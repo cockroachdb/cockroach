@@ -33,175 +33,180 @@ call
       ├── params: arg_k:1 new_i:2 new_s:3
       └── body
            └── limit
-                ├── columns: "_stmt_exec_1":59
+                ├── columns: dispatcher_8:60
                 ├── project
-                │    ├── columns: "_stmt_exec_1":59
-                │    ├── barrier
-                │    │    ├── columns: c:4
-                │    │    └── project
-                │    │         ├── columns: c:4
-                │    │         ├── values
-                │    │         │    └── tuple
-                │    │         └── projections
-                │    │              └── cast: INT8 [as=c:4]
-                │    │                   └── null
+                │    ├── columns: dispatcher_8:60
+                │    ├── values
+                │    │    └── tuple
                 │    └── projections
-                │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":59]
-                │              ├── args
-                │              │    ├── variable: arg_k:1
-                │              │    ├── variable: new_i:2
-                │              │    ├── variable: new_s:3
-                │              │    └── variable: c:4
-                │              ├── params: arg_k:5 new_i:6 new_s:7 c:8
-                │              └── body
-                │                   └── project
-                │                        ├── columns: "_stmt_exec_ret_2":58
-                │                        ├── barrier
-                │                        │    ├── columns: c:57
-                │                        │    └── project
-                │                        │         ├── columns: c:57
-                │                        │         ├── right-join (cross)
-                │                        │         │    ├── columns: count_rows:14
-                │                        │         │    ├── limit
-                │                        │         │    │    ├── columns: count_rows:14!null
-                │                        │         │    │    ├── scalar-group-by
-                │                        │         │    │    │    ├── columns: count_rows:14!null
-                │                        │         │    │    │    ├── project
-                │                        │         │    │    │    │    └── select
-                │                        │         │    │    │    │         ├── columns: k:9!null i:10 s:11 crdb_internal_mvcc_timestamp:12 tableoid:13
-                │                        │         │    │    │    │         ├── scan t
-                │                        │         │    │    │    │         │    └── columns: k:9!null i:10 s:11 crdb_internal_mvcc_timestamp:12 tableoid:13
-                │                        │         │    │    │    │         └── filters
-                │                        │         │    │    │    │              └── eq
-                │                        │         │    │    │    │                   ├── variable: k:9
-                │                        │         │    │    │    │                   └── variable: arg_k:5
-                │                        │         │    │    │    └── aggregations
-                │                        │         │    │    │         └── count-rows [as=count_rows:14]
-                │                        │         │    │    └── const: 1
-                │                        │         │    ├── values
-                │                        │         │    │    └── tuple
-                │                        │         │    └── filters (true)
-                │                        │         └── projections
-                │                        │              └── variable: count_rows:14 [as=c:57]
-                │                        └── projections
-                │                             └── udf: _stmt_exec_ret_2 [as="_stmt_exec_ret_2":58]
-                │                                  ├── args
-                │                                  │    ├── variable: arg_k:5
-                │                                  │    ├── variable: new_i:6
-                │                                  │    ├── variable: new_s:7
-                │                                  │    └── variable: c:57
-                │                                  ├── params: arg_k:15 new_i:16 new_s:17 c:18
-                │                                  └── body
-                │                                       └── project
-                │                                            ├── columns: stmt_if_7:56
-                │                                            ├── values
-                │                                            │    └── tuple
-                │                                            └── projections
-                │                                                 └── case [as=stmt_if_7:56]
-                │                                                      ├── true
-                │                                                      ├── when
-                │                                                      │    ├── gt
-                │                                                      │    │    ├── variable: c:18
-                │                                                      │    │    └── const: 0
-                │                                                      │    └── subquery
-                │                                                      │         └── project
-                │                                                      │              ├── columns: "_stmt_exec_5":41
-                │                                                      │              ├── values
-                │                                                      │              │    └── tuple
-                │                                                      │              └── projections
-                │                                                      │                   └── udf: _stmt_exec_5 [as="_stmt_exec_5":41]
-                │                                                      │                        ├── args
-                │                                                      │                        │    ├── variable: arg_k:15
-                │                                                      │                        │    ├── variable: new_i:16
-                │                                                      │                        │    ├── variable: new_s:17
-                │                                                      │                        │    └── variable: c:18
-                │                                                      │                        ├── params: arg_k:24 new_i:25 new_s:26 c:27
-                │                                                      │                        └── body
-                │                                                      │                             ├── update t
-                │                                                      │                             │    ├── columns: <none>
-                │                                                      │                             │    ├── fetch columns: k:33 i:34 s:35
-                │                                                      │                             │    ├── update-mapping:
-                │                                                      │                             │    │    ├── i_new:38 => i:29
-                │                                                      │                             │    │    └── s_new:39 => s:30
-                │                                                      │                             │    └── project
-                │                                                      │                             │         ├── columns: i_new:38 s_new:39 k:33!null i:34 s:35 crdb_internal_mvcc_timestamp:36 tableoid:37
-                │                                                      │                             │         ├── select
-                │                                                      │                             │         │    ├── columns: k:33!null i:34 s:35 crdb_internal_mvcc_timestamp:36 tableoid:37
-                │                                                      │                             │         │    ├── scan t
-                │                                                      │                             │         │    │    └── columns: k:33!null i:34 s:35 crdb_internal_mvcc_timestamp:36 tableoid:37
-                │                                                      │                             │         │    └── filters
-                │                                                      │                             │         │         └── eq
-                │                                                      │                             │         │              ├── variable: k:33
-                │                                                      │                             │         │              └── variable: arg_k:24
-                │                                                      │                             │         └── projections
-                │                                                      │                             │              ├── variable: new_i:25 [as=i_new:38]
-                │                                                      │                             │              └── variable: new_s:26 [as=s_new:39]
-                │                                                      │                             └── project
-                │                                                      │                                  ├── columns: stmt_if_3:40
-                │                                                      │                                  ├── values
-                │                                                      │                                  │    └── tuple
-                │                                                      │                                  └── projections
-                │                                                      │                                       └── udf: stmt_if_3 [as=stmt_if_3:40]
-                │                                                      │                                            ├── args
-                │                                                      │                                            │    ├── variable: arg_k:24
-                │                                                      │                                            │    ├── variable: new_i:25
-                │                                                      │                                            │    ├── variable: new_s:26
-                │                                                      │                                            │    └── variable: c:27
-                │                                                      │                                            ├── params: arg_k:19 new_i:20 new_s:21 c:22
-                │                                                      │                                            └── body
-                │                                                      │                                                 └── project
-                │                                                      │                                                      ├── columns: stmt_return_4:23
-                │                                                      │                                                      ├── values
-                │                                                      │                                                      │    └── tuple
-                │                                                      │                                                      └── projections
-                │                                                      │                                                           └── cast: VOID [as=stmt_return_4:23]
-                │                                                      │                                                                └── null
-                │                                                      └── subquery
-                │                                                           └── project
-                │                                                                ├── columns: "_stmt_exec_6":55
-                │                                                                ├── values
-                │                                                                │    └── tuple
-                │                                                                └── projections
-                │                                                                     └── udf: _stmt_exec_6 [as="_stmt_exec_6":55]
-                │                                                                          ├── args
-                │                                                                          │    ├── variable: arg_k:15
-                │                                                                          │    ├── variable: new_i:16
-                │                                                                          │    ├── variable: new_s:17
-                │                                                                          │    └── variable: c:18
-                │                                                                          ├── params: arg_k:42 new_i:43 new_s:44 c:45
-                │                                                                          └── body
-                │                                                                               ├── insert t
-                │                                                                               │    ├── columns: <none>
-                │                                                                               │    ├── insert-mapping:
-                │                                                                               │    │    ├── column1:51 => k:46
-                │                                                                               │    │    ├── column2:52 => i:47
-                │                                                                               │    │    └── column3:53 => s:48
-                │                                                                               │    └── values
-                │                                                                               │         ├── columns: column1:51 column2:52 column3:53
-                │                                                                               │         └── tuple
-                │                                                                               │              ├── variable: arg_k:42
-                │                                                                               │              ├── variable: new_i:43
-                │                                                                               │              └── variable: new_s:44
-                │                                                                               └── project
-                │                                                                                    ├── columns: stmt_if_3:54
-                │                                                                                    ├── values
-                │                                                                                    │    └── tuple
-                │                                                                                    └── projections
-                │                                                                                         └── udf: stmt_if_3 [as=stmt_if_3:54]
-                │                                                                                              ├── args
-                │                                                                                              │    ├── variable: arg_k:42
-                │                                                                                              │    ├── variable: new_i:43
-                │                                                                                              │    ├── variable: new_s:44
-                │                                                                                              │    └── variable: c:45
-                │                                                                                              ├── params: arg_k:19 new_i:20 new_s:21 c:22
-                │                                                                                              └── body
-                │                                                                                                   └── project
-                │                                                                                                        ├── columns: stmt_return_4:23
-                │                                                                                                        ├── values
-                │                                                                                                        │    └── tuple
-                │                                                                                                        └── projections
-                │                                                                                                             └── cast: VOID [as=stmt_return_4:23]
-                │                                                                                                                  └── null
+                │         └── dispatcher
+                │              ├── subquery
+                │              │    └── project
+                │              │         ├── columns: "_stmt_exec_1":59
+                │              │         ├── project
+                │              │         │    ├── columns: c:4
+                │              │         │    ├── values
+                │              │         │    │    └── tuple
+                │              │         │    └── projections
+                │              │         │         └── cast: INT8 [as=c:4]
+                │              │         │              └── null
+                │              │         └── projections
+                │              │              └── dispatch: 1
+                │              │                   ├── branch: 0
+                │              │                   └── args
+                │              │                        ├── variable: arg_k:1
+                │              │                        ├── variable: new_i:2
+                │              │                        ├── variable: new_s:3
+                │              │                        └── variable: c:4
+                │              ├── branch: 0
+                │              │    ├── params: arg_k:5 new_i:6 new_s:7 c:8
+                │              │    └── body
+                │              │         └── project
+                │              │              ├── columns: "_stmt_exec_ret_2":58
+                │              │              ├── project
+                │              │              │    ├── columns: c:57
+                │              │              │    ├── right-join (cross)
+                │              │              │    │    ├── columns: count_rows:14
+                │              │              │    │    ├── limit
+                │              │              │    │    │    ├── columns: count_rows:14!null
+                │              │              │    │    │    ├── scalar-group-by
+                │              │              │    │    │    │    ├── columns: count_rows:14!null
+                │              │              │    │    │    │    ├── project
+                │              │              │    │    │    │    │    └── select
+                │              │              │    │    │    │    │         ├── columns: k:9!null i:10 s:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+                │              │              │    │    │    │    │         ├── scan t
+                │              │              │    │    │    │    │         │    └── columns: k:9!null i:10 s:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+                │              │              │    │    │    │    │         └── filters
+                │              │              │    │    │    │    │              └── eq
+                │              │              │    │    │    │    │                   ├── variable: k:9
+                │              │              │    │    │    │    │                   └── variable: arg_k:5
+                │              │              │    │    │    │    └── aggregations
+                │              │              │    │    │    │         └── count-rows [as=count_rows:14]
+                │              │              │    │    │    └── const: 1
+                │              │              │    │    ├── values
+                │              │              │    │    │    └── tuple
+                │              │              │    │    └── filters (true)
+                │              │              │    └── projections
+                │              │              │         └── variable: count_rows:14 [as=c:57]
+                │              │              └── projections
+                │              │                   └── dispatch: 1
+                │              │                        ├── branch: 1
+                │              │                        └── args
+                │              │                             ├── variable: arg_k:5
+                │              │                             ├── variable: new_i:6
+                │              │                             ├── variable: new_s:7
+                │              │                             └── variable: c:57
+                │              ├── branch: 1
+                │              │    ├── params: arg_k:15 new_i:16 new_s:17 c:18
+                │              │    └── body
+                │              │         └── project
+                │              │              ├── columns: stmt_if_7:56
+                │              │              ├── values
+                │              │              │    └── tuple
+                │              │              └── projections
+                │              │                   └── case [as=stmt_if_7:56]
+                │              │                        ├── true
+                │              │                        ├── when
+                │              │                        │    ├── gt
+                │              │                        │    │    ├── variable: c:18
+                │              │                        │    │    └── const: 0
+                │              │                        │    └── subquery
+                │              │                        │         └── project
+                │              │                        │              ├── columns: "_stmt_exec_5":41
+                │              │                        │              ├── values
+                │              │                        │              │    └── tuple
+                │              │                        │              └── projections
+                │              │                        │                   └── dispatch: 1
+                │              │                        │                        ├── branch: 3
+                │              │                        │                        └── args
+                │              │                        │                             ├── variable: arg_k:15
+                │              │                        │                             ├── variable: new_i:16
+                │              │                        │                             ├── variable: new_s:17
+                │              │                        │                             └── variable: c:18
+                │              │                        └── subquery
+                │              │                             └── project
+                │              │                                  ├── columns: "_stmt_exec_6":55
+                │              │                                  ├── values
+                │              │                                  │    └── tuple
+                │              │                                  └── projections
+                │              │                                       └── dispatch: 1
+                │              │                                            ├── branch: 4
+                │              │                                            └── args
+                │              │                                                 ├── variable: arg_k:15
+                │              │                                                 ├── variable: new_i:16
+                │              │                                                 ├── variable: new_s:17
+                │              │                                                 └── variable: c:18
+                │              ├── branch: 2
+                │              │    ├── params: arg_k:19 new_i:20 new_s:21 c:22
+                │              │    └── body
+                │              │         └── project
+                │              │              ├── columns: stmt_return_4:23
+                │              │              ├── values
+                │              │              │    └── tuple
+                │              │              └── projections
+                │              │                   └── cast: VOID [as=stmt_return_4:23]
+                │              │                        └── null
+                │              ├── branch: 3
+                │              │    ├── params: arg_k:24 new_i:25 new_s:26 c:27
+                │              │    └── body
+                │              │         ├── update t
+                │              │         │    ├── columns: <none>
+                │              │         │    ├── fetch columns: k:33 i:34 s:35
+                │              │         │    ├── update-mapping:
+                │              │         │    │    ├── i_new:38 => i:29
+                │              │         │    │    └── s_new:39 => s:30
+                │              │         │    └── project
+                │              │         │         ├── columns: i_new:38 s_new:39 k:33!null i:34 s:35 crdb_internal_mvcc_timestamp:36 tableoid:37
+                │              │         │         ├── select
+                │              │         │         │    ├── columns: k:33!null i:34 s:35 crdb_internal_mvcc_timestamp:36 tableoid:37
+                │              │         │         │    ├── scan t
+                │              │         │         │    │    └── columns: k:33!null i:34 s:35 crdb_internal_mvcc_timestamp:36 tableoid:37
+                │              │         │         │    └── filters
+                │              │         │         │         └── eq
+                │              │         │         │              ├── variable: k:33
+                │              │         │         │              └── variable: arg_k:24
+                │              │         │         └── projections
+                │              │         │              ├── variable: new_i:25 [as=i_new:38]
+                │              │         │              └── variable: new_s:26 [as=s_new:39]
+                │              │         └── project
+                │              │              ├── columns: stmt_if_3:40
+                │              │              ├── values
+                │              │              │    └── tuple
+                │              │              └── projections
+                │              │                   └── dispatch: 1
+                │              │                        ├── branch: 2
+                │              │                        └── args
+                │              │                             ├── variable: arg_k:24
+                │              │                             ├── variable: new_i:25
+                │              │                             ├── variable: new_s:26
+                │              │                             └── variable: c:27
+                │              └── branch: 4
+                │                   ├── params: arg_k:42 new_i:43 new_s:44 c:45
+                │                   └── body
+                │                        ├── insert t
+                │                        │    ├── columns: <none>
+                │                        │    ├── insert-mapping:
+                │                        │    │    ├── column1:51 => k:46
+                │                        │    │    ├── column2:52 => i:47
+                │                        │    │    └── column3:53 => s:48
+                │                        │    └── values
+                │                        │         ├── columns: column1:51 column2:52 column3:53
+                │                        │         └── tuple
+                │                        │              ├── variable: arg_k:42
+                │                        │              ├── variable: new_i:43
+                │                        │              └── variable: new_s:44
+                │                        └── project
+                │                             ├── columns: stmt_if_3:54
+                │                             ├── values
+                │                             │    └── tuple
+                │                             └── projections
+                │                                  └── dispatch: 1
+                │                                       ├── branch: 2
+                │                                       └── args
+                │                                            ├── variable: arg_k:42
+                │                                            ├── variable: new_i:43
+                │                                            ├── variable: new_s:44
+                │                                            └── variable: c:45
                 └── const: 1
 
 # Case with nested blocks.
@@ -238,197 +243,206 @@ call
       ├── params: x:1
       └── body
            └── limit
-                ├── columns: "_stmt_raise_1":27
+                ├── columns: dispatcher_9:28
                 ├── project
-                │    ├── columns: "_stmt_raise_1":27
-                │    ├── barrier
-                │    │    ├── columns: x:3 y:4!null
-                │    │    └── project
-                │    │         ├── columns: y:4!null x:3
-                │    │         ├── project
-                │    │         │    ├── columns: x:3 y:2!null
-                │    │         │    ├── project
-                │    │         │    │    ├── columns: y:2!null
-                │    │         │    │    ├── values
-                │    │         │    │    │    └── tuple
-                │    │         │    │    └── projections
-                │    │         │    │         └── const: 10 [as=y:2]
-                │    │         │    └── projections
-                │    │         │         └── plus [as=x:3]
-                │    │         │              ├── variable: x:1
-                │    │         │              └── const: 1
-                │    │         └── projections
-                │    │              └── plus [as=y:4]
-                │    │                   ├── variable: y:2
-                │    │                   └── const: 1
+                │    ├── columns: dispatcher_9:28
+                │    ├── values
+                │    │    └── tuple
                 │    └── projections
-                │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":27]
-                │              ├── args
-                │              │    ├── variable: x:3
-                │              │    └── variable: y:4
-                │              ├── params: x:5 y:6
-                │              └── body
-                │                   ├── project
-                │                   │    ├── columns: stmt_raise_2:7
-                │                   │    ├── values
-                │                   │    │    └── tuple
-                │                   │    └── projections
-                │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:7]
-                │                   │              ├── const: 'NOTICE'
-                │                   │              ├── concat
-                │                   │              │    ├── concat
-                │                   │              │    │    ├── concat
-                │                   │              │    │    │    ├── concat
-                │                   │              │    │    │    │    ├── const: ''
-                │                   │              │    │    │    │    └── coalesce
-                │                   │              │    │    │    │         ├── cast: STRING
-                │                   │              │    │    │    │         │    └── variable: x:5
-                │                   │              │    │    │    │         └── const: '<NULL>'
-                │                   │              │    │    │    └── const: ' '
-                │                   │              │    │    └── coalesce
-                │                   │              │    │         ├── cast: STRING
-                │                   │              │    │         │    └── variable: y:6
-                │                   │              │    │         └── const: '<NULL>'
-                │                   │              │    └── const: ''
-                │                   │              ├── const: ''
-                │                   │              ├── const: ''
-                │                   │              └── const: '00000'
-                │                   └── project
-                │                        ├── columns: "_stmt_raise_7":26
-                │                        ├── barrier
-                │                        │    ├── columns: x:18 y:19 z:20!null
-                │                        │    └── project
-                │                        │         ├── columns: z:20!null x:18 y:19
-                │                        │         ├── project
-                │                        │         │    ├── columns: y:19 z:17!null x:18
-                │                        │         │    ├── project
-                │                        │         │    │    ├── columns: x:18 z:17!null
-                │                        │         │    │    ├── project
-                │                        │         │    │    │    ├── columns: z:17!null
-                │                        │         │    │    │    ├── values
-                │                        │         │    │    │    │    └── tuple
-                │                        │         │    │    │    └── projections
-                │                        │         │    │    │         └── const: 100 [as=z:17]
-                │                        │         │    │    └── projections
-                │                        │         │    │         └── plus [as=x:18]
-                │                        │         │    │              ├── variable: x:5
-                │                        │         │    │              └── const: 1
-                │                        │         │    └── projections
-                │                        │         │         └── plus [as=y:19]
-                │                        │         │              ├── variable: y:6
-                │                        │         │              └── const: 1
-                │                        │         └── projections
-                │                        │              └── plus [as=z:20]
-                │                        │                   ├── variable: z:17
-                │                        │                   └── const: 1
-                │                        └── projections
-                │                             └── udf: _stmt_raise_7 [as="_stmt_raise_7":26]
-                │                                  ├── args
-                │                                  │    ├── variable: x:18
-                │                                  │    ├── variable: y:19
-                │                                  │    └── variable: z:20
-                │                                  ├── params: x:21 y:22 z:23
-                │                                  └── body
-                │                                       ├── project
-                │                                       │    ├── columns: stmt_raise_8:24
-                │                                       │    ├── values
-                │                                       │    │    └── tuple
-                │                                       │    └── projections
-                │                                       │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_8:24]
-                │                                       │              ├── const: 'NOTICE'
-                │                                       │              ├── concat
-                │                                       │              │    ├── concat
-                │                                       │              │    │    ├── concat
-                │                                       │              │    │    │    ├── concat
-                │                                       │              │    │    │    │    ├── concat
-                │                                       │              │    │    │    │    │    ├── concat
-                │                                       │              │    │    │    │    │    │    ├── const: ''
-                │                                       │              │    │    │    │    │    │    └── coalesce
-                │                                       │              │    │    │    │    │    │         ├── cast: STRING
-                │                                       │              │    │    │    │    │    │         │    └── variable: x:21
-                │                                       │              │    │    │    │    │    │         └── const: '<NULL>'
-                │                                       │              │    │    │    │    │    └── const: ' '
-                │                                       │              │    │    │    │    └── coalesce
-                │                                       │              │    │    │    │         ├── cast: STRING
-                │                                       │              │    │    │    │         │    └── variable: y:22
-                │                                       │              │    │    │    │         └── const: '<NULL>'
-                │                                       │              │    │    │    └── const: ' '
-                │                                       │              │    │    └── coalesce
-                │                                       │              │    │         ├── cast: STRING
-                │                                       │              │    │         │    └── variable: z:23
-                │                                       │              │    │         └── const: '<NULL>'
-                │                                       │              │    └── const: ''
-                │                                       │              ├── const: ''
-                │                                       │              ├── const: ''
-                │                                       │              └── const: '00000'
-                │                                       └── project
-                │                                            ├── columns: nested_block_3:25
-                │                                            ├── values
-                │                                            │    └── tuple
-                │                                            └── projections
-                │                                                 └── udf: nested_block_3 [as=nested_block_3:25]
-                │                                                      ├── args
-                │                                                      │    ├── variable: x:21
-                │                                                      │    └── variable: y:22
-                │                                                      ├── params: x:8 y:9
-                │                                                      └── body
-                │                                                           └── project
-                │                                                                ├── columns: "_stmt_raise_4":16
-                │                                                                ├── barrier
-                │                                                                │    ├── columns: x:10 y:11
-                │                                                                │    └── project
-                │                                                                │         ├── columns: y:11 x:10
-                │                                                                │         ├── project
-                │                                                                │         │    ├── columns: x:10
-                │                                                                │         │    ├── values
-                │                                                                │         │    │    └── tuple
-                │                                                                │         │    └── projections
-                │                                                                │         │         └── plus [as=x:10]
-                │                                                                │         │              ├── variable: x:8
-                │                                                                │         │              └── const: 1
-                │                                                                │         └── projections
-                │                                                                │              └── plus [as=y:11]
-                │                                                                │                   ├── variable: y:9
-                │                                                                │                   └── const: 1
-                │                                                                └── projections
-                │                                                                     └── udf: _stmt_raise_4 [as="_stmt_raise_4":16]
-                │                                                                          ├── args
-                │                                                                          │    ├── variable: x:10
-                │                                                                          │    └── variable: y:11
-                │                                                                          ├── params: x:12 y:13
-                │                                                                          └── body
-                │                                                                               ├── project
-                │                                                                               │    ├── columns: stmt_raise_5:14
-                │                                                                               │    ├── values
-                │                                                                               │    │    └── tuple
-                │                                                                               │    └── projections
-                │                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_5:14]
-                │                                                                               │              ├── const: 'NOTICE'
-                │                                                                               │              ├── concat
-                │                                                                               │              │    ├── concat
-                │                                                                               │              │    │    ├── concat
-                │                                                                               │              │    │    │    ├── concat
-                │                                                                               │              │    │    │    │    ├── const: ''
-                │                                                                               │              │    │    │    │    └── coalesce
-                │                                                                               │              │    │    │    │         ├── cast: STRING
-                │                                                                               │              │    │    │    │         │    └── variable: x:12
-                │                                                                               │              │    │    │    │         └── const: '<NULL>'
-                │                                                                               │              │    │    │    └── const: ' '
-                │                                                                               │              │    │    └── coalesce
-                │                                                                               │              │    │         ├── cast: STRING
-                │                                                                               │              │    │         │    └── variable: y:13
-                │                                                                               │              │    │         └── const: '<NULL>'
-                │                                                                               │              │    └── const: ''
-                │                                                                               │              ├── const: ''
-                │                                                                               │              ├── const: ''
-                │                                                                               │              └── const: '00000'
-                │                                                                               └── project
-                │                                                                                    ├── columns: stmt_return_6:15
-                │                                                                                    ├── values
-                │                                                                                    │    └── tuple
-                │                                                                                    └── projections
-                │                                                                                         └── cast: VOID [as=stmt_return_6:15]
-                │                                                                                              └── null
+                │         └── dispatcher
+                │              ├── subquery
+                │              │    └── project
+                │              │         ├── columns: "_stmt_raise_1":27
+                │              │         ├── project
+                │              │         │    ├── columns: y:4!null x:3
+                │              │         │    ├── project
+                │              │         │    │    ├── columns: x:3 y:2!null
+                │              │         │    │    ├── project
+                │              │         │    │    │    ├── columns: y:2!null
+                │              │         │    │    │    ├── values
+                │              │         │    │    │    │    └── tuple
+                │              │         │    │    │    └── projections
+                │              │         │    │    │         └── const: 10 [as=y:2]
+                │              │         │    │    └── projections
+                │              │         │    │         └── plus [as=x:3]
+                │              │         │    │              ├── variable: x:1
+                │              │         │    │              └── const: 1
+                │              │         │    └── projections
+                │              │         │         └── plus [as=y:4]
+                │              │         │              ├── variable: y:2
+                │              │         │              └── const: 1
+                │              │         └── projections
+                │              │              └── dispatch: 1
+                │              │                   ├── branch: 0
+                │              │                   └── args
+                │              │                        ├── variable: x:3
+                │              │                        └── variable: y:4
+                │              ├── branch: 0
+                │              │    ├── params: x:5 y:6
+                │              │    └── body
+                │              │         ├── project
+                │              │         │    ├── columns: stmt_raise_2:7
+                │              │         │    ├── values
+                │              │         │    │    └── tuple
+                │              │         │    └── projections
+                │              │         │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:7]
+                │              │         │              ├── const: 'NOTICE'
+                │              │         │              ├── concat
+                │              │         │              │    ├── concat
+                │              │         │              │    │    ├── concat
+                │              │         │              │    │    │    ├── concat
+                │              │         │              │    │    │    │    ├── const: ''
+                │              │         │              │    │    │    │    └── coalesce
+                │              │         │              │    │    │    │         ├── cast: STRING
+                │              │         │              │    │    │    │         │    └── variable: x:5
+                │              │         │              │    │    │    │         └── const: '<NULL>'
+                │              │         │              │    │    │    └── const: ' '
+                │              │         │              │    │    └── coalesce
+                │              │         │              │    │         ├── cast: STRING
+                │              │         │              │    │         │    └── variable: y:6
+                │              │         │              │    │         └── const: '<NULL>'
+                │              │         │              │    └── const: ''
+                │              │         │              ├── const: ''
+                │              │         │              ├── const: ''
+                │              │         │              └── const: '00000'
+                │              │         └── project
+                │              │              ├── columns: "_stmt_raise_7":26
+                │              │              ├── project
+                │              │              │    ├── columns: z:20!null x:18 y:19
+                │              │              │    ├── project
+                │              │              │    │    ├── columns: y:19 z:17!null x:18
+                │              │              │    │    ├── project
+                │              │              │    │    │    ├── columns: x:18 z:17!null
+                │              │              │    │    │    ├── project
+                │              │              │    │    │    │    ├── columns: z:17!null
+                │              │              │    │    │    │    ├── values
+                │              │              │    │    │    │    │    └── tuple
+                │              │              │    │    │    │    └── projections
+                │              │              │    │    │    │         └── const: 100 [as=z:17]
+                │              │              │    │    │    └── projections
+                │              │              │    │    │         └── plus [as=x:18]
+                │              │              │    │    │              ├── variable: x:5
+                │              │              │    │    │              └── const: 1
+                │              │              │    │    └── projections
+                │              │              │    │         └── plus [as=y:19]
+                │              │              │    │              ├── variable: y:6
+                │              │              │    │              └── const: 1
+                │              │              │    └── projections
+                │              │              │         └── plus [as=z:20]
+                │              │              │              ├── variable: z:17
+                │              │              │              └── const: 1
+                │              │              └── projections
+                │              │                   └── dispatch: 1
+                │              │                        ├── branch: 3
+                │              │                        └── args
+                │              │                             ├── variable: x:18
+                │              │                             ├── variable: y:19
+                │              │                             └── variable: z:20
+                │              ├── branch: 1
+                │              │    ├── params: x:8 y:9
+                │              │    └── body
+                │              │         └── project
+                │              │              ├── columns: "_stmt_raise_4":16
+                │              │              ├── project
+                │              │              │    ├── columns: y:11 x:10
+                │              │              │    ├── project
+                │              │              │    │    ├── columns: x:10
+                │              │              │    │    ├── values
+                │              │              │    │    │    └── tuple
+                │              │              │    │    └── projections
+                │              │              │    │         └── plus [as=x:10]
+                │              │              │    │              ├── variable: x:8
+                │              │              │    │              └── const: 1
+                │              │              │    └── projections
+                │              │              │         └── plus [as=y:11]
+                │              │              │              ├── variable: y:9
+                │              │              │              └── const: 1
+                │              │              └── projections
+                │              │                   └── dispatch: 1
+                │              │                        ├── branch: 2
+                │              │                        └── args
+                │              │                             ├── variable: x:10
+                │              │                             └── variable: y:11
+                │              ├── branch: 2
+                │              │    ├── params: x:12 y:13
+                │              │    └── body
+                │              │         ├── project
+                │              │         │    ├── columns: stmt_raise_5:14
+                │              │         │    ├── values
+                │              │         │    │    └── tuple
+                │              │         │    └── projections
+                │              │         │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_5:14]
+                │              │         │              ├── const: 'NOTICE'
+                │              │         │              ├── concat
+                │              │         │              │    ├── concat
+                │              │         │              │    │    ├── concat
+                │              │         │              │    │    │    ├── concat
+                │              │         │              │    │    │    │    ├── const: ''
+                │              │         │              │    │    │    │    └── coalesce
+                │              │         │              │    │    │    │         ├── cast: STRING
+                │              │         │              │    │    │    │         │    └── variable: x:12
+                │              │         │              │    │    │    │         └── const: '<NULL>'
+                │              │         │              │    │    │    └── const: ' '
+                │              │         │              │    │    └── coalesce
+                │              │         │              │    │         ├── cast: STRING
+                │              │         │              │    │         │    └── variable: y:13
+                │              │         │              │    │         └── const: '<NULL>'
+                │              │         │              │    └── const: ''
+                │              │         │              ├── const: ''
+                │              │         │              ├── const: ''
+                │              │         │              └── const: '00000'
+                │              │         └── project
+                │              │              ├── columns: stmt_return_6:15
+                │              │              ├── values
+                │              │              │    └── tuple
+                │              │              └── projections
+                │              │                   └── cast: VOID [as=stmt_return_6:15]
+                │              │                        └── null
+                │              └── branch: 3
+                │                   ├── params: x:21 y:22 z:23
+                │                   └── body
+                │                        ├── project
+                │                        │    ├── columns: stmt_raise_8:24
+                │                        │    ├── values
+                │                        │    │    └── tuple
+                │                        │    └── projections
+                │                        │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_8:24]
+                │                        │              ├── const: 'NOTICE'
+                │                        │              ├── concat
+                │                        │              │    ├── concat
+                │                        │              │    │    ├── concat
+                │                        │              │    │    │    ├── concat
+                │                        │              │    │    │    │    ├── concat
+                │                        │              │    │    │    │    │    ├── concat
+                │                        │              │    │    │    │    │    │    ├── const: ''
+                │                        │              │    │    │    │    │    │    └── coalesce
+                │                        │              │    │    │    │    │    │         ├── cast: STRING
+                │                        │              │    │    │    │    │    │         │    └── variable: x:21
+                │                        │              │    │    │    │    │    │         └── const: '<NULL>'
+                │                        │              │    │    │    │    │    └── const: ' '
+                │                        │              │    │    │    │    └── coalesce
+                │                        │              │    │    │    │         ├── cast: STRING
+                │                        │              │    │    │    │         │    └── variable: y:22
+                │                        │              │    │    │    │         └── const: '<NULL>'
+                │                        │              │    │    │    └── const: ' '
+                │                        │              │    │    └── coalesce
+                │                        │              │    │         ├── cast: STRING
+                │                        │              │    │         │    └── variable: z:23
+                │                        │              │    │         └── const: '<NULL>'
+                │                        │              │    └── const: ''
+                │                        │              ├── const: ''
+                │                        │              ├── const: ''
+                │                        │              └── const: '00000'
+                │                        └── project
+                │                             ├── columns: nested_block_3:25
+                │                             ├── values
+                │                             │    └── tuple
+                │                             └── projections
+                │                                  └── dispatch: 1
+                │                                       ├── branch: 1
+                │                                       └── args
+                │                                            ├── variable: x:21
+                │                                            └── variable: y:22
                 └── const: 1
 
 # Nested blocks with an exception handler. Note that the exception handler
@@ -458,165 +472,158 @@ call
  └── procedure: p
       └── body
            └── limit
-                ├── columns: "_stmt_raise_1":18
+                ├── columns: dispatcher_10:19
                 ├── project
-                │    ├── columns: "_stmt_raise_1":18
-                │    ├── barrier
-                │    │    ├── columns: x:1!null
-                │    │    └── project
-                │    │         ├── columns: x:1!null
-                │    │         ├── values
-                │    │         │    └── tuple
-                │    │         └── projections
-                │    │              └── const: 0 [as=x:1]
+                │    ├── columns: dispatcher_10:19
+                │    ├── values
+                │    │    └── tuple
                 │    └── projections
-                │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":18]
-                │              ├── args
-                │              │    └── variable: x:1
-                │              ├── params: x:2
-                │              └── body
-                │                   ├── project
-                │                   │    ├── columns: stmt_raise_2:3
-                │                   │    ├── values
-                │                   │    │    └── tuple
-                │                   │    └── projections
-                │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:3]
-                │                   │              ├── const: 'NOTICE'
-                │                   │              ├── concat
-                │                   │              │    ├── concat
-                │                   │              │    │    ├── const: ''
-                │                   │              │    │    └── coalesce
-                │                   │              │    │         ├── cast: STRING
-                │                   │              │    │         │    └── variable: x:2
-                │                   │              │    │         └── const: '<NULL>'
-                │                   │              │    └── const: ''
-                │                   │              ├── const: ''
-                │                   │              ├── const: ''
-                │                   │              └── const: '00000'
-                │                   └── project
-                │                        ├── columns: exception_block_8:17
-                │                        ├── values
-                │                        │    └── tuple
-                │                        └── projections
-                │                             └── udf: exception_block_8 [as=exception_block_8:17]
-                │                                  ├── args
-                │                                  │    └── variable: x:2
-                │                                  ├── params: x:12
-                │                                  ├── body
-                │                                  │    └── project
-                │                                  │         ├── columns: "_stmt_exec_9":16
-                │                                  │         ├── values
-                │                                  │         │    └── tuple
-                │                                  │         └── projections
-                │                                  │              └── udf: _stmt_exec_9 [as="_stmt_exec_9":16]
-                │                                  │                   ├── args
-                │                                  │                   │    └── variable: x:12
-                │                                  │                   ├── params: x:13
-                │                                  │                   └── body
-                │                                  │                        ├── project
-                │                                  │                        │    ├── columns: "?column?":14!null
-                │                                  │                        │    ├── values
-                │                                  │                        │    │    └── tuple
-                │                                  │                        │    └── projections
-                │                                  │                        │         └── floor-div [as="?column?":14]
-                │                                  │                        │              ├── const: 1
-                │                                  │                        │              └── const: 0
-                │                                  │                        └── project
-                │                                  │                             ├── columns: nested_block_3:15
-                │                                  │                             ├── values
-                │                                  │                             │    └── tuple
-                │                                  │                             └── projections
-                │                                  │                                  └── udf: nested_block_3 [as=nested_block_3:15]
-                │                                  │                                       ├── args
-                │                                  │                                       │    └── variable: x:13
-                │                                  │                                       ├── params: x:4
-                │                                  │                                       └── body
-                │                                  │                                            └── project
-                │                                  │                                                 ├── columns: "_stmt_raise_4":8
-                │                                  │                                                 ├── values
-                │                                  │                                                 │    └── tuple
-                │                                  │                                                 └── projections
-                │                                  │                                                      └── udf: _stmt_raise_4 [as="_stmt_raise_4":8]
-                │                                  │                                                           ├── args
-                │                                  │                                                           │    └── variable: x:4
-                │                                  │                                                           ├── params: x:5
-                │                                  │                                                           └── body
-                │                                  │                                                                ├── project
-                │                                  │                                                                │    ├── columns: stmt_raise_5:6
-                │                                  │                                                                │    ├── values
-                │                                  │                                                                │    │    └── tuple
-                │                                  │                                                                │    └── projections
-                │                                  │                                                                │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_5:6]
-                │                                  │                                                                │              ├── const: 'NOTICE'
-                │                                  │                                                                │              ├── concat
-                │                                  │                                                                │              │    ├── concat
-                │                                  │                                                                │              │    │    ├── const: ''
-                │                                  │                                                                │              │    │    └── coalesce
-                │                                  │                                                                │              │    │         ├── cast: STRING
-                │                                  │                                                                │              │    │         │    └── variable: x:5
-                │                                  │                                                                │              │    │         └── const: '<NULL>'
-                │                                  │                                                                │              │    └── const: ''
-                │                                  │                                                                │              ├── const: ''
-                │                                  │                                                                │              ├── const: ''
-                │                                  │                                                                │              └── const: '00000'
-                │                                  │                                                                └── project
-                │                                  │                                                                     ├── columns: stmt_return_6:7
-                │                                  │                                                                     ├── values
-                │                                  │                                                                     │    └── tuple
-                │                                  │                                                                     └── projections
-                │                                  │                                                                          └── cast: VOID [as=stmt_return_6:7]
-                │                                  │                                                                               └── null
-                │                                  └── exception-handler
-                │                                       └── SQLSTATE '22012'
-                │                                            └── project
-                │                                                 ├── columns: nested_block_3:11
-                │                                                 ├── barrier
-                │                                                 │    ├── columns: x:10!null
-                │                                                 │    └── project
-                │                                                 │         ├── columns: x:10!null
-                │                                                 │         ├── values
-                │                                                 │         │    └── tuple
-                │                                                 │         └── projections
-                │                                                 │              └── const: 100 [as=x:10]
-                │                                                 └── projections
-                │                                                      └── udf: nested_block_3 [as=nested_block_3:11]
-                │                                                           ├── args
-                │                                                           │    └── variable: x:10
-                │                                                           ├── params: x:4
-                │                                                           └── body
-                │                                                                └── project
-                │                                                                     ├── columns: "_stmt_raise_4":8
-                │                                                                     ├── values
-                │                                                                     │    └── tuple
-                │                                                                     └── projections
-                │                                                                          └── udf: _stmt_raise_4 [as="_stmt_raise_4":8]
-                │                                                                               ├── args
-                │                                                                               │    └── variable: x:4
-                │                                                                               ├── params: x:5
-                │                                                                               └── body
-                │                                                                                    ├── project
-                │                                                                                    │    ├── columns: stmt_raise_5:6
-                │                                                                                    │    ├── values
-                │                                                                                    │    │    └── tuple
-                │                                                                                    │    └── projections
-                │                                                                                    │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_5:6]
-                │                                                                                    │              ├── const: 'NOTICE'
-                │                                                                                    │              ├── concat
-                │                                                                                    │              │    ├── concat
-                │                                                                                    │              │    │    ├── const: ''
-                │                                                                                    │              │    │    └── coalesce
-                │                                                                                    │              │    │         ├── cast: STRING
-                │                                                                                    │              │    │         │    └── variable: x:5
-                │                                                                                    │              │    │         └── const: '<NULL>'
-                │                                                                                    │              │    └── const: ''
-                │                                                                                    │              ├── const: ''
-                │                                                                                    │              ├── const: ''
-                │                                                                                    │              └── const: '00000'
-                │                                                                                    └── project
-                │                                                                                         ├── columns: stmt_return_6:7
-                │                                                                                         ├── values
-                │                                                                                         │    └── tuple
-                │                                                                                         └── projections
-                │                                                                                              └── cast: VOID [as=stmt_return_6:7]
-                │                                                                                                   └── null
+                │         └── dispatcher
+                │              ├── subquery
+                │              │    └── project
+                │              │         ├── columns: "_stmt_raise_1":18
+                │              │         ├── project
+                │              │         │    ├── columns: x:1!null
+                │              │         │    ├── values
+                │              │         │    │    └── tuple
+                │              │         │    └── projections
+                │              │         │         └── const: 0 [as=x:1]
+                │              │         └── projections
+                │              │              └── dispatch: 1
+                │              │                   ├── branch: 0
+                │              │                   └── args
+                │              │                        └── variable: x:1
+                │              ├── branch: 0
+                │              │    ├── params: x:2
+                │              │    └── body
+                │              │         ├── project
+                │              │         │    ├── columns: stmt_raise_2:3
+                │              │         │    ├── values
+                │              │         │    │    └── tuple
+                │              │         │    └── projections
+                │              │         │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:3]
+                │              │         │              ├── const: 'NOTICE'
+                │              │         │              ├── concat
+                │              │         │              │    ├── concat
+                │              │         │              │    │    ├── const: ''
+                │              │         │              │    │    └── coalesce
+                │              │         │              │    │         ├── cast: STRING
+                │              │         │              │    │         │    └── variable: x:2
+                │              │         │              │    │         └── const: '<NULL>'
+                │              │         │              │    └── const: ''
+                │              │         │              ├── const: ''
+                │              │         │              ├── const: ''
+                │              │         │              └── const: '00000'
+                │              │         └── project
+                │              │              ├── columns: exception_block_8:17
+                │              │              ├── values
+                │              │              │    └── tuple
+                │              │              └── projections
+                │              │                   └── dispatch: 1
+                │              │                        ├── branch: 4
+                │              │                        └── args
+                │              │                             └── variable: x:2
+                │              ├── branch: 1
+                │              │    ├── params: x:4
+                │              │    └── body
+                │              │         └── project
+                │              │              ├── columns: "_stmt_raise_4":8
+                │              │              ├── values
+                │              │              │    └── tuple
+                │              │              └── projections
+                │              │                   └── dispatch: 1
+                │              │                        ├── branch: 2
+                │              │                        └── args
+                │              │                             └── variable: x:4
+                │              ├── branch: 2
+                │              │    ├── params: x:5
+                │              │    └── body
+                │              │         ├── project
+                │              │         │    ├── columns: stmt_raise_5:6
+                │              │         │    ├── values
+                │              │         │    │    └── tuple
+                │              │         │    └── projections
+                │              │         │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_5:6]
+                │              │         │              ├── const: 'NOTICE'
+                │              │         │              ├── concat
+                │              │         │              │    ├── concat
+                │              │         │              │    │    ├── const: ''
+                │              │         │              │    │    └── coalesce
+                │              │         │              │    │         ├── cast: STRING
+                │              │         │              │    │         │    └── variable: x:5
+                │              │         │              │    │         └── const: '<NULL>'
+                │              │         │              │    └── const: ''
+                │              │         │              ├── const: ''
+                │              │         │              ├── const: ''
+                │              │         │              └── const: '00000'
+                │              │         └── project
+                │              │              ├── columns: stmt_return_6:7
+                │              │              ├── values
+                │              │              │    └── tuple
+                │              │              └── projections
+                │              │                   └── cast: VOID [as=stmt_return_6:7]
+                │              │                        └── null
+                │              ├── branch: 3
+                │              │    ├── params: x:9
+                │              │    └── body
+                │              │         └── project
+                │              │              ├── columns: nested_block_3:11
+                │              │              ├── project
+                │              │              │    ├── columns: x:10!null
+                │              │              │    ├── values
+                │              │              │    │    └── tuple
+                │              │              │    └── projections
+                │              │              │         └── const: 100 [as=x:10]
+                │              │              └── projections
+                │              │                   └── dispatch: 1
+                │              │                        ├── branch: 1
+                │              │                        └── args
+                │              │                             └── variable: x:10
+                │              ├── branch: 4
+                │              │    ├── params: x:12
+                │              │    ├── body
+                │              │    │    └── project
+                │              │    │         ├── columns: "_stmt_exec_9":16
+                │              │    │         ├── values
+                │              │    │         │    └── tuple
+                │              │    │         └── projections
+                │              │    │              └── dispatch: 1
+                │              │    │                   ├── branch: 5
+                │              │    │                   └── args
+                │              │    │                        └── variable: x:12
+                │              │    └── exception-handler
+                │              │         └── SQLSTATE '22012'
+                │              │              └── project
+                │              │                   ├── columns: nested_block_3:11
+                │              │                   ├── project
+                │              │                   │    ├── columns: x:10!null
+                │              │                   │    ├── values
+                │              │                   │    │    └── tuple
+                │              │                   │    └── projections
+                │              │                   │         └── const: 100 [as=x:10]
+                │              │                   └── projections
+                │              │                        └── dispatch: 1
+                │              │                             ├── branch: 1
+                │              │                             └── args
+                │              │                                  └── variable: x:10
+                │              └── branch: 5
+                │                   ├── params: x:13
+                │                   └── body
+                │                        ├── project
+                │                        │    ├── columns: "?column?":14!null
+                │                        │    ├── values
+                │                        │    │    └── tuple
+                │                        │    └── projections
+                │                        │         └── floor-div [as="?column?":14]
+                │                        │              ├── const: 1
+                │                        │              └── const: 0
+                │                        └── project
+                │                             ├── columns: nested_block_3:15
+                │                             ├── values
+                │                             │    └── tuple
+                │                             └── projections
+                │                                  └── dispatch: 1
+                │                                       ├── branch: 1
+                │                                       └── args
+                │                                            └── variable: x:13
                 └── const: 1
