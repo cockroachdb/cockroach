@@ -170,11 +170,13 @@ func TestJWTSingleKey(t *testing.T) {
 	// Configure issuer as it gets checked even before the token validity check.
 	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer1)
 
-	// When no JWKS is specified the JWKS fetch should be attempted and  fail for configured issuer.
+	// When JWKSAutoFetchEnabled JWKS fetch should be attempted and  fail for configured issuer.
+	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: unable to validate token")
 
 	// Set the JWKS cluster setting.
+	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, jwkPublicKey)
 
 	// Now the validate call gets past the token validity check and fails on the next check (subject matching user).
@@ -206,11 +208,13 @@ func TestJWTSingleKeyWithoutKeyAlgorithm(t *testing.T) {
 	// Configure issuer as it gets checked even before the token validity check.
 	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer1)
 
-	// When no JWKS is specified the JWKS fetch should be attempted and  fail for configured issuer.
+	// When JWKSAutoFetchEnabled, JWKS fetch should be attempted and  fail for configured issuer.
+	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: unable to validate token")
 
 	// Set the JWKS cluster setting.
+	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, jwkPublicKey)
 
 	// Now the validate call gets past the token validity check and fails on the next check (subject matching user).
@@ -243,11 +247,13 @@ func TestJWTMultiKey(t *testing.T) {
 
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
 
-	// When the JWKS is set not to include the key used to sign the token, the jwks fetch should be attempted and fail.
+	// When JWKSAutoFetchEnabled the jwks fetch should be attempted and fail.
+	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: unable to validate token")
 
 	// Set both jwk1 and jwk2 to be valid signing keys.
+	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 
 	// Now jwk2 token passes the validity check and fails on the next check (subject matching user).
@@ -300,16 +306,17 @@ func TestKeyIdMismatch(t *testing.T) {
 	// Configure issuer as it gets checked even before the token validity check.
 	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer1)
 
-	// When JWKS is set not to include the key with keyId used to sign the token, jwks fetch should be attempted and fail.
-	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
-	require.ErrorContains(t, err, "JWT authentication: unable to validate token")
+	// When JWKSAutoFetchEnabled the jwks fetch should be attempted and fail.
+	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.ErrorContains(t, err, "JWT authentication: invalid token")
 
 	// Reset the key id and regenerate the token.
 	require.NoError(t, key.Set(jwk.KeyIDKey, keyID1))
 	token = createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
 	// Now jwk1 token passes the validity check and fails on the next check (subject matching user)..
-	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
-	require.ErrorContains(t, err, "JWT authentication: invalid principal")
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
+	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.NoError(t, err)
 }
 
 func TestIssuerCheck(t *testing.T) {
@@ -638,8 +645,8 @@ func createJWKSFromFile(t *testing.T, fileName string) jwk.Set {
 	return jwkSet
 }
 
-// test that jwks url is used when jwks cluster setting is not configured.
-func Test_JWKSFallBackWhenJWKSClusterSettingNotConfigured(t *testing.T) {
+// test that jwks url is used when JWKSAutoFetchEnabled is true.
+func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Intercept the call to getHttpResponse and return the mockGetHttpResponse
 	restoreHook := testutils.TestingHook(&getHttpResponse, mockGetHttpResponseWithLocalFileContent)
@@ -670,6 +677,7 @@ func Test_JWKSFallBackWhenJWKSClusterSettingNotConfigured(t *testing.T) {
 	// Set audience field to audience2.
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience2)
 
+	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
 
 	// Validation fails with an audience error when the audience in the token doesn't match the cluster's audience.
@@ -690,8 +698,8 @@ func Test_JWKSFallBackWhenJWKSClusterSettingNotConfigured(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// test that jwks url is used when jwks cluster setting is configured but does not have the kid required by token.
-func Test_JWKSFallBackWhenJWKSClusterSettingConfiguredButFails(t *testing.T) {
+// test jwks url is used when JWKSAutoFetchEnabled and static jwks ignored.
+func Test_JWKSFetchWorksWhenEnabledIgnoresTheStaticJWKS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Intercept the call to getHttpResponse and return the mockGetHttpResponse
 	restoreHook := testutils.TestingHook(&getHttpResponse, mockGetHttpResponseWithLocalFileContent)
@@ -716,7 +724,7 @@ func Test_JWKSFallBackWhenJWKSClusterSettingConfiguredButFails(t *testing.T) {
 
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-
+	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	// Configure cluster setting with a key that is not used for signing.
 	keySetNotUsedForSigning, _, _ := createJWKS(t)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySetNotUsedForSigning))
@@ -743,50 +751,4 @@ func Test_JWKSFallBackWhenJWKSClusterSettingConfiguredButFails(t *testing.T) {
 	// Validation passes the audience check now that both audiences are accepted.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.NoError(t, err)
-}
-
-// Test that jwks url is not used when jwks cluster setting is configured and has the kid required by token.
-func Test_NoFallbackWhenSameKIDExitsInClusterSetting(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	// Intercept the call to getHttpResponse and return the mockGetHttpResponse
-	restoreHook := testutils.TestingHook(&getHttpResponse, mockGetHttpResponseWithLocalFileContent)
-	defer func() {
-		restoreHook()
-	}()
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	identMapString := ""
-	identMap, err := identmap.From(strings.NewReader(identMapString))
-	require.NoError(t, err)
-
-	// Create keyUsedForSigning from a file. This keyUsedForSigning will be used to sign the token.
-	// Matching public keyUsedForSigning available in jwks url is used to verify token.
-	keySetUsedForSigning := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
-	keyUsedForSigning, _ := keySetUsedForSigning.Get(0)
-	validIssuer := "https://accounts.idp1.com"
-	token := createJWT(t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), keyUsedForSigning, jwa.RS256, "", "")
-
-	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
-	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-
-	// Configure cluster setting with a keyUsedForSigning that is not used for signing.
-	keySetNotUsedForSigning, _, _ := createJWKS(t)
-	keyNotUsedForSigning, _ := keySetNotUsedForSigning.Get(0)
-
-	//Override the kid of keyNotUsedForSigning to match the kid of keyUsedForSigning
-	require.NoError(t, keyNotUsedForSigning.Set(jwk.KeyIDKey, keyUsedForSigning.KeyID()))
-	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySetNotUsedForSigning))
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, validIssuer)
-
-	// Set audience field to audience2.
-	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience2)
-
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
-
-	// kid of keyUsedForSigning is found in the cluster setting, but the validation fails.
-	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
-	require.ErrorContains(t, err, "JWT authentication: invalid token")
 }

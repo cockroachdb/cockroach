@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/lestrrat-go/jwx/jws"
 	"github.com/lestrrat-go/jwx/jwt"
 )
 
@@ -66,11 +65,12 @@ type jwtAuthenticator struct {
 // jwtAuthenticatorConf contains all the values to configure JWT authentication. These values are copied from
 // the matching cluster settings.
 type jwtAuthenticatorConf struct {
-	audience []string
-	enabled  bool
-	issuers  []string
-	jwks     jwk.Set
-	claim    string
+	audience             []string
+	enabled              bool
+	issuers              []string
+	jwks                 jwk.Set
+	claim                string
+	jwksAutoFetchEnabled bool
 }
 
 // reloadConfig locks mutex and then refreshes the values in conf from the cluster settings.
@@ -85,11 +85,12 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 	ctx context.Context, st *cluster.Settings,
 ) {
 	conf := jwtAuthenticatorConf{
-		audience: mustParseValueOrArray(JWTAuthAudience.Get(&st.SV)),
-		enabled:  JWTAuthEnabled.Get(&st.SV),
-		issuers:  mustParseValueOrArray(JWTAuthIssuers.Get(&st.SV)),
-		jwks:     mustParseJWKS(JWTAuthJWKS.Get(&st.SV)),
-		claim:    JWTAuthClaim.Get(&st.SV),
+		audience:             mustParseValueOrArray(JWTAuthAudience.Get(&st.SV)),
+		enabled:              JWTAuthEnabled.Get(&st.SV),
+		issuers:              mustParseValueOrArray(JWTAuthIssuers.Get(&st.SV)),
+		jwks:                 mustParseJWKS(JWTAuthJWKS.Get(&st.SV)),
+		claim:                JWTAuthClaim.Get(&st.SV),
+		jwksAutoFetchEnabled: JWKSAutoFetchEnabled.Get(&st.SV),
 	}
 
 	if !authenticator.mu.conf.enabled && conf.enabled {
@@ -164,23 +165,15 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 			"token issued by %s", unverifiedToken.Issuer())
 	}
 
-	// Check for key-id match against configured jwks.
-	jwkSet := authenticator.mu.conf.jwks
-	keyExists := false
-	if authenticator.mu.conf.jwks.Len() > 0 {
-		jwsMessage, err := jws.Parse(tokenBytes)
-		if err != nil || len(jwsMessage.Signatures()) == 0 {
-			return errors.Newf("JWT authentication: invalid token signature")
-		}
-		tokenKeyId := jwsMessage.Signatures()[0].ProtectedHeaders().KeyID()
-		_, keyExists = authenticator.mu.conf.jwks.LookupKeyID(tokenKeyId)
-	}
-	// if key not found in jwks, fetch remote jwks from issuerUrl and try again.
-	if !keyExists {
-		jwkSet, err = getJWKS(ctx, issuerUrl)
+	var jwkSet jwk.Set
+	// If auto-fetch is enabled, fetch the JWKS remotely from the issuer's well known jwks url.
+	if authenticator.mu.conf.jwksAutoFetchEnabled {
+		jwkSet, err = remoteFetchJWKS(ctx, issuerUrl)
 		if err != nil {
 			return errors.Newf("JWT authentication: unable to validate token")
 		}
+	} else {
+		jwkSet = authenticator.mu.conf.jwks
 	}
 
 	// Now that both the issuer and key-id are matched, parse the token again to validate the signature.
@@ -275,8 +268,8 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	return nil
 }
 
-// getJWKS fetches the JWKS from the provided URI.
-func getJWKS(ctx context.Context, issuerUrl string) (jwk.Set, error) {
+// remoteFetchJWKS fetches the JWKS from the provided URI.
+func remoteFetchJWKS(ctx context.Context, issuerUrl string) (jwk.Set, error) {
 	jwksUrl, err := getJWKSUrl(ctx, issuerUrl)
 	if err != nil {
 		return nil, err
@@ -356,6 +349,9 @@ var ConfigureJWTAuth = func(
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	JWTAuthClaim.SetOnChange(&st.SV, func(ctx context.Context) {
+		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
+	})
+	JWKSAutoFetchEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	return &authenticator
