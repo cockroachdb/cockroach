@@ -1089,11 +1089,11 @@ project
  │    └── tuple
  └── projections
       └── udf: strict_fn [as=strict_fn:5]
-           ├── strict
            ├── args
            │    ├── const: 1
            │    ├── const: 'foo'
            │    └── false
+           ├── strict
            ├── params: i:1 t:2 b:3
            └── body
                 └── limit
@@ -1118,7 +1118,6 @@ project
  │    └── filters
  │         └── eq
  │              ├── udf: strict_fn
- │              │    ├── strict
  │              │    ├── args
  │              │    │    ├── plus
  │              │    │    │    ├── plus
@@ -1128,6 +1127,7 @@ project
  │              │    │    ├── cast: STRING
  │              │    │    │    └── variable: abc.b:2
  │              │    │    └── false
+ │              │    ├── strict
  │              │    ├── params: i:6 t:7 b:8
  │              │    └── body
  │              │         └── limit
@@ -1142,12 +1142,12 @@ project
  │              └── const: 10
  └── projections
       └── udf: strict_fn [as=strict_fn:14]
-           ├── strict
            ├── args
            │    ├── variable: a:1
            │    ├── cast: STRING
            │    │    └── variable: abc.b:2
            │    └── false
+           ├── strict
            ├── params: i:10 t:11 b:12
            └── body
                 └── limit
@@ -1181,7 +1181,6 @@ project
  │    └── columns: t1.i:1
  └── projections
       └── udf: f101516 [as=f101516:16]
-           ├── strict
            ├── args
            │    └── subquery
            │         └── max1-row
@@ -1200,6 +1199,7 @@ project
            │                   │              └── variable: t3.i:9
            │                   └── projections
            │                        └── variable: t1.i:1 [as=i:13]
+           ├── strict
            ├── params: x:14
            └── body
                 └── values
@@ -1220,11 +1220,11 @@ project-set
  │    └── tuple
  └── zip
       └── udf: strict_fn_record
-           ├── strict
            ├── args
            │    ├── const: 1
            │    ├── const: 'foo'
            │    └── false
+           ├── strict
            ├── params: i:1 t:2 b:3
            └── body
                 └── limit
@@ -1248,11 +1248,11 @@ project
  │    └── tuple
  └── projections
       └── udf: strict_fn_record [as=strict_fn_record:8]
-           ├── strict
            ├── args
            │    ├── const: 1
            │    ├── const: 'foo'
            │    └── false
+           ├── strict
            ├── params: i:1 t:2 b:3
            └── body
                 └── project

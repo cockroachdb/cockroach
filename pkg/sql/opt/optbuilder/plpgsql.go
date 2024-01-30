@@ -1125,7 +1125,7 @@ func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) *memo.ExceptionBlock 
 		return nil
 	}
 	codes := make([]pgcode.Code, 0, len(block.Exceptions))
-	handlers := make([]*memo.UDFDefinition, 0, len(block.Exceptions))
+	handlers := make(memo.RoutineDefList, 0, len(block.Exceptions))
 	addHandler := func(codeStr string, handler *memo.UDFDefinition) {
 		code := pgcode.MakeCode(strings.ToUpper(codeStr))
 		switch code {
