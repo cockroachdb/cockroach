@@ -1039,25 +1039,42 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 		tblName := "seed"
 		defer s.DB.Close()
 
-		sqlDB.ExecMultiple(t, sqlsmith.Setups[tblName](rng)...)
+		setup := sqlsmith.Setups[tblName](rng)
+		sqlDB.ExecMultiple(t, setup...)
 
 		// TODO: PopulateTableWithRandData doesn't work with enums
-		sqlDB.Exec(t, "ALTER TABLE seed DROP COLUMN _enum")
+		dropEnumQry := "ALTER TABLE seed DROP COLUMN _enum;"
+		sqlDB.Exec(t, dropEnumQry)
 
+		// Attempt to insert a few more than our target 100 values, since there's a
+		// small chance we may not succeed that many inserts.
+		numInserts := 110
+		inserts := make([]string, 0, numInserts)
 		for rows := 0; rows < 100; {
 			var err error
 			var newRows int
-			if newRows, err = randgen.PopulateTableWithRandData(rng, s.DB, tblName, 200); err != nil {
+			if newRows, err = randgen.PopulateTableWithRandData(rng, s.DB, tblName, numInserts, &inserts); err != nil {
 				t.Fatal(err)
 			}
 			rows += newRows
 		}
 
-		sqlDB.Exec(t, `DELETE FROM seed WHERE rowid NOT IN (SELECT rowid FROM seed LIMIT 100)`)
+		limitQry := "DELETE FROM seed WHERE rowid NOT IN (SELECT rowid FROM seed ORDER BY rowid LIMIT 100);"
+		sqlDB.Exec(t, limitQry)
 
 		// Put the enums back. enum_range('hi'::greeting)[rowid%7] will give nulls when rowid%7=0 or 6.
-		sqlDB.Exec(t, `ALTER TABLE seed ADD COLUMN _enum greeting`)
-		sqlDB.Exec(t, `UPDATE seed SET _enum = enum_range('hi'::greeting)[rowid%7]`)
+		addEnumQry := "ALTER TABLE seed ADD COLUMN _enum greeting;"
+		sqlDB.Exec(t, addEnumQry)
+		populateEnumQry := "UPDATE seed SET _enum = enum_range('hi'::greeting)[rowid%7];"
+		sqlDB.Exec(t, populateEnumQry)
+		// Get values to log setup.
+		t.Logf("setup:\n%s\n%s\n%s\n%s\n%s\n%s",
+			strings.Join(setup, "\n"),
+			dropEnumQry,
+			strings.Join(inserts, "\n"),
+			limitQry,
+			addEnumQry,
+			populateEnumQry)
 
 		queryGen, err := sqlsmith.NewSmither(s.DB, rng,
 			sqlsmith.DisableWith(),
