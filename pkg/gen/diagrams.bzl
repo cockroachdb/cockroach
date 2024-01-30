@@ -230,6 +230,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:show_create_schedules.html",
     "//docs/generated/sql/bnf:show_databases.html",
     "//docs/generated/sql/bnf:show_default_privileges.html",
+    "//docs/generated/sql/bnf:show_default_session_variables_for_role.html",
     "//docs/generated/sql/bnf:show_enums.html",
     "//docs/generated/sql/bnf:show_full_scans.html",
     "//docs/generated/sql/bnf:show_functions.html",
