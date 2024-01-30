@@ -1162,7 +1162,7 @@ func (r *raft) Step(m pb.Message) error {
 
 	case pb.MsgStorageAppendResp:
 		if m.Index != 0 {
-			r.raftLog.stableTo(m.Index, m.LogTerm)
+			r.raftLog.stableTo(entryID{term: m.LogTerm, index: m.Index})
 		}
 		if m.Snapshot != nil {
 			r.appliedSnap(m.Snapshot)

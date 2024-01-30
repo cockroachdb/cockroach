@@ -493,7 +493,7 @@ func TestUnstableStableTo(t *testing.T) {
 				snapshot:         tt.snap,
 				logger:           raftLogger,
 			}
-			u.stableTo(tt.index, tt.term)
+			u.stableTo(entryID{term: tt.term, index: tt.index})
 			require.Equal(t, tt.woffset, u.offset)
 			require.Equal(t, tt.woffsetInProgress, u.offsetInProgress)
 			require.Equal(t, tt.wlen, len(u.entries))

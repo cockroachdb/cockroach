@@ -407,7 +407,7 @@ func TestHasNextCommittedEnts(t *testing.T) {
 
 			raftLog := newLog(storage, raftLogger)
 			raftLog.append(ents...)
-			raftLog.stableTo(4, 1)
+			raftLog.stableTo(entryID{term: 1, index: 4})
 			raftLog.maybeCommit(5, 1)
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
@@ -465,7 +465,7 @@ func TestNextCommittedEnts(t *testing.T) {
 
 			raftLog := newLog(storage, raftLogger)
 			raftLog.append(ents...)
-			raftLog.stableTo(4, 1)
+			raftLog.stableTo(entryID{term: 1, index: 4})
 			raftLog.maybeCommit(5, 1)
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
@@ -524,7 +524,7 @@ func TestAcceptApplying(t *testing.T) {
 
 			raftLog := newLogWithSize(storage, raftLogger, maxSize)
 			raftLog.append(ents...)
-			raftLog.stableTo(4, 1)
+			raftLog.stableTo(entryID{term: 1, index: 4})
 			raftLog.maybeCommit(5, 1)
 			raftLog.appliedTo(3, 0 /* size */)
 
@@ -573,7 +573,7 @@ func TestAppliedTo(t *testing.T) {
 
 			raftLog := newLogWithSize(storage, raftLogger, maxSize)
 			raftLog.append(ents...)
-			raftLog.stableTo(4, 1)
+			raftLog.stableTo(entryID{term: 1, index: 4})
 			raftLog.maybeCommit(5, 1)
 			raftLog.appliedTo(3, 0 /* size */)
 			raftLog.acceptApplying(5, maxSize+overshoot, false /* allowUnstable */)
@@ -611,7 +611,7 @@ func TestNextUnstableEnts(t *testing.T) {
 
 			ents := raftLog.nextUnstableEnts()
 			if l := len(ents); l > 0 {
-				raftLog.stableTo(ents[l-1].Index, ents[l-1].Term)
+				raftLog.stableTo(pbEntryID(&ents[l-1]))
 			}
 			require.Equal(t, tt.wents, ents)
 			require.Equal(t, previousEnts[len(previousEnts)-1].Index+1, raftLog.unstable.offset)
@@ -662,7 +662,7 @@ func TestStableTo(t *testing.T) {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			raftLog := newLog(NewMemoryStorage(), raftLogger)
 			raftLog.append([]pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}}...)
-			raftLog.stableTo(tt.stablei, tt.stablet)
+			raftLog.stableTo(entryID{term: tt.stablet, index: tt.stablei})
 			require.Equal(t, tt.wunstable, raftLog.unstable.offset)
 		})
 	}
@@ -699,7 +699,7 @@ func TestStableToWithSnap(t *testing.T) {
 			require.NoError(t, s.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: snapi, Term: snapt}}))
 			raftLog := newLog(s, raftLogger)
 			raftLog.append(tt.newEnts...)
-			raftLog.stableTo(tt.stablei, tt.stablet)
+			raftLog.stableTo(entryID{term: tt.stablet, index: tt.stablei})
 			require.Equal(t, tt.wunstable, raftLog.unstable.offset)
 		})
 
