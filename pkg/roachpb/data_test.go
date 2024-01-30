@@ -929,7 +929,7 @@ func TestMakePriority(t *testing.T) {
 	}
 
 	// Generate values for all priorities.
-	const trials = 750000
+	const trials = 1000000
 	values := make([][trials]enginepb.TxnPriority, len(userPs))
 	for i, userPri := range userPs {
 		for tr := 0; tr < trials; tr++ {
