@@ -2029,37 +2029,13 @@ type kafkaManager struct {
 }
 
 func (k kafkaManager) setProducerQuota(ctx context.Context, bytesPerSecond int) {
-	// bin/kafka-configs.sh --bootstrap-server localhost:9092 --alter --add-config 'producer_byte_rate=1024,consumer_byte_rate=2048,request_percentage=200' --entity-type users --entity-name user1 --entity-type clients --entity-name clientA
 	k.t.Status("setting producer quota to %d bytes per second for all users", bytesPerSecond)
-	//k.c.Run(ctx, k.nodes, filepath.Join(k.binDir(), "kafka-configs"),
-	//	"--bootstrap-server", "localhost:9092",
-	//	"--alter",
-	//	"--add-config", fmt.Sprintf("producer_byte_rate=%d", bytesPerSecond),
-	//	"--entity-type", "users",
-	//	"--entity-name", "default")
-	//
-
 	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNode), filepath.Join(k.binDir(), "kafka-configs"),
-		// bootstrap-server=localhost:9092
 		"--bootstrap-server", "localhost:9092",
 		"--alter",
 		"--add-config", fmt.Sprintf("producer_byte_rate=%d", bytesPerSecond),
 		"--entity-type", "users",
 		"--entity-default")
-
-	//k.c.Run(ctx, k.nodes, filepath.Join(k.binDir(), "kafka-configs"),
-	//	"--bootstrap-server", "localhost:9092",
-	//	"--alter",
-	//	"--add-config", "SCRAM-SHA-512=[password=scram512-secret]",
-	//	"--entity-type", "users",
-	//	"--entity-name", "scram512")
-	//
-	//k.c.Run(ctx, k.nodes, filepath.Join(k.binDir(), "kafka-configs"),
-	//	"--bootstrap-server", "localhost:9092",
-	//	"--alter",
-	//	"--add-config", "SCRAM-SHA-256=[password=scram256-secret]",
-	//	"--entity-type", "users",
-	//	"--entity-name", "scram256")
 }
 
 func (k kafkaManager) basePath() string {

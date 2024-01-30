@@ -1243,7 +1243,6 @@ func (s *kafkaStats) String() string {
 
 type metricsRegistryInterceptor struct {
 	metrics.Registry
-	// do we want to implement the histogram interface so that it gets called when update is called
 	throttleTimeMs metrics.Histogram
 }
 

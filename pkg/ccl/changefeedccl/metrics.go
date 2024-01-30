@@ -333,6 +333,14 @@ type kafkaHistogramAdapter struct {
 	wrapped *aggmetric.Histogram
 }
 
+var _ metrics.Histogram = (*kafkaHistogramAdapter)(nil)
+
+func (k *kafkaHistogramAdapter) Update(valueInMs int64) {
+	if k != nil {
+		k.wrapped.RecordValue(valueInMs * 1000000)
+	}
+}
+
 func (k *kafkaHistogramAdapter) Clear() {
 	panic("clear is not expected to be called on kafkaHistogramAdapter")
 }
@@ -379,14 +387,6 @@ func (k *kafkaHistogramAdapter) Sum() int64 {
 
 func (k *kafkaHistogramAdapter) Variance() float64 {
 	panic("variance is not expected to be called on kafkaHistogramAdapter")
-}
-
-var _ metrics.Histogram = (*kafkaHistogramAdapter)(nil)
-
-func (k *kafkaHistogramAdapter) Update(v int64) {
-	if k != nil {
-		k.wrapped.RecordValue(v)
-	}
 }
 
 type KafkaMetricsGetter interface {
@@ -643,10 +643,9 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Unit:        metric.Unit_COUNT,
 	}
 	metaThrottleTimeInMs := metric.Metadata{
-		// TODO(wenyihu): add ms to ns conversion
-		Name:        "changefeed.throttle_time_in_ms",
+		Name:        "changefeed.throttle_time_in_ns",
 		Help:        "Throttling tims spent in ms due to kafka quota",
-		Measurement: "Milliseconds",
+		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaChangefeedEmittedBatchSizes := metric.Metadata{
