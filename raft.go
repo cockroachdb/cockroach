@@ -1744,13 +1744,26 @@ func stepFollower(r *raft, m pb.Message) error {
 	return nil
 }
 
+// logSliceFromMsgApp extracts the appended logSlice from a MsgApp message.
+func logSliceFromMsgApp(m *pb.Message) logSlice {
+	// TODO(pav-kv): consider also validating the logSlice here.
+	return logSlice{
+		term:    m.Term,
+		prev:    entryID{term: m.LogTerm, index: m.Index},
+		entries: m.Entries,
+	}
+}
+
 func (r *raft) handleAppendEntries(m pb.Message) {
-	prev := entryID{term: m.LogTerm, index: m.Index}
-	if prev.index < r.raftLog.committed {
+	// TODO(pav-kv): construct logSlice up the stack next to receiving the
+	// message, and validate it before taking any action (e.g. bumping term).
+	a := logSliceFromMsgApp(&m)
+
+	if a.prev.index < r.raftLog.committed {
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed})
 		return
 	}
-	if mlastIndex, ok := r.raftLog.maybeAppend(prev, m.Commit, m.Entries...); ok {
+	if mlastIndex, ok := r.raftLog.maybeAppend(a, m.Commit); ok {
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: mlastIndex})
 		return
 	}
