@@ -4,6 +4,7 @@ load("//pkg/util/interval/generic:gen.bzl", "gen_interval_btree")
 go_library(
     name = "span",
     srcs = [
+        "doc.go",
         "frontier.go",
         "llrb_frontier.go",
         ":btreefrontierentry_interval_btree.go",  #keep
