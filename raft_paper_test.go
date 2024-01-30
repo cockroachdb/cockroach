@@ -923,7 +923,8 @@ func commitNoopEntry(r *raft, s *MemoryStorage) {
 	r.readMessages()
 	s.Append(r.raftLog.nextUnstableEnts())
 	r.raftLog.appliedTo(r.raftLog.committed, 0 /* size */)
-	r.raftLog.stableTo(r.raftLog.lastIndex(), r.raftLog.lastTerm())
+	last := r.raftLog.lastEntryID()
+	r.raftLog.stableTo(last.index, last.term) // TODO(pav-kv): pass lastEntryID directly
 }
 
 func acceptAndReply(m pb.Message) pb.Message {
