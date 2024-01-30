@@ -90,11 +90,46 @@ func FloatsMatchApprox(expectedString, actualString string) (bool, error) {
 		// Default to string matching for NULL, since it can't be parsed as a float.
 		return expectedString == actualString, nil
 	}
-	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
+	expected, actual, err := parseTwoFloats(expectedString, actualString)
 	if err != nil {
 		return false, err
 	}
 	return EqualApprox(expected, actual, CloseFraction, CloseMargin), nil
+}
+
+// FloatsCmp returns -1 if aString is less than bString, 0 if they are equal,
+// and 1 otherwise when aString and bString are parsed as SQL floats. NULL
+// sorts before NaN, which sorts before all other numbers.
+func FloatsCmp(aString, bString string) (int, error) {
+	if aString == "NULL" {
+		if bString != "NULL" {
+			return -1, nil
+		}
+		return 0, nil
+	} else if bString == "NULL" {
+		return 1, nil
+	}
+
+	a, b, err := parseTwoFloats(aString, bString)
+	if err != nil {
+		return 0, err
+	}
+	if math.IsNaN(a) {
+		if !math.IsNaN(b) {
+			return -1, nil
+		}
+		return 0, nil
+	} else if math.IsNaN(b) {
+		return 1, nil
+	}
+
+	if a < b {
+		return -1, nil
+	} else if a == b {
+		return 0, nil
+	} else {
+		return 1, nil
+	}
 }
 
 // FloatsMatch returns whether two floating point numbers represented as
@@ -105,11 +140,11 @@ func FloatsMatch(expectedString, actualString string) (bool, error) {
 		// Default to string matching for NULL, since it can't be parsed as a float.
 		return expectedString == actualString, nil
 	}
-	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
+	expected, actual, err := parseTwoFloats(expectedString, actualString)
 	if err != nil {
 		return false, err
 	}
-	// Check special values - NaN, +Inf, -Inf, 0.
+	// Check special values - NaN, +Inf, -Inf, 0, -0.
 	if math.IsNaN(expected) || math.IsNaN(actual) {
 		return math.IsNaN(expected) == math.IsNaN(actual), nil
 	}
@@ -187,16 +222,15 @@ func ParseRoundInStringsDirective(directive string) (int, error) {
 	return strconv.Atoi(kv[1])
 }
 
-// parseExpectedAndActualFloats converts the strings expectedString and
-// actualString to float64 values.
-func parseExpectedAndActualFloats(expectedString, actualString string) (float64, float64, error) {
-	expected, err := strconv.ParseFloat(expectedString, 64 /* bitSize */)
+// parseTwoFloats converts the strings aString and bString to float64 values.
+func parseTwoFloats(aString, bString string) (float64, float64, error) {
+	a, err := strconv.ParseFloat(aString, 64 /* bitSize */)
 	if err != nil {
-		return 0, 0, errors.Wrap(err, "when parsing expected")
+		return 0, 0, errors.Wrap(err, "when parsing aString")
 	}
-	actual, err := strconv.ParseFloat(actualString, 64 /* bitSize */)
+	b, err := strconv.ParseFloat(bString, 64 /* bitSize */)
 	if err != nil {
-		return 0, 0, errors.Wrap(err, "when parsing actual")
+		return 0, 0, errors.Wrap(err, "when parsing bString")
 	}
-	return expected, actual, nil
+	return a, b, nil
 }
