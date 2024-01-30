@@ -137,7 +137,7 @@ func TestIsUpToDate(t *testing.T) {
 
 	for i, tt := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			require.Equal(t, tt.wUpToDate, raftLog.isUpToDate(tt.lastIndex, tt.term))
+			require.Equal(t, tt.wUpToDate, raftLog.isUpToDate(entryID{term: tt.term, index: tt.lastIndex}))
 		})
 	}
 }

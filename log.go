@@ -430,15 +430,16 @@ func (l *raftLog) allEntries() []pb.Entry {
 	panic(err)
 }
 
-// isUpToDate determines if the given (lastIndex,term) log is more up-to-date
+// isUpToDate determines if a log with the given last entry is more up-to-date
 // by comparing the index and term of the last entries in the existing logs.
+//
 // If the logs have last entries with different terms, then the log with the
 // later term is more up-to-date. If the logs end with the same term, then
 // whichever log has the larger lastIndex is more up-to-date. If the logs are
 // the same, the given log is up-to-date.
-func (l *raftLog) isUpToDate(lasti, term uint64) bool {
-	last := l.lastEntryID()
-	return term > last.term || term == last.term && lasti >= last.index
+func (l *raftLog) isUpToDate(their entryID) bool {
+	our := l.lastEntryID()
+	return their.term > our.term || their.term == our.term && their.index >= our.index
 }
 
 func (l *raftLog) matchTerm(id entryID) bool {
