@@ -4134,7 +4134,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 			// Sleep to give the shutdown time to propagate. The test appeared to work
 			// without this sleep, but best to be somewhat robust to different
 			// goroutine schedules.
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(20 * time.Millisecond)
 		} else {
 			state.Unlock()
 		}
