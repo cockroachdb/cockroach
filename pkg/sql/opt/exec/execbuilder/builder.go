@@ -86,6 +86,10 @@ type Builder struct {
 	// rather than scans.
 	withExprs []builtWithExpr
 
+	// dispatchers maps from each dispatcher ID to its DispatchChannel, which
+	// allows DispatchExpr instances to communicate with their parent Dispatcher.
+	dispatchers map[memo.DispatcherID]*tree.DispatchChannel
+
 	// allowAutoCommit is passed through to factory methods for mutation
 	// operators. It allows execution to commit the transaction as part of the
 	// mutation itself. See canAutoCommit().
