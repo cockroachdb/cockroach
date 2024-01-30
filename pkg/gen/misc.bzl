@@ -35,5 +35,7 @@ MISC_SRCS = [
     "//pkg/util/log/logpb:json_encode_generated.go",
     "//pkg/util/log/severity:severity_generated.go",
     "//pkg/util/log:log_channels_generated.go",
+    "//pkg/util/span:btreefrontierentry_interval_btree.go",
+    "//pkg/util/span:btreefrontierentry_interval_btree_test.go",
     "//pkg/util/timeutil:lowercase_timezones_generated.go",
 ]
