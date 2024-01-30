@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -84,15 +85,18 @@ func NewParallelIO(
 	metrics metricsRecorder,
 	settings *cluster.Settings,
 ) *ParallelIO {
+	quota := uint64(requestQuota.Get(&settings.SV))
 	wg := ctxgroup.WithContext(ctx)
 	io := &ParallelIO{
 		retryOpts: retryOpts,
 		wg:        wg,
 		metrics:   metrics,
 		ioHandler: handler,
-		quota:     quotapool.NewIntPool("changefeed-parallel-io", uint64(requestQuota.Get(&settings.SV))),
-		requestCh: make(chan AdmittedIORequest, numWorkers),
-		resultCh:  make(chan IOResult, numWorkers),
+		quota:     quotapool.NewIntPool("changefeed-parallel-io", quota),
+		// NB: The size of these channels should not be less than the quota. This prevents the producer from
+		// blocking on sending requests which have been admitted.
+		requestCh: make(chan AdmittedIORequest, quota),
+		resultCh:  make(chan IOResult, quota),
 		doneCh:    make(chan struct{}),
 	}
 
@@ -161,8 +165,10 @@ var requestQuota = settings.RegisterIntSetting(
 	"changefeed.parallel_io.request_quota",
 	"the number of requests which can be admitted into the parallelio"+
 		" system before blocking the producer",
-	128,
-	settings.PositiveInt,
+	int64(util.ConstantWithMetamorphicTestChoice(
+		"changefeed.parallel_io.request_quota",
+		128, 16, 32, 64, 256).(int)),
+	settings.IntInRange(1, 256),
 	settings.WithVisibility(settings.Reserved),
 )
 
