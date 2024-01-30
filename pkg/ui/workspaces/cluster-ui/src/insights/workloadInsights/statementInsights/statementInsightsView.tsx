@@ -77,7 +77,6 @@ export type StatementInsightsViewStateProps = {
   dropDownSelect?: React.ReactElement;
   timeScale?: TimeScale;
   maxSizeApiReached?: boolean;
-  isTenant?: boolean;
 };
 
 export type StatementInsightsViewDispatchProps = {
