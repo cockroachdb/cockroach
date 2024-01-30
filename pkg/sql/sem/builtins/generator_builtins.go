@@ -752,7 +752,7 @@ func (g *gistPlanGenerator) Next(context.Context) (bool, error) {
 
 func (g *gistPlanGenerator) Close(context.Context) {}
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (g *gistPlanGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{tree.NewDString(g.rows[g.index])}, nil
 }
@@ -825,25 +825,25 @@ func makeRegexpSplitToTableGeneratorFactory(hasFlags bool) eval.GeneratorOverloa
 	}
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (*regexpSplitToTableGenerator) ResolvedType() *types.T { return types.String }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (*regexpSplitToTableGenerator) Close(_ context.Context) {}
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (g *regexpSplitToTableGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	g.curr = -1
 	return nil
 }
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (g *regexpSplitToTableGenerator) Next(_ context.Context) (bool, error) {
 	g.curr++
 	return g.curr < len(g.words), nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (g *regexpSplitToTableGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{tree.NewDString(g.words[g.curr])}, nil
 }
@@ -865,20 +865,20 @@ var optionsToOverloadGeneratorType = types.MakeLabeledTuple(
 	[]string{"option_name", "option_value"},
 )
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (*optionsToTableGenerator) ResolvedType() *types.T {
 	return optionsToOverloadGeneratorType
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (*optionsToTableGenerator) Close(_ context.Context) {}
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (g *optionsToTableGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	return nil
 }
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (g *optionsToTableGenerator) Next(_ context.Context) (bool, error) {
 	g.idx++
 	if g.idx >= g.arr.Len() {
@@ -887,7 +887,7 @@ func (g *optionsToTableGenerator) Next(_ context.Context) (bool, error) {
 	return true, nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (g *optionsToTableGenerator) Values() (tree.Datums, error) {
 	elem := g.arr.Array[g.idx]
 
@@ -926,25 +926,25 @@ func makeKeywordsGenerator(
 	return &keywordsValueGenerator{}, nil
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (*keywordsValueGenerator) ResolvedType() *types.T { return keywordsValueGeneratorType }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (*keywordsValueGenerator) Close(_ context.Context) {}
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (k *keywordsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	k.curKeyword = -1
 	return nil
 }
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (k *keywordsValueGenerator) Next(_ context.Context) (bool, error) {
 	k.curKeyword++
 	return k.curKeyword < len(lexbase.KeywordNames), nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (k *keywordsValueGenerator) Values() (tree.Datums, error) {
 	kw := lexbase.KeywordNames[k.curKeyword]
 	cat := lexbase.KeywordsCategories[kw]
@@ -1103,12 +1103,12 @@ func makeTSTZSeriesGenerator(
 	}, nil
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (s *seriesValueGenerator) ResolvedType() *types.T {
 	return s.genType
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (s *seriesValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.nextOK = true
 	s.start = s.origStart
@@ -1116,15 +1116,15 @@ func (s *seriesValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	return nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (s *seriesValueGenerator) Close(_ context.Context) {}
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (s *seriesValueGenerator) Next(_ context.Context) (bool, error) {
 	return s.next(s)
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (s *seriesValueGenerator) Values() (tree.Datums, error) {
 	return s.genValue(s)
 }
@@ -1148,7 +1148,7 @@ type multipleArrayValueGenerator struct {
 	datums    tree.Datums
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (s *multipleArrayValueGenerator) ResolvedType() *types.T {
 	arraysN := len(s.arrays)
 	returnTypes := make([]*types.T, arraysN)
@@ -1160,17 +1160,17 @@ func (s *multipleArrayValueGenerator) ResolvedType() *types.T {
 	return types.MakeLabeledTuple(returnTypes, labels)
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (s *multipleArrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.datums = make(tree.Datums, len(s.arrays))
 	s.nextIndex = -1
 	return nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (s *multipleArrayValueGenerator) Close(_ context.Context) {}
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (s *multipleArrayValueGenerator) Next(_ context.Context) (bool, error) {
 	s.nextIndex++
 	for _, arr := range s.arrays {
@@ -1181,7 +1181,7 @@ func (s *multipleArrayValueGenerator) Next(_ context.Context) (bool, error) {
 	return false, nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (s *multipleArrayValueGenerator) Values() (tree.Datums, error) {
 	for i, arr := range s.arrays {
 		if s.nextIndex < arr.Len() {
@@ -1237,21 +1237,21 @@ type arrayValueGenerator struct {
 	nextIndex int
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (s *arrayValueGenerator) ResolvedType() *types.T {
 	return s.array.ParamTyp
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (s *arrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.nextIndex = -1
 	return nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (s *arrayValueGenerator) Close(_ context.Context) {}
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (s *arrayValueGenerator) Next(_ context.Context) (bool, error) {
 	s.nextIndex++
 	if s.nextIndex >= s.array.Len() {
@@ -1260,7 +1260,7 @@ func (s *arrayValueGenerator) Next(_ context.Context) (bool, error) {
 	return true, nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (s *arrayValueGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{s.array.Array[s.nextIndex]}, nil
 }
@@ -1283,7 +1283,7 @@ type expandArrayValueGenerator struct {
 
 var expandArrayValueGeneratorLabels = []string{"x", "n"}
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (s *expandArrayValueGenerator) ResolvedType() *types.T {
 	return types.MakeLabeledTuple(
 		[]*types.T{s.avg.array.ParamTyp, types.Int},
@@ -1291,22 +1291,22 @@ func (s *expandArrayValueGenerator) ResolvedType() *types.T {
 	)
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (s *expandArrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.avg.nextIndex = -1
 	return nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (s *expandArrayValueGenerator) Close(_ context.Context) {}
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (s *expandArrayValueGenerator) Next(_ context.Context) (bool, error) {
 	s.avg.nextIndex++
 	return s.avg.nextIndex < s.avg.array.Len(), nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (s *expandArrayValueGenerator) Values() (tree.Datums, error) {
 	// Expand array's index is 1 based.
 	s.buf[0] = s.avg.array.Array[s.avg.nextIndex]
@@ -1353,12 +1353,12 @@ type subscriptsValueGenerator struct {
 
 var subscriptsValueGeneratorType = types.Int
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (s *subscriptsValueGenerator) ResolvedType() *types.T {
 	return subscriptsValueGeneratorType
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (s *subscriptsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	if s.reverse {
 		s.avg.nextIndex = s.avg.array.Len()
@@ -1370,10 +1370,10 @@ func (s *subscriptsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	return nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (s *subscriptsValueGenerator) Close(_ context.Context) {}
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (s *subscriptsValueGenerator) Next(_ context.Context) (bool, error) {
 	if s.reverse {
 		s.avg.nextIndex--
@@ -1383,7 +1383,7 @@ func (s *subscriptsValueGenerator) Next(_ context.Context) (bool, error) {
 	return s.avg.nextIndex < s.avg.array.Len(), nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (s *subscriptsValueGenerator) Values() (tree.Datums, error) {
 	s.buf[0] = tree.NewDInt(tree.DInt(s.avg.nextIndex + s.firstIndex))
 	return s.buf[:], nil
@@ -1422,19 +1422,19 @@ func makeUnaryGenerator(
 	return &unaryValueGenerator{}, nil
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (*unaryValueGenerator) ResolvedType() *types.T { return unaryValueGeneratorType }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (s *unaryValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.done = false
 	return nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (s *unaryValueGenerator) Close(_ context.Context) {}
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (s *unaryValueGenerator) Next(_ context.Context) (bool, error) {
 	if !s.done {
 		s.done = true
@@ -1445,7 +1445,7 @@ func (s *unaryValueGenerator) Next(_ context.Context) (bool, error) {
 
 var noDatums tree.Datums
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (s *unaryValueGenerator) Values() (tree.Datums, error) { return noDatums, nil }
 
 func jsonAsText(j json.JSON) (tree.Datum, error) {
@@ -1520,7 +1520,7 @@ func makeJSONArrayGenerator(args tree.Datums, asText bool) (eval.ValueGenerator,
 	}, nil
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (g *jsonArrayGenerator) ResolvedType() *types.T {
 	if g.asText {
 		return jsonArrayTextGeneratorType
@@ -1528,7 +1528,7 @@ func (g *jsonArrayGenerator) ResolvedType() *types.T {
 	return jsonArrayGeneratorType
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (g *jsonArrayGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	g.nextIndex = -1
 	g.json.JSON = g.json.JSON.MaybeDecode()
@@ -1536,10 +1536,10 @@ func (g *jsonArrayGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	return nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (g *jsonArrayGenerator) Close(_ context.Context) {}
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (g *jsonArrayGenerator) Next(_ context.Context) (bool, error) {
 	g.nextIndex++
 	next, err := g.json.FetchValIdx(g.nextIndex)
@@ -1556,7 +1556,7 @@ func (g *jsonArrayGenerator) Next(_ context.Context) (bool, error) {
 	return true, nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (g *jsonArrayGenerator) Values() (tree.Datums, error) {
 	return g.buf[:], nil
 }
@@ -1597,23 +1597,23 @@ func makeJSONObjectKeysGenerator(
 	}, nil
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) ResolvedType() *types.T {
 	return jsonObjectKeysGeneratorType
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Close(_ context.Context) {}
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Next(_ context.Context) (bool, error) {
 	return g.iter.Next(), nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{tree.NewDString(g.iter.Key())}, nil
 }
@@ -1697,7 +1697,7 @@ func makeJSONEachGenerator(args tree.Datums, asText bool) (eval.ValueGenerator, 
 	}, nil
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (g *jsonEachGenerator) ResolvedType() *types.T {
 	if g.asText {
 		return jsonEachTextGeneratorType
@@ -1705,7 +1705,7 @@ func (g *jsonEachGenerator) ResolvedType() *types.T {
 	return jsonEachGeneratorType
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (g *jsonEachGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	iter, err := g.target.ObjectIter()
 	if err != nil {
@@ -1723,10 +1723,10 @@ func (g *jsonEachGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	return nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (g *jsonEachGenerator) Close(_ context.Context) {}
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (g *jsonEachGenerator) Next(_ context.Context) (bool, error) {
 	if !g.iter.Next() {
 		return false, nil
@@ -1743,7 +1743,7 @@ func (g *jsonEachGenerator) Next(_ context.Context) (bool, error) {
 	return true, nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (g *jsonEachGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{g.key, g.value}, nil
 }
@@ -1850,21 +1850,21 @@ type jsonPopulateRecordGenerator struct {
 	evalCtx   *eval.Context
 }
 
-// ResolvedType is part of the tree.ValueGenerator interface.
+// ResolvedType is part of the eval.ValueGenerator interface.
 func (j jsonPopulateRecordGenerator) ResolvedType() *types.T {
 	return j.input.ResolvedType()
 }
 
-// Start is part of the tree.ValueGenerator interface.
+// Start is part of the eval.ValueGenerator interface.
 func (j *jsonPopulateRecordGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	j.ctx = ctx
 	return nil
 }
 
-// Close is part of the tree.ValueGenerator interface.
+// Close is part of the eval.ValueGenerator interface.
 func (j *jsonPopulateRecordGenerator) Close(_ context.Context) {}
 
-// Next is part of the tree.ValueGenerator interface.
+// Next is part of the eval.ValueGenerator interface.
 func (j *jsonPopulateRecordGenerator) Next(ctx context.Context) (bool, error) {
 	j.ctx = ctx
 	if !j.wasCalled {
@@ -1874,7 +1874,7 @@ func (j *jsonPopulateRecordGenerator) Next(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-// Values is part of the tree.ValueGenerator interface.
+// Values is part of the eval.ValueGenerator interface.
 func (j jsonPopulateRecordGenerator) Values() (tree.Datums, error) {
 	output := tree.NewDTupleWithLen(j.input.ResolvedType(), j.input.D.Len())
 	copy(output.D, j.input.D)
@@ -1915,19 +1915,19 @@ type jsonPopulateRecordSetGenerator struct {
 	nextIdx int
 }
 
-// ResolvedType is part of the tree.ValueGenerator interface.
+// ResolvedType is part of the eval.ValueGenerator interface.
 func (j jsonPopulateRecordSetGenerator) ResolvedType() *types.T { return j.input.ResolvedType() }
 
-// Start is part of the tree.ValueGenerator interface.
+// Start is part of the eval.ValueGenerator interface.
 func (j jsonPopulateRecordSetGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	j.ctx = ctx
 	return nil
 }
 
-// Close is part of the tree.ValueGenerator interface.
+// Close is part of the eval.ValueGenerator interface.
 func (j jsonPopulateRecordSetGenerator) Close(_ context.Context) {}
 
-// Next is part of the tree.ValueGenerator interface.
+// Next is part of the eval.ValueGenerator interface.
 func (j *jsonPopulateRecordSetGenerator) Next(ctx context.Context) (bool, error) {
 	j.ctx = ctx
 	if j.nextIdx >= j.target.Len() {
@@ -1937,7 +1937,7 @@ func (j *jsonPopulateRecordSetGenerator) Next(ctx context.Context) (bool, error)
 	return true, nil
 }
 
-// Values is part of the tree.ValueGenerator interface.
+// Values is part of the eval.ValueGenerator interface.
 func (j *jsonPopulateRecordSetGenerator) Values() (tree.Datums, error) {
 	obj, err := j.target.FetchValIdx(j.nextIdx - 1)
 	if err != nil {
@@ -2181,12 +2181,12 @@ var checkConsistencyGeneratorType = types.MakeLabeledTuple(
 	[]string{"range_id", "start_key", "start_key_pretty", "status", "detail", "duration"},
 )
 
-// ResolvedType is part of the tree.ValueGenerator interface.
+// ResolvedType is part of the eval.ValueGenerator interface.
 func (*checkConsistencyGenerator) ResolvedType() *types.T {
 	return checkConsistencyGeneratorType
 }
 
-// Start is part of the tree.ValueGenerator interface.
+// Start is part of the eval.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	for c.rangeDescIterator.Valid() {
 		desc := c.rangeDescIterator.CurRangeDescriptor()
@@ -2235,7 +2235,7 @@ func (c *checkConsistencyGenerator) maybeRefillRows(ctx context.Context) time.Du
 	return timeutil.Since(tBegin)
 }
 
-// Next is part of the tree.ValueGenerator interface.
+// Next is part of the eval.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Next(ctx context.Context) (bool, error) {
 	dur := c.maybeRefillRows(ctx)
 	if len(c.next) == 0 {
@@ -2245,7 +2245,7 @@ func (c *checkConsistencyGenerator) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Values is part of the tree.ValueGenerator interface.
+// Values is part of the eval.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Values() (tree.Datums, error) {
 	row := c.cur
 	intervalMeta := types.IntervalTypeMetadata{
@@ -2263,7 +2263,7 @@ func (c *checkConsistencyGenerator) Values() (tree.Datums, error) {
 	}, nil
 }
 
-// Close is part of the tree.ValueGenerator interface.
+// Close is part of the eval.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Close(_ context.Context) {}
 
 // spanKeyIteratorChunkKeys is the number of K/V pairs that the
@@ -2289,7 +2289,7 @@ var spanKeyIteratorType = types.MakeLabeledTuple(
 	[]string{"key", "value", "ts"},
 )
 
-// spanKeyIterator is a ValueGenerator that iterates over all
+// spanKeyIterator is an eval.ValueGenerator that iterates over all
 // SQL keys in a target span.
 type spanKeyIterator struct {
 	// The span to iterate
@@ -2321,7 +2321,7 @@ func newSpanKeyIterator(evalCtx *eval.Context, span roachpb.Span) *spanKeyIterat
 	}
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (sp *spanKeyIterator) Start(ctx context.Context, txn *kv.Txn) error {
 	if err := sp.acc.Grow(ctx, spanKeyIteratorChunkBytes); err != nil {
 		return err
@@ -2330,7 +2330,7 @@ func (sp *spanKeyIterator) Start(ctx context.Context, txn *kv.Txn) error {
 	return sp.scan(ctx, sp.span.Key, sp.span.EndKey)
 }
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (sp *spanKeyIterator) Next(ctx context.Context) (bool, error) {
 	sp.index++
 	// If index is within rk.kvs, then we have buffered K/V pairs to return.
@@ -2380,7 +2380,7 @@ func (sp *spanKeyIterator) scan(
 	return nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (sp *spanKeyIterator) Values() (tree.Datums, error) {
 	kv := sp.kvs[sp.index]
 	sp.buf[0] = tree.NewDBytes(tree.DBytes(kv.Key))
@@ -2389,12 +2389,12 @@ func (sp *spanKeyIterator) Values() (tree.Datums, error) {
 	return sp.buf[:], nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (sp *spanKeyIterator) Close(ctx context.Context) {
 	sp.acc.Close(ctx)
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (sp *spanKeyIterator) ResolvedType() *types.T {
 	return spanKeyIteratorType
 }
@@ -2432,12 +2432,12 @@ func makeRangeKeyIterator(
 	}, nil
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (rk *rangeKeyIterator) ResolvedType() *types.T {
 	return rangeKeyIteratorType
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) (err error) {
 	// Scan the range meta K/V's to find the target range. We do this in a
 	// chunk-wise fashion to avoid loading all ranges into memory.
@@ -2449,7 +2449,7 @@ func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) (err error) 
 	return rk.spanKeyIterator.Start(ctx, txn)
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (rk *rangeKeyIterator) Values() (tree.Datums, error) {
 	kv := rk.kvs[rk.index]
 	rk.buf[0] = tree.NewDString(kv.Key.String())
@@ -2497,12 +2497,12 @@ func makePayloadsForSpanGenerator(
 	return &payloadsForSpanGenerator{span: span}, nil
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (p *payloadsForSpanGenerator) ResolvedType() *types.T {
 	return payloadsForSpanGeneratorType
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (p *payloadsForSpanGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	// The user of the generator first calls Next(), then Values(), so the index
 	// managing the iterator's position needs to start at -1 instead of 0.
@@ -2525,13 +2525,13 @@ func (p *payloadsForSpanGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	return nil
 }
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (p *payloadsForSpanGenerator) Next(_ context.Context) (bool, error) {
 	p.payloadIndex++
 	return p.payloadIndex < len(p.payloads), nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (p *payloadsForSpanGenerator) Values() (tree.Datums, error) {
 	payload := p.payloads[p.payloadIndex]
 	payloadTypeAsJSON, err := payload.FetchValKey("@type")
@@ -2557,7 +2557,7 @@ func (p *payloadsForSpanGenerator) Values() (tree.Datums, error) {
 	}, nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (p *payloadsForSpanGenerator) Close(_ context.Context) {}
 
 var payloadsForTraceGeneratorLabels = []string{"span_id", "payload_type", "payload_jsonb"}
@@ -2589,12 +2589,12 @@ func makePayloadsForTraceGenerator(
 	return &payloadsForTraceGenerator{traceID: traceID, planner: evalCtx.Planner}, nil
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (p *payloadsForTraceGenerator) ResolvedType() *types.T {
 	return payloadsForSpanGeneratorType
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (p *payloadsForTraceGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	const query = `WITH spans AS(
 									SELECT span_id
@@ -2617,7 +2617,7 @@ func (p *payloadsForTraceGenerator) Start(ctx context.Context, _ *kv.Txn) error 
 	return nil
 }
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (p *payloadsForTraceGenerator) Next(ctx context.Context) (bool, error) {
 	if p.it == nil {
 		return false, errors.AssertionFailedf("Start must be called before Next")
@@ -2625,7 +2625,7 @@ func (p *payloadsForTraceGenerator) Next(ctx context.Context) (bool, error) {
 	return p.it.Next(ctx)
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (p *payloadsForTraceGenerator) Values() (tree.Datums, error) {
 	if p.it == nil {
 		return nil, errors.AssertionFailedf("Start must be called before Values")
@@ -2633,7 +2633,7 @@ func (p *payloadsForTraceGenerator) Values() (tree.Datums, error) {
 	return p.it.Cur(), nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (p *payloadsForTraceGenerator) Close(_ context.Context) {
 	if p.it != nil {
 		err := p.it.Close()
@@ -2674,12 +2674,12 @@ type showCreateAllSchemasGenerator struct {
 	idx  int
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (s *showCreateAllSchemasGenerator) ResolvedType() *types.T {
 	return showCreateAllSchemasGeneratorType
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (s *showCreateAllSchemasGenerator) Start(ctx context.Context, txn *kv.Txn) error {
 	ids, err := getSchemaIDs(
 		ctx, s.evalPlanner, txn, s.dbName, &s.acc,
@@ -2713,12 +2713,12 @@ func (s *showCreateAllSchemasGenerator) Next(ctx context.Context) (bool, error) 
 	return true, nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (s *showCreateAllSchemasGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{s.curr}, nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (s *showCreateAllSchemasGenerator) Close(ctx context.Context) {
 	s.acc.Close(ctx)
 }
@@ -2759,12 +2759,12 @@ type showCreateAllTablesGenerator struct {
 	phase          Phase
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (s *showCreateAllTablesGenerator) ResolvedType() *types.T {
 	return showCreateAllTablesGeneratorType
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
 	// Note: All the table ids are accumulated in ram before the generator
 	// starts generating values.
@@ -2868,12 +2868,12 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (s *showCreateAllTablesGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{s.curr}, nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (s *showCreateAllTablesGenerator) Close(ctx context.Context) {
 	s.acc.Close(ctx)
 }
@@ -2911,12 +2911,12 @@ type showCreateAllTypesGenerator struct {
 	idx  int
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (s *showCreateAllTypesGenerator) ResolvedType() *types.T {
 	return showCreateAllTypesGeneratorType
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (s *showCreateAllTypesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
 	ids, err := getTypeIDs(
 		ctx, s.evalPlanner, txn, s.dbName, &s.acc,
@@ -2950,12 +2950,12 @@ func (s *showCreateAllTypesGenerator) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (s *showCreateAllTypesGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{s.curr}, nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (s *showCreateAllTypesGenerator) Close(ctx context.Context) {
 	s.acc.Close(ctx)
 }
@@ -2989,12 +2989,12 @@ type identGenerator struct {
 	count int
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (s *identGenerator) ResolvedType() *types.T {
 	return types.String
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (s *identGenerator) Start(ctx context.Context, txn *kv.Txn) error {
 	return nil
 }
@@ -3014,12 +3014,12 @@ func (s *identGenerator) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (s *identGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{s.curr}, nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (s *identGenerator) Close(ctx context.Context) {
 	s.acc.Close(ctx)
 }
@@ -3089,14 +3089,14 @@ func newTableSpanStatsIterator(
 	return &tableSpanStatsIterator{codec: eval.Codec, p: eval.Planner, argDbId: dbId, argTableId: tableId, spanStatsBatchLimit: spanBatchLimit}
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (tssi *tableSpanStatsIterator) Start(ctx context.Context, _ *kv.Txn) error {
 	var err error = nil
 	tssi.it, err = tssi.p.GetDetailsForSpanStats(ctx, tssi.argDbId, tssi.argTableId)
 	return err
 }
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (tssi *tableSpanStatsIterator) Next(ctx context.Context) (bool, error) {
 	if tssi.it == nil {
 		return false, errors.AssertionFailedf("Start must be called before Next")
@@ -3170,7 +3170,7 @@ func (tssi *tableSpanStatsIterator) fetchSpanStats(ctx context.Context) (bool, e
 	return ok, err
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (tssi *tableSpanStatsIterator) Values() (tree.Datums, error) {
 	// Get the current span details.
 	spanDetails := tssi.spanStatsDetails[tssi.iterSpanIdx]
@@ -3201,10 +3201,10 @@ func (tssi *tableSpanStatsIterator) Values() (tree.Datums, error) {
 	}, nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (tssi *tableSpanStatsIterator) Close(_ context.Context) {}
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (tssi *tableSpanStatsIterator) ResolvedType() *types.T {
 	return tableSpanStatsGeneratorType
 }
@@ -3214,7 +3214,7 @@ var tableMetricsGeneratorType = types.MakeLabeledTuple(
 	[]string{"node_id", "store_id", "level", "file_num", "approximate_span_bytes", "metrics"},
 )
 
-// tableMetricsIterator implements tree.ValueGenerator; it returns a set of
+// tableMetricsIterator implements eval.ValueGenerator; it returns a set of
 // SSTable metrics (one per row).
 type tableMetricsIterator struct {
 	metrics []enginepb.SSTableMetricsInfo
@@ -3235,7 +3235,7 @@ func newTableMetricsIterator(
 	return &tableMetricsIterator{evalCtx: evalCtx, nodeID: nodeID, storeID: storeID, start: start, end: end}
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (tmi *tableMetricsIterator) Start(ctx context.Context, _ *kv.Txn) error {
 	var err error
 	tmi.metrics, err = tmi.evalCtx.GetTableMetrics(ctx, tmi.nodeID, tmi.storeID, tmi.start, tmi.end)
@@ -3251,13 +3251,13 @@ func (tmi *tableMetricsIterator) Start(ctx context.Context, _ *kv.Txn) error {
 	return err
 }
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (tmi *tableMetricsIterator) Next(_ context.Context) (bool, error) {
 	tmi.iterIdx++
 	return tmi.iterIdx <= len(tmi.metrics), nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (tmi *tableMetricsIterator) Values() (tree.Datums, error) {
 	metricsInfo := tmi.metrics[tmi.iterIdx-1]
 
@@ -3276,10 +3276,10 @@ func (tmi *tableMetricsIterator) Values() (tree.Datums, error) {
 	}, nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (tmi *tableMetricsIterator) Close(_ context.Context) {}
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (tmi *tableMetricsIterator) ResolvedType() *types.T {
 	return tableMetricsGeneratorType
 }
@@ -3341,7 +3341,7 @@ func newStorageInternalKeysGenerator(
 	return &storageInternalKeysIterator{evalCtx: evalCtx, nodeID: nodeID, storeID: storeID, start: start, end: end, megabytesPerSecond: megaBytesPerSecond}
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (s *storageInternalKeysIterator) Start(ctx context.Context, _ *kv.Txn) error {
 	var err error
 	s.metrics, err = s.evalCtx.ScanStorageInternalKeys(ctx, s.nodeID, s.storeID, s.start, s.end, s.megabytesPerSecond)
@@ -3352,13 +3352,13 @@ func (s *storageInternalKeysIterator) Start(ctx context.Context, _ *kv.Txn) erro
 	return err
 }
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (s *storageInternalKeysIterator) Next(_ context.Context) (bool, error) {
 	s.iterIdx++
 	return s.iterIdx <= len(s.metrics), nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (s *storageInternalKeysIterator) Values() (tree.Datums, error) {
 	metricsInfo := s.metrics[s.iterIdx-1]
 	levelDatum := tree.DNull
@@ -3383,10 +3383,10 @@ func (s *storageInternalKeysIterator) Values() (tree.Datums, error) {
 	}, nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (tmi *storageInternalKeysIterator) Close(_ context.Context) {}
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (tmi *storageInternalKeysIterator) ResolvedType() *types.T {
 	return storageInternalKeysGeneratorType
 }
