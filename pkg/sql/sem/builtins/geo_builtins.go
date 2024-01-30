@@ -448,7 +448,7 @@ func makeSubdividedGeometriesGeneratorFactory(expectMaxVerticesArg bool) eval.Ge
 	}
 }
 
-// subdividedGeometriesGen implements the tree.ValueGenerator interface
+// subdividedGeometriesGen implements the eval.ValueGenerator interface
 type subdividedGeometriesGen struct {
 	geometries []geo.Geometry
 	curr       int

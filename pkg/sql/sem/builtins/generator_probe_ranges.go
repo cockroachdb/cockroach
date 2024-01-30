@@ -156,17 +156,17 @@ func makeProbeRangeGenerator(
 	}, nil
 }
 
-// ResolvedType implements the tree.ValueGenerator interface.
+// ResolvedType implements the eval.ValueGenerator interface.
 func (p *probeRangeGenerator) ResolvedType() *types.T {
 	return probeRangeGeneratorType
 }
 
-// Start implements the tree.ValueGenerator interface.
+// Start implements the eval.ValueGenerator interface.
 func (p *probeRangeGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	return nil
 }
 
-// Next implements the tree.ValueGenerator interface.
+// Next implements the eval.ValueGenerator interface.
 func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
 	if len(p.ranges) == 0 {
 		return false, nil
@@ -209,7 +209,7 @@ func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Values implements the tree.ValueGenerator interface.
+// Values implements the eval.ValueGenerator interface.
 func (p *probeRangeGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{
 		tree.NewDInt(tree.DInt(p.curr.rangeID)),
@@ -219,5 +219,5 @@ func (p *probeRangeGenerator) Values() (tree.Datums, error) {
 	}, nil
 }
 
-// Close implements the tree.ValueGenerator interface.
+// Close implements the eval.ValueGenerator interface.
 func (p *probeRangeGenerator) Close(_ context.Context) {}

@@ -169,12 +169,12 @@ func (g *routineGenerator) reset(
 	g.init(p, expr, args)
 }
 
-// ResolvedType is part of the ValueGenerator interface.
+// ResolvedType is part of the eval.ValueGenerator interface.
 func (g *routineGenerator) ResolvedType() *types.T {
 	return g.expr.ResolvedType()
 }
 
-// Start is part of the ValueGenerator interface.
+// Start is part of the eval.ValueGenerator interface.
 func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
 	for {
 		err = g.startInternal(ctx, txn)
@@ -392,7 +392,7 @@ func (g *routineGenerator) maybeInitBlockState(ctx context.Context) error {
 	return nil
 }
 
-// Next is part of the ValueGenerator interface.
+// Next is part of the eval.ValueGenerator interface.
 func (g *routineGenerator) Next(ctx context.Context) (bool, error) {
 	var err error
 	g.currVals, err = g.rci.Next()
@@ -402,12 +402,12 @@ func (g *routineGenerator) Next(ctx context.Context) (bool, error) {
 	return g.currVals != nil, nil
 }
 
-// Values is part of the ValueGenerator interface.
+// Values is part of the eval.ValueGenerator interface.
 func (g *routineGenerator) Values() (tree.Datums, error) {
 	return g.currVals, nil
 }
 
-// Close is part of the ValueGenerator interface.
+// Close is part of the eval.ValueGenerator interface.
 func (g *routineGenerator) Close(ctx context.Context) {
 	if g.rci != nil {
 		g.rci.Close()
