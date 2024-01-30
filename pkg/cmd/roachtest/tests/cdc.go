@@ -37,7 +37,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -2617,7 +2617,7 @@ func (k kafkaManager) newConsumer(ctx context.Context, topic string) (*topicCons
 	config := sarama.NewConfig()
 	// I was seeing "error processing FetchRequest: kafka: error decoding
 	// packet: unknown magic byte (2)" errors which
-	// https://github.com/Shopify/sarama/issues/962 identifies as the
+	// https://github.com/IBM/sarama/issues/962 identifies as the
 	// consumer's fetch size being less than the "max.message.bytes" that
 	// kafka is configured with. Kafka notes that this is required in
 	// https://kafka.apache.org/documentation.html#upgrade_11_message_format
