@@ -1,8 +1,5 @@
 # LogicTest: !local-mixed-23.1
 
-statement ok
-SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
-
 subtest select_for_update
 
 statement ok

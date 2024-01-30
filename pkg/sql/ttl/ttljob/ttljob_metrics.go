@@ -18,11 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -225,10 +223,7 @@ func (m *rowLevelTTLMetrics) fetchStatistics(
 			ctx,
 			c.opName,
 			nil,
-			sessiondata.InternalExecutorOverride{
-				User:             username.RootUserName(),
-				QualityOfService: &qosLevel,
-			},
+			getInternalExecutorOverride(qosLevel),
 			fmt.Sprintf(c.query, details.TableID, aost.String()),
 			c.args...,
 		)

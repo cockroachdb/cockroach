@@ -618,7 +618,6 @@ var ignoredErrorPatterns = []string{
 	"cannot call json_object_keys on an array",
 	"cannot set path in scalar",
 	"cannot delete path in scalar",
-	"unable to encode table key: \\*tree\\.DJSON",
 	"path element at position .* is null",
 	"path element is not an integer",
 	"cannot delete from object using integer index",

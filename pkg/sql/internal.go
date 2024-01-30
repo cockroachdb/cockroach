@@ -863,6 +863,9 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	}
 	// We always override the injection knob based on the override struct.
 	sd.InjectRetryErrorsEnabled = o.InjectRetryErrorsEnabled
+	if o.OptimizerUseHistograms {
+		sd.OptimizerUseHistograms = true
+	}
 }
 
 func (ie *InternalExecutor) maybeRootSessionDataOverride(
