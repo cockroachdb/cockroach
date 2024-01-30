@@ -1,8 +1,5 @@
 # LogicTest: local
 
-statement ok
-SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
-
 # Test multi-column-family checks under read committed. If a check constraint
 # contains multiple column families but only some of them are updated, the
 # query should fail under read committed.

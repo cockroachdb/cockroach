@@ -47,6 +47,10 @@ type InternalExecutorOverride struct {
 	// does **not** propagate further to "nested" executors that are spawned up
 	// by the "top" executor.
 	InjectRetryErrorsEnabled bool
+	// OptimizerUseHistograms indicates whether we should use histograms for
+	// cardinality estimation in the optimizer.
+	// TODO(#102954): this should be removed when #102954 is fixed.
+	OptimizerUseHistograms bool
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not

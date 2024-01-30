@@ -3426,7 +3426,7 @@ var allowReadCommittedIsolation = settings.RegisterBoolSetting(
 	"sql.txn.read_committed_isolation.enabled",
 	"set to true to allow transactions to use the READ COMMITTED isolation "+
 		"level if specified by BEGIN/SET commands",
-	false,
+	true,
 	settings.WithPublic,
 )
 

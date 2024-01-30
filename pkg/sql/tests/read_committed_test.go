@@ -89,12 +89,9 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	codec = s.ApplicationLayer().Codec()
 
-	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
-	require.NoError(t, err)
-
 	// Create a table with three rows. Note that k is not the primary key,
 	// so locking won't be pushed into the initial scan of the UPDATEs below.
-	_, err = sqlDB.Exec(`CREATE TABLE kv (k TEXT, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
+	_, err := sqlDB.Exec(`CREATE TABLE kv (k TEXT, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`INSERT INTO kv VALUES ('a', 1);`)
 	require.NoError(t, err)
@@ -181,9 +178,7 @@ func TestReadCommittedReadTimestampNotSteppedOnCommit(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
-	require.NoError(t, err)
-	_, err = sqlDB.Exec(`CREATE TABLE kv (k TEXT, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
+	_, err := sqlDB.Exec(`CREATE TABLE kv (k TEXT, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
 	require.NoError(t, err)
 
 	// Create a read committed transaction that writes to three rows in three
@@ -226,10 +221,7 @@ func TestReadCommittedVolatileUDF(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
-	require.NoError(t, err)
-
-	_, err = sqlDB.Exec(`CREATE TABLE kv (k TEXT PRIMARY KEY, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
+	_, err := sqlDB.Exec(`CREATE TABLE kv (k TEXT PRIMARY KEY, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`INSERT INTO kv VALUES ('a', 10);`)
 	require.NoError(t, err)
