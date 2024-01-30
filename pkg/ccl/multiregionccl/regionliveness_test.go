@@ -44,7 +44,12 @@ import (
 )
 
 const (
+	// Use a low probe timeout number, but intentionally only manipulate to
+	// this value when *failures* are expected.
 	testingRegionLivenessProbeTimeout = time.Second * 2
+	// Use a reduced TTL, but not too far to avoid having the nodes die due to liveness
+	// issues on overloaded systems.
+	defaultLivenessTTL = time.Second * 20
 )
 
 func TestRegionLivenessProber(t *testing.T) {
@@ -53,7 +58,7 @@ func TestRegionLivenessProber(t *testing.T) {
 	// This test forces the SQL liveness TTL be a small number,
 	// which makes the heartbeats even more critical. Under stress and
 	// race environments this test becomes even more sensitive, if
-	// we can't send heartbeats within 10 seconds.
+	// we can't send heartbeats within 20 seconds.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
 	skip.UnderDeadlock(t)
@@ -65,7 +70,7 @@ func TestRegionLivenessProber(t *testing.T) {
 	makeSettings := func() *cluster.Settings {
 		cs := cluster.MakeTestingClusterSettings()
 		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
-		slbase.DefaultTTL.Override(ctx, &cs.SV, 10*time.Second)
+		slbase.DefaultTTL.Override(ctx, &cs.SV, defaultLivenessTTL)
 		regionliveness.RegionLivenessEnabled.Override(ctx, &cs.SV, true)
 		return cs
 	}
@@ -88,11 +93,11 @@ func TestRegionLivenessProber(t *testing.T) {
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
 	blockProbeQuery := atomic.Bool{}
-	defer regionliveness.TestingSetProbeLivenessTimeout(500*time.Millisecond,
+	defer regionliveness.TestingSetProbeLivenessTimeout(
 		func() {
 			// Timeout attempts to probe intentionally.
 			if blockProbeQuery.Swap(false) {
-				time.Sleep(2 * time.Second)
+				time.Sleep(testingRegionLivenessProbeTimeout)
 			}
 		})()
 
@@ -148,6 +153,11 @@ func TestRegionLivenessProber(t *testing.T) {
 	liveRegions, err = regionProber.QueryLiveness(ctx, testTxn)
 	require.NoError(t, err)
 	checkExpectedRegions(expectedRegions, liveRegions)
+	// Override the table timeout probe for testing to ensure timeout failures
+	// happen now.
+	for _, ts := range tenants {
+		regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, testingRegionLivenessProbeTimeout)
+	}
 	// Probe the liveness of the region, but timeout the query
 	// intentionally to make it seem dead.
 	blockProbeQuery.Store(true)
@@ -213,7 +223,7 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	// This test forces the SQL liveness TTL be a small number,
 	// which makes the heartbeats even more critical. Under stress and
 	// race environments this test becomes even more sensitive, if
-	// we can't send heartbeats within 10 seconds.
+	// we can't send heartbeats within 20 seconds.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
 	skip.UnderDeadlock(t)
@@ -225,7 +235,7 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	makeSettings := func() *cluster.Settings {
 		cs := cluster.MakeTestingClusterSettings()
 		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
-		slbase.DefaultTTL.Override(ctx, &cs.SV, 10*time.Second)
+		slbase.DefaultTTL.Override(ctx, &cs.SV, defaultLivenessTTL)
 		regionliveness.RegionLivenessEnabled.Override(ctx, &cs.SV, true)
 		return cs
 	}
@@ -239,11 +249,11 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	targetCount := atomic.Int64{}
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
-	defer regionliveness.TestingSetProbeLivenessTimeout(1*time.Second, func() {
+	defer regionliveness.TestingSetProbeLivenessTimeout(func() {
 		if !detectLeaseWait.Load() {
 			return
 		}
-		time.Sleep(time.Second * 2)
+		time.Sleep(testingRegionLivenessProbeTimeout)
 		targetCount.Swap(0)
 		detectLeaseWait.Swap(false)
 	})()
@@ -274,7 +284,7 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 							if targetCount.Add(1) != 1 {
 								return
 							}
-							time.Sleep(time.Second * 2)
+							time.Sleep(testingRegionLivenessProbeTimeout)
 						}
 					},
 				},
@@ -298,10 +308,7 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 			require.NoError(t, err)
 		}
 	}
-	// Override the table timeout probe for testing.
-	for _, ts := range tenants {
-		regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, testingRegionLivenessProbeTimeout)
-	}
+
 	// Create a new table and have it used on all nodes.
 	_, err = tenantSQL[0].Exec("CREATE TABLE t1(j int)")
 	require.NoError(t, err)
@@ -312,6 +319,11 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	row := tenantSQL[0].QueryRow("SELECT 't1'::REGCLASS::OID")
 	var tableID int
 	require.NoError(t, row.Scan(&tableID))
+	// Override the table timeout probe for testing to ensure timeout failures
+	// happen now.
+	for _, ts := range tenants {
+		regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, testingRegionLivenessProbeTimeout)
+	}
 	// Issue a schema change which should mark this region as dead, and fail
 	// out because our probe query will time out.
 	detectLeaseWait.Swap(true)
@@ -350,5 +362,9 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 		})
 		return builder.BuildExistingMutableType()
 	})
+	// Restore the override to reduce the risk of failing on overloaded systems.
+	for _, ts := range tenants {
+		regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, regionliveness.RegionLivenessProbeTimeout.Default())
+	}
 	require.NoError(t, lm.WaitForNoVersion(ctx, descpb.ID(tableID), cachedDatabaseRegions, retry.Options{}))
 }
