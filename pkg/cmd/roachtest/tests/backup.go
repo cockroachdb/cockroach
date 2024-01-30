@@ -539,10 +539,9 @@ func registerBackup(r registry.Registry) {
 		kmsProvider string
 		machine     string
 		clouds      registry.CloudSet
-		tags        map[string]struct{}
 	}{
 		{kmsProvider: "GCS", machine: spec.GCE, clouds: registry.AllExceptAWS},
-		{kmsProvider: "AWS", machine: spec.AWS, clouds: registry.OnlyAWS, tags: registry.Tags("aws")},
+		{kmsProvider: "AWS", machine: spec.AWS, clouds: registry.OnlyAWS},
 	} {
 		item := item
 		r.Add(registry.TestSpec{
@@ -553,7 +552,6 @@ func registerBackup(r registry.Registry) {
 			Leases:            registry.MetamorphicLeases,
 			CompatibleClouds:  item.clouds,
 			Suites:            registry.Suites(registry.Nightly),
-			Tags:              item.tags,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.Cloud() != item.machine {
 					t.Skip("backupKMS roachtest is only configured to run on "+item.machine, "")

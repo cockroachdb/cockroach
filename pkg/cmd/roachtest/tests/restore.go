@@ -67,7 +67,6 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 		Owner:            registry.OwnerDisasterRecovery,
 		Cluster:          sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
 		CompatibleClouds: registry.Clouds(sp.backup.cloud),
-		Tags:             registry.Tags("aws"),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          sp.timeout,
@@ -88,7 +87,6 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 		Owner:            registry.OwnerDisasterRecovery,
 		Cluster:          sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
 		CompatibleClouds: registry.Clouds(sp.backup.cloud),
-		Tags:             registry.Tags("aws"),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          sp.timeout,
@@ -131,7 +129,6 @@ func registerRestore(r registry.Registry) {
 		Timeout:          withPauseSpecs.timeout,
 		CompatibleClouds: registry.Clouds(withPauseSpecs.backup.cloud),
 		Suites:           registry.Suites(registry.Nightly),
-		Tags:             registry.Tags(withPauseSpecs.backup.cloud),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			rd := makeRestoreDriver(t, c, withPauseSpecs)
@@ -378,7 +375,6 @@ func registerRestore(r registry.Registry) {
 			EncryptionSupport: registry.EncryptionAlwaysDisabled,
 			CompatibleClouds:  registry.Clouds(sp.backup.cloud),
 			Suites:            sp.suites,
-			Tags:              tagsFromSuiteAndCloud(sp.backup.cloud, sp.suites),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 				rd := makeRestoreDriver(t, c, sp)
@@ -798,22 +794,6 @@ func (rd *restoreDriver) initRestorePerfMetrics(
 			throughput)
 		exportToRoachperf(ctx, rd.t, rd.c, rd.sp.testName, int64(throughput))
 	}
-}
-
-func tagsFromSuiteAndCloud(cloud string, suites registry.SuiteSet) map[string]struct{} {
-	tags := registry.Tags()
-	if cloud == spec.AWS {
-		if suites.Contains(registry.Weekly) {
-			tags = registry.Tags("aws-weekly")
-		} else {
-			tags = registry.Tags("aws")
-		}
-	} else {
-		if suites.Contains(registry.Weekly) {
-			tags = registry.Tags("weekly")
-		}
-	}
-	return tags
 }
 
 // checkFingerprint runs a stripped fingerprint on all user tables in the cluster if the restore

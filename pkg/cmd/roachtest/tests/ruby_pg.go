@@ -241,7 +241,6 @@ func registerRubyPG(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Leases:           registry.MetamorphicLeases,
 		NativeLibs:       registry.LibGEOS,
-		Tags:             registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRubyPGTest(ctx, t, c)
 		},

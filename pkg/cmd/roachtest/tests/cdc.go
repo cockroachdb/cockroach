@@ -1010,7 +1010,6 @@ func registerCDC(r registry.Registry) {
 		// TODO(radu): fix this.
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.ManualOnly,
-		Tags:             registry.Tags("manual"),
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)

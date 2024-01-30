@@ -110,7 +110,6 @@ func registerYCSB(r registry.Registry) {
 				},
 				CompatibleClouds: registry.AllClouds,
 				Suites:           registry.Suites(registry.Nightly),
-				Tags:             registry.Tags(`aws`),
 			})
 
 			if wl == "A" {
@@ -138,7 +137,6 @@ func registerYCSB(r registry.Registry) {
 					},
 					CompatibleClouds: registry.AllClouds,
 					Suites:           registry.Suites(registry.Nightly),
-					Tags:             registry.Tags(`aws`),
 				})
 			}
 		}
