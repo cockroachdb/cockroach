@@ -177,16 +177,34 @@ type sqlActivityUpdater struct {
 	db           isql.DB
 }
 
+// TransferStatsToActivity call upsert stats function to current and prior hour.
 func (u *sqlActivityUpdater) TransferStatsToActivity(ctx context.Context) error {
+	// To improve performance we don't recalculate the entire top activity table everytime.
+	// Only update the latest hour and the one prior.
+	// We still need to recalculate the prior hour because the flush could happen during the switch of hours, and
+	// we could miss some executions completed on the prior hour.
+	aggTs := u.computeAggregatedTs(&u.st.SV)
+
+	err := u.upsertStatsForAggregatedTs(ctx, aggTs)
+	if err != nil {
+		return err
+	}
+	return u.upsertStatsForAggregatedTs(ctx, aggTs.Add(-time.Hour))
+}
+
+// upsertStatsForAggregatedTs calculates the top sql stats and update the activity table accordingly.
+func (u *sqlActivityUpdater) upsertStatsForAggregatedTs(
+	ctx context.Context, aggTs time.Time,
+) error {
 	// Get the config and pass it around to avoid any issue of it changing
 	// in the middle of the execution.
 	maxRowPersistedRows := sqlStatsActivityMaxPersistedRows.Get(&u.st.SV)
 	topLimit := sqlStatsActivityTopCount.Get(&u.st.SV)
-	aggTs := u.computeAggregatedTs(&u.st.SV)
 
 	// The counts are using AS OF SYSTEM TIME so the values may be slightly
 	// off. This is acceptable to increase the performance.
-	stmtRowCount, txnRowCount, totalEstimatedStmtClusterExecSeconds, totalEstimatedTxnClusterExecSeconds, err := u.getAostRowCountAndTotalClusterExecSeconds(ctx, aggTs)
+	stmtRowCount, txnRowCount, totalEstimatedStmtClusterExecSeconds, totalEstimatedTxnClusterExecSeconds,
+		err := u.getAostRowCountAndTotalClusterExecSeconds(ctx, aggTs)
 	if err != nil {
 		return err
 	}
