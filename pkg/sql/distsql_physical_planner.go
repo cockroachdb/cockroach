@@ -387,9 +387,9 @@ func hasOidType(t *types.T) bool {
 	return false
 }
 
-// checkExpr verifies that an expression doesn't contain things that are not yet
-// supported by distSQL, like distSQL-blocklisted functions.
-func checkExpr(expr tree.Expr) error {
+// checkExprForDistSQL verifies that an expression doesn't contain things that
+// are not yet supported by distSQL, like distSQL-blocklisted functions.
+func checkExprForDistSQL(expr tree.Expr) error {
 	if expr == nil {
 		return nil
 	}
@@ -536,7 +536,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return checkSupportForPlanNode(n.source)
 
 	case *filterNode:
-		if err := checkExpr(n.filter); err != nil {
+		if err := checkExprForDistSQL(n.filter); err != nil {
 			return cannotDistribute, err
 		}
 		return checkSupportForPlanNode(n.source.plan)
@@ -575,7 +575,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 			// TODO(nvanbenschoten): lift this restriction.
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
-		if err := checkExpr(n.onExpr); err != nil {
+		if err := checkExprForDistSQL(n.onExpr); err != nil {
 			return cannotDistribute, err
 		}
 		rec, err := checkSupportForPlanNode(n.input)
@@ -585,7 +585,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return rec.compose(shouldDistribute), nil
 
 	case *joinNode:
-		if err := checkExpr(n.pred.onCond); err != nil {
+		if err := checkExprForDistSQL(n.pred.onCond); err != nil {
 			return cannotDistribute, err
 		}
 		recLeft, err := checkSupportForPlanNode(n.left.plan)
@@ -624,13 +624,13 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
 
-		if err := checkExpr(n.lookupExpr); err != nil {
+		if err := checkExprForDistSQL(n.lookupExpr); err != nil {
 			return cannotDistribute, err
 		}
-		if err := checkExpr(n.remoteLookupExpr); err != nil {
+		if err := checkExprForDistSQL(n.remoteLookupExpr); err != nil {
 			return cannotDistribute, err
 		}
-		if err := checkExpr(n.onCond); err != nil {
+		if err := checkExprForDistSQL(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
 		rec, err := checkSupportForPlanNode(n.input)
@@ -646,7 +646,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 
 	case *projectSetNode:
 		for i := range n.exprs {
-			if err := checkExpr(n.exprs[i]); err != nil {
+			if err := checkExprForDistSQL(n.exprs[i]); err != nil {
 				return cannotDistribute, err
 			}
 		}
@@ -654,7 +654,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 
 	case *renderNode:
 		for _, e := range n.render {
-			if err := checkExpr(e); err != nil {
+			if err := checkExprForDistSQL(e); err != nil {
 				return cannotDistribute, err
 			}
 		}
@@ -725,7 +725,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 
 		for _, tuple := range n.tuples {
 			for _, expr := range tuple {
-				if err := checkExpr(expr); err != nil {
+				if err := checkExprForDistSQL(expr); err != nil {
 					return cannotDistribute, err
 				}
 			}
@@ -759,7 +759,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 				return cannotDistribute, cannotDistributeRowLevelLockingErr
 			}
 		}
-		if err := checkExpr(n.onCond); err != nil {
+		if err := checkExprForDistSQL(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
 		return shouldDistribute, nil
