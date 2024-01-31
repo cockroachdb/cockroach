@@ -115,9 +115,9 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 			}
 
 		case *memo.ConstExpr:
-			// Use a ValueGenerator to retrieve values from the datums wrapped
-			// in the ConstExpr. These generators are used at runtime to unnest
-			// values from regular and JSON arrays.
+			// Use the eval.ValueGenerator to retrieve values from the datums
+			// wrapped in the ConstExpr. These generators are used at runtime to
+			// unnest values from regular and JSON arrays.
 			if function.Overload.GeneratorWithExprs != nil {
 				panic(errors.AssertionFailedf("unexpected GeneratorWithExprs"))
 			}
