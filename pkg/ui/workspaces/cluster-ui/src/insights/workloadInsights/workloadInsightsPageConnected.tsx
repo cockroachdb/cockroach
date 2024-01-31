@@ -50,7 +50,6 @@ import { TimeScale } from "../../timeScaleDropdown";
 import { StmtInsightsReq, TxnInsightsRequest } from "src/api";
 import { selectTimeScale } from "../../store/utils/selectors";
 import { actions as analyticsActions } from "../../store/analytics";
-import { selectUseObsService } from "../../store/uiConfig";
 
 const transactionMapStateToProps = (
   state: AppState,
@@ -83,7 +82,6 @@ const statementMapStateToProps = (
   timeScale: selectTimeScale(state),
   isLoading: selectStmtInsightsLoading(state),
   maxSizeApiReached: selectStmtInsightsMaxApiReached(state),
-  useObsService: selectUseObsService(state),
 });
 
 const TransactionDispatchProps = (

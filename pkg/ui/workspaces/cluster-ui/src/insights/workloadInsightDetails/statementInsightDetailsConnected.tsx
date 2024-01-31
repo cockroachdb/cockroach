@@ -20,7 +20,7 @@ import {
   selectStmtInsightDetails,
   selectStmtInsightsError,
 } from "src/store/insights/statementInsights";
-import { selectHasAdminRole, selectUseObsService } from "src/store/uiConfig";
+import { selectHasAdminRole } from "src/store/uiConfig";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { selectTimeScale } from "../../store/utils/selectors";
@@ -37,7 +37,6 @@ const mapStateToProps = (
     insightError: insightError,
     timeScale: selectTimeScale(state),
     hasAdminRole: selectHasAdminRole(state),
-    useObsService: selectUseObsService(state),
   };
 };
 
