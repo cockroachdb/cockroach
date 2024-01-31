@@ -413,19 +413,17 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 			storageCluster = startOpts.KVCluster
 		}
 		if startOpts.Target == StartDefault {
-			if err := storageCluster.waitForDefaultTargetCluster(ctx, l, startOpts); err != nil {
-				return errors.Wrap(err, "failed to wait for default target cluster")
+			if err = storageCluster.setClusterSettings(ctx, l, startOpts.GetInitTarget(), startOpts.VirtualClusterName); err != nil {
+				return err
 			}
-			// Only after a successful cluster initialization should we attempt to schedule backups.
+
+			storageCluster.createAdminUserForSecureCluster(ctx, l, startOpts)
+
 			if startOpts.ScheduleBackups && shouldInit && config.CockroachDevLicense != "" {
-				if err := c.createFixedBackupSchedule(ctx, l, startOpts.ScheduleBackupArgs); err != nil {
+				if err := storageCluster.createFixedBackupSchedule(ctx, l, startOpts.ScheduleBackupArgs); err != nil {
 					return err
 				}
 			}
-		}
-		c.createAdminUserForSecureCluster(ctx, l, startOpts)
-		if err = storageCluster.setClusterSettings(ctx, l, startOpts.GetInitTarget(), startOpts.VirtualClusterName); err != nil {
-			return err
 		}
 	}
 
@@ -971,71 +969,6 @@ func (c *SyncedCluster) initializeCluster(
 	return res, err
 }
 
-// waitForDefaultTargetCluster checks for the existence of a
-// config-profile flag that leads to the use of an application tenant
-// as 'default target cluster'; if that is the case, we wait for all
-// nodes to be aware of the cluster setting before proceding. Without
-// this logic, follow-up tasks in the process of creating the cluster
-// could run before the cluster setting is propagated, and they would
-// apply to the system tenant instead.
-func (c *SyncedCluster) waitForDefaultTargetCluster(
-	ctx context.Context, l *logger.Logger, startOpts StartOpts,
-) error {
-	var hasCustomTargetCluster bool
-	for _, arg := range startOpts.ExtraArgs {
-		// If there is a config profile and that is set to either a '+app'
-		// profile or 'replication-source', we know that the default
-		// target cluster setting will be set to the application tenant.
-		if strings.Contains(arg, "config-profile") &&
-			(strings.Contains(arg, "+app") || strings.Contains(arg, "replication-source")) {
-			hasCustomTargetCluster = true
-			break
-		}
-	}
-
-	if !hasCustomTargetCluster {
-		return nil
-	}
-
-	l.Printf("waiting for default target cluster")
-	retryOpts := retry.Options{MaxRetries: 20}
-	return retryOpts.Do(ctx, func(ctx context.Context) error {
-		// TODO(renato): use server.controller.default_target_cluster once
-		// 23.1 is no longer supported.
-		const stmt = "SHOW CLUSTER SETTING server.controller.default_tenant"
-		res, err := c.ExecSQL(ctx, l, Nodes{startOpts.GetInitTarget()}, SystemInterfaceName, 0, []string{"-e", stmt})
-		if err != nil {
-			return errors.Wrap(err, "error reading cluster setting")
-		}
-
-		if len(res) > 0 {
-			if res[0].Err != nil {
-				return errors.Wrapf(res[0].Err, "node %d", res[0].Node)
-			}
-
-			if strings.Contains(res[0].CombinedOut, "system") {
-				return errors.Newf("target cluster on n%d is still system", res[0].Node)
-			}
-		}
-
-		// Once we know the cluster setting points to the default target
-		// cluster, we attempt to run a dummy SQL statement until that
-		// succeeds (i.e., until the target cluster is able to handle
-		// requests.)
-		const pingStmt = "SELECT 1;"
-		res, err = c.ExecSQL(ctx, l, Nodes{startOpts.GetInitTarget()}, "", 0, []string{"-e", pingStmt})
-		if err != nil {
-			return errors.Wrap(err, "error connecting to default target cluster")
-		}
-
-		if res[0] != nil && res[0].Err != nil {
-			err = errors.CombineErrors(err, res[0].Err)
-		}
-
-		return err
-	})
-}
-
 // createAdminUserForSecureCluster creates a `roach` user with admin
 // privileges. The password used matches the virtual cluster name
 // ('system' for the storage cluster). If it cannot be created, this
@@ -1075,6 +1008,9 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 	if err := retryOpts.Do(ctx, func(ctx context.Context) error {
 		// We use the first node in the virtual cluster to create the user.
 		firstNode := c.TargetNodes()[0]
+		if startOpts.VirtualClusterName == "" {
+			startOpts.VirtualClusterName = SystemInterfaceName
+		}
 		results, err := c.ExecSQL(
 			ctx, l, Nodes{firstNode}, startOpts.VirtualClusterName, startOpts.SQLInstance, []string{
 				"-e", stmts,
@@ -1404,7 +1340,7 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 		if res != nil {
 			out = res.CombinedOut
 		}
-		return errors.Wrapf(err, "~ %s\n%s", fullCmd, out)
+		return errors.Wrapf(errors.CombineErrors(err, res.Err), "~ %s\n%s", fullCmd, out)
 	}
 
 	if out := strings.TrimSpace(res.CombinedOut); out != "" {
