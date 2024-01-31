@@ -937,6 +937,23 @@ func (ex *connExecutor) execStmtInOpenState(
 	// dispatchToExecutionEngine.
 	shouldLogToExecAndAudit = false
 
+	if tree.CanModifySchema(ast) && !ex.implicitTxn() &&
+		ex.sessionData().AutoCommitBeforeDDL && ex.executorType != executorTypeInternal {
+		if err := ex.planner.SendClientNotice(
+			ctx,
+			pgnotice.Newf("auto-committing transaction before processing DDL due to autocommit_before_ddl setting"),
+		); err != nil {
+			return nil, nil, err
+		}
+		retEv, retPayload = ex.handleAutoCommit(ctx, ast)
+		if _, committed := retEv.(eventTxnFinishCommitted); committed && retPayload == nil {
+			// Use eventTxnCommittedDueToDDL so that the current statement gets
+			// executed again when the state machine advances.
+			retEv = eventTxnCommittedDueToDDL{}
+		}
+		return
+	}
+
 	// For regular statements (the ones that get to this point), we
 	// don't return any event unless an error happens.
 
@@ -2237,6 +2254,11 @@ func (ex *connExecutor) handleTxnRowsWrittenReadLimits(ctx context.Context) erro
 	return errors.CombineErrors(writtenErr, readErr)
 }
 
+var txnSchemaChangeErr = pgerror.Newf(
+	pgcode.FeatureNotSupported,
+	"to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting",
+)
+
 // maybeUpgradeToSerializable checks if the statement is a schema change, and
 // upgrades the transaction to serializable isolation if it is. If the
 // transaction contains multiple statements, and an upgrade was attempted, an
@@ -2244,9 +2266,7 @@ func (ex *connExecutor) handleTxnRowsWrittenReadLimits(ctx context.Context) erro
 func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Statement) error {
 	p := &ex.planner
 	if ex.extraTxnState.upgradedToSerializable && ex.extraTxnState.firstStmtExecuted {
-		return pgerror.Newf(
-			pgcode.FeatureNotSupported, "multi-statement transaction involving a schema change needs to be SERIALIZABLE",
-		)
+		return txnSchemaChangeErr
 	}
 	if tree.CanModifySchema(stmt.AST) {
 		if ex.state.mu.txn.IsoLevel().ToleratesWriteSkew() {
@@ -2257,9 +2277,7 @@ func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Sta
 				ex.extraTxnState.upgradedToSerializable = true
 				p.BufferClientNotice(ctx, pgnotice.Newf("setting transaction isolation level to SERIALIZABLE due to schema change"))
 			} else {
-				return pgerror.Newf(
-					pgcode.FeatureNotSupported, "multi-statement transaction involving a schema change needs to be SERIALIZABLE",
-				)
+				return txnSchemaChangeErr
 			}
 		}
 	}
@@ -2547,6 +2565,17 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		return ex.execShowCommitTimestampInNoTxnState(ctx, s, res)
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
 		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
+		if ex.sessionData().AutoCommitBeforeDDL {
+			// If autocommit_before_ddl is set, we allow these statements to be
+			// executed, and send a warning rather than an error.
+			if err := ex.planner.SendClientNotice(
+				ctx,
+				pgerror.WithSeverity(errNoTransactionInProgress, "WARNING"),
+			); err != nil {
+				return ex.makeErrEvent(err, ast)
+			}
+			return nil, nil
+		}
 		return ex.makeErrEvent(errNoTransactionInProgress, ast)
 	default:
 		// NB: Implicit transactions are created with the session's default
