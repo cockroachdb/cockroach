@@ -94,7 +94,6 @@ export const getStatementInsightPropsFixture =
       insightEventDetails: insightEventFixture,
       insightError: null,
       hasAdminRole: true,
-      useObsService: false,
       setTimeScale: noop,
       refreshUserSQLRoles: noop,
     };

@@ -2,11 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "validate",
-    srcs = [
-        "stmt_insights_validator.go",
-        "validate.go",
-    ],
+    srcs = ["validate.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obslib/validate",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/obsservice/obspb"],
 )

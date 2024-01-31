@@ -420,7 +420,7 @@ func (s *Container) RecordTransaction(
 	if s.knobs != nil && s.knobs.InsightsWriterTxnInterceptor != nil {
 		s.knobs.InsightsWriterTxnInterceptor(ctx, value.SessionID, &insight)
 	} else {
-		s.insights.ObserveTransaction(ctx, value.SessionID, &insight)
+		s.insights.ObserveTransaction(value.SessionID, &insight)
 	}
 	return nil
 }

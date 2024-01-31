@@ -19,7 +19,6 @@ export type UIConfigState = {
   userSQLRoles: string[];
   hasViewActivityRedactedRole: boolean;
   hasAdminRole: boolean;
-  useObsService: boolean;
   pages: {
     statementDetails: {
       showStatementDiagnosticsLink: boolean;
@@ -35,7 +34,6 @@ const initialState: UIConfigState = {
   userSQLRoles: [],
   hasViewActivityRedactedRole: false,
   hasAdminRole: false,
-  useObsService: false,
   pages: {
     statementDetails: {
       showStatementDiagnosticsLink: true,
