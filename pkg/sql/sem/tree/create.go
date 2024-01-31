@@ -1701,7 +1701,7 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			ctx.WriteString(option.AsIntegerType.SQLString())
 		case SeqOptCycle, SeqOptNoCycle:
 			ctx.WriteString(option.Name)
-		case SeqOptCache:
+		case SeqOptCache, SeqOptCacheNode:
 			ctx.WriteString(option.Name)
 			ctx.WriteByte(' ')
 			// TODO(knz): replace all this with ctx.FormatNode if/when
@@ -1803,6 +1803,7 @@ const (
 	SeqOptNoCycle   = "NO CYCLE"
 	SeqOptOwnedBy   = "OWNED BY"
 	SeqOptCache     = "CACHE"
+	SeqOptCacheNode = "PER NODE CACHE"
 	SeqOptIncrement = "INCREMENT"
 	SeqOptMinValue  = "MINVALUE"
 	SeqOptMaxValue  = "MAXVALUE"

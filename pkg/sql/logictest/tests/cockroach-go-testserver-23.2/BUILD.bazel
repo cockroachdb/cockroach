@@ -11,7 +11,7 @@ go_test(
         "//pkg/sql/logictest:testdata",  # keep
     ],
     exec_properties = {"test.Pool": "large"},
-    shard_count = 3,
+    shard_count = 4,
     tags = [
         "cpu:2",
     ],
