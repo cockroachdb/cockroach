@@ -83,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -109,6 +110,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -1978,7 +1980,7 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 
 // checkResultType verifies that a table result can be returned to the
 // client.
-func checkResultType(typ *types.T) error {
+func checkResultType(typ *types.T, fmtCode pgwirebase.FormatCode) error {
 	// Compare all types that can rely on == equality.
 	switch typ.Family() {
 	case types.UnknownFamily:
@@ -2011,6 +2013,11 @@ func checkResultType(typ *types.T) error {
 	case types.EnumFamily:
 	case types.VoidFamily:
 	case types.ArrayFamily:
+		if fmtCode == pgwirebase.FormatBinary && typ.ArrayContents().Family() == types.ArrayFamily {
+			return unimplemented.NewWithIssueDetail(32552,
+				"result", "unsupported binary serialization of multidimensional arrays",
+			)
+		}
 		// Note that we support multidimensional arrays in some cases (e.g.
 		// array_agg with arrays as inputs) but not in others (e.g. CREATE).
 		// Here we allow them in all cases and rely on each unsupported place to
