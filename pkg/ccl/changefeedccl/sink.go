@@ -59,6 +59,7 @@ const (
 	sinkTypePubsub
 	sinkTypeCloudstorage
 	sinkTypeSQL
+	sinkTypePulsar
 )
 
 // externalResource is the interface common to both EventSink and
@@ -236,6 +237,13 @@ func getSink(
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
 				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
 			})
+		case isPulsarSink(u):
+			var testingKnobs *TestingKnobs
+			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+				testingKnobs = knobs
+			}
+			return makePulsarSink(ctx, sinkURL{URL: u}, encodingOpts, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
+				serverCfg.Settings, metricsBuilder, testingKnobs)
 		case isWebhookSink(u):
 			webhookOpts, err := opts.GetWebhookSinkOptions()
 			if err != nil {
