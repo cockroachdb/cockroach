@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -97,7 +98,8 @@ var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.experimental_use_session_based_leasing",
 	"enables session based leasing for internal testing.",
-	"off",
+	util.ConstantWithMetamorphicTestChoice("experimental_use_session_based_leasing",
+		"off", "dual_write", "drain", "session").(string),
 	map[int64]string{
 		int64(SessionBasedLeasingOff): "off",
 		int64(SessionBasedDualWrite):  "dual_write",
@@ -117,6 +119,8 @@ func (m *Manager) getSessionBasedLeasingMode() SessionBasedLeasingMode {
 	return SessionBasedLeasingMode(LeaseEnableSessionBasedLeasing.Get(&m.settings.SV))
 }
 
+// WaitForNoVersion returns once there are no unexpired leases left
+// for any version of the descriptor.
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
 func (m *Manager) WaitForNoVersion(
@@ -144,6 +148,9 @@ func (m *Manager) WaitForNoVersion(
 		if count != lastCount {
 			lastCount = count
 			log.Infof(ctx, "waiting for %d leases to expire: desc=%d", count, id)
+		}
+		if lastCount == 0 {
+			break
 		}
 	}
 	return nil
@@ -692,14 +699,45 @@ func purgeOldVersions(
 	}
 
 	removeInactives := func(dropped bool) {
-		leases := func() []*storedLease {
+		leases, leaseToExpire := func() (leasesToRemove []*storedLease, leasesToExpire *descriptorVersionState) {
 			t.mu.Lock()
 			defer t.mu.Unlock()
 			t.mu.takenOffline = dropped
-			return t.removeInactiveVersions()
+			return t.removeInactiveVersions(), t.mu.active.findPreviousToExpire(dropped)
 		}()
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
+		}
+		// If there are old versions with an active refcount, we cannot allow
+		// these to stay forever. So, setup an expiry on them, which is required
+		// for session based leases.
+		if leaseToExpire != nil {
+			func() {
+				m.mu.Lock()
+				leaseToExpire.mu.Lock()
+				defer leaseToExpire.mu.Unlock()
+				defer m.mu.Unlock()
+				// In dual-write mode there will already be an expiration set,
+				// so we don't need to modify it if it's valid.
+				if leaseToExpire.mu.expiration.Less(m.storage.db.KV().Clock().Now()) {
+					// Expire any active old versions into the future based on the lease
+					// duration. If the session lifetime had been longer then use
+					// that. We will only expire later into the future, then what
+					// was previously observed, since transactions may have already
+					// picked this time. If the lease duration is zero, then we are
+					// looking at instant expiration for testing.
+					leaseDuration := LeaseDuration.Get(&m.storage.settings.SV)
+					leaseToExpire.mu.expiration = m.storage.db.KV().Clock().Now().AddDuration(leaseDuration)
+					if sessionExpiry := leaseToExpire.mu.session.Expiration(); leaseDuration > 0 && leaseToExpire.mu.expiration.Less(sessionExpiry) {
+						leaseToExpire.mu.expiration = sessionExpiry
+					}
+				}
+				leaseToExpire.mu.session = nil
+				if leaseToExpire.mu.lease != nil {
+					m.storage.sessionBasedLeasesWaitingToExpire.Inc(1)
+					m.mu.leasesToExpire = append(m.mu.leasesToExpire, leaseToExpire)
+				}
+			}()
 		}
 	}
 
@@ -764,6 +802,10 @@ type Manager struct {
 		// TODO(james): Track size of leased descriptors in memory.
 		descriptors map[descpb.ID]*descriptorState
 
+		// Session based leases that will be removed with expiry, since
+		// a new version has arrived.
+		leasesToExpire []*descriptorVersionState
+
 		// updatesResolvedTimestamp keeps track of a timestamp before which all
 		// descriptor updates have already been seen.
 		updatesResolvedTimestamp hlc.Timestamp
@@ -817,6 +859,18 @@ func NewLeaseManager(
 				Name:        "sql.leases.active",
 				Help:        "The number of outstanding SQL schema leases.",
 				Measurement: "Outstanding leases",
+				Unit:        metric.Unit_COUNT,
+			}),
+			sessionBasedLeasesWaitingToExpire: metric.NewGauge(metric.Metadata{
+				Name:        "sql.leases.waiting_to_expire",
+				Help:        "The number of outstanding session based SQL schema leases with expiry.",
+				Measurement: "Outstanding Leases Waiting to Expire",
+				Unit:        metric.Unit_COUNT,
+			}),
+			sessionBasedLeasesExpired: metric.NewGauge(metric.Metadata{
+				Name:        "sql.leases.expired",
+				Help:        "The number of outstanding session based SQL schema leases expired.",
+				Measurement: "Leases expired because of a new version",
 				Unit:        metric.Unit_COUNT,
 			}),
 		},
@@ -1188,10 +1242,23 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 // RangefeedLeases is not active.
 func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB) {
 	descUpdateCh := make(chan catalog.Descriptor)
-	m.watchForUpdates(ctx, descUpdateCh)
+	descDelCh := make(chan descpb.ID)
+	m.watchForUpdates(ctx, descUpdateCh, descDelCh)
 	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
 		for {
 			select {
+			case id := <-descDelCh:
+				// Descriptor is marked as deleted, so mark it for deletion or
+				// remove it if it's no longer in use.
+				_ = s.RunAsyncTask(ctx, "purge deleted descriptor", func(ctx context.Context) {
+					state := m.findNewest(id)
+					if state != nil {
+						if err := purgeOldVersions(ctx, db, id, true /* dropped */, state.GetVersion(), m); err != nil {
+							log.Warningf(ctx, "error purging leases for deleted descriptor %d",
+								id)
+						}
+					}
+				})
 			case desc := <-descUpdateCh:
 				// NB: We allow nil descriptors to be sent to synchronize the updating of
 				// descriptors.
@@ -1254,7 +1321,9 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 
 // watchForUpdates will watch a rangefeed on the system.descriptor table for
 // updates.
-func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- catalog.Descriptor) {
+func (m *Manager) watchForUpdates(
+	ctx context.Context, descUpdateCh chan<- catalog.Descriptor, descDelCh chan<- descpb.ID,
+) {
 	if log.V(1) {
 		log.Infof(ctx, "using rangefeeds for lease manager updates")
 	}
@@ -1267,6 +1336,15 @@ func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- catal
 		ctx context.Context, ev *kvpb.RangeFeedValue,
 	) {
 		if len(ev.Value.RawBytes) == 0 {
+			id, err := m.Codec().DecodeDescMetadataID(ev.Key)
+			if err != nil {
+				log.Infof(ctx, "unable to decode metadata key %v", ev.Key)
+				return
+			}
+			select {
+			case <-ctx.Done():
+			case descDelCh <- descpb.ID(id):
+			}
 			return
 		}
 		b, err := descbuilder.FromSerializedValue(&ev.Value)
@@ -1310,13 +1388,19 @@ var leaseRefreshLimit = settings.RegisterIntSetting(
 // TODO(vivek): Remove once epoch based table leases are implemented.
 func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 	_ = m.stopper.RunAsyncTask(ctx, "lease-refresher", func(ctx context.Context) {
-		leaseDuration := LeaseDuration.Get(&m.storage.settings.SV)
-		if leaseDuration <= 0 {
-			return
+		refreshTimerDuration := LeaseDuration.Get(&m.storage.settings.SV)
+		renewalsDisabled := false
+		if refreshTimerDuration <= 0 {
+			// Session based leasing still needs a refresh loop to expire
+			// leases, so we will execute that without any renewals.
+			refreshTimerDuration = time.Millisecond * 200
+			renewalsDisabled = true
+		} else {
+			refreshTimerDuration = m.storage.jitteredLeaseDuration()
 		}
 		refreshTimer := timeutil.NewTimer()
 		defer refreshTimer.Stop()
-		refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
+		refreshTimer.Reset(refreshTimerDuration / 2)
 		for {
 			select {
 			case <-m.stopper.ShouldQuiesce():
@@ -1326,10 +1410,73 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 				refreshTimer.Read = true
 				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
 
-				m.refreshSomeLeases(ctx)
+				// Clean up session based leases that have expired.
+				m.cleanupExpiredSessionLeases(ctx)
+
+				// Refreshing leases is enabled unless we are past the drain mode,
+				// after which no expiry based leases should be created or updated.
+				// Existing ones can still be queried by schema changes.
+				if !m.sessionBasedLeasingModeAtLeast(SessionBasedDrain) &&
+					!renewalsDisabled {
+					m.refreshSomeLeases(ctx)
+				}
 			}
 		}
 	})
+}
+
+// cleanupExpiredSessionLeases expires session based leases marked for removal,
+// which will happen when a new version is published.
+func (m *Manager) cleanupExpiredSessionLeases(ctx context.Context) {
+	now := m.storage.db.KV().Clock().Now()
+	latest := -1
+	// Leases which have hit their expiry time, which will be finally discarded
+	// from the storage layer.
+	var leasesToDiscard []*descriptorVersionState
+	func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		// First go through the leases which have an expiry set and find out which
+		// ones have expired. The slice is sorted by the expiry time, so once we
+		// find the first non-expired lease we are done.
+		for i, desc := range m.mu.leasesToExpire {
+			if desc.hasExpired(now) {
+				latest = i
+			} else {
+				break
+			}
+		}
+		// Next extract the slice of the leases that needed to be removed from
+		// storage.
+		if latest >= 0 {
+			leasesToDiscard = m.mu.leasesToExpire[0 : latest+1]
+			m.storage.sessionBasedLeasesWaitingToExpire.Dec(int64(len(leasesToDiscard)))
+			m.mu.leasesToExpire = m.mu.leasesToExpire[latest+1:]
+		}
+	}()
+
+	// Finally for each lease that has expired we can discard it from the storage
+	// layer.
+	if len(leasesToDiscard) > 0 {
+		if err := m.stopper.RunAsyncTask(ctx, "clearing expired session based leases from storage", func(ctx context.Context) {
+			for _, l := range leasesToDiscard {
+				l.mu.Lock()
+				leaseToDelete := l.mu.lease
+				l.mu.lease = nil
+				l.mu.Unlock()
+				// Its possible the reference count has concurrently hit
+				// zero and been cleaned up, so check if there is a lease
+				// to delete first.
+				if leaseToDelete != nil {
+					m.storage.release(ctx, m.stopper, leaseToDelete)
+					m.storage.sessionBasedLeasesExpired.Inc(1)
+				}
+
+			}
+		}); err != nil {
+			log.Infof(ctx, "unable to delete leases from storage %s", err)
+		}
+	}
 }
 
 // Refresh some of the current leases.
@@ -1514,13 +1661,17 @@ func (m *Manager) SystemDatabaseCache() *catkv.SystemDatabaseCache {
 // Metrics contains a pointer to all relevant lease.Manager metrics, for
 // registration.
 type Metrics struct {
-	OutstandingLeases *metric.Gauge
+	OutstandingLeases                 *metric.Gauge
+	SessionBasedLeasesWaitingToExpire *metric.Gauge
+	SessionBasedLeasesExpired         *metric.Gauge
 }
 
 // MetricsStruct returns a struct containing all of this Manager's metrics.
 func (m *Manager) MetricsStruct() Metrics {
 	return Metrics{
-		OutstandingLeases: m.storage.outstandingLeases,
+		OutstandingLeases:                 m.storage.outstandingLeases,
+		SessionBasedLeasesExpired:         m.storage.sessionBasedLeasesExpired,
+		SessionBasedLeasesWaitingToExpire: m.storage.sessionBasedLeasesWaitingToExpire,
 	}
 }
 
