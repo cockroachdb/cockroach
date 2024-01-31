@@ -76,7 +76,6 @@ func (c *serverController) sqlMux(
 			s, err = c.waitForTenantServer(ctx, tenantName)
 		}
 		if err != nil {
-			log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 			c.sendSQLRoutingError(ctx, conn, tenantName)
 			return err
 		}
