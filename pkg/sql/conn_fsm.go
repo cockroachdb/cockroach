@@ -215,6 +215,11 @@ type eventTxnReleased struct{}
 // CommitWait.
 type eventTxnCommittedWithShowCommitTimestamp struct{}
 
+// eventTxnCommittedDueToDDL is generated when a DDL statement is received
+// in an explicit transaction, and the autocommit_before_ddl session variable
+// is enabled. It moves the state to NoTxn.
+type eventTxnCommittedDueToDDL struct{}
+
 // payloadWithError is a common interface for the payloads that wrap an error.
 type payloadWithError interface {
 	errorCause() error
@@ -230,6 +235,7 @@ func (eventTxnRestart) Event()                          {}
 func (eventTxnReleased) Event()                         {}
 func (eventTxnCommittedWithShowCommitTimestamp) Event() {}
 func (eventTxnUpgradeToExplicit) Event()                {}
+func (eventTxnCommittedDueToDDL) Event()                {}
 
 // TxnStateTransitions describe the transitions used by a connExecutor's
 // fsm.Machine. Args.Extended is a txnState, which is muted by the Actions.
@@ -365,6 +371,18 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "SHOW COMMIT TIMESTAMP",
 			Next:        stateCommitWait{},
 			Action:      moveToCommitWaitAfterInternalCommit,
+		},
+		eventTxnCommittedDueToDDL{}: {
+			Description: "auto-commit before DDL",
+			Next:        stateNoTxn{},
+			Action: func(args fsm.Args) error {
+				ts := args.Extended.(*txnState)
+				finishedTxnID, commitTimestamp := ts.finishSQLTxn()
+				ts.setAdvanceInfo(stayInPlace, noRewind, txnEvent{
+					eventType: txnCommit, txnID: finishedTxnID, commitTimestamp: commitTimestamp,
+				})
+				return nil
+			},
 		},
 		// This is the case where we auto-retry explicit transactions.
 		eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.Any}: {

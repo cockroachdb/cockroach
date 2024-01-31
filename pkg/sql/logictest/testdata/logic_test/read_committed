@@ -286,7 +286,7 @@ BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 ALTER TABLE single_stmt_explicit ADD COLUMN b TEXT;
 COMMIT
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 ALTER TABLE supermarket ADD COLUMN age INT
@@ -294,7 +294,7 @@ ALTER TABLE supermarket ADD COLUMN age INT
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 CREATE TABLE foo(a INT)
@@ -302,7 +302,7 @@ CREATE TABLE foo(a INT)
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 DROP TABLE supermarket
@@ -310,7 +310,7 @@ DROP TABLE supermarket
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 CREATE USER foo
@@ -318,7 +318,7 @@ CREATE USER foo
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 DROP USER testuser
@@ -326,7 +326,7 @@ DROP USER testuser
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 GRANT admin TO testuser
@@ -334,7 +334,7 @@ GRANT admin TO testuser
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 GRANT SELECT ON supermarket TO testuser
@@ -342,7 +342,7 @@ GRANT SELECT ON supermarket TO testuser
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 GRANT USAGE ON SCHEMA public TO testuser
@@ -350,7 +350,7 @@ GRANT USAGE ON SCHEMA public TO testuser
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 GRANT CONNECT ON DATABASE postgres TO testuser
@@ -358,7 +358,7 @@ GRANT CONNECT ON DATABASE postgres TO testuser
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 CREATE INDEX foo ON supermarket(ends_with, starts_with)
@@ -366,7 +366,7 @@ CREATE INDEX foo ON supermarket(ends_with, starts_with)
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 CREATE FUNCTION f (x INT) RETURNS INT LANGUAGE SQL AS $$
@@ -376,7 +376,7 @@ $$
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 ALTER FUNCTION f (x INT) RENAME TO g
@@ -384,7 +384,7 @@ ALTER FUNCTION f (x INT) RENAME TO g
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 GRANT EXECUTE ON FUNCTION f (x INT) TO testuser
@@ -392,7 +392,7 @@ GRANT EXECUTE ON FUNCTION f (x INT) TO testuser
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 CREATE TYPE typ AS ENUM('a', 'b')
@@ -400,7 +400,7 @@ CREATE TYPE typ AS ENUM('a', 'b')
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 ALTER TYPE typ ADD VALUE 'c'
@@ -408,7 +408,7 @@ ALTER TYPE typ ADD VALUE 'c'
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 GRANT USAGE ON TYPE typ TO testuser
@@ -416,7 +416,7 @@ GRANT USAGE ON TYPE typ TO testuser
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 CREATE DATABASE foo;
 SELECT 1;
@@ -424,7 +424,7 @@ SELECT 1;
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 ALTER DATABASE postgres RENAME TO foo;
 SELECT 1;
@@ -432,7 +432,7 @@ SELECT 1;
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 CREATE SCHEMA s;
 SELECT 1;
@@ -440,7 +440,7 @@ SELECT 1;
 statement ok
 ROLLBACK
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
+statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SELECT 1;
 ALTER SCHEMA s RENAME TO foo;

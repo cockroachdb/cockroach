@@ -31,6 +31,7 @@ allow_ordinal_column_references                            off
 allow_role_memberships_to_change_during_transaction        off
 alter_primary_region_super_region_override                 off
 application_name                                           ·
+autocommit_before_ddl                                      off
 avoid_buffering                                            off
 backslash_quote                                            safe_encoding
 bytea_output                                               hex
