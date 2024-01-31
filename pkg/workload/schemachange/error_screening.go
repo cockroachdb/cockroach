@@ -422,7 +422,7 @@ GROUP BY name;
 				// No choice but to rollback, expression is malformed.
 				rollbackErr := evalTxn.Rollback(ctx)
 				if rollbackErr != nil {
-					return false, err
+					return false, errors.CombineErrors(err, rollbackErr)
 				}
 				var pgErr *pgconn.PgError
 				if !errors.As(err, &pgErr) {
@@ -449,23 +449,28 @@ GROUP BY name;
 					continue
 				}
 			}
-			// Skip if any null values exist in the expression
-			if hasNullValues {
-				continue
-			}
-			exists, err := og.scanBool(ctx, evalTxn, query.String())
-			if err != nil {
-				skipConstraint, err := handleEvalTxnError(err)
+			// If it has null values, we are going to skip later on,
+			// so skip this operation.
+			var exists bool
+			if !hasNullValues {
+				exists, err = og.scanBool(ctx, evalTxn, query.String())
 				if err != nil {
-					return false, generatedCodes, err
-				}
-				if skipConstraint {
-					continue
+					skipConstraint, err := handleEvalTxnError(err)
+					if err != nil {
+						return false, generatedCodes, err
+					}
+					if skipConstraint {
+						continue
+					}
 				}
 			}
 			err = evalTxn.Commit(ctx)
 			if err != nil {
 				return false, nil, err
+			}
+			// Proceed to the next constraint if it has NULL values.
+			if hasNullValues {
+				continue
 			}
 			if exists {
 				return true, nil, nil
@@ -644,8 +649,8 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if !errors.As(err, &pgErr) {
-				_ = evalTx.Rollback(ctx)
-				return err
+				rbkErr := evalTx.Rollback(ctx)
+				return errors.CombineErrors(err, rbkErr)
 			}
 			if !isValidGenerationError(pgErr.Code) {
 				return err
@@ -663,8 +668,8 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 			if _, err := og.scanBool(ctx, evalTx, queryEvalOrderCheck.String()); err != nil {
 				var pgErr *pgconn.PgError
 				if !errors.As(err, &pgErr) {
-					_ = evalTx.Rollback(ctx)
-					return err
+					rbkErr := evalTx.Rollback(ctx)
+					return errors.CombineErrors(err, rbkErr)
 				}
 				// Note: Invalid errors are allowed, since this is a heuristic. We replaced
 				// random NULL values with zero.
