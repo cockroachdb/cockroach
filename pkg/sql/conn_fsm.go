@@ -306,6 +306,18 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Next:   stateNoTxn{},
 			Action: cleanupAndFinishOnError,
 		},
+		eventTxnCommittedDueToDDL{}: {
+			Description: "auto-commit before DDL",
+			Next:        stateNoTxn{},
+			Action: func(args fsm.Args) error {
+				ts := args.Extended.(*txnState)
+				finishedTxnID, commitTimestamp := ts.finishSQLTxn()
+				ts.setAdvanceInfo(stayInPlace, noRewind, txnEvent{
+					eventType: txnCommit, txnID: finishedTxnID, commitTimestamp: commitTimestamp,
+				})
+				return nil
+			},
+		},
 	},
 	stateOpen{ImplicitTxn: fsm.True, WasUpgraded: fsm.False}: {
 		// This is the case where we auto-retry.
@@ -371,18 +383,6 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "SHOW COMMIT TIMESTAMP",
 			Next:        stateCommitWait{},
 			Action:      moveToCommitWaitAfterInternalCommit,
-		},
-		eventTxnCommittedDueToDDL{}: {
-			Description: "auto-commit before DDL",
-			Next:        stateNoTxn{},
-			Action: func(args fsm.Args) error {
-				ts := args.Extended.(*txnState)
-				finishedTxnID, commitTimestamp := ts.finishSQLTxn()
-				ts.setAdvanceInfo(stayInPlace, noRewind, txnEvent{
-					eventType: txnCommit, txnID: finishedTxnID, commitTimestamp: commitTimestamp,
-				})
-				return nil
-			},
 		},
 		// This is the case where we auto-retry explicit transactions.
 		eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.Any}: {

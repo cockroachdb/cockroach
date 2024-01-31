@@ -937,7 +937,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	// dispatchToExecutionEngine.
 	shouldLogToExecAndAudit = false
 
-	if tree.CanModifySchema(ast) && !ex.implicitTxn() &&
+	if tree.CanModifySchema(ast) &&
+		((!ex.planner.EvalContext().TxnIsSingleStmt && ex.extraTxnState.firstStmtExecuted) ||
+			!ex.implicitTxn()) &&
 		ex.sessionData().AutoCommitBeforeDDL && ex.executorType != executorTypeInternal {
 		if err := ex.planner.SendClientNotice(
 			ctx,
@@ -2265,10 +2267,10 @@ var txnSchemaChangeErr = pgerror.Newf(
 // error is returned.
 func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Statement) error {
 	p := &ex.planner
-	if ex.extraTxnState.upgradedToSerializable && ex.extraTxnState.firstStmtExecuted {
-		return txnSchemaChangeErr
-	}
 	if tree.CanModifySchema(stmt.AST) {
+		if ex.extraTxnState.upgradedToSerializable && ex.extraTxnState.firstStmtExecuted {
+			return txnSchemaChangeErr
+		}
 		if ex.state.mu.txn.IsoLevel().ToleratesWriteSkew() {
 			if !ex.extraTxnState.firstStmtExecuted {
 				if err := ex.state.setIsolationLevel(isolation.Serializable); err != nil {
