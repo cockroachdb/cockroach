@@ -70,12 +70,12 @@ var eventStreamReturnType = types.MakeLabeledTuple(
 	[]string{"stream_event"},
 )
 
-// ResolvedType implements tree.ValueGenerator interface.
+// ResolvedType implements eval.ValueGenerator interface.
 func (s *eventStream) ResolvedType() *types.T {
 	return eventStreamReturnType
 }
 
-// Start implements tree.ValueGenerator interface.
+// Start implements eval.ValueGenerator interface.
 func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	// ValueGenerator API indicates that Start maybe called again if Next returned
 	// false.  However, this generator never terminates without an error,
@@ -232,7 +232,7 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier span.Fr
 	// TODO(yevgeniy): Add go routine to monitor stream job liveness.
 }
 
-// Next implements tree.ValueGenerator interface.
+// Next implements eval.ValueGenerator interface.
 func (s *eventStream) Next(ctx context.Context) (bool, error) {
 	select {
 	case <-ctx.Done():
@@ -244,12 +244,12 @@ func (s *eventStream) Next(ctx context.Context) (bool, error) {
 	}
 }
 
-// Values implements tree.ValueGenerator interface.
+// Values implements eval.ValueGenerator interface.
 func (s *eventStream) Values() (tree.Datums, error) {
 	return s.data, nil
 }
 
-// Close implements tree.ValueGenerator interface.
+// Close implements eval.ValueGenerator interface.
 func (s *eventStream) Close(ctx context.Context) {
 	if s.rf != nil {
 		s.rf.Close()

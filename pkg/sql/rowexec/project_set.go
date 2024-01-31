@@ -54,7 +54,7 @@ type projectSetProcessor struct {
 	// RowBuffer will contain the current row of results.
 	rowBuffer rowenc.EncDatumRow
 
-	// gens contains the current "active" ValueGenerators for each entry
+	// gens contains the current "active" eval.ValueGenerators for each entry
 	// in `funcs`. They are initialized anew for every new row in the source.
 	gens []eval.ValueGenerator
 
@@ -164,10 +164,10 @@ func (ps *projectSetProcessor) nextInputRow() (
 	// Initialize a round of SRF generators or scalar values.
 	for i, n := 0, ps.eh.ExprCount(); i < n; i++ {
 		if fn := ps.funcs[i]; fn != nil {
-			// A set-generating function. Prepare its ValueGenerator.
+			// A set-generating function. Prepare its eval.ValueGenerator.
 
-			// First, make sure to close its ValueGenerator from the previous
-			// input row (if it exists).
+			// First, make sure to close its eval.ValueGenerator from the
+			// previous input row (if it exists).
 			if ps.gens[i] != nil {
 				ps.gens[i].Close(ps.Ctx())
 				ps.gens[i] = nil
