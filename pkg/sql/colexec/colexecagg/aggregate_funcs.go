@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
@@ -203,8 +202,8 @@ type aggregateFuncAlloc interface {
 	// newAggFunc returns the aggregate function from the pool with all
 	// necessary fields initialized.
 	newAggFunc() AggregateFunc
-	// incAllocSize increments allocSize of this allocator by one.
-	incAllocSize()
+	// increaseAllocSize increments allocSize of this allocator by delta.
+	increaseAllocSize(delta int64)
 }
 
 // AggregateFuncsAlloc is a utility struct that pools allocations of multiple
@@ -215,8 +214,11 @@ type aggregateFuncAlloc interface {
 type AggregateFuncsAlloc struct {
 	allocator *colmem.Allocator
 	// allocSize determines the number of objects allocated when the previous
-	// allocations have been used up.
+	// allocations have been used up. This number will grow exponentially until
+	// it reaches maxAllocSize.
 	allocSize int64
+	// maxAllocSize determines the maximum allocSize value.
+	maxAllocSize int64
 	// returnFuncs is the pool for the slice to be returned in
 	// makeAggregateFuncs.
 	returnFuncs []AggregateFunc
@@ -249,9 +251,16 @@ func NewAggregateFuncsAlloc(
 	ctx context.Context,
 	args *NewAggregatorArgs,
 	aggregations []execinfrapb.AggregatorSpec_Aggregation,
-	allocSize int64,
+	initialAllocSize int64,
+	maxAllocSize int64,
 	aggKind AggKind,
 ) (*AggregateFuncsAlloc, *colconv.VecToDatumConverter, colexecop.Closers, error) {
+	if initialAllocSize > maxAllocSize {
+		return nil, nil, nil, errors.AssertionFailedf(
+			"initialAllocSize %d must be no greater than maxAllocSize %d", initialAllocSize, maxAllocSize,
+		)
+	}
+	allocSize := initialAllocSize
 	funcAllocs := make([]aggregateFuncAlloc, len(aggregations))
 	var toClose colexecop.Closers
 	var vecIdxsToConvert []int
@@ -506,31 +515,15 @@ func NewAggregateFuncsAlloc(
 			if !freshAllocator {
 				// If we're reusing the same allocator as for one of the
 				// previous aggregate functions, we want to increment the alloc
-				// size (unless we're doing the hash aggregation). This is the
-				// case since we have allocSize = 1, so for all usages of this
-				// allocator (except for the first one) we want to bump
-				// funcAllocs[i].allocSize by 1.
-				// TODO(yuzefovich): if we ever make allocSize configurable,
-				// this logic should probably be changed (like if we make the
-				// alloc size 1 for hash aggregation, then we'd need to bump it
-				// with every reuse).
-				switch aggKind {
-				case OrderedAggKind, WindowAggKind:
-					if buildutil.CrdbTestBuild {
-						if allocSize != 1 {
-							colexecerror.InternalError(errors.AssertionFailedf(
-								"expected alloc size of 1, found %d", allocSize,
-							))
-						}
-					}
-					funcAllocs[i].incAllocSize()
-				}
+				// size accordingly.
+				funcAllocs[i].increaseAllocSize(initialAllocSize)
 			}
 		}
 	}
 	return &AggregateFuncsAlloc{
 		allocator:     args.Allocator,
 		allocSize:     allocSize,
+		maxAllocSize:  maxAllocSize,
 		aggFuncAllocs: funcAllocs,
 	}, inputArgsConverter, toClose, nil
 }
@@ -550,6 +543,28 @@ func (a *AggregateFuncsAlloc) MakeAggregateFuncs() []AggregateFunc {
 		// of 'allocSize x number of funcs in schema' length. Every
 		// aggFuncAlloc will allocate allocSize of objects on the newAggFunc
 		// call below.
+		//
+		// But first check whether we need to grow allocSize.
+		if a.returnFuncs != nil {
+			// We're doing the very first allocation when returnFuncs is nil, so
+			// we don't change the allocSize then.
+			if a.allocSize < a.maxAllocSize {
+				// We need to grow the alloc size of both this alloc object and
+				// all aggAlloc objects.
+				newAllocSize := a.allocSize * 2
+				if newAllocSize > a.maxAllocSize {
+					newAllocSize = a.maxAllocSize
+				}
+				delta := newAllocSize - a.allocSize
+				a.allocSize = newAllocSize
+				// Note that the same agg alloc object can be present multiple
+				// times in the aggFuncAllocs slice, and we do want to increase
+				// its alloc size every time we see it.
+				for _, alloc := range a.aggFuncAllocs {
+					alloc.increaseAllocSize(delta)
+				}
+			}
+		}
 		a.allocator.AdjustMemoryUsage(aggregateFuncSliceOverhead + sizeOfAggregateFunc*int64(len(a.aggFuncAllocs))*a.allocSize)
 		a.returnFuncs = make([]AggregateFunc, len(a.aggFuncAllocs)*int(a.allocSize))
 	}
@@ -566,8 +581,8 @@ type aggAllocBase struct {
 	allocSize int64
 }
 
-func (a *aggAllocBase) incAllocSize() {
-	a.allocSize++
+func (a *aggAllocBase) increaseAllocSize(delta int64) {
+	a.allocSize += delta
 }
 
 // ProcessAggregations processes all aggregate functions specified in

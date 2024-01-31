@@ -199,8 +199,11 @@ func NewHashAggregator(
 	args *colexecagg.NewHashAggregatorArgs,
 	newSpillingQueueArgs *colexecutils.NewSpillingQueueArgs,
 ) colexecop.ResettableOperator {
+	// TODO(yuzefovich): use the optimizer-provided estimate of the groups count
+	// as initialAllocSize.
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-		ctx, args.NewAggregatorArgs, args.Spec.Aggregations, hashAggregatorAllocSize, colexecagg.HashAggKind,
+		ctx, args.NewAggregatorArgs, args.Spec.Aggregations, 1, /* initialAllocSize */
+		hashAggregatorAllocSize /* maxAllocSize */, colexecagg.HashAggKind,
 	)
 	if err != nil {
 		colexecerror.InternalError(err)
