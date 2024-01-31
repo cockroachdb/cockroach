@@ -141,6 +141,9 @@ jest_test(
         "tsconfig.json",
         ":node_modules",
     ],
+    exec_properties = {
+        "test.Pool": "large",
+    },
     node_modules = ":node_modules",
 )
 
