@@ -41,6 +41,10 @@ type groupNode struct {
 	funcs []*aggregateFuncHolder
 
 	reqOrdering ReqOrdering
+
+	// estimatedRowCount, when set, is the estimated number of rows that this
+	// groupNode will output.
+	estimatedRowCount uint64
 }
 
 func (n *groupNode) startExec(params runParams) error {

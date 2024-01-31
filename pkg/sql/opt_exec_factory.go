@@ -503,19 +503,21 @@ func (ef *execFactory) ConstructGroupBy(
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
 	groupingOrderType exec.GroupingOrderType,
+	estimatedRowCount uint64,
 ) (exec.Node, error) {
 	inputPlan := input.(planNode)
 	inputCols := planColumns(inputPlan)
 	// TODO(harding): Use groupingOrder to determine when to use a hash
 	// aggregator.
 	n := &groupNode{
-		plan:             inputPlan,
-		funcs:            make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
-		columns:          getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
-		groupCols:        convertNodeOrdinalsToInts(groupCols),
-		groupColOrdering: groupColOrdering,
-		isScalar:         false,
-		reqOrdering:      ReqOrdering(reqOrdering),
+		plan:              inputPlan,
+		funcs:             make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
+		columns:           getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
+		groupCols:         convertNodeOrdinalsToInts(groupCols),
+		groupColOrdering:  groupColOrdering,
+		isScalar:          false,
+		reqOrdering:       ReqOrdering(reqOrdering),
+		estimatedRowCount: estimatedRowCount,
 	}
 	for _, col := range n.groupCols {
 		// TODO(radu): only generate the grouping columns we actually need.
