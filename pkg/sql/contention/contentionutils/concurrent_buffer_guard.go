@@ -123,6 +123,18 @@ func (c *ConcurrentBufferGuard) ForceSync() {
 	c.syncLocked()
 }
 
+// ForceSyncExec blocks all inflight and upcoming write operation, to allow
+// the onBufferFullHandler to be executed. However, unlike ForceSync, ForceSyncExec
+// executes the provided function prior to executing onBufferFullHandler, which allows
+// callers to atomically apply state to this specific execution of the
+// onBufferFullHandler.
+func (c *ConcurrentBufferGuard) ForceSyncExec(fn func()) {
+	c.flushSyncLock.Lock()
+	defer c.flushSyncLock.Unlock()
+	fn()
+	c.syncLocked()
+}
+
 func (c *ConcurrentBufferGuard) syncRLocked() {
 	// We upgrade the read-lock to a write-lock, then when we are done flushing,
 	// the lock is downgraded to a read-lock.

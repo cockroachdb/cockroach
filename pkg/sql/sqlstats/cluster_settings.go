@@ -17,6 +17,7 @@ import (
 )
 
 // StmtStatsEnable determines whether to collect per-statement statistics.
+// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 var StmtStatsEnable = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
@@ -35,6 +36,7 @@ var TxnStatsNumStmtFingerprintIDsToRecord = settings.RegisterIntSetting(
 
 // TxnStatsEnable determines whether to collect per-application transaction
 // statistics.
+// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 var TxnStatsEnable = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.metrics.transaction_details.enabled", "collect per-application transaction statistics", true,

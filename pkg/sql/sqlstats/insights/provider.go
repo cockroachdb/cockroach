@@ -53,4 +53,7 @@ func (n *nullWriter) ObserveStatement(_ clusterunique.ID, _ *Statement) {
 func (n *nullWriter) ObserveTransaction(_ context.Context, _ clusterunique.ID, _ *Transaction) {
 }
 
+func (n *nullWriter) Clear(_ context.Context) {
+}
+
 var nullWriterInstance Writer = &nullWriter{}

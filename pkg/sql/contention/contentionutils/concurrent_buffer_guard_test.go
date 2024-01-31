@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -115,6 +117,33 @@ func TestConcurrentWriterGuard(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConcurrentBufferGuard_ForceSyncExec(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("executes function prior to onBufferFullSync", func(t *testing.T) {
+		// Construct a guard whose onBufferFullSync fn simply checks that a
+		// condition was set prior to execution. We can later make assertions
+		// on the result.
+		conditionSet := false
+		fnCalled := false
+		guard := NewConcurrentBufferGuard(
+			func() int64 {
+				return 1024 // 1K
+			}, /* limiter */
+			func(currentWriterIdx int64) {
+				fnCalled = conditionSet
+			}, /* onBufferFullSync */
+		)
+		// Execute and verify our func was called prior to the
+		// onBufferFullSync call.
+		guard.ForceSyncExec(func() {
+			conditionSet = true
+		})
+		require.True(t, fnCalled)
+	})
 }
 
 func runConcurrentWriterGuard(t *testing.T, concurrentWriters int, sizeLimit int64) {

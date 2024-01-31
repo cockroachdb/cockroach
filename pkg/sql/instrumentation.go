@@ -473,6 +473,7 @@ func (ih *instrumentationHelper) Setup(
 
 	// Don't collect it if Stats Collection is disabled. If it is disabled the
 	// stats are not stored, so it always returns false for previouslySampled.
+	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !collectTxnExecStats && (!previouslySampled && sqlstats.StmtStatsEnable.Get(&cfg.Settings.SV)) {
 		// We don't collect the execution stats for statements in this txn, but
 		// this is the first time we see this statement ever, so we'll collect
