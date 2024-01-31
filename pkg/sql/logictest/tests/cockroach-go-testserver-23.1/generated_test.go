@@ -113,6 +113,13 @@ func TestLogic_mixed_version_schedule_details(
 	runLogicTest(t, "mixed_version_schedule_details")
 }
 
+func TestLogic_mixed_version_sequence_per_node_cache(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_sequence_per_node_cache")
+}
+
 func TestLogic_mixed_version_udf_execute_privileges(
 	t *testing.T,
 ) {

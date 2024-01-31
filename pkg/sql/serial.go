@@ -49,7 +49,8 @@ var virtualSequenceOpts = tree.SequenceOptions{
 }
 
 // cachedSequencesCacheSize is the default cache size used when
-// SessionNormalizationMode is SerialUsesCachedSQLSequences.
+// SessionNormalizationMode is SerialUsesCachedSQLSequences or
+// SerialUsesCachedNodeSQLSequences.
 var cachedSequencesCacheSizeSetting = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.serial_sequences_cache_size",
@@ -180,7 +181,7 @@ func (p *planner) generateSerialInColumnDef(
 		newSpec.Type = upgradeType
 		asIntType = upgradeType
 
-	case sessiondatapb.SerialUsesSQLSequences, sessiondatapb.SerialUsesCachedSQLSequences:
+	case sessiondatapb.SerialUsesSQLSequences, sessiondatapb.SerialUsesCachedSQLSequences, sessiondatapb.SerialUsesCachedNodeSQLSequences:
 		// With real sequences we can use the requested type as-is.
 
 	default:
@@ -218,6 +219,13 @@ func (p *planner) generateSerialInColumnDef(
 		value := cachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
 		seqOpts = tree.SequenceOptions{
 			tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &value},
+		}
+	} else if serialNormalizationMode == sessiondatapb.SerialUsesCachedNodeSQLSequences {
+		seqType = "cached node "
+
+		value := cachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
+		seqOpts = tree.SequenceOptions{
+			tree.SequenceOption{Name: tree.SeqOptCacheNode, IntVal: &value},
 		}
 	}
 

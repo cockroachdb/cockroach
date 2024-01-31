@@ -82,6 +82,7 @@ func (i *immediateVisitor) SetSequenceOptions(
 		tree.SeqOptMaxValue:  {SetFunc: setIntValue(&sc.SequenceOpts.MaxValue)},
 		tree.SeqOptStart:     {SetFunc: setIntValue(&sc.SequenceOpts.Start)},
 		tree.SeqOptCache:     {SetFunc: setIntValue(&sc.SequenceOpts.CacheSize)},
+		tree.SeqOptCacheNode: {SetFunc: setIntValue(&sc.SequenceOpts.NodeCacheSize)},
 		tree.SeqOptVirtual:   {SetFunc: setBoolValue(&sc.SequenceOpts.Virtual)},
 		tree.SeqOptAs: {SetFunc: func(Value string) error {
 			sc.SequenceOpts.AsIntegerType = Value

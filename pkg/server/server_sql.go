@@ -973,6 +973,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RoleMemberCache: sql.NewMembershipCache(
 			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper,
 		),
+		SequenceCacheNode: sessiondatapb.NewSequenceCacheNode(),
 		SessionInitCache: sessioninit.NewCache(
 			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper,
 		),

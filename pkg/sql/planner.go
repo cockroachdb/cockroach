@@ -618,6 +618,11 @@ func (p *planner) GetOrInitSequenceCache() sessiondatapb.SequenceCache {
 	return p.SessionData().SequenceCache
 }
 
+// GetSequenceCacheNode returns the node-level sequence cache.
+func (p *planner) GetSequenceCacheNode() *sessiondatapb.SequenceCacheNode {
+	return p.execCfg.SequenceCacheNode
+}
+
 func (p *planner) LeaseMgr() *lease.Manager {
 	return p.execCfg.LeaseManager
 }
