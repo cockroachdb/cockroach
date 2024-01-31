@@ -157,6 +157,7 @@ func (s storage) acquire(
 		// written a value to the database, which we'd leak if we did not delete it.
 		// Note that the expiration is part of the primary key in the table, so we
 		// would not overwrite the old entry if we just were to do another insert.
+		//repeatIteration = desc != nil
 		if (!expiration.IsEmpty() || sessionID != nil) && desc != nil {
 			prevExpirationTS := storedLeaseExpiration(expiration)
 			if err := s.writer.deleteLease(ctx, txn, leaseFields{
@@ -191,7 +192,6 @@ func (s storage) acquire(
 		log.VEventf(ctx, 2, "storage attempting to acquire lease %v@%v", desc, expiration)
 
 		ts := storedLeaseExpiration(expiration)
-
 		var isLeaseRenewal bool
 		var lastLeaseWasWrittenWithSessionID bool
 		// If there was a previous lease then determine if this a renewal and
@@ -254,7 +254,9 @@ func (s storage) acquire(
 // read a descriptor because it can be called while modifying a
 // descriptor through a schema change before the schema change has committed
 // that can result in a deadlock.
-func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *storedLease) {
+func (s storage) release(
+	ctx context.Context, stopper *stop.Stopper, lease *storedLease,
+) (released bool) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	retryOptions := base.DefaultRetryOptions()
 	retryOptions.Closer = stopper.ShouldQuiesce()
@@ -283,6 +285,7 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 			}
 			continue
 		}
+		released = true
 		s.outstandingLeases.Dec(1)
 		if s.testingKnobs.LeaseReleasedEvent != nil {
 			s.testingKnobs.LeaseReleasedEvent(
@@ -290,6 +293,7 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 		}
 		break
 	}
+	return released
 }
 
 // Get the descriptor valid for the expiration time from the store.
