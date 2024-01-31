@@ -203,8 +203,8 @@ type aggregateFuncAlloc interface {
 	// newAggFunc returns the aggregate function from the pool with all
 	// necessary fields initialized.
 	newAggFunc() AggregateFunc
-	// incAllocSize increments allocSize of this allocator by one.
-	incAllocSize()
+	// increaseAllocSize increments allocSize of this allocator by delta.
+	increaseAllocSize(delta int64)
 }
 
 // AggregateFuncsAlloc is a utility struct that pools allocations of multiple
@@ -215,8 +215,11 @@ type aggregateFuncAlloc interface {
 type AggregateFuncsAlloc struct {
 	allocator *colmem.Allocator
 	// allocSize determines the number of objects allocated when the previous
-	// allocations have been used up.
+	// allocations have been used up. This number will grow exponentially until
+	// it reaches maxAllocSize.
 	allocSize int64
+	// maxAllocSize determines the maximum allocSize value.
+	maxAllocSize int64
 	// returnFuncs is the pool for the slice to be returned in
 	// makeAggregateFuncs.
 	returnFuncs []AggregateFunc
@@ -249,9 +252,16 @@ func NewAggregateFuncsAlloc(
 	ctx context.Context,
 	args *NewAggregatorArgs,
 	aggregations []execinfrapb.AggregatorSpec_Aggregation,
-	allocSize int64,
+	initialAllocSize int64,
+	maxAllocSize int64,
 	aggKind AggKind,
 ) (*AggregateFuncsAlloc, *colconv.VecToDatumConverter, colexecop.Closers, error) {
+	if initialAllocSize > maxAllocSize {
+		return nil, nil, nil, errors.AssertionFailedf(
+			"initialAllocSize %d must be no greater than maxAllocSize %d", initialAllocSize, maxAllocSize,
+		)
+	}
+	allocSize := initialAllocSize
 	funcAllocs := make([]aggregateFuncAlloc, len(aggregations))
 	var toClose colexecop.Closers
 	var vecIdxsToConvert []int
@@ -523,7 +533,7 @@ func NewAggregateFuncsAlloc(
 							))
 						}
 					}
-					funcAllocs[i].incAllocSize()
+					funcAllocs[i].increaseAllocSize(1)
 				}
 			}
 		}
@@ -531,6 +541,7 @@ func NewAggregateFuncsAlloc(
 	return &AggregateFuncsAlloc{
 		allocator:     args.Allocator,
 		allocSize:     allocSize,
+		maxAllocSize:  maxAllocSize,
 		aggFuncAllocs: funcAllocs,
 	}, inputArgsConverter, toClose, nil
 }
@@ -550,6 +561,25 @@ func (a *AggregateFuncsAlloc) MakeAggregateFuncs() []AggregateFunc {
 		// of 'allocSize x number of funcs in schema' length. Every
 		// aggFuncAlloc will allocate allocSize of objects on the newAggFunc
 		// call below.
+		//
+		// But first check whether we need to grow allocSize.
+		if a.returnFuncs != nil {
+			// We're doing the very first allocation when returnFuncs is nil, so
+			// we don't change the allocSize then.
+			if a.allocSize < a.maxAllocSize {
+				// We need to grow the alloc size of both this alloc object and
+				// all aggAlloc objects.
+				newAllocSize := a.allocSize * 2
+				if newAllocSize > a.maxAllocSize {
+					newAllocSize = a.maxAllocSize
+				}
+				delta := newAllocSize - a.allocSize
+				a.allocSize = newAllocSize
+				for _, alloc := range a.aggFuncAllocs {
+					alloc.increaseAllocSize(delta)
+				}
+			}
+		}
 		a.allocator.AdjustMemoryUsage(aggregateFuncSliceOverhead + sizeOfAggregateFunc*int64(len(a.aggFuncAllocs))*a.allocSize)
 		a.returnFuncs = make([]AggregateFunc, len(a.aggFuncAllocs)*int(a.allocSize))
 	}
@@ -566,8 +596,8 @@ type aggAllocBase struct {
 	allocSize int64
 }
 
-func (a *aggAllocBase) incAllocSize() {
-	a.allocSize++
+func (a *aggAllocBase) increaseAllocSize(delta int64) {
+	a.allocSize += delta
 }
 
 // ProcessAggregations processes all aggregate functions specified in
