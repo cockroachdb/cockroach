@@ -757,12 +757,11 @@ func (r *raft) appliedSnap(snap *pb.Snapshot) {
 	r.appliedTo(index, 0 /* size */)
 }
 
-// maybeCommit attempts to advance the commit index. Returns true if
-// the commit index changed (in which case the caller should call
-// r.bcastAppend).
+// maybeCommit attempts to advance the commit index. Returns true if the commit
+// index changed (in which case the caller should call r.bcastAppend). This can
+// only be called in StateLeader.
 func (r *raft) maybeCommit() bool {
-	mci := r.trk.Committed()
-	return r.raftLog.maybeCommit(mci, r.Term)
+	return r.raftLog.maybeCommit(entryID{term: r.Term, index: r.trk.Committed()})
 }
 
 func (r *raft) reset(term uint64) {
