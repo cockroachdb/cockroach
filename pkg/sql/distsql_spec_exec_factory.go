@@ -314,7 +314,7 @@ func (e *distSQLSpecExecFactory) checkExprsAndMaybeMergeLastStage(
 		recommendation = cannotDistribute
 	}
 	for _, expr := range exprs {
-		if err := checkExpr(expr); err != nil {
+		if err := checkExprForDistSQL(expr); err != nil {
 			recommendation = cannotDistribute
 			if physPlan != nil {
 				// The filter expression cannot be distributed, so we need to

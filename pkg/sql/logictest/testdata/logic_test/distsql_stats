@@ -1184,9 +1184,12 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 2            0           0                    1
 3            0           0                    1
 
-# Test that stats are not collected for virtual columns.
+# Test that stats are not collected for virtual columns if disabled.
 statement ok
 SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
+
+statement ok
+SET CLUSTER SETTING sql.stats.virtual_computed_columns.enabled = false
 
 statement ok
 CREATE TABLE virt (
@@ -1259,6 +1262,9 @@ s                {a}           3          0           true
 s                {b}           3          0           true
 s                {j}           3          0           true
 s                {rowid}       3          0           true
+
+statement ok
+RESET CLUSTER SETTING sql.stats.virtual_computed_columns.enabled
 
 # Test that non-index columns have histograms collected for them, with
 # up to 2 buckets.
@@ -1600,6 +1606,9 @@ CREATE STATISTICS s FROM t63387;
 # Regression test for #71080. Stats collection should succeed on tables with NOT
 # NULL virtual columns.
 statement ok
+SET CLUSTER SETTING sql.stats.virtual_computed_columns.enabled = false
+
+statement ok
 SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
 
 statement ok
@@ -1608,19 +1617,19 @@ CREATE TABLE t71080 (
   a INT,
   b INT NOT NULL AS (a + 10) VIRTUAL,
   INDEX (a, b)
-);
+)
 
 statement ok
-INSERT INTO t71080 VALUES (1, 2);
+INSERT INTO t71080 VALUES (1, 2)
 
 statement ok
-CREATE STATISTICS s FROM t71080;
+CREATE STATISTICS s FROM t71080
 
 statement error cannot create statistics on virtual column \"b\"
-CREATE STATISTICS s ON b FROM t71080;
+CREATE STATISTICS s ON b FROM t71080
 
 statement error cannot create statistics on virtual column \"b\"
-CREATE STATISTICS s ON a, b FROM t71080;
+CREATE STATISTICS s ON a, b FROM t71080
 
 # Regression test for #76867. Do not attempt to collect empty multi-column stats
 # when there are indexes on columns that are all virtual.
@@ -1634,6 +1643,9 @@ CREATE TABLE t76867 (
 
 statement ok
 ANALYZE t76867
+
+statement ok
+RESET CLUSTER SETTING sql.stats.virtual_computed_columns.enabled
 
 # Regression tests for #80123. Collecting stats on system tables is allowed.
 statement ok
@@ -2404,6 +2416,9 @@ CREATE INDEX ON xy (y) WHERE y > 5;
 statement error pq: table xy does not contain a non-partial forward index with y as a prefix column
 CREATE STATISTICS xy_partial_idx ON y FROM xy USING EXTREMES;
 
+statement ok
+RESET enable_create_stats_using_extremes
+
 # Regression test for #100909. Ensure enum is hydrated in SHOW HISTOGRAM.
 statement ok
 CREATE TYPE enum1 as ENUM ('hello', 'hi');
@@ -2491,3 +2506,167 @@ SELECT statistics_name FROM [SHOW STATISTICS FOR TABLE tab_test_privileges]
 tab_test_privileges_stat
 
 user root
+
+# Test stats collection on virtual computed columns.
+
+statement ok
+CREATE TABLE t68254 (
+  a INT PRIMARY KEY,
+  b STRING,
+  c JSONB,
+  d STRING AS (b || repeat('a', a)) VIRTUAL,
+  e STRING AS ((c->'foo')->>'bar') VIRTUAL,
+  INDEX (d),
+  INDEX (e),
+  INDEX (b, e)
+)
+
+statement ok
+INSERT INTO t68254 (a, b, c)
+SELECT i, i::STRING, json_build_object('foo', json_build_object('bar', json_build_object('baz', i)))
+FROM generate_series(0, 3) s(i)
+
+statement ok
+INSERT INTO t68254 (a, b, c) VALUES (4, NULL, NULL)
+
+statement ok
+CREATE STATISTICS j1 FROM t68254
+
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE t68254]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+j1               {a}           5          5               0           true
+j1               {b,e}         5          5               1           false
+j1               {b}           5          5               1           true
+j1               {c}           5          5               1           true
+j1               {d}           5          5               1           true
+j1               {e}           5          5               1           true
+
+statement ok
+CREATE STATISTICS j2 ON d FROM t68254
+
+statement ok
+CREATE STATISTICS j3 ON e FROM t68254
+
+let $hist_d
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j2'
+
+let $hist_e
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j3'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_d
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+'0'          0           0                    1
+'1a'         0           0                    1
+'2aa'        0           0                    1
+'3aaa'       0           0                    1
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_e
+----
+upper_bound   range_rows  distinct_range_rows  equal_rows
+'{"baz": 0}'  0           0                    1
+'{"baz": 1}'  0           0                    1
+'{"baz": 2}'  0           0                    1
+'{"baz": 3}'  0           0                    1
+
+# Check that we also collect stats on the hidden expression index virt column.
+statement ok
+CREATE INDEX ON t68254 ((c->'foo'))
+
+statement ok
+CREATE STATISTICS j4 FROM t68254
+
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE t68254]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names              row_count  distinct_count  null_count  has_histogram
+j4               {a}                       5          5               0           true
+j4               {b,e}                     5          5               1           false
+j4               {b}                       5          5               1           true
+j4               {crdb_internal_idx_expr}  5          5               1           true
+j4               {c}                       5          5               1           true
+j4               {d}                       5          5               1           true
+j4               {e}                       5          5               1           true
+
+statement ok
+CREATE STATISTICS j5 ON crdb_internal_idx_expr FROM t68254
+
+let $hist_crdb_internal_idx_expr
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j5'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_crdb_internal_idx_expr
+----
+upper_bound            range_rows  distinct_range_rows  equal_rows
+'{"bar": {"baz": 0}}'  0           0                    1
+'{"bar": {"baz": 1}}'  0           0                    1
+'{"bar": {"baz": 2}}'  0           0                    1
+'{"bar": {"baz": 3}}'  0           0                    1
+
+# Test partial stats using extremes on indexed virtual computed columns.
+statement ok
+SET enable_create_stats_using_extremes = on
+
+statement ok
+INSERT INTO t68254 (a, b, c) VALUES (5, '5', '{"foo": {"bar": {"baz": 5}}}')
+
+statement ok
+CREATE STATISTICS j6 ON d FROM t68254 USING EXTREMES
+
+statement ok
+CREATE STATISTICS j7 ON e FROM t68254 USING EXTREMES
+
+statement ok
+CREATE STATISTICS j8 ON crdb_internal_idx_expr FROM t68254 USING EXTREMES
+
+let $hist_d
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j6'
+
+let $hist_e
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j7'
+
+let $hist_crdb_internal_idx_expr
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j8'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_d
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+'5aaaaa'     0           0                    1
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_e
+----
+upper_bound   range_rows  distinct_range_rows  equal_rows
+'{"baz": 5}'  0           0                    1
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_crdb_internal_idx_expr
+----
+upper_bound            range_rows  distinct_range_rows  equal_rows
+'{"bar": {"baz": 5}}'  0           0                    1
+
+statement ok
+RESET enable_create_stats_using_extremes
