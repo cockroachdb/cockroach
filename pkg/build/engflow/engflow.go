@@ -102,15 +102,15 @@ func getHttpClient(certFile, keyFile string) (*http.Client, error) {
 
 func downloadFile(client *http.Client, uri string) (string, error) {
 	url := strings.ReplaceAll(uri, "bytestream://", "https://")
-	url = strings.ReplaceAll(url, "/blobs/", "/api/v0/blob/")
+	url = strings.ReplaceAll(url, "/blobs/", "/api/contentaddressablestorage/v1/instances/default/blobs/")
 	resp, err := client.Get(url)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to download from %s: %+v", url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	contents, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to download from %s: %+v", url, err)
 	}
 	return string(contents), nil
 }
