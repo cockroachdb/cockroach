@@ -12,7 +12,8 @@ package execinfrapb
 
 import (
 	context "context"
-	"strings"
+	"unicode/utf8"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -28,10 +29,14 @@ import (
 // GetAggregateFuncIdx converts the aggregate function name to the enum value
 // with the same string representation.
 func GetAggregateFuncIdx(funcName string) (int32, error) {
-	funcStr := strings.ToUpper(funcName)
+	var ub upperBuffer //gcassert:noescape
+	funcStr, ok := ub.ToUpper(funcName)
+	if !ok {
+		return 0, errors.Errorf("unknown aggregate %s", funcName)
+	}
 	funcIdx, ok := AggregatorSpec_Func_value[funcStr]
 	if !ok {
-		return 0, errors.Errorf("unknown aggregate %s", funcStr)
+		return 0, errors.Errorf("unknown aggregate %s", funcName)
 	}
 	return funcIdx, nil
 }
@@ -88,10 +93,14 @@ func (spec *AggregatorSpec) IsRowCount() bool {
 // GetWindowFuncIdx converts the window function name to the enum value with
 // the same string representation.
 func GetWindowFuncIdx(funcName string) (int32, error) {
-	funcStr := strings.ToUpper(funcName)
+	var ub upperBuffer //gcassert:noescape
+	funcStr, ok := ub.ToUpper(funcName)
+	if !ok {
+		return 0, errors.Errorf("unknown window function %s", funcName)
+	}
 	funcIdx, ok := WindowerSpec_WindowFunc_value[funcStr]
 	if !ok {
-		return 0, errors.Errorf("unknown window function %s", funcStr)
+		return 0, errors.Errorf("unknown window function %s", funcName)
 	}
 	return funcIdx, nil
 }
@@ -370,4 +379,91 @@ func (spec *WindowerSpec_Frame) ConvertToAST() (*tree.WindowFrame, error) {
 // lookup join).
 func (spec *JoinReaderSpec) IsIndexJoin() bool {
 	return len(spec.LookupColumns) == 0 && spec.LookupExpr.Empty()
+}
+
+// init performs some sanity checks for the invariants required by the
+// upperBuffer type.
+func init() {
+	isAllASCII := func(s string) bool {
+		for i := range s {
+			if s[i] >= utf8.RuneSelf {
+				return false
+			}
+		}
+		return true
+	}
+	// Check that aggregate function names are not longer than upperBufferSize
+	// and that they do not have non-ASCII characters. If these invariants
+	// change in the future, upperBufferSize or ToUpper will need to be
+	// adjusted.
+	for funcStr := range AggregatorSpec_Func_value {
+		if len(funcStr) > upperBufferSize {
+			panic(errors.AssertionFailedf(
+				"aggregate function name length cannot exceed length %d: %q",
+				upperBufferSize, funcStr,
+			))
+		}
+		if !isAllASCII(funcStr) {
+			panic(errors.AssertionFailedf(
+				"aggregate function name cannot contain non-ASCII characters: %q", funcStr,
+			))
+		}
+	}
+
+	// Perform the same check for window function names.
+	for funcStr := range WindowerSpec_WindowFunc_value {
+		if len(funcStr) > upperBufferSize {
+			panic(errors.AssertionFailedf(
+				"window function name length cannot exceed length %d: %q",
+				upperBufferSize, funcStr,
+			))
+		}
+		if !isAllASCII(funcStr) {
+			panic(errors.AssertionFailedf(
+				"window function name cannot contain non-ASCII characters: %q", funcStr,
+			))
+		}
+	}
+}
+
+const (
+	// upperBufferSize is large enough to accommodate the longest aggregate or
+	// window function name.
+	upperBufferSize = 31
+)
+
+// upperBuffer is a helper struct for creating a temporary upper-cased string
+// without performing a heap allocation. See ToUpper.
+type upperBuffer struct {
+	buf  [upperBufferSize]byte
+	used bool
+}
+
+// ToUpper returns a string where every lowercase ASCII character in "s" has
+// been converted to an uppercase character. If the length of "s" is greater
+// than upperBufferSize, ok=false is returned. If ToUpper returns ok=true, all
+// future invocations on the same upperBuffer will return ok=false.
+func (ub *upperBuffer) ToUpper(s string) (_ string, ok bool) {
+	if ub.used {
+		// Don't allow the buffer to be reused.
+		return "", false
+	}
+	if len(s) > upperBufferSize {
+		// The init function guarantees that no aggregate or window function has
+		// a name longer than upperBufferSize bytes. We can return ok=false here
+		// because upper-casing is pointless - the lookups in
+		// GetAggregateFuncIdx and GetWindowFuncIdx would fail anyway.
+		return "", false
+	}
+	ub.used = true
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'a' && c <= 'z' {
+			c -= 'a' - 'A'
+		}
+		ub.buf[i] = c
+	}
+	// Convert the buffer to a string without allocating.
+	b := ub.buf[:len(s)]
+	return *(*string)(unsafe.Pointer(&b)), true
 }
