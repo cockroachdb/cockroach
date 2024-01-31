@@ -283,17 +283,16 @@ func (ds *DistSender) RangeFeedSpans(
 
 	// Kick off the initial set of ranges.
 	g.GoCtx(func(ctx context.Context) error {
-		return divideAllSpansOnRangeBoundaries(ctx, spans, sendSingleRangeInfo(rangeCh), ds, &g)
+		return divideAllSpansOnRangeBoundaries(ctx, spans, sendSingleRangeInfo(rangeCh), ds)
 	})
 
 	return g.Wait()
 }
 
 // divideAllSpansOnRangeBoundaries divides all spans on range boundaries and invokes
-// provided onRange function for each range.  Resolution happens concurrently using provided
-// context group.
+// provided onRange function for each range.
 func divideAllSpansOnRangeBoundaries(
-	ctx context.Context, spans []SpanTimePair, onRange onRangeFn, ds *DistSender, g *ctxgroup.Group,
+	ctx context.Context, spans []SpanTimePair, onRange onRangeFn, ds *DistSender,
 ) error {
 	// Sort input spans based on their start time -- older spans first.
 	// Starting rangefeed over large number of spans is an expensive proposition,
