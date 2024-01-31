@@ -1266,9 +1266,10 @@ func registerCDC(r registry.Registry) {
 				sinkType: kafkaSink,
 				targets:  allTpccTargets,
 				opts: map[string]string{
-					"metrics_label":     "'quota1'",
-					"initial_scan":      "'no'",
-					"kafka_sink_config": `{"ClientID": "quota1"}`,
+					"metrics_label": "'quota1'",
+					"initial_scan":  "'no'",
+					// '{"Flush": {"MaxMessages": 1, "Frequency": "1s"}, "RequiredAcks": "ONE"}'
+					"kafka_sink_config": `'{"ClientID": "quota1"}'`,
 				},
 				kafkaQuota: 1024,
 			})
@@ -1278,10 +1279,11 @@ func registerCDC(r registry.Registry) {
 			feed2 := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
 				targets:  allTpccTargets,
+
 				opts: map[string]string{
 					"metrics_label":     "'quota2'",
 					"initial_scan":      "'no'",
-					"kafka_sink_config": `{"ClientID": "quota2"}`,
+					"kafka_sink_config": `'{"ClientID": "quota2"}'`,
 				},
 				kafkaQuota: 1024,
 			})
