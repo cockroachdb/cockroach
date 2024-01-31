@@ -24,38 +24,35 @@ import (
 )
 
 // element describes a single []byte value. If a value doesn't exceed
-// BytesMaxInlineLength (30 bytes on 64 bit systems), then the whole value is
+// BytesMaxInlineLength (31 bytes on 64 bit systems), then the whole value is
 // stored within the element; otherwise, the element "points" at a region in
 // Bytes.buffer where the non-inlined value is stored.
 //
 // If the value is inlined, then the layout of element is used as follows:
 //
-//	         24-byte header | 6-byte padding
-//	element: .............................. | length | true
+//	         24-byte header | 7-byte padding
+//	element: ............................... | length
 //	Bytes.buffer: N/A
 //
-// where 30 dots describe the inlinable space followed by a single byte for the
+// where 31 dots describe the inlinable space followed by a single byte for the
 // length followed by a boolean 'true' indicating an inlined value.
 //
 // If the value is non-inlined, then the layout of element is used as follows:
 //
 //	                                          padding
-//	element: .offset. | ..len... | ..cap... | xxxxxx | x | false
+//	element: .offset. | ..len... | ..cap... | xxxxxx | -1
 //	Bytes.buffer: xxxxxxxx | offset .... | xxxxxxxx
 //
 // where first 24 bytes contain our custom "header" of a byte slice that is
-// backed by Bytes.buffer. The following 7 bytes (the padding and the
-// inlinedLength byte) are not used, and then we have a boolean 'false'
-// indicating a non-inlined value.
+// backed by Bytes.buffer. The following 7 bytes of padding are not used, and
+// then inlinedLength set to -1, indicating a non-inlined value.
 type element struct {
 	header sliceHeader
-	_      [6]byte
+	_      [7]byte
 	// inlinedLength contains the length of the []byte value if it is inlined.
-	// Since the length of that value is at most BytesMaxInlineLength (30), it
-	// can definitely fit into a single byte.
-	inlinedLength byte
-	// inlined indicates whether the byte value is inlined in the element.
-	inlined bool
+	// Since the length of that value is at most BytesMaxInlineLength (31), it
+	// can definitely fit into a signed 8-bit integer.
+	inlinedLength int8
 }
 
 // sliceHeader describes a non-inlined byte value that is backed by
@@ -86,6 +83,11 @@ const ElementSize = int64(unsafe.Sizeof(element{}))
 // within element.
 const BytesMaxInlineLength = int(unsafe.Offsetof(element{}.inlinedLength))
 
+//gcassert:inline
+func (e *element) isInlined() bool {
+	return e.inlinedLength >= 0
+}
+
 // inlinedSlice returns 30 bytes of space within e that can be used for storing
 // a value inlined, as a slice.
 //
@@ -96,7 +98,7 @@ func (e *element) inlinedSlice() []byte {
 
 //gcassert:inline
 func (e *element) get(b *Bytes) []byte {
-	if e.inlined {
+	if e.isInlined() {
 		return e.inlinedSlice()[:e.inlinedLength:BytesMaxInlineLength]
 	}
 	return e.getNonInlined(b)
@@ -109,7 +111,7 @@ func (e *element) getNonInlined(b *Bytes) []byte {
 
 func (e *element) set(v []byte, b *Bytes) {
 	if len(v) <= BytesMaxInlineLength {
-		*e = element{inlinedLength: byte(len(v)), inlined: true}
+		*e = element{inlinedLength: int8(len(v))}
 		copy(e.inlinedSlice(), v)
 	} else {
 		e.setNonInlined(v, b)
@@ -118,7 +120,7 @@ func (e *element) set(v []byte, b *Bytes) {
 
 // copy copies the value contained in other into the receiver.
 func (e *element) copy(other element, dest, src *Bytes) {
-	if other.inlined {
+	if other.isInlined() {
 		*e = other
 		return
 	}
@@ -127,7 +129,7 @@ func (e *element) copy(other element, dest, src *Bytes) {
 
 func (e *element) setNonInlined(v []byte, b *Bytes) {
 	// Check if we there was an old non-inlined value we can overwrite.
-	if !e.inlined && e.header.cap >= len(v) {
+	if !e.isInlined() && e.header.cap >= len(v) {
 		e.header.len = len(v)
 		copy(e.getNonInlined(b), v)
 	} else {
@@ -137,7 +139,9 @@ func (e *element) setNonInlined(v []byte, b *Bytes) {
 				len:          len(v),
 				cap:          len(v),
 			},
-			inlined: false,
+			// Set inlinedLength to -1 to indicate that the value is not
+			// inlined.
+			inlinedLength: -1,
 		}
 		// Use a custom append to grow the buffer faster than go does by default.
 		if rem := cap(b.buffer) - len(b.buffer); rem < len(v) {
@@ -265,7 +269,7 @@ func (b *Bytes) copyElements(srcElementsToCopy []element, src *Bytes, destIdx in
 	_ = destElements[len(srcElementsToCopy)-1]
 	for i := 0; i < len(srcElementsToCopy); i++ {
 		//gcassert:bce
-		if e := &destElements[i]; !e.inlined {
+		if e := &destElements[i]; !e.isInlined() {
 			// This value is non-inlined, so at the moment it is pointing
 			// into the buffer of the source - we have to explicitly set it
 			// in order to copy the actual value's data into the buffer of
@@ -456,7 +460,7 @@ func (b *Bytes) ProportionalSize(n int64) int64 {
 //
 //gcassert:inline
 func (b *Bytes) ElemSize(idx int) int64 {
-	if b.elements[idx].inlined {
+	if b.elements[idx].isInlined() {
 		return ElementSize
 	}
 	return ElementSize + int64(b.elements[idx].header.cap)
