@@ -292,10 +292,17 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		t.mu.Lock()
 		defer t.mu.Unlock()
 		if l := maybeMarkRemoveStoredLease(s); l != nil {
-			t.mu.active.remove(s)
+			leaseReleased := true
+			// For testing, we will synchronously release leases, but that
+			// exposes us to the danger of the context getting cancelled. To
+			// eliminate this risk, we are going first remove the lease from
+			// storage and then delete if from mqemory.
 			if t.m.storage.testingKnobs.RemoveOnceDereferenced {
-				releaseLease(ctx, l, t.m)
+				leaseReleased = releaseLease(ctx, l, t.m)
 				l = nil
+			}
+			if leaseReleased {
+				t.mu.active.remove(s)
 			}
 			return l
 		}

@@ -12,6 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/roachpb",
         "//pkg/util",
         "//pkg/util/cache",
@@ -43,12 +44,14 @@ go_test(
         "//conditions:default": {"Pool": "default"},
     }),
     deps = [
+        "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/timeutil",
+        "//pkg/util/uint128",
         "//pkg/util/uuid",
         "@com_github_andy_kimball_arenaskl//:arenaskl",
         "@com_github_cockroachdb_errors//:errors",

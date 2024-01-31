@@ -637,7 +637,7 @@ func acquireNodeLease(
 }
 
 // releaseLease deletes an entry from system.lease.
-func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
+func releaseLease(ctx context.Context, lease *storedLease, m *Manager) (released bool) {
 	// Force the release to happen synchronously, if we are draining or, when we
 	// force removals for unit tests. This didn't matter with expiration based leases
 	// since each renewal would have a different expiry (but the same version in
@@ -647,8 +647,9 @@ func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
 	// because we release only if a new version exists.
 	if m.IsDraining() || m.removeOnceDereferenced() {
 		// Release synchronously to guarantee release before exiting.
-		m.storage.release(ctx, m.stopper, lease)
-		return
+		// It's possible for the context to get cancelled, so return if
+		// it was released.
+		return m.storage.release(ctx, m.stopper, lease)
 	}
 
 	// Release to the store asynchronously, without the descriptorState lock.
@@ -663,6 +664,8 @@ func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
 		}); err != nil {
 		log.Warningf(ctx, "error: %s, not releasing lease: %q", err, lease)
 	}
+	// Asynchronous job is releasing it.
+	return true
 }
 
 // purgeOldVersions removes old unused descriptor versions older than

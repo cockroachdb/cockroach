@@ -1360,6 +1360,29 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 	}
 }
 
+func BenchmarkIntervalSklSerialize(b *testing.B) {
+	const max = 1000000000 // max size of range
+	const data = 1000      // number of ranges
+	const txnID = "123"
+
+	clock := hlc.NewClockForTesting(nil)
+	s := newIntervalSkl(clock, MinRetentionWindow, makeSklMetrics())
+	s.pageSize = maximumSklPageSize
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+
+	for i := 0; i < data; i++ {
+		from, to := makeRange(rng.Int31n(max))
+		nowVal := makeVal(clock.Now(), txnID)
+		s.AddRange(ctx, from, to, excludeTo, nowVal)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// from = "" and to = nil means that we're scanning over all keys.
+		_ = s.Serialize(ctx, []byte(""), []byte(nil))
+	}
+}
+
 // makeRange creates a key range from the provided input. The range will start
 // at the provided key and will have an end key that is a deterministic function
 // of the provided key. This means that for a given input, the function will
@@ -1387,7 +1410,8 @@ func makeRange(start int32) (from, to []byte) {
 }
 
 // randRange creates a random range with keys within the specified number of
-// slots. The function also returns a middle key, if one exists.
+// slots. The function also returns a middle key, if one exists. from and to
+// may be equal, which represents a point key.
 func randRange(rng *rand.Rand, slots int) (from, middle, to []byte) {
 	fromNum := rng.Intn(slots)
 	toNum := rng.Intn(slots)
