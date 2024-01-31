@@ -956,8 +956,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	// dispatchToExecutionEngine.
 	shouldLogToExecAndAudit = false
 
-	if tree.CanModifySchema(ast) && !ex.implicitTxn() &&
-		ex.sessionData().AutoCommitBeforeDDL && ex.executorType != executorTypeInternal {
+	if tree.CanModifySchema(ast) &&
+		(!ex.planner.EvalContext().TxnIsSingleStmt || !ex.implicitTxn()) &&
+		ex.extraTxnState.firstStmtExecuted &&
+		ex.sessionData().AutoCommitBeforeDDL &&
+		ex.executorType != executorTypeInternal {
 		if err := ex.planner.SendClientNotice(
 			ctx,
 			pgnotice.Newf("auto-committing transaction before processing DDL due to autocommit_before_ddl setting"),
@@ -2284,9 +2287,6 @@ var txnSchemaChangeErr = pgerror.Newf(
 // error is returned.
 func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Statement) error {
 	p := &ex.planner
-	if ex.extraTxnState.upgradedToSerializable && ex.extraTxnState.firstStmtExecuted {
-		return txnSchemaChangeErr
-	}
 	if tree.CanModifySchema(stmt.AST) {
 		if ex.state.mu.txn.IsoLevel().ToleratesWriteSkew() {
 			if !ex.extraTxnState.firstStmtExecuted {

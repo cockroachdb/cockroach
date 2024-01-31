@@ -122,12 +122,12 @@ Open{ImplicitTxn:true, WasUpgraded:false}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		TxnCommittedDueToDDL{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
 		TxnUpgradeToExplicit{}
 	missing events:
 		SavepointRollback{}
-		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnReleased{}
 		TxnRestart{}
@@ -138,6 +138,7 @@ Open{ImplicitTxn:true, WasUpgraded:true}
 	handled events:
 		NonRetriableErr{IsCommit:true}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
+		TxnCommittedDueToDDL{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
 	missing events:
@@ -146,7 +147,6 @@ Open{ImplicitTxn:true, WasUpgraded:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
-		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnReleased{}
 		TxnRestart{}

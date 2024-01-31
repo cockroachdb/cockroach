@@ -2007,7 +2007,8 @@ statement ok
 CREATE TABLE t1 (id STRING PRIMARY KEY, other_id STRING NOT NULL);
 
 statement ok
-BEGIN
+BEGIN;
+SELECT 1;
 
 query T noticetrace
 ALTER TABLE t1 ADD COLUMN c INT DEFAULT 1
