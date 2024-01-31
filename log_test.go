@@ -326,7 +326,6 @@ func TestCompactionSideEffects(t *testing.T) {
 	// Populate the log with 1000 entries; 750 in stable storage and 250 in unstable.
 	lastIndex := uint64(1000)
 	unstableIndex := uint64(750)
-	lastTerm := lastIndex
 	storage := NewMemoryStorage()
 	for i = 1; i <= unstableIndex; i++ {
 		storage.Append([]pb.Entry{{Term: i, Index: i}})
@@ -336,7 +335,7 @@ func TestCompactionSideEffects(t *testing.T) {
 		raftLog.append(pb.Entry{Term: i + 1, Index: i + 1})
 	}
 
-	require.True(t, raftLog.maybeCommit(lastIndex, lastTerm))
+	require.True(t, raftLog.maybeCommit(raftLog.lastEntryID()))
 	raftLog.appliedTo(raftLog.committed, 0 /* size */)
 
 	offset := uint64(500)
@@ -408,7 +407,7 @@ func TestHasNextCommittedEnts(t *testing.T) {
 			raftLog := newLog(storage, raftLogger)
 			raftLog.append(ents...)
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.maybeCommit(5, 1)
+			raftLog.maybeCommit(entryID{term: 1, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
 			raftLog.applyingEntsPaused = tt.paused
@@ -466,7 +465,7 @@ func TestNextCommittedEnts(t *testing.T) {
 			raftLog := newLog(storage, raftLogger)
 			raftLog.append(ents...)
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.maybeCommit(5, 1)
+			raftLog.maybeCommit(entryID{term: 1, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
 			raftLog.applyingEntsPaused = tt.paused
@@ -525,7 +524,7 @@ func TestAcceptApplying(t *testing.T) {
 			raftLog := newLogWithSize(storage, raftLogger, maxSize)
 			raftLog.append(ents...)
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.maybeCommit(5, 1)
+			raftLog.maybeCommit(entryID{term: 1, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
 
 			raftLog.acceptApplying(tt.index, tt.size, tt.allowUnstable)
@@ -574,7 +573,7 @@ func TestAppliedTo(t *testing.T) {
 			raftLog := newLogWithSize(storage, raftLogger, maxSize)
 			raftLog.append(ents...)
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.maybeCommit(5, 1)
+			raftLog.maybeCommit(entryID{term: 1, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
 			raftLog.acceptApplying(5, maxSize+overshoot, false /* allowUnstable */)
 
@@ -733,7 +732,7 @@ func TestCompaction(t *testing.T) {
 				storage.Append([]pb.Entry{{Index: i}})
 			}
 			raftLog := newLog(storage, raftLogger)
-			raftLog.maybeCommit(tt.lastIndex, 0)
+			raftLog.maybeCommit(entryID{term: 0, index: tt.lastIndex}) // TODO(pav-kv): this is a no-op
 
 			raftLog.appliedTo(raftLog.committed, 0 /* size */)
 			for j := 0; j < len(tt.compact); j++ {
