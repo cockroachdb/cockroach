@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -942,6 +941,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 	defer utilccl.TestingEnableEnterprise()()
 
 	skip.UnderStressRace(t, "times out")
+	skip.UnderDeadlock(t)
 
 	for _, testCase := range []struct {
 		name             string
@@ -952,11 +952,6 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 		{name: "latency-based", sharedProcess: false, validLatencyFunc: true},
 		{name: "locality-based", sharedProcess: false, validLatencyFunc: false},
 	} {
-		if syncutil.DeadlockEnabled && testCase.sharedProcess {
-			// TODO(yuzefovich): unskipping shared-process config under deadlock
-			// is tracked by #113555.
-			continue
-		}
 		t.Run(testCase.name, func(t *testing.T) {
 			const numNodes = 4
 			gatewayNode := 3

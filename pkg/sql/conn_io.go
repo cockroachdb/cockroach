@@ -837,6 +837,10 @@ type RestrictedCommandResult interface {
 	// ClientComm.createStatementResult.
 	ResetStmtType(stmt tree.Statement)
 
+	// GetFormatCode returns the format code that will be used to serialize the
+	// data in the provided column when sending messages to the client.
+	GetFormatCode(colIdx int) (pgwirebase.FormatCode, error)
+
 	// AddRow accumulates a result row.
 	//
 	// The implementation cannot hold on to the row slice; it needs to make a
@@ -1103,6 +1107,13 @@ func (r *streamingCommandResult) SendNotice(ctx context.Context, notice pgnotice
 // ResetStmtType is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) ResetStmtType(stmt tree.Statement) {
 	panic("unimplemented")
+}
+
+// GetFormatCode is part of the sql.RestrictedCommandResult interface.
+func (r *streamingCommandResult) GetFormatCode(colIdx int) (pgwirebase.FormatCode, error) {
+	// Rows aren't serialized in the streamingCommandResult, so this format code
+	// doesn't really matter - return the default.
+	return pgwirebase.FormatText, nil
 }
 
 // AddRow is part of the RestrictedCommandResult interface.
