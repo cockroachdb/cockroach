@@ -139,7 +139,8 @@ const (
 	// values being lost to errors and/or node failures.
 	SerialUsesCachedSQLSequences SerialNormalizationMode = 3
 	// SerialUsesUnorderedRowID means use INT NOT NULL DEFAULT unordered_unique_rowid().
-	SerialUsesUnorderedRowID SerialNormalizationMode = 4
+	SerialUsesUnorderedRowID         SerialNormalizationMode = 4
+	SerialUsesCachedNodeSQLSequences SerialNormalizationMode = 5
 )
 
 func (m SerialNormalizationMode) String() string {
@@ -172,6 +173,8 @@ func SerialNormalizationModeFromString(val string) (_ SerialNormalizationMode, o
 		return SerialUsesSQLSequences, true
 	case "SQL_SEQUENCE_CACHED":
 		return SerialUsesCachedSQLSequences, true
+	case "SQL_SEQUENCE_CACHED_NODE":
+		return SerialUsesCachedNodeSQLSequences, true
 	default:
 		return 0, false
 	}
