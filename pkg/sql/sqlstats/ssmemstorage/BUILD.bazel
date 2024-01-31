@@ -35,7 +35,6 @@ go_test(
     srcs = ["ss_mem_writer_test.go"],
     embed = [":ssmemstorage"],
     deps = [
-        "//pkg/obs",
         "//pkg/settings/cluster",
         "//pkg/sql/appstatspb",
         "//pkg/sql/clusterunique",

@@ -96,9 +96,9 @@ func (i *concurrentBufferIngester) Start(
 		for {
 			select {
 			case payload := <-i.eventBufferCh:
-				i.ingest(ctx, payload.events) // note that ingest clears the buffer
+				i.ingest(payload.events) // note that ingest clears the buffer
 				if payload.clearRegistry {
-					i.registry.Clear(ctx)
+					i.registry.Clear()
 				}
 				eventBufferPool.Put(payload.events)
 			case <-stopper.ShouldQuiesce():
@@ -129,14 +129,14 @@ func (i *concurrentBufferIngester) Start(
 
 // Clear flushes the underlying buffer, and signals the underlying registry
 // to clear any remaining cached data afterward. This is an async operation.
-func (i *concurrentBufferIngester) Clear(_ context.Context) {
+func (i *concurrentBufferIngester) Clear() {
 	i.guard.ForceSyncExec(func() {
 		// Our flush function defined on the guard is responsible for setting clearRegistry back to 0.
 		atomic.StoreUint32(&i.clearRegistry, 1)
 	})
 }
 
-func (i *concurrentBufferIngester) ingest(ctx context.Context, events *eventBuffer) {
+func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
 	for idx, e := range events {
 		// Because an eventBuffer is a fixed-size array, rather than a slice,
 		// we do not know how full it is until we hit a nil entry.
@@ -146,7 +146,7 @@ func (i *concurrentBufferIngester) ingest(ctx context.Context, events *eventBuff
 		if e.statement != nil {
 			i.registry.ObserveStatement(e.sessionID, e.statement)
 		} else {
-			i.registry.ObserveTransaction(ctx, e.sessionID, e.transaction)
+			i.registry.ObserveTransaction(e.sessionID, e.transaction)
 		}
 		events[idx] = event{}
 	}
@@ -167,7 +167,7 @@ func (i *concurrentBufferIngester) ObserveStatement(
 }
 
 func (i *concurrentBufferIngester) ObserveTransaction(
-	_ context.Context, sessionID clusterunique.ID, transaction *Transaction,
+	sessionID clusterunique.ID, transaction *Transaction,
 ) {
 	if !i.registry.enabled() {
 		return

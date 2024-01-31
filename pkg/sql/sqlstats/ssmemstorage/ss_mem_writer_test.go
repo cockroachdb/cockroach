@@ -14,7 +14,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -50,7 +49,7 @@ func TestRecordStatement(t *testing.T) {
 			"test-app",
 			knobs,
 			nil, /* insightsWriter */
-			insights.New(settings, insights.NewMetrics(), obs.NoopEventsExporter{}).LatencyInformation(),
+			insights.New(settings, insights.NewMetrics()).LatencyInformation(),
 		)
 		// Record a statement, ensure no insights are generated.
 		statsKey := appstatspb.StatementStatisticsKey{
@@ -85,7 +84,7 @@ func TestRecordTransaction(t *testing.T) {
 			"test-app",
 			knobs,
 			nil, /* insightsWriter */
-			insights.New(settings, insights.NewMetrics(), obs.NoopEventsExporter{}).LatencyInformation(),
+			insights.New(settings, insights.NewMetrics()).LatencyInformation(),
 		)
 		// Record a transaction, ensure no insights are generated.
 		require.NoError(t, memContainer.RecordTransaction(ctx, appstatspb.TransactionFingerprintID(123), sqlstats.RecordedTxnStats{}))

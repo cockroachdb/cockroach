@@ -50,10 +50,10 @@ type nullWriter struct{}
 func (n *nullWriter) ObserveStatement(_ clusterunique.ID, _ *Statement) {
 }
 
-func (n *nullWriter) ObserveTransaction(_ context.Context, _ clusterunique.ID, _ *Transaction) {
+func (n *nullWriter) ObserveTransaction(_ clusterunique.ID, _ *Transaction) {
 }
 
-func (n *nullWriter) Clear(_ context.Context) {
+func (n *nullWriter) Clear() {
 }
 
 var nullWriterInstance Writer = &nullWriter{}

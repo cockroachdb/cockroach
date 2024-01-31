@@ -220,12 +220,6 @@ func NewEventsExporter(
 				Version: "1.0",
 			},
 		},
-		obspb.StatementInsightsStatsEvent: {
-			instrumentationScope: otel_pb.InstrumentationScope{
-				Name:    string(obspb.StatementInsightsStatsEvent),
-				Version: "1.0",
-			},
-		},
 	}
 	s.buf.mu.memAccount = memMonitor.MakeBoundAccount()
 	return s
