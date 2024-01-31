@@ -1641,8 +1641,12 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 			return execPlan{}, err
 		}
 		orderType := exec.GroupingOrderType(groupBy.GroupingOrderType(&groupBy.RequiredPhysical().Ordering))
+		var rowCount uint64
+		if relProps := groupBy.Relational(); relProps.Statistics().Available {
+			rowCount = uint64(relProps.Statistics().RowCount)
+		}
 		ep.root, err = b.factory.ConstructGroupBy(
-			input.root, groupingColIdx, groupingColOrder, aggInfos, reqOrdering, orderType,
+			input.root, groupingColIdx, groupingColOrder, aggInfos, reqOrdering, orderType, rowCount,
 		)
 	}
 	if err != nil {

@@ -974,10 +974,11 @@ func NewColOperator(
 			// Make a copy of the evalCtx since we're modifying it below.
 			evalCtx := flowCtx.NewEvalCtx()
 			newAggArgs := &colexecagg.NewAggregatorArgs{
-				Input:      inputs[0].Root,
-				InputTypes: spec.Input[0].ColumnTypes,
-				Spec:       aggSpec,
-				EvalCtx:    evalCtx,
+				Input:             inputs[0].Root,
+				InputTypes:        spec.Input[0].ColumnTypes,
+				Spec:              aggSpec,
+				EvalCtx:           evalCtx,
+				EstimatedRowCount: args.Spec.EstimatedRowCount,
 			}
 			newAggArgs.Constructors, newAggArgs.ConstArguments, newAggArgs.OutputTypes, err = colexecagg.ProcessAggregations(
 				ctx, evalCtx, args.ExprHelper.SemaCtx, aggSpec.Aggregations, spec.Input[0].ColumnTypes,
@@ -1306,9 +1307,10 @@ func NewColOperator(
 			// Make a copy of the evalCtx since we're modifying it below.
 			evalCtx := flowCtx.NewEvalCtx()
 			newAggArgs := &colexecagg.NewAggregatorArgs{
-				InputTypes: joinOutputTypes,
-				Spec:       aggSpec,
-				EvalCtx:    evalCtx,
+				InputTypes:        joinOutputTypes,
+				Spec:              aggSpec,
+				EvalCtx:           evalCtx,
+				EstimatedRowCount: args.Spec.EstimatedRowCount,
 			}
 			newAggArgs.Constructors, newAggArgs.ConstArguments, newAggArgs.OutputTypes, err = colexecagg.ProcessAggregations(
 				ctx, evalCtx, args.ExprHelper.SemaCtx, aggSpec.Aggregations, joinOutputTypes,
