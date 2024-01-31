@@ -317,6 +317,7 @@ go_test(
         "//pkg/workload/bank",
         "//pkg/workload/ledger",
         "//pkg/workload/workloadsql",
+        "@com_github_apache_pulsar_client_go//pulsar",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
