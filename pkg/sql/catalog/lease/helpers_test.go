@@ -122,6 +122,8 @@ func (m *Manager) ExpireLeases(clock *hlc.Clock) {
 		desc.mu.Lock()
 		defer desc.mu.Unlock()
 		desc.mu.expiration = past
+		// Wipe the session as if this is an expired version
+		desc.mu.session = nil
 		return nil
 	})
 }

@@ -1360,6 +1360,8 @@
 <tr><td>APPLICATION</td><td>sql.insights.anomaly_detection.fingerprints</td><td>Current number of statement fingerprints being monitored for anomaly detection</td><td>Fingerprints</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>sql.insights.anomaly_detection.memory</td><td>Current memory used to support anomaly detection</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>sql.leases.active</td><td>The number of outstanding SQL schema leases.</td><td>Outstanding leases</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>APPLICATION</td><td>sql.leases.expired</td><td>The number of outstanding session based SQL schema leases expired.</td><td>Leases expired because of a new version</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>APPLICATION</td><td>sql.leases.waiting_to_expire</td><td>The number of outstanding session based SQL schema leases with expiry.</td><td>Outstanding Leases Waiting to Expire</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>sql.mem.bulk.current</td><td>Current sql statement memory usage for bulk operations</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>sql.mem.bulk.max</td><td>Memory usage per sql statement for bulk operations</td><td>Memory</td><td>HISTOGRAM</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>sql.mem.conns.current</td><td>Current sql statement memory usage for conns</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>

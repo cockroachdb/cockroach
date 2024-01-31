@@ -62,9 +62,11 @@ type storage struct {
 	// concurrent lease acquisitions from the store.
 	group *singleflight.Group
 
-	outstandingLeases *metric.Gauge
-	testingKnobs      StorageTestingKnobs
-	writer            writer
+	outstandingLeases                 *metric.Gauge
+	sessionBasedLeasesWaitingToExpire *metric.Gauge
+	sessionBasedLeasesExpired         *metric.Gauge
+	testingKnobs                      StorageTestingKnobs
+	writer                            writer
 }
 
 type leaseFields struct {
