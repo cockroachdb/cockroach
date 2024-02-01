@@ -206,7 +206,7 @@ func (p *ScheduledProcessor) processPushTxn(ctx context.Context) {
 			// Launch an async transaction push attempt that pushes the
 			// timestamp of all transactions beneath the push offset.
 			// Ignore error if quiescing.
-			pushTxns := newTxnPushAttempt(p.Span, p.TxnPusher, p, toPush, now, func() {
+			pushTxns := newTxnPushAttempt(p.Settings, p.Span, p.TxnPusher, p, toPush, now, func() {
 				p.enqueueRequest(func(ctx context.Context) {
 					p.txnPushActive = false
 				})
@@ -698,7 +698,7 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 
 		// Determine whether the operation caused the resolved timestamp to
 		// move forward. If so, publish a RangeFeedCheckpoint notification.
-		if p.rts.ConsumeLogicalOp(op) {
+		if p.rts.ConsumeLogicalOp(ctx, op) {
 			p.publishCheckpoint(ctx)
 		}
 	}
