@@ -691,22 +691,22 @@ func (c *cluster) makeConfig() concurrency.Config {
 // PushTransaction implements the concurrency.IntentResolver interface.
 func (c *cluster) PushTransaction(
 	ctx context.Context, pushee *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
-) (*roachpb.Transaction, *roachpb.Error) {
+) (*roachpb.Transaction, bool, *roachpb.Error) {
 	pusheeRecord, err := c.getTxnRecord(pushee.ID)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, false, roachpb.NewError(err)
 	}
 	var pusherRecord *txnRecord
 	if h.Txn != nil {
 		pusherID := h.Txn.ID
 		pusherRecord, err = c.getTxnRecord(pusherID)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, false, roachpb.NewError(err)
 		}
 
 		push, err := c.registerPush(ctx, pusherID, pushee.ID)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, false, roachpb.NewError(err)
 		}
 		defer c.unregisterPush(push)
 	}
@@ -725,10 +725,10 @@ func (c *cluster) PushTransaction(
 		switch {
 		case pusheeTxn.Status.IsFinalized():
 			// Already finalized.
-			return pusheeTxn, nil
+			return pusheeTxn, false, nil
 		case pushType == roachpb.PUSH_TIMESTAMP && pushTo.LessEq(pusheeTxn.WriteTimestamp):
 			// Already pushed.
-			return pusheeTxn, nil
+			return pusheeTxn, false, nil
 		case pushType == roachpb.PUSH_TOUCH:
 			pusherWins = false
 		case txnwait.CanPushWithPriority(pusherPriority, pusheeTxn.Priority):
@@ -748,16 +748,16 @@ func (c *cluster) PushTransaction(
 				err = errors.Errorf("unexpected push type: %s", pushType)
 			}
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, false, roachpb.NewError(err)
 			}
 			pusheeTxn, _ = pusheeRecord.asTxn()
-			return pusheeTxn, nil
+			return pusheeTxn, false, nil
 		}
 		// If PUSH_TOUCH, return error instead of waiting.
 		if pushType == roachpb.PUSH_TOUCH {
 			log.Eventf(ctx, "pushee not abandoned")
 			err := roachpb.NewTransactionPushError(*pusheeTxn)
-			return nil, roachpb.NewError(err)
+			return nil, false, roachpb.NewError(err)
 		}
 		// Or the pusher aborted?
 		var pusherRecordSig chan struct{}
@@ -767,7 +767,7 @@ func (c *cluster) PushTransaction(
 			if pusherTxn.Status == roachpb.ABORTED {
 				log.Eventf(ctx, "detected pusher aborted")
 				err := roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED)
-				return nil, roachpb.NewError(err)
+				return nil, false, roachpb.NewError(err)
 			}
 		}
 		// Wait until either record is updated.
@@ -775,7 +775,7 @@ func (c *cluster) PushTransaction(
 		case <-pusheeRecordSig:
 		case <-pusherRecordSig:
 		case <-ctx.Done():
-			return nil, roachpb.NewError(ctx.Err())
+			return nil, false, roachpb.NewError(ctx.Err())
 		}
 	}
 }
