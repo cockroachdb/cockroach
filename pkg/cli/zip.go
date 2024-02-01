@@ -286,6 +286,10 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				prefix:           debugBase + prefix,
 			}
 
+			if err := zc.collectStartTime(ctx); err != nil {
+				return err
+			}
+
 			// Fetch the cluster-wide details.
 			// For a SQL only server, the nodeList will be a list of SQL nodes
 			// and livenessByNodeID is null. For a KV server, the nodeList will
@@ -343,6 +347,10 @@ done
 					return err
 				}
 			}
+			if err := zc.collectEndTime(ctx); err != nil {
+				return err
+			}
+
 			return nil
 		}(); err != nil {
 			return err

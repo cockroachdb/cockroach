@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -69,6 +70,14 @@ func makeClusterWideZipRequests(
 			pathName: prefix + problemRangesName,
 		},
 	}
+}
+
+func (zc *debugZipContext) collectStartTime(ctx context.Context) error {
+	return zc.z.createRaw(zc.clusterPrinter, debugBase+"/debug_zip_started.txt", []byte(timeutil.Now().String()))
+}
+
+func (zc *debugZipContext) collectEndTime(ctx context.Context) error {
+	return zc.z.createRaw(zc.clusterPrinter, debugBase+"/debug_zip_finished.txt", []byte(timeutil.Now().String()))
 }
 
 // collectClusterData runs the data collection that only needs to
