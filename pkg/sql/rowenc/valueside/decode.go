@@ -230,6 +230,9 @@ func DecodeUntaggedDatum(
 		// execution time uses a uint32 for OIDs. The extra safety may not be worth
 		// the loss of variable length encoding.
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
+		if data == 0 {
+			return tree.WrapAsZeroOid(t), b, err
+		}
 		return a.NewDOid(tree.MakeDOid(oid.Oid(data), t)), b, err
 	case types.ArrayFamily:
 		// Skip the encoded data length.

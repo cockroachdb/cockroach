@@ -261,7 +261,7 @@ func RandDatumWithNullChance(
 		}
 		return d
 	case types.OidFamily:
-		return tree.NewDOid(oid.Oid(rng.Uint32()))
+		return tree.NewDOidWithType(oid.Oid(rng.Uint32()), typ)
 	case types.UnknownFamily:
 		return tree.DNull
 	case types.ArrayFamily:
@@ -388,6 +388,13 @@ func adjustDatum(datum tree.Datum, typ *types.T) tree.Datum {
 		}
 		return datum
 
+	case types.OidFamily:
+		d := datum.(*tree.DOid)
+		if typ.Oid() != oid.T_oid && d.Oid == 0 {
+			datum = tree.WrapAsZeroOid(typ)
+		}
+		return datum
+
 	default:
 		return datum
 	}
@@ -468,7 +475,7 @@ func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
 	case types.JsonFamily:
 		datum = tree.NewDJSON(randJSONSimple(rng))
 	case types.OidFamily:
-		datum = tree.NewDOid(oid.Oid(rng.Intn(simpleRange)))
+		datum = tree.NewDOidWithType(oid.Oid(rng.Intn(simpleRange)), typ)
 	case types.StringFamily:
 		datum = tree.NewDString(randStringSimple(rng))
 	case types.TimeFamily:

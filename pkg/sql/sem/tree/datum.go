@@ -5562,22 +5562,32 @@ func intIsOutOfOIDRange(i DInt) bool {
 
 // MakeDOid is a helper routine to create a DOid initialized from a DInt.
 func MakeDOid(d oid.Oid, semanticType *types.T) DOid {
-	return DOid{Oid: d, semanticType: semanticType, name: ""}
+	dOid := DOid{Oid: d, semanticType: semanticType, name: ""}
+	if d == 0 && semanticType.Oid() != oid.T_oid {
+		dOid.name = ZeroOidValue
+	}
+	return dOid
 }
 
 // NewDOidWithType constructs a DOid with the given type and no name.
 func NewDOidWithType(d oid.Oid, semanticType *types.T) *DOid {
-	oid := DOid{Oid: d, semanticType: semanticType}
-	return &oid
+	dOid := DOid{Oid: d, semanticType: semanticType}
+	if d == 0 && semanticType.Oid() != oid.T_oid {
+		dOid.name = ZeroOidValue
+	}
+	return &dOid
 }
 
 // NewDOidWithTypeAndName constructs a DOid with the given type and name.
 func NewDOidWithTypeAndName(d oid.Oid, semanticType *types.T, name string) *DOid {
-	oid := DOid{Oid: d, semanticType: semanticType, name: name}
-	return &oid
+	dOid := DOid{Oid: d, semanticType: semanticType, name: name}
+	return &dOid
 }
 
 // NewDOid is a helper routine to create a *DOid initialized from a DInt.
+// NOTE: for types in OidFamily other than Oid (ex: RegClass), consider using
+// NewDOidWithType instead, since the zero oid requires special handling for
+// those types.
 func NewDOid(d oid.Oid) *DOid {
 	// TODO(yuzefovich): audit the callers of NewDOid to see whether any want to
 	// create a DOid with a semantic type different from types.Oid.
@@ -5757,8 +5767,8 @@ type DOidWrapper struct {
 	Oid     oid.Oid
 }
 
-// ZeroOidValue represents the 0 oid value as '-', which matches the Postgres
-// representation.
+// ZeroOidValue represents the 0 oid value as '-' for types other than T_oid in
+// the oid family, which matches the Postgres representation.
 const ZeroOidValue = "-"
 
 // wrapWithOid wraps a Datum with a custom Oid.
