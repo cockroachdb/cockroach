@@ -2615,6 +2615,13 @@ func TestTenantLogicCCL_pgcrypto_builtins(
 	runCCLLogicTest(t, "pgcrypto_builtins")
 }
 
+func TestTenantLogicCCL_plpgsql_block(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_block")
+}
+
 func TestTenantLogicCCL_plpgsql_cursor(
 	t *testing.T,
 ) {
