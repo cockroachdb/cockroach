@@ -277,6 +277,9 @@ func Decode(
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
+		if i == 0 {
+			return tree.WrapAsZeroOid(valType), rkey, err
+		}
 		return a.NewDOid(tree.MakeDOid(oid.Oid(i), valType)), rkey, err
 	case types.EnumFamily:
 		var r []byte
