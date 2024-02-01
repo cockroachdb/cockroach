@@ -149,10 +149,7 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 	if err = job.AwaitCompletion(ctx); err != nil {
 		if errors.Is(err, stats.ConcurrentCreateStatsError) {
 			// Delete the job so users don't see it and get confused by the error.
-			const stmt = `DELETE FROM system.jobs WHERE id = $1`
-			if _ /* cols */, delErr := n.p.ExecCfg().InternalDB.Executor().Exec(
-				ctx, "delete-job", nil /* txn */, stmt, jobID,
-			); delErr != nil {
+			if delErr := n.p.ExecCfg().JobRegistry.DeleteTerminalJobByID(ctx, job.ID()); delErr != nil {
 				log.Warningf(ctx, "failed to delete job: %v", delErr)
 			}
 		}
