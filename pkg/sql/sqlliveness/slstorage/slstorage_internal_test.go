@@ -60,7 +60,7 @@ func TestGetEncoder(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			storage := NewTestingStorage(
-				log.AmbientContext{}, nil, nil, nil, keys.SystemSQLCodec, nil, nil, systemschema.SqllivenessTable(), nil)
+				log.AmbientContext{}, nil, nil, nil, keys.SystemSQLCodec, nil, nil, systemschema.SqllivenessTable(), nil, true /*withSyntheticClock*/)
 
 			checkCodec(t, tc.readCodec, storage.keyCodec)
 		})

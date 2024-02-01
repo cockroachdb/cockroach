@@ -78,16 +78,18 @@ var CacheSize = settings.RegisterIntSetting(
 // Storage deals with reading and writing session records. It implements the
 // sqlliveness.Storage interface, and the slinstace.Writer interface.
 type Storage struct {
-	settings        *cluster.Settings
-	settingsWatcher *settingswatcher.SettingsWatcher
-	stopper         *stop.Stopper
-	clock           *hlc.Clock
-	db              *kv.DB
-	codec           keys.SQLCodec
-	metrics         Metrics
-	gcInterval      func() time.Duration
-	newTimer        func() timeutil.TimerI
-	keyCodec        keyCodec
+	settings           *cluster.Settings
+	settingsWatcher    *settingswatcher.SettingsWatcher
+	livenessProber     regionliveness.Prober
+	stopper            *stop.Stopper
+	clock              *hlc.Clock
+	db                 *kv.DB
+	codec              keys.SQLCodec
+	metrics            Metrics
+	gcInterval         func() time.Duration
+	newTimer           func() timeutil.TimerI
+	keyCodec           keyCodec
+	withSyntheticClock bool
 
 	mu struct {
 		syncutil.Mutex
@@ -120,6 +122,7 @@ func NewTestingStorage(
 	settingsWatcher *settingswatcher.SettingsWatcher,
 	table catalog.TableDescriptor,
 	newTimer func() timeutil.TimerI,
+	withSyntheticClock bool,
 ) *Storage {
 	s := &Storage{
 		settings:        settings,
@@ -130,13 +133,15 @@ func NewTestingStorage(
 		codec:           codec,
 		keyCodec:        &rbrEncoder{codec.IndexPrefix(uint32(table.GetID()), uint32(table.GetPrimaryIndexID()))},
 		newTimer:        newTimer,
+		livenessProber:  regionliveness.NewLivenessProber(db, codec, nil, settings),
 		gcInterval: func() time.Duration {
 			baseInterval := GCInterval.Get(&settings.SV)
 			jitter := GCJitter.Get(&settings.SV)
 			frac := 1 + (2*rand.Float64()-1)*jitter
 			return time.Duration(frac * float64(baseInterval.Nanoseconds()))
 		},
-		metrics: makeMetrics(),
+		withSyntheticClock: withSyntheticClock,
+		metrics:            makeMetrics(),
 	}
 	cacheConfig := cache.Config{
 		Policy: cache.CacheLRU,
@@ -164,6 +169,7 @@ func NewStorage(
 		ambientCtx, stopper, clock, db, codec, settings, settingsWatcher,
 		systemschema.SqllivenessTable(),
 		timeutil.DefaultTimeSource{}.NewTimer,
+		false, /*withSynthticClock*/
 	)
 }
 
@@ -318,11 +324,11 @@ func (s *Storage) deleteOrFetchSession(
 		if err != nil {
 			return err
 		}
-		if unavailableAtRegions, err := livenessProber.QueryUnavailablePhysicalRegions(ctx, txn); err != nil ||
+		if unavailableAtRegions, err := s.livenessProber.QueryUnavailablePhysicalRegions(ctx, txn, true /*filterAvailable*/); err != nil ||
 			unavailableAtRegions.ContainsPhysicalRepresentation(regionPhysicalRep) {
 			return err
 		}
-		execWithTimeout, timeout := livenessProber.GetProbeTimeout()
+		execWithTimeout, timeout := s.livenessProber.GetProbeTimeout()
 		var kv kv.KeyValue
 		if execWithTimeout {
 			// Detect if we fail to a region and force a probe in that
@@ -495,9 +501,26 @@ func (s *Storage) Insert(
 	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
 
-		k, _, err := s.keyCodec.encode(sid)
+		k, region, err := s.keyCodec.encode(sid)
 		if err != nil {
 			return err
+		}
+		unavailableRegions, err := s.livenessProber.QueryUnavailablePhysicalRegions(ctx, txn, true /*filterAvailable*/)
+		if err != nil {
+			return err
+		}
+		if unavailableRegions.ContainsPhysicalRepresentation(region) {
+			// Delete all rows for the region in system.sqlliveness, system.sql_instances,
+			// system.leases.
+			if err := regionliveness.CleanupSystemTableForRegion(ctx,
+				s.codec, region, txn); err != nil {
+				return err
+			}
+			// Make the region as available again.
+			if err := s.livenessProber.MarkPhysicalRegionAsAvailable(ctx, txn, region, unavailableRegions[region]); err != nil {
+				return err
+			}
+
 		}
 		v := encodeValue(expiration)
 		batch.InitPut(k, &v, true)
@@ -516,19 +539,43 @@ func (s *Storage) Insert(
 // if the row exists and in that case returns true. Otherwise it returns false.
 func (s *Storage) Update(
 	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
-) (sessionExists bool, err error) {
+) (sessionExists bool, newExpiry hlc.Timestamp, err error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
+	resetUnavailableAtTime := false
+	k, region, err := s.keyCodec.encode(sid)
+	if err != nil {
+		return false, hlc.Timestamp{}, err
+	}
 	err = s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		k, _, err := s.keyCodec.encode(sid)
-		if err != nil {
-			return err
-		}
 		kv, err := txn.Get(ctx, k)
 		if err != nil {
 			return err
 		}
 		if sessionExists = kv.Value != nil; !sessionExists {
 			return nil
+		}
+		unavailableRegions, err := s.livenessProber.QueryUnavailablePhysicalRegions(ctx, txn, false /*filterAvailable*/)
+		if err != nil {
+			return err
+		}
+		if unavailableRegions.ContainsPhysicalRepresentation(region) {
+			ts := unavailableRegions[region].Time
+			// If the read timestamp is past the expiration, then we cannot allow
+			// this session to renew.
+			if txn.ReadTimestamp().GoTime().After(ts) {
+				return errors.New("region is unavailable, so unable to renew session")
+			}
+			// Clamp the expiration time to the unavailable_at time, if its
+			// after.
+			expirationTS := expiration.GoTime()
+			if expirationTS.After(ts) {
+				// Since the unavailable_at time is stored as a time.Time, we will
+				// need to apply a delta hlc.Timestamp to get clamped timestamp.
+				timeDelta := ts.Sub(expirationTS)
+				expiration = expiration.AddDuration(timeDelta)
+			}
+			// If we aren't past the number yet then attempt a recovery.
+			resetUnavailableAtTime = true
 		}
 		v := encodeValue(expiration)
 		ba := txn.NewBatch()
@@ -539,10 +586,42 @@ func (s *Storage) Update(
 		s.metrics.WriteFailures.Inc(1)
 	}
 	if err != nil {
-		return false, errors.Wrapf(err, "could not update session %s", sid)
+		return false, hlc.Timestamp{}, errors.Wrapf(err, "could not update session %s", sid)
 	}
 	s.metrics.WriteSuccesses.Inc(1)
-	return sessionExists, nil
+	// If we were able to write to the sqlliveness table, then region communication
+	// may be restored. At this point lets attempt to clean up any unavailable
+	// region liveness time if it was set.
+	if resetUnavailableAtTime {
+		if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Check if this region has an unavailable_at time set.
+			unavailableRegions, err := s.livenessProber.QueryUnavailablePhysicalRegions(ctx, txn, false /*filterAvailable*/)
+			if err != nil {
+				return err
+			}
+			readTS := txn.ReadTimestamp()
+			ts, exists := unavailableRegions[region]
+			if !exists {
+				return nil
+			}
+			// If it took us longer then the unavailable_at to recover, then fail
+			// at this point. This could happen if the deadline is hit while
+			// recovering, and we are forced to retry.
+			if ts.Before(txn.ReadTimestamp().GoTime()) {
+				return errors.New("region is unavailable, so unable to recover session")
+			}
+
+			// Set a transaction deadline before clearing it.
+			deadLineTS := readTS.AddDuration(ts.Time.Sub(readTS.GoTime()))
+			if err := txn.UpdateDeadline(ctx, deadLineTS); err != nil {
+				return err
+			}
+			return s.livenessProber.MarkPhysicalRegionAsAvailable(ctx, txn, region, ts)
+		}); err != nil {
+			return false, hlc.Timestamp{}, err
+		}
+	}
+	return sessionExists, expiration, nil
 }
 
 // Delete removes the session from the sqlliveness table without checking the

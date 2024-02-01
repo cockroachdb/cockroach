@@ -448,7 +448,7 @@ func (h *queryComparisonHelper) runQuery(stmt string) ([][]string, error) {
 	// such a scenario, since the stmt didn't execute successfully, it won't get
 	// logged by the caller).
 	h.logStmt(fmt.Sprintf("-- %s: %s", timeutil.Now(),
-		// Remove all control characters, including newline symbols. to log this
+		// Remove all control characters, including newline symbols, to log this
 		// stmt as a single line. This way this auxiliary logging takes up less
 		// space (if the stmt executes successfully, it'll still get logged with
 		// the nice formatting).
