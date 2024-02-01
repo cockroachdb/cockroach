@@ -262,9 +262,6 @@ type Overload struct {
 	// in a Schema descriptor, which means that the full UDF descriptor need to be
 	// fetched to get more info, e.g. function Body.
 	UDFContainsOnlySignature bool
-	// ReturnSet is set to true when a user-defined function is defined to return
-	// a set of values.
-	ReturnSet bool
 	// Version is the descriptor version of the descriptor used to construct
 	// this version of the function overload. Only used for UDFs.
 	Version uint64

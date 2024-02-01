@@ -1077,9 +1077,10 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 	}
 
 	stmt := &tree.CreateRoutine{
+		Replace:    s.coin(),
 		Name:       name,
-		ReturnType: &rtype,
 		Params:     params,
+		ReturnType: &rtype,
 		Options:    opts,
 	}
 

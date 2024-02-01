@@ -50,8 +50,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.Name.ObjectNamePrefix = resName
 
-	// TODO(chengxiong,mgartner): this is a hack to disallow UDF usage in UDF and
-	// we will need to lift this hack when we plan to allow it.
+	// TODO(#88198): this is a hack to disallow UDF usage in UDF and we will
+	// need to lift this hack when we plan to allow it.
 	preFuncResolver := b.semaCtx.FunctionResolver
 	b.semaCtx.FunctionResolver = nil
 
@@ -207,7 +207,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		outParamType = types.MakeTuple(outParamTypes)
 	}
 
-	// Collect the user defined type dependency of the return type.
 	var funcReturnType *types.T
 	var err error
 	if cf.ReturnType != nil {
@@ -246,6 +245,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "PL/pgSQL functions cannot return type unknown"))
 		}
 	}
+	// Collect the user defined type dependency of the return type.
 	typedesc.GetTypeDescriptorClosure(funcReturnType).ForEach(func(id descpb.ID) {
 		typeDeps.Add(int(id))
 	})
@@ -396,7 +396,9 @@ func validateReturnType(
 	}
 
 	// If return type is RECORD and the tuple content types unspecified by OUT
-	// parameters, any column types are valid.
+	// parameters, any column types are valid. This is the case when we have
+	// RETURNS RECORD without OUT params - we don't need to check the types
+	// below.
 	if types.IsRecordType(expected) && types.IsWildcardTupleType(expected) {
 		return nil
 	}
