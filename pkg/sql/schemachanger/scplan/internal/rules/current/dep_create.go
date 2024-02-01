@@ -38,7 +38,7 @@ func init() {
 		"dependent", "relation",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, Not(isDescriptor)),
+				from.TypeFilter(rulesVersionKey, Not(isDescriptor), Not(isData)),
 				to.TypeFilter(rulesVersionKey, isDescriptor),
 				JoinOnDescID(from, to, "relation-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
