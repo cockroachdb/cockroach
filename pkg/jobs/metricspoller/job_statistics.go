@@ -100,21 +100,27 @@ type schedulePTSStat struct {
 func manageProtectedTimestamps(ctx context.Context, execCtx sql.JobExecContext) error {
 	var ptsStats map[jobspb.Type]*ptsStat
 	var schedulePtsStats map[string]*schedulePTSStat
-
+	var ptsState ptpb.State
 	execCfg := execCtx.ExecCfg()
+
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		ptsStats = make(map[jobspb.Type]*ptsStat)
 		schedulePtsStats = make(map[string]*schedulePTSStat)
+		var err error
+		ptsState, err = execCfg.ProtectedTimestampProvider.WithTxn(txn).GetState(ctx)
+		return err
+	}); err != nil {
+		return err
+	}
 
-		ptsState, err := execCfg.ProtectedTimestampProvider.WithTxn(txn).GetState(ctx)
+	// Iterate over each job with a fresh transaction, to prevent scanning the
+	// whole jobs table with a single txn.
+	for _, rec := range ptsState.Records {
+		id, err := jobsprotectedts.DecodeID(rec.Meta)
 		if err != nil {
 			return err
 		}
-		for _, rec := range ptsState.Records {
-			id, err := jobsprotectedts.DecodeID(rec.Meta)
-			if err != nil {
-				return err
-			}
+		if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			switch rec.MetaType {
 			case jobsprotectedts.GetMetaType(jobsprotectedts.Jobs):
 				if err := processJobPTSRecord(ctx, execCfg, id, rec, ptsStats, txn); err != nil {
@@ -124,13 +130,14 @@ func manageProtectedTimestamps(ctx context.Context, execCtx sql.JobExecContext) 
 				if err := processSchedulePTSRecord(ctx, jobspb.ScheduleID(id), rec, schedulePtsStats, txn); err != nil {
 					return err
 				}
-			default:
-				continue
 			}
+			return nil
+		}); err != nil {
+			// If we fail to process one record, we should still try to process
+			// subsequent records, therefore, just log the error instead of returning
+			// early.
+			log.Infof(ctx, "Could not process pts record id %d: %s", rec.ID, err.Error())
 		}
-		return nil
-	}); err != nil {
-		return err
 	}
 
 	updateJobPTSMetrics(execCfg.JobRegistry.MetricsStruct(), execCfg.Clock, ptsStats)
