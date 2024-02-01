@@ -250,17 +250,17 @@ project
                      │              │              └── projections
                      │              │                   └── udf: stmt_if_1 [as=stmt_if_1:9]
                      │              │                        ├── args
-                     │              │                        │    ├── variable: c:8
                      │              │                        │    ├── variable: a:1
-                     │              │                        │    └── variable: b:2
-                     │              │                        ├── params: c:4 a:5 b:6
+                     │              │                        │    ├── variable: b:2
+                     │              │                        │    └── variable: c:8
+                     │              │                        ├── params: a:4 b:5 c:6
                      │              │                        └── body
                      │              │                             └── project
                      │              │                                  ├── columns: stmt_return_2:7
                      │              │                                  ├── values
                      │              │                                  │    └── tuple
                      │              │                                  └── projections
-                     │              │                                       └── variable: c:4 [as=stmt_return_2:7]
+                     │              │                                       └── variable: c:6 [as=stmt_return_2:7]
                      │              └── subquery
                      │                   └── project
                      │                        ├── columns: stmt_if_1:10
@@ -269,17 +269,17 @@ project
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:10]
                      │                                  ├── args
-                     │                                  │    ├── variable: c:3
                      │                                  │    ├── variable: a:1
-                     │                                  │    └── variable: b:2
-                     │                                  ├── params: c:4 a:5 b:6
+                     │                                  │    ├── variable: b:2
+                     │                                  │    └── variable: c:3
+                     │                                  ├── params: a:4 b:5 c:6
                      │                                  └── body
                      │                                       └── project
                      │                                            ├── columns: stmt_return_2:7
                      │                                            ├── values
                      │                                            │    └── tuple
                      │                                            └── projections
-                     │                                                 └── variable: c:4 [as=stmt_return_2:7]
+                     │                                                 └── variable: c:6 [as=stmt_return_2:7]
                      └── const: 1
 
 exec-ddl
@@ -341,17 +341,17 @@ project
                      │              │              └── projections
                      │              │                   └── udf: stmt_if_1 [as=stmt_if_1:9]
                      │              │                        ├── args
-                     │              │                        │    ├── variable: c:8
                      │              │                        │    ├── variable: a:1
-                     │              │                        │    └── variable: b:2
-                     │              │                        ├── params: c:4 a:5 b:6
+                     │              │                        │    ├── variable: b:2
+                     │              │                        │    └── variable: c:8
+                     │              │                        ├── params: a:4 b:5 c:6
                      │              │                        └── body
                      │              │                             └── project
                      │              │                                  ├── columns: stmt_return_2:7
                      │              │                                  ├── values
                      │              │                                  │    └── tuple
                      │              │                                  └── projections
-                     │              │                                       └── variable: c:4 [as=stmt_return_2:7]
+                     │              │                                       └── variable: c:6 [as=stmt_return_2:7]
                      │              └── subquery
                      │                   └── project
                      │                        ├── columns: stmt_if_1:11
@@ -364,17 +364,17 @@ project
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:11]
                      │                                  ├── args
-                     │                                  │    ├── variable: c:10
                      │                                  │    ├── variable: a:1
-                     │                                  │    └── variable: b:2
-                     │                                  ├── params: c:4 a:5 b:6
+                     │                                  │    ├── variable: b:2
+                     │                                  │    └── variable: c:10
+                     │                                  ├── params: a:4 b:5 c:6
                      │                                  └── body
                      │                                       └── project
                      │                                            ├── columns: stmt_return_2:7
                      │                                            ├── values
                      │                                            │    └── tuple
                      │                                            └── projections
-                     │                                                 └── variable: c:4 [as=stmt_return_2:7]
+                     │                                                 └── variable: c:6 [as=stmt_return_2:7]
                      └── const: 1
 
 exec-ddl
@@ -436,17 +436,17 @@ project
                      │              │              └── projections
                      │              │                   └── udf: stmt_if_1 [as=stmt_if_1:9]
                      │              │                        ├── args
-                     │              │                        │    ├── variable: c:8
                      │              │                        │    ├── variable: a:1
-                     │              │                        │    └── variable: b:2
-                     │              │                        ├── params: c:4 a:5 b:6
+                     │              │                        │    ├── variable: b:2
+                     │              │                        │    └── variable: c:8
+                     │              │                        ├── params: a:4 b:5 c:6
                      │              │                        └── body
                      │              │                             └── project
                      │              │                                  ├── columns: stmt_return_2:7
                      │              │                                  ├── values
                      │              │                                  │    └── tuple
                      │              │                                  └── projections
-                     │              │                                       └── variable: c:4 [as=stmt_return_2:7]
+                     │              │                                       └── variable: c:6 [as=stmt_return_2:7]
                      │              └── subquery
                      │                   └── project
                      │                        ├── columns: stmt_return_3:10!null
@@ -522,17 +522,17 @@ project
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:10]
                      │                                  ├── args
-                     │                                  │    ├── variable: c:9
                      │                                  │    ├── variable: a:1
-                     │                                  │    └── variable: b:2
-                     │                                  ├── params: c:4 a:5 b:6
+                     │                                  │    ├── variable: b:2
+                     │                                  │    └── variable: c:9
+                     │                                  ├── params: a:4 b:5 c:6
                      │                                  └── body
                      │                                       └── project
                      │                                            ├── columns: stmt_return_2:7
                      │                                            ├── values
                      │                                            │    └── tuple
                      │                                            └── projections
-                     │                                                 └── variable: c:4 [as=stmt_return_2:7]
+                     │                                                 └── variable: c:6 [as=stmt_return_2:7]
                      └── const: 1
 
 exec-ddl
@@ -636,10 +636,10 @@ project
                      │    └── projections
                      │         └── udf: stmt_loop_5 [as=stmt_loop_5:17]
                      │              ├── args
-                     │              │    ├── variable: i:3
                      │              │    ├── variable: a:1
-                     │              │    └── variable: b:2
-                     │              ├── params: i:13 a:14 b:15
+                     │              │    ├── variable: b:2
+                     │              │    └── variable: i:3
+                     │              ├── params: a:13 b:14 i:15
                      │              └── body
                      │                   └── project
                      │                        ├── columns: stmt_return_6:16!null
@@ -691,10 +691,10 @@ project
                      │    └── projections
                      │         └── udf: stmt_loop_5 [as=stmt_loop_5:23]
                      │              ├── args
-                     │              │    ├── variable: i:3
                      │              │    ├── variable: a:1
-                     │              │    └── variable: b:2
-                     │              ├── params: i:13 a:14 b:15
+                     │              │    ├── variable: b:2
+                     │              │    └── variable: i:3
+                     │              ├── params: a:13 b:14 i:15
                      │              └── body
                      │                   └── project
                      │                        ├── columns: stmt_if_9:22
@@ -705,8 +705,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── lt
-                     │                                  │    │    ├── variable: a:14
-                     │                                  │    │    └── variable: b:15
+                     │                                  │    │    ├── variable: a:13
+                     │                                  │    │    └── variable: b:14
                      │                                  │    └── subquery
                      │                                  │         └── project
                      │                                  │              ├── columns: stmt_return_8:20!null
@@ -722,10 +722,10 @@ project
                      │                                            └── projections
                      │                                                 └── udf: stmt_if_6 [as=stmt_if_6:21]
                      │                                                      ├── args
-                     │                                                      │    ├── variable: i:13
-                     │                                                      │    ├── variable: a:14
-                     │                                                      │    └── variable: b:15
-                     │                                                      ├── params: i:16 a:17 b:18
+                     │                                                      │    ├── variable: a:13
+                     │                                                      │    ├── variable: b:14
+                     │                                                      │    └── variable: i:15
+                     │                                                      ├── params: a:16 b:17 i:18
                      │                                                      └── body
                      │                                                           └── project
                      │                                                                ├── columns: stmt_return_7:19!null
@@ -777,10 +777,10 @@ project
                      │    └── projections
                      │         └── udf: stmt_loop_3 [as=stmt_loop_3:25]
                      │              ├── args
-                     │              │    ├── variable: i:3
                      │              │    ├── variable: a:1
-                     │              │    └── variable: b:2
-                     │              ├── params: i:8 a:9 b:10
+                     │              │    ├── variable: b:2
+                     │              │    └── variable: i:3
+                     │              ├── params: a:8 b:9 i:10
                      │              └── body
                      │                   └── project
                      │                        ├── columns: stmt_if_8:24
@@ -791,8 +791,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── ge
-                     │                                  │    │    ├── variable: i:8
-                     │                                  │    │    └── variable: b:10
+                     │                                  │    │    ├── variable: i:10
+                     │                                  │    │    └── variable: b:9
                      │                                  │    └── subquery
                      │                                  │         └── project
                      │                                  │              ├── columns: loop_exit_1:22
@@ -801,17 +801,17 @@ project
                      │                                  │              └── projections
                      │                                  │                   └── udf: loop_exit_1 [as=loop_exit_1:22]
                      │                                  │                        ├── args
-                     │                                  │                        │    ├── variable: i:8
-                     │                                  │                        │    ├── variable: a:9
-                     │                                  │                        │    └── variable: b:10
-                     │                                  │                        ├── params: i:4 a:5 b:6
+                     │                                  │                        │    ├── variable: a:8
+                     │                                  │                        │    ├── variable: b:9
+                     │                                  │                        │    └── variable: i:10
+                     │                                  │                        ├── params: a:4 b:5 i:6
                      │                                  │                        └── body
                      │                                  │                             └── project
                      │                                  │                                  ├── columns: stmt_return_2:7
                      │                                  │                                  ├── values
                      │                                  │                                  │    └── tuple
                      │                                  │                                  └── projections
-                     │                                  │                                       └── variable: i:4 [as=stmt_return_2:7]
+                     │                                  │                                       └── variable: i:6 [as=stmt_return_2:7]
                      │                                  └── subquery
                      │                                       └── project
                      │                                            ├── columns: stmt_if_4:23
@@ -820,10 +820,10 @@ project
                      │                                            └── projections
                      │                                                 └── udf: stmt_if_4 [as=stmt_if_4:23]
                      │                                                      ├── args
-                     │                                                      │    ├── variable: i:8
-                     │                                                      │    ├── variable: a:9
-                     │                                                      │    └── variable: b:10
-                     │                                                      ├── params: i:11 a:12 b:13
+                     │                                                      │    ├── variable: a:8
+                     │                                                      │    ├── variable: b:9
+                     │                                                      │    └── variable: i:10
+                     │                                                      ├── params: a:11 b:12 i:13
                      │                                                      └── body
                      │                                                           └── project
                      │                                                                ├── columns: stmt_if_7:21
@@ -834,7 +834,7 @@ project
                      │                                                                          ├── true
                      │                                                                          ├── when
                      │                                                                          │    ├── eq
-                     │                                                                          │    │    ├── variable: i:11
+                     │                                                                          │    │    ├── variable: i:13
                      │                                                                          │    │    └── const: 8
                      │                                                                          │    └── subquery
                      │                                                                          │         └── project
@@ -851,10 +851,10 @@ project
                      │                                                                                    └── projections
                      │                                                                                         └── udf: stmt_if_5 [as=stmt_if_5:20]
                      │                                                                                              ├── args
-                     │                                                                                              │    ├── variable: i:11
-                     │                                                                                              │    ├── variable: a:12
-                     │                                                                                              │    └── variable: b:13
-                     │                                                                                              ├── params: i:14 a:15 b:16
+                     │                                                                                              │    ├── variable: a:11
+                     │                                                                                              │    ├── variable: b:12
+                     │                                                                                              │    └── variable: i:13
+                     │                                                                                              ├── params: a:14 b:15 i:16
                      │                                                                                              └── body
                      │                                                                                                   └── project
                      │                                                                                                        ├── columns: stmt_loop_3:18
@@ -864,14 +864,14 @@ project
                      │                                                                                                        │    │    └── tuple
                      │                                                                                                        │    └── projections
                      │                                                                                                        │         └── plus [as=i:17]
-                     │                                                                                                        │              ├── variable: i:14
+                     │                                                                                                        │              ├── variable: i:16
                      │                                                                                                        │              └── const: 1
                      │                                                                                                        └── projections
                      │                                                                                                             └── udf: stmt_loop_3 [as=stmt_loop_3:18]
                      │                                                                                                                  ├── args
-                     │                                                                                                                  │    ├── variable: i:17
-                     │                                                                                                                  │    ├── variable: a:15
-                     │                                                                                                                  │    └── variable: b:16
+                     │                                                                                                                  │    ├── variable: a:14
+                     │                                                                                                                  │    ├── variable: b:15
+                     │                                                                                                                  │    └── variable: i:17
                      │                                                                                                                  └── recursive-call
                      └── const: 1
 
@@ -916,10 +916,10 @@ project
                      │    └── projections
                      │         └── udf: stmt_loop_3 [as=stmt_loop_3:19]
                      │              ├── args
-                     │              │    ├── variable: i:3
                      │              │    ├── variable: a:1
-                     │              │    └── variable: b:2
-                     │              ├── params: i:8 a:9 b:10
+                     │              │    ├── variable: b:2
+                     │              │    └── variable: i:3
+                     │              ├── params: a:8 b:9 i:10
                      │              └── body
                      │                   └── project
                      │                        ├── columns: stmt_if_5:18
@@ -930,8 +930,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── ge
-                     │                                  │    │    ├── variable: i:8
-                     │                                  │    │    └── variable: b:10
+                     │                                  │    │    ├── variable: i:10
+                     │                                  │    │    └── variable: b:9
                      │                                  │    └── subquery
                      │                                  │         └── project
                      │                                  │              ├── columns: loop_exit_1:16
@@ -940,17 +940,17 @@ project
                      │                                  │              └── projections
                      │                                  │                   └── udf: loop_exit_1 [as=loop_exit_1:16]
                      │                                  │                        ├── args
-                     │                                  │                        │    ├── variable: i:8
-                     │                                  │                        │    ├── variable: a:9
-                     │                                  │                        │    └── variable: b:10
-                     │                                  │                        ├── params: i:4 a:5 b:6
+                     │                                  │                        │    ├── variable: a:8
+                     │                                  │                        │    ├── variable: b:9
+                     │                                  │                        │    └── variable: i:10
+                     │                                  │                        ├── params: a:4 b:5 i:6
                      │                                  │                        └── body
                      │                                  │                             └── project
                      │                                  │                                  ├── columns: stmt_return_2:7
                      │                                  │                                  ├── values
                      │                                  │                                  │    └── tuple
                      │                                  │                                  └── projections
-                     │                                  │                                       └── variable: i:4 [as=stmt_return_2:7]
+                     │                                  │                                       └── variable: i:6 [as=stmt_return_2:7]
                      │                                  └── subquery
                      │                                       └── project
                      │                                            ├── columns: stmt_if_4:17
@@ -959,10 +959,10 @@ project
                      │                                            └── projections
                      │                                                 └── udf: stmt_if_4 [as=stmt_if_4:17]
                      │                                                      ├── args
-                     │                                                      │    ├── variable: i:8
-                     │                                                      │    ├── variable: a:9
-                     │                                                      │    └── variable: b:10
-                     │                                                      ├── params: i:11 a:12 b:13
+                     │                                                      │    ├── variable: a:8
+                     │                                                      │    ├── variable: b:9
+                     │                                                      │    └── variable: i:10
+                     │                                                      ├── params: a:11 b:12 i:13
                      │                                                      └── body
                      │                                                           └── project
                      │                                                                ├── columns: stmt_loop_3:15
@@ -972,14 +972,14 @@ project
                      │                                                                │    │    └── tuple
                      │                                                                │    └── projections
                      │                                                                │         └── plus [as=i:14]
-                     │                                                                │              ├── variable: i:11
+                     │                                                                │              ├── variable: i:13
                      │                                                                │              └── const: 1
                      │                                                                └── projections
                      │                                                                     └── udf: stmt_loop_3 [as=stmt_loop_3:15]
                      │                                                                          ├── args
-                     │                                                                          │    ├── variable: i:14
-                     │                                                                          │    ├── variable: a:12
-                     │                                                                          │    └── variable: b:13
+                     │                                                                          │    ├── variable: a:11
+                     │                                                                          │    ├── variable: b:12
+                     │                                                                          │    └── variable: i:14
                      │                                                                          └── recursive-call
                      └── const: 1
 
@@ -1048,11 +1048,11 @@ project
                      │              │              └── projections
                      │              │                   └── udf: stmt_loop_4 [as=stmt_loop_4:29]
                      │              │                        ├── args
-                     │              │                        │    ├── variable: sum:3
-                     │              │                        │    ├── variable: i:4
                      │              │                        │    ├── variable: a:1
-                     │              │                        │    └── variable: b:2
-                     │              │                        ├── params: sum:15 i:16 a:17 b:18
+                     │              │                        │    ├── variable: b:2
+                     │              │                        │    ├── variable: sum:3
+                     │              │                        │    └── variable: i:4
+                     │              │                        ├── params: a:15 b:16 sum:17 i:18
                      │              │                        └── body
                      │              │                             └── project
                      │              │                                  ├── columns: stmt_if_6:28
@@ -1063,8 +1063,8 @@ project
                      │              │                                            ├── true
                      │              │                                            ├── when
                      │              │                                            │    ├── ge
-                     │              │                                            │    │    ├── variable: i:16
-                     │              │                                            │    │    └── variable: b:18
+                     │              │                                            │    │    ├── variable: i:18
+                     │              │                                            │    │    └── variable: b:16
                      │              │                                            │    └── subquery
                      │              │                                            │         └── project
                      │              │                                            │              ├── columns: loop_exit_3:26
@@ -1073,11 +1073,11 @@ project
                      │              │                                            │              └── projections
                      │              │                                            │                   └── udf: loop_exit_3 [as=loop_exit_3:26]
                      │              │                                            │                        ├── args
-                     │              │                                            │                        │    ├── variable: sum:15
-                     │              │                                            │                        │    ├── variable: i:16
-                     │              │                                            │                        │    ├── variable: a:17
-                     │              │                                            │                        │    └── variable: b:18
-                     │              │                                            │                        ├── params: sum:10 i:11 a:12 b:13
+                     │              │                                            │                        │    ├── variable: a:15
+                     │              │                                            │                        │    ├── variable: b:16
+                     │              │                                            │                        │    ├── variable: sum:17
+                     │              │                                            │                        │    └── variable: i:18
+                     │              │                                            │                        ├── params: a:10 b:11 sum:12 i:13
                      │              │                                            │                        └── body
                      │              │                                            │                             └── project
                      │              │                                            │                                  ├── columns: stmt_if_1:14
@@ -1086,18 +1086,18 @@ project
                      │              │                                            │                                  └── projections
                      │              │                                            │                                       └── udf: stmt_if_1 [as=stmt_if_1:14]
                      │              │                                            │                                            ├── args
-                     │              │                                            │                                            │    ├── variable: sum:10
-                     │              │                                            │                                            │    ├── variable: i:11
-                     │              │                                            │                                            │    ├── variable: a:12
-                     │              │                                            │                                            │    └── variable: b:13
-                     │              │                                            │                                            ├── params: sum:5 i:6 a:7 b:8
+                     │              │                                            │                                            │    ├── variable: a:10
+                     │              │                                            │                                            │    ├── variable: b:11
+                     │              │                                            │                                            │    ├── variable: sum:12
+                     │              │                                            │                                            │    └── variable: i:13
+                     │              │                                            │                                            ├── params: a:5 b:6 sum:7 i:8
                      │              │                                            │                                            └── body
                      │              │                                            │                                                 └── project
                      │              │                                            │                                                      ├── columns: stmt_return_2:9
                      │              │                                            │                                                      ├── values
                      │              │                                            │                                                      │    └── tuple
                      │              │                                            │                                                      └── projections
-                     │              │                                            │                                                           └── variable: sum:5 [as=stmt_return_2:9]
+                     │              │                                            │                                                           └── variable: sum:7 [as=stmt_return_2:9]
                      │              │                                            └── subquery
                      │              │                                                 └── project
                      │              │                                                      ├── columns: stmt_if_5:27
@@ -1106,11 +1106,11 @@ project
                      │              │                                                      └── projections
                      │              │                                                           └── udf: stmt_if_5 [as=stmt_if_5:27]
                      │              │                                                                ├── args
-                     │              │                                                                │    ├── variable: sum:15
-                     │              │                                                                │    ├── variable: i:16
-                     │              │                                                                │    ├── variable: a:17
-                     │              │                                                                │    └── variable: b:18
-                     │              │                                                                ├── params: sum:19 i:20 a:21 b:22
+                     │              │                                                                │    ├── variable: a:15
+                     │              │                                                                │    ├── variable: b:16
+                     │              │                                                                │    ├── variable: sum:17
+                     │              │                                                                │    └── variable: i:18
+                     │              │                                                                ├── params: a:19 b:20 sum:21 i:22
                      │              │                                                                └── body
                      │              │                                                                     └── project
                      │              │                                                                          ├── columns: stmt_loop_4:25
@@ -1122,19 +1122,19 @@ project
                      │              │                                                                          │    │    │    └── tuple
                      │              │                                                                          │    │    └── projections
                      │              │                                                                          │    │         └── plus [as=sum:23]
-                     │              │                                                                          │    │              ├── variable: sum:19
-                     │              │                                                                          │    │              └── variable: i:20
+                     │              │                                                                          │    │              ├── variable: sum:21
+                     │              │                                                                          │    │              └── variable: i:22
                      │              │                                                                          │    └── projections
                      │              │                                                                          │         └── plus [as=i:24]
-                     │              │                                                                          │              ├── variable: i:20
+                     │              │                                                                          │              ├── variable: i:22
                      │              │                                                                          │              └── const: 1
                      │              │                                                                          └── projections
                      │              │                                                                               └── udf: stmt_loop_4 [as=stmt_loop_4:25]
                      │              │                                                                                    ├── args
+                     │              │                                                                                    │    ├── variable: a:19
+                     │              │                                                                                    │    ├── variable: b:20
                      │              │                                                                                    │    ├── variable: sum:23
-                     │              │                                                                                    │    ├── variable: i:24
-                     │              │                                                                                    │    ├── variable: a:21
-                     │              │                                                                                    │    └── variable: b:22
+                     │              │                                                                                    │    └── variable: i:24
                      │              │                                                                                    └── recursive-call
                      │              └── subquery
                      │                   └── project
@@ -1144,18 +1144,18 @@ project
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:30]
                      │                                  ├── args
-                     │                                  │    ├── variable: sum:3
-                     │                                  │    ├── variable: i:4
                      │                                  │    ├── variable: a:1
-                     │                                  │    └── variable: b:2
-                     │                                  ├── params: sum:5 i:6 a:7 b:8
+                     │                                  │    ├── variable: b:2
+                     │                                  │    ├── variable: sum:3
+                     │                                  │    └── variable: i:4
+                     │                                  ├── params: a:5 b:6 sum:7 i:8
                      │                                  └── body
                      │                                       └── project
                      │                                            ├── columns: stmt_return_2:9
                      │                                            ├── values
                      │                                            │    └── tuple
                      │                                            └── projections
-                     │                                                 └── variable: sum:5 [as=stmt_return_2:9]
+                     │                                                 └── variable: sum:7 [as=stmt_return_2:9]
                      └── const: 1
 
 exec-ddl
@@ -1209,11 +1209,11 @@ project
                      │    └── projections
                      │         └── udf: stmt_loop_3 [as=stmt_loop_3:32]
                      │              ├── args
-                     │              │    ├── variable: sum:3
-                     │              │    ├── variable: i:4
                      │              │    ├── variable: a:1
-                     │              │    └── variable: b:2
-                     │              ├── params: sum:10 i:11 a:12 b:13
+                     │              │    ├── variable: b:2
+                     │              │    ├── variable: sum:3
+                     │              │    └── variable: i:4
+                     │              ├── params: a:10 b:11 sum:12 i:13
                      │              └── body
                      │                   └── project
                      │                        ├── columns: stmt_if_7:31
@@ -1224,8 +1224,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── ge
-                     │                                  │    │    ├── variable: i:11
-                     │                                  │    │    └── variable: b:13
+                     │                                  │    │    ├── variable: i:13
+                     │                                  │    │    └── variable: b:11
                      │                                  │    └── subquery
                      │                                  │         └── project
                      │                                  │              ├── columns: loop_exit_1:29
@@ -1234,18 +1234,18 @@ project
                      │                                  │              └── projections
                      │                                  │                   └── udf: loop_exit_1 [as=loop_exit_1:29]
                      │                                  │                        ├── args
-                     │                                  │                        │    ├── variable: sum:10
-                     │                                  │                        │    ├── variable: i:11
-                     │                                  │                        │    ├── variable: a:12
-                     │                                  │                        │    └── variable: b:13
-                     │                                  │                        ├── params: sum:5 i:6 a:7 b:8
+                     │                                  │                        │    ├── variable: a:10
+                     │                                  │                        │    ├── variable: b:11
+                     │                                  │                        │    ├── variable: sum:12
+                     │                                  │                        │    └── variable: i:13
+                     │                                  │                        ├── params: a:5 b:6 sum:7 i:8
                      │                                  │                        └── body
                      │                                  │                             └── project
                      │                                  │                                  ├── columns: stmt_return_2:9
                      │                                  │                                  ├── values
                      │                                  │                                  │    └── tuple
                      │                                  │                                  └── projections
-                     │                                  │                                       └── variable: sum:5 [as=stmt_return_2:9]
+                     │                                  │                                       └── variable: sum:7 [as=stmt_return_2:9]
                      │                                  └── subquery
                      │                                       └── project
                      │                                            ├── columns: stmt_if_4:30
@@ -1254,11 +1254,11 @@ project
                      │                                            └── projections
                      │                                                 └── udf: stmt_if_4 [as=stmt_if_4:30]
                      │                                                      ├── args
-                     │                                                      │    ├── variable: sum:10
-                     │                                                      │    ├── variable: i:11
-                     │                                                      │    ├── variable: a:12
-                     │                                                      │    └── variable: b:13
-                     │                                                      ├── params: sum:14 i:15 a:16 b:17
+                     │                                                      │    ├── variable: a:10
+                     │                                                      │    ├── variable: b:11
+                     │                                                      │    ├── variable: sum:12
+                     │                                                      │    └── variable: i:13
+                     │                                                      ├── params: a:14 b:15 sum:16 i:17
                      │                                                      └── body
                      │                                                           └── project
                      │                                                                ├── columns: stmt_if_6:28
@@ -1269,7 +1269,7 @@ project
                      │                                                                          ├── true
                      │                                                                          ├── when
                      │                                                                          │    ├── eq
-                     │                                                                          │    │    ├── variable: i:15
+                     │                                                                          │    │    ├── variable: i:17
                      │                                                                          │    │    └── const: 2
                      │                                                                          │    └── subquery
                      │                                                                          │         └── project
@@ -1280,15 +1280,15 @@ project
                      │                                                                          │              │    │    └── tuple
                      │                                                                          │              │    └── projections
                      │                                                                          │              │         └── plus [as=i:25]
-                     │                                                                          │              │              ├── variable: i:15
+                     │                                                                          │              │              ├── variable: i:17
                      │                                                                          │              │              └── const: 1
                      │                                                                          │              └── projections
                      │                                                                          │                   └── udf: stmt_loop_3 [as=stmt_loop_3:26]
                      │                                                                          │                        ├── args
-                     │                                                                          │                        │    ├── variable: sum:14
-                     │                                                                          │                        │    ├── variable: i:25
-                     │                                                                          │                        │    ├── variable: a:16
-                     │                                                                          │                        │    └── variable: b:17
+                     │                                                                          │                        │    ├── variable: a:14
+                     │                                                                          │                        │    ├── variable: b:15
+                     │                                                                          │                        │    ├── variable: sum:16
+                     │                                                                          │                        │    └── variable: i:25
                      │                                                                          │                        └── recursive-call
                      │                                                                          └── subquery
                      │                                                                               └── project
@@ -1298,11 +1298,11 @@ project
                      │                                                                                    └── projections
                      │                                                                                         └── udf: stmt_if_5 [as=stmt_if_5:27]
                      │                                                                                              ├── args
-                     │                                                                                              │    ├── variable: sum:14
-                     │                                                                                              │    ├── variable: i:15
-                     │                                                                                              │    ├── variable: a:16
-                     │                                                                                              │    └── variable: b:17
-                     │                                                                                              ├── params: sum:18 i:19 a:20 b:21
+                     │                                                                                              │    ├── variable: a:14
+                     │                                                                                              │    ├── variable: b:15
+                     │                                                                                              │    ├── variable: sum:16
+                     │                                                                                              │    └── variable: i:17
+                     │                                                                                              ├── params: a:18 b:19 sum:20 i:21
                      │                                                                                              └── body
                      │                                                                                                   └── project
                      │                                                                                                        ├── columns: stmt_loop_3:24
@@ -1314,19 +1314,19 @@ project
                      │                                                                                                        │    │    │    └── tuple
                      │                                                                                                        │    │    └── projections
                      │                                                                                                        │    │         └── plus [as=sum:22]
-                     │                                                                                                        │    │              ├── variable: sum:18
-                     │                                                                                                        │    │              └── variable: i:19
+                     │                                                                                                        │    │              ├── variable: sum:20
+                     │                                                                                                        │    │              └── variable: i:21
                      │                                                                                                        │    └── projections
                      │                                                                                                        │         └── plus [as=i:23]
-                     │                                                                                                        │              ├── variable: i:19
+                     │                                                                                                        │              ├── variable: i:21
                      │                                                                                                        │              └── const: 1
                      │                                                                                                        └── projections
                      │                                                                                                             └── udf: stmt_loop_3 [as=stmt_loop_3:24]
                      │                                                                                                                  ├── args
+                     │                                                                                                                  │    ├── variable: a:18
+                     │                                                                                                                  │    ├── variable: b:19
                      │                                                                                                                  │    ├── variable: sum:22
-                     │                                                                                                                  │    ├── variable: i:23
-                     │                                                                                                                  │    ├── variable: a:20
-                     │                                                                                                                  │    └── variable: b:21
+                     │                                                                                                                  │    └── variable: i:23
                      │                                                                                                                  └── recursive-call
                      └── const: 1
 
@@ -1388,12 +1388,12 @@ project
                      │    └── projections
                      │         └── udf: stmt_loop_3 [as=stmt_loop_3:50]
                      │              ├── args
+                     │              │    ├── variable: a:1
+                     │              │    ├── variable: b:2
                      │              │    ├── variable: sum:3
                      │              │    ├── variable: i:4
-                     │              │    ├── variable: j:5
-                     │              │    ├── variable: a:1
-                     │              │    └── variable: b:2
-                     │              ├── params: sum:12 i:13 j:14 a:15 b:16
+                     │              │    └── variable: j:5
+                     │              ├── params: a:12 b:13 sum:14 i:15 j:16
                      │              └── body
                      │                   └── project
                      │                        ├── columns: stmt_if_9:49
@@ -1404,8 +1404,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── ge
-                     │                                  │    │    ├── variable: i:13
-                     │                                  │    │    └── variable: b:16
+                     │                                  │    │    ├── variable: i:15
+                     │                                  │    │    └── variable: b:13
                      │                                  │    └── subquery
                      │                                  │         └── project
                      │                                  │              ├── columns: loop_exit_1:47
@@ -1414,19 +1414,19 @@ project
                      │                                  │              └── projections
                      │                                  │                   └── udf: loop_exit_1 [as=loop_exit_1:47]
                      │                                  │                        ├── args
-                     │                                  │                        │    ├── variable: sum:12
-                     │                                  │                        │    ├── variable: i:13
-                     │                                  │                        │    ├── variable: j:14
-                     │                                  │                        │    ├── variable: a:15
-                     │                                  │                        │    └── variable: b:16
-                     │                                  │                        ├── params: sum:6 i:7 j:8 a:9 b:10
+                     │                                  │                        │    ├── variable: a:12
+                     │                                  │                        │    ├── variable: b:13
+                     │                                  │                        │    ├── variable: sum:14
+                     │                                  │                        │    ├── variable: i:15
+                     │                                  │                        │    └── variable: j:16
+                     │                                  │                        ├── params: a:6 b:7 sum:8 i:9 j:10
                      │                                  │                        └── body
                      │                                  │                             └── project
                      │                                  │                                  ├── columns: stmt_return_2:11
                      │                                  │                                  ├── values
                      │                                  │                                  │    └── tuple
                      │                                  │                                  └── projections
-                     │                                  │                                       └── variable: sum:6 [as=stmt_return_2:11]
+                     │                                  │                                       └── variable: sum:8 [as=stmt_return_2:11]
                      │                                  └── subquery
                      │                                       └── project
                      │                                            ├── columns: stmt_if_4:48
@@ -1435,12 +1435,12 @@ project
                      │                                            └── projections
                      │                                                 └── udf: stmt_if_4 [as=stmt_if_4:48]
                      │                                                      ├── args
-                     │                                                      │    ├── variable: sum:12
-                     │                                                      │    ├── variable: i:13
-                     │                                                      │    ├── variable: j:14
-                     │                                                      │    ├── variable: a:15
-                     │                                                      │    └── variable: b:16
-                     │                                                      ├── params: sum:17 i:18 j:19 a:20 b:21
+                     │                                                      │    ├── variable: a:12
+                     │                                                      │    ├── variable: b:13
+                     │                                                      │    ├── variable: sum:14
+                     │                                                      │    ├── variable: i:15
+                     │                                                      │    └── variable: j:16
+                     │                                                      ├── params: a:17 b:18 sum:19 i:20 j:21
                      │                                                      └── body
                      │                                                           └── project
                      │                                                                ├── columns: stmt_loop_6:46
@@ -1453,12 +1453,12 @@ project
                      │                                                                └── projections
                      │                                                                     └── udf: stmt_loop_6 [as=stmt_loop_6:46]
                      │                                                                          ├── args
-                     │                                                                          │    ├── variable: sum:17
-                     │                                                                          │    ├── variable: i:18
-                     │                                                                          │    ├── variable: j:22
-                     │                                                                          │    ├── variable: a:20
-                     │                                                                          │    └── variable: b:21
-                     │                                                                          ├── params: sum:30 i:31 j:32 a:33 b:34
+                     │                                                                          │    ├── variable: a:17
+                     │                                                                          │    ├── variable: b:18
+                     │                                                                          │    ├── variable: sum:19
+                     │                                                                          │    ├── variable: i:20
+                     │                                                                          │    └── variable: j:22
+                     │                                                                          ├── params: a:30 b:31 sum:32 i:33 j:34
                      │                                                                          └── body
                      │                                                                               └── project
                      │                                                                                    ├── columns: stmt_if_8:45
@@ -1469,8 +1469,8 @@ project
                      │                                                                                              ├── true
                      │                                                                                              ├── when
                      │                                                                                              │    ├── ge
-                     │                                                                                              │    │    ├── variable: j:32
-                     │                                                                                              │    │    └── variable: i:31
+                     │                                                                                              │    │    ├── variable: j:34
+                     │                                                                                              │    │    └── variable: i:33
                      │                                                                                              │    └── subquery
                      │                                                                                              │         └── project
                      │                                                                                              │              ├── columns: loop_exit_5:43
@@ -1479,12 +1479,12 @@ project
                      │                                                                                              │              └── projections
                      │                                                                                              │                   └── udf: loop_exit_5 [as=loop_exit_5:43]
                      │                                                                                              │                        ├── args
-                     │                                                                                              │                        │    ├── variable: sum:30
-                     │                                                                                              │                        │    ├── variable: i:31
-                     │                                                                                              │                        │    ├── variable: j:32
-                     │                                                                                              │                        │    ├── variable: a:33
-                     │                                                                                              │                        │    └── variable: b:34
-                     │                                                                                              │                        ├── params: sum:23 i:24 j:25 a:26 b:27
+                     │                                                                                              │                        │    ├── variable: a:30
+                     │                                                                                              │                        │    ├── variable: b:31
+                     │                                                                                              │                        │    ├── variable: sum:32
+                     │                                                                                              │                        │    ├── variable: i:33
+                     │                                                                                              │                        │    └── variable: j:34
+                     │                                                                                              │                        ├── params: a:23 b:24 sum:25 i:26 j:27
                      │                                                                                              │                        └── body
                      │                                                                                              │                             └── project
                      │                                                                                              │                                  ├── columns: stmt_loop_3:29
@@ -1494,16 +1494,16 @@ project
                      │                                                                                              │                                  │    │    └── tuple
                      │                                                                                              │                                  │    └── projections
                      │                                                                                              │                                  │         └── plus [as=i:28]
-                     │                                                                                              │                                  │              ├── variable: i:24
+                     │                                                                                              │                                  │              ├── variable: i:26
                      │                                                                                              │                                  │              └── const: 1
                      │                                                                                              │                                  └── projections
                      │                                                                                              │                                       └── udf: stmt_loop_3 [as=stmt_loop_3:29]
                      │                                                                                              │                                            ├── args
-                     │                                                                                              │                                            │    ├── variable: sum:23
+                     │                                                                                              │                                            │    ├── variable: a:23
+                     │                                                                                              │                                            │    ├── variable: b:24
+                     │                                                                                              │                                            │    ├── variable: sum:25
                      │                                                                                              │                                            │    ├── variable: i:28
-                     │                                                                                              │                                            │    ├── variable: j:25
-                     │                                                                                              │                                            │    ├── variable: a:26
-                     │                                                                                              │                                            │    └── variable: b:27
+                     │                                                                                              │                                            │    └── variable: j:27
                      │                                                                                              │                                            └── recursive-call
                      │                                                                                              └── subquery
                      │                                                                                                   └── project
@@ -1513,12 +1513,12 @@ project
                      │                                                                                                        └── projections
                      │                                                                                                             └── udf: stmt_if_7 [as=stmt_if_7:44]
                      │                                                                                                                  ├── args
-                     │                                                                                                                  │    ├── variable: sum:30
-                     │                                                                                                                  │    ├── variable: i:31
-                     │                                                                                                                  │    ├── variable: j:32
-                     │                                                                                                                  │    ├── variable: a:33
-                     │                                                                                                                  │    └── variable: b:34
-                     │                                                                                                                  ├── params: sum:35 i:36 j:37 a:38 b:39
+                     │                                                                                                                  │    ├── variable: a:30
+                     │                                                                                                                  │    ├── variable: b:31
+                     │                                                                                                                  │    ├── variable: sum:32
+                     │                                                                                                                  │    ├── variable: i:33
+                     │                                                                                                                  │    └── variable: j:34
+                     │                                                                                                                  ├── params: a:35 b:36 sum:37 i:38 j:39
                      │                                                                                                                  └── body
                      │                                                                                                                       └── project
                      │                                                                                                                            ├── columns: stmt_loop_6:42
@@ -1530,20 +1530,20 @@ project
                      │                                                                                                                            │    │    │    └── tuple
                      │                                                                                                                            │    │    └── projections
                      │                                                                                                                            │    │         └── plus [as=sum:40]
-                     │                                                                                                                            │    │              ├── variable: sum:35
-                     │                                                                                                                            │    │              └── variable: j:37
+                     │                                                                                                                            │    │              ├── variable: sum:37
+                     │                                                                                                                            │    │              └── variable: j:39
                      │                                                                                                                            │    └── projections
                      │                                                                                                                            │         └── plus [as=j:41]
-                     │                                                                                                                            │              ├── variable: j:37
+                     │                                                                                                                            │              ├── variable: j:39
                      │                                                                                                                            │              └── const: 1
                      │                                                                                                                            └── projections
                      │                                                                                                                                 └── udf: stmt_loop_6 [as=stmt_loop_6:42]
                      │                                                                                                                                      ├── args
+                     │                                                                                                                                      │    ├── variable: a:35
+                     │                                                                                                                                      │    ├── variable: b:36
                      │                                                                                                                                      │    ├── variable: sum:40
-                     │                                                                                                                                      │    ├── variable: i:36
-                     │                                                                                                                                      │    ├── variable: j:41
-                     │                                                                                                                                      │    ├── variable: a:38
-                     │                                                                                                                                      │    └── variable: b:39
+                     │                                                                                                                                      │    ├── variable: i:38
+                     │                                                                                                                                      │    └── variable: j:41
                      │                                                                                                                                      └── recursive-call
                      └── const: 1
 
@@ -1592,10 +1592,10 @@ project
                      │    └── projections
                      │         └── udf: stmt_loop_3 [as=stmt_loop_3:20]
                      │              ├── args
+                     │              │    ├── variable: n:1
                      │              │    ├── variable: sum:2
-                     │              │    ├── variable: i:3
-                     │              │    └── variable: n:1
-                     │              ├── params: sum:8 i:9 n:10
+                     │              │    └── variable: i:3
+                     │              ├── params: n:8 sum:9 i:10
                      │              └── body
                      │                   └── project
                      │                        ├── columns: stmt_if_5:19
@@ -1606,8 +1606,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── lt
-                     │                                  │    │    ├── variable: i:9
-                     │                                  │    │    └── variable: n:10
+                     │                                  │    │    ├── variable: i:10
+                     │                                  │    │    └── variable: n:8
                      │                                  │    └── subquery
                      │                                  │         └── project
                      │                                  │              ├── columns: stmt_if_4:17
@@ -1619,19 +1619,19 @@ project
                      │                                  │              │    │    │    └── tuple
                      │                                  │              │    │    └── projections
                      │                                  │              │    │         └── plus [as=sum:15]
-                     │                                  │              │    │              ├── variable: sum:8
-                     │                                  │              │    │              └── variable: i:9
+                     │                                  │              │    │              ├── variable: sum:9
+                     │                                  │              │    │              └── variable: i:10
                      │                                  │              │    └── projections
                      │                                  │              │         └── plus [as=i:16]
-                     │                                  │              │              ├── variable: i:9
+                     │                                  │              │              ├── variable: i:10
                      │                                  │              │              └── const: 1
                      │                                  │              └── projections
                      │                                  │                   └── udf: stmt_if_4 [as=stmt_if_4:17]
                      │                                  │                        ├── args
+                     │                                  │                        │    ├── variable: n:8
                      │                                  │                        │    ├── variable: sum:15
-                     │                                  │                        │    ├── variable: i:16
-                     │                                  │                        │    └── variable: n:10
-                     │                                  │                        ├── params: sum:11 i:12 n:13
+                     │                                  │                        │    └── variable: i:16
+                     │                                  │                        ├── params: n:11 sum:12 i:13
                      │                                  │                        └── body
                      │                                  │                             └── project
                      │                                  │                                  ├── columns: stmt_loop_3:14
@@ -1640,9 +1640,9 @@ project
                      │                                  │                                  └── projections
                      │                                  │                                       └── udf: stmt_loop_3 [as=stmt_loop_3:14]
                      │                                  │                                            ├── args
-                     │                                  │                                            │    ├── variable: sum:11
-                     │                                  │                                            │    ├── variable: i:12
-                     │                                  │                                            │    └── variable: n:13
+                     │                                  │                                            │    ├── variable: n:11
+                     │                                  │                                            │    ├── variable: sum:12
+                     │                                  │                                            │    └── variable: i:13
                      │                                  │                                            └── recursive-call
                      │                                  └── subquery
                      │                                       └── project
@@ -1652,17 +1652,17 @@ project
                      │                                            └── projections
                      │                                                 └── udf: loop_exit_1 [as=loop_exit_1:18]
                      │                                                      ├── args
-                     │                                                      │    ├── variable: sum:8
-                     │                                                      │    ├── variable: i:9
-                     │                                                      │    └── variable: n:10
-                     │                                                      ├── params: sum:4 i:5 n:6
+                     │                                                      │    ├── variable: n:8
+                     │                                                      │    ├── variable: sum:9
+                     │                                                      │    └── variable: i:10
+                     │                                                      ├── params: n:4 sum:5 i:6
                      │                                                      └── body
                      │                                                           └── project
                      │                                                                ├── columns: stmt_return_2:7
                      │                                                                ├── values
                      │                                                                │    └── tuple
                      │                                                                └── projections
-                     │                                                                     └── variable: sum:4 [as=stmt_return_2:7]
+                     │                                                                     └── variable: sum:5 [as=stmt_return_2:7]
                      └── const: 1
 
 exec-ddl
@@ -3379,16 +3379,16 @@ project
                      │              │              └── projections
                      │              │                   └── udf: stmt_if_1 [as=stmt_if_1:8]
                      │              │                        ├── args
-                     │              │                        │    ├── variable: i:7
-                     │              │                        │    └── variable: n:1
-                     │              │                        ├── params: i:3 n:4
+                     │              │                        │    ├── variable: n:1
+                     │              │                        │    └── variable: i:7
+                     │              │                        ├── params: n:3 i:4
                      │              │                        └── body
                      │              │                             └── project
                      │              │                                  ├── columns: stmt_return_2:5
                      │              │                                  ├── values
                      │              │                                  │    └── tuple
                      │              │                                  └── projections
-                     │              │                                       └── variable: i:3 [as=stmt_return_2:5]
+                     │              │                                       └── variable: i:4 [as=stmt_return_2:5]
                      │              ├── when
                      │              │    ├── eq
                      │              │    │    ├── variable: n:1
@@ -3412,16 +3412,16 @@ project
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:11]
                      │                                  ├── args
-                     │                                  │    ├── variable: i:2
-                     │                                  │    └── variable: n:1
-                     │                                  ├── params: i:3 n:4
+                     │                                  │    ├── variable: n:1
+                     │                                  │    └── variable: i:2
+                     │                                  ├── params: n:3 i:4
                      │                                  └── body
                      │                                       └── project
                      │                                            ├── columns: stmt_return_2:5
                      │                                            ├── values
                      │                                            │    └── tuple
                      │                                            └── projections
-                     │                                                 └── variable: i:3 [as=stmt_return_2:5]
+                     │                                                 └── variable: i:4 [as=stmt_return_2:5]
                      └── const: 1
 
 # Testing EXCEPTION blocks.
@@ -3794,16 +3794,16 @@ project
                      │    └── projections
                      │         └── udf: exception_block_3 [as=exception_block_3:9]
                      │              ├── args
-                     │              │    ├── variable: i:2
-                     │              │    └── variable: n:1
-                     │              ├── params: i:6 n:7
+                     │              │    ├── variable: n:1
+                     │              │    └── variable: i:2
+                     │              ├── params: n:6 i:7
                      │              ├── body
                      │              │    └── project
                      │              │         ├── columns: stmt_return_4:8
                      │              │         ├── values
                      │              │         │    └── tuple
                      │              │         └── projections
-                     │              │              └── variable: i:6 [as=stmt_return_4:8]
+                     │              │              └── variable: i:7 [as=stmt_return_4:8]
                      │              └── exception-handler
                      │                   └── SQLSTATE '22012'
                      │                        └── project
@@ -3861,11 +3861,11 @@ project
                      │    └── projections
                      │         └── udf: exception_block_3 [as=exception_block_3:33]
                      │              ├── args
-                     │              │    ├── variable: x:4
                      │              │    ├── variable: i:1
                      │              │    ├── variable: j:2
-                     │              │    └── variable: k:3
-                     │              ├── params: x:10 i:11 j:12 k:13
+                     │              │    ├── variable: k:3
+                     │              │    └── variable: x:4
+                     │              ├── params: i:10 j:11 k:12 x:13
                      │              ├── body
                      │              │    └── project
                      │              │         ├── columns: assign_exception_block_4:32
@@ -3878,15 +3878,15 @@ project
                      │              │         │         └── projections
                      │              │         │              └── floor-div [as=x:14]
                      │              │         │                   ├── const: 1
-                     │              │         │                   └── variable: i:11
+                     │              │         │                   └── variable: i:10
                      │              │         └── projections
                      │              │              └── udf: assign_exception_block_4 [as=assign_exception_block_4:32]
                      │              │                   ├── args
-                     │              │                   │    ├── variable: x:14
-                     │              │                   │    ├── variable: i:11
-                     │              │                   │    ├── variable: j:12
-                     │              │                   │    └── variable: k:13
-                     │              │                   ├── params: x:15 i:16 j:17 k:18
+                     │              │                   │    ├── variable: i:10
+                     │              │                   │    ├── variable: j:11
+                     │              │                   │    ├── variable: k:12
+                     │              │                   │    └── variable: x:14
+                     │              │                   ├── params: i:15 j:16 k:17 x:18
                      │              │                   └── body
                      │              │                        └── project
                      │              │                             ├── columns: assign_exception_block_5:31
@@ -3899,15 +3899,15 @@ project
                      │              │                             │         └── projections
                      │              │                             │              └── floor-div [as=x:19]
                      │              │                             │                   ├── const: 2
-                     │              │                             │                   └── variable: j:17
+                     │              │                             │                   └── variable: j:16
                      │              │                             └── projections
                      │              │                                  └── udf: assign_exception_block_5 [as=assign_exception_block_5:31]
                      │              │                                       ├── args
-                     │              │                                       │    ├── variable: x:19
-                     │              │                                       │    ├── variable: i:16
-                     │              │                                       │    ├── variable: j:17
-                     │              │                                       │    └── variable: k:18
-                     │              │                                       ├── params: x:20 i:21 j:22 k:23
+                     │              │                                       │    ├── variable: i:15
+                     │              │                                       │    ├── variable: j:16
+                     │              │                                       │    ├── variable: k:17
+                     │              │                                       │    └── variable: x:19
+                     │              │                                       ├── params: i:20 j:21 k:22 x:23
                      │              │                                       └── body
                      │              │                                            └── project
                      │              │                                                 ├── columns: assign_exception_block_6:30
@@ -3920,22 +3920,22 @@ project
                      │              │                                                 │         └── projections
                      │              │                                                 │              └── floor-div [as=x:24]
                      │              │                                                 │                   ├── const: 3
-                     │              │                                                 │                   └── variable: k:23
+                     │              │                                                 │                   └── variable: k:22
                      │              │                                                 └── projections
                      │              │                                                      └── udf: assign_exception_block_6 [as=assign_exception_block_6:30]
                      │              │                                                           ├── args
-                     │              │                                                           │    ├── variable: x:24
-                     │              │                                                           │    ├── variable: i:21
-                     │              │                                                           │    ├── variable: j:22
-                     │              │                                                           │    └── variable: k:23
-                     │              │                                                           ├── params: x:25 i:26 j:27 k:28
+                     │              │                                                           │    ├── variable: i:20
+                     │              │                                                           │    ├── variable: j:21
+                     │              │                                                           │    ├── variable: k:22
+                     │              │                                                           │    └── variable: x:24
+                     │              │                                                           ├── params: i:25 j:26 k:27 x:28
                      │              │                                                           └── body
                      │              │                                                                └── project
                      │              │                                                                     ├── columns: stmt_return_7:29
                      │              │                                                                     ├── values
                      │              │                                                                     │    └── tuple
                      │              │                                                                     └── projections
-                     │              │                                                                          └── variable: x:25 [as=stmt_return_7:29]
+                     │              │                                                                          └── variable: x:28 [as=stmt_return_7:29]
                      │              └── exception-handler
                      │                   └── SQLSTATE '22012'
                      │                        └── project
@@ -3943,7 +3943,7 @@ project
                      │                             ├── values
                      │                             │    └── tuple
                      │                             └── projections
-                     │                                  └── variable: x:5 [as=stmt_return_2:9]
+                     │                                  └── variable: x:8 [as=stmt_return_2:9]
                      └── const: 1
 
 exec-ddl
@@ -3995,9 +3995,9 @@ project
                      │    └── projections
                      │         └── udf: exception_block_3 [as=exception_block_3:30]
                      │              ├── args
-                     │              │    ├── variable: x:2
-                     │              │    └── variable: i:1
-                     │              ├── params: x:6 i:7
+                     │              │    ├── variable: i:1
+                     │              │    └── variable: x:2
+                     │              ├── params: i:6 x:7
                      │              ├── body
                      │              │    └── project
                      │              │         ├── columns: stmt_if_12:29
@@ -4008,7 +4008,7 @@ project
                      │              │                   ├── true
                      │              │                   ├── when
                      │              │                   │    ├── eq
-                     │              │                   │    │    ├── variable: i:7
+                     │              │                   │    │    ├── variable: i:6
                      │              │                   │    │    └── const: 0
                      │              │                   │    └── subquery
                      │              │                   │         └── project
@@ -4024,9 +4024,9 @@ project
                      │              │                   │              └── projections
                      │              │                   │                   └── udf: assign_exception_block_6 [as=assign_exception_block_6:19]
                      │              │                   │                        ├── args
-                     │              │                   │                        │    ├── variable: x:11
-                     │              │                   │                        │    └── variable: i:7
-                     │              │                   │                        ├── params: x:12 i:13
+                     │              │                   │                        │    ├── variable: i:6
+                     │              │                   │                        │    └── variable: x:11
+                     │              │                   │                        ├── params: i:12 x:13
                      │              │                   │                        └── body
                      │              │                   │                             └── project
                      │              │                   │                                  ├── columns: "_stmt_raise_7":18
@@ -4035,9 +4035,9 @@ project
                      │              │                   │                                  └── projections
                      │              │                   │                                       └── udf: _stmt_raise_7 [as="_stmt_raise_7":18]
                      │              │                   │                                            ├── args
-                     │              │                   │                                            │    ├── variable: x:12
-                     │              │                   │                                            │    └── variable: i:13
-                     │              │                   │                                            ├── params: x:14 i:15
+                     │              │                   │                                            │    ├── variable: i:12
+                     │              │                   │                                            │    └── variable: x:13
+                     │              │                   │                                            ├── params: i:14 x:15
                      │              │                   │                                            └── body
                      │              │                   │                                                 ├── project
                      │              │                   │                                                 │    ├── columns: stmt_raise_8:16
@@ -4057,9 +4057,9 @@ project
                      │              │                   │                                                      └── projections
                      │              │                   │                                                           └── udf: stmt_if_4 [as=stmt_if_4:17]
                      │              │                   │                                                                ├── args
-                     │              │                   │                                                                │    ├── variable: x:14
-                     │              │                   │                                                                │    └── variable: i:15
-                     │              │                   │                                                                ├── params: x:8 i:9
+                     │              │                   │                                                                │    ├── variable: i:14
+                     │              │                   │                                                                │    └── variable: x:15
+                     │              │                   │                                                                ├── params: i:8 x:9
                      │              │                   │                                                                └── body
                      │              │                   │                                                                     └── project
                      │              │                   │                                                                          ├── columns: stmt_return_5:10!null
@@ -4081,9 +4081,9 @@ project
                      │              │                             └── projections
                      │              │                                  └── udf: assign_exception_block_9 [as=assign_exception_block_9:28]
                      │              │                                       ├── args
-                     │              │                                       │    ├── variable: x:20
-                     │              │                                       │    └── variable: i:7
-                     │              │                                       ├── params: x:21 i:22
+                     │              │                                       │    ├── variable: i:6
+                     │              │                                       │    └── variable: x:20
+                     │              │                                       ├── params: i:21 x:22
                      │              │                                       └── body
                      │              │                                            └── project
                      │              │                                                 ├── columns: "_stmt_raise_10":27
@@ -4092,9 +4092,9 @@ project
                      │              │                                                 └── projections
                      │              │                                                      └── udf: _stmt_raise_10 [as="_stmt_raise_10":27]
                      │              │                                                           ├── args
-                     │              │                                                           │    ├── variable: x:21
-                     │              │                                                           │    └── variable: i:22
-                     │              │                                                           ├── params: x:23 i:24
+                     │              │                                                           │    ├── variable: i:21
+                     │              │                                                           │    └── variable: x:22
+                     │              │                                                           ├── params: i:23 x:24
                      │              │                                                           └── body
                      │              │                                                                ├── project
                      │              │                                                                │    ├── columns: stmt_raise_11:25
@@ -4114,9 +4114,9 @@ project
                      │              │                                                                     └── projections
                      │              │                                                                          └── udf: stmt_if_4 [as=stmt_if_4:26]
                      │              │                                                                               ├── args
-                     │              │                                                                               │    ├── variable: x:23
-                     │              │                                                                               │    └── variable: i:24
-                     │              │                                                                               ├── params: x:8 i:9
+                     │              │                                                                               │    ├── variable: i:23
+                     │              │                                                                               │    └── variable: x:24
+                     │              │                                                                               ├── params: i:8 x:9
                      │              │                                                                               └── body
                      │              │                                                                                    └── project
                      │              │                                                                                         ├── columns: stmt_return_5:10!null
@@ -4131,7 +4131,7 @@ project
                      │                             ├── values
                      │                             │    └── tuple
                      │                             └── projections
-                     │                                  └── variable: x:3 [as=stmt_return_2:5]
+                     │                                  └── variable: x:4 [as=stmt_return_2:5]
                      └── const: 1
 
 exec-ddl
@@ -4186,11 +4186,11 @@ project
                      │    └── projections
                      │         └── udf: exception_block_3 [as=exception_block_3:44]
                      │              ├── args
-                     │              │    ├── variable: x:3
-                     │              │    ├── variable: i:4
                      │              │    ├── variable: n:1
-                     │              │    └── variable: a:2
-                     │              ├── params: x:10 i:11 n:12 a:13
+                     │              │    ├── variable: a:2
+                     │              │    ├── variable: x:3
+                     │              │    └── variable: i:4
+                     │              ├── params: n:10 a:11 x:12 i:13
                      │              ├── body
                      │              │    └── project
                      │              │         ├── columns: stmt_loop_6:43
@@ -4199,11 +4199,11 @@ project
                      │              │         └── projections
                      │              │              └── udf: stmt_loop_6 [as=stmt_loop_6:43]
                      │              │                   ├── args
-                     │              │                   │    ├── variable: x:10
-                     │              │                   │    ├── variable: i:11
-                     │              │                   │    ├── variable: n:12
-                     │              │                   │    └── variable: a:13
-                     │              │                   ├── params: x:19 i:20 n:21 a:22
+                     │              │                   │    ├── variable: n:10
+                     │              │                   │    ├── variable: a:11
+                     │              │                   │    ├── variable: x:12
+                     │              │                   │    └── variable: i:13
+                     │              │                   ├── params: n:19 a:20 x:21 i:22
                      │              │                   └── body
                      │              │                        └── project
                      │              │                             ├── columns: stmt_if_10:42
@@ -4214,8 +4214,8 @@ project
                      │              │                                       ├── true
                      │              │                                       ├── when
                      │              │                                       │    ├── ge
-                     │              │                                       │    │    ├── variable: i:20
-                     │              │                                       │    │    └── variable: n:21
+                     │              │                                       │    │    ├── variable: i:22
+                     │              │                                       │    │    └── variable: n:19
                      │              │                                       │    └── subquery
                      │              │                                       │         └── project
                      │              │                                       │              ├── columns: loop_exit_4:40
@@ -4224,11 +4224,11 @@ project
                      │              │                                       │              └── projections
                      │              │                                       │                   └── udf: loop_exit_4 [as=loop_exit_4:40]
                      │              │                                       │                        ├── args
-                     │              │                                       │                        │    ├── variable: x:19
-                     │              │                                       │                        │    ├── variable: i:20
-                     │              │                                       │                        │    ├── variable: n:21
-                     │              │                                       │                        │    └── variable: a:22
-                     │              │                                       │                        ├── params: x:14 i:15 n:16 a:17
+                     │              │                                       │                        │    ├── variable: n:19
+                     │              │                                       │                        │    ├── variable: a:20
+                     │              │                                       │                        │    ├── variable: x:21
+                     │              │                                       │                        │    └── variable: i:22
+                     │              │                                       │                        ├── params: n:14 a:15 x:16 i:17
                      │              │                                       │                        └── body
                      │              │                                       │                             └── project
                      │              │                                       │                                  ├── columns: stmt_return_5:18!null
@@ -4244,11 +4244,11 @@ project
                      │              │                                                 └── projections
                      │              │                                                      └── udf: stmt_if_7 [as=stmt_if_7:41]
                      │              │                                                           ├── args
-                     │              │                                                           │    ├── variable: x:19
-                     │              │                                                           │    ├── variable: i:20
-                     │              │                                                           │    ├── variable: n:21
-                     │              │                                                           │    └── variable: a:22
-                     │              │                                                           ├── params: x:23 i:24 n:25 a:26
+                     │              │                                                           │    ├── variable: n:19
+                     │              │                                                           │    ├── variable: a:20
+                     │              │                                                           │    ├── variable: x:21
+                     │              │                                                           │    └── variable: i:22
+                     │              │                                                           ├── params: n:23 a:24 x:25 i:26
                      │              │                                                           └── body
                      │              │                                                                └── project
                      │              │                                                                     ├── columns: assign_exception_block_8:39
@@ -4262,16 +4262,16 @@ project
                      │              │                                                                     │              └── floor-div [as=x:27]
                      │              │                                                                     │                   ├── const: 1
                      │              │                                                                     │                   └── minus
-                     │              │                                                                     │                        ├── variable: i:24
-                     │              │                                                                     │                        └── variable: a:26
+                     │              │                                                                     │                        ├── variable: i:26
+                     │              │                                                                     │                        └── variable: a:24
                      │              │                                                                     └── projections
                      │              │                                                                          └── udf: assign_exception_block_8 [as=assign_exception_block_8:39]
                      │              │                                                                               ├── args
+                     │              │                                                                               │    ├── variable: n:23
+                     │              │                                                                               │    ├── variable: a:24
                      │              │                                                                               │    ├── variable: x:27
-                     │              │                                                                               │    ├── variable: i:24
-                     │              │                                                                               │    ├── variable: n:25
-                     │              │                                                                               │    └── variable: a:26
-                     │              │                                                                               ├── params: x:28 i:29 n:30 a:31
+                     │              │                                                                               │    └── variable: i:26
+                     │              │                                                                               ├── params: n:28 a:29 x:30 i:31
                      │              │                                                                               └── body
                      │              │                                                                                    └── project
                      │              │                                                                                         ├── columns: assign_exception_block_9:38
@@ -4283,16 +4283,16 @@ project
                      │              │                                                                                         │         │    └── tuple
                      │              │                                                                                         │         └── projections
                      │              │                                                                                         │              └── plus [as=i:32]
-                     │              │                                                                                         │                   ├── variable: i:29
+                     │              │                                                                                         │                   ├── variable: i:31
                      │              │                                                                                         │                   └── const: 1
                      │              │                                                                                         └── projections
                      │              │                                                                                              └── udf: assign_exception_block_9 [as=assign_exception_block_9:38]
                      │              │                                                                                                   ├── args
-                     │              │                                                                                                   │    ├── variable: x:28
-                     │              │                                                                                                   │    ├── variable: i:32
-                     │              │                                                                                                   │    ├── variable: n:30
-                     │              │                                                                                                   │    └── variable: a:31
-                     │              │                                                                                                   ├── params: x:33 i:34 n:35 a:36
+                     │              │                                                                                                   │    ├── variable: n:28
+                     │              │                                                                                                   │    ├── variable: a:29
+                     │              │                                                                                                   │    ├── variable: x:30
+                     │              │                                                                                                   │    └── variable: i:32
+                     │              │                                                                                                   ├── params: n:33 a:34 x:35 i:36
                      │              │                                                                                                   └── body
                      │              │                                                                                                        └── project
                      │              │                                                                                                             ├── columns: stmt_loop_6:37
@@ -4301,10 +4301,10 @@ project
                      │              │                                                                                                             └── projections
                      │              │                                                                                                                  └── udf: stmt_loop_6 [as=stmt_loop_6:37]
                      │              │                                                                                                                       ├── args
-                     │              │                                                                                                                       │    ├── variable: x:33
-                     │              │                                                                                                                       │    ├── variable: i:34
-                     │              │                                                                                                                       │    ├── variable: n:35
-                     │              │                                                                                                                       │    └── variable: a:36
+                     │              │                                                                                                                       │    ├── variable: n:33
+                     │              │                                                                                                                       │    ├── variable: a:34
+                     │              │                                                                                                                       │    ├── variable: x:35
+                     │              │                                                                                                                       │    └── variable: i:36
                      │              │                                                                                                                       └── recursive-call
                      │              └── exception-handler
                      │                   └── SQLSTATE '22012'
@@ -4313,7 +4313,7 @@ project
                      │                             ├── values
                      │                             │    └── tuple
                      │                             └── projections
-                     │                                  └── variable: i:6 [as=stmt_return_2:9]
+                     │                                  └── variable: i:8 [as=stmt_return_2:9]
                      └── const: 1
 
 # Testing SQL statement execution.

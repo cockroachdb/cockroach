@@ -13,6 +13,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/jobs",
+        "//pkg/jobs/joberror",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
