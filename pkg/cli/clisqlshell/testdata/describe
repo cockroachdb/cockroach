@@ -532,8 +532,8 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html"
 pg_catalog,pg_attribute_attrelid_idx,index,node,NULL,permanent,prefix,
 pg_catalog,pg_auth_members,table,node,NULL,permanent,prefix,"role membership
 https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html"
-pg_catalog,pg_authid,table,node,NULL,permanent,prefix,"authorization identifiers - differs from postgres as we do not display passwords, 
-and thus do not require admin privileges for access. 
+pg_catalog,pg_authid,table,node,NULL,permanent,prefix,"authorization identifiers - differs from postgres as we do not display passwords,
+and thus do not require admin privileges for access.
 https://www.postgresql.org/docs/9.5/catalog-pg-authid.html"
 pg_catalog,pg_available_extension_versions,table,node,NULL,permanent,prefix,pg_available_extension_versions was created for compatibility and is currently unimplemented
 pg_catalog,pg_available_extensions,table,node,NULL,permanent,prefix,"available extensions
@@ -637,7 +637,7 @@ pg_catalog,pg_settings,table,node,NULL,permanent,prefix,"session variables (inco
 https://www.postgresql.org/docs/9.5/catalog-pg-settings.html"
 pg_catalog,pg_shadow,table,node,NULL,permanent,prefix,"pg_shadow lists properties for roles that are marked as rolcanlogin in pg_authid
 https://www.postgresql.org/docs/13/view-pg-shadow.html"
-pg_catalog,pg_shdepend,table,node,NULL,permanent,prefix,"Shared Dependencies (Roles depending on objects). 
+pg_catalog,pg_shdepend,table,node,NULL,permanent,prefix,"Shared Dependencies (Roles depending on objects).
 https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html"
 pg_catalog,pg_shdescription,view,node,NULL,permanent,NULL,"shared object comments
 https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html"
@@ -2098,7 +2098,7 @@ List of functions:
          END AS "Type"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE 
+    WHERE TRUE
       AND n.nspname !~ '^pg_'
       AND n.nspname <> 'information_schema'
       AND n.nspname <> 'crdb_internal'
@@ -2123,7 +2123,7 @@ List of functions:
          END AS "Type"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND p.proname LIKE 'abs' ORDER BY 1, 2, 4
+    WHERE TRUE AND p.proname LIKE 'abs' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type
 pg_catalog,abs,float8,float8,func
 pg_catalog,abs,int8,int8,func
@@ -2156,7 +2156,7 @@ List of functions:
        pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND p.proname LIKE 'abs' ORDER BY 1, 2, 4
+    WHERE TRUE AND p.proname LIKE 'abs' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
 pg_catalog,abs,float8,float8,func,i,NULL,invoker,,abs,Calculates the absolute value of `val`.
 pg_catalog,abs,int8,int8,func,i,NULL,invoker,,abs,Calculates the absolute value of `val`.
@@ -2179,7 +2179,7 @@ List of functions:
          END AS "Type"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND (FALSE OR p.proiswindow) AND p.proname LIKE '%rank%' ORDER BY 1, 2, 4
+    WHERE TRUE AND (FALSE OR p.proiswindow) AND p.proname LIKE '%rank%' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type
 pg_catalog,dense_rank,int8,,window
 pg_catalog,percent_rank,float8,,window
@@ -2212,7 +2212,7 @@ List of functions:
        pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND (FALSE OR p.proiswindow) AND p.proname LIKE '%rank%' ORDER BY 1, 2, 4
+    WHERE TRUE AND (FALSE OR p.proiswindow) AND p.proname LIKE '%rank%' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
 pg_catalog,dense_rank,int8,,window,i,NULL,invoker,,dense_rank,Calculates the rank of the current row without gaps; this function counts peer groups.
 pg_catalog,percent_rank,float8,,window,i,NULL,invoker,,percent_rank,Calculates the relative rank of the current row: (rank - 1) / (total rows - 1).
@@ -2235,7 +2235,7 @@ List of functions:
          END AS "Type"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND (FALSE OR p.proisagg) AND p.proname LIKE 'xor%' ORDER BY 1, 2, 4
+    WHERE TRUE AND (FALSE OR p.proisagg) AND p.proname LIKE 'xor%' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type
 pg_catalog,xor_agg,bytea,bytea,agg
 pg_catalog,xor_agg,int8,int8,agg
@@ -2267,7 +2267,7 @@ List of functions:
        pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND (FALSE OR p.proisagg) AND p.proname LIKE 'xor%' ORDER BY 1, 2, 4
+    WHERE TRUE AND (FALSE OR p.proisagg) AND p.proname LIKE 'xor%' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
 pg_catalog,xor_agg,bytea,bytea,agg,i,NULL,invoker,,xor_agg,Calculates the bitwise XOR of the selected values.
 pg_catalog,xor_agg,int8,int8,agg,i,NULL,invoker,,xor_agg,Calculates the bitwise XOR of the selected values.
@@ -2289,7 +2289,7 @@ List of functions:
          END AS "Type"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND NOT p.proisagg AND (p.prokind IS NULL OR p.prokind <> 'p') AND NOT p.proiswindow
+    WHERE TRUE AND NOT p.proisagg AND (p.prokind IS NULL OR p.prokind <> 'p') AND NOT p.proiswindow
       AND n.nspname !~ '^pg_'
       AND n.nspname <> 'information_schema'
       AND n.nspname <> 'crdb_internal'
@@ -2324,7 +2324,7 @@ List of functions:
        pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND NOT p.proisagg AND (p.prokind IS NULL OR p.prokind <> 'p') AND NOT p.proiswindow
+    WHERE TRUE AND NOT p.proisagg AND (p.prokind IS NULL OR p.prokind <> 'p') AND NOT p.proiswindow
       AND n.nspname !~ '^pg_'
       AND n.nspname <> 'information_schema'
       AND n.nspname <> 'crdb_internal'
@@ -2349,7 +2349,7 @@ List of functions:
          END AS "Type"
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE  AND (FALSE OR p.proisagg OR p.proiswindow) AND p.proname LIKE '%tile%' ORDER BY 1, 2, 4
+    WHERE TRUE AND (FALSE OR p.proisagg OR p.proiswindow) AND p.proname LIKE '%tile%' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type
 pg_catalog,ntile,int8,int8,window
 pg_catalog,percentile_cont,_interval,_float8,agg

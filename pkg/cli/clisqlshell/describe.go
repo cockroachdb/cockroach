@@ -296,7 +296,7 @@ func describeFunctions(
 	buf.WriteString(`
      FROM pg_catalog.pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-    WHERE TRUE `)
+    WHERE TRUE`)
 	// TODO(sql-sessions): Filtering based on argument types like
 	// in PostgreSQL.
 	// TODO(sql-sessions): join on pg_language when verbose; pg_language

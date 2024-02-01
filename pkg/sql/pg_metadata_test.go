@@ -182,9 +182,7 @@ const updateExpectedDiffsJSON = `Diff EXPECTED. To fix this, please run: cd pkg/
 var virtualTableTemplate = fmt.Sprintf(`var %s = virtualSchemaTable{
 	comment: "%s was created for compatibility and is currently unimplemented",
 	%s:  vtable.%s,
-	%s: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
+	%s: emptyVirtualTable,
 	unimplemented: true,
 }
 
@@ -1125,16 +1123,22 @@ func (v *pgCatalogCodeVisitor) Visit(node ast.Node) ast.Visitor {
 		case virtualTablePopulateField:
 			// FuncLit is a function definition, we can look for addRow if this is
 			// a function definition.
-			val, ok := n.Value.(*ast.FuncLit)
-			if !ok {
+			switch val := n.Value.(type) {
+			case *ast.FuncLit:
+				v.bodyStmts = len(val.Body.List)
+				next, index := v.findAddRowFuncName(val.Type)
+				if index <= -1 {
+					v.pgCode.t.Fatal("populate function does not have a parameter with 'func(...tree.Datum) error' signature")
+				}
+				return next
+			case *ast.Ident:
+				if val.Name == "emptyVirtualTable" {
+					v.pgCode.fixableTables[v.schema] = none
+				}
+				return v
+			default:
 				return v
 			}
-			v.bodyStmts = len(val.Body.List)
-			next, index := v.findAddRowFuncName(val.Type)
-			if index <= -1 {
-				v.pgCode.t.Fatal("populate function does not have a parameter with 'func(...tree.Datum) error' signature")
-			}
-			return next
 		}
 	case *ast.ReturnStmt:
 		result, ok := n.Results[0].(*ast.Ident)
