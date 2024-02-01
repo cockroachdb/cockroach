@@ -669,8 +669,8 @@ node_id  component  field   value
 query ITTTTT colnames
 SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-upgrading-to-\d+\.\d+-step-\d+)?$', '<server_version>') as server_version FROM crdb_internal.gossip_nodes WHERE node_id = 1
 ----
-node_id  network  address           attrs  locality            server_version
-1        tcp      127.0.0.1:<port>  []     region=test,dc=dc1  <server_version>
+node_id  network  address           attrs  locality                       server_version
+1        tcp      127.0.0.1:<port>  []     region=test,zone=zone1,dc=dc1  <server_version>
 
 query ITTBBT colnames
 SELECT node_id, regexp_replace(epoch::string, '^\d+$', '<epoch>') as epoch, regexp_replace(expiration, '^(\d+\.)?\d+,\d+$', '<timestamp>') as expiration, draining, decommissioning, membership FROM crdb_internal.gossip_liveness WHERE node_id = 1
@@ -682,8 +682,8 @@ query ITTTTTT colnames
 SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-upgrading-to-\d+\.\d+-step-\d+)?$', '<server_version>') as server_version, regexp_replace(go_version, '^go.+$', '<go_version>') as go_version
 FROM crdb_internal.kv_node_status WHERE node_id = 1
 ----
-node_id  network  address           attrs  locality            server_version    go_version
-1        tcp      127.0.0.1:<port>  []     region=test,dc=dc1  <server_version>  <go_version>
+node_id  network  address           attrs  locality                       server_version    go_version
+1        tcp      127.0.0.1:<port>  []     region=test,zone=zone1,dc=dc1  <server_version>  <go_version>
 
 query IITI colnames
 SELECT node_id, store_id, attrs, used
@@ -1221,7 +1221,7 @@ true
 query TT
 SELECT * FROM crdb_internal.regions ORDER BY 1
 ----
-test  {}
+test  {zone1}
 
 # Regression test for incorrectly handling tree.DOidWrappers by some builtins
 # (#69684).
