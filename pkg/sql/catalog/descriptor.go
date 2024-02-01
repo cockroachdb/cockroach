@@ -784,7 +784,8 @@ type TypeDescriptor interface {
 	IsCompatibleWith(other TypeDescriptor) error
 	// AsTypesT returns a reference to a types.T corresponding to this type
 	// descriptor. No guarantees are provided as to whether this object is a
-	// singleton or not, or whether it's hydrated or not.
+	// singleton or not, or whether it's hydrated or not. The returned type can be
+	// hydrated by the caller.
 	AsTypesT() *types.T
 	// GetKind returns the kind of this type.
 	GetKind() descpb.TypeDescriptor_Kind
