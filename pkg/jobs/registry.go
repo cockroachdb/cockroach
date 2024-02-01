@@ -1348,6 +1348,38 @@ func (r *Registry) cleanupOldJobsPage(
 	return !morePages, maxID, nil
 }
 
+// DeleteTerminalJobByID deletes the given job ID if it is in a
+// terminal state. If it is is in a non-terminal state, an error is
+// returned.
+func (r *Registry) DeleteTerminalJobByID(ctx context.Context, id jobspb.JobID) error {
+	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		row, err := txn.QueryRow(ctx, "get-job-status", txn.KV(),
+			"SELECT status FROM system.jobs WHERE id = $1", id)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			return nil
+		}
+		status := Status(*row[0].(*tree.DString))
+		switch status {
+		case StatusSucceeded, StatusCanceled, StatusFailed:
+			_, err := txn.Exec(
+				ctx, "delete-job", txn.KV(), "DELETE FROM system.jobs WHERE id = $1", id,
+			)
+			if err != nil {
+				return err
+			}
+			_, err = txn.Exec(
+				ctx, "delete-job-info", txn.KV(), "DELETE FROM system.job_info WHERE job_id = $1", id,
+			)
+			return err
+		default:
+			return errors.Newf("job %d has non-terminal status: %q", id, status)
+		}
+	})
+}
+
 // getJobFn attempts to get a resumer from the given job id. If the job id
 // does not have a resumer then it returns an error message suitable for users.
 func (r *Registry) getJobFn(

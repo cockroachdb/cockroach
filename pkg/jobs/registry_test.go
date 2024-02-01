@@ -1189,6 +1189,111 @@ func TestJitterCalculation(t *testing.T) {
 	}
 }
 
+func TestDeleteTerminalJobByID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer ResetConstructors()
+
+	errCh := make(chan error)
+	RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+		return jobstest.FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case err := <-errCh:
+					return err
+				}
+			},
+			FailOrCancel: func(ctx context.Context) error {
+				return nil
+			},
+		}
+	}, UsesTenantCostControl)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	var (
+		r   = s.ApplicationLayer().JobRegistry().(*Registry)
+		idb = s.ApplicationLayer().InternalDB().(isql.DB)
+	)
+
+	createStartableJob := func() *StartableJob {
+		jobID := r.MakeJobID()
+		var j *StartableJob
+		err := idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return r.CreateStartableJobWithTxn(ctx, &j, jobID, txn, Record{
+				JobID:       jobID,
+				Description: "testing",
+				Username:    username.RootUserName(),
+				Details:     jobspb.ImportDetails{},
+				Progress:    jobspb.ImportProgress{},
+			})
+		})
+		require.NoError(t, err)
+		return j
+	}
+
+	assertValidDeletion := func(id jobspb.JobID) {
+		var count int
+		require.NoError(t, sqlDB.QueryRow("SELECT count(*) FROM system.jobs WHERE id = $1", id).Scan(&count))
+		require.Equal(t, 0, count, "expected no job rows")
+		sqlDB.QueryRow("SELECT count(*) FROM system.job_info WHERE job_id = $1", id)
+		require.Equal(t, 0, count, "expected no job_info rows")
+	}
+
+	t.Run("running job is not deleted", func(t *testing.T) {
+		j := createStartableJob()
+		require.NoError(t, j.Start(ctx))
+		require.Error(t, r.DeleteTerminalJobByID(ctx, j.ID()))
+		errCh <- nil
+		require.NoError(t, j.AwaitCompletion(ctx))
+	})
+	t.Run("paused job is not deleted", func(t *testing.T) {
+		j := createStartableJob()
+		require.NoError(t, j.Start(ctx))
+		require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return r.PauseRequested(ctx, txn, j.ID(), "test paused")
+		}))
+		require.Error(t, j.AwaitCompletion(ctx))
+		_ = r.WaitForJobs(ctx, []jobspb.JobID{j.ID()})
+		require.Error(t, r.DeleteTerminalJobByID(ctx, j.ID()))
+	})
+	t.Run("successful job is deleted", func(t *testing.T) {
+		j := createStartableJob()
+		require.NoError(t, j.Start(ctx))
+		errCh <- nil
+		require.NoError(t, j.AwaitCompletion(ctx))
+		_ = r.WaitForJobs(ctx, []jobspb.JobID{j.ID()})
+		require.NoError(t, r.DeleteTerminalJobByID(ctx, j.ID()))
+		assertValidDeletion(j.ID())
+	})
+	t.Run("failed job is deleted", func(t *testing.T) {
+		j := createStartableJob()
+		require.NoError(t, j.Start(ctx))
+		errCh <- errors.New("test error")
+		require.Error(t, j.AwaitCompletion(ctx))
+		_ = r.WaitForJobs(ctx, []jobspb.JobID{j.ID()})
+		require.NoError(t, r.DeleteTerminalJobByID(ctx, j.ID()))
+		assertValidDeletion(j.ID())
+	})
+	t.Run("canceled job is deleted", func(t *testing.T) {
+		j := createStartableJob()
+		require.NoError(t, j.Start(ctx))
+		require.NoError(t, j.Cancel(ctx))
+		require.Error(t, j.AwaitCompletion(ctx))
+		_ = r.WaitForJobs(ctx, []jobspb.JobID{j.ID()})
+		require.NoError(t, r.DeleteTerminalJobByID(ctx, j.ID()))
+		assertValidDeletion(j.ID())
+	})
+}
+
 // TestRunWithoutLoop tests that Run calls will trigger the execution of a
 // job even when the adoption loop is set to infinitely slow and that the
 // observation of the completion of the job using the notification channel
