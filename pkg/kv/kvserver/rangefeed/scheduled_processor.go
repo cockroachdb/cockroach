@@ -12,7 +12,6 @@ package rangefeed
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -228,6 +227,7 @@ func (p *ScheduledProcessor) processStop() {
 }
 
 func (p *ScheduledProcessor) cleanup() {
+	ctx := p.AmbientContext.AnnotateCtx(context.Background())
 	// Cleanup is normally called when all registrations are disconnected and
 	// unregistered or were not created yet (processor start failure).
 	// However, there's a case where processor is stopped by replica action while
@@ -237,14 +237,14 @@ func (p *ScheduledProcessor) cleanup() {
 	// To avoid leaking any registry resources and metrics, processor performs
 	// explicit registry termination in that case.
 	pErr := kvpb.NewError(&kvpb.NodeUnavailableError{})
-	p.reg.DisconnectAllOnShutdown(pErr)
+	p.reg.DisconnectAllOnShutdown(ctx, pErr)
 
 	// Unregister callback from scheduler
 	p.scheduler.Unregister()
 
 	p.taskCancel()
 	close(p.stoppedC)
-	p.MemBudget.Close(context.Background())
+	p.MemBudget.Close(ctx)
 }
 
 // Stop shuts down the processor and closes all registrations. Safe to call on
@@ -271,13 +271,13 @@ func (p *ScheduledProcessor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb
 		return
 	}
 	p.enqueueRequest(func(ctx context.Context) {
-		p.reg.DisconnectWithErr(span, pErr)
+		p.reg.DisconnectWithErr(ctx, span, pErr)
 	})
 }
 
 func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
 	p.enqueueRequest(func(ctx context.Context) {
-		p.reg.DisconnectWithErr(all, pErr)
+		p.reg.DisconnectWithErr(ctx, all, pErr)
 		// First set stopping flag to ensure that once all registrations are removed
 		// processor should stop.
 		p.stopping = true
@@ -331,7 +331,7 @@ func (p *ScheduledProcessor) Register(
 		}
 
 		// Add the new registration to the registry.
-		p.reg.Register(&r)
+		p.reg.Register(ctx, &r)
 
 		// Prep response with filter that includes the new registration.
 		f := p.reg.NewFilter()
@@ -645,7 +645,7 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 		p.consumeSSTable(ctx, e.sst.data, e.sst.span, e.sst.ts, e.alloc)
 	case e.sync != nil:
 		if e.sync.testRegCatchupSpan != nil {
-			if err := p.reg.waitForCaughtUp(*e.sync.testRegCatchupSpan); err != nil {
+			if err := p.reg.waitForCaughtUp(ctx, *e.sync.testRegCatchupSpan); err != nil {
 				log.Errorf(
 					ctx,
 					"error waiting for registries to catch up during test, results might be impacted: %s",
@@ -655,7 +655,7 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 		}
 		close(e.sync.c)
 	default:
-		panic(fmt.Sprintf("missing event variant: %+v", e))
+		log.Fatalf(ctx, "missing event variant: %+v", e)
 	}
 }
 
@@ -693,7 +693,7 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 			// No updates to publish.
 
 		default:
-			panic(errors.AssertionFailedf("unknown logical op %T", t))
+			log.Fatalf(ctx, "unknown logical op %T", t)
 		}
 
 		// Determine whether the operation caused the resolved timestamp to
@@ -715,13 +715,13 @@ func (p *ScheduledProcessor) consumeSSTable(
 }
 
 func (p *ScheduledProcessor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
-	if p.rts.ForwardClosedTS(newClosedTS) {
+	if p.rts.ForwardClosedTS(ctx, newClosedTS) {
 		p.publishCheckpoint(ctx)
 	}
 }
 
 func (p *ScheduledProcessor) initResolvedTS(ctx context.Context) {
-	if p.rts.Init() {
+	if p.rts.Init(ctx) {
 		p.publishCheckpoint(ctx)
 	}
 }
@@ -781,10 +781,10 @@ func (p *ScheduledProcessor) publishSSTable(
 	alloc *SharedBudgetAllocation,
 ) {
 	if sstSpan.Equal(roachpb.Span{}) {
-		panic(errors.AssertionFailedf("received SSTable without span"))
+		log.Fatalf(ctx, "received SSTable without span")
 	}
 	if sstWTS.IsEmpty() {
-		panic(errors.AssertionFailedf("received SSTable without write timestamp"))
+		log.Fatalf(ctx, "received SSTable without write timestamp")
 	}
 	p.reg.PublishToOverlapping(ctx, sstSpan, &kvpb.RangeFeedEvent{
 		SST: &kvpb.RangeFeedSSTable{

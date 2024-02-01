@@ -183,7 +183,7 @@ func TestResolvedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	rts := makeResolvedTimestamp(cluster.MakeTestingClusterSettings())
-	rts.Init()
+	rts.Init(ctx)
 
 	// Test empty resolved timestamp.
 	require.Equal(t, hlc.Timestamp{}, rts.Get())
@@ -201,19 +201,9 @@ func TestResolvedTimestamp(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{}, rts.Get())
 
 	// Set a closed timestamp. Resolved timestamp advances.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 5})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
-
-	// Write intent at earlier timestamp. Assertion failure.
-	require.Panics(t, func() {
-		rts.ConsumeLogicalOp(ctx, writeIntentOp(uuid.MakeV4(), hlc.Timestamp{WallTime: 3}))
-	})
-
-	// Write value at earlier timestamp. Assertion failure.
-	require.Panics(t, func() {
-		rts.ConsumeLogicalOp(ctx, writeValueOp(hlc.Timestamp{WallTime: 4}))
-	})
 
 	// Write value at later timestamp. No effect on resolved timestamp.
 	fwd = rts.ConsumeLogicalOp(ctx, writeValueOp(hlc.Timestamp{WallTime: 6}))
@@ -222,7 +212,7 @@ func TestResolvedTimestamp(t *testing.T) {
 
 	// Forward closed timestamp. Resolved timestamp advances to the timestamp of
 	// the earliest intent.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 15})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 15})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 9}, rts.Get())
 
@@ -237,7 +227,7 @@ func TestResolvedTimestamp(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 15}, rts.Get())
 
 	// Forward closed timestamp to same time as earliest intent.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 18})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 18})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 17}, rts.Get())
 
@@ -253,7 +243,7 @@ func TestResolvedTimestamp(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 18}, rts.Get())
 
 	// Forward closed timestamp. Resolved timestamp moves to earliest intent.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 30})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 30})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 19}, rts.Get())
 
@@ -304,7 +294,7 @@ func TestResolvedTimestamp(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 30}, rts.Get())
 
 	// Forward closed timestamp. Resolved timestamp moves to earliest intent.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 40})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 40})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 34}, rts.Get())
 
@@ -330,7 +320,7 @@ func TestResolvedTimestamp(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 40}, rts.Get())
 
 	// Forward closed timestamp. Resolved timestamp moves to earliest intent.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 50})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 50})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 45}, rts.Get())
 
@@ -356,7 +346,7 @@ func TestResolvedTimestampNoClosedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	rts := makeResolvedTimestamp(cluster.MakeTestingClusterSettings())
-	rts.Init()
+	rts.Init(ctx)
 
 	// Add a value. No closed timestamp so no resolved timestamp.
 	fwd := rts.ConsumeLogicalOp(ctx, writeValueOp(hlc.Timestamp{WallTime: 1}))
@@ -393,31 +383,32 @@ func TestResolvedTimestampNoClosedTimestamp(t *testing.T) {
 
 func TestResolvedTimestampNoIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	rts := makeResolvedTimestamp(cluster.MakeTestingClusterSettings())
-	rts.Init()
+	rts.Init(ctx)
 
 	// Set a closed timestamp. Resolved timestamp advances.
-	fwd := rts.ForwardClosedTS(hlc.Timestamp{WallTime: 1})
+	fwd := rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 1})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 1}, rts.Get())
 
 	// Forward closed timestamp. Resolved timestamp advances.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 3})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 3})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 3}, rts.Get())
 
 	// Smaller closed timestamp. Resolved timestamp does not advance.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 2})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 2})
 	require.False(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 3}, rts.Get())
 
 	// Equal closed timestamp. Resolved timestamp does not advance.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 3})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 3})
 	require.False(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 3}, rts.Get())
 
 	// Forward closed timestamp. Resolved timestamp advances.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 4})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 4})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 4}, rts.Get())
 }
@@ -431,12 +422,12 @@ func TestResolvedTimestampInit(t *testing.T) {
 		rts := makeResolvedTimestamp(cluster.MakeTestingClusterSettings())
 
 		// Set a closed timestamp. Not initialized so no resolved timestamp.
-		fwd := rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
+		fwd := rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 5})
 		require.False(t, fwd)
 		require.Equal(t, hlc.Timestamp{}, rts.Get())
 
 		// Init. Resolved timestamp moves to closed timestamp.
-		fwd = rts.Init()
+		fwd = rts.Init(ctx)
 		require.True(t, fwd)
 		require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
 	})
@@ -450,7 +441,7 @@ func TestResolvedTimestampInit(t *testing.T) {
 		require.Equal(t, hlc.Timestamp{}, rts.Get())
 
 		// Init. Resolved timestamp undefined.
-		fwd = rts.Init()
+		fwd = rts.Init(ctx)
 		require.False(t, fwd)
 		require.Equal(t, hlc.Timestamp{}, rts.Get())
 	})
@@ -464,12 +455,12 @@ func TestResolvedTimestampInit(t *testing.T) {
 		require.Equal(t, hlc.Timestamp{}, rts.Get())
 
 		// Set a closed timestamp. Not initialized so no resolved timestamp.
-		fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
+		fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 5})
 		require.False(t, fwd)
 		require.Equal(t, hlc.Timestamp{}, rts.Get())
 
 		// Init. Resolved timestamp moves below first unresolved intent.
-		fwd = rts.Init()
+		fwd = rts.Init(ctx)
 		require.True(t, fwd)
 		require.Equal(t, hlc.Timestamp{WallTime: 2}, rts.Get())
 	})
@@ -496,12 +487,12 @@ func TestResolvedTimestampInit(t *testing.T) {
 		require.Equal(t, hlc.Timestamp{}, rts.Get())
 
 		// Set a closed timestamp. Not initialized so no resolved timestamp.
-		fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
+		fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 5})
 		require.False(t, fwd)
 		require.Equal(t, hlc.Timestamp{}, rts.Get())
 
 		// Init. Resolved timestamp moves to closed timestamp.
-		fwd = rts.Init()
+		fwd = rts.Init(ctx)
 		require.True(t, fwd)
 		require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
 	})
@@ -516,7 +507,7 @@ func TestResolvedTimestampInit(t *testing.T) {
 
 		// Init. Negative txn ref count causes panic. Init should not have
 		// been called because an intent must not have been accounted for.
-		require.Panics(t, func() { rts.Init() })
+		require.Panics(t, func() { rts.Init(ctx) })
 	})
 }
 
@@ -524,10 +515,10 @@ func TestResolvedTimestampTxnAborted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	rts := makeResolvedTimestamp(cluster.MakeTestingClusterSettings())
-	rts.Init()
+	rts.Init(ctx)
 
 	// Set a closed timestamp. Resolved timestamp advances.
-	fwd := rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
+	fwd := rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 5})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
 
@@ -538,7 +529,7 @@ func TestResolvedTimestampTxnAborted(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
 
 	// Set a new closed timestamp. Resolved timestamp advances.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 15})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 15})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 9}, rts.Get())
 
@@ -565,7 +556,7 @@ func TestResolvedTimestampTxnAborted(t *testing.T) {
 
 	// Set a new closed timestamp. Resolved timestamp advances, but only up to
 	// the timestamp of txn1's intent, which we fail remember is uncommittable.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 25})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 25})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 19}, rts.Get())
 
@@ -581,10 +572,10 @@ func TestClosedTimestampLogicalPart(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	rts := makeResolvedTimestamp(cluster.MakeTestingClusterSettings())
-	rts.Init()
+	rts.Init(ctx)
 
 	// Set a new closed timestamp. Resolved timestamp advances.
-	fwd := rts.ForwardClosedTS(hlc.Timestamp{WallTime: 10, Logical: 2})
+	fwd := rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 10, Logical: 2})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 10, Logical: 0}, rts.Get())
 
@@ -597,7 +588,7 @@ func TestClosedTimestampLogicalPart(t *testing.T) {
 	// Set a new closed timestamp. Resolved timestamp doesn't advance, since it
 	// could only theoretically advance up to 10.4, and it doesn't do logical
 	// parts.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 11, Logical: 6})
+	fwd = rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 11, Logical: 6})
 	require.False(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 10, Logical: 0}, rts.Get())
 
