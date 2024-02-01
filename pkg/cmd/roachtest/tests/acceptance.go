@@ -49,12 +49,6 @@ func registerAcceptance(r registry.Registry) {
 			{name: "cluster-init", fn: runClusterInit},
 			{name: "rapid-restart", fn: runRapidRestart},
 		},
-		registry.OwnerMultiTenant: {
-			{
-				name: "multitenant",
-				fn:   runAcceptanceMultitenant,
-			},
-		},
 		registry.OwnerObservability: {
 			{name: "status-server", fn: runStatusServer},
 		},
@@ -75,6 +69,10 @@ func registerAcceptance(r registry.Registry) {
 				name:     "c2c",
 				fn:       runAcceptanceClusterReplication,
 				numNodes: 3,
+			},
+			{
+				name: "multitenant",
+				fn:   runAcceptanceMultitenant,
 			},
 		},
 		registry.OwnerSQLFoundations: {

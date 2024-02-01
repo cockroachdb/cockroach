@@ -45,7 +45,7 @@ func registerSecure(r registry.Registry) {
 	}
 	r.Add(registry.TestSpec{
 		Name:             "smoketest/secure/multitenant",
-		Owner:            registry.OwnerMultiTenant,
+		Owner:            registry.OwnerDisasterRecovery,
 		Cluster:          r.MakeClusterSpec(2),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
