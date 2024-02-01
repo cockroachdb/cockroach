@@ -12,6 +12,7 @@ package metricspoller
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -92,6 +93,8 @@ type schedulePTSStat struct {
 	m *jobs.ExecutorPTSMetrics
 }
 
+const cancelJobTimeout = 10 * time.Second
+
 // manageProtectedTimestamps manages protected timestamp records owned by
 // various jobs or schedules.. This function mostly concerns itself with
 // collecting statistics related to job PTS records. It also detects PTS records
@@ -100,37 +103,51 @@ type schedulePTSStat struct {
 func manageProtectedTimestamps(ctx context.Context, execCtx sql.JobExecContext) error {
 	var ptsStats map[jobspb.Type]*ptsStat
 	var schedulePtsStats map[string]*schedulePTSStat
-
+	var ptsState ptpb.State
 	execCfg := execCtx.ExecCfg()
+
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		ptsStats = make(map[jobspb.Type]*ptsStat)
 		schedulePtsStats = make(map[string]*schedulePTSStat)
+		var err error
+		ptsState, err = execCfg.ProtectedTimestampProvider.WithTxn(txn).GetState(ctx)
+		return err
+	}); err != nil {
+		return err
+	}
 
-		ptsState, err := execCfg.ProtectedTimestampProvider.WithTxn(txn).GetState(ctx)
+	// Iterate over each job with a fresh transaction, to avoid reading and
+	// updating too many jobs in a single transaction.
+	for _, scannedRec := range ptsState.Records {
+		id, err := jobsprotectedts.DecodeID(scannedRec.Meta)
 		if err != nil {
 			return err
 		}
-		for _, rec := range ptsState.Records {
-			id, err := jobsprotectedts.DecodeID(rec.Meta)
-			if err != nil {
-				return err
-			}
-			switch rec.MetaType {
-			case jobsprotectedts.GetMetaType(jobsprotectedts.Jobs):
-				if err := processJobPTSRecord(ctx, execCfg, id, rec, ptsStats, txn); err != nil {
+		if err := timeutil.RunWithTimeout(ctx, "cancel-job-old-pts", cancelJobTimeout, func(ctx context.Context) error {
+			return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				// Grab the pts within the transaction to ensure we have an up to date view of it.
+				rec, err := execCfg.ProtectedTimestampProvider.WithTxn(txn).GetRecord(ctx, scannedRec.ID.GetUUID())
+				if err != nil {
 					return err
 				}
-			case jobsprotectedts.GetMetaType(jobsprotectedts.Schedules):
-				if err := processSchedulePTSRecord(ctx, id, rec, schedulePtsStats, txn); err != nil {
-					return err
+				switch rec.MetaType {
+				case jobsprotectedts.GetMetaType(jobsprotectedts.Jobs):
+					if err := processJobPTSRecord(ctx, execCfg, id, rec, ptsStats, txn); err != nil {
+						return err
+					}
+				case jobsprotectedts.GetMetaType(jobsprotectedts.Schedules):
+					if err := processSchedulePTSRecord(ctx, id, rec, schedulePtsStats, txn); err != nil {
+						return err
+					}
 				}
-			default:
-				continue
-			}
+				return nil
+			})
+		}); err != nil {
+			// If we fail to process one record, we should still try to process
+			// subsequent records, therefore, just log the error instead of returning
+			// early.
+			log.Infof(ctx, "could not process pts record id %d: %s", scannedRec.ID, err.Error())
 		}
-		return nil
-	}); err != nil {
-		return err
 	}
 
 	updateJobPTSMetrics(execCfg.JobRegistry.MetricsStruct(), execCfg.Clock, ptsStats)
@@ -143,7 +160,7 @@ func processJobPTSRecord(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	jobID int64,
-	rec ptpb.Record,
+	rec *ptpb.Record,
 	ptsStats map[jobspb.Type]*ptsStat,
 	txn isql.Txn,
 ) error {
@@ -214,7 +231,7 @@ func updateJobPTSMetrics(
 func processSchedulePTSRecord(
 	ctx context.Context,
 	scheduleID int64,
-	rec ptpb.Record,
+	rec *ptpb.Record,
 	ptsStats map[string]*schedulePTSStat,
 	txn isql.Txn,
 ) error {
