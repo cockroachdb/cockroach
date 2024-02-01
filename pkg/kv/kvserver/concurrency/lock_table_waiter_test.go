@@ -38,7 +38,7 @@ import (
 )
 
 type mockIntentResolver struct {
-	pushTxn        func(context.Context, *enginepb.TxnMeta, kvpb.Header, kvpb.PushTxnType) (*roachpb.Transaction, *Error)
+	pushTxn        func(context.Context, *enginepb.TxnMeta, kvpb.Header, kvpb.PushTxnType) (*roachpb.Transaction, bool, *Error)
 	resolveIntent  func(context.Context, roachpb.LockUpdate) *Error
 	resolveIntents func(context.Context, []roachpb.LockUpdate) *Error
 }
@@ -46,7 +46,7 @@ type mockIntentResolver struct {
 // mockIntentResolver implements the IntentResolver interface.
 func (m *mockIntentResolver) PushTransaction(
 	ctx context.Context, txn *enginepb.TxnMeta, h kvpb.Header, pushType kvpb.PushTxnType,
-) (*roachpb.Transaction, *Error) {
+) (*roachpb.Transaction, bool, *Error) {
 	return m.pushTxn(ctx, txn, h, pushType)
 }
 
@@ -351,7 +351,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 				pusheeArg *enginepb.TxnMeta,
 				h kvpb.Header,
 				pushType kvpb.PushTxnType,
-			) (*roachpb.Transaction, *Error) {
+			) (*roachpb.Transaction, bool, *Error) {
 				require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
 				require.Equal(t, req.Txn, h.Txn)
 				require.Equal(t, expPushTS, h.Timestamp)
@@ -384,7 +384,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 					g.state = waitingState{kind: doneWaiting}
 					g.notify()
 				}
-				return resp, nil
+				return resp, false, nil
 			}
 
 			err := w.WaitOn(ctx, req, g)
@@ -536,7 +536,7 @@ func testErrorWaitPush(
 				pusheeArg *enginepb.TxnMeta,
 				h kvpb.Header,
 				pushType kvpb.PushTxnType,
-			) (*roachpb.Transaction, *Error) {
+			) (*roachpb.Transaction, bool, *Error) {
 				require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
 				require.Equal(t, req.Txn, h.Txn)
 				require.Equal(t, expPushTS, h.Timestamp)
@@ -544,7 +544,7 @@ func testErrorWaitPush(
 
 				resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.PENDING}
 				if pusheeActive {
-					return nil, kvpb.NewError(&kvpb.TransactionPushError{
+					return nil, false, kvpb.NewError(&kvpb.TransactionPushError{
 						PusheeTxn: *resp,
 					})
 				}
@@ -565,7 +565,7 @@ func testErrorWaitPush(
 					return nil
 				}
 				resp.Status = roachpb.ABORTED
-				return resp, nil
+				return resp, false, nil
 			}
 
 			err := w.WaitOn(ctx, req, g)
@@ -708,7 +708,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					pusheeArg *enginepb.TxnMeta,
 					h kvpb.Header,
 					pushType kvpb.PushTxnType,
-				) (*roachpb.Transaction, *Error) {
+				) (*roachpb.Transaction, bool, *Error) {
 					require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
 					require.Equal(t, req.Txn, h.Txn)
 
@@ -721,7 +721,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 
 						// Wait for the context to hit its timeout.
 						<-ctx.Done()
-						return nil, kvpb.NewError(ctx.Err())
+						return nil, false, kvpb.NewError(ctx.Err())
 					}
 
 					require.Equal(t, kvpb.PUSH_TOUCH, pushType)
@@ -731,7 +731,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 
 					resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.PENDING}
 					if pusheeActive {
-						return nil, kvpb.NewError(&kvpb.TransactionPushError{
+						return nil, false, kvpb.NewError(&kvpb.TransactionPushError{
 							PusheeTxn: *resp,
 						})
 					}
@@ -752,7 +752,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 						return nil
 					}
 					resp.Status = roachpb.ABORTED
-					return resp, nil
+					return resp, false, nil
 				}
 
 				err := w.WaitOn(ctx, req, g)
@@ -808,8 +808,8 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 		g.notify()
 		ir.pushTxn = func(
 			_ context.Context, _ *enginepb.TxnMeta, _ kvpb.Header, _ kvpb.PushTxnType,
-		) (*roachpb.Transaction, *Error) {
-			return nil, err1
+		) (*roachpb.Transaction, bool, *Error) {
+			return nil, false, err1
 		}
 		err := w.WaitOn(ctx, req, g)
 		require.Equal(t, err1, err)
@@ -819,8 +819,8 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 			g.notify()
 			ir.pushTxn = func(
 				_ context.Context, _ *enginepb.TxnMeta, _ kvpb.Header, _ kvpb.PushTxnType,
-			) (*roachpb.Transaction, *Error) {
-				return &pusheeTxn, nil
+			) (*roachpb.Transaction, bool, *Error) {
+				return &pusheeTxn, false, nil
 			}
 			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
 				return err2
