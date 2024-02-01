@@ -98,10 +98,6 @@ cockroachdb/obs-inf-prs:
     cockroachdb/http-api-prs: other
   triage_column_id: 14196277
   label: T-observability-inf
-cockroachdb/multi-tenant:
-  # Multi-tenant team uses GH projects v2, which doesn't have a REST API, so no triage column ID
-  # see .github/workflows/add-issues-to-project.yml
-  label: T-multitenant
 cockroachdb/jobs:
   aliases:
     cockroachdb/jobs-prs: other
