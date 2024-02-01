@@ -30,10 +30,9 @@ import (
 func (p *planner) ResolveOIDFromString(
 	ctx context.Context, resultType *types.T, toResolve *tree.DString,
 ) (_ *tree.DOid, errSafeToIgnore bool, _ error) {
-	ie := p.ExecCfg().InternalDB.NewInternalExecutor(p.SessionData())
 	return resolveOID(
 		ctx, p.Txn(),
-		ie,
+		p.InternalSQLTxn(),
 		resultType, toResolve,
 	)
 }
@@ -42,10 +41,9 @@ func (p *planner) ResolveOIDFromString(
 func (p *planner) ResolveOIDFromOID(
 	ctx context.Context, resultType *types.T, toResolve *tree.DOid,
 ) (_ *tree.DOid, errSafeToIgnore bool, _ error) {
-	ie := p.ExecCfg().InternalDB.NewInternalExecutor(p.SessionData())
 	return resolveOID(
 		ctx, p.Txn(),
-		ie,
+		p.InternalSQLTxn(),
 		resultType, toResolve,
 	)
 }
