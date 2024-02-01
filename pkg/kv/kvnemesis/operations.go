@@ -33,6 +33,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *DeleteRangeOperation:
 		return &o.Result
+	case *BarrierOperation:
+		return &o.Result
 	case *SplitOperation:
 		return &o.Result
 	case *MergeOperation:
@@ -111,6 +113,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *DeleteOperation:
 		o.format(w, fctx)
 	case *DeleteRangeOperation:
+		o.format(w, fctx)
+	case *BarrierOperation:
 		o.format(w, fctx)
 	case *SplitOperation:
 		o.format(w, fctx)
@@ -257,6 +261,16 @@ func (op DeleteRangeOperation) format(w *strings.Builder, fctx formatCtx) {
 		}
 		fmt.Fprintf(w, ` // ([%s], nil)`, keysW.String())
 	}
+}
+
+func (op BarrierOperation) format(w *strings.Builder, fctx formatCtx) {
+	if op.WithLeaseAppliedIndex {
+		fmt.Fprintf(w, `%s.BarrierWithLAI(ctx, %s, %s)`,
+			fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey))
+	} else {
+		fmt.Fprintf(w, `%s.Barrier(ctx, %s, %s)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey))
+	}
+	op.Result.format(w)
 }
 
 func (op SplitOperation) format(w *strings.Builder, fctx formatCtx) {

@@ -432,6 +432,19 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], scan)
 			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], deleteOps...)
 		}
+	case *BarrierOperation:
+		if op.Barrier.WithLeaseAppliedIndex &&
+			resultIsError(t.Result, &roachpb.RangeKeyMismatchError{}) {
+			// Barriers requesting LAIs can't span ranges. The generator will
+			// optimistically try to fit the barrier inside one of the current ranges,
+			// but this may race with a split, so we ignore the error in this case and
+			// try again later.
+		} else {
+			// Fail or retry on other errors, depending on type.
+			v.failIfError(op, t.Result)
+		}
+		// We don't yet actually check the barrier guarantees here, i.e. that all
+		// concurrent writes are applied by the time it completes. Maybe later.
 	case *ScanOperation:
 		v.failIfError(op, t.Result)
 		if txnID == nil {

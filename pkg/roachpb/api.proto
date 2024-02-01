@@ -2128,11 +2128,28 @@ message ScanInterleavedIntentsResponse {
   repeated Intent intents = 3 [(gogoproto.nullable) = false];
 }
 
-// BarrierRequest is the request for a Barrier operation. This goes through Raft
-// and has the purpose of waiting until all conflicting in-flight operations on
-// this range have completed, without blocking any new operations.
+// BarrierRequest is the request for a Barrier operation. This guarantees that
+// all past and ongoing operations to a key span have completed and applied on
+// the leaseholder. It does this by waiting for all conflicting latches and then
+// submitting a noop write through Raft, waiting for it to apply. Later
+// operations are not affected -- in particular, it does not actually take out a
+// latch, so writers don't have to wait for it to complete and can write below
+// the barrier.
 message BarrierRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // WithLeaseAppliedIndex will return the LeaseAppliedIndex of the barrier
+  // command in the response, allowing the caller to wait for the barrier to
+  // apply on an arbitrary replica. It also returns the range descriptor, so the
+  // caller can detect any unexpected range changes.
+  //
+  // When enabled, the barrier request can no longer span multiple ranges, and
+  // will instead return RangeKeyMismatchError. The caller must be prepared to
+  // handle this.
+  //
+  // NB: This field was added in a patch release. Nodes prior to 24.1 are not
+  // guaranteed to support it, returning a zero LeaseAppliedIndex instead.
+  bool with_lease_applied_index = 2;
 }
 
 // BarrierResponse is the response for a Barrier operation.
@@ -2142,6 +2159,14 @@ message BarrierResponse {
   // Timestamp at which this Barrier was evaluated. Can be used to guarantee
   // future operations happen on the same or newer leaseholders.
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+
+  // LeaseAppliedIndex at which this Barrier was applied. Only returned when
+  // requested via WithLeaseAppliedIndex.
+  uint64 lease_applied_index = 3;
+
+  // RangeDesc at the time the barrier was applied. Only returned when requested
+  // via WithLeaseAppliedIndex.
+  RangeDescriptor range_desc = 4 [(gogoproto.nullable) = false];
 }
 
 // A RequestUnion contains exactly one of the requests.
