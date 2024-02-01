@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -249,10 +250,10 @@ type SharedBudgetAllocation struct {
 // Use increases usage count for the allocation. It should be called by each
 // new consumer that plans to retain allocation after returning to a caller
 // that passed this allocation.
-func (a *SharedBudgetAllocation) Use() {
+func (a *SharedBudgetAllocation) Use(ctx context.Context) {
 	if a != nil {
 		if atomic.AddInt32(&a.refCount, 1) == 1 {
-			panic("unexpected shared memory allocation usage increase after free")
+			log.Fatalf(ctx, "unexpected shared memory allocation usage increase after free")
 		}
 	}
 }
