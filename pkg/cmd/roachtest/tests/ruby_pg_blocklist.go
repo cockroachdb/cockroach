@@ -156,7 +156,6 @@ var rubyPGBlocklist = blocklist{
 	`running with sync_* methods PG::Connection multinationalization support handles clearing result in or after set_notice_receiver`:                                                                                           "unknown",
 	`running with sync_* methods PG::Connection multinationalization support receives properly encoded messages in the notice callbacks`:                                                                                        "unknown",
 	`running with sync_* methods PG::Connection multinationalization support receives properly encoded text from wait_for_notify`:                                                                                               "unknown",
-	`running with sync_* methods PG::Connection multinationalization support respect and convert character encoding of input strings should convert error string to #put_copy_end`:                                              "unknown",
 	`running with sync_* methods PG::Connection multinationalization support respect and convert character encoding of input strings should convert query string and parameters to #exec_params`:                                "unknown",
 	`running with sync_* methods PG::Connection multinationalization support respect and convert character encoding of input strings should convert query string and parameters to #send_query_params`:                          "unknown",
 	`running with sync_* methods PG::Connection multinationalization support respect and convert character encoding of input strings should convert strings and parameters to #prepare and #exec_prepared`:                      "unknown",
@@ -211,8 +210,10 @@ var rubyPGBlocklist = blocklist{
 }
 
 var rubyPGIgnorelist = blocklist{
-	`PG::Connection OS thread support Connection.new shouldn't block a second thread`:                             "flaky",
-	`running with sync_* methods PG::Connection consume_input should raise ConnectionBad for a closed connection`: "flaky",
-	`running with sync_* methods PG::Connection OS thread support Connection.new shouldn't block a second thread`: "flaky",
-	`running with sync_* methods PG::Connection handles server close while asynchronous connect`:                  "flaky",
+	`PG::Connection OS thread support Connection.new shouldn't block a second thread`:                                                                                              "flaky",
+	`PG::Connection multinationalization support respect and convert character encoding of input strings should convert error string to #put_copy_end`:                             "unknown",
+	`running with sync_* methods PG::Connection consume_input should raise ConnectionBad for a closed connection`:                                                                  "flaky",
+	`running with sync_* methods PG::Connection OS thread support Connection.new shouldn't block a second thread`:                                                                  "flaky",
+	`running with sync_* methods PG::Connection handles server close while asynchronous connect`:                                                                                   "flaky",
+	`running with sync_* methods PG::Connection multinationalization support respect and convert character encoding of input strings should convert error string to #put_copy_end`: "flaky",
 }
