@@ -2573,6 +2573,7 @@ set_zone_config:
   {
     $$.val = &tree.SetZoneConfig{
       ZoneConfigSettings: tree.ZoneConfigSettings {
+        Discard: true,
         YAMLConfig: tree.DNull,
       },
     }
