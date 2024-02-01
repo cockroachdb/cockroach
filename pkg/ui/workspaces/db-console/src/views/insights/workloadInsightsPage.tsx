@@ -79,7 +79,6 @@ const statementMapStateToProps = (
   timeScale: selectTimeScale(state),
   isLoading: selectStmtInsightsLoading(state),
   maxSizeApiReached: selectStmtInsightsMaxApiReached(state),
-  useObsService: false,
 });
 
 const TransactionDispatchProps = {

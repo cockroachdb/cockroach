@@ -375,7 +375,6 @@ var allConsoleKeys = []InternalKey{
 	"keyvisualizer.sample_interval",
 	"sql.index_recommendation.drop_unused_duration",
 	"sql.insights.anomaly_detection.latency_threshold",
-	"sql.insights.export.enabled",
 	"sql.insights.high_retry_count.threshold",
 	"sql.insights.latency_threshold",
 	"sql.stats.automatic_collection.enabled",

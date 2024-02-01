@@ -42,7 +42,6 @@ export interface StatementInsightDetailsStateProps {
   insightError: Error | null;
   timeScale?: TimeScale;
   hasAdminRole: boolean;
-  useObsService: boolean;
 }
 
 export interface StatementInsightDetailsDispatchProps {
@@ -76,7 +75,6 @@ export const StatementInsightDetails: React.FC<
   timeScale,
   hasAdminRole,
   refreshUserSQLRoles,
-  useObsService,
 }) => {
   const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({
     explainPlan: null,
@@ -89,7 +87,6 @@ export const StatementInsightDetails: React.FC<
       loaded: insightEventDetails != null,
       error: insightError,
     });
-  const [prevUseObsService, setPrevUseObsService] = useState(useObsService);
 
   const details = insightDetails?.details;
 
@@ -116,16 +113,14 @@ export const StatementInsightDetails: React.FC<
 
   useEffect(() => {
     refreshUserSQLRoles();
-    if (details != null && prevUseObsService === useObsService) {
+    if (details != null) {
       return;
     }
-    setPrevUseObsService(useObsService);
     const [start, end] = toDateRange(timeScale);
     getStmtInsightsApi({
       stmtExecutionID: executionID,
       start,
       end,
-      useObsService,
     })
       .then(res => {
         setInsightDetails({
@@ -136,14 +131,7 @@ export const StatementInsightDetails: React.FC<
       .catch(e => {
         setInsightDetails({ details: null, error: e, loaded: true });
       });
-  }, [
-    details,
-    executionID,
-    timeScale,
-    refreshUserSQLRoles,
-    useObsService,
-    prevUseObsService,
-  ]);
+  }, [details, executionID, timeScale, refreshUserSQLRoles]);
 
   return (
     <div>
