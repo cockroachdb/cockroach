@@ -21,6 +21,7 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/util/contextutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
