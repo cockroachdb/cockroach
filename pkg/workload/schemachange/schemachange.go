@@ -196,7 +196,7 @@ func (s *schemaChange) Ops(
 		return workload.QueryLoad{}, err
 	}
 	stdoutLog := makeAtomicLog(os.Stdout)
-	rng, seed := randutil.NewTestRand()
+	rng, seed := randutil.NewPseudoRand()
 	stdoutLog.printLn(fmt.Sprintf("using random seed: %d", seed))
 	ops := newDeck(rng, opWeights...)
 	// A separate deck is constructed of only schema changes supported
