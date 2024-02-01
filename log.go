@@ -16,7 +16,6 @@ package raft
 
 import (
 	"fmt"
-	"log"
 
 	pb "go.etcd.io/raft/v3/raftpb"
 )
@@ -72,9 +71,6 @@ func newLog(storage Storage, logger Logger) *raftLog {
 // newLogWithSize returns a log using the given storage and max
 // message size.
 func newLogWithSize(storage Storage, logger Logger, maxApplyingEntsSize entryEncodingSize) *raftLog {
-	if storage == nil {
-		log.Panic("storage must not be nil")
-	}
 	firstIndex, err := storage.FirstIndex()
 	if err != nil {
 		panic(err) // TODO(bdarnell)
