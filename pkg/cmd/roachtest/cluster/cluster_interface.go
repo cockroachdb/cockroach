@@ -75,6 +75,7 @@ type Cluster interface {
 	InternalIP(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 	ExternalAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 	ExternalIP(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
+	SQLPorts(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]int, error)
 
 	// SQL connection strings.
 
@@ -90,7 +91,7 @@ type Cluster interface {
 
 	InternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 	ExternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
-	AdminUIPorts(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]int, error)
+	AdminUIPorts(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]int, error)
 
 	// Running commands on nodes.
 
