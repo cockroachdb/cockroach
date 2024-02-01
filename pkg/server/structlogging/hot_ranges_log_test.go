@@ -13,6 +13,7 @@ package structlogging_test
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"regexp"
 	"testing"
 	"time"
@@ -21,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -31,8 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type hotRangesLogSpy struct {
@@ -78,10 +83,10 @@ func (spy *hotRangesLogSpy) Reset() {
 	spy.mu.logs = nil
 }
 
-// TestHotRangesStatsTenants tests that hot ranges stats are logged per node.
+// TestNodeHotRangesStats tests that hot ranges stats are logged per node.
 // The test will ensure each node contains 5 distinct range replicas for hot
 // ranges logging. Each node should thus log 5 distinct range ids.
-func TestHotRangesStats(t *testing.T) {
+func TestNodeLocalHotRangesStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ccl.TestingEnableEnterprise()
 	defer ccl.TestingDisableEnterprise()
@@ -95,6 +100,7 @@ func TestHotRangesStats(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					DisableReplicaRebalancing: true,
@@ -168,4 +174,73 @@ found range on node %d and node %d: %s %s %s %s %d`, i, l.LeaseholderNodeID, l.D
 		}
 
 	}
+}
+
+// TestHotRangesStats tests that hot ranges stats are logged for tenants.
+func TestHotRangesStats(t *testing.T) {
+	ctx := context.Background()
+	defer leaktest.AfterTest(t)()
+	ccl.TestingEnableEnterprise()
+	defer ccl.TestingDisableEnterprise()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	defer cleanup()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+		},
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableReplicaRebalancing: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	logcrash.DiagnosticsReportingEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	structlogging.TelemetryHotRangesStatsEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	structlogging.TelemetryHotRangesStatsInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Millisecond)
+	structlogging.TelemetryHotRangesStatsLoggingDelay.Override(ctx, &s.ClusterSettings().SV, 10*time.Millisecond)
+
+	tenantID := roachpb.MustMakeTenantID(2)
+	tt, err := s.StartTenant(ctx, base.TestTenantArgs{
+		TenantID: tenantID,
+		Settings: s.ClusterSettings(),
+	})
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		ss := tt.TenantStatusServer().(serverpb.TenantStatusServer)
+		resp, err := ss.HotRangesV2(ctx, &serverpb.HotRangesRequest{TenantID: tenantID.String()})
+		if err != nil {
+			return err
+		}
+		if len(resp.Ranges) == 0 {
+			return errors.New("waiting for hot ranges to be collected")
+		}
+		return nil
+	})
+
+	testutils.SucceedsWithin(t, func() error {
+		log.Flush()
+		entries, err := log.FetchEntriesFromFiles(
+			0,
+			math.MaxInt64,
+			10000,
+			regexp.MustCompile(`"EventType":"hot_ranges_stats"`),
+			log.WithMarkedSensitiveData,
+		)
+		if err != nil {
+			return err
+		}
+		if len(entries) == 0 {
+			return errors.New("waiting for logs")
+		}
+		return nil
+	}, 5*time.Second)
 }
