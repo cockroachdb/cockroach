@@ -1116,7 +1116,7 @@ func (b *Batch) queryResolvedTimestamp(s, e interface{}) {
 	b.initResult(1, 0, notRaw, nil)
 }
 
-func (b *Batch) barrier(s, e interface{}) {
+func (b *Batch) barrier(s, e interface{}, withLAI bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -1132,6 +1132,7 @@ func (b *Batch) barrier(s, e interface{}) {
 			Key:    begin,
 			EndKey: end,
 		},
+		WithLeaseAppliedIndex: withLAI,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
