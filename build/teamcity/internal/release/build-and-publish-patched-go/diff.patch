@@ -78,6 +78,110 @@ index ee66b43c85..4e0dcf3a73 100644
 +	p.addChild(&a)
 +	return true
 +}
+diff --git a/src/crypto/md5/md5.go b/src/crypto/md5/md5.go
+index ccee4ea3a9..e15bc6d6d6 100644
+--- a/src/crypto/md5/md5.go
++++ b/src/crypto/md5/md5.go
+@@ -27,6 +27,10 @@ const Size = 16
+ // The blocksize of MD5 in bytes.
+ const BlockSize = 64
+ 
++// The maximum number of bytes that can be passed to block.
++const maxAsmIters = 1024
++const maxAsmSize = BlockSize * maxAsmIters // 64KiB
++
+ const (
+ 	init0 = 0x67452301
+ 	init1 = 0xEFCDAB89
+@@ -130,6 +134,11 @@ func (d *digest) Write(p []byte) (nn int, err error) {
+ 	if len(p) >= BlockSize {
+ 		n := len(p) &^ (BlockSize - 1)
+ 		if haveAsm {
++			for n > maxAsmSize {
++				block(d, p[:maxAsmSize])
++				p = p[maxAsmSize:]
++				n -= maxAsmSize
++			}
+ 			block(d, p[:n])
+ 		} else {
+ 			blockGeneric(d, p[:n])
+diff --git a/src/crypto/md5/md5_test.go b/src/crypto/md5/md5_test.go
+index 851e7fb10d..e120be3718 100644
+--- a/src/crypto/md5/md5_test.go
++++ b/src/crypto/md5/md5_test.go
+@@ -120,10 +120,11 @@ func TestGoldenMarshal(t *testing.T) {
+ 
+ func TestLarge(t *testing.T) {
+ 	const N = 10000
++	const offsets = 4
+ 	ok := "2bb571599a4180e1d542f76904adc3df" // md5sum of "0123456789" * 1000
+-	block := make([]byte, 10004)
++	block := make([]byte, N+offsets)
+ 	c := New()
+-	for offset := 0; offset < 4; offset++ {
++	for offset := 0; offset < offsets; offset++ {
+ 		for i := 0; i < N; i++ {
+ 			block[offset+i] = '0' + byte(i%10)
+ 		}
+@@ -142,6 +143,31 @@ func TestLarge(t *testing.T) {
+ 	}
+ }
+ 
++func TestExtraLarge(t *testing.T) {
++	const N = 100000
++	const offsets = 4
++	ok := "13572e9e296cff52b79c52148313c3a5" // md5sum of "0123456789" * 10000
++	block := make([]byte, N+offsets)
++	c := New()
++	for offset := 0; offset < offsets; offset++ {
++		for i := 0; i < N; i++ {
++			block[offset+i] = '0' + byte(i%10)
++		}
++		for blockSize := 10; blockSize <= N; blockSize *= 10 {
++			blocks := N / blockSize
++			b := block[offset : offset+blockSize]
++			c.Reset()
++			for i := 0; i < blocks; i++ {
++				c.Write(b)
++			}
++			s := fmt.Sprintf("%x", c.Sum(nil))
++			if s != ok {
++				t.Fatalf("md5 TestExtraLarge offset=%d, blockSize=%d = %s want %s", offset, blockSize, s, ok)
++			}
++		}
++	}
++}
++
+ // Tests that blockGeneric (pure Go) and block (in assembly for amd64, 386, arm) match.
+ func TestBlockGeneric(t *testing.T) {
+ 	gen, asm := New().(*digest), New().(*digest)
+diff --git a/src/crypto/sha256/sha256.go b/src/crypto/sha256/sha256.go
+index 2deafbc9fc..567a3c81f9 100644
+--- a/src/crypto/sha256/sha256.go
++++ b/src/crypto/sha256/sha256.go
+@@ -28,6 +28,10 @@ const Size224 = 28
+ // The blocksize of SHA256 and SHA224 in bytes.
+ const BlockSize = 64
+ 
++// The maximum number of bytes that can be passed to block.
++const maxAsmIters = 1024
++const maxAsmSize = BlockSize * maxAsmIters // 64KiB
++
+ const (
+ 	chunk     = 64
+ 	init0     = 0x6A09E667
+@@ -191,6 +195,11 @@ func (d *digest) Write(p []byte) (nn int, err error) {
+ 	}
+ 	if len(p) >= chunk {
+ 		n := len(p) &^ (chunk - 1)
++		for n > maxAsmSize {
++			block(d, p[:maxAsmSize])
++			p = p[maxAsmSize:]
++			n -= maxAsmSize
++		}
+ 		block(d, p[:n])
+ 		p = p[n:]
+ 	}
 diff --git a/src/runtime/extern.go b/src/runtime/extern.go
 index 26dcf0bd52..01b84268db 100644
 --- a/src/runtime/extern.go
