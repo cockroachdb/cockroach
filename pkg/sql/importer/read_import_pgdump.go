@@ -784,6 +784,7 @@ func readPostgresStmt(
 				case *tree.FuncExpr:
 					// Look for function calls that mutate schema (this is actually a thing).
 					semaCtx := tree.MakeSemaContext()
+					semaCtx.Properties.Require("pg_dump function arguments", tree.RejectSubqueries)
 					if _, err := expr.TypeCheck(ctx, &semaCtx, nil /* desired */); err != nil {
 						// If the expression does not type check, it may be a case of using
 						// a column that does not exist yet in a setval call (as is the case
