@@ -951,3 +951,15 @@ query T
 SELECT j FROM json_subscript_test WHERE j['other_field'] = '2' ORDER BY id
 ----
 {"other_field": 2}
+
+# Regression test for not using value-encoding for JSON when fingerprinting a
+# tuple (#118380).
+query T rowsort
+WITH cte1 AS (SELECT * FROM (VALUES
+  (('1':::JSON, 1)),
+  (('2':::JSON, 2))
+) AS tab (col1))
+SELECT * FROM cte1 GROUP BY cte1.col1;
+----
+(1,1)
+(2,2)
