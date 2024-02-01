@@ -24,6 +24,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -1263,6 +1264,7 @@ func waitForGroupStability(project, groupName string, zones []string) error {
 func (p *Provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
 ) error {
+	providerOpts := vmProviderOpts.(*ProviderOpts)
 	project := p.GetProject()
 	var gcJob bool
 	for _, prj := range projectsWithGC {
@@ -1275,8 +1277,11 @@ func (p *Provider) Create(
 		l.Printf("WARNING: --lifetime functionality requires "+
 			"`roachprod gc --gce-project=%s` cronjob", project)
 	}
-
-	providerOpts := vmProviderOpts.(*ProviderOpts)
+	if providerOpts.Managed {
+		if err := checkSDKVersion("450.0.0" /* minVersion */, "required by managed instance groups"); err != nil {
+			return err
+		}
+	}
 
 	instanceArgs, cleanUpFn, err := p.computeInstanceArgs(l, opts, providerOpts)
 	if cleanUpFn != nil {
@@ -2089,4 +2094,28 @@ func getUbuntuImage(version vm.UbuntuVersion, arch string) (string, error) {
 func shouldEnableRSAForSSH(version vm.UbuntuVersion, arch string) bool {
 	// FIPS is not yet available on 22.04, it's still using Ubuntu 20.04.
 	return version.IsOverridden() || arch == string(vm.ArchFIPS)
+}
+
+// checkSDKVersion checks that the gcloud SDK version is at least minVersion.
+// If it is not, it returns an error with the given message.
+func checkSDKVersion(minVersion, message string) error {
+	var jsonVersion struct {
+		GoogleCloudSDK string `json:"Google Cloud SDK"`
+	}
+	err := runJSONCommand([]string{"version", "--format", "json"}, &jsonVersion)
+	if err != nil {
+		return err
+	}
+	v, err := semver.NewVersion(jsonVersion.GoogleCloudSDK)
+	if err != nil {
+		return errors.Wrapf(err, "invalid gcloud version %q", jsonVersion.GoogleCloudSDK)
+	}
+	minConstraint, err := semver.NewConstraint(">= " + minVersion)
+	if err != nil {
+		return err
+	}
+	if !minConstraint.Check(v) {
+		return errors.Errorf("gcloud version %s is below minimum required version %s: %s", v, minVersion, message)
+	}
+	return nil
 }
