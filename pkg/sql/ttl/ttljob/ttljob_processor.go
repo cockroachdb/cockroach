@@ -302,6 +302,8 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 			ctx,
 			"pre-select-delete-statement",
 			nil, /* txn */
+			// This is a test-only knob, so we're ok not specifying custom
+			// InternalExecutorOverride.
 			sessiondata.RootUserSessionDataOverride,
 			preSelectStatement,
 		); err != nil {
