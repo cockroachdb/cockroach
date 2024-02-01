@@ -128,6 +128,12 @@ type jsonVM struct {
 		InstanceTerminationAction string
 		ProvisioningModel         string
 	}
+	Metadata struct {
+		Items []struct {
+			Key   string
+			Value string
+		}
+	}
 	MachineType string
 	// CPU platform corresponding to machine type; see https://cloud.google.com/compute/docs/cpu-platforms
 	CPUPlatform string
@@ -1545,6 +1551,24 @@ func propagateDiskLabels(
 	return g.Wait()
 }
 
+type jsonInstanceTemplate struct {
+	Name       string `json:"name"`
+	Properties struct {
+		Labels map[string]string `json:"labels"`
+	} `json:"properties"`
+}
+
+// listInstanceTemplates returns a list of instance templates for a given
+// project.
+func listInstanceTemplates(project string) ([]jsonInstanceTemplate, error) {
+	args := []string{"compute", "instance-templates", "list", "--project", project, "--format", "json"}
+	var templates []jsonInstanceTemplate
+	if err := runJSONCommand(args, &templates); err != nil {
+		return nil, err
+	}
+	return templates, nil
+}
+
 type jsonManagedInstanceGroup struct {
 	Name string `json:"name"`
 	Zone string `json:"zone"`
@@ -1564,7 +1588,7 @@ func listManagedInstanceGroups(project, groupName string) ([]jsonManagedInstance
 }
 
 // deleteInstanceTemplate deletes the instance template for the cluster.
-func deleteInstanceTemplate(project string, clusterName string) error {
+func deleteInstanceTemplate(project, clusterName string) error {
 	templateName := instanceTemplateName(clusterName)
 	args := []string{"compute", "instance-templates", "delete", "--project", project, "--quiet", templateName}
 	cmd := exec.Command("gcloud", args...)
@@ -1579,13 +1603,7 @@ func deleteInstanceTemplate(project string, clusterName string) error {
 // This function makes the assumption that a cluster is either completely
 // managed or not at all.
 func isManaged(vms vm.List) bool {
-	firstVM := vms[0]
-	for k, v := range firstVM.Labels {
-		if k == ManagedLabel && v == "true" {
-			return true
-		}
-	}
-	return false
+	return vms[0].Labels[ManagedLabel] == "true"
 }
 
 // Delete is part of the vm.Provider interface.
@@ -1602,43 +1620,35 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 // deletes any instance templates that were used to create the managed instance
 // group.
 func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
-	projectClusterMap := make(map[string]map[string]struct{})
+	clusterProjectMap := make(map[string]string)
 	for _, v := range vms {
-		if v.Provider != ProviderName {
-			return errors.Errorf("%s received VM instance from %s", ProviderName, v.Provider)
-		}
 		clusterName, err := v.ClusterName()
 		if err != nil {
 			return err
 		}
-		if projectClusterMap[v.Project] == nil {
-			projectClusterMap[v.Project] = make(map[string]struct{})
-		}
-		projectClusterMap[v.Project][clusterName] = struct{}{}
+		clusterProjectMap[clusterName] = v.Project
 	}
 
 	var g errgroup.Group
-	for project, clusters := range projectClusterMap {
-		for cluster := range clusters {
-			// Multiple instance groups can exist for a single cluster, one for each zone.
-			projectGroups, err := listManagedInstanceGroups(project, instanceGroupName(cluster))
-			if err != nil {
-				return err
-			}
-			for _, group := range projectGroups {
-				argsWithZone := []string{"compute", "instance-groups", "managed", "delete", "--quiet",
-					"--project", project,
-					"--zone", group.Zone,
-					group.Name}
-				g.Go(func() error {
-					cmd := exec.Command("gcloud", argsWithZone...)
-					output, err := cmd.CombinedOutput()
-					if err != nil {
-						return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithZone, output)
-					}
-					return nil
-				})
-			}
+	for cluster, project := range clusterProjectMap {
+		// Multiple instance groups can exist for a single cluster, one for each zone.
+		projectGroups, err := listManagedInstanceGroups(project, instanceGroupName(cluster))
+		if err != nil {
+			return err
+		}
+		for _, group := range projectGroups {
+			argsWithZone := []string{"compute", "instance-groups", "managed", "delete", "--quiet",
+				"--project", project,
+				"--zone", group.Zone,
+				group.Name}
+			g.Go(func() error {
+				cmd := exec.Command("gcloud", argsWithZone...)
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithZone, output)
+				}
+				return nil
+			})
 		}
 	}
 	err := g.Wait()
@@ -1649,13 +1659,11 @@ func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 	// All instance groups have to be deleted before the instance templates can be
 	// deleted.
 	g = errgroup.Group{}
-	for project, clusters := range projectClusterMap {
-		for cluster := range clusters {
-			project, cluster := project, cluster
-			g.Go(func() error {
-				return deleteInstanceTemplate(project, cluster)
-			})
-		}
+	for cluster, project := range clusterProjectMap {
+		cluster, project := cluster, project
+		g.Go(func() error {
+			return deleteInstanceTemplate(project /* project */, cluster /* cluster */)
+		})
 	}
 	return g.Wait()
 }
@@ -1665,9 +1673,6 @@ func (p *Provider) deleteUnmanaged(l *logger.Logger, vms vm.List) error {
 	// Map from project to map of zone to list of machines in that project/zone.
 	projectZoneMap := make(map[string]map[string][]string)
 	for _, v := range vms {
-		if v.Provider != ProviderName {
-			return errors.Errorf("%s received VM instance from %s", ProviderName, v.Provider)
-		}
 		if projectZoneMap[v.Project] == nil {
 			projectZoneMap[v.Project] = make(map[string][]string)
 		}
@@ -1783,6 +1788,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 		l.Printf("WARN: --include-volumes is disabled; attached disks info will be partial")
 	}
 
+	templatesInUse := make(map[string]map[string]struct{})
 	var vms vm.List
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "instances", "list", "--project", prj, "--format", "json"}
@@ -1820,6 +1826,21 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 				}
 			}
 		}
+
+		// Find all instance templates that are currently in use.
+		for _, jsonVM := range jsonVMS {
+			for _, entry := range jsonVM.Metadata.Items {
+				if entry.Key == "instance-template" {
+					if templatesInUse[prj] == nil {
+						templatesInUse[prj] = make(map[string]struct{})
+					}
+					templateName := entry.Value[strings.LastIndex(entry.Value, "/")+1:]
+					templatesInUse[prj][templateName] = struct{}{}
+					break
+				}
+			}
+		}
+
 		// Now, convert the json payload into our common VM type
 		for _, jsonVM := range jsonVMS {
 			defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
@@ -1831,6 +1852,39 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 				disks = toDescribeVolumeCommandResponse(jsonVM.Disks, jsonVM.Zone)
 			}
 			vms = append(vms, *jsonVM.toVM(prj, disks, defaultOpts))
+		}
+	}
+
+	if opts.IncludeEmptyClusters {
+		// Find any instance templates that are not in use and add an Empty
+		// Cluster (VM marked as empty) for it. This allows `Delete` to clean up
+		// any MIG or instance template resources when there are no VMs to
+		// derive it from.
+		for _, prj := range p.GetProjects() {
+			projTemplatesInUse := templatesInUse[prj]
+			if projTemplatesInUse == nil {
+				projTemplatesInUse = make(map[string]struct{})
+			}
+			templates, err := listInstanceTemplates(prj)
+			if err != nil {
+				return nil, err
+			}
+			for _, template := range templates {
+				// Skip templates that are not marked as managed.
+				if managed, ok := template.Properties.Labels[ManagedLabel]; !(ok && managed == "true") {
+					continue
+				}
+				// Create an `EmptyCluster` VM for templates that are not in use.
+				if _, ok := projTemplatesInUse[template.Name]; !ok {
+					vms = append(vms, vm.VM{
+						Name:         template.Name,
+						Provider:     ProviderName,
+						Project:      prj,
+						Labels:       template.Properties.Labels,
+						EmptyCluster: true,
+					})
+				}
+			}
 		}
 	}
 
