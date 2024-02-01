@@ -109,7 +109,7 @@ lc_messages                                                C.UTF-8
 lc_monetary                                                C.UTF-8
 lc_numeric                                                 C.UTF-8
 lc_time                                                    C.UTF-8
-locality                                                   region=test,dc=dc1
+locality                                                   region=test,zone=zone1,dc=dc1
 locality_optimized_partitioned_index_scan                  on
 lock_timeout                                               0
 log_timezone                                               UTC
@@ -633,7 +633,7 @@ table2  table2_pkey  public  false  1  key2  key2  ASC  false  false  true  1
 query T
 SHOW LOCALITY
 ----
-region=test,dc=dc1
+region=test,zone=zone1,dc=dc1
 
 query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.locality' AND usage_count > 0
