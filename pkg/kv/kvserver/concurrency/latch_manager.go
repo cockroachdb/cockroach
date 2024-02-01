@@ -66,8 +66,8 @@ func (m *latchManagerImpl) Poison(lg latchGuard) {
 	m.m.Poison(lg.(*spanlatch.Guard))
 }
 
-func (m *latchManagerImpl) Release(lg latchGuard) {
-	m.m.Release(lg.(*spanlatch.Guard))
+func (m *latchManagerImpl) Release(ctx context.Context, lg latchGuard) {
+	m.m.Release(ctx, lg.(*spanlatch.Guard))
 }
 
 func (m *latchManagerImpl) Metrics() LatchMetrics {
