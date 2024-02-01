@@ -51,6 +51,7 @@ func statementForDropJob(e scpb.Element, md *opGenContext) scop.StatementForDrop
 type opGenContext struct {
 	scpb.TargetState
 	Current         []scpb.Status
+	Initial         []scpb.Status
 	ActiveVersion   clusterversion.ClusterVersion
 	elementToTarget map[scpb.Element]int
 	InRollback      bool
@@ -63,6 +64,7 @@ func makeOpgenContext(
 		ActiveVersion:   activeVersion,
 		InRollback:      cs.InRollback,
 		TargetState:     cs.TargetState,
+		Initial:         cs.Initial,
 		Current:         cs.Current,
 		elementToTarget: make(map[scpb.Element]int),
 	}
@@ -187,8 +189,8 @@ func checkIfDescriptorIsWithoutData(id descpb.ID, md *opGenContext) bool {
 		case *scpb.IndexData, *scpb.TableData:
 			// Check if this descriptor has any data within
 			// a public state.
-			if md.Current[idx] == scpb.Status_PUBLIC ||
-				t.TargetStatus == scpb.Status_PUBLIC {
+			if md.Current[idx] == scpb.Status_PUBLIC &&
+				md.Initial[idx] == scpb.Status_PUBLIC {
 				doesDescriptorHaveData = true
 			}
 		}

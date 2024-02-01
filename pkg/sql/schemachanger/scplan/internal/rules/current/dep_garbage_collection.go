@@ -138,3 +138,21 @@ func init() {
 		},
 	)
 }
+
+// Rules to ensure for created objects the table data will be live after the
+// descriptor is public.
+func init() {
+	registerDepRule(
+		"table added right before data element",
+		scgraph.Precedence,
+		"table", "data",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isDescriptor),
+				to.TypeFilter(rulesVersionKey, isData),
+				JoinOnDescID(from, to, "table-id"),
+				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
+			}
+		},
+	)
+}

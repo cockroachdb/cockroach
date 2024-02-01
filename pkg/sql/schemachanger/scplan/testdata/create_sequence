@@ -1,10 +1,12 @@
 ops
 CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
 ----
-StatementPhase stage 1 of 1 with 23 MutationType ops
+StatementPhase stage 1 of 1 with 24 MutationType ops
   transitions:
     [[Sequence:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
+    [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[SequenceOption:{DescID: 104, Name: START}, PUBLIC], ABSENT] -> PUBLIC
     [[Column:{DescID: 104, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
@@ -27,6 +29,10 @@ StatementPhase stage 1 of 1 with 23 MutationType ops
         DatabaseID: 100
         DescriptorID: 104
         Name: sq1
+        SchemaID: 101
+    *scop.SetObjectParentID
+      ObjParent:
+        ChildObjectID: 104
         SchemaID: 101
     *scop.SetSequenceOptions
       Key: START
@@ -112,6 +118,8 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Sequence:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, PUBLIC], PUBLIC] -> ABSENT
+    [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
     [[SequenceOption:{DescID: 104, Name: START}, PUBLIC], PUBLIC] -> ABSENT
     [[Column:{DescID: 104, ColumnID: 1}, PUBLIC], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC], PUBLIC] -> ABSENT
@@ -130,6 +138,8 @@ PreCommitPhase stage 2 of 2 with 24 MutationType ops
   transitions:
     [[Sequence:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
+    [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[SequenceOption:{DescID: 104, Name: START}, PUBLIC], ABSENT] -> PUBLIC
     [[Column:{DescID: 104, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
@@ -152,6 +162,10 @@ PreCommitPhase stage 2 of 2 with 24 MutationType ops
         DatabaseID: 100
         DescriptorID: 104
         Name: sq1
+        SchemaID: 101
+    *scop.SetObjectParentID
+      ObjParent:
+        ChildObjectID: 104
         SchemaID: 101
     *scop.SetSequenceOptions
       Key: START
@@ -218,8 +232,6 @@ PreCommitPhase stage 2 of 2 with 24 MutationType ops
       TableID: 104
     *scop.MakeWriteOnlyColumnPublic
       ColumnID: 1
-      TableID: 104
-    *scop.RefreshStats
       TableID: 104
     *scop.MakeMergedIndexWriteOnly
       IndexID: 1
@@ -336,6 +348,10 @@ CREATE SEQUENCE sq1  MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 3
   to:   [Sequence:{DescID: 105}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [SchemaChild:{DescID: 105, ReferencedDescID: 101}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
 - from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
   to:   [Column:{DescID: 105, ColumnID: 1}, PUBLIC]
   kind: Precedence
@@ -373,7 +389,15 @@ CREATE SEQUENCE sq1  MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 3
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [SchemaChild:{DescID: 105, ReferencedDescID: 101}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
   to:   [SequenceOption:{DescID: 105, Name: START}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
@@ -384,6 +408,10 @@ CREATE SEQUENCE sq1  MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 3
   to:   [UserPrivileges:{DescID: 105, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, PUBLIC]
+  to:   [TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC]
+  kind: Precedence
+  rule: table added right before data element
 - from: [SequenceOption:{DescID: 105, Name: START}, PUBLIC]
   to:   [Sequence:{DescID: 105}, PUBLIC]
   kind: Precedence

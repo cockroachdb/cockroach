@@ -748,7 +748,7 @@ func rewriteSchemaChangerState(
 		t := &state.Targets[i]
 		// Since the parent database ID is never written in the descriptorRewrites
 		// map we need to special case certain elements that need their ParentID
-		// re-written.
+		// re-written
 		if data := t.GetTableData(); data != nil {
 			rewrite, ok := descriptorRewrites[data.TableID]
 			if !ok {
@@ -756,6 +756,15 @@ func rewriteSchemaChangerState(
 			}
 			data.TableID = rewrite.ID
 			data.DatabaseID = rewrite.ParentID
+			continue
+		} else if data := t.GetNamespace(); data != nil {
+			rewrite, ok := descriptorRewrites[data.DescriptorID]
+			if !ok {
+				return errors.Errorf("missing rewrite for id %d in %s", data.DescriptorID, screl.ElementString(t.Element()))
+			}
+			data.DescriptorID = rewrite.ID
+			data.DatabaseID = rewrite.ParentID
+			data.SchemaID = rewrite.ParentSchemaID
 			continue
 		}
 		if err := screl.WalkDescIDs(t.Element(), func(id *descpb.ID) error {

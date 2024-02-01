@@ -1,0 +1,17 @@
+/* setup */
+CREATE TABLE t (k INT PRIMARY KEY);
+
+/* test */
+CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+EXPLAIN (DDL, SHAPE) ALTER TABLE t ADD COLUMN j INT DEFAULT nextval('sq1');
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLUMN ‹j› INT8 DEFAULT nextval(‹'sq1'›); following CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey- in relation t
+ │    └── into t_pkey+ (k; j+)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into t_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ └── execute 3 system table mutations transactions
