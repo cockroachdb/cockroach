@@ -705,12 +705,12 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	ret = &tree.Overload{
 		Oid:        catid.FuncIDToOID(desc.ID),
 		ReturnType: tree.FixedReturnType(desc.ReturnType.Type),
-		ReturnSet:  desc.ReturnType.ReturnSet,
 		Body:       desc.FunctionBody,
 		Type:       routineType,
 		Version:    uint64(desc.Version),
 		Language:   desc.getCreateExprLang(),
 	}
+	ret.ReturnsRecordType = types.IsRecordType(desc.ReturnType.Type)
 
 	argTypes := make(tree.ParamTypes, 0, len(desc.Params))
 	for _, param := range desc.Params {

@@ -63,14 +63,12 @@ func (b *Builder) buildUDF(
 	}
 
 	// Build the routine.
-	routine, rtyp, isMultiColDataSource := b.buildRoutine(f, def, inScope, colRefs)
+	routine, isMultiColDataSource := b.buildRoutine(f, def, inScope, colRefs)
 
 	// Synthesize an output columns if necessary.
 	if outCol == nil {
 		if isMultiColDataSource {
-			// TODO(harding): Add the returns record property during create function.
-			f.ResolvedOverload().ReturnsRecordType = types.IsRecordType(rtyp)
-			return b.finishBuildGeneratorFunction(f, f.ResolvedOverload(), routine, inScope, outScope, outCol)
+			return b.finishBuildGeneratorFunction(f, o, routine, inScope, outScope, outCol)
 		}
 		if outScope != nil {
 			outCol = b.synthesizeColumn(outScope, scopeColName(""), f.ResolvedType(), nil /* expr */, routine)
@@ -129,7 +127,7 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	}
 
 	// Build the routine.
-	routine, _, _ := b.buildRoutine(c.Proc, def, inScope, nil /* colRefs */)
+	routine, _ := b.buildRoutine(c.Proc, def, inScope, nil /* colRefs */)
 	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
 		nil /* outScope */, nil /* outCol */)
 
@@ -143,7 +141,7 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 // routine and a boolean that is true if the routine returns multiple columns.
 func (b *Builder) buildRoutine(
 	f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition, inScope *scope, colRefs *opt.ColSet,
-) (out opt.ScalarExpr, returnType *types.T, isMultiColDataSource bool) {
+) (out opt.ScalarExpr, isMultiColDataSource bool) {
 	o := f.ResolvedOverload()
 	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
 
@@ -168,13 +166,13 @@ func (b *Builder) buildRoutine(
 	// represented as a tuple with any types and execution requires the types to
 	// be concrete in order to decode them correctly. We can determine the types
 	// from the result columns or tuple of the last statement.
-	finishResolveType := func(lastStmtScope *scope) *types.T {
+	finishResolveType := func(lastStmtScope *scope) {
 		if types.IsRecordType(rtyp) {
 			if len(lastStmtScope.cols) == 1 &&
 				lastStmtScope.cols[0].typ.Family() == types.TupleFamily {
 				// When the final statement returns a single tuple, we can use
 				// the tuple's types as the function return type.
-				rtyp = lastStmtScope.cols[0].typ
+				f.SetTypeAnnotation(lastStmtScope.cols[0].typ)
 			} else {
 				// Get the types from the individual columns of the last
 				// statement.
@@ -184,11 +182,9 @@ func (b *Builder) buildRoutine(
 					tc[i] = col.typ
 					tl[i] = col.name.MetadataName()
 				}
-				rtyp = types.MakeLabeledTuple(tc, tl)
+				f.SetTypeAnnotation(types.MakeLabeledTuple(tc, tl))
 			}
-			f.SetTypeAnnotation(rtyp)
 		}
-		return rtyp
 	}
 
 	// Build the argument expressions.
@@ -274,7 +270,7 @@ func (b *Builder) buildRoutine(
 
 			// The last statement produces the output of the UDF.
 			if i == len(stmts)-1 {
-				rtyp = finishResolveType(stmtScope)
+				finishResolveType(stmtScope)
 				expr, physProps, isMultiColDataSource =
 					b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
 			}
@@ -302,7 +298,7 @@ func (b *Builder) buildRoutine(
 		var physProps *physical.Required
 		plBuilder := newPLpgSQLBuilder(b, def.Name, colRefs, o.Types.(tree.ParamTypes), rtyp)
 		stmtScope := plBuilder.buildBlock(stmt.AST, bodyScope)
-		rtyp = finishResolveType(stmtScope)
+		finishResolveType(stmtScope)
 		expr, physProps, isMultiColDataSource =
 			b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
 		body = []memo.RelExpr{expr}
@@ -330,7 +326,7 @@ func (b *Builder) buildRoutine(
 			},
 		},
 	)
-	return routine, rtyp, isMultiColDataSource
+	return routine, isMultiColDataSource
 }
 
 // finishBuildLastStmt manages the columns returned by the last statement of a

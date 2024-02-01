@@ -156,6 +156,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		Language:          language,
 		Type:              routineType,
 	}
+	overload.ReturnsRecordType = types.IsRecordType(retType)
 	if c.ReturnType != nil && c.ReturnType.SetOf {
 		overload.Class = tree.GeneratorClass
 	}
