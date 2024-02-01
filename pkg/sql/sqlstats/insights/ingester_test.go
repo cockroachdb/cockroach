@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -77,7 +76,7 @@ func TestIngester(t *testing.T) {
 			// that we can assert on the generated insights to make sure all
 			// the events came through properly.
 			st := cluster.MakeTestingClusterSettings()
-			store := newStore(st, obs.NoopEventsExporter{})
+			store := newStore(st)
 			ingester := newConcurrentBufferIngester(
 				newRegistry(st, &fakeDetector{
 					stubEnabled: true,
@@ -90,7 +89,7 @@ func TestIngester(t *testing.T) {
 				if e.statementID != 0 {
 					ingester.ObserveStatement(e.SessionID(), &Statement{ID: e.StatementID()})
 				} else {
-					ingester.ObserveTransaction(ctx, e.SessionID(), &Transaction{ID: e.TransactionID()})
+					ingester.ObserveTransaction(e.SessionID(), &Transaction{ID: e.TransactionID()})
 				}
 			}
 
@@ -132,7 +131,7 @@ func TestIngester_Clear(t *testing.T) {
 		ctx := context.Background()
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		store := newStore(settings, obs.NoopEventsExporter{})
+		store := newStore(settings)
 		ingester := newConcurrentBufferIngester(
 			newRegistry(settings, &fakeDetector{
 				stubEnabled: true,
@@ -163,14 +162,14 @@ func TestIngester_Clear(t *testing.T) {
 			if o.statementID != 0 {
 				ingester.ObserveStatement(o.SessionID(), &Statement{ID: o.StatementID()})
 			} else {
-				ingester.ObserveTransaction(ctx, o.SessionID(), &Transaction{ID: o.TransactionID()})
+				ingester.ObserveTransaction(o.SessionID(), &Transaction{ID: o.TransactionID()})
 			}
 		}
 		empty := event{}
 		require.NotEqual(t, empty, ingester.guard.eventBuffer[0])
 		// Now, call Clear() to verify it clears the buffer.
 		// Use SucceedsSoon for assertions, since the operation is async.
-		ingester.Clear(ctx)
+		ingester.Clear()
 		testutils.SucceedsSoon(t, func() error {
 			if ingester.guard.eventBuffer[0] != empty {
 				return errors.New("eventBuffer not empty")
@@ -185,12 +184,11 @@ func TestIngester_Disabled(t *testing.T) {
 	// should something go wrong. Here we peek at the internals of the ingester
 	// to make sure it doesn't hold onto any statement or transaction info if
 	// the underlying registry is currently disabled.
-	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
-	ingester := newConcurrentBufferIngester(newRegistry(st, &fakeDetector{}, newStore(st, obs.NoopEventsExporter{})))
+	ingester := newConcurrentBufferIngester(newRegistry(st, &fakeDetector{}, newStore(st)))
 	ingester.ObserveStatement(clusterunique.ID{}, &Statement{})
-	ingester.ObserveTransaction(ctx, clusterunique.ID{}, &Transaction{})
+	ingester.ObserveTransaction(clusterunique.ID{}, &Transaction{})
 	require.Equal(t, event{}, ingester.guard.eventBuffer[0])
 }
 
@@ -205,7 +203,7 @@ func TestIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *test
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	registry := newRegistry(st, &fakeDetector{stubEnabled: true}, newStore(st, obs.NoopEventsExporter{}))
+	registry := newRegistry(st, &fakeDetector{stubEnabled: true}, newStore(st))
 	ingester := newConcurrentBufferIngester(registry)
 	ingester.Start(ctx, stopper)
 
