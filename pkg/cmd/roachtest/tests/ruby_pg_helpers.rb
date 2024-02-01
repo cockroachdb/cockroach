@@ -30,6 +30,21 @@ module PG::TestingHelpers
 				@conninfo = $pg_server.conninfo
 				@unix_socket = $pg_server.unix_socket
 				@conn = $pg_server.connect
+
+				# Find a local port that is not in use
+				@port_down = @port + 10
+				loop do
+					@port_down = @port_down + 1
+					begin
+						TCPSocket.new("::1", @port_down)
+					rescue SystemCallError
+						begin
+							TCPSocket.new("127.0.0.1", @port_down)
+						rescue SystemCallError
+							break
+						end
+					end
+				end
 			end
 
 			mod.around( :each ) do |example|
@@ -52,6 +67,11 @@ module PG::TestingHelpers
 						end
 						@conn.exit_pipeline_mode
 					end
+					@conn.setnonblocking false
+					@conn.type_map_for_results = PG::TypeMapAllStrings.new
+					@conn.type_map_for_queries = PG::TypeMapAllStrings.new
+					@conn.encoder_for_put_copy_data = nil
+					@conn.decoder_for_get_copy_data = nil
 					@conn.exec( 'ROLLBACK' ) unless example.metadata[:without_transaction]
 				end
 			end
