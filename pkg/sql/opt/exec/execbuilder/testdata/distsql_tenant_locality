@@ -40,19 +40,19 @@ statement ok
 SELECT * FROM t
 
 # Check sql instance locality in the secondary tenant.
-query IT
-SELECT id, locality FROM system.sql_instances WHERE locality IS NOT NULL ORDER BY id
+query ITB retry
+SELECT id, locality, crdb_internal.sql_liveness_is_alive(session_id) FROM system.sql_instances WHERE locality IS NOT NULL ORDER BY id
 ----
-1  {"Tiers": "region=test"}
-2  {"Tiers": "region=test1"}
-3  {"Tiers": "region=test2"}
+1  {"Tiers": "region=test"}   true
+2  {"Tiers": "region=test1"}  true
+3  {"Tiers": "region=test2"}  true
 
 # Ensure that we plan TableReaders in the regions according to the leaseholder
 # of each range, namely we want
 # - TableReader on SQL Instance 2 to scan Span /106/1/1/0
 # - TableReader on SQL Instance 3 to scan Span /106/1/3/0
 # - TableReader on SQL Instance 1 to scan Span /106/1/5/0.
-query T retry
+query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE k IN (1, 3, 5)
 ----
 distribution: full
