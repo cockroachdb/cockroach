@@ -30,12 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -700,7 +698,7 @@ func DecodeHistogramBuckets(tabStat *TableStatistic) error {
 	var a tree.DatumAlloc
 	for i := offset; i < len(tabStat.Histogram); i++ {
 		bucket := &tabStat.HistogramData.Buckets[i-offset]
-		datum, _, err := keyside.Decode(&a, tabStat.HistogramData.ColumnType, bucket.UpperBound, encoding.Ascending)
+		datum, err := decodeUpperBound(tabStat.HistogramData.ColumnType, &a, bucket.UpperBound)
 		if err != nil {
 			return err
 		}
