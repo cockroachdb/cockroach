@@ -73,7 +73,7 @@ func (l LiveRegions) ForEach(fn func(region string) error) error {
 }
 
 // UnavailableAtPhysicalRegions is map of regions (in physical representation).
-type UnavailableAtPhysicalRegions map[string]struct{}
+type UnavailableAtPhysicalRegions map[string]*tree.DTimestamp
 
 // ContainsPhysicalRepresentation contains the physical representation of a region
 // as stored inside the KV.
@@ -96,10 +96,12 @@ type Prober interface {
 	QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRegions, error)
 	// QueryUnavailablePhysicalRegions returns a list of regions that are unavailable at
 	// right now as physical representations.
-	QueryUnavailablePhysicalRegions(ctx context.Context, txn *kv.Txn) (UnavailableAtPhysicalRegions, error)
+	QueryUnavailablePhysicalRegions(ctx context.Context, txn *kv.Txn, filterAvailable bool) (UnavailableAtPhysicalRegions, error)
 	// GetProbeTimeout gets maximum timeout waiting on a table before issuing
 	// liveness queries.
 	GetProbeTimeout() (bool, time.Duration)
+	// MarkPhysicalRegionAsAvailable deletes the unavailable_at timestamp for a region.
+	MarkPhysicalRegionAsAvailable(ctx context.Context, txn *kv.Txn, region string, timestamp *tree.DTimestamp) error
 }
 
 // RegionProvider abstracts the lookup of regions (see regions.Provider).
@@ -263,7 +265,7 @@ func (l *livenessProber) QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRe
 		return regionStatus, nil
 	}
 	// Detect and down regions and remove them.
-	unavailableAtRegions, err := l.QueryUnavailablePhysicalRegions(ctx, txn)
+	unavailableAtRegions, err := l.QueryUnavailablePhysicalRegions(ctx, txn, true)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +280,7 @@ func (l *livenessProber) QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRe
 
 // QueryUnavailablePhysicalRegions implements Prober.
 func (l *livenessProber) QueryUnavailablePhysicalRegions(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, filterAvailable bool,
 ) (UnavailableAtPhysicalRegions, error) {
 	// Scan the entire region liveness table.
 	regionLivenessIndex := l.codec.IndexPrefix(uint32(systemschema.RegionLivenessTable.GetID()), uint32(systemschema.RegionLivenessTable.GetPrimaryIndexID()))
@@ -306,11 +308,25 @@ func (l *livenessProber) QueryUnavailablePhysicalRegions(
 		unavailableAt := ts.(*tree.DTimestamp)
 		// Region is now officially unavailable, so lets remove
 		// it.
-		if txn.ReadTimestamp().GoTime().After(unavailableAt.Time) {
-			unavailableAtRegions[string(*enumBytes)] = struct{}{}
+		if txn.ReadTimestamp().GoTime().After(unavailableAt.Time) ||
+			!filterAvailable {
+			unavailableAtRegions[string(*enumBytes)] = unavailableAt
 		}
 	}
 	return unavailableAtRegions, nil
+}
+
+// MarkPhysicalRegionAsAvailable implements Prober.
+func (l *livenessProber) MarkPhysicalRegionAsAvailable(
+	ctx context.Context, txn *kv.Txn, region string, timestamp *tree.DTimestamp,
+) error {
+	ba := txn.NewBatch()
+	// Encode a key for this region, and delete it.
+	err := l.kvWriter.Delete(ctx, ba, false /*kvTrace*/, tree.NewDBytes(tree.DBytes(region)), timestamp)
+	if err != nil {
+		return err
+	}
+	return txn.Run(ctx, ba)
 }
 
 // GetProbeTimeout gets maximum timeout waiting on a table before issuing
