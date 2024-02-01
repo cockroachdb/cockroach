@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -130,6 +131,18 @@ func (b *SelectQueryBuilder) buildQuery() string {
 
 var qosLevel = sessiondatapb.TTLLow
 
+func getInternalExecutorOverride(
+	qosLevel sessiondatapb.QoSLevel,
+) sessiondata.InternalExecutorOverride {
+	return sessiondata.InternalExecutorOverride{
+		User:                      username.RootUserName(),
+		QualityOfService:          &qosLevel,
+		ReorderJoinsLimit:         opt.DefaultJoinOrderLimit,
+		OptimizerUseHistograms:    true,
+		OptimizerUseMultiColStats: true,
+	}
+}
+
 func (b *SelectQueryBuilder) Run(
 	ctx context.Context, ie isql.Executor,
 ) (_ []tree.Datums, hasNext bool, _ error) {
@@ -151,10 +164,7 @@ func (b *SelectQueryBuilder) Run(
 		ctx,
 		b.selectOpName,
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User:             username.RootUserName(),
-			QualityOfService: &qosLevel,
-		},
+		getInternalExecutorOverride(qosLevel),
 		query,
 		b.cachedArgs...,
 	)
@@ -253,10 +263,7 @@ func (b *DeleteQueryBuilder) Run(
 		ctx,
 		b.deleteOpName,
 		txn.KV(),
-		sessiondata.InternalExecutorOverride{
-			User:             username.RootUserName(),
-			QualityOfService: &qosLevel,
-		},
+		getInternalExecutorOverride(qosLevel),
 		query,
 		deleteArgs...,
 	)
