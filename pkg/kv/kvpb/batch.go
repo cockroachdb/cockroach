@@ -66,8 +66,8 @@ func (ba *BatchRequest) ShallowCopy() *BatchRequest {
 // timestamp is specified, clock is used to create and set one.
 func (ba *BatchRequest) SetActiveTimestamp(clock *hlc.Clock) error {
 	if txn := ba.Txn; txn != nil {
-		if !ba.Timestamp.IsEmpty() {
-			return errors.New("transactional request must not set batch timestamp")
+		if !ba.Timestamp.IsEmpty() && ba.Timestamp != txn.ReadTimestamp {
+			return errors.Newf("transactional request must not set batch timestamp %d != %d", ba.Timestamp, txn.ReadTimestamp)
 		}
 
 		// The batch timestamp is the timestamp at which reads are performed. We set
