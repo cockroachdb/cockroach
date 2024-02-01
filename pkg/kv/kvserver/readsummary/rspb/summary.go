@@ -47,6 +47,13 @@ func (c *ReadSummary) Merge(o ReadSummary) {
 	c.Global.Merge(o.Global)
 }
 
+// Compress compresses the read summary to fit within the provided size budget.
+// It splits the budget evenly between the local and global segments.
+func (c *ReadSummary) Compress(budget int64) {
+	c.Local.Compress(budget / 2)
+	c.Global.Compress(budget / 2)
+}
+
 // AddReadSpan adds a read span to the segment. The span must be sorted after
 // all existing spans in the segment and must not overlap with any existing
 // spans.

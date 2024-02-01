@@ -287,7 +287,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				opName := fmt.Sprintf("finish %s", reqName)
 				mon.runSync(opName, func(ctx context.Context) {
 					log.Event(ctx, "finishing request")
-					m.FinishReq(guard)
+					m.FinishReq(ctx, guard)
 					c.mu.Lock()
 					delete(c.guardsByReqName, reqName)
 					c.mu.Unlock()

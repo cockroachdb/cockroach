@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
@@ -128,7 +129,15 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			} else {
 				maxPriorReadTS = nextLease.Start.ToTimestamp().Add(-2*time.Second.Nanoseconds(), 0)
 			}
-			currentReadSummary := rspb.FromTimestamp(maxPriorReadTS)
+			currentReadSummary := rspb.FromTimestamp(maxPriorReadTS.Add(-100, 0))
+			currentReadSummary.Local.AddReadSpan(rspb.ReadSpan{
+				Key:       keys.MakeRangeKeyPrefix([]byte("a")),
+				Timestamp: maxPriorReadTS,
+			})
+			currentReadSummary.Global.AddReadSpan(rspb.ReadSpan{
+				Key:       roachpb.Key("a"),
+				Timestamp: maxPriorReadTS,
+			})
 
 			evalCtx := &MockEvalCtx{
 				ClusterSettings:    cluster.MakeTestingClusterSettings(),
@@ -165,11 +174,17 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			// The prior read summary should reflect the maximum read times served
 			// under the current leaseholder, even if this time is below the proposed
 			// lease start time.
-			propReadSum, err := readsummary.Load(ctx, batch, desc.RangeID)
+			propReadSum := res.Replicated.PriorReadSummary
 			require.NoError(t, err)
-			require.NotNil(t, propReadSum, "should write prior read summary")
-			require.Equal(t, maxPriorReadTS, propReadSum.Local.LowWater)
-			require.Equal(t, maxPriorReadTS, propReadSum.Global.LowWater)
+			require.NotNil(t, propReadSum, "should include prior read summary")
+			require.Equal(t, currentReadSummary, *propReadSum)
+
+			// The prior read summary should also be persisted, but compressed.
+			persistReadSum, err := readsummary.Load(ctx, batch, desc.RangeID)
+			require.NoError(t, err)
+			require.NotNil(t, persistReadSum, "should persist prior read summary")
+			require.NotEqual(t, currentReadSummary, *persistReadSum)
+			require.Equal(t, rspb.FromTimestamp(maxPriorReadTS), *persistReadSum)
 		})
 	})
 }
