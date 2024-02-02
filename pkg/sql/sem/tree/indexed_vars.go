@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -110,33 +111,14 @@ func NewTypedOrdinalReference(r int, typ *types.T) *IndexedVar {
 // It also keeps track of which indexes from the container are used by
 // expressions.
 type IndexedVarHelper struct {
-	vars      []IndexedVar
-	container IndexedVarContainer
+	vars         []IndexedVar
+	container    IndexedVarContainer
+	reboundIVars intsets.Fast
 }
 
 // Container returns the container associated with the helper.
 func (h *IndexedVarHelper) Container() IndexedVarContainer {
 	return h.container
-}
-
-// BindIfUnbound ensures the IndexedVar is attached to this helper's container.
-// - for freshly created IndexedVars (with a nil container) this will bind in-place.
-// - for already bound IndexedVar, bound to this container, this will return the same ivar unchanged.
-// - for ordinal references (with an explicit unboundContainer) this will return a new var.
-// - for already bound IndexedVars, bound to another container, this will error out.
-func (h *IndexedVarHelper) BindIfUnbound(ivar *IndexedVar) (*IndexedVar, error) {
-	// We perform the range check always, even if the ivar is already
-	// bound, as a form of safety assertion against misreuse of ivars
-	// across containers.
-	if ivar.Idx < 0 || ivar.Idx >= len(h.vars) {
-		return ivar, pgerror.Newf(
-			pgcode.UndefinedColumn, "invalid column ordinal: @%d", ivar.Idx+1)
-	}
-
-	if !ivar.Used {
-		return h.IndexedVar(ivar.Idx), nil
-	}
-	return ivar, nil
 }
 
 // MakeIndexedVarHelper initializes an IndexedVarHelper structure.
@@ -206,6 +188,8 @@ func (h *IndexedVarHelper) Rebind(expr Expr) Expr {
 	if expr == nil {
 		return nil
 	}
+	// Reset reboundIVars.
+	h.reboundIVars = intsets.Fast{}
 	ret, _ := WalkExpr(h, expr)
 	return ret
 }
@@ -224,7 +208,8 @@ var _ Visitor = &IndexedVarHelper{}
 
 // VisitPre implements the Visitor interface.
 func (h *IndexedVarHelper) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	if iv, ok := expr.(*IndexedVar); ok {
+	if iv, ok := expr.(*IndexedVar); ok && !h.reboundIVars.Contains(iv.Idx) {
+		h.reboundIVars.Add(iv.Idx)
 		return false, h.IndexedVar(iv.Idx)
 	}
 	return true, expr
