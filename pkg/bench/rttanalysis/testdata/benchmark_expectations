@@ -61,7 +61,7 @@ exp,benchmark
 23,Grant/grant_all_on_3_tables
 19,GrantRole/grant_1_role
 25,GrantRole/grant_2_roles
-8,Jobs/show_job
+3,Jobs/show_job
 3,ORMQueries/activerecord_type_introspection_query
 0,ORMQueries/asyncpg_types
 0,ORMQueries/column_descriptions_json_agg
