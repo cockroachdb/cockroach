@@ -17,6 +17,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/cache",
         "//pkg/util/container/list",
+        "//pkg/util/encoding",
         "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/interval",
