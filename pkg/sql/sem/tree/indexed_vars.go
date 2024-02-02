@@ -166,13 +166,6 @@ func (h *IndexedVarHelper) IndexedVarWithType(idx int, typ *types.T) *IndexedVar
 	return v
 }
 
-// IndexedVarUsed returns true if IndexedVar() was called for the given index.
-// The index must be valid.
-func (h *IndexedVarHelper) IndexedVarUsed(idx int) bool {
-	h.checkIndex(idx)
-	return h.vars[idx].Used
-}
-
 // GetIndexedVars returns the indexed var array of this helper.
 // IndexedVars to the caller; unused vars are guaranteed to have
 // a false Used field.
