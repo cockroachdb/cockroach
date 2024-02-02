@@ -2053,18 +2053,8 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		endTime := hlc.MaxTimestamp
 		clearRangeThreshold := int(s.rng.Int63n(5))
 
-		// TODO(nvanbenschoten): this should be pushed into MVCCClearTimeRange, which
-		// does not currently handle replicated locks correctly.
-		locks, err := ScanLocks(ctx, s.batch, keySpan.Key, keySpan.EndKey, 1, 0, UnknownReadCategory)
-		if err == nil && len(locks) > 0 {
-			err = &kvpb.LockConflictError{Locks: locks}
-		}
-		if err != nil {
-			return false, err.Error()
-		}
-
 		desc := fmt.Sprintf("mvccClearTimeRange=%s, startTime=%s, endTime=%s", keySpan, startTime, endTime)
-		_, err = MVCCClearTimeRange(ctx, s.batch, s.MSDelta, keySpan.Key, keySpan.EndKey,
+		_, err := MVCCClearTimeRange(ctx, s.batch, s.MSDelta, keySpan.Key, keySpan.EndKey,
 			startTime, endTime, nil /* leftPeekBound */, nil /* rightPeekBound */, clearRangeThreshold, 0, 0)
 		if err != nil {
 			desc += " " + err.Error()

@@ -3177,6 +3177,18 @@ func MVCCClearTimeRange(
 		return nil, errors.AssertionFailedf("requires consistent iterators")
 	}
 
+	// Check for any overlapping locks (at any timestamp), and return them to
+	// be resolved. We don't _expect_ to hit any since the RevertRange is only
+	// intended for non-live key spans, but there could be an intent or lock
+	// leftover from before the keyspace become non-live.
+	maxLockConflicts := int64(0) // TODO(nvanbenschoten): plumb this in.
+	if locks, err := ScanLocks(
+		ctx, rw, key, endKey, maxLockConflicts, 0, BatchEvalReadCategory); err != nil {
+		return nil, err
+	} else if len(locks) > 0 {
+		return nil, &kvpb.LockConflictError{Locks: locks}
+	}
+
 	// When iterating, instead of immediately clearing a matching key we can
 	// accumulate it in buf until either a) clearRangeThreshold is reached and
 	// we discard the buffer, instead just keeping track of where the span of keys
@@ -3363,9 +3375,10 @@ func MVCCClearTimeRange(
 	// do the delete including updating the live key stats correctly.
 	//
 	// The MVCCIncrementalIterator checks for and fails on any intents in our
-	// time-range, as we do not want to clear any running transactions. We don't
-	// _expect_ to hit this since the RevertRange is only intended for non-live
-	// key spans, but there could be an intent leftover.
+	// time-range. However, we've already scanned over the lock table with the
+	// call to ScanLocks above, so this is not strictly necessary. If performance
+	// of this function is a concern, we could instruct the MVCCIncrementalIterator
+	// to forgo intent interleaving.
 	iter, err := NewMVCCIncrementalIterator(ctx, rw, MVCCIncrementalIterOptions{
 		KeyTypes:     IterKeyTypePointsAndRanges,
 		StartKey:     key,

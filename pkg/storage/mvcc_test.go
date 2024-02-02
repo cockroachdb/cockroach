@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -2118,37 +2119,57 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
-	t.Run("clear everything above intent", func(t *testing.T) {
+	t.Run("clear everything above intent fails", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addIntent(t, b)
-		resumingClear(t, ctx, b, nil, localMax, keyMax, ts3, ts5, 10, kb)
-		assertKVs(t, b, ts2, ts2Content)
-
-		// Scan (< k3 to avoid intent) to confirm that k2 was indeed reverted to
-		// value as of ts3 (i.e. v4 was cleared to expose v2).
-		res, err := MVCCScan(ctx, b, localMax, testKey3, ts5, MVCCScanOptions{})
-		require.NoError(t, err)
-		require.Equal(t, ts3Content[:2], res.KVs)
-
-		// Verify the intent was left alone.
-		_, err = MVCCScan(ctx, b, testKey3, testKey4, ts5, MVCCScanOptions{})
-		require.Error(t, err)
-
-		// Scan (> k3 to avoid intent) to confirm that k5 was indeed reverted to
-		// value as of ts3 (i.e. v4 was cleared to expose v2).
-		res, err = MVCCScan(ctx, b, testKey4, keyMax, ts5, MVCCScanOptions{})
-		require.NoError(t, err)
-		require.Equal(t, ts3Content[2:], res.KVs)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts3, ts5, nil, nil, 64, 10, 1<<10)
+		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
-	t.Run("clear below intent", func(t *testing.T) {
+	t.Run("clear below intent fails", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addIntent(t, b)
-		assertKVs(t, b, ts2, ts2Content)
-		resumingClear(t, ctx, b, nil, localMax, keyMax, ts1, ts2, 10, kb)
-		assertKVs(t, b, ts2, ts1Content)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts1, ts2, nil, nil, 64, 10, 1<<10)
+		require.EqualError(t, err, "conflicting locks on \"/db3\"")
+	})
+
+	// Add a shared lock at k1 with a txn at ts3.
+	addLock := func(t *testing.T, rw ReadWriter) {
+		err := MVCCAcquireLock(ctx, rw, &txn, lock.Shared, testKey1, nil, 0)
+		require.NoError(t, err)
+	}
+	t.Run("clear everything hitting lock fails", func(t *testing.T) {
+		b := eng.NewBatch()
+		defer b.Close()
+		addLock(t, b)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10)
+		require.EqualError(t, err, "conflicting locks on \"/db1\"")
+	})
+
+	t.Run("clear exactly hitting lock fails", func(t *testing.T) {
+		b := eng.NewBatch()
+		defer b.Close()
+		addLock(t, b)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts2, ts3, nil, nil, 64, 10, 1<<10)
+		require.EqualError(t, err, "conflicting locks on \"/db1\"")
+	})
+
+	t.Run("clear everything above lock fails", func(t *testing.T) {
+		b := eng.NewBatch()
+		defer b.Close()
+		addLock(t, b)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts3, ts5, nil, nil, 64, 10, 1<<10)
+		require.EqualError(t, err, "conflicting locks on \"/db1\"")
+	})
+
+	t.Run("clear below lock fails", func(t *testing.T) {
+		b := eng.NewBatch()
+		defer b.Close()
+		addLock(t, b)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts1, ts2, nil, nil, 64, 10, 1<<10)
+		require.EqualError(t, err, "conflicting locks on \"/db1\"")
 	})
 }
 
