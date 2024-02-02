@@ -69,14 +69,16 @@ type txnState struct {
 		// has executed.
 		stmtCount int
 
-		// autoRetryReason records the error causing an auto-retryable error event if
-		// the current transaction is being automatically retried. This is used in
-		// statement traces to give more information in statement diagnostic bundles.
+		// autoRetryReason records the error causing an auto-retryable error event
+		// if the current transaction is being automatically retried. This is used
+		// in statement traces to give more information in statement diagnostic
+		// bundles, and also is surfaced in the DB Console.
 		autoRetryReason error
 
-		// autoRetryCounter keeps track of the which iteration of a transaction
-		// auto-retry we're currently in. It's 0 whenever the transaction state is not
-		// stateOpen.
+		// autoRetryCounter keeps track of the number of automatic retries that
+		// have occurred. It includes per-statement retries performed under READ
+		// COMMITTED as well as transaction retries for serialization failures.
+		// It's 0 whenever the transaction state is not stateOpen.
 		autoRetryCounter int32
 	}
 
