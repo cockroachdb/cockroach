@@ -1039,6 +1039,9 @@ func (d *Discard) StatementTag() string {
 	return "DISCARD"
 }
 
+// modifiesSchema implements the canModifySchema interface.
+func (*Discard) modifiesSchema() bool { return true }
+
 // StatementReturnType implements the Statement interface.
 func (n *DeclareCursor) StatementReturnType() StatementReturnType { return Ack }
 
