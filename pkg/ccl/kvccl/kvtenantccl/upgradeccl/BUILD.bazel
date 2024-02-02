@@ -7,8 +7,8 @@ go_test(
         "tenant_upgrade_test.go",
     ],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     shard_count = 4,
     tags = ["ccl_test"],

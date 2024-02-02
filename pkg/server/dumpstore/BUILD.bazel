@@ -18,8 +18,8 @@ go_test(
     srcs = ["dumpstore_test.go"],
     embed = [":dumpstore"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         "@com_github_stretchr_testify//assert",

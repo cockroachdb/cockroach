@@ -10,11 +10,11 @@ go_test(
     exec_properties = select({
         "//build/toolchains:is_heavy": {
             "dockerNetwork": "standard",
-            "Pool": "heavy",
+            "test.Pool": "heavy",
         },
         "//conditions:default": {
             "dockerNetwork": "standard",
-            "Pool": "default",
+            "test.Pool": "default",
         },
     }),
     tags = ["ccl_test"],

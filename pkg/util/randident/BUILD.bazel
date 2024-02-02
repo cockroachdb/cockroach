@@ -20,8 +20,8 @@ go_test(
     srcs = ["namegen_test.go"],
     embed = [":randident"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = ["@org_golang_x_text//unicode/norm"],
 )

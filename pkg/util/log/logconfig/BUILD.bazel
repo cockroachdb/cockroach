@@ -44,8 +44,8 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":logconfig"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         "@com_github_cockroachdb_datadriven//:datadriven",

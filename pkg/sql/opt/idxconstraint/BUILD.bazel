@@ -25,8 +25,8 @@ go_test(
     srcs = ["index_constraints_test.go"],
     data = glob(["testdata/**"]),
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         ":idxconstraint",

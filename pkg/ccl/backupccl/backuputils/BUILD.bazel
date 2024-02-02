@@ -23,8 +23,8 @@ go_test(
     srcs = ["memory_backed_quota_pool_test.go"],
     embed = [":backuputils"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     tags = ["ccl_test"],
     deps = [

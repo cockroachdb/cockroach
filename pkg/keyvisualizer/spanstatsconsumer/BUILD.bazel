@@ -23,8 +23,8 @@ go_test(
     srcs = ["span_stats_consumer_test.go"],
     embed = [":spanstatsconsumer"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         "//pkg/roachpb",
