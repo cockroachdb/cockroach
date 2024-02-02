@@ -24,18 +24,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-type testVarContainer []tree.Datum
+type testVarContainerSlot struct {
+	d    tree.Datum
+	used bool
+}
+
+type testVarContainer []testVarContainerSlot
 
 var _ eval.IndexedVarContainer = testVarContainer{}
 
 func (d testVarContainer) IndexedVarEval(
 	ctx context.Context, idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
-	return d[idx].Eval(ctx, e)
+	return d[idx].d.Eval(ctx, e)
 }
 
 func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
-	return d[idx].ResolvedType()
+	d[idx].used = true
+	return d[idx].d.ResolvedType()
 }
 
 func (d testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
@@ -47,10 +53,10 @@ func TestIndexedVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	c := make(testVarContainer, 4)
-	c[0] = tree.NewDInt(3)
-	c[1] = tree.NewDInt(5)
-	c[2] = tree.NewDInt(6)
-	c[3] = tree.NewDInt(0)
+	c[0].d = tree.NewDInt(3)
+	c[1].d = tree.NewDInt(5)
+	c[2].d = tree.NewDInt(6)
+	c[3].d = tree.NewDInt(0)
 
 	h := tree.MakeIndexedVarHelper(c, 4)
 
@@ -59,9 +65,9 @@ func TestIndexedVars(t *testing.T) {
 	v1 := h.IndexedVar(1)
 	v2 := h.IndexedVar(2)
 
-	if !h.IndexedVarUsed(0) || !h.IndexedVarUsed(1) || !h.IndexedVarUsed(2) || h.IndexedVarUsed(3) {
+	if !c[0].used || !c[1].used || !c[2].used || c[3].used {
 		t.Errorf("invalid IndexedVarUsed results %t %t %t %t (expected false false false true)",
-			h.IndexedVarUsed(0), h.IndexedVarUsed(1), h.IndexedVarUsed(2), h.IndexedVarUsed(3))
+			c[0].used, c[1].used, c[2].used, c[3].used)
 	}
 
 	binary := func(op treebin.BinaryOperator, left, right tree.Expr) tree.Expr {
