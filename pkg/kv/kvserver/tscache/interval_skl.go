@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -688,7 +689,7 @@ func (p *sklPage) serialize(from, to []byte) rspb.Segment {
 			if opt&hasKey == 0 {
 				// The value is a gap value with no key value. This means that the value
 				// has an exclusive start key, so we advance the key to the next key.
-				key = append(key, 0) // Key.Next()
+				key = encoding.BytesNext(key) // Key.Next()
 			}
 			lastSpan = rspb.ReadSpan{
 				Key:       key,

@@ -37,6 +37,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/buildutil",
+        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
     ],
