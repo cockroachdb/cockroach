@@ -807,44 +807,34 @@ func TestAnalyzeSystemTables(t *testing.T) {
 		s.InternalDB().(descs.DB),
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
-	var tableNames []string
-	tableNames = make([]string, 0, 40)
 
-	it, err := executor.QueryIterator(
+	rows, err := executor.QueryBuffered(
 		ctx,
 		"get-system-tables",
 		nil, /* txn */
-		"SELECT table_name FROM [SHOW TABLES FROM SYSTEM]",
+		"SELECT table_name FROM [SHOW TABLES FROM SYSTEM] WHERE type = 'table'",
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var ok bool
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		if err != nil {
-			t.Fatal(err)
-		}
-		row := it.Cur()
-		tableName := string(*row[0].(*tree.DOidWrapper).Wrapped.(*tree.DString))
-		tableNames = append(tableNames, tableName)
-	}
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	expectZeroRows := false
-	for _, tableName := range tableNames {
-		// Stats may not be collected on system.lease and system.table_statistics.
-		if tableName == "lease" || tableName == "table_statistics" ||
-			tableName == "jobs" || tableName == "scheduled_jobs" ||
-			tableName == "role_id_seq" ||
-			tableName == "tenant_id_seq" ||
-			tableName == "descriptor_id_seq" {
+	getTableID := func(tableName string) descpb.ID {
+		var tableID int
+		row := sqlRun.QueryRow(t, fmt.Sprintf("SELECT 'system.%s'::REGCLASS::OID", tableName))
+		row.Scan(&tableID)
+		return descpb.ID(tableID)
+	}
+	for _, row := range rows {
+		tableName := string(*row[0].(*tree.DOidWrapper).Wrapped.(*tree.DString))
+		if DisallowedOnSystemTable(getTableID(tableName)) {
 			continue
 		}
-		sql := fmt.Sprintf("ANALYZE system.%s", tableName)
-		sqlRun.Exec(t, sql)
-		// We're testing that ANALYZE on every system table except the above two
-		// doesn't error out, and populates system.table_statistics.
-		if err := compareStatsCountWithZero(ctx, cache, tableName, s, expectZeroRows); err != nil {
+		sqlRun.Exec(t, fmt.Sprintf("ANALYZE system.%s", tableName))
+		// We're testing that ANALYZE on every system table (except a few
+		// disallowed ones) doesn't error out and populates
+		// system.table_statistics.
+		if err = compareStatsCountWithZero(ctx, cache, tableName, s, false /* expectZeroRows */); err != nil {
 			t.Fatal(err)
 		}
 	}

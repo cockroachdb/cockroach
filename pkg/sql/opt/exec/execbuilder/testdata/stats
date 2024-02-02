@@ -1,7 +1,4 @@
-# LogicTest: 5node
-
-# Tests that verify we retrieve the stats correctly. Note that we can't create
-# statistics if distsql mode is OFF.
+# LogicTest: local
 
 statement ok
 CREATE TABLE uv (u INT, v INT, INDEX (u) STORING (v), INDEX (v) STORING (u));
@@ -373,3 +370,42 @@ limit
  │    └── filters
  │         └── j:1 IS NULL [outer=(1), immutable, constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
  └── 1
+
+# Ensure we can run ALTER statements on the system.jobs table.
+statement ok
+INSERT INTO system.users VALUES ('node', NULL, true, 3);
+
+statement ok
+GRANT node TO root;
+
+# Ensure that stats on the system.jobs table are being used.
+statement ok
+ALTER TABLE system.jobs INJECT STATISTICS '[
+    {
+        "avg_size": 7,
+        "columns": [
+            "id"
+        ],
+        "created_at": "2024-02-02 22:56:02.854028",
+        "distinct_count": 19,
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "null_count": 0,
+        "row_count": 19
+    }
+]';
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM system.jobs;
+----
+scan jobs
+ ├── columns: id:1 status:2 created:3 payload:4 progress:5 created_by_type:6 created_by_id:7 claim_session_id:8 claim_instance_id:9 num_runs:10 last_run:11 job_type:12
+ ├── partial index predicates
+ │    └── jobs_run_stats_idx: filters
+ │         └── status:2 IN ('cancel-requested', 'pause-requested', 'pending', 'reverting', 'running') [outer=(2), constraints=(/2: [/'cancel-requested' - /'cancel-requested'] [/'pause-requested' - /'pause-requested'] [/'pending' - /'pending'] [/'reverting' - /'reverting'] [/'running' - /'running']; tight)]
+ ├── stats: [rows=19]
+ ├── cost: 61.81
+ ├── key: (1)
+ ├── fd: (1)-->(2-12)
+ ├── distribution: test
+ └── prune: (1-12)

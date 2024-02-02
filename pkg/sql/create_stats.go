@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -198,21 +197,9 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		)
 	}
 
-	if tableDesc.GetID() == keys.TableStatisticsTableID {
-		return nil, pgerror.New(
-			pgcode.WrongObjectType, "cannot create statistics on system.table_statistics",
-		)
-	}
-
-	if tableDesc.GetID() == keys.LeaseTableID {
-		return nil, pgerror.New(
-			pgcode.WrongObjectType, "cannot create statistics on system.lease",
-		)
-	}
-
-	if tableDesc.GetID() == keys.ScheduledJobsTableID {
-		return nil, pgerror.New(
-			pgcode.WrongObjectType, "cannot create statistics on system.scheduled_jobs",
+	if stats.DisallowedOnSystemTable(tableDesc.GetID()) {
+		return nil, pgerror.Newf(
+			pgcode.WrongObjectType, "cannot create statistics on system.%s", tableDesc.GetName(),
 		)
 	}
 

@@ -285,10 +285,3 @@ func TestExecBuild_scan_parallel(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "scan_parallel")
 }
-
-func TestExecBuild_stats(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "stats")
-}
