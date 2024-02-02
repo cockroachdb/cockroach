@@ -1644,11 +1644,17 @@ func (c *cliState) handleConnect(
 }
 
 func (c *cliState) handleConnectInternal(cmd []string, omitConnString bool) error {
+	// currURL is the previous connection URL up to this point.
+	currURL, err := pgurl.Parse(c.conn.GetURL())
+	if err != nil {
+		return errors.Wrap(err, "parsing current connection URL")
+	}
+
 	firstArgIsURL := len(cmd) > 0 &&
 		(strings.HasPrefix(cmd[0], "postgres://") ||
 			strings.HasPrefix(cmd[0], "postgresql://"))
 
-	if len(cmd) == 1 && firstArgIsURL {
+	if firstArgIsURL && (len(cmd) == 1 || (len(cmd) == 2 && cmd[1] == "autocerts")) {
 		// Note: we use a custom URL parser here to inherit the complex
 		// custom logic from crdb's own handling of --url in `cockroach
 		// sql`.
@@ -1660,13 +1666,12 @@ func (c *cliState) handleConnectInternal(cmd []string, omitConnString bool) erro
 		if err != nil {
 			return err
 		}
+		if len(cmd) == 2 {
+			if err := autoFillClientCerts(purl, currURL, c.sqlCtx.CertsDir); err != nil {
+				return err
+			}
+		}
 		return c.switchToURL(purl)
-	}
-
-	// currURL is the previous connection URL up to this point.
-	currURL, err := pgurl.Parse(c.conn.GetURL())
-	if err != nil {
-		return errors.Wrap(err, "parsing current connection URL")
 	}
 
 	// Reuse the current database from the session if known
