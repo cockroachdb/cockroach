@@ -1633,8 +1633,6 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		return err
 	}
 
-	// TODO(rafi): Figure out observability for these retries. We might want to
-	// add a new field similar to ex.state.mu.autoRetryCounter.
 	maxRetries := int(ex.sessionData().MaxRetriesForReadCommitted)
 	for attemptNum := 0; ; attemptNum++ {
 		bufferPos := res.BufferedResultsLen()
@@ -1689,6 +1687,8 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		if err := ex.state.mu.txn.PrepareForPartialRetry(ctx); err != nil {
 			return err
 		}
+		ex.state.mu.autoRetryCounter++
+		ex.state.mu.autoRetryReason = txnRetryErr
 	}
 	return nil
 }
