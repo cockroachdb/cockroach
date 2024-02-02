@@ -2839,8 +2839,14 @@ func autoFillClientCerts(newURL, currURL *pgurl.URL, extraCertsDir string) error
 		}
 		return err
 	}
-
 	newURL.WithAuthn(pgurl.AuthnClientCert(newCert, newKey))
+
+	if _, _, caCertPath := newURL.GetTLSOptions(); caCertPath == "" {
+		if candidateCA := filepath.Join(extraCertsDir, "ca.crt"); fileExists(candidateCA) {
+			newURL.WithTransport(pgurl.TransportTLS(pgurl.TLSRequire, candidateCA))
+		}
+		// We don't error if we could not find it, as explicit CAs are not required.
+	}
 
 	return nil
 }
