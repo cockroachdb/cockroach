@@ -2268,9 +2268,6 @@ var txnSchemaChangeErr = pgerror.Newf(
 func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Statement) error {
 	p := &ex.planner
 	if tree.CanModifySchema(stmt.AST) {
-		if ex.extraTxnState.upgradedToSerializable && ex.extraTxnState.firstStmtExecuted {
-			return txnSchemaChangeErr
-		}
 		if ex.state.mu.txn.IsoLevel().ToleratesWriteSkew() {
 			if !ex.extraTxnState.firstStmtExecuted {
 				if err := ex.state.setIsolationLevel(isolation.Serializable); err != nil {

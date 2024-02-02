@@ -74,6 +74,7 @@ func alterZoneConfigAndClusterSettings(
 		`ALTER ROLE ALL SET multiple_active_portals_enabled = 'true';`,
 		`ALTER ROLE ALL SET serial_normalization = 'sql_sequence_cached'`,
 		`ALTER ROLE ALL SET statement_timeout = '60s'`,
+		`ALTER ROLE ALL SET default_transaction_isolation = 'read committed'`,
 	} {
 		if _, err := db.ExecContext(ctx, cmd); err != nil {
 			return err
