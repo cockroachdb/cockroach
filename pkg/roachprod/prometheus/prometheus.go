@@ -206,7 +206,7 @@ func Init(
 			fmt.Sprintf(`
 (sudo systemctl stop node_exporter || true) &&
 rm -rf node_exporter && mkdir -p node_exporter && curl -fsSL \
-  https://storage.googleapis.com/cockroach-fixtures/prometheus/node_exporter-1.2.2.linux-%s.tar.gz |
+  https://storage.googleapis.com/cockroach-test-artifacts/prometheus/node_exporter-1.2.2.linux-%s.tar.gz |
   tar zxv --strip-components 1 -C node_exporter
 `, binArch)); err != nil {
 			return nil, err
@@ -242,7 +242,7 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		cfg.PrometheusNode,
 		"download prometheus",
 		fmt.Sprintf(`sudo rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
-			curl -fsSL https://storage.googleapis.com/cockroach-fixtures/prometheus/prometheus-2.27.1.linux-%s.tar.gz | tar zxv --strip-components=1`,
+			curl -fsSL https://storage.googleapis.com/cockroach-test-artifacts/prometheus/prometheus-2.27.1.linux-%s.tar.gz | tar zxv --strip-components=1`,
 			binArch)); err != nil {
 		return nil, err
 	}

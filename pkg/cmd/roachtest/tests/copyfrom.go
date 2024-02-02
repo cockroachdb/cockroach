@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const tpchLineitemFmt = `https://storage.googleapis.com/cockroach-fixtures/tpch-csv/sf-%d/lineitem.tbl.1`
+const tpchLineitemFmt = `https://storage.googleapis.com/cockroach-fixtures-us-east1/tpch-csv/sf-%d/lineitem.tbl.1`
 
 // There's an extra dummy field because the file above ends lines with delimiter and standard CSV behavior is to
 // interpret that as a column.
