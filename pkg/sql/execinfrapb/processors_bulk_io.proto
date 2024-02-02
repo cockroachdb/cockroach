@@ -289,6 +289,12 @@ message StreamIngestionFrontierSpec {
   optional StreamIngestionPartitionSpecs partition_specs = 9 [(gogoproto.nullable) = false];
 }
 
+enum ElidePrefix {
+  None = 0;
+  Tenant = 1;
+  TenantAndTable = 2;
+}
+
 message BackupDataSpec {
   // TODO(lidor): job_id is not needed when interoperability with 22.2 is
   // dropped, the new way to send the job tag is using 'job_tag' in the
@@ -311,7 +317,8 @@ message BackupDataSpec {
   // when using FileTable ExternalStorage.
   optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
 
-  // NEXTID: 12.
+  optional ElidePrefix elide_prefix = 12 [(gogoproto.nullable) = false];
+  // NEXTID: 13.
 }
 
 message RestoreFileSpec {
@@ -323,7 +330,6 @@ message RestoreFileSpec {
   optional roachpb.RowCount backup_file_entry_counts = 6 [(gogoproto.nullable) = false];
   optional uint64 backing_file_size = 7 [(gogoproto.nullable) = false];
   optional uint64 approximate_physical_size = 8 [(gogoproto.nullable) = false];
-
   // NEXT ID: 9.
 }
 
@@ -349,6 +355,7 @@ message RestoreSpanEntry {
   optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
   repeated RestoreFileSpec files = 2 [(gogoproto.nullable) = false];
   optional int64 progressIdx = 3 [(gogoproto.nullable) = false];
+  optional ElidePrefix elided_prefix = 4 [(gogoproto.nullable) = false];
 }
 
 message RestoreDataSpec {
