@@ -22,6 +22,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/isql",
         "//pkg/sql/sqlliveness",
         "//pkg/util/encoding",
         "//pkg/util/hlc",

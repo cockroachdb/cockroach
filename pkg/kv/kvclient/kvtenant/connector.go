@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -916,6 +917,11 @@ func (c *connector) DownloadSpan(
 
 // WithTxn implements the spanconfig.KVAccessor interface.
 func (c *connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
+	panic("not applicable")
+}
+
+// WithISQLTxn is part of the spanconfig.KVAccessor interface.
+func (c *connector) WithISQLTxn(context.Context, isql.Txn) spanconfig.KVAccessor {
 	panic("not applicable")
 }
 

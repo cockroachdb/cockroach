@@ -271,7 +271,7 @@ func floatToInt(intWidth, floatWidth int32) castFunc {
 			if math.IsNaN(float64(%[2]s)) || %[2]s <= float%[4]d(math.MinInt%[3]d) || %[2]s >= float%[4]d(math.MaxInt%[3]d) {
 				colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 			}
-			%[1]s = int%[3]d(%[2]s)
+			%[1]s = int%[3]d(math.RoundToEven(%[2]s))
 		`
 		if intWidth == anyWidth {
 			intWidth = 64

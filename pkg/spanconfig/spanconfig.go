@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -61,6 +62,11 @@ type KVAccessor interface {
 	// its operations discarded if aborted, valid only if committed). If nil, a
 	// transaction is created internally for every operation.
 	WithTxn(context.Context, *kv.Txn) KVAccessor
+
+	// WithISQLTxn returns a KVAccessor that runs using the given isql.Txn (with
+	// its operations discarded if aborted, valid only if committed). This makes
+	// it possible to use the KVAccessor in the context of a SQL transaction.
+	WithISQLTxn(context.Context, isql.Txn) KVAccessor
 }
 
 // KVSubscriber presents a consistent[1] snapshot of a StoreReader and

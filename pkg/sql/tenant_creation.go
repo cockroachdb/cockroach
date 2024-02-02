@@ -133,7 +133,7 @@ func (p *planner) createTenantInternal(
 		p.ExecCfg().Codec,
 		p.ExecCfg().Settings,
 		p.InternalSQLTxn(),
-		p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, p.Txn()),
+		p.ExecCfg().SpanConfigKVAccessor.WithISQLTxn(ctx, p.InternalSQLTxn()),
 		info,
 		initialTenantZoneConfig,
 		ctcfg.IfNotExists,

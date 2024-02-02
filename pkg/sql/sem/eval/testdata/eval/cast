@@ -1460,3 +1460,25 @@ eval
 text(1.11::float8)
 ----
 '1.11'
+
+# Issue #112515: float casting returns the nearest integer,
+# rounding ties to even (Banker's rounding).
+eval
+int8(0.5::float8)
+----
+0
+
+eval
+int8(1.5::float8)
+----
+2
+
+eval
+int8(-0.5::float8)
+----
+0
+
+eval
+int8(-1.5::float8)
+----
+-2
