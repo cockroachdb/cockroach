@@ -149,6 +149,10 @@ type canModifySchema interface {
 // CanModifySchema returns true if the statement can modify
 // the database schema.
 func CanModifySchema(stmt Statement) bool {
+	if stmt == nil {
+		// Some drivers send empty queries to test the connection.
+		return false
+	}
 	if stmt.StatementReturnType() == DDL || stmt.StatementType() == TypeDDL {
 		return true
 	}
