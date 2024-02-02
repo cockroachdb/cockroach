@@ -218,6 +218,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   const onSubmitToggleAutoRefresh = () => {
     // Refresh immediately when toggling auto-refresh on.
     if (!isAutoRefreshEnabled) {
+      setDisplayRefreshAlert(false);
       refreshLiveWorkload();
     }
     onAutoRefreshToggle(!isAutoRefreshEnabled);
