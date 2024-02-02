@@ -100,8 +100,16 @@ DROP TABLE splitmerge.t;
 }
 
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
+	testCtx := ctx
+	if c.IsLocal() {
+		localTimeout := 30 * time.Minute
+		var cancel context.CancelFunc
+		testCtx, cancel = context.WithTimeout(ctx, localTimeout)
+		defer cancel()
+	}
+
 	mvt := mixedversion.NewTest(
-		ctx, t, t.L(), c, c.All(),
+		testCtx, t, t.L(), c, c.All(),
 		mixedversion.AlwaysUseFixtures, mixedversion.AlwaysUseLatestPredecessors,
 	)
 	mvt.OnStartup(
