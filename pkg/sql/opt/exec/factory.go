@@ -66,7 +66,9 @@ type ScanParams struct {
 	// Row-level locking properties.
 	Locking opt.Locking
 
-	EstimatedRowCount float64
+	// EstimatedRowCount, if set, is the estimated number of rows that will be
+	// scanned, rounded up.
+	EstimatedRowCount uint64
 
 	// If true, we are performing a locality optimized search. In order for this
 	// to work correctly, the execution engine must create a local DistSQL plan

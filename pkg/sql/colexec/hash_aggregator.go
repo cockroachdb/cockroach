@@ -201,9 +201,12 @@ func NewHashAggregator(
 ) colexecop.ResettableOperator {
 	initialAllocSize, maxAllocSize := int64(1), int64(hashAggregatorAllocSize)
 	if args.EstimatedRowCount != 0 {
-		initialAllocSize = int64(args.EstimatedRowCount)
-		if initialAllocSize > maxAllocSize {
+		// Use uint64s for comparison to prevent overflow in case
+		// args.EstimatedRowCount is larger than MaxInt64.
+		if args.EstimatedRowCount >= uint64(maxAllocSize) {
 			initialAllocSize = maxAllocSize
+		} else {
+			initialAllocSize = int64(args.EstimatedRowCount)
 		}
 	}
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
