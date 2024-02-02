@@ -2239,7 +2239,7 @@ func (p *Pebble) GetAuxiliaryDir() string {
 
 // NewBatch implements the Engine interface.
 func (p *Pebble) NewBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */, p.settings, p, p)
+	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), p.settings, p, p)
 }
 
 // NewReadOnly implements the Engine interface.
@@ -2249,12 +2249,12 @@ func (p *Pebble) NewReadOnly(durability DurabilityRequirement) ReadWriter {
 
 // NewUnindexedBatch implements the Engine interface.
 func (p *Pebble) NewUnindexedBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), false /* writeOnly */, p.settings, p, p)
+	return newPebbleBatch(p.db, p.db.NewBatch(), p.settings, p, p)
 }
 
 // NewWriteBatch implements the Engine interface.
 func (p *Pebble) NewWriteBatch() WriteBatch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), true /* writeOnly */, p.settings, p, p)
+	return newWriteBatch(p.db, p.db.NewBatch(), p.settings, p, p)
 }
 
 // NewSnapshot implements the Engine interface.
