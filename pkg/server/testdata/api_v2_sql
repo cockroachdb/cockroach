@@ -78,7 +78,7 @@ sql admin
       "type": "INT8"
      },
      {
-      "name": "?column?",
+      "name": "?column?_1",
       "oid": 20,
       "type": "INT8"
      }
@@ -86,7 +86,8 @@ sql admin
     "end": "1970-01-01T00:00:00Z",
     "rows": [
      {
-      "?column?": 2
+      "?column?": 1,
+      "?column?_1": 2
      }
     ],
     "rows_affected": 0,
@@ -904,4 +905,71 @@ sql admin
   ]
  },
  "num_statements": 4
+}
+
+# Test a query with duplicated column names.
+sql admin
+{
+  "database": "system",
+  "execute": true,
+  "max_result_size": 23,
+  "separate_txns": true,
+  "statements": [
+        {"sql": "SELECT 1 as a, 2 as b, 3 as a, 4 as a"}
+  ]
+}
+----
+{
+ "error": {
+  "code": "XXUUU",
+  "message": "separate transaction payload encountered transaction error(s)",
+  "severity": "ERROR"
+ },
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "a",
+      "oid": 20,
+      "type": "INT8"
+     },
+     {
+      "name": "b",
+      "oid": 20,
+      "type": "INT8"
+     },
+     {
+      "name": "a_1",
+      "oid": 20,
+      "type": "INT8"
+     },
+     {
+      "name": "a_2",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "XXUUU",
+     "message": "executing stmt 1: max result size exceeded",
+     "severity": "ERROR"
+    },
+    "rows": [
+     {
+      "a": 1,
+      "a_1": 3,
+      "a_2": 4,
+      "b": 2
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 1
 }

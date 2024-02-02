@@ -484,7 +484,18 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 						return err
 					}
 
+					// Make sure column names are not duplicated.
 					txnRes.Columns = columnsDefinition(it.Types())
+					seenColumnNames := make(map[string]int, len(txnRes.Columns))
+					for i, col := range txnRes.Columns {
+						origName := col.Name
+						count := seenColumnNames[origName]
+						if count > 0 {
+							txnRes.Columns[i].Name = fmt.Sprintf("%s_%d", origName, count)
+						}
+						seenColumnNames[origName] = count + 1
+					}
+
 					for ; ok; ok, err = it.Next(ctx) {
 						if err := a.shouldStop(ctx); err != nil {
 							return err
