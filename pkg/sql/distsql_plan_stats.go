@@ -505,7 +505,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		var rb renderBuilder
 		rb.init(exec.Node(planNode(&scan)), exec.OutputOrdering{})
 		for i, expr := range exprs {
-			exprs[i] = rb.r.ivarHelper.Rebind(expr)
+			exprs[i] = rb.r.ivarHelper.RebindTyped(expr)
 		}
 		rb.setOutput(exprs, resultCols)
 
