@@ -152,7 +152,8 @@ func (n *scanNode) IndexedVarResolvedType(idx int) *types.T {
 
 // IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
 func (n *scanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return n.resultColumns.Name(idx)
+	//return n.resultColumns.Name(idx)
+	return nil
 }
 
 func (n *scanNode) startExec(params runParams) error {

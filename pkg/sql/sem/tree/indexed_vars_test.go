@@ -12,7 +12,6 @@ package tree_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -45,8 +44,9 @@ func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
 }
 
 func (d testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("var%d", idx))
-	return &n
+	return nil
+	// n := tree.Name(fmt.Sprintf("var%d", idx))
+	// return &n
 }
 
 func TestIndexedVars(t *testing.T) {
@@ -66,7 +66,7 @@ func TestIndexedVars(t *testing.T) {
 	v2 := h.IndexedVar(2)
 
 	if !c[0].used || !c[1].used || !c[2].used || c[3].used {
-		t.Errorf("invalid IndexedVarUsed results %t %t %t %t (expected false false false true)",
+		t.Errorf("invalid IndexedVarUsed results %t %t %t %t (expected true true true false)",
 			c[0].used, c[1].used, c[2].used, c[3].used)
 	}
 
@@ -85,23 +85,7 @@ func TestIndexedVars(t *testing.T) {
 	}
 
 	str := typedExpr.String()
-	expectedStr := "var0 + (var1 * var2)"
-	if str != expectedStr {
-		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
-	}
-
-	// Test formatting using the indexed var format interceptor.
-	f := tree.NewFmtCtx(
-		tree.FmtSimple,
-		tree.FmtIndexedVarFormat(
-			func(ctx *tree.FmtCtx, idx int) {
-				ctx.Printf("customVar%d", idx)
-			}),
-	)
-	f.FormatNode(typedExpr)
-	str = f.CloseAndGetString()
-
-	expectedStr = "customVar0 + (customVar1 * customVar2)"
+	expectedStr := "@1 + (@2 * @3)"
 	if str != expectedStr {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
 	}

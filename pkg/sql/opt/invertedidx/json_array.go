@@ -225,8 +225,9 @@ func (g *jsonOrArrayDatumsToInvertedExpr) IndexedVarResolvedType(idx int) *types
 
 // IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
 func (g *jsonOrArrayDatumsToInvertedExpr) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("$%d", idx))
-	return &n
+	return nil
+	// n := tree.Name(fmt.Sprintf("$%d", idx))
+	// return &n
 }
 
 // NewJSONOrArrayDatumsToInvertedExpr returns a new

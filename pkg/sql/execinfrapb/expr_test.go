@@ -12,7 +12,6 @@ package execinfrapb
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -39,8 +38,9 @@ func (d *testVarContainer) IndexedVarResolvedType(idx int) *types.T {
 }
 
 func (d *testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("var%d", idx))
-	return &n
+	return nil
+	// n := tree.Name(fmt.Sprintf("var%d", idx))
+	// return &n
 }
 
 func (d *testVarContainer) wasUsed(idx int) bool {
@@ -66,25 +66,31 @@ func TestProcessExpression(t *testing.T) {
 	}
 
 	if !c.wasUsed(0) || !c.wasUsed(1) || !c.wasUsed(2) || c.wasUsed(3) {
-		t.Errorf("invalid IndexedVarUsed results %t %t %t %t (expected false false false true)",
+		t.Errorf("invalid IndexedVarUsed results %t %t %t %t (expected true true true false)",
 			c.wasUsed(0), c.wasUsed(1), c.wasUsed(2), c.wasUsed(3))
 	}
 
 	str := expr.String()
-	expectedStr := "(var0 * (var1 + var2)) + var0"
+	expectedStr := "(@1 * (@2 + @3)) + @1"
 	if str != expectedStr {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
 	}
 
 	// We can process a new expression with the same tree.IndexedVarHelper.
+	c.used = nil
 	e = Expression{Expr: "@4 - @1"}
 	expr, err = processExpression(context.Background(), e, &evalCtx, &semaCtx, &h)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	if !c.wasUsed(0) || c.wasUsed(1) || c.wasUsed(2) || !c.wasUsed(3) {
+		t.Errorf("invalid IndexedVarUsed results %t %t %t %t (expected true false false true)",
+			c.wasUsed(0), c.wasUsed(1), c.wasUsed(2), c.wasUsed(3))
+	}
+
 	str = expr.String()
-	expectedStr = "var3 - var0"
+	expectedStr = "@4 - @1"
 	if str != expectedStr {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
 	}

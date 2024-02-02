@@ -12,7 +12,6 @@ package execinfrapb
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -297,8 +296,9 @@ func (eh *exprHelper) IndexedVarEval(
 
 // IndexedVarNodeFormatter is part of the tree.IndexedVarContainer interface.
 func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("$%d", idx))
-	return &n
+	return nil
+	// n := tree.Name(fmt.Sprintf("$%d", idx))
+	// return &n
 }
 
 // init initializes the exprHelper.

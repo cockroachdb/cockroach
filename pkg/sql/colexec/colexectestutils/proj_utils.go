@@ -46,8 +46,9 @@ func (p *MockTypeContext) IndexedVarResolvedType(idx int) *types.T {
 
 // IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
 func (p *MockTypeContext) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("$%d", idx))
-	return &n
+	return nil
+	// n := tree.Name(fmt.Sprintf("$%d", idx))
+	// return &n
 }
 
 // CreateTestProjectingOperator creates a projecting operator that performs
