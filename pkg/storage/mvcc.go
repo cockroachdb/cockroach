@@ -3144,6 +3144,7 @@ func MVCCClearTimeRange(
 	leftPeekBound, rightPeekBound roachpb.Key,
 	clearRangeThreshold int,
 	maxBatchSize, maxBatchByteSize int64,
+	maxLockConflicts int64,
 ) (roachpb.Key, error) {
 	var batchSize, batchByteSize int64
 	var resumeKey roachpb.Key
@@ -3181,7 +3182,6 @@ func MVCCClearTimeRange(
 	// be resolved. We don't _expect_ to hit any since the RevertRange is only
 	// intended for non-live key spans, but there could be an intent or lock
 	// leftover from before the keyspace become non-live.
-	maxLockConflicts := int64(0) // TODO(nvanbenschoten): plumb this in.
 	if locks, err := ScanLocks(
 		ctx, rw, key, endKey, maxLockConflicts, 0, BatchEvalReadCategory); err != nil {
 		return nil, err

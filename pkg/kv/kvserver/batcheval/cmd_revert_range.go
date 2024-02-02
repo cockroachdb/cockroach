@@ -140,12 +140,13 @@ func RevertRange(
 
 	leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 		args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
 	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
 
 	resumeKey, err := storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
 		args.TargetTime, cArgs.Header.Timestamp, leftPeekBound, rightPeekBound,
-		clearRangeThreshold, cArgs.Header.MaxSpanRequestKeys, maxRevertRangeBatchBytes)
+		clearRangeThreshold, cArgs.Header.MaxSpanRequestKeys, maxRevertRangeBatchBytes, maxLockConflicts)
 	if err != nil {
 		return result.Result{}, err
 	}
