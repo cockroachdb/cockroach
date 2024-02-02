@@ -26,30 +26,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ivarBinder is a tree.Visitor that binds ordinal references
-// (IndexedVars represented by @1, @2, ...) to an IndexedVarContainer.
-type ivarBinder struct {
-	h   *tree.IndexedVarHelper
-	err error
-}
-
-func (v *ivarBinder) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
-	if v.err != nil {
-		return false, expr
-	}
-	if ivar, ok := expr.(*tree.IndexedVar); ok {
-		newVar, err := v.h.BindIfUnbound(ivar)
-		if err != nil {
-			v.err = err
-			return false, expr
-		}
-		return false, newVar
-	}
-	return true, expr
-}
-
-func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
-
 // DeserializeExpr deserializes expr, binds the indexed variables to the
 // provided IndexedVarHelper, and evaluates any constants in the expression.
 //
@@ -130,12 +106,8 @@ func processExpression(
 		return nil, err
 	}
 
-	// Bind IndexedVars to our eh.Vars.
-	v := ivarBinder{h: h, err: nil}
-	expr, _ = tree.WalkExpr(&v, expr)
-	if v.err != nil {
-		return nil, v.err
-	}
+	// Bind IndexedVars to h.
+	expr = h.Rebind(expr)
 
 	semaCtx.IVarContainer = h.Container()
 	// Convert to a fully typed expression.
