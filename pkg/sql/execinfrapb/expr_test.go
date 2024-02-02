@@ -23,17 +23,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-type testVarContainer struct{}
+type testVarContainer struct {
+	used []bool
+}
 
-var _ tree.IndexedVarContainer = testVarContainer{}
+var _ tree.IndexedVarContainer = &testVarContainer{}
 
-func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
+func (d *testVarContainer) IndexedVarResolvedType(idx int) *types.T {
+	// Track usage of the IndexedVar.
+	for idx > len(d.used)-1 {
+		d.used = append(d.used, false)
+	}
+	d.used[idx] = true
 	return types.Int
 }
 
-func (d testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+func (d *testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	n := tree.Name(fmt.Sprintf("var%d", idx))
 	return &n
+}
+
+func (d *testVarContainer) wasUsed(idx int) bool {
+	if idx < len(d.used) {
+		return d.used[idx]
+	}
+	return false
 }
 
 func TestProcessExpression(t *testing.T) {
@@ -41,7 +55,8 @@ func TestProcessExpression(t *testing.T) {
 
 	e := Expression{Expr: "@1 * (@2 + @3) + @1"}
 
-	h := tree.MakeIndexedVarHelper(testVarContainer{}, 4)
+	var c testVarContainer
+	h := tree.MakeIndexedVarHelper(&c, 4)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	semaCtx := tree.MakeSemaContext()
@@ -50,9 +65,9 @@ func TestProcessExpression(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !h.IndexedVarUsed(0) || !h.IndexedVarUsed(1) || !h.IndexedVarUsed(2) || h.IndexedVarUsed(3) {
+	if !c.wasUsed(0) || !c.wasUsed(1) || !c.wasUsed(2) || c.wasUsed(3) {
 		t.Errorf("invalid IndexedVarUsed results %t %t %t %t (expected false false false true)",
-			h.IndexedVarUsed(0), h.IndexedVarUsed(1), h.IndexedVarUsed(2), h.IndexedVarUsed(3))
+			c.wasUsed(0), c.wasUsed(1), c.wasUsed(2), c.wasUsed(3))
 	}
 
 	str := expr.String()
