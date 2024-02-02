@@ -18,6 +18,7 @@ go_library(
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigbounds",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/isql",
         "//pkg/util/hlc",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",

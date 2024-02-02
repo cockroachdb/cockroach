@@ -88,6 +88,14 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 	return newKVAccessor(k.db, k.ie, k.settings, k.clock, k.configurationsTableFQN, k.knobs, txn)
 }
 
+// WithISQLTxn is part of the KVAccessor interface.
+func (k *KVAccessor) WithISQLTxn(ctx context.Context, txn isql.Txn) spanconfig.KVAccessor {
+	if k.optionalTxn != nil {
+		log.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithISQLTxn(...) chained multiple times?)")
+	}
+	return newKVAccessor(txn.KV().DB(), txn, k.settings, k.clock, k.configurationsTableFQN, k.knobs, txn.KV())
+}
+
 // GetAllSystemSpanConfigsThatApply is part of the spanconfig.KVAccessor
 // interface.
 func (k *KVAccessor) GetAllSystemSpanConfigsThatApply(

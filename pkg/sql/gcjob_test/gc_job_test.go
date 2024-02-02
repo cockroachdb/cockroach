@@ -480,7 +480,7 @@ func TestGCTenant(t *testing.T) {
 		_, err := sql.CreateTenantRecord(
 			ctx, execCfg.Codec, execCfg.Settings,
 			txn,
-			execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV()),
+			execCfg.SpanConfigKVAccessor.WithISQLTxn(ctx, txn),
 			&mtinfopb.TenantInfoWithUsage{
 				SQLInfo: mtinfopb.SQLInfo{ID: activeTenID},
 			},
@@ -495,7 +495,7 @@ func TestGCTenant(t *testing.T) {
 		_, err := sql.CreateTenantRecord(
 			ctx, execCfg.Codec, execCfg.Settings,
 			txn,
-			execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV()),
+			execCfg.SpanConfigKVAccessor.WithISQLTxn(ctx, txn),
 			&mtinfopb.TenantInfoWithUsage{
 				SQLInfo: mtinfopb.SQLInfo{
 					ID:        dropTenID,

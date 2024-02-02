@@ -79,6 +79,7 @@ go_test(
         "//pkg/server",
         "//pkg/spanconfig",
         "//pkg/sql",
+        "//pkg/sql/isql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
