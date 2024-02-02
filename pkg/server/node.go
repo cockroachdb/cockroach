@@ -1600,24 +1600,23 @@ func setupSpanForIncomingRPC(
 ) (context.Context, spanForRequest) {
 	var newSpan *tracing.Span
 	remoteParent := !ba.TraceInfo.Empty()
-	if !remoteParent {
+	parentSpan := tracing.SpanFromContext(ctx)
+	if parentSpan != nil || !remoteParent {
 		// This is either a local request which circumvented gRPC, or a remote
 		// request that didn't specify tracing information. In the former case,
 		// EnsureChildSpan will create a child span, in the former case we'll get a
 		// root span.
-		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
+		ctx, newSpan = tracing.EnsureChildSpan(
+			ctx,
+			tr,
+			grpcinterceptor.BatchMethodName,
+			tracing.WithServerSpanKind)
 	} else {
 		// Non-local call. Tracing information comes from the request proto.
-
-		// Sanity check - we're not expecting a span in the context. If there was
-		// one, it'd be unclear what needRecordingCollection should be set to.
-		parentSpan := tracing.SpanFromContext(ctx)
-		if parentSpan != nil {
-			log.Fatalf(ctx, "unexpected span found in non-local RPC: %s", parentSpan)
-		}
-
-		ctx, newSpan = tr.StartSpanCtx(
-			ctx, grpcinterceptor.BatchMethodName,
+		ctx, newSpan = tracing.EnsureChildSpan(
+			ctx,
+			tr,
+			grpcinterceptor.BatchMethodName,
 			tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
 			tracing.WithServerSpanKind)
 	}
