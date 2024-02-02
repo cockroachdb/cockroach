@@ -29,6 +29,7 @@ go_library(
         "//pkg/server/settingswatcher",
         "//pkg/settings",
         "//pkg/spanconfig",
+        "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/ts/tspb",
