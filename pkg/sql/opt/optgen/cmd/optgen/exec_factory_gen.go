@@ -83,6 +83,7 @@ func (g *execFactoryGen) genExecFactory() {
 	g.w.writeIndent("cascades []Cascade,\n")
 	g.w.writeIndent("checks []Node,\n")
 	g.w.writeIndent("rootRowCount int64,\n")
+	g.w.writeIndent("flags PlanFlags,\n")
 	g.w.unnest(") (Plan, error)\n")
 
 	g.w.write("\n")
@@ -121,6 +122,7 @@ func (g *execFactoryGen) genStubFactory() {
 	g.w.writeIndent("cascades []Cascade,\n")
 	g.w.writeIndent("checks []Node,\n")
 	g.w.writeIndent("rootRowCount int64,\n")
+	g.w.writeIndent("flags PlanFlags,\n")
 	g.w.unnest(") (Plan, error) {\n")
 	g.w.nestIndent("return struct{}{}, nil\n")
 	g.w.unnest("}\n")
