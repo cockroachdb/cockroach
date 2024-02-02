@@ -1591,7 +1591,13 @@ func (c *transientCluster) getNetworkURLForServerAndUser(
 		u.WithTransport(pgurl.TransportTLS(
 			pgurl.TLSRequire, filepath.Join(c.demoDir, certnames.CACertFilename())))
 
-		u.WithAuthn(pgurl.AuthnPassword(true, password))
+		if password != "" {
+			u.WithAuthn(pgurl.AuthnPassword(true, password))
+		} else {
+			clientCert := filepath.Join(c.demoDir, certnames.ClientCertFilename(user))
+			clientKey := filepath.Join(c.demoDir, certnames.ClientKeyFilename(user))
+			u.WithAuthn(pgurl.AuthnClientCert(clientCert, clientKey))
+		}
 	}
 	return u, nil
 }
@@ -2058,7 +2064,7 @@ func (c *transientCluster) ExpandShortDemoURLs(s string) string {
 		}
 
 		// By default we'll connect to the default demo user/pw, but use an explicit
-		// user/pw if specified.
+		// user/pw if specified. An empty pw will switch to client-cert auth.
 		user, password := c.adminUser, c.adminPassword
 		if parsed.User != nil {
 			user, err = username.MakeSQLUsernameFromUserInput(parsed.User.Username(), username.PurposeValidation)
