@@ -171,6 +171,17 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	}
 	cmd.response.EncounteredIntents = cmd.proposal.Local.DetachEncounteredIntents()
 	cmd.response.EndTxns = cmd.proposal.Local.DetachEndTxns(pErr != nil)
+
+	// Populate BarrierResponse if requested.
+	if pErr == nil && cmd.proposal.Local.DetachPopulateBarrierResponse() {
+		if resp := cmd.response.Reply.Responses[0].GetBarrier(); resp != nil {
+			resp.LeaseAppliedIndex = cmd.leaseIndex
+			resp.RangeDesc = *r.Desc()
+		} else {
+			log.Fatalf(ctx, "PopulateBarrierResponse for %T", cmd.response.Reply.Responses[0].GetInner())
+		}
+	}
+
 	if pErr == nil {
 		cmd.localResult = cmd.proposal.Local
 	} else if cmd.localResult != nil {
