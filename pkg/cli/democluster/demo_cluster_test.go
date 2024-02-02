@@ -88,6 +88,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 						StickyVFSRegistry: stickyVFSRegistry,
 					},
 				},
+				ExternalIODir: "nodelocal/n1",
 			},
 		},
 		{
@@ -114,6 +115,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 						StickyVFSRegistry: stickyVFSRegistry,
 					},
 				},
+				ExternalIODir: "nodelocal/n3",
 			},
 		},
 	}

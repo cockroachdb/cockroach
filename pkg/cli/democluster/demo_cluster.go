@@ -921,6 +921,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		JoinAddr:                joinAddr,
 		DisableTLSForHTTP:       true,
 		StoreSpecs:              []base.StoreSpec{storeSpec},
+		ExternalIODir:           filepath.Join(demoDir, "nodelocal", fmt.Sprintf("n%d", serverIdx+1)),
 		SQLMemoryPoolSize:       demoCtx.SQLPoolMemorySize,
 		CacheSize:               demoCtx.CacheSize,
 		AutoConfigProvider:      demoCtx.AutoConfigProvider,
