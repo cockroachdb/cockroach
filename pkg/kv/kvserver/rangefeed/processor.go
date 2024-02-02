@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,6 +39,21 @@ const (
 	defaultCheckStreamsInterval = 1 * time.Second
 )
 
+var (
+	// PushTxnsBarrierEnabled is an escape hatch to disable the txn push barrier
+	// command in case it causes unexpected problems. This can result in
+	// violations of the rangefeed checkpoint guarantee, emitting premature
+	// checkpoints before all writes below it have been emitted in rare cases.
+	// See: https://github.com/cockroachdb/cockroach/issues/104309
+	PushTxnsBarrierEnabled = settings.RegisterBoolSetting(
+		settings.SystemOnly,
+		"kv.rangefeed.push_txns.barrier.enabled",
+		"flush and apply prior writes when a txn push returns an ambiguous abort "+
+			"(disabling may emit premature checkpoints before writes in rare cases)",
+		true,
+	)
+)
+
 // newErrBufferCapacityExceeded creates an error that is returned to subscribers
 // if the rangefeed processor is not able to keep up with the flow of incoming
 // events and is forced to drop events in order to not block.
@@ -49,9 +66,10 @@ func newErrBufferCapacityExceeded() *roachpb.Error {
 // Config encompasses the configuration required to create a Processor.
 type Config struct {
 	log.AmbientContext
-	Clock   *hlc.Clock
-	RangeID roachpb.RangeID
-	Span    roachpb.RSpan
+	Settings *cluster.Settings
+	Clock    *hlc.Clock
+	RangeID  roachpb.RangeID
+	Span     roachpb.RSpan
 
 	TxnPusher TxnPusher
 	// PushTxnsInterval specifies the interval at which a Processor will push
@@ -726,7 +744,7 @@ func (p *Processor) consumeLogicalOps(
 
 		// Determine whether the operation caused the resolved timestamp to
 		// move forward. If so, publish a RangeFeedCheckpoint notification.
-		if p.rts.ConsumeLogicalOp(op) {
+		if p.rts.ConsumeLogicalOp(ctx, op) {
 			p.publishCheckpoint(ctx)
 		}
 	}
