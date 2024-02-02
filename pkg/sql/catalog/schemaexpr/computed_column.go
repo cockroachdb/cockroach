@@ -242,16 +242,12 @@ func MakeComputedExprs(
 
 		// Collect all column IDs that are referenced in the partial index
 		// predicate expression.
-		colIDs, err := ExtractColumnIDs(tableDesc, exprs[compExprIdx])
+		expr := exprs[compExprIdx]
+		colIDs, err := ExtractColumnIDs(tableDesc, expr)
 		if err != nil {
 			return nil, refColIDs, err
 		}
 		refColIDs.UnionWith(colIDs)
-
-		expr, err := nr.resolveNames(exprs[compExprIdx])
-		if err != nil {
-			return nil, catalog.TableColSet{}, err
-		}
 
 		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, col.GetType())
 		if err != nil {

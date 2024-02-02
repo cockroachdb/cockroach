@@ -13,7 +13,6 @@ go_library(
         "expr.go",
         "hash_sharded_compute_expr.go",
         "partial_index.go",
-        "select_name_resolution.go",
         "sequence_options.go",
         "unique_contraint.go",
     ],

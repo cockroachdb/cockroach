@@ -201,11 +201,6 @@ func (pi partialIndexHelper) makePartialIndexExpr(
 		return nil, catalog.TableColSet{}, err
 	}
 
-	expr, err = pi.nr.resolveNames(expr)
-	if err != nil {
-		return nil, catalog.TableColSet{}, err
-	}
-
 	typedExpr, err := tree.TypeCheck(ctx, expr, pi.semaCtx, types.Bool)
 	if err != nil {
 		return nil, catalog.TableColSet{}, err

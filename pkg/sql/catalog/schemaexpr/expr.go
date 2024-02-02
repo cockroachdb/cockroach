@@ -360,13 +360,6 @@ func newNameResolver(
 	}
 }
 
-// resolveNames returns an expression equivalent to the input expression with
-// unresolved names replaced with IndexedVars.
-func (nr *nameResolver) resolveNames(expr tree.Expr) (tree.Expr, error) {
-	var v NameResolutionVisitor
-	return ResolveNamesUsingVisitor(&v, expr, nr.source, *nr.ivarHelper)
-}
-
 // addColumn adds a new column to the nameResolver so that it can be resolved in
 // future calls to resolveNames.
 func (nr *nameResolver) addColumn(col catalog.Column) {
