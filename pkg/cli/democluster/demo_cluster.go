@@ -128,10 +128,10 @@ type LoggerFn = func(context.Context, string, ...interface{})
 // cluster to report special events to both a log and the terminal.
 type ShoutLoggerFn = func(context.Context, logpb.Severity, string, ...interface{})
 
-type serverSelection bool
+type serverSelection string
 
-const forSystemTenant serverSelection = false
-const forSecondaryTenant serverSelection = true
+const forSystemTenant serverSelection = "system"
+const forSecondaryTenant serverSelection = demoTenantName
 
 // NewDemoCluster instantiates a demo cluster. The caller must call
 // the .Close() method to clean up resources even if the
@@ -539,8 +539,8 @@ func (c *transientCluster) startTenantService(
 			SSLCertsDir:             c.demoDir,
 			DisableTLSForHTTP:       true,
 			EnableDemoLoginEndpoint: true,
-			StartingRPCAndSQLPort:   c.demoCtx.sqlPort(serverIdx, true) - secondaryTenantID,
-			StartingHTTPPort:        c.demoCtx.httpPort(serverIdx, true) - secondaryTenantID,
+			StartingRPCAndSQLPort:   c.demoCtx.sqlPort(serverIdx, forSecondaryTenant) - secondaryTenantID,
+			StartingHTTPPort:        c.demoCtx.httpPort(serverIdx, forSecondaryTenant) - secondaryTenantID,
 			Locality:                c.demoCtx.Localities[serverIdx],
 			TestingKnobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -948,7 +948,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 	// So by default we use :0 to auto-allocate ports.
 	args.Addr = "127.0.0.1:0"
 	if sqlPort := demoCtx.sqlPort(serverIdx, forSystemTenant); sqlPort != 0 {
-		rpcPort := demoCtx.rpcPort(serverIdx, false)
+		rpcPort := demoCtx.rpcPort(serverIdx, forSystemTenant)
 		args.Addr = fmt.Sprintf("127.0.0.1:%d", rpcPort)
 		args.SQLAddr = fmt.Sprintf("127.0.0.1:%d", sqlPort)
 		if !demoCtx.DisableServerController {
@@ -1555,7 +1555,7 @@ func (c *transientCluster) getNetworkURLForServer(
 	}
 	sqlAddr := c.servers[serverIdx].AdvSQLAddr()
 	database := c.defaultDB
-	if target == forSecondaryTenant {
+	if target != forSystemTenant {
 		sqlAddr = c.tenantServers[serverIdx].SQLAddr()
 	}
 	if (target == forSystemTenant) && c.demoCtx.Multitenant {
@@ -1590,14 +1590,8 @@ func (c *transientCluster) getNetworkURLForServer(
 
 func (c *transientCluster) extendURLWithTargetCluster(u *pgurl.URL, target serverSelection) error {
 	if c.demoCtx.Multitenant && !c.demoCtx.DisableServerController {
-		if target == forSecondaryTenant {
-			if err := u.SetOption("options", "-ccluster="+demoTenantName); err != nil {
-				return err
-			}
-		} else {
-			if err := u.SetOption("options", "-ccluster="+catconstants.SystemTenantName); err != nil {
-				return err
-			}
+		if err := u.SetOption("options", "-ccluster="+string(target)); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1877,7 +1871,7 @@ func (c *transientCluster) sockForServer(
 	if !c.useSockets {
 		return unixSocketDetails{}, nil
 	}
-	port := strconv.Itoa(c.demoCtx.sqlPort(serverIdx, false))
+	port := strconv.Itoa(c.demoCtx.sqlPort(serverIdx, forSystemTenant))
 	databaseName := c.defaultDB
 	if c.demoCtx.Multitenant {
 		// TODO(knz): for now, we only define the unix socket for the
