@@ -3128,8 +3128,8 @@ func MVCCMerge(
 // incremental deltas of clearing these keys (and correctly determining if it
 // does or not not change the live and gc keys).
 //
-// If the underlying iterator encounters an intent with a timestamp in the span
-// (startTime, endTime], or any inline meta, this method will return an error.
+// If the function encounters an intent (with any timestamp), a replicated lock,
+// or any inline meta in the key span, it will return an error.
 //
 // TODO(erikgrinaker): endTime does not actually work here -- if there are keys
 // above endTime then the stats do not properly account for them. We probably
@@ -3175,6 +3175,18 @@ func MVCCClearTimeRange(
 	// Since we're setting up multiple iterators, we require consistent iterators.
 	if !rw.ConsistentIterators() {
 		return nil, errors.AssertionFailedf("requires consistent iterators")
+	}
+
+	// Check for any overlapping locks (at any timestamp), and return them to
+	// be resolved. We don't _expect_ to hit any since the RevertRange is only
+	// intended for non-live key spans, but there could be an intent or lock
+	// leftover from before the keyspace become non-live.
+	maxLockConflicts := int64(0) // TODO(nvanbenschoten): plumb this in.
+	if locks, err := ScanLocks(
+		ctx, rw, key, endKey, maxLockConflicts, 0, BatchEvalReadCategory); err != nil {
+		return nil, err
+	} else if len(locks) > 0 {
+		return nil, &kvpb.LockConflictError{Locks: locks}
 	}
 
 	// When iterating, instead of immediately clearing a matching key we can
@@ -3363,9 +3375,10 @@ func MVCCClearTimeRange(
 	// do the delete including updating the live key stats correctly.
 	//
 	// The MVCCIncrementalIterator checks for and fails on any intents in our
-	// time-range, as we do not want to clear any running transactions. We don't
-	// _expect_ to hit this since the RevertRange is only intended for non-live
-	// key spans, but there could be an intent leftover.
+	// time-range. However, we've already scanned over the lock table with the
+	// call to ScanLocks above, so this is not strictly necessary. If performance
+	// of this function is a concern, we could instruct the MVCCIncrementalIterator
+	// to forgo intent interleaving.
 	iter, err := NewMVCCIncrementalIterator(ctx, rw, MVCCIncrementalIterOptions{
 		KeyTypes:     IterKeyTypePointsAndRanges,
 		StartKey:     key,

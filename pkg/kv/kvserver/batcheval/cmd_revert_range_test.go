@@ -184,7 +184,6 @@ func TestCmdRevertRange(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	sumCIntent := hashRange(t, eng, startKey, endKey)
 
 	// Lay down more revisions (skipping even keys to avoid our intent on 0012).
 	for i := 7; i < keyCount+7; i += 2 {
@@ -209,9 +208,9 @@ func TestCmdRevertRange(t *testing.T) {
 		expectedSum []byte
 		resumes     int
 	}{
-		{"hit intent", tsB, true, nil, 2},
-		{"hit intent exactly", tsC, false, sumCIntent, 2},
-		{"clear above intent", tsC.Add(0, 1), false, sumCIntent, 2},
+		{"hit intent", tsB, true, nil, 0},
+		{"hit intent exactly", tsC, true, nil, 0},
+		{"clear above intent", tsC.Add(0, 1), true, nil, 0},
 		{"clear nothing above intent", tsD, false, sumD, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
