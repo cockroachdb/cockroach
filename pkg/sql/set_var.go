@@ -94,7 +94,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 
 				var dummyHelper tree.IndexedVarHelper
 				typedValue, err := p.analyzeExpr(
-					ctx, expr, nil, dummyHelper, types.String, false, "SET SESSION "+name)
+					ctx, expr, dummyHelper, types.String, false, "SET SESSION "+name)
 				if err != nil {
 					return nil, wrapSetVarError(err, name, expr.String())
 				}

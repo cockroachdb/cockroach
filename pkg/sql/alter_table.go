@@ -122,7 +122,6 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		}
 		typedExpr, err := p.analyzeExpr(
 			ctx, injectStats.Stats,
-			nil, /* sources - no name resolution */
 			tree.IndexedVarHelper{},
 			types.Jsonb, true, /* requireType */
 			"INJECT STATISTICS" /* typingContext */)

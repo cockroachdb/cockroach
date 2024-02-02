@@ -95,7 +95,6 @@ func (p *planner) AlterTenantCapability(
 				typedValue, err = p.analyzeExpr(
 					ctx,
 					update.Value,
-					nil, /* source */
 					dummyHelper,
 					desiredType,
 					true, /* requireType */

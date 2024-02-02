@@ -41,7 +41,7 @@ func (p *planner) alterRenameTenant(
 		e = tree.NewStrVal(tree.AsStringWithFlags(s, tree.FmtBareIdentifiers))
 	}
 	tname, err := p.analyzeExpr(
-		ctx, e, nil, tree.IndexedVarHelper{}, types.String, true, "ALTER VIRTUAL CLUSTER RENAME")
+		ctx, e, tree.IndexedVarHelper{}, types.String, true, "ALTER VIRTUAL CLUSTER RENAME")
 	if err != nil {
 		return nil, err
 	}
