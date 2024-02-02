@@ -466,6 +466,8 @@ func runBackupProcessor(
 			logClose(ctx, sink, "SST sink")
 		}()
 
+		sink.elideMode = spec.ElidePrefix
+
 		// priority becomes true when we're sending re-attempts of reads far enough
 		// in the past that we want to run them with priority.
 		var priority bool

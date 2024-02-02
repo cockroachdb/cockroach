@@ -237,6 +237,7 @@ func backup(
 		kvpb.MVCCFilter(backupManifest.MVCCFilter),
 		backupManifest.StartTime,
 		backupManifest.EndTime,
+		backupManifest.ElidedPrefix,
 	)
 	if err != nil {
 		return roachpb.RowCount{}, 0, err
@@ -1620,6 +1621,16 @@ func createBackupManifest(
 	if jobDetails.FullCluster {
 		coverage = tree.AllDescriptors
 	}
+	elide := execinfrapb.ElidePrefix_None
+	if len(prevBackups) > 0 {
+		elide = prevBackups[0].ElidedPrefix
+	} else if execCfg.Settings.Version.IsActive(ctx, clusterversion.V24_1) {
+		if len(tenants) > 0 {
+			elide = execinfrapb.ElidePrefix_Tenant
+		} else {
+			elide = execinfrapb.ElidePrefix_TenantAndTable
+		}
+	}
 
 	backupManifest := backuppb.BackupManifest{
 		StartTime:           startTime,
@@ -1637,6 +1648,7 @@ func createBackupManifest(
 		ClusterID:           execCfg.NodeInfo.LogicalClusterID(),
 		StatisticsFilenames: statsFiles,
 		DescriptorCoverage:  coverage,
+		ElidedPrefix:        elide,
 	}
 	if err := checkCoverage(ctx, backupManifest.Spans, append(prevBackups, backupManifest)); err != nil {
 		return backuppb.BackupManifest{}, errors.Wrap(err, "new backup would not cover expected time")
