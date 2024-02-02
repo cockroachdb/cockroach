@@ -146,14 +146,19 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
-			// Ignore failures from test expecting `DELETE FROM ... USING` syntax to
-			// fail (https://github.com/cockroachdb/cockroach/issues/40963). We don't
-			// have a good way of parsing test results from javascript, so we do
-			// substring matching instead. This can be removed once the upstream knex
-			// repo updates to test with v23.1.
+			// We don't have a good way of parsing test results from javascript, so
+			// we do substring matching instead.
+			// - (1) and (2) ignore failures from a test that expects `DELETE FROM
+			//   ... USING` syntax to fail (https://github.com/cockroachdb/cockroach/issues/40963).
+			//   This can be removed once the upstream knex repo updates to test with
+			//   v23.1.
+			// - (3) ignores a failure caused by our use of the autocommit_before_ddl
+			//   setting, which makes a test that drops a primary key and then re-adds
+			//   it in the same transaction fail.
 			if !strings.Contains(rawResultsStr, "1) should handle basic delete with join") ||
 				!strings.Contains(rawResultsStr, "2) should handle returning") ||
-				strings.Contains(rawResultsStr, " 3) ") {
+				!strings.Contains(rawResultsStr, "3) #1430 - .primary() & .dropPrimary() same for all dialects") ||
+				strings.Contains(rawResultsStr, " 4) ") {
 				t.Fatal(err)
 			}
 		}

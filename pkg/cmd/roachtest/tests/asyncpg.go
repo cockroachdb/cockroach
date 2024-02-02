@@ -83,6 +83,13 @@ func registerAsyncpg(r registry.Registry) {
 		}
 
 		if err := repeatRunE(
+			ctx, t, c, node, "patch test to workaround flaky cleanup logic",
+			`sed -e "s/CREATE TYPE enum_t AS ENUM ('abc', 'def', 'ghi');/CREATE TYPE IF NOT EXISTS enum_t AS ENUM ('abc', 'def', 'ghi');/g" -i /mnt/data1/asyncpg/tests/test_codecs.py`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get",
 			`sudo apt-get -qq update`,
 		); err != nil {
