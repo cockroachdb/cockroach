@@ -211,7 +211,6 @@ go_library(
         "scrub_fk.go",
         "scrub_index.go",
         "scrub_unique_constraint.go",
-        "select_name_resolution.go",
         "sequence.go",
         "sequence_select.go",
         "serial.go",
