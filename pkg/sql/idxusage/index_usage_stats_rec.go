@@ -45,9 +45,10 @@ const defaultUnusedIndexDuration = 7 * 24 * time.Hour
 var DropUnusedIndexDuration = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"sql.index_recommendation.drop_unused_duration",
-	"the index unuse duration at which we begin to recommend dropping the index",
+	"the index unused duration at which we begin to recommend dropping the index",
 	defaultUnusedIndexDuration,
 	settings.NonNegativeDuration,
+	settings.WithPublic,
 )
 
 const indexExceedUsageDurationReasonPlaceholder = "This index has not been used in over %sand can be removed for better write performance."
