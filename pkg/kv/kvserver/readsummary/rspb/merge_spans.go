@@ -13,6 +13,7 @@ package rspb
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -176,7 +177,7 @@ func mergeSpans[V ratchetingValue[V], S span[V], SPtr spanPtr[V, S]](a, b []S) [
 						long.setKey(shortEndKey)
 					} else {
 						// short is a point span, so start long at the next key.
-						long.setKey(append(short.key(), 0)) // Key.Next()
+						long.setKey(encoding.BytesNext(short.key())) // Key.Next()
 					}
 				}
 			}
