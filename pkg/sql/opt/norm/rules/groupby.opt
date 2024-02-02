@@ -133,8 +133,8 @@
 )
 
 # EliminateDistinct discards a DistinctOn operator that is eliminating duplicate
-# rows by using grouping columns that are statically known to form a strong key.
-# By definition, a strong key does not allow duplicate values, so the GroupBy is
+# rows by using grouping columns that are statically known to form a strict key.
+# By definition, a strict key does not allow duplicate values, so the GroupBy is
 # redundant and can be eliminated.
 #
 # Since a DistinctOn operator can serve as a projection operator, we need to
@@ -162,6 +162,32 @@
 )
 =>
 (Project $input [] (GroupingOutputCols $groupingPrivate $aggs))
+
+# EliminateGroupBy is similar to EliminateDistinct, but it operates on GroupBy
+# expressions where the grouping columns are statically known to form a strict
+# key in the GroupBy's input.
+#
+# It only applies if all the aggregate functions are ConstAgg, ConstNotNullAgg,
+# or AnyNotNullAgg. These aggregate functions all evaluate to the first non-NULL
+# value encountered, and NULL if there are no such values. Because the input is
+# guaranteed to produce one row per group, these aggregate functions are
+# equivalent to projecting their input column.
+[EliminateGroupBy, Normalize]
+(GroupBy
+    $input:*
+    $aggs:* & (AreAllAnyNotNullAggs $aggs)
+    $groupingPrivate:* &
+        (ColsAreStrictKey (GroupingCols $groupingPrivate) $input)
+)
+=>
+(Project
+    $input
+    (ConvertAnyNotNullAggsToProjections $aggs)
+    (IntersectionCols
+        (GroupingOutputCols $groupingPrivate $aggs)
+        (OutputCols $input)
+    )
+)
 
 # ReduceGroupingCols eliminates redundant grouping columns from the GroupBy
 # operator and replaces them by ConstAgg aggregate functions. A grouping

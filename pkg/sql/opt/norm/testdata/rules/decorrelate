@@ -2031,7 +2031,7 @@ CREATE TABLE tab_orig (
 )
 ----
 
-norm expect=TryDecorrelateGroupBy disable=InlineWith
+norm expect=TryDecorrelateGroupBy disable=(InlineWith,EliminateGroupBy)
 SELECT
   NULL
 FROM
@@ -4662,68 +4662,50 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1!null i:2 f:3 s:4 j:5 column16:16 true_agg:18
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 x:12 column16:16 true:17
       ├── key: (1)
-      ├── fd: (1)-->(2-5,16,18)
-      ├── group-by (hash)
-      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 column16:16 true_agg:18
-      │    ├── grouping columns: k:1!null
+      ├── fd: (1)-->(2-5,12,16,17)
+      ├── left-join (hash)
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:12 column16:16 true:17
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,16,18)
-      │    ├── left-join (hash)
-      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:12 column16:16 true:17
-      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+      │    ├── fd: (1)-->(2-5,12,16,17)
+      │    ├── left-join (cross)
+      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 column16:16
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2-5,12,16,17)
-      │    │    ├── left-join (cross)
-      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 column16:16
-      │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+      │    │    ├── fd: (1)-->(2-5,16)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-5,16)
-      │    │    │    ├── scan a
-      │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    └── fd: (1)-->(2-5)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column16:16!null
+      │    │    │    └── fd: (1)-->(2-5)
+      │    │    ├── project
+      │    │    │    ├── columns: column16:16!null
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(16)
+      │    │    │    ├── limit
       │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    ├── key: ()
-      │    │    │    │    ├── fd: ()-->(16)
-      │    │    │    │    ├── limit
-      │    │    │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    │    │    ├── key: ()
-      │    │    │    │    │    ├── scan xy
-      │    │    │    │    │    │    └── limit hint: 1.00
-      │    │    │    │    │    └── 1
-      │    │    │    │    └── projections
-      │    │    │    │         └── true [as=column16:16]
-      │    │    │    └── filters (true)
-      │    │    ├── project
-      │    │    │    ├── columns: true:17!null x:12!null
-      │    │    │    ├── key: (12)
-      │    │    │    ├── fd: ()-->(17)
-      │    │    │    ├── scan xy
-      │    │    │    │    ├── columns: x:12!null
-      │    │    │    │    └── key: (12)
+      │    │    │    │    ├── scan xy
+      │    │    │    │    │    └── limit hint: 1.00
+      │    │    │    │    └── 1
       │    │    │    └── projections
-      │    │    │         └── true [as=true:17]
-      │    │    └── filters
-      │    │         └── x:12 = k:1 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
-      │    └── aggregations
-      │         ├── const-not-null-agg [as=true_agg:18, outer=(17)]
-      │         │    └── true:17
-      │         ├── const-agg [as=i:2, outer=(2)]
-      │         │    └── i:2
-      │         ├── const-agg [as=f:3, outer=(3)]
-      │         │    └── f:3
-      │         ├── const-agg [as=s:4, outer=(4)]
-      │         │    └── s:4
-      │         ├── const-agg [as=j:5, outer=(5)]
-      │         │    └── j:5
-      │         └── const-agg [as=column16:16, outer=(16)]
-      │              └── column16:16
+      │    │    │         └── true [as=column16:16]
+      │    │    └── filters (true)
+      │    ├── project
+      │    │    ├── columns: true:17!null x:12!null
+      │    │    ├── key: (12)
+      │    │    ├── fd: ()-->(17)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:12!null
+      │    │    │    └── key: (12)
+      │    │    └── projections
+      │    │         └── true [as=true:17]
+      │    └── filters
+      │         └── x:12 = k:1 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
       └── filters
-           └── COALESCE(column16:16, false) OR (true_agg:18 IS NOT NULL) [outer=(16,18)]
+           └── COALESCE(column16:16, false) OR (true:17 IS NOT NULL) [outer=(16,17)]
 
 # Hoist an uncorrelated equality subquery.
 norm expect=HoistSelectSubquery
@@ -5641,36 +5623,28 @@ project
       │    ├── columns: exists:18!null x:8!null
       │    ├── key: (8)
       │    ├── fd: (8)-->(18)
-      │    ├── group-by (hash)
-      │    │    ├── columns: x:8!null true_agg:17
-      │    │    ├── grouping columns: x:8!null
+      │    ├── left-join (hash)
+      │    │    ├── columns: x:8!null y:9 u:12 true:16
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    ├── key: (8)
-      │    │    ├── fd: (8)-->(17)
-      │    │    ├── left-join (hash)
-      │    │    │    ├── columns: x:8!null y:9 u:12 true:16
-      │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+      │    │    ├── fd: (8)-->(9,12,16)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:8!null y:9
       │    │    │    ├── key: (8)
-      │    │    │    ├── fd: (8)-->(9,12,16)
-      │    │    │    ├── scan xy
-      │    │    │    │    ├── columns: x:8!null y:9
-      │    │    │    │    ├── key: (8)
-      │    │    │    │    └── fd: (8)-->(9)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: true:16!null u:12!null
-      │    │    │    │    ├── key: (12)
-      │    │    │    │    ├── fd: ()-->(16)
-      │    │    │    │    ├── scan uv
-      │    │    │    │    │    ├── columns: u:12!null
-      │    │    │    │    │    └── key: (12)
-      │    │    │    │    └── projections
-      │    │    │    │         └── true [as=true:16]
-      │    │    │    └── filters
-      │    │    │         └── u:12 = y:9 [outer=(9,12), constraints=(/9: (/NULL - ]; /12: (/NULL - ]), fd=(9)==(12), (12)==(9)]
-      │    │    └── aggregations
-      │    │         └── const-not-null-agg [as=true_agg:17, outer=(16)]
-      │    │              └── true:16
+      │    │    │    └── fd: (8)-->(9)
+      │    │    ├── project
+      │    │    │    ├── columns: true:16!null u:12!null
+      │    │    │    ├── key: (12)
+      │    │    │    ├── fd: ()-->(16)
+      │    │    │    ├── scan uv
+      │    │    │    │    ├── columns: u:12!null
+      │    │    │    │    └── key: (12)
+      │    │    │    └── projections
+      │    │    │         └── true [as=true:16]
+      │    │    └── filters
+      │    │         └── u:12 = y:9 [outer=(9,12), constraints=(/9: (/NULL - ]; /12: (/NULL - ]), fd=(9)==(12), (12)==(9)]
       │    └── projections
-      │         └── true_agg:17 IS NOT NULL [as=exists:18, outer=(17)]
+      │         └── true:16 IS NOT NULL [as=exists:18, outer=(16)]
       └── filters
            └── exists:18 OR (k:1 = x:8) [outer=(1,8,18)]
 
@@ -5795,35 +5769,27 @@ SELECT (VALUES (EXISTS(SELECT * FROM xy WHERE x=k))) FROM a
 ----
 project
  ├── columns: column1:16!null
- ├── group-by (hash)
- │    ├── columns: k:1!null true_agg:14
- │    ├── grouping columns: k:1!null
+ ├── left-join (hash)
+ │    ├── columns: k:1!null x:8 true:13
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    ├── key: (1)
- │    ├── fd: (1)-->(14)
- │    ├── left-join (hash)
- │    │    ├── columns: k:1!null x:8 true:13
- │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(8,13)
- │    │    ├── scan a
- │    │    │    ├── columns: k:1!null
- │    │    │    └── key: (1)
- │    │    ├── project
- │    │    │    ├── columns: true:13!null x:8!null
- │    │    │    ├── key: (8)
- │    │    │    ├── fd: ()-->(13)
- │    │    │    ├── scan xy
- │    │    │    │    ├── columns: x:8!null
- │    │    │    │    └── key: (8)
- │    │    │    └── projections
- │    │    │         └── true [as=true:13]
- │    │    └── filters
- │    │         └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
- │    └── aggregations
- │         └── const-not-null-agg [as=true_agg:14, outer=(13)]
- │              └── true:13
+ │    ├── fd: (1)-->(8,13)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null
+ │    │    └── key: (1)
+ │    ├── project
+ │    │    ├── columns: true:13!null x:8!null
+ │    │    ├── key: (8)
+ │    │    ├── fd: ()-->(13)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:8!null
+ │    │    │    └── key: (8)
+ │    │    └── projections
+ │    │         └── true [as=true:13]
+ │    └── filters
+ │         └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  └── projections
-      └── true_agg:14 IS NOT NULL [as=column1:16, outer=(14)]
+      └── true:13 IS NOT NULL [as=column1:16, outer=(13)]
 
 # Any in values row.
 norm expect=HoistValuesSubquery
