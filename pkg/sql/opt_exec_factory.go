@@ -1178,12 +1178,13 @@ func (ef *execFactory) ConstructPlan(
 	cascades []exec.Cascade,
 	checks []exec.Node,
 	rootRowCount int64,
+	flags exec.PlanFlags,
 ) (exec.Plan, error) {
 	// No need to spool at the root.
 	if spool, ok := root.(*spoolNode); ok {
 		root = spool.source
 	}
-	return constructPlan(ef.planner, root, subqueries, cascades, checks, rootRowCount)
+	return constructPlan(ef.planner, root, subqueries, cascades, checks, rootRowCount, flags)
 }
 
 // urlOutputter handles writing strings into an encoded URL for EXPLAIN (OPT,

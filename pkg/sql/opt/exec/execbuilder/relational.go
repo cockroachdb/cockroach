@@ -171,11 +171,11 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	if opt.IsDDLOp(e) {
 		// Mark the statement as containing DDL for use
 		// in the SQL executor.
-		b.IsDDL = true
+		b.flags.Set(exec.PlanFlagIsDDL)
 	}
 
 	if opt.IsMutationOp(e) {
-		b.ContainsMutation = true
+		b.flags.Set(exec.PlanFlagContainsMutation)
 		// Raise error if mutation op is part of a read-only transaction.
 		if b.evalCtx.TxnReadOnly {
 			return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
@@ -620,7 +620,8 @@ func (b *Builder) scanParams(
 			err = pgerror.Newf(pgcode.WrongObjectType,
 				"index \"%s\" cannot be used for this query", idx.Name())
 			if b.evalCtx.SessionData().DisallowFullTableScans &&
-				(b.ContainsLargeFullTableScan || b.ContainsLargeFullIndexScan) {
+				(b.flags.IsSet(exec.PlanFlagContainsLargeFullTableScan) ||
+					b.flags.IsSet(exec.PlanFlagContainsLargeFullIndexScan)) {
 				err = errors.WithHint(err,
 					"try overriding the `disallow_full_table_scans` or increasing the `large_full_scan_rows` cluster/session settings",
 				)
@@ -773,11 +774,15 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	if !tab.IsVirtualTable() && isUnfiltered {
 		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
 		if scan.Index == cat.PrimaryIndex {
-			b.ContainsFullTableScan = true
-			b.ContainsLargeFullTableScan = b.ContainsLargeFullTableScan || large
+			b.flags.Set(exec.PlanFlagContainsFullTableScan)
+			if large {
+				b.flags.Set(exec.PlanFlagContainsLargeFullTableScan)
+			}
 		} else {
-			b.ContainsFullIndexScan = true
-			b.ContainsLargeFullIndexScan = b.ContainsLargeFullIndexScan || large
+			b.flags.Set(exec.PlanFlagContainsFullIndexScan)
+			if large {
+				b.flags.Set(exec.PlanFlagContainsLargeFullIndexScan)
+			}
 		}
 		if stats.Available && stats.RowCount > b.MaxFullScanRows {
 			b.MaxFullScanRows = stats.RowCount
@@ -2946,10 +2951,10 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 					!b.evalCtx.SessionData().SharedLockingForSerializable) {
 				// Reset locking information as we've determined we're going to be
 				// performing a non-locking read.
-				return opt.Locking{}, nil // early return; do not set b.ContainsNonDefaultKeyLocking
+				return opt.Locking{}, nil // early return; do not set PlanFlagContainsNonDefaultKeyLocking
 			}
 		}
-		b.ContainsNonDefaultKeyLocking = true
+		b.flags.Set(exec.PlanFlagContainsNonDefaultKeyLocking)
 	}
 	return locking, nil
 }
@@ -3056,7 +3061,10 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 			return nil, err
 		}
 		rootRowCount := int64(rec.Recursive.Relational().Statistics().RowCountIfAvailable())
-		return innerBld.factory.ConstructPlan(plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks, rootRowCount)
+		return innerBld.factory.ConstructPlan(
+			plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks, rootRowCount,
+			innerBld.flags,
+		)
 	}
 
 	label := fmt.Sprintf("working buffer (%s)", rec.Name)
@@ -3171,7 +3179,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
 
 	for _, s := range udf.Def.Body {
 		if s.Relational().CanMutate {
-			b.ContainsMutation = true
+			b.flags.Set(exec.PlanFlagContainsMutation)
 			break
 		}
 	}
