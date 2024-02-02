@@ -2285,6 +2285,7 @@ type aggregatorPlanningInfo struct {
 	inputMergeOrdering       execinfrapb.Ordering
 	reqOrdering              ReqOrdering
 	allowPartialDistribution bool
+	estimatedRowCount        uint64
 }
 
 // addAggregators adds aggregators corresponding to a groupNode and updates the plan to
@@ -2328,6 +2329,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		groupColOrdering:     n.groupColOrdering,
 		inputMergeOrdering:   dsp.convertOrdering(planReqOrdering(n.plan), p.PlanToStreamColMap),
 		reqOrdering:          n.reqOrdering,
+		estimatedRowCount:    n.estimatedRowCount,
 	})
 }
 
@@ -2975,6 +2977,11 @@ func (dsp *DistSQLPlanner) planAggregators(
 		}
 
 		p.SetMergeOrdering(dsp.convertOrdering(info.reqOrdering, p.PlanToStreamColMap))
+	}
+
+	// Set the estimated output row count if we have it available.
+	for _, pIdx := range p.ResultRouters {
+		p.Processors[pIdx].Spec.EstimatedRowCount = info.estimatedRowCount
 	}
 
 	return nil
