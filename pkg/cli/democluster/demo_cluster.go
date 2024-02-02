@@ -1557,6 +1557,7 @@ func (c *transientCluster) getNetworkURLForServerAndUser(
 	user username.SQLUsername,
 	password string,
 	target serverSelection,
+	database string,
 ) (*pgurl.URL, error) {
 	u := pgurl.New()
 	if includeAppName {
@@ -1565,12 +1566,14 @@ func (c *transientCluster) getNetworkURLForServerAndUser(
 		}
 	}
 	sqlAddr := c.servers[serverIdx].AdvSQLAddr()
-	database := c.defaultDB
 	if target != forSystemTenant {
 		sqlAddr = c.tenantServers[serverIdx].SQLAddr()
 	}
-	if (target == forSystemTenant) && c.demoCtx.Multitenant {
-		database = catalogkeys.DefaultDatabaseName
+	if database == "" {
+		database = c.defaultDB
+		if (target == forSystemTenant) && c.demoCtx.Multitenant {
+			database = catalogkeys.DefaultDatabaseName
+		}
 	}
 
 	if err := c.extendURLWithTargetCluster(u, target); err != nil {
@@ -2051,7 +2054,7 @@ func (c *transientCluster) ExpandShortDemoURLs(s string) string {
 		return s
 	}
 
-	for _, match := range regexp.MustCompile(`demo://[a-zA-Z0-9:@]+`).FindAllString(s, -1) {
+	for _, match := range regexp.MustCompile(`demo://[a-zA-Z0-9:@/]+`).FindAllString(s, -1) {
 		parsed, err := url.Parse(match)
 		if err != nil {
 			continue
@@ -2076,7 +2079,7 @@ func (c *transientCluster) ExpandShortDemoURLs(s string) string {
 
 		// Generate the new URL, then replace the demo one with it.
 		replaced, err := c.getNetworkURLForServerAndUser(context.Background(),
-			idx, false, user, password, serverSelection(parsed.Hostname()),
+			idx, false, user, password, serverSelection(parsed.Hostname()), strings.TrimPrefix(parsed.Path, "/"),
 		)
 		if err != nil {
 			continue
