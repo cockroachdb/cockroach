@@ -93,6 +93,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 {{- $tests := .Tests -}}
@@ -102,7 +103,8 @@ func TestRestoreEntryCover_numBackups_{{.NumBackups}}(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	runTestRestoreEntryCover(t, {{.NumBackups}})
+	{{ if ge .NumBackups 12 }}skip.UnderRace(t, "excessive memory usage")
+	{{ end }}runTestRestoreEntryCover(t, {{.NumBackups}})
 }
 {{- end }}
 `
