@@ -2036,11 +2036,22 @@ func (c *transientCluster) ExpandShortDemoURLs(s string) string {
 	if !strings.Contains(s, "demo://") {
 		return s
 	}
-	u, err := c.getNetworkURLForServer(context.Background(), 0, false, forSystemTenant)
-	if err != nil {
-		return s
+
+	for _, match := range regexp.MustCompile(`demo://[a-zA-Z0-9]+`).FindAllString(s, -1) {
+		parsed, err := url.Parse(match)
+		if err != nil {
+			continue
+		}
+		// Generate the new URL, then replace the demo one with it.
+		replaced, err := c.getNetworkURLForServer(context.Background(),
+			0, false, serverSelection(parsed.Hostname()),
+		)
+		if err != nil {
+			continue
+		}
+		s = strings.ReplaceAll(s, match, replaced.String())
 	}
-	return regexp.MustCompile(`demo://([[:alnum:]]+)`).ReplaceAllString(s, strings.ReplaceAll(u.String(), "-ccluster%3Dsystem", "-ccluster%3D$1"))
+	return s
 }
 
 func (c *transientCluster) printURLs(
