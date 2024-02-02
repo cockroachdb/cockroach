@@ -2037,14 +2037,21 @@ func (c *transientCluster) ExpandShortDemoURLs(s string) string {
 		return s
 	}
 
-	for _, match := range regexp.MustCompile(`demo://[a-zA-Z0-9]+`).FindAllString(s, -1) {
+	for _, match := range regexp.MustCompile(`demo://[a-zA-Z0-9:]+`).FindAllString(s, -1) {
 		parsed, err := url.Parse(match)
 		if err != nil {
 			continue
 		}
+
+		// If a node number if specified (using port number), use it.
+		idx := 0
+		if i, err := strconv.Atoi(parsed.Port()); err == nil && i > 0 && i <= len(c.servers) {
+			idx = i - 1
+		}
+
 		// Generate the new URL, then replace the demo one with it.
 		replaced, err := c.getNetworkURLForServer(context.Background(),
-			0, false, serverSelection(parsed.Hostname()),
+			idx, false, serverSelection(parsed.Hostname()),
 		)
 		if err != nil {
 			continue
