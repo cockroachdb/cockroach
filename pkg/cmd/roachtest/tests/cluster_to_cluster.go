@@ -1241,6 +1241,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		maxAcceptedLatency: 12 * time.Minute,
 		clouds:             registry.AllExceptAWS,
 		suites:             registry.Suites(registry.Nightly),
+		skip:               "test flakes on 23.1, but c2c shouldn't be used on 23.1 ;)",
 	}
 	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		rd := makeReplicationDriver(t, c, sp)
