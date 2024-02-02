@@ -2055,7 +2055,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 
 		desc := fmt.Sprintf("mvccClearTimeRange=%s, startTime=%s, endTime=%s", keySpan, startTime, endTime)
 		_, err := MVCCClearTimeRange(ctx, s.batch, s.MSDelta, keySpan.Key, keySpan.EndKey,
-			startTime, endTime, nil /* leftPeekBound */, nil /* rightPeekBound */, clearRangeThreshold, 0, 0)
+			startTime, endTime, nil /* leftPeekBound */, nil /* rightPeekBound */, clearRangeThreshold, 0, 0, 0)
 		if err != nil {
 			desc += " " + err.Error()
 			return false, desc + ": " + err.Error()
