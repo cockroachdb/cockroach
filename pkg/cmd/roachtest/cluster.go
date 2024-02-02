@@ -887,9 +887,6 @@ func (f *clusterFactory) newCluster(
 		providerOptsContainer.SetProviderOpts(cloud, providerOpts)
 	}
 
-	if cfg.spec.UbuntuVersion.IsOverridden() {
-		createVMOpts.UbuntuVersion = cfg.spec.UbuntuVersion
-	}
 	createFlagsOverride(&createVMOpts)
 	// Make sure expiration is changed if --lifetime override flag
 	// is passed.

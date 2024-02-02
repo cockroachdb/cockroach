@@ -652,10 +652,6 @@ func (p *Provider) createVM(
 		startupArgs.AttachedDiskLun = &lun
 	}
 
-	// In the future, when all tests are run on Ubuntu 22.04, we can remove this
-	// check and always enable RSA SHA1 and create a tcpdump symlink.
-	startupArgs.IsUbuntu22 = !opts.UbuntuVersion.IsOverridden()
-
 	startupScript, err := evalStartupTemplate(startupArgs)
 	if err != nil {
 		return vm, err
@@ -753,20 +749,6 @@ func (p *Provider) createVM(
 				},
 			},
 		},
-	}
-	if opts.UbuntuVersion.IsOverridden() {
-		var image []string
-		image, err = getUbuntuImage(opts.UbuntuVersion)
-		if err != nil {
-			return compute.VirtualMachine{}, err
-		}
-		vm.VirtualMachineProperties.StorageProfile.ImageReference = &compute.ImageReference{
-			Publisher: to.StringPtr("Canonical"),
-			Offer:     to.StringPtr(image[0]),
-			Sku:       to.StringPtr(image[1]),
-			Version:   to.StringPtr(image[2]),
-		}
-		l.Printf("Overriding default Ubuntu image with %s", image)
 	}
 	if !opts.SSDOpts.UseLocalSSD {
 		caching := compute.CachingTypesNone
@@ -1516,25 +1498,4 @@ func (p *Provider) getResourcesAndSecurityGroupByName(
 		sGroup = p.mu.securityGroups[sName]
 	}
 	return rGroup, sGroup
-}
-
-var (
-	// We define the actual image here because it's different for every provider.
-	focalFossa = vm.UbuntuImages{
-		DefaultImage: "0001-com-ubuntu-server-focal;20_04-lts;20.04.202109080",
-	}
-
-	azUbuntuImages = map[vm.UbuntuVersion]vm.UbuntuImages{
-		vm.FocalFossa: focalFossa,
-	}
-)
-
-// getUbuntuImage returns the correct Ubuntu image for the specified Ubuntu version.
-func getUbuntuImage(version vm.UbuntuVersion) ([]string, error) {
-	image, ok := azUbuntuImages[version]
-	if ok {
-		return strings.Split(image.DefaultImage, ";"), nil
-	}
-
-	return nil, errors.Errorf("Unknown Ubuntu version specified.")
 }
