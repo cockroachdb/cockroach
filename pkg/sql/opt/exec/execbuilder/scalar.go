@@ -858,6 +858,7 @@ func (b *Builder) buildSubquery(
 			}
 			plan, err := b.factory.ConstructPlan(
 				ePlan.root, nil /* subqueries */, nil /* cascades */, nil /* checks */, inputRowCount,
+				eb.flags,
 			)
 			if err != nil {
 				return err
@@ -947,7 +948,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 
 	for _, s := range udf.Def.Body {
 		if s.Relational().CanMutate {
-			b.ContainsMutation = true
+			b.flags.Set(exec.PlanFlagContainsMutation)
 			break
 		}
 	}

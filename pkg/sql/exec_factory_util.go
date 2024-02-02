@@ -32,6 +32,7 @@ func constructPlan(
 	cascades []exec.Cascade,
 	checks []exec.Node,
 	rootRowCount int64,
+	flags exec.PlanFlags,
 ) (exec.Plan, error) {
 	res := &planComponents{}
 	assignPlan := func(plan *planMaybePhysical, node exec.Node) {
@@ -80,6 +81,30 @@ func constructPlan(
 		for i := range checks {
 			assignPlan(&res.checkPlans[i].plan, checks[i])
 		}
+	}
+	if flags.IsSet(exec.PlanFlagIsDDL) {
+		res.flags.Set(planFlagIsDDL)
+	}
+	if flags.IsSet(exec.PlanFlagContainsFullTableScan) {
+		res.flags.Set(planFlagContainsFullTableScan)
+	}
+	if flags.IsSet(exec.PlanFlagContainsFullIndexScan) {
+		res.flags.Set(planFlagContainsFullIndexScan)
+	}
+	if flags.IsSet(exec.PlanFlagContainsLargeFullTableScan) {
+		res.flags.Set(planFlagContainsLargeFullTableScan)
+	}
+	if flags.IsSet(exec.PlanFlagContainsLargeFullIndexScan) {
+		res.flags.Set(planFlagContainsLargeFullIndexScan)
+	}
+	if flags.IsSet(exec.PlanFlagContainsMutation) {
+		res.flags.Set(planFlagContainsMutation)
+	}
+	if flags.IsSet(exec.PlanFlagContainsNonDefaultKeyLocking) {
+		res.flags.Set(planFlagContainsNonDefaultLocking)
+	}
+	if flags.IsSet(exec.PlanFlagCheckContainsNonDefaultKeyLocking) {
+		res.flags.Set(planFlagCheckContainsNonDefaultLocking)
 	}
 
 	return res, nil
