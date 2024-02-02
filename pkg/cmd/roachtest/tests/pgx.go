@@ -82,6 +82,19 @@ func registerPgx(r registry.Registry) {
 		); err != nil {
 			t.Fatal(err)
 		}
+
+		for original, replacement := range map[string]string{
+			"create type fruit": "drop type if exists public.fruit; create type fruit",
+			"t.Parallel()":      "", // SAFE FOR TESTING
+		} {
+			if err := repeatRunE(
+				ctx, t, c, node, "patch test to workaround flaky cleanup logic",
+				fmt.Sprintf(`find /mnt/data1/pgx/ -name "query_test.go" | xargs sed -i -e "s/%s/%s/g"`, original, replacement),
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		// It's safer to clean up dependencies this way than it is to give the cluster
 		// wipe root access.
 		defer func() {

@@ -127,6 +127,23 @@ func registerRubyPG(r registry.Registry) {
 			t.Fatal(err)
 		}
 
+		for original, replacement := range map[string]string{
+			"CREATE FUNCTION errfunc()":    "DROP FUNCTION IF EXISTS errfunc(); CREATE FUNCTION errfunc()",
+			"CREATE TEMP TABLE copytable":  "DROP TABLE IF EXISTS copytable; CREATE TEMP TABLE copytable",
+			"CREATE TEMP TABLE copytable2": "DROP TABLE IF EXISTS copytable2; CREATE TEMP TABLE copytable2",
+			"CREATE TABLE fmodtest":        "DROP TABLE IF EXISTS fmodtest; CREATE TABLE fmodtest",
+			"CREATE TABLE ftablecoltest":   "DROP TABLE IF EXISTS ftablecoltest; CREATE TABLE ftablecoltest",
+			"CREATE TABLE ftabletest":      "DROP TABLE IF EXISTS ftabletest; CREATE TABLE ftabletest",
+			"CREATE TABLE students":        "DROP TABLE IF EXISTS students; CREATE TABLE students",
+		} {
+			if err := repeatRunE(
+				ctx, t, c, node, "patch test to workaround flaky cleanup logic",
+				fmt.Sprintf(`find /mnt/data1/ruby-pg/spec/pg/ -name "*_spec.rb" | xargs sed -i -e "s/%s/%s/g"`, original, replacement),
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		t.Status("installing bundler")
 		if err := repeatRunE(
 			ctx,
