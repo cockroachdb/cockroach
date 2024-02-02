@@ -112,9 +112,9 @@ send "\\connect cluster:system/postgres - - - autocerts\r"
 eexpect root@
 eexpect "system/postgres>"
 
-send "\\c demo://demo@demoapp"
+send "\\c demo://demo@demoapp/system"
 eexpect demo@
-eexpect "demoapp/defaultdb>"
+eexpect "demoapp/system>"
 
 send "\\c demo://root@system"
 eexpect root@
