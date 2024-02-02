@@ -5396,7 +5396,7 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 							if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
-							r = int16(v)
+							r = int16(math.RoundToEven(v))
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -5425,7 +5425,7 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 							if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
-							r = int16(v)
+							r = int16(math.RoundToEven(v))
 
 							//gcassert:bce
 							outputCol.Set(tupleIdx, r)
@@ -5454,7 +5454,7 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 							if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
-							r = int16(v)
+							r = int16(math.RoundToEven(v))
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -5483,7 +5483,7 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 							if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
-							r = int16(v)
+							r = int16(math.RoundToEven(v))
 
 							//gcassert:bce
 							outputCol.Set(tupleIdx, r)
@@ -5544,7 +5544,7 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 							if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
-							r = int32(v)
+							r = int32(math.RoundToEven(v))
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -5573,7 +5573,7 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 							if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
-							r = int32(v)
+							r = int32(math.RoundToEven(v))
 
 							//gcassert:bce
 							outputCol.Set(tupleIdx, r)
@@ -5602,7 +5602,7 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 							if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
-							r = int32(v)
+							r = int32(math.RoundToEven(v))
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -5631,7 +5631,7 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 							if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
-							r = int32(v)
+							r = int32(math.RoundToEven(v))
 
 							//gcassert:bce
 							outputCol.Set(tupleIdx, r)
@@ -5692,7 +5692,7 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 							if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
-							r = int64(v)
+							r = int64(math.RoundToEven(v))
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -5721,7 +5721,7 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 							if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
-							r = int64(v)
+							r = int64(math.RoundToEven(v))
 
 							//gcassert:bce
 							outputCol.Set(tupleIdx, r)
@@ -5750,7 +5750,7 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 							if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
-							r = int64(v)
+							r = int64(math.RoundToEven(v))
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -5779,7 +5779,7 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 							if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
-							r = int64(v)
+							r = int64(math.RoundToEven(v))
 
 							//gcassert:bce
 							outputCol.Set(tupleIdx, r)

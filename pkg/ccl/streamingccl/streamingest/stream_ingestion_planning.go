@@ -200,7 +200,7 @@ func ingestionPlanHook(
 		destinationTenantID, err = sql.CreateTenantRecord(
 			ctx, p.ExecCfg().Codec, p.ExecCfg().Settings,
 			p.InternalSQLTxn(),
-			p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, p.Txn()),
+			p.ExecCfg().SpanConfigKVAccessor.WithISQLTxn(ctx, p.InternalSQLTxn()),
 			tenantInfo, initialTenantZoneConfig,
 			ingestionStmt.IfNotExists,
 			p.ExecCfg().TenantTestingKnobs,

@@ -1533,3 +1533,18 @@ array_agg
 array_agg
 array_agg
 array_agg
+
+subtest regression_112515
+
+statement ok
+CREATE TABLE t112515 (f FLOAT);
+INSERT INTO t112515 VALUES (-1.5), (-0.5), (0.5), (1.5), (2.5);
+
+query I rowsort
+SELECT f::INT FROM t112515
+----
+-2
+0
+0
+2
+2
