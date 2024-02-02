@@ -149,7 +149,10 @@ message BackupManifest {
   // since all backups in 23.1+ will write slim manifests.
   bool has_external_manifest_ssts = 27 [(gogoproto.customname) = "HasExternalManifestSSTs"];
 
-  // NEXT ID: 28
+  int32 elided_prefix = 28 [(gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb.ElidePrefix"];
+
+  // NEXT ID: 29.
 }
 
 message BackupPartitionDescriptor{

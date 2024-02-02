@@ -45,6 +45,7 @@ func distBackupPlanSpecs(
 	kmsEnv cloud.KMSEnv,
 	mvccFilter kvpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
+	elide execinfrapb.ElidePrefix,
 ) (map[base.SQLInstanceID]*execinfrapb.BackupDataSpec, error) {
 	var span *tracing.Span
 	ctx, span = tracing.ChildSpan(ctx, "backupccl.distBackupPlanSpecs")
@@ -107,6 +108,7 @@ func distBackupPlanSpecs(
 			BackupStartTime:  startTime,
 			BackupEndTime:    endTime,
 			UserProto:        user.EncodeProto(),
+			ElidePrefix:      elide,
 		}
 		sqlInstanceIDToSpec[partition.SQLInstanceID] = spec
 	}
