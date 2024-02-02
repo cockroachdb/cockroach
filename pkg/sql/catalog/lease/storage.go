@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -38,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
@@ -138,7 +138,6 @@ func (s storage) acquire(
 	prefix = s.getRegionPrefix()
 	var sessionID []byte
 	acquireInTxn := func(ctx context.Context, txn *kv.Txn) (err error) {
-
 		// Run the descriptor read as high-priority, thereby pushing any intents out
 		// of its way. We don't want schema changes to prevent lease acquisitions;
 		// we'd rather force them to refresh. Also this prevents deadlocks in cases
@@ -179,10 +178,14 @@ func (s storage) acquire(
 			// a monotonically increasing expiration.
 			expiration = minExpiration.Add(int64(time.Millisecond), 0)
 		}
-		desc, err = s.mustGetDescriptorByID(ctx, txn, id)
+		// Read into a temporary variable in case our read runs into
+		// any retryable error. If we run into an error then the delete
+		// above may need to be executed again.
+		latestDesc, err := s.mustGetDescriptorByID(ctx, txn, id)
 		if err != nil {
 			return err
 		}
+		desc = latestDesc
 		if err := catalog.FilterAddingDescriptor(desc); err != nil {
 			return err
 		}
@@ -228,10 +231,9 @@ func (s storage) acquire(
 	// are propagated up to the caller.
 	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
 		err := s.db.KV().Txn(ctx, acquireInTxn)
-		var pErr *kvpb.AmbiguousResultError
 		switch {
-		case errors.As(err, &pErr):
-			log.Infof(ctx, "ambiguous error occurred during lease acquisition for %v, retrying: %v", id, err)
+		case startup.IsRetryableReplicaError(err):
+			log.Infof(ctx, "retryable replica error occurred during lease acquisition for %v, retrying: %v", id, err)
 			continue
 		case pgerror.GetPGCode(err) == pgcode.UniqueViolation:
 			log.Infof(ctx, "uniqueness violation occurred due to concurrent lease"+
