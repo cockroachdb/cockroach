@@ -199,8 +199,15 @@ func NewHashAggregator(
 	args *colexecagg.NewHashAggregatorArgs,
 	newSpillingQueueArgs *colexecutils.NewSpillingQueueArgs,
 ) colexecop.ResettableOperator {
+	initialAllocSize, maxAllocSize := int64(1), int64(hashAggregatorAllocSize)
+	if args.EstimatedRowCount != 0 {
+		initialAllocSize = int64(args.EstimatedRowCount)
+		if initialAllocSize > maxAllocSize {
+			initialAllocSize = maxAllocSize
+		}
+	}
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-		ctx, args.NewAggregatorArgs, args.Spec.Aggregations, hashAggregatorAllocSize, colexecagg.HashAggKind,
+		ctx, args.NewAggregatorArgs, args.Spec.Aggregations, initialAllocSize, maxAllocSize, colexecagg.HashAggKind,
 	)
 	if err != nil {
 		colexecerror.InternalError(err)

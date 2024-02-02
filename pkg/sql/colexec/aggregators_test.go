@@ -1166,19 +1166,23 @@ func benchmarkAggregateFunction(
 		"%s/%s/%s%s/groupSize=%d%s/numInputRows=%d",
 		fName, agg.name, inputTypesString, numSameAggsSuffix, groupSize, distinctProbString, numInputRows),
 		func(b *testing.B) {
+			// Simulate the scenario when the optimizer has the perfect
+			// estimate.
+			estimatedRowCount := uint64(math.Ceil(float64(numInputRows) / float64(groupSize)))
 			b.SetBytes(int64(argumentsSize * numInputRows))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				a := agg.new(ctx, &colexecagg.NewAggregatorArgs{
-					Allocator:      testAllocator,
-					MemAccount:     testMemAcc,
-					Input:          source,
-					InputTypes:     tc.typs,
-					Spec:           tc.spec,
-					EvalCtx:        &evalCtx,
-					Constructors:   constructors,
-					ConstArguments: constArguments,
-					OutputTypes:    outputTypes,
+					Allocator:         testAllocator,
+					MemAccount:        testMemAcc,
+					Input:             source,
+					InputTypes:        tc.typs,
+					Spec:              tc.spec,
+					EvalCtx:           &evalCtx,
+					Constructors:      constructors,
+					ConstArguments:    constArguments,
+					OutputTypes:       outputTypes,
+					EstimatedRowCount: estimatedRowCount,
 				})
 				a.Init(ctx)
 				// Exhaust aggregator until all batches have been read or limit, if

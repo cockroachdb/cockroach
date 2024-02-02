@@ -26,7 +26,6 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//pkg/util/buildutil",
         "//pkg/util/duration",
         "//pkg/util/json",  # keep
         "//pkg/util/mon",

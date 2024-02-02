@@ -35,6 +35,12 @@ type NewAggregatorArgs struct {
 	Constructors   []execagg.AggregateConstructor
 	ConstArguments []tree.Datums
 	OutputTypes    []*types.T
+	// EstimatedRowCount, if set, is the number of rows that will be output by
+	// the aggregator (i.e. total number of groups). At time of this writing it
+	// is only used for initialAllocSize in the hash aggregator.
+	// TODO(yuzefovich): consider using this information for other things too
+	// (e.g. sizing the output batch).
+	EstimatedRowCount uint64
 
 	TestingKnobs struct {
 		// HashTableNumBuckets if positive will override the initial number of
