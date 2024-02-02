@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"runtime"
@@ -416,6 +417,7 @@ func (rd *restoreDataProcessor) openSSTs(
 
 	for ; idx < len(entry.Files); idx++ {
 		file := entry.Files[idx]
+
 		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
 
 		alloc, err := rd.qp.TryAcquireMaybeIncreaseCapacity(ctx, sstOverheadBytesPerFile)
@@ -559,6 +561,11 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	iter := sst.iter
 	defer sst.cleanup()
 
+	elidedPrefix, err := elidedPrefix(entry.Span.Key, sst.entry.ElidedPrefix)
+	if err != nil {
+		return summary, err
+	}
+
 	var batcher SSTBatcherExecutor
 	if rd.spec.ValidateOnly {
 		batcher = &sstBatcherNoop{}
@@ -617,19 +624,36 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key},
 		storage.MVCCKey{Key: entry.Span.EndKey}
 
+	if elidedPrefix != nil {
+		startKeyMVCC.Key = bytes.TrimPrefix(startKeyMVCC.Key, elidedPrefix)
+	}
+	if verbose {
+		log.Infof(ctx, "reading from %s to %s", startKeyMVCC, endKeyMVCC)
+	}
 	for iter.SeekGE(startKeyMVCC); ; iter.NextKey() {
 		ok, err := iter.Valid()
 		if err != nil {
 			return summary, err
 		}
 
-		if !ok || !iter.UnsafeKey().Less(endKeyMVCC) {
+		if !ok {
+			if verbose {
+				log.Infof(ctx, "iterator exhausted")
+			}
 			break
 		}
 
 		key := iter.UnsafeKey()
-		keyScratch = append(keyScratch[:0], key.Key...)
+		keyScratch = append(append(keyScratch[:0], elidedPrefix...), key.Key...)
 		key.Key = keyScratch
+
+		if !key.Less(endKeyMVCC) {
+			if verbose {
+				log.Infof(ctx, "iterator key %s exceeded end %s", key, endKeyMVCC)
+			}
+			break
+		}
+
 		v, err := iter.UnsafeValue()
 		if err != nil {
 			return summary, err

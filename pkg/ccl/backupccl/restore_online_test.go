@@ -45,6 +45,9 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	defer cleanupFn()
 	externalStorage := "nodelocal://1/backup"
 
+	// TODO(dt): remove this when OR supports synthesis.
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.elide_common_prefix.enabled = false`)
+
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 
 	params := base.TestClusterArgs{
@@ -93,6 +96,9 @@ func TestOnlineRestoreTenant(t *testing.T) {
 	_, _ = tc, systemDB
 	defer cleanupFn()
 	srv := tc.Server(0)
+
+	// TODO(dt): remove this when OR supports synthesis.
+	systemDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.elide_common_prefix.enabled = false`)
 
 	_ = securitytest.EmbeddedTenantIDs()
 

@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	io "io"
@@ -60,6 +61,9 @@ type fileSSTSink struct {
 	// completedSpans contain the number of completed spans since the last
 	// flush. This counter resets on each flush.
 	completedSpans int32
+
+	elideMode   execinfrapb.ElidePrefix
+	elidePrefix roachpb.Key
 
 	// stats contain statistics about the actions of the fileSSTSink over its
 	// entire lifespan.
@@ -163,6 +167,7 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 	}
 
 	s.flushedFiles = nil
+	s.elidePrefix = s.elidePrefix[:0]
 	s.flushedSize = 0
 	s.flushedRevStart.Reset()
 	s.completedSpans = 0
@@ -208,11 +213,16 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 
 	span := resp.metadata.Span
 
+	spanPrefix, err := elidedPrefix(span.Key, s.elideMode)
+	if err != nil {
+		return err
+	}
+
 	// If this span starts before the last buffered span ended, we need to flush
 	// since it overlaps but SSTWriter demands writes in-order.
 	if len(s.flushedFiles) > 0 {
 		last := s.flushedFiles[len(s.flushedFiles)-1].Span.EndKey
-		if span.Key.Compare(last) < 0 {
+		if span.Key.Compare(last) < 0 || !bytes.Equal(spanPrefix, s.elidePrefix) {
 			log.VEventf(ctx, 1, "flushing backup file %s of size %d because span %s cannot append before %s",
 				s.outName, s.flushedSize, span, last,
 			)
@@ -229,6 +239,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 			return err
 		}
 	}
+	s.elidePrefix = append(s.elidePrefix[:0], spanPrefix...)
 
 	log.VEventf(ctx, 2, "writing %s to backup file %s", span, s.outName)
 
@@ -299,6 +310,12 @@ func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
 			break
 		}
 		k := iter.UnsafeKey()
+		suffix, ok := bytes.CutPrefix(k.Key, s.elidePrefix)
+		if !ok {
+			return errors.AssertionFailedf("prefix mismatch %q does not have %q", k.Key, s.elidePrefix)
+		}
+		k.Key = suffix
+
 		v, err := iter.UnsafeValue()
 		if err != nil {
 			return err
@@ -308,7 +325,7 @@ func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
 				return err
 			}
 		} else {
-			if err := s.sst.PutRawMVCC(iter.UnsafeKey(), v); err != nil {
+			if err := s.sst.PutRawMVCC(k, v); err != nil {
 				return err
 			}
 		}
@@ -336,7 +353,15 @@ func (s *fileSSTSink) copyRangeKeys(dataSST []byte) error {
 		}
 		rangeKeys := iter.RangeKeys()
 		for _, v := range rangeKeys.Versions {
-			if err := s.sst.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), v.Value); err != nil {
+			rk := rangeKeys.AsRangeKey(v)
+			var ok bool
+			if rk.StartKey, ok = bytes.CutPrefix(rk.StartKey, s.elidePrefix); !ok {
+				return errors.AssertionFailedf("prefix mismatch %q does not have %q", rk.StartKey, s.elidePrefix)
+			}
+			if rk.EndKey, ok = bytes.CutPrefix(rk.EndKey, s.elidePrefix); !ok {
+				return errors.AssertionFailedf("prefix mismatch %q does not have %q", rk.EndKey, s.elidePrefix)
+			}
+			if err := s.sst.PutRawMVCCRangeKey(rk, v.Value); err != nil {
 				return err
 			}
 		}
@@ -349,4 +374,23 @@ func generateUniqueSSTName(nodeID base.SQLInstanceID) string {
 	// common file/bucket browse UIs.
 	return fmt.Sprintf("data/%d.sst",
 		builtins.GenerateUniqueInt(builtins.ProcessUniqueID(nodeID)))
+}
+
+func elidedPrefix(key roachpb.Key, mode execinfrapb.ElidePrefix) ([]byte, error) {
+	switch mode {
+	case execinfrapb.ElidePrefix_TenantAndTable:
+		rest, err := keys.StripTablePrefix(key)
+		if err != nil {
+			return nil, err
+		}
+		return key[: len(key)-len(rest) : len(key)-len(rest)], nil
+
+	case execinfrapb.ElidePrefix_Tenant:
+		rest, err := keys.StripTenantPrefix(key)
+		if err != nil {
+			return nil, err
+		}
+		return key[: len(key)-len(rest) : len(key)-len(rest)], nil
+	}
+	return nil, nil
 }

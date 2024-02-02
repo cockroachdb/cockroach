@@ -63,6 +63,7 @@ func sendAddRemoteSSTs(
 	requestFinishedCh chan<- struct{},
 	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
+	elide execinfrapb.ElidePrefix,
 ) error {
 	defer close(requestFinishedCh)
 	defer close(tracingAggCh)
@@ -85,7 +86,7 @@ func sendAddRemoteSSTs(
 
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, dataToRestore.getRekeys(), dataToRestore.getTenantRekeys(), fromSystemTenant, restoreSpanEntriesCh, requestFinishedCh))
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, dataToRestore.getRekeys(), dataToRestore.getTenantRekeys(), elide, fromSystemTenant, restoreSpanEntriesCh, requestFinishedCh))
 	}
 
 	if err := grp.Wait(); err != nil {
@@ -114,6 +115,7 @@ func sendAddRemoteSSTWorker(
 	execCtx sql.JobExecContext,
 	tableRekeys []execinfrapb.TableRekey,
 	tenantRekeys []execinfrapb.TenantRekey,
+	elide execinfrapb.ElidePrefix,
 	fromSystemTenant bool,
 	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
 	requestFinishedCh chan<- struct{},
@@ -146,6 +148,9 @@ func sendAddRemoteSSTWorker(
 			})
 		}
 		for _, i := range tenantRekeys {
+			if i.OldID == roachpb.SystemTenantID {
+				continue
+			}
 			prefixes.rewrites = append(prefixes.rewrites, prefixRewrite{
 				OldPrefix: keys.MakeTenantPrefix(i.OldID),
 				NewPrefix: keys.MakeTenantPrefix(i.NewID),
@@ -169,18 +174,22 @@ func sendAddRemoteSSTWorker(
 				if !found {
 					return errors.AssertionFailedf("file %s starting at %s did not find a prefix rewrite", file.Path, file.BackupFileEntrySpan.Key)
 				}
-				if !bytes.HasPrefix(file.BackupFileEntrySpan.EndKey, rw.OldPrefix) {
-					return errors.AssertionFailedf("file %s has span %s which does not end within prefix %q", file.Path, file.BackupFileEntrySpan, roachpb.Key(rw.OldPrefix))
+				if bytes.HasPrefix(file.BackupFileEntrySpan.EndKey, rw.OldPrefix) {
+					file.BackupFileEntrySpan.Key = rw.rewriteKey(file.BackupFileEntrySpan.Key)
+					file.BackupFileEntrySpan.EndKey = rw.rewriteKey(file.BackupFileEntrySpan.EndKey)
+				} else if bytes.Equal(file.BackupFileEntrySpan.EndKey, file.BackupFileEntrySpan.Key.PrefixEnd()) {
+					file.BackupFileEntrySpan.Key = rw.rewriteKey(file.BackupFileEntrySpan.Key)
+					file.BackupFileEntrySpan.EndKey = file.BackupFileEntrySpan.Key.PrefixEnd()
+				} else {
+					return errors.AssertionFailedf("file %s ending at %s did not find a prefix rewrite", file.Path, file.BackupFileEntrySpan.EndKey)
 				}
-				file.BackupFileEntrySpan.Key = rw.rewriteKey(file.BackupFileEntrySpan.Key)
-				file.BackupFileEntrySpan.EndKey = rw.rewriteKey(file.BackupFileEntrySpan.EndKey)
 
 				rewrite := kvpb.AddSSTableRequest_PrefixReplacement{}
 
-				if !rw.noop {
+				if elide == execinfrapb.ElidePrefix_None {
 					rewrite.From = rw.OldPrefix
-					rewrite.To = rw.NewPrefix
 				}
+				rewrite.To = rw.NewPrefix
 
 				if err := sendRemoteAddSSTable(ctx, execCtx, file, rewrite, fromSystemTenant); err != nil {
 					return err
@@ -203,7 +212,7 @@ func sendAddRemoteSSTWorker(
 					)
 				}
 
-				log.Infof(ctx, "experimental restore: sending span %s of file %s (file span: %s) as part of restore span %s",
+				log.Infof(ctx, "experimental restore: sending span %s of file %s (file span %s) as part of restore span %s",
 					restoringSubspan, file.Path, file.BackupFileEntrySpan, entry.Span)
 				file.BackupFileEntrySpan = restoringSubspan
 				if !firstSplitDone {
@@ -315,6 +324,8 @@ func sendRemoteAddSSTable(
 		batchTimestamp = execCtx.ExecCfg().DB.Clock().Now()
 	}
 
+	log.Infof(ctx, "sending remote AddSSTable span %s of %s remapped %q -> %q at timestamp %s",
+		file.BackupFileEntrySpan, loc.String(), rewrite.From, rewrite.To, batchTimestamp)
 	_, _, err := execCtx.ExecCfg().DB.AddRemoteSSTable(
 		ctx, file.BackupFileEntrySpan, loc, fileStats, rewrite, batchTimestamp)
 	return err

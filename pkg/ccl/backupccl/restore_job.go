@@ -474,6 +474,7 @@ func restore(
 				requestFinishedCh,
 				tracingAggCh,
 				genSpan,
+				backupManifests[0].ElidedPrefix,
 			), "sending remote AddSSTable requests")
 		}
 		md := restoreJobMetadata{
