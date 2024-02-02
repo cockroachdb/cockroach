@@ -1547,6 +1547,17 @@ func (c *transientCluster) generateCerts(ctx context.Context, certsDir string) (
 func (c *transientCluster) getNetworkURLForServer(
 	ctx context.Context, serverIdx int, includeAppName bool, target serverSelection,
 ) (*pgurl.URL, error) {
+	return c.getNetworkURLForServerAndUser(ctx, serverIdx, includeAppName, c.adminUser, c.adminPassword, target)
+}
+
+func (c *transientCluster) getNetworkURLForServerAndUser(
+	ctx context.Context,
+	serverIdx int,
+	includeAppName bool,
+	user username.SQLUsername,
+	password string,
+	target serverSelection,
+) (*pgurl.URL, error) {
 	u := pgurl.New()
 	if includeAppName {
 		if err := u.SetOption("application_name", catconstants.ReportableAppNamePrefix+"cockroach demo"); err != nil {
@@ -1569,7 +1580,7 @@ func (c *transientCluster) getNetworkURLForServer(
 	u.
 		WithNet(pgurl.NetTCP(host, port)).
 		WithDatabase(database).
-		WithUsername(c.adminUser.Normalized())
+		WithUsername(user.Normalized())
 
 	// For a demo cluster we don't use client TLS certs and instead use
 	// password-based authentication with the password pre-filled in the
@@ -1577,13 +1588,10 @@ func (c *transientCluster) getNetworkURLForServer(
 	if c.demoCtx.Insecure {
 		u.WithInsecure()
 	} else {
-		caCert := certnames.CACertFilename()
-		u.
-			WithAuthn(pgurl.AuthnPassword(true, c.adminPassword)).
-			WithTransport(pgurl.TransportTLS(
-				pgurl.TLSRequire,
-				filepath.Join(c.demoDir, caCert),
-			))
+		u.WithTransport(pgurl.TransportTLS(
+			pgurl.TLSRequire, filepath.Join(c.demoDir, certnames.CACertFilename())))
+
+		u.WithAuthn(pgurl.AuthnPassword(true, password))
 	}
 	return u, nil
 }
@@ -2037,7 +2045,7 @@ func (c *transientCluster) ExpandShortDemoURLs(s string) string {
 		return s
 	}
 
-	for _, match := range regexp.MustCompile(`demo://[a-zA-Z0-9:]+`).FindAllString(s, -1) {
+	for _, match := range regexp.MustCompile(`demo://[a-zA-Z0-9:@]+`).FindAllString(s, -1) {
 		parsed, err := url.Parse(match)
 		if err != nil {
 			continue
@@ -2049,9 +2057,20 @@ func (c *transientCluster) ExpandShortDemoURLs(s string) string {
 			idx = i - 1
 		}
 
+		// By default we'll connect to the default demo user/pw, but use an explicit
+		// user/pw if specified.
+		user, password := c.adminUser, c.adminPassword
+		if parsed.User != nil {
+			user, err = username.MakeSQLUsernameFromUserInput(parsed.User.Username(), username.PurposeValidation)
+			if err != nil {
+				continue
+			}
+			password, _ = parsed.User.Password()
+		}
+
 		// Generate the new URL, then replace the demo one with it.
-		replaced, err := c.getNetworkURLForServer(context.Background(),
-			idx, false, serverSelection(parsed.Hostname()),
+		replaced, err := c.getNetworkURLForServerAndUser(context.Background(),
+			idx, false, user, password, serverSelection(parsed.Hostname()),
 		)
 		if err != nil {
 			continue

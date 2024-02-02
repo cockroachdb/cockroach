@@ -112,6 +112,14 @@ send "\\connect cluster:system/postgres - - - autocerts\r"
 eexpect root@
 eexpect "system/postgres>"
 
+send "\\c demo://demo@demoapp"
+eexpect demo@
+eexpect "demoapp/defaultdb>"
+
+send "\\c demo://root@system"
+eexpect root@
+eexpect "system/defaultdb>"
+
 end_test
 
 send "\\q\r"
@@ -148,6 +156,11 @@ eexpect "2 rows"
 eexpect "system/defaultdb>"
 send "\\q\r"
 eexpect eof
+
+send "\\c demo://root:abc@system"
+eexpect root@
+eexpect "system/defaultdb>"
+
 end_test
 
 spawn /bin/bash
