@@ -1978,11 +1978,11 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		sz int64,
 		byteLimit int64,
 	) int {
-		resume, err := MVCCClearTimeRange(ctx, rw, ms, key, endKey, ts, endTs, nil, nil, 64, sz, byteLimit)
+		resume, err := MVCCClearTimeRange(ctx, rw, ms, key, endKey, ts, endTs, nil, nil, 64, sz, byteLimit, 0)
 		require.NoError(t, err)
 		attempts := 1
 		for resume != nil {
-			resume, err = MVCCClearTimeRange(ctx, rw, ms, resume, endKey, ts, endTs, nil, nil, 64, sz, byteLimit)
+			resume, err = MVCCClearTimeRange(ctx, rw, ms, resume, endKey, ts, endTs, nil, nil, 64, sz, byteLimit, 0)
 			require.NoError(t, err)
 			attempts++
 		}
@@ -1991,7 +1991,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear > ts0", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10, 0)
 		require.NoError(t, err)
 		assertKVs(t, b, ts0, ts0Content)
 		assertKVs(t, b, ts1, ts0Content)
@@ -2047,7 +2047,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear > ts4 (nothing) ", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts4, ts5, nil, nil, 64, 10, kb)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts4, ts5, nil, nil, 64, 10, kb, 0)
 		require.NoError(t, err)
 		assertKVs(t, b, ts4, ts4Content)
 		assertKVs(t, b, ts5, ts4Content)
@@ -2056,7 +2056,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear > ts5 (nothing)", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts5, ts5.Next(), nil, nil, 64, 10, kb)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts5, ts5.Next(), nil, nil, 64, 10, kb, 0)
 		require.NoError(t, err)
 		assertKVs(t, b, ts4, ts4Content)
 		assertKVs(t, b, ts5, ts4Content)
@@ -2073,7 +2073,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear > ts0 in empty span (nothing)", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey5, ts0, ts5, nil, nil, 64, 10, kb)
+		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey5, ts0, ts5, nil, nil, 64, 10, kb, 0)
 		require.NoError(t, err)
 		assertKVs(t, b, ts2, ts2Content)
 		assertKVs(t, b, ts5, ts4Content)
@@ -2082,7 +2082,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear > ts0 in empty span [k3,k5) (nothing)", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey5, ts0, ts5, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey5, ts0, ts5, nil, nil, 64, 10, 1<<10, 0)
 		require.NoError(t, err)
 		assertKVs(t, b, ts2, ts2Content)
 		assertKVs(t, b, ts5, ts4Content)
@@ -2091,7 +2091,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear k3 and up in ts0 > x >= ts1 (nothing)", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, keyMax, ts0, ts1, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, keyMax, ts0, ts1, nil, nil, 64, 10, 1<<10, 0)
 		require.NoError(t, err)
 		assertKVs(t, b, ts2, ts2Content)
 		assertKVs(t, b, ts5, ts4Content)
@@ -2107,7 +2107,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addIntent(t, b)
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10, 0)
 		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
@@ -2115,7 +2115,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addIntent(t, b)
-		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey4, ts2, ts3, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey4, ts2, ts3, nil, nil, 64, 10, 1<<10, 0)
 		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
@@ -2123,7 +2123,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addIntent(t, b)
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts3, ts5, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts3, ts5, nil, nil, 64, 10, 1<<10, 0)
 		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
@@ -2131,7 +2131,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addIntent(t, b)
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts1, ts2, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts1, ts2, nil, nil, 64, 10, 1<<10, 0)
 		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
@@ -2144,7 +2144,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addLock(t, b)
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10, 0)
 		require.EqualError(t, err, "conflicting locks on \"/db1\"")
 	})
 
@@ -2152,7 +2152,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addLock(t, b)
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts2, ts3, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts2, ts3, nil, nil, 64, 10, 1<<10, 0)
 		require.EqualError(t, err, "conflicting locks on \"/db1\"")
 	})
 
@@ -2160,7 +2160,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addLock(t, b)
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts3, ts5, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts3, ts5, nil, nil, 64, 10, 1<<10, 0)
 		require.EqualError(t, err, "conflicting locks on \"/db1\"")
 	})
 
@@ -2168,7 +2168,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
 		addLock(t, b)
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts1, ts2, nil, nil, 64, 10, 1<<10)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts1, ts2, nil, nil, 64, 10, 1<<10, 0)
 		require.EqualError(t, err, "conflicting locks on \"/db1\"")
 	})
 }
@@ -2275,7 +2275,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 				attempts++
 				batch := e.NewBatch()
 				startKey, err = MVCCClearTimeRange(ctx, batch, &ms, startKey, keyMax, revertTo, now,
-					nil, nil, clearRangeThreshold, keyLimit, byteLimit)
+					nil, nil, clearRangeThreshold, keyLimit, byteLimit, 0)
 				require.NoError(t, err)
 				require.NoError(t, batch.Commit(false))
 				batch.Close()
