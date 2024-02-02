@@ -60,8 +60,6 @@ func (e TableEvent) Timestamp() hlc.Timestamp {
 type leaseAcquirer interface {
 	Acquire(ctx context.Context, timestamp hlc.Timestamp, id descpb.ID) (lease.LeasedDescriptor, error)
 	AcquireFreshestFromStore(ctx context.Context, id descpb.ID) error
-	// TODO(yang): Investigate whether the codec can be stored in the schema feed itself.
-	Codec() keys.SQLCodec
 }
 
 // SchemaFeed is a stream of events corresponding the relevant set of
@@ -102,6 +100,7 @@ func New(
 		leaseMgr:   cfg.LeaseManager.(*lease.Manager),
 		metrics:    metrics,
 		tolerances: tolerances,
+		codec:      cfg.Codec,
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = initialHighwater
@@ -127,6 +126,7 @@ type schemaFeed struct {
 	targets    changefeedbase.Targets
 	metrics    *Metrics
 	tolerances changefeedbase.CanHandle
+	codec      keys.SQLCodec
 
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
@@ -839,9 +839,8 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
 	}
-	codec := tf.leaseMgr.Codec()
 	start := timeutil.Now()
-	span := roachpb.Span{Key: codec.TablePrefix(keys.DescriptorTableID)}
+	span := roachpb.Span{Key: tf.codec.TablePrefix(keys.DescriptorTableID)}
 	span.EndKey = span.Key.PrefixEnd()
 
 	tf.mu.Lock()
@@ -879,7 +878,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 						return nil
 					}
 					k := it.UnsafeKey()
-					remaining, _, _, err := codec.DecodeIndexPrefix(k.Key)
+					remaining, _, _, err := tf.codec.DecodeIndexPrefix(k.Key)
 					if err != nil {
 						return err
 					}
