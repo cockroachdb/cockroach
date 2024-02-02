@@ -154,12 +154,13 @@ var (
 	defaultTestOptions = testOptions{
 		// We use fixtures more often than not as they are more likely to
 		// detect bugs, especially in migrations.
-		useFixturesProbability:  0.7,
-		upgradeTimeout:          clusterupgrade.DefaultUpgradeTimeout,
-		minUpgrades:             1,
-		maxUpgrades:             3,
-		minimumSupportedVersion: OldestSupportedVersion,
-		predecessorFunc:         randomPredecessorHistory,
+		useFixturesProbability:         0.7,
+		upgradeTimeout:                 clusterupgrade.DefaultUpgradeTimeout,
+		minUpgrades:                    1,
+		maxUpgrades:                    3,
+		minimumSupportedVersion:        OldestSupportedVersion,
+		predecessorFunc:                randomPredecessorHistory,
+		overriddenMutatorProbabilities: make(map[string]float64),
 	}
 
 	// OldestSupportedVersion is the oldest cockroachdb version
@@ -249,13 +250,14 @@ type (
 	// testOptions contains some options that can be changed by the user
 	// that expose some control over the generated test plan and behaviour.
 	testOptions struct {
-		useFixturesProbability  float64
-		upgradeTimeout          time.Duration
-		minUpgrades             int
-		maxUpgrades             int
-		minimumSupportedVersion *clusterupgrade.Version
-		predecessorFunc         predecessorFunc
-		settings                []install.ClusterSettingOption
+		useFixturesProbability         float64
+		upgradeTimeout                 time.Duration
+		minUpgrades                    int
+		maxUpgrades                    int
+		minimumSupportedVersion        *clusterupgrade.Version
+		predecessorFunc                predecessorFunc
+		settings                       []install.ClusterSettingOption
+		overriddenMutatorProbabilities map[string]float64
 	}
 
 	CustomOption func(*testOptions)
@@ -390,6 +392,23 @@ func ClusterSettingOption(opt ...install.ClusterSettingOption) CustomOption {
 // in case the test is more susceptible to fail due to known bugs.
 func AlwaysUseLatestPredecessors(opts *testOptions) {
 	opts.predecessorFunc = latestPredecessorHistory
+}
+
+// WithMutatorProbability allows tests to override the default
+// probability that a mutator will be applied to a test plan.
+func WithMutatorProbability(name string, probability float64) CustomOption {
+	return func(opts *testOptions) {
+		opts.overriddenMutatorProbabilities[name] = probability
+	}
+}
+
+// DisableMutators disables all mutators with the names passed.
+func DisableMutators(names ...string) CustomOption {
+	return func(opts *testOptions) {
+		for _, name := range names {
+			WithMutatorProbability(name, 0)(opts)
+		}
+	}
 }
 
 // NewTest creates a Test struct that users can use to create and run
@@ -841,21 +860,21 @@ func (s restartWithNewBinaryStep) Run(
 	)
 }
 
-// finalizeUpgradeStep resets the `preserve_downgrade_option` cluster
+// allowUpgradeStep resets the `preserve_downgrade_option` cluster
 // setting, allowing the upgrade migrations to run and the cluster
 // version to eventually reach the binary version on the nodes.
-type finalizeUpgradeStep struct {
+type allowUpgradeStep struct {
 	crdbNodes option.NodeListOption
 	prng      *rand.Rand
 }
 
-func (s finalizeUpgradeStep) Background() shouldStop { return nil }
+func (s allowUpgradeStep) Background() shouldStop { return nil }
 
-func (s finalizeUpgradeStep) Description() string {
-	return "finalize upgrade by resetting `preserve_downgrade_option`"
+func (s allowUpgradeStep) Description() string {
+	return "allow upgrade to happen by resetting `preserve_downgrade_option`"
 }
 
-func (s finalizeUpgradeStep) Run(
+func (s allowUpgradeStep) Run(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
 ) error {
 	node, db := h.RandomDB(s.prng, s.crdbNodes)
