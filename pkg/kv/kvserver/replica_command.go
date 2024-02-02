@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"math/rand"
 	"sort"
 	"time"
@@ -228,14 +229,20 @@ func splitTxnAttempt(
 		return err
 	}
 
+	leftMS, err := rditer.ComputeStatsForRange(ctx, leftDesc, store.TODOEngine(), b.Header.Timestamp.WallTime)
+	if err != nil {
+		return errors.Wrapf(err, "unable to compute stats for LHS range during split")
+	}
+
 	// End the transaction manually, instead of letting RunTransaction
 	// loop do it, in order to provide a split trigger.
 	b.AddRawRequest(&kvpb.EndTxnRequest{
 		Commit: true,
 		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 			SplitTrigger: &roachpb.SplitTrigger{
-				LeftDesc:  *leftDesc,
-				RightDesc: *rightDesc,
+				LeftDesc:               *leftDesc,
+				RightDesc:              *rightDesc,
+				LeftMVCCStatsEstimates: leftMS,
 			},
 		},
 	})

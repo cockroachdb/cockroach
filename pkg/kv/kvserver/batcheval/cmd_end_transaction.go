@@ -1054,13 +1054,18 @@ func splitTrigger(
 			"unable to fetch original range mvcc stats for split")
 	}
 
+	postSplitLeftFn := func() (enginepb.MVCCStats, error) {
+		return split.LeftMVCCStatsEstimates, nil
+	}
+
 	h := splitStatsHelperInput{
 		AbsPreSplitBothStored: currentStats,
 		DeltaBatchEstimated:   bothDeltaMS,
 		DeltaRangeKey:         rangeKeyDeltaMS,
-		PostSplitScanLeftFn:   makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
-		PostSplitScanRightFn:  makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
-		ScanRightFirst:        splitScansRightForStatsFirst || emptyRHS,
+		//PostSplitScanLeftFn:   makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
+		PostSplitScanLeftFn:  postSplitLeftFn,
+		PostSplitScanRightFn: makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
+		ScanRightFirst:       splitScansRightForStatsFirst || emptyRHS,
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }
@@ -1120,7 +1125,7 @@ func splitTriggerHelper(
 	}
 	if err := storage.MVCCPutProto(
 		ctx, batch, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
-		&replicaGCTS, storage.MVCCWriteOptions{Category: storage.BatchEvalReadCategory}); err != nil {
+		&replicaGCTS, storage.MVCCWriteOptions{Category: storage.BatchEvalReadCategory, Stats: &split.LeftMVCCStatsEstimates}); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
