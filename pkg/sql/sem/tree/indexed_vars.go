@@ -36,11 +36,8 @@ type IndexedVarContainer interface {
 // represents a dynamic value. It defers calls to TypeCheck, Eval, String to an
 // IndexedVarContainer.
 type IndexedVar struct {
-	Idx  int
-	Used bool
-
+	Idx int
 	col NodeFormatter
-
 	typeAnnotation
 }
 
@@ -149,7 +146,6 @@ func (h *IndexedVarHelper) IndexedVar(idx int) *IndexedVar {
 	h.checkIndex(idx)
 	v := &h.vars[idx]
 	v.Idx = idx
-	v.Used = true
 	v.typ = h.container.IndexedVarResolvedType(idx)
 	v.col = h.container.IndexedVarNodeFormatter(idx)
 	return v
@@ -163,14 +159,11 @@ func (h *IndexedVarHelper) IndexedVarWithType(idx int, typ *types.T) *IndexedVar
 	h.checkIndex(idx)
 	v := &h.vars[idx]
 	v.Idx = idx
-	v.Used = true
 	v.typ = typ
 	return v
 }
 
 // GetIndexedVars returns the indexed var array of this helper.
-// IndexedVars to the caller; unused vars are guaranteed to have
-// a false Used field.
 func (h *IndexedVarHelper) GetIndexedVars() []IndexedVar {
 	return h.vars
 }
