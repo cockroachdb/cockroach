@@ -202,7 +202,17 @@ func (h *IndexedVarHelper) GetIndexedVars() []IndexedVar {
 
 // Rebind collects all the IndexedVars in the given expression and re-binds them
 // to this helper.
-func (h *IndexedVarHelper) Rebind(expr TypedExpr) TypedExpr {
+func (h *IndexedVarHelper) Rebind(expr Expr) Expr {
+	if expr == nil {
+		return nil
+	}
+	ret, _ := WalkExpr(h, expr)
+	return ret
+}
+
+// RebindTyped collects all the IndexedVars in the given typed expression and
+// re-binds them to this helper.
+func (h *IndexedVarHelper) RebindTyped(expr TypedExpr) TypedExpr {
 	if expr == nil {
 		return nil
 	}
@@ -241,7 +251,7 @@ func (tc *typeContainer) IndexedVarNodeFormatter(idx int) NodeFormatter {
 
 // MakeTypesOnlyIndexedVarHelper creates an IndexedVarHelper which provides
 // the given types for indexed vars. It does not support evaluation, unless
-// Rebind is used with another container which supports evaluation.
+// RebindTyped is used with another container which supports evaluation.
 func MakeTypesOnlyIndexedVarHelper(types []*types.T) IndexedVarHelper {
 	c := &typeContainer{types: types}
 	return MakeIndexedVarHelper(c, len(types))

@@ -355,7 +355,7 @@ func (eh *exprHelper) prepareExpr(ctx context.Context, expr Expression) (tree.Ty
 		return nil, nil
 	}
 	if expr.LocalExpr != nil {
-		eh.vars.Rebind(expr.LocalExpr)
+		eh.vars.RebindTyped(expr.LocalExpr)
 		return expr.LocalExpr, nil
 	}
 	return DeserializeExpr(ctx, expr.Expr, eh.semaCtx, eh.evalCtx, &eh.vars)
