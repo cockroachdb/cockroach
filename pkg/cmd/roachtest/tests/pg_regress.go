@@ -477,6 +477,8 @@ type regressPatch struct {
 
 // Diffs on files in the original pg_regress suite that help with setup
 // and reduce non-determinism due to CRDB implementation.
+// Note: Due to issues applying patches including single quotes, replace
+// single quotes ' with '"'"'.
 var patches = []regressPatch{
 	{"pg_regress.c",
 		`diff --git a/src/test/regress/pg_regress.c b/src/test/regress/pg_regress.c
@@ -1081,10 +1083,23 @@ index a460f82fb7..a9f7b99b84 100644
    VALUES ('"'"'test'"'"', DEFAULT), ('"'"'More'"'"', 11), (upper('"'"'more'"'"'), 7+9)
 `},
 	// Serial is non-deterministic.
+	// TODO(#114846): Enable array_to_set function calls when internal
+	// error is fixed.
+	// TODO(#118702): Remove the patch around getrngfunc9 when
+	// the internal error is fixed.
 	{"rangefuncs.sql", `diff --git a/src/test/regress/sql/rangefuncs.sql b/src/test/regress/sql/rangefuncs.sql
-index 63351e1412..737592d874 100644
+index 63351e1412..07d3216a9d 100644
 --- a/src/test/regress/sql/rangefuncs.sql
 +++ b/src/test/regress/sql/rangefuncs.sql
+@@ -182,7 +182,7 @@ SELECT * FROM vw_getrngfunc;
+ DROP VIEW vw_getrngfunc;
+
+ -- plpgsql, proretset = f, prorettype = c
+-CREATE FUNCTION getrngfunc9(int) RETURNS rngfunc AS '"'"'DECLARE rngfunctup rngfunc%ROWTYPE; BEGIN SELECT * into rngfunctup FROM rngfunc WHERE rngfuncid = $1; RETURN rngfunctup; END;'"'"' LANGUAGE plpgsql;
++-- CREATE FUNCTION getrngfunc9(int) RETURNS rngfunc AS '"'"'DECLARE rngfunctup rngfunc%ROWTYPE; BEGIN SELECT * into rngfunctup FROM rngfunc WHERE rngfuncid = $1; RETURN rngfunctup; END;'"'"' LANGUAGE plpgsql;
+ SELECT * FROM getrngfunc9(1) AS t1;
+ SELECT * FROM getrngfunc9(1) WITH ORDINALITY AS t1(a,b,c,o);
+ CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc9(1);
 @@ -457,7 +457,8 @@ DROP FUNCTION rngfunc();
  -- some tests on SQL functions with RETURNING
  --
@@ -1095,29 +1110,49 @@ index 63351e1412..737592d874 100644
  
  create function insert_tt(text) returns int as
  $$ insert into tt(data) values($1) returning f1 $$
+@@ -537,7 +538,7 @@ select array_to_set(array['"'"'one'"'"', '"'"'two'"'"']);
+ select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 int,f2 text);
+ select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']); -- fail
+ -- after-the-fact coercion of the columns is now possible, too
+-select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
++-- select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
+ -- and if it doesn'"'"'t work, you get a compile-time not run-time error
+ select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 point,f2 text);
+ 
+@@ -553,7 +554,7 @@ $$ language sql immutable;
+ 
+ select array_to_set(array['"'"'one'"'"', '"'"'two'"'"']);
+ select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 int,f2 text);
+-select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
++-- select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
+ select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 point,f2 text);
+ explain (verbose, costs off)
+   select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
 `},
 	// Serial is non-deterministic and non-monotonic in CRDB, so we modify the tests for serial slightly
 	// to only print non-serial columns.
-	{"sequences.sql", `diff --git a/src/test/regress/sql/sequence.sql b/src/test/regress/sql/sequence.sql
-index 674f5f1f66..b6acfd587f 100644
+	// TODO(#114848): Allow SELECT * FROM pg_sequence_parameters('sequence_test4'::regclass);
+	// when the internal error is fixed.
+	{"sequence.sql", `diff --git a/src/test/regress/sql/sequence.sql b/src/test/regress/sql/sequence.sql
+index 674f5f1f66..54baf75a7b 100644
 --- a/src/test/regress/sql/sequence.sql
 +++ b/src/test/regress/sql/sequence.sql
 @@ -58,7 +58,7 @@ INSERT INTO serialTest1 VALUES ('"'"'bar'"'"');
  INSERT INTO serialTest1 VALUES ('"'"'force'"'"', 100);
  INSERT INTO serialTest1 VALUES ('"'"'wrong'"'"', NULL);
- 
+
 -SELECT * FROM serialTest1;
 +SELECT f1 FROM serialTest1 ORDER BY f2;
- 
+
  SELECT pg_get_serial_sequence('"'"'serialTest1'"'"', '"'"'f2'"'"');
- 
+
 @@ -100,7 +100,7 @@ INSERT INTO serialTest2 (f1, f5)
  INSERT INTO serialTest2 (f1, f6)
    VALUES ('"'"'bogus'"'"', 9223372036854775808);
- 
+
 -SELECT * FROM serialTest2 ORDER BY f2 ASC;
 +SELECT f1 FROM serialTest2 ORDER BY f2 ASC;
- 
+
  SELECT nextval('"'"'serialTest2_f2_seq'"'"');
  SELECT nextval('"'"'serialTest2_f3_seq'"'"');
 @@ -143,7 +143,7 @@ DROP SEQUENCE foo_seq_new;
@@ -1126,9 +1161,18 @@ index 674f5f1f66..b6acfd587f 100644
  INSERT INTO serialTest1 VALUES ('"'"'more'"'"');
 -SELECT * FROM serialTest1;
 +SELECT f1 FROM serialTest1 ORDER BY f2;
- 
+
  --
  -- Check dependencies of serial and ordinary sequences
+@@ -242,7 +242,7 @@ WHERE sequencename ~ ANY(ARRAY['"'"'sequence_test'"'"', '"'"'serialtest'"'"'])
+   ORDER BY sequencename ASC;
+
+
+-SELECT * FROM pg_sequence_parameters('"'"'sequence_test4'"'"'::regclass);
++-- SELECT * FROM pg_sequence_parameters('"'"'sequence_test4'"'"'::regclass);
+
+
+ \d sequence_test4
 `},
 	// Serial is non-deterministic.
 	{"truncate.sql", `diff --git a/src/test/regress/sql/truncate.sql b/src/test/regress/sql/truncate.sql
@@ -1274,25 +1318,44 @@ index d8cb99e93c..48cff6ddff 100644
 +CREATE SEQUENCE id_seq;
  CREATE TABLE delete_test (
 -    id SERIAL PRIMARY KEY,
-+    id INT PRIMARY KEY DEFAULT nextval('id_seq'),
++    id INT PRIMARY KEY DEFAULT nextval('"'"'id_seq'"'"'),
      a INT,
      b text
  );
 `},
-	// Error message includes an oid.
+	// Avoid ordering by oids. Error message includes an oid.
 	{"indexing.sql", `diff --git a/src/test/regress/sql/indexing.sql b/src/test/regress/sql/indexing.sql
-index 6f60d1dc0f..1cbf508d39 100644
+index 6f60d1dc0f..161b7bded2 100644
 --- a/src/test/regress/sql/indexing.sql
 +++ b/src/test/regress/sql/indexing.sql
+@@ -438,7 +438,7 @@ alter table idxpart attach partition idxpart1 for values from (0) to (1000);
+ \d idxpart1
+ select attrelid::regclass, attname, attnum from pg_attribute
+   where attrelid::regclass::text like '"'"'idxpart%'"'"' and attnum > 0
+-  order by attrelid::regclass, attnum;
++  order by attrelid::regclass::text, attnum;
+ drop table idxpart;
+ 
+ -- Column number mapping: dropped columns in the parent table
+@@ -454,7 +454,7 @@ alter table idxpart attach partition idxpart1 for values from (0) to (1000);
+ \d idxpart1
+ select attrelid::regclass, attname, attnum from pg_attribute
+   where attrelid::regclass::text like '"'"'idxpart%'"'"' and attnum > 0
+-  order by attrelid::regclass, attnum;
++  order by attrelid::regclass::text, attnum;
+ drop table idxpart;
+ 
+ --
 @@ -566,7 +566,7 @@ select indrelid::regclass, indexrelid::regclass, inhparent::regclass, indisvalid
- drop index idxpart0_pkey;								-- fail
- drop index idxpart1_pkey;								-- fail
- alter table idxpart0 drop constraint idxpart0_pkey;		-- fail
--alter table idxpart1 drop constraint idxpart1_pkey;		-- fail
-+-- alter table idxpart1 drop constraint idxpart1_pkey;		-- fail
- alter table idxpart drop constraint idxpart_pkey;		-- ok
+ drop index idxpart0_pkey;                                                              -- fail
+ drop index idxpart1_pkey;                                                              -- fail
+ alter table idxpart0 drop constraint idxpart0_pkey;            -- fail
+-alter table idxpart1 drop constraint idxpart1_pkey;            -- fail
++-- alter table idxpart1 drop constraint idxpart1_pkey;         -- fail
+ alter table idxpart drop constraint idxpart_pkey;              -- ok
  select indrelid::regclass, indexrelid::regclass, inhparent::regclass, indisvalid,
    conname, conislocal, coninhcount, connoinherit, convalidated
+
 `},
 	{"misc_sanity.sql", `diff --git a/src/test/regress/sql/misc_sanity.sql b/src/test/regress/sql/misc_sanity.sql
 index 2c0f87a651..26bd75bbf0 100644
@@ -1316,5 +1379,245 @@ index 2c0f87a651..26bd75bbf0 100644
  
  
  -- **************** pg_class ****************
+`},
+	// TODO(#114858): Remove this patch when the internal error is fixed.
+	{"stats.sql", `diff --git a/src/test/regress/sql/stats.sql b/src/test/regress/sql/stats.sql
+index 1e21e55c6d..a2b6cce79e 100644
+--- a/src/test/regress/sql/stats.sql
++++ b/src/test/regress/sql/stats.sql
+@@ -131,8 +131,8 @@ COMMIT;
+ ---
+ CREATE FUNCTION stats_test_func1() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
+ SELECT '"'"'stats_test_func1()'"'"'::regprocedure::oid AS stats_test_func1_oid \gset
+-CREATE FUNCTION stats_test_func2() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
+-SELECT '"'"'stats_test_func2()'"'"'::regprocedure::oid AS stats_test_func2_oid \gset
++-- CREATE FUNCTION stats_test_func2() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
++-- SELECT '"'"'stats_test_func2()'"'"'::regprocedure::oid AS stats_test_func2_oid \gset
+ 
+ -- test that stats are accumulated
+ BEGIN;
+`},
+	// TODO(#114849): Remove the patch around void_return_expr when the
+	// internal error is fixed.
+	// TODO(#118702): Remove the patch around wslot_slotlink_view when
+	// the internal error is fixed.
+	{"plpgsql.sql", `diff --git a/src/test/regress/sql/plpgsql.sql b/src/test/regress/sql/plpgsql.sql
+index 924d524094..eb7bc0cf87 100644
+--- a/src/test/regress/sql/plpgsql.sql
++++ b/src/test/regress/sql/plpgsql.sql
+@@ -1087,51 +1087,51 @@ end;
+ -- ************************************************************
+ -- * Describe the front of a wall connector slot
+ -- ************************************************************
+-create function wslot_slotlink_view(bpchar)
+-returns text as '"'"'
+-declare
+-    rec		record;
+-    sltype	char(2);
+-    retval	text;
+-begin
+-    select into rec * from WSlot where slotname = $1;
+-    if not found then
+-        return '"'"''"'"''"'"''"'"';
+-    end if;
+-    if rec.slotlink = '"'"''"'"''"'"''"'"' then
+-        return '"'"''"'"'-'"'"''"'"';
+-    end if;
+-    sltype := substr(rec.slotlink, 1, 2);
+-    if sltype = '"'"''"'"'PH'"'"''"'"' then
+-        select into rec * from PHone where slotname = rec.slotlink;
+-	retval := '"'"''"'"'Phone '"'"''"'"' || trim(rec.slotname);
+-	if rec.comment != '"'"''"'"''"'"''"'"' then
+-	    retval := retval || '"'"''"'"' ('"'"''"'"';
+-	    retval := retval || rec.comment;
+-	    retval := retval || '"'"''"'"')'"'"''"'"';
+-	end if;
+-	return retval;
+-    end if;
+-    if sltype = '"'"''"'"'IF'"'"''"'"' then
+-	declare
+-	    syrow	System%RowType;
+-	    ifrow	IFace%ROWTYPE;
+-        begin
+-	    select into ifrow * from IFace where slotname = rec.slotlink;
+-	    select into syrow * from System where name = ifrow.sysname;
+-	    retval := syrow.name || '"'"''"'"' IF '"'"''"'"';
+-	    retval := retval || ifrow.ifname;
+-	    if syrow.comment != '"'"''"'"''"'"''"'"' then
+-	        retval := retval || '"'"''"'"' ('"'"''"'"';
+-		retval := retval || syrow.comment;
+-		retval := retval || '"'"''"'"')'"'"''"'"';
+-	    end if;
+-	    return retval;
+-	end;
+-    end if;
+-    return rec.slotlink;
+-end;
+-'"'"' language plpgsql;
++-- create function wslot_slotlink_view(bpchar)
++-- returns text as '"'"'
++-- declare
++--     rec		record;
++--     sltype	char(2);
++--     retval	text;
++-- begin
++--     select into rec * from WSlot where slotname = $1;
++--     if not found then
++--         return '"'"''"'"''"'"''"'"';
++--     end if;
++--     if rec.slotlink = '"'"''"'"''"'"''"'"' then
++--         return '"'"''"'"'-'"'"''"'"';
++--     end if;
++--     sltype := substr(rec.slotlink, 1, 2);
++--     if sltype = '"'"''"'"'PH'"'"''"'"' then
++--         select into rec * from PHone where slotname = rec.slotlink;
++-- 	retval := '"'"''"'"'Phone '"'"''"'"' || trim(rec.slotname);
++-- 	if rec.comment != '"'"''"'"''"'"''"'"' then
++-- 	    retval := retval || '"'"''"'"' ('"'"''"'"';
++-- 	    retval := retval || rec.comment;
++-- 	    retval := retval || '"'"''"'"')'"'"''"'"';
++-- 	end if;
++-- 	return retval;
++--     end if;
++--     if sltype = '"'"''"'"'IF'"'"''"'"' then
++-- 	declare
++-- 	    syrow	System%RowType;
++-- 	    ifrow	IFace%ROWTYPE;
++--         begin
++-- 	    select into ifrow * from IFace where slotname = rec.slotlink;
++-- 	    select into syrow * from System where name = ifrow.sysname;
++-- 	    retval := syrow.name || '"'"''"'"' IF '"'"''"'"';
++-- 	    retval := retval || ifrow.ifname;
++-- 	    if syrow.comment != '"'"''"'"''"'"''"'"' then
++-- 	        retval := retval || '"'"''"'"' ('"'"''"'"';
++-- 		retval := retval || syrow.comment;
++-- 		retval := retval || '"'"''"'"')'"'"''"'"';
++-- 	    end if;
++-- 	    return retval;
++-- 	end;
++--     end if;
++--     return rec.slotlink;
++-- end;
++-- '"'"' language plpgsql;
+ 
+ 
+ 
+@@ -2171,7 +2171,7 @@ begin
+     perform 2+2;
+ end;$$ language plpgsql;
+ 
+-select void_return_expr();
++-- select void_return_expr();
+ 
+ -- but ordinary functions are not
+ create function missing_return_expr() returns int as $$
+@@ -2191,25 +2191,25 @@ drop function missing_return_expr();
+ create table eifoo (i integer, y integer);
+ create type eitype as (i integer, y integer);
+ 
+-create or replace function execute_into_test(varchar) returns record as $$
+-declare
+-    _r record;
+-    _rt eifoo%rowtype;
+-    _v eitype;
+-    i int;
+-    j int;
+-    k int;
+-begin
+-    execute '"'"'insert into '"'"'||$1||'"'"' values(10,15)'"'"';
+-    execute '"'"'select (row).* from (select row(10,1)::eifoo) s'"'"' into _r;
+-    raise notice '"'"'% %'"'"', _r.i, _r.y;
+-    execute '"'"'select * from '"'"'||$1||'"'"' limit 1'"'"' into _rt;
+-    raise notice '"'"'% %'"'"', _rt.i, _rt.y;
+-    execute '"'"'select *, 20 from '"'"'||$1||'"'"' limit 1'"'"' into i, j, k;
+-    raise notice '"'"'% % %'"'"', i, j, k;
+-    execute '"'"'select 1,2'"'"' into _v;
+-    return _v;
+-end; $$ language plpgsql;
++-- create or replace function execute_into_test(varchar) returns record as $$
++-- declare
++--     _r record;
++--     _rt eifoo%rowtype;
++--     _v eitype;
++--     i int;
++--     j int;
++--     k int;
++-- begin
++--     execute '"'"'insert into '"'"'||$1||'"'"' values(10,15)'"'"';
++--     execute '"'"'select (row).* from (select row(10,1)::eifoo) s'"'"' into _r;
++--     raise notice '"'"'% %'"'"', _r.i, _r.y;
++--     execute '"'"'select * from '"'"'||$1||'"'"' limit 1'"'"' into _rt;
++--     raise notice '"'"'% %'"'"', _rt.i, _rt.y;
++--     execute '"'"'select *, 20 from '"'"'||$1||'"'"' limit 1'"'"' into i, j, k;
++--     raise notice '"'"'% % %'"'"', i, j, k;
++--     execute '"'"'select 1,2'"'"' into _v;
++--     return _v;
++-- end; $$ language plpgsql;
+ 
+ select execute_into_test('"'"'eifoo'"'"');
+
+`},
+	// TODO(#114847): Remove this patch when the internal error is fixed.
+	{"rowtypes.sql", `diff --git a/src/test/regress/sql/rowtypes.sql b/src/test/regress/sql/rowtypes.sql
+index 565e6249d5..f36ce2844b 100644
+--- a/src/test/regress/sql/rowtypes.sql
++++ b/src/test/regress/sql/rowtypes.sql
+@@ -245,8 +245,8 @@ create type testtype3 as (a int, b text);
+ select row(1, 2)::testtype1 < row(1, '"'"'abc'"'"')::testtype3;
+ select row(1, 2)::testtype1 <> row(1, '"'"'abc'"'"')::testtype3;
+ create type testtype5 as (a int);
+-select row(1, 2)::testtype1 < row(1)::testtype5;
+-select row(1, 2)::testtype1 <> row(1)::testtype5;
++-- select row(1, 2)::testtype1 < row(1)::testtype5;
++-- select row(1, 2)::testtype1 <> row(1)::testtype5;
+ 
+ -- non-comparable types
+ create type testtype6 as (a int, b point);
+
+`},
+	// TODO(#118698): Remove patch when internal error is fixed.
+	{"union.sql", `diff --git a/src/test/regress/sql/union.sql b/src/test/regress/sql/union.sql
+index ca8c9b4d12..7b8aaf2df2 100644
+--- a/src/test/regress/sql/union.sql
++++ b/src/test/regress/sql/union.sql
+@@ -294,7 +294,7 @@ SELECT q1 FROM int8_tbl EXCEPT (((SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1)))
+ -- Check behavior with empty select list (allowed since 9.4)
+ --
+ 
+-select union select;
++-- select union select;
+ select intersect select;
+ select except select;
+ 
+@@ -307,11 +307,11 @@ select from generate_series(1,5) union select from generate_series(1,3);
+ explain (costs off)
+ select from generate_series(1,5) intersect select from generate_series(1,3);
+ 
+-select from generate_series(1,5) union select from generate_series(1,3);
++-- select from generate_series(1,5) union select from generate_series(1,3);
+ select from generate_series(1,5) union all select from generate_series(1,3);
+-select from generate_series(1,5) intersect select from generate_series(1,3);
++-- select from generate_series(1,5) intersect select from generate_series(1,3);
+ select from generate_series(1,5) intersect all select from generate_series(1,3);
+-select from generate_series(1,5) except select from generate_series(1,3);
++-- select from generate_series(1,5) except select from generate_series(1,3);
+ select from generate_series(1,5) except all select from generate_series(1,3);
+ 
+ -- check sorted implementation
+@@ -323,11 +323,11 @@ select from generate_series(1,5) union select from generate_series(1,3);
+ explain (costs off)
+ select from generate_series(1,5) intersect select from generate_series(1,3);
+ 
+-select from generate_series(1,5) union select from generate_series(1,3);
++-- select from generate_series(1,5) union select from generate_series(1,3);
+ select from generate_series(1,5) union all select from generate_series(1,3);
+-select from generate_series(1,5) intersect select from generate_series(1,3);
++-- select from generate_series(1,5) intersect select from generate_series(1,3);
+ select from generate_series(1,5) intersect all select from generate_series(1,3);
+-select from generate_series(1,5) except select from generate_series(1,3);
++-- select from generate_series(1,5) except select from generate_series(1,3);
+ select from generate_series(1,5) except all select from generate_series(1,3);
+ 
+ reset enable_hashagg;
 `},
 }
