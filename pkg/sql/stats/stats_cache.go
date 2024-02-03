@@ -251,8 +251,10 @@ func DisallowedOnSystemTable(tableID descpb.ID) bool {
 	// benefit is not worth the potential performance hit.
 	// TODO(yuzefovich): re-evaluate this assumption. Perhaps we could at
 	// least enable manual collection on this table.
-	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID:
+	case keys.TableStatisticsTableID, keys.ScheduledJobsTableID:
 		return true
+	case keys.LeaseTableID:
+		return false
 	}
 	return false
 }

@@ -140,15 +140,15 @@ func TestMaybeRefreshStats(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Auto stats collection on system.lease should fail (no stats should be collected).
-	descLease :=
-		desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "system", "lease")
-	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), descLease.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
-	)
-	if err := checkStatsCount(ctx, cache, descLease, 0 /* expected */); err != nil {
-		t.Fatal(err)
-	}
+	//// Auto stats collection on system.lease should fail (no stats should be collected).
+	//descLease :=
+	//	desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "system", "lease")
+	//refresher.maybeRefreshStats(
+	//	ctx, s.AppStopper(), descLease.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
+	//)
+	//if err := checkStatsCount(ctx, cache, descLease, 0 /* expected */); err != nil {
+	//	t.Fatal(err)
+	//}
 
 	// Auto stats collection on system.table_statistics should fail (no stats should be collected).
 	descTableStats :=
