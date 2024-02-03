@@ -102,7 +102,7 @@ func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
 	if explain.Options.Flags[tree.ExplainFlagCatalog] {
 		for _, t := range b.mem.Metadata().AllTables() {
 			tp := treeprinter.New()
-			cat.FormatTable(b.catalog, t.Table, tp, redactValues)
+			cat.FormatTable(b.ctx, b.catalog, t.Table, tp, redactValues)
 			catStr := tp.String()
 			if redactValues {
 				catStr = string(redact.RedactableString(catStr).Redact())

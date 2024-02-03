@@ -225,7 +225,9 @@ func indexEntryForDatums(
 		colIDtoRowIndex.Set(c.GetID(), i)
 	}
 	indexEntries, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, index, colIDtoRowIndex, row, true /* includeEmpty */)
+		context.Background(), keys.SystemSQLCodec, tableDesc, index,
+		colIDtoRowIndex, row, true, /* includeEmpty */
+	)
 	if err != nil {
 		return rowenc.IndexEntry{}, err
 	}

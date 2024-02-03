@@ -69,7 +69,7 @@ func (w KVWriter) RecordToKeyValues(values ...tree.Datum) (ret []roachpb.KeyValu
 	// Encode the secondary index rows.
 	for _, idx := range w.tableDesc.PublicNonPrimaryIndexes() {
 		indexEntries, err := rowenc.EncodeSecondaryIndex(
-			w.codec, w.tableDesc, idx, w.colIDtoRowIndex, values, true, /* includeEmpty */
+			context.Background(), w.codec, w.tableDesc, idx, w.colIDtoRowIndex, values, true, /* includeEmpty */
 		)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(

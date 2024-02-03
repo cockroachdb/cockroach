@@ -11,7 +11,6 @@
 package scbuildstmt
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -86,7 +85,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
 		}
 	}
-	activeVersion := b.EvalCtx().Settings.Version.ActiveVersion(context.TODO())
+	activeVersion := b.EvalCtx().Settings.Version.ActiveVersion(b)
 	if !activeVersion.IsActive(clusterversion.V23_2) &&
 		n.Invisibility.Value > 0.0 && n.Invisibility.Value < 1.0 {
 		panic(unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported"))

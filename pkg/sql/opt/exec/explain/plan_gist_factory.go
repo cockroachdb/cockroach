@@ -303,7 +303,7 @@ func (f *PlanGistFactory) decodeTable() cat.Table {
 		return &unknownTable{}
 	}
 	id := f.decodeID()
-	ds, _, err := f.catalog.ResolveDataSourceByID(context.TODO(), cat.Flags{}, id)
+	ds, _, err := f.catalog.ResolveDataSourceByID(f.Ctx(), cat.Flags{}, id)
 	if err == nil {
 		return ds.(cat.Table)
 	}

@@ -106,6 +106,7 @@ Del /Table/106/1/4/0
 query T kvtrace
 INSERT INTO e VALUES(0, ARRAY[7,0,0,1,NULL,10,0,1,7,NULL])
 ----
+Scan /Table/20/1/10{7-8}
 CPut /Table/107/1/0/0 -> /TUPLE/
 InitPut /Table/107/2/NULL/0/0 -> /BYTES/
 InitPut /Table/107/2/0/0/0 -> /BYTES/
@@ -199,6 +200,7 @@ vectorized: true
 query T kvtrace
 INSERT INTO f VALUES(0, ARRAY[7,0,0,1.000,10,0,1,7,1.0,1.00])
 ----
+Scan /Table/20/1/10{8-9}
 CPut /Table/108/1/0/0 -> /TUPLE/
 InitPut /Table/108/2/0/0/0 -> /BYTES/
 InitPut /Table/108/2/1/0/0 -> /BYTES/
@@ -3231,6 +3233,7 @@ CREATE INVERTED INDEX ON t(y)
 query T kvtrace
 INSERT INTO t VALUES (1.00, ARRAY[1,2])
 ----
+Scan /Table/20/1/109{-/PrefixEnd}
 CPut /Table/109/1/1/0 -> /TUPLE/1:1:Decimal/1.00/
 InitPut /Table/109/2/1/1/0 -> /BYTES/0x1503348964
 InitPut /Table/109/2/2/1/0 -> /BYTES/0x1503348964
@@ -3509,6 +3512,7 @@ CREATE TABLE m (
 query T kvtrace
 SELECT k FROM m@i1 WHERE a = 10 AND j @> '{"a": "b"}'
 ----
+Scan /Table/20/1/11{2-3}
 Scan /Table/112/2/10/"a"/"b"{-/PrefixEnd}
 
 # Combine multiple constraint spans with the inverted constraint.

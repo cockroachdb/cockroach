@@ -77,7 +77,10 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2);
 	}
 
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(codec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true)
+	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
+		context.Background(), codec, tableDesc, secondaryIndex,
+		colIDtoRowIndex, values, true, /* includeEmpty */
+	)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -163,7 +166,10 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, NULL, 2);
 	}
 
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(codec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true)
+	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
+		context.Background(), codec, tableDesc, secondaryIndex,
+		colIDtoRowIndex, values, true, /* includeEmpty */
+	)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -236,12 +242,16 @@ INSERT INTO db.t VALUES (1, 3), (2, 4);
 	oldValues := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3)}
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
 	secondaryIndexDelKey, err := rowenc.EncodeSecondaryIndex(
-		codec, tableDesc, secondaryIndex, colIDtoRowIndex, oldValues, true /* includeEmpty */)
+		context.Background(), codec, tableDesc, secondaryIndex,
+		colIDtoRowIndex, oldValues, true, /* includeEmpty */
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		codec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
+		context.Background(), codec, tableDesc, secondaryIndex,
+		colIDtoRowIndex, values, true, /* includeEmpty */
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -319,7 +329,9 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 
 	// Modify the secondary index with a duplicate constrained value.
 	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		codec, tableDesc, secondaryIndex, colIDtoRowIndex, valuesConstrained, true /* includeEmpty */)
+		context.Background(), codec, tableDesc, secondaryIndex,
+		colIDtoRowIndex, valuesConstrained, true, /* includeEmpty */
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -346,7 +358,9 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 	// Modify the secondary index with a duplicate value not in the constrained
 	// range.
 	secondaryIndexKey, err = rowenc.EncodeSecondaryIndex(
-		codec, tableDesc, secondaryIndex, colIDtoRowIndex, valuesNotConstrained, true /* includeEmpty */)
+		context.Background(), codec, tableDesc, secondaryIndex,
+		colIDtoRowIndex, valuesNotConstrained, true, /* includeEmpty */
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -437,7 +451,9 @@ INSERT INTO db.t VALUES (1, 1, 2, 1);
 	// Modify the secondary index with the duplicate value.
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
 	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		codec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
+		context.Background(), codec, tableDesc, secondaryIndex,
+		colIDtoRowIndex, values, true, /* includeEmpty */
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}

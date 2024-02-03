@@ -559,7 +559,7 @@ func (oc *optCatalog) dataSourceForTable(
 	var tableStats []*stats.TableStatistic
 	if !flags.NoTableStats {
 		var err error
-		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(context.TODO(), desc)
+		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(ctx, desc)
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
 			// access to the statistics table.

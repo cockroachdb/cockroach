@@ -298,7 +298,9 @@ func TestIndexKey(t *testing.T) {
 		primaryIndexKV := kv.KeyValue{Key: primaryKey, Value: &primaryValue}
 
 		secondaryIndexEntry, err := EncodeSecondaryIndex(
-			codec, tableDesc, tableDesc.PublicNonPrimaryIndexes()[0], colMap, testValues, true /* includeEmpty */)
+			context.Background(), codec, tableDesc, tableDesc.PublicNonPrimaryIndexes()[0],
+			colMap, testValues, true, /* includeEmpty */
+		)
 		if len(secondaryIndexEntry) != 1 {
 			t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexEntry), secondaryIndexEntry)
 		}
@@ -449,7 +451,9 @@ func TestInvertedIndexKey(t *testing.T) {
 		codec := keys.SystemSQLCodec
 
 		secondaryIndexEntries, err := EncodeSecondaryIndex(
-			codec, tableDesc, tableDesc.PublicNonPrimaryIndexes()[0], colMap, testValues, true /* includeEmpty */)
+			context.Background(), codec, tableDesc, tableDesc.PublicNonPrimaryIndexes()[0],
+			colMap, testValues, true, /* includeEmpty */
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
