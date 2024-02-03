@@ -1673,8 +1673,7 @@ ANALYZE system.table_statistics
 statement ok
 ANALYZE system.jobs
 
-# Collecting stats on system.scheduled_jobs is disallowed.
-statement error pq: cannot create statistics on system.scheduled_jobs
+statement ok
 ANALYZE system.scheduled_jobs
 
 # Collecting stats on empty tables should result in empty (but not NULL)
