@@ -2072,6 +2072,8 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		return getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
 	}
 
+	checksContainLocking := planner.curPlan.flags.IsSet(planFlagCheckContainsNonDefaultLocking)
+
 	// We treat plan.cascades as a queue.
 	for i := 0; i < len(plan.cascades); i++ {
 		// The original bufferNode is stored in c.Buffer; we can refer to it
@@ -2138,6 +2140,9 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		// Collect any new checks.
 		if len(cp.checkPlans) > 0 {
 			plan.checkPlans = append(plan.checkPlans, cp.checkPlans...)
+			if cp.flags.IsSet(planFlagCheckContainsNonDefaultLocking) {
+				checksContainLocking = true
+			}
 		}
 
 		// In cyclical reference situations, the number of cascading operations can
@@ -2183,8 +2188,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 	// multiple checks to run, none of the checks have non-default locking, and
 	// we're likely to have quota to do so.
 	runParallelChecks := parallelizeChecks.Get(&dsp.st.SV) &&
-		len(plan.checkPlans) > 1 &&
-		!planner.curPlan.flags.IsSet(planFlagCheckContainsNonDefaultLocking) &&
+		len(plan.checkPlans) > 1 && !checksContainLocking &&
 		dsp.parallelChecksSem.ApproximateQuota() > 0
 	if runParallelChecks {
 		// At the moment, we rely on not using the newer DistSQL spec factory to
