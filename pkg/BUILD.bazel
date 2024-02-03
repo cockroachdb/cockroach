@@ -1825,7 +1825,6 @@ GO_TARGETS = [
     "//pkg/sql/decodeusername:decodeusername",
     "//pkg/sql/decodeusername:decodeusername_test",
     "//pkg/sql/delegate:delegate",
-    "//pkg/sql/deprecatedshowranges:deprecatedshowranges",
     "//pkg/sql/descmetadata:descmetadata",
     "//pkg/sql/descmetadata:descmetadata_test",
     "//pkg/sql/distsql:distsql",

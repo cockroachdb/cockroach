@@ -233,7 +233,6 @@ go_library(
         "//pkg/sql/consistencychecker",
         "//pkg/sql/contention",
         "//pkg/sql/contentionpb",
-        "//pkg/sql/deprecatedshowranges",
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",

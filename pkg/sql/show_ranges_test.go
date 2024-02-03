@@ -19,9 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -146,34 +144,6 @@ SELECT DISTINCT
 	FROM [%s]`, q), [][]string{{"true"}})
 		})
 	}
-}
-
-// Regression test for #102183 and #102218.
-func TestDeprecatedShowRangesWithClusterSettingChange(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	db := sqlutils.MakeSQLRunner(sqlDB)
-
-	// Initialize the plan cache with the default (modern) behavior.
-	deprecatedshowranges.ShowRangesDeprecatedBehaviorSetting.Override(ctx, &s.ClusterSettings().SV, false)
-	db.Exec(t, `TABLE crdb_internal.ranges_no_leases`)
-	db.Exec(t, `TABLE crdb_internal.ranges`)
-
-	// Now change the setting and verify that the plan cache is invalidated.
-	deprecatedshowranges.ShowRangesDeprecatedBehaviorSetting.Override(ctx, &s.ClusterSettings().SV, true)
-	db.Exec(t, `TABLE crdb_internal.ranges_no_leases`)
-	db.Exec(t, `TABLE crdb_internal.ranges`)
-
-	// Now change the setting back and verify that the plan cache is invalidated again.
-	deprecatedshowranges.ShowRangesDeprecatedBehaviorSetting.Override(ctx, &s.ClusterSettings().SV, false)
-	db.Exec(t, `TABLE crdb_internal.ranges_no_leases`)
-	db.Exec(t, `TABLE crdb_internal.ranges`)
 }
 
 func TestShowRangesWithDetails(t *testing.T) {
