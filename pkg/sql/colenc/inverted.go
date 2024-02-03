@@ -11,6 +11,8 @@
 package colenc
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -44,7 +46,7 @@ func invertedColToDatum(vec coldata.Vec, row int) tree.Datum {
 // doesn't attempt to do bulk KV operations. TODO(cucaroach): optimize
 // inverted index encoding to do bulk allocations and bulk KV puts.
 func (b *BatchEncoder) encodeInvertedSecondaryIndex(
-	index catalog.Index, kys []roachpb.Key, extraKeys [][]byte,
+	ctx context.Context, index catalog.Index, kys []roachpb.Key, extraKeys [][]byte,
 ) error {
 	var err error
 	if kys, err = b.encodeInvertedIndexPrefixKeys(kys, index); err != nil {
@@ -62,7 +64,7 @@ func (b *BatchEncoder) encodeInvertedSecondaryIndex(
 		var keys [][]byte
 		val := invertedColToDatum(vec, row+b.start)
 		if !indexGeoConfig.IsEmpty() {
-			if keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, kys[row], indexGeoConfig); err != nil {
+			if keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(ctx, val, kys[row], indexGeoConfig); err != nil {
 				return err
 			}
 		} else {

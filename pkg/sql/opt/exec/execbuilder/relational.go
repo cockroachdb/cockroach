@@ -2228,7 +2228,7 @@ func (b *Builder) indexColumnNames(
 		col := index.Column(i)
 		ord := col.Ordinal()
 		colID := tableMeta.MetaID.ColumnID(ord)
-		colName := b.mem.Metadata().QualifiedAlias(colID, false /* fullyQualify */, true /* alwaysQualify */, b.catalog)
+		colName := b.mem.Metadata().QualifiedAlias(b.ctx, colID, false /* fullyQualify */, true /* alwaysQualify */, b.catalog)
 		sb.WriteString(colName)
 	}
 	return sb.String()
@@ -3636,7 +3636,7 @@ func (b *Builder) getEnvData() (exec.ExplainEnvData, error) {
 	envOpts.Tables, envOpts.Sequences, envOpts.Views, err = b.mem.Metadata().AllDataSourceNames(
 		b.ctx, b.catalog,
 		func(ds cat.DataSource) (cat.DataSourceName, error) {
-			return b.catalog.FullyQualifiedName(context.TODO(), ds)
+			return b.catalog.FullyQualifiedName(b.ctx, ds)
 		},
 		true, /* includeVirtualTables */
 	)

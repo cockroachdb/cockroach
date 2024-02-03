@@ -797,7 +797,7 @@ func (md *Metadata) ColumnMeta(colID ColumnID) *ColumnMeta {
 //     name: "tabName.columnAlias". If alwaysQualify is true, then the column
 //     alias is always prefixed with the table alias.
 func (md *Metadata) QualifiedAlias(
-	colID ColumnID, fullyQualify, alwaysQualify bool, catalog cat.Catalog,
+	ctx context.Context, colID ColumnID, fullyQualify, alwaysQualify bool, catalog cat.Catalog,
 ) string {
 	cm := md.ColumnMeta(colID)
 	if cm.Table == 0 {
@@ -839,7 +839,7 @@ func (md *Metadata) QualifiedAlias(
 
 	var sb strings.Builder
 	if fullyQualify {
-		tn, err := catalog.FullyQualifiedName(context.TODO(), md.TableMeta(cm.Table).Table)
+		tn, err := catalog.FullyQualifiedName(ctx, md.TableMeta(cm.Table).Table)
 		if err != nil {
 			panic(err)
 		}

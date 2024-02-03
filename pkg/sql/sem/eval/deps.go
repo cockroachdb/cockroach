@@ -216,7 +216,7 @@ type Planner interface {
 	// GetTypeFromValidSQLSyntax parses a column type when the input
 	// string uses the parseable SQL representation of a type name, e.g.
 	// `INT(13)`, `mytype`, `"mytype"`, `pg_catalog.int4` or `"public".mytype`.
-	GetTypeFromValidSQLSyntax(sql string) (*types.T, error)
+	GetTypeFromValidSQLSyntax(ctx context.Context, sql string) (*types.T, error)
 
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *tree.Subquery) (tree.Datum, error)

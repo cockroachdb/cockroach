@@ -119,6 +119,7 @@ func (rd *Deleter) DeleteRow(
 
 		// We want to include empty k/v pairs because we want to delete all k/v's for this row.
 		entries, err := rowenc.EncodeSecondaryIndex(
+			ctx,
 			rd.Helper.Codec,
 			rd.Helper.TableDesc,
 			rd.Helper.Indexes[i],

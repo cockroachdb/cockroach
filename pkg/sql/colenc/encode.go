@@ -436,7 +436,7 @@ func (b *BatchEncoder) encodeSecondaryIndex(ctx context.Context, ind catalog.Ind
 	if ind.GetType() == descpb.IndexDescriptor_INVERTED {
 		// Since the inverted indexes generate multiple keys per row just handle them
 		// separately.
-		return b.encodeInvertedSecondaryIndex(ind, kys, b.extraKeys)
+		return b.encodeInvertedSecondaryIndex(ctx, ind, kys, b.extraKeys)
 	} else {
 		keyAndSuffixCols := b.rh.TableDesc.IndexFetchSpecKeyAndSuffixColumns(ind)
 		keyCols := keyAndSuffixCols[:ind.NumKeyColumns()]

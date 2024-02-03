@@ -678,12 +678,12 @@ func (p *planner) SpanStatsConsumer() keyvisualizer.SpanStatsConsumer {
 
 // GetTypeFromValidSQLSyntax implements the eval.Planner interface.
 // We define this here to break the dependency from eval.go to the parser.
-func (p *planner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
+func (p *planner) GetTypeFromValidSQLSyntax(ctx context.Context, sql string) (*types.T, error) {
 	ref, err := parser.GetTypeFromValidSQLSyntax(sql)
 	if err != nil {
 		return nil, err
 	}
-	return tree.ResolveType(context.TODO(), ref, p.semaCtx.GetTypeResolver())
+	return tree.ResolveType(ctx, ref, p.semaCtx.GetTypeResolver())
 }
 
 // ResolveTableName implements the eval.DatabaseCatalog interface.
