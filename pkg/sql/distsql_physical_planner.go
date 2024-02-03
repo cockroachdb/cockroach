@@ -4889,7 +4889,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 		if planner == nil ||
 			evalCtx.SessionData().Internal ||
 			planner.curPlan.flags.IsSet(planFlagContainsMutation) ||
-			planner.curPlan.flags.IsSet(planFlagContainsNonDefaultLocking) {
+			planner.curPlan.flags.IsSet(planFlagContainsLocking) {
 			// Don't parallelize the scans if we have a local plan if
 			// - we don't have a planner which is the case when we are not on
 			// the main query path;
@@ -4900,7 +4900,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 			// any synchronization (see #116039);
 			// - the plan contains a mutation operation - we currently don't
 			// support any parallelism when mutations are present;
-			// - the plan uses non-default key locking strength (see #94290).
+			// - the plan uses locking (see #94290).
 			return planCtx
 		}
 		prohibitParallelization, hasScanNodeToParallelize := checkScanParallelizationIfLocal(ctx, &planner.curPlan.planComponents)
