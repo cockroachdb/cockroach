@@ -2205,10 +2205,13 @@ func maybeSetResumeSpan(
 // ambiguousErr, if not nil, is the error we got from the first attempt when the
 // success of the request cannot be ruled out by the error. lastAttemptErr is
 // the error that the last attempt to execute the request returned.
-func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
+func noMoreReplicasErr(ambiguousErr, replicaUnavailableErr, lastAttemptErr error) error {
 	if ambiguousErr != nil {
 		return kvpb.NewAmbiguousResultErrorf("error=%v [exhausted] (last error: %v)",
 			ambiguousErr, lastAttemptErr)
+	}
+	if replicaUnavailableErr != nil {
+		return replicaUnavailableErr
 	}
 
 	// TODO(bdarnell): The error from the last attempt is not necessarily the best
@@ -2361,7 +2364,7 @@ func (ds *DistSender) sendToReplicas(
 
 	// This loop will retry operations that fail with errors that reflect
 	// per-replica state and may succeed on other replicas.
-	var ambiguousError error
+	var ambiguousError, replicaUnavailableError error
 	var br *kvpb.BatchResponse
 	attempts := int64(0)
 	for first := true; ; first, attempts = false, attempts+1 {
@@ -2377,7 +2380,7 @@ func (ds *DistSender) sendToReplicas(
 		if lastErr == nil && br != nil {
 			lastErr = br.Error.GoError()
 		}
-		err = skipStaleReplicas(transport, routing, ambiguousError, lastErr)
+		err = skipStaleReplicas(transport, routing, ambiguousError, replicaUnavailableError, lastErr)
 		if err != nil {
 			return nil, err
 		}
@@ -2591,6 +2594,70 @@ func (ds *DistSender) sendToReplicas(
 				// We'll try other replicas which typically gives us the leaseholder, either
 				// via the NotLeaseHolderError or nil error paths, both of which update the
 				// leaseholder in the range cache.
+			case *kvpb.ReplicaUnavailableError:
+				// The replica's circuit breaker is tripped. This only means that this
+				// replica is unable to propose writes -- the range may or may not be
+				// available with a quorum elsewhere (e.g. in the case of a partial
+				// network partition or stale replica). There are several possibilities:
+				//
+				// 0. This replica knows about a valid leaseholder elsewhere. It will
+				//    return a NLHE instead of a RUE even with a tripped circuit
+				//    breaker, so we'll take that branch instead and retry the
+				//    leaseholder. We list this case explicitly, as a reminder.
+				//
+				// 1. This replica is the current leaseholder. The range cache can't
+				//    tell us with certainty who the leaseholder is, so we try other
+				//    replicas in case a lease exists elsewhere, but if we get an NLHE
+				//    pointing back to this one we fail fast.
+				//
+				// 2. This replica is the current Raft leader, but it has lost quorum
+				//    (prior to stepping down via CheckQuorum). We go on to try other
+				//    replicas, which may return a NLHE pointing back to the leader
+				//    instead of attempting to acquire a lease, which we'll fail fast.
+				//
+				// 3. This replica does not know about a current quorum or leaseholder,
+				//    but one does exist elsewhere. Try other replicas to discover it,
+				//    but error out if it's unreachable.
+				//
+				// 4. There is no quorum nor lease. Error out after trying all replicas.
+				//
+				// To handle these cases, we track RUEs in *replicaUnavailableError.
+				// This contains either:
+				//
+				// - The last RUE we received from a supposed leaseholder, as given by
+				//   the range cache via routing.Leaseholder() at the time of the error.
+				//
+				// - Otherwise, the first RUE we received from any replica.
+				//
+				// If, when retrying a later replica, we receive a NLHE pointing to the
+				// same replica as the RUE, we ignore the NLHE and move on to the next
+				// replica. This also handles the case where a NLHE points to a new
+				// leaseholder and that leaseholder returns RUE, in which case the next
+				// NLHE will error out.
+				//
+				// Otherwise, if no NLHE points back to the RUE, we will return the RUE
+				// when we've tried all replicas unsuccessfully.
+				//
+				// NB: we can't return tErr directly, because GetDetail() strips error
+				// marks from the error (e.g. ErrBreakerOpen).
+				if !tErr.Replica.IsSame(curReplica) {
+					// The ReplicaUnavailableError may have been proxied via this replica.
+					// This can happen e.g. if the replica has to access a txn record on a
+					// different range during intent resolution, and that range returns a
+					// RUE. In this case we just return it directly, as br.Error.
+					return br, nil
+				} else if replicaUnavailableError == nil {
+					// This is the first time we see a RUE. Record it, such that we'll
+					// return it if all other replicas fail (regardless of error).
+					replicaUnavailableError = br.Error.GoError()
+				} else if lh := routing.Leaseholder(); lh != nil && lh.IsSame(curReplica) {
+					// This error came from the supposed leaseholder. Record it, such that
+					// subsequent NLHEs pointing back to this one can be ignored instead
+					// of getting stuck in a retry loop. This ensures we'll eventually
+					// error out when the transport is exhausted even if multiple replicas
+					// return NLHEs to different replicas all returning RUEs.
+					replicaUnavailableError = br.Error.GoError()
+				}
 			case *kvpb.NotLeaseHolderError:
 				ds.metrics.NotLeaseHolderErrCount.Inc(1)
 				// If we got some lease information, we use it. If not, we loop around
@@ -2608,6 +2675,14 @@ func (ds *DistSender) sendToReplicas(
 					// retry. Note that the leaseholder might not be the one indicated by
 					// the NLHE we just received, in case that error carried stale info.
 					if lh := routing.Leaseholder(); lh != nil {
+						// If we've already tried this replica and it's unavailable due to
+						// a tripped replica circuit breaker, skip it to avoid loops.
+						var lhRUE bool
+						if err := replicaUnavailableError; err != nil {
+							if rue := (*kvpb.ReplicaUnavailableError)(nil); errors.As(err, &rue) {
+								lhRUE = lh.IsSame(rue.Replica)
+							}
+						}
 						// If the leaseholder is the replica that we've just tried, and
 						// we've tried this replica a bunch of times already, let's move on
 						// and not try it again. This prevents us getting stuck on a replica
@@ -2615,7 +2690,7 @@ func (ds *DistSender) sendToReplicas(
 						// (possibly because it hasn't applied its lease yet). Perhaps that
 						// lease expires and someone else gets a new one, so by moving on we
 						// get out of possibly infinite loops.
-						if !lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit {
+						if (!lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit) && !lhRUE {
 							moved := transport.MoveToFront(*lh)
 							if !moved {
 								// The transport always includes the client's view of the
@@ -2888,7 +2963,9 @@ func (ds *DistSender) AllRangeSpans(
 //
 // Returns an error if the transport is exhausted.
 func skipStaleReplicas(
-	transport Transport, routing rangecache.EvictionToken, ambiguousError error, lastErr error,
+	transport Transport,
+	routing rangecache.EvictionToken,
+	ambiguousError, replicaUnavailableError, lastErr error,
 ) error {
 	// Check whether the range cache told us that the routing info we had is
 	// very out-of-date. If so, there's not much point in trying the other
@@ -2898,12 +2975,13 @@ func skipStaleReplicas(
 	if !routing.Valid() {
 		return noMoreReplicasErr(
 			ambiguousError,
+			nil, // ignore the replicaUnavailableError, retry with new routing info
 			errors.Wrap(lastErr, "routing information detected to be stale"))
 	}
 
 	for {
 		if transport.IsExhausted() {
-			return noMoreReplicasErr(ambiguousError, lastErr)
+			return noMoreReplicasErr(ambiguousError, replicaUnavailableError, lastErr)
 		}
 
 		if _, ok := routing.Desc().GetReplicaDescriptorByID(transport.NextReplica().ReplicaID); ok {
