@@ -77,8 +77,8 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":sqlproxyccl"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "large"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "large"},
     }),
     shard_count = 8,
     tags = ["ccl_test"],

@@ -273,8 +273,8 @@ go_test(
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}
     ],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "large"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "large"},
     }),
     shard_count = {{ if gt .TestCount 48 }}48{{ else }}{{ .TestCount }}{{end}},
     tags = [{{ if .Ccl }}

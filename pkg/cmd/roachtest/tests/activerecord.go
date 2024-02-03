@@ -33,8 +33,8 @@ var railsReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\
 
 // WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
 // This is used by docs automation to produce a list of supported versions for ORM's.
-var supportedRailsVersion = "7.0.3"
-var activerecordAdapterVersion = "v7.0.2"
+var supportedRailsVersion = "7.1.3"
+var activerecordAdapterVersion = "v7.1.0"
 
 // This test runs activerecord's full test suite against a single cockroach node.
 
@@ -234,14 +234,9 @@ func registerActiveRecord(r registry.Registry) {
 				results.failExpectedCount++
 				results.currentFailures = append(results.currentFailures, test)
 			case !pass && !expectedFailure:
-				// The test suite is flaky and work is being done upstream to stabilize
-				// it (https://github.com/cockroachdb/cockroach/issues/108938). Until
-				// that's done, we ignore all failures from this test.
-				// results.results[test] = fmt.Sprintf("--- FAIL: %s (unexpected)", test)
-				// results.failUnexpectedCount++
-				// results.currentFailures = append(results.currentFailures, test)
-				results.results[test] = fmt.Sprintf("--- SKIP: %s due to upstream flakes (https://github.com/cockroachdb/cockroach/issues/108938)", test)
-				results.ignoredCount++
+				results.results[test] = fmt.Sprintf("--- FAIL: %s (unexpected)", test)
+				results.failUnexpectedCount++
+				results.currentFailures = append(results.currentFailures, test)
 			}
 			results.runTests[test] = struct{}{}
 		}

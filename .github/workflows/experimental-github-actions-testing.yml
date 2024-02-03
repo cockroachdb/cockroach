@@ -17,7 +17,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: ./build/github/get-engflow-keys.sh
       - name: run tests
-        run: bazel test //pkg:all_tests --config crosslinux --jobs 300 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --config=use_ci_timeouts --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
+        run: bazel test //pkg:all_tests //pkg/ui:lint //pkg/ui:test --config crosslinux --jobs 300 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --config=use_ci_timeouts --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
       - name: upload test results
         run: ./build/github/upload-test-results.sh bes.bin
         if: always()
