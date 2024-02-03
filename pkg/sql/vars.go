@@ -440,6 +440,9 @@ var varGen = map[string]sessionVar{
 				}
 			}
 			if upgraded {
+				if f := m.upgradedIsolationLevel; f != nil {
+					f()
+				}
 				telemetry.Inc(sqltelemetry.IsolationLevelUpgradedCounter(ctx, originalLevel))
 			}
 			m.SetDefaultTransactionIsolationLevel(level)

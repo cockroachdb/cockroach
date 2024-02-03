@@ -109,6 +109,9 @@ func (p *planner) SetSessionCharacteristics(
 	}
 
 	if upgradedLevel {
+		if f := p.sessionDataMutatorIterator.upgradedIsolationLevel; f != nil {
+			f()
+		}
 		telemetry.Inc(sqltelemetry.IsolationLevelUpgradedCounter(ctx, originalLevel))
 	}
 
