@@ -2951,10 +2951,10 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 					!b.evalCtx.SessionData().SharedLockingForSerializable) {
 				// Reset locking information as we've determined we're going to be
 				// performing a non-locking read.
-				return opt.Locking{}, nil // early return; do not set PlanFlagContainsNonDefaultKeyLocking
+				return opt.Locking{}, nil // early return; do not set PlanFlagContainsLocking
 			}
 		}
-		b.flags.Set(exec.PlanFlagContainsNonDefaultKeyLocking)
+		b.flags.Set(exec.PlanFlagContainsLocking)
 	}
 	return locking, nil
 }
