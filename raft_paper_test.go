@@ -654,27 +654,27 @@ func TestFollowerAppendEntries(t *testing.T) {
 	}{
 		{
 			2, 2,
-			[]pb.Entry{{Term: 3, Index: 3}},
-			[]pb.Entry{{Term: 1, Index: 1}, {Term: 2, Index: 2}, {Term: 3, Index: 3}},
-			[]pb.Entry{{Term: 3, Index: 3}},
+			index(3).terms(3),
+			index(1).terms(1, 2, 3),
+			index(3).terms(3),
 		},
 		{
 			1, 1,
-			[]pb.Entry{{Term: 3, Index: 2}, {Term: 4, Index: 3}},
-			[]pb.Entry{{Term: 1, Index: 1}, {Term: 3, Index: 2}, {Term: 4, Index: 3}},
-			[]pb.Entry{{Term: 3, Index: 2}, {Term: 4, Index: 3}},
+			index(2).terms(3, 4),
+			index(1).terms(1, 3, 4),
+			index(2).terms(3, 4),
 		},
 		{
 			0, 0,
-			[]pb.Entry{{Term: 1, Index: 1}},
-			[]pb.Entry{{Term: 1, Index: 1}, {Term: 2, Index: 2}},
+			index(1).terms(1),
+			index(1).terms(1, 2),
 			nil,
 		},
 		{
 			0, 0,
-			[]pb.Entry{{Term: 3, Index: 1}},
-			[]pb.Entry{{Term: 3, Index: 1}},
-			[]pb.Entry{{Term: 3, Index: 1}},
+			index(1).terms(3),
+			index(1).terms(3),
+			index(1).terms(3),
 		},
 	}
 	for i, tt := range tests {
@@ -698,55 +698,16 @@ func TestFollowerAppendEntries(t *testing.T) {
 // into consistency with its own.
 // Reference: section 5.3, figure 7
 func TestLeaderSyncFollowerLog(t *testing.T) {
-	ents := []pb.Entry{
-		{},
-		{Term: 1, Index: 1}, {Term: 1, Index: 2}, {Term: 1, Index: 3},
-		{Term: 4, Index: 4}, {Term: 4, Index: 5},
-		{Term: 5, Index: 6}, {Term: 5, Index: 7},
-		{Term: 6, Index: 8}, {Term: 6, Index: 9}, {Term: 6, Index: 10},
-	}
+	ents := index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6)
 	term := uint64(8)
-	tests := [][]pb.Entry{
-		{
-			{},
-			{Term: 1, Index: 1}, {Term: 1, Index: 2}, {Term: 1, Index: 3},
-			{Term: 4, Index: 4}, {Term: 4, Index: 5},
-			{Term: 5, Index: 6}, {Term: 5, Index: 7},
-			{Term: 6, Index: 8}, {Term: 6, Index: 9},
-		},
-		{
-			{},
-			{Term: 1, Index: 1}, {Term: 1, Index: 2}, {Term: 1, Index: 3},
-			{Term: 4, Index: 4},
-		},
-		{
-			{},
-			{Term: 1, Index: 1}, {Term: 1, Index: 2}, {Term: 1, Index: 3},
-			{Term: 4, Index: 4}, {Term: 4, Index: 5},
-			{Term: 5, Index: 6}, {Term: 5, Index: 7},
-			{Term: 6, Index: 8}, {Term: 6, Index: 9}, {Term: 6, Index: 10}, {Term: 6, Index: 11},
-		},
-		{
-			{},
-			{Term: 1, Index: 1}, {Term: 1, Index: 2}, {Term: 1, Index: 3},
-			{Term: 4, Index: 4}, {Term: 4, Index: 5},
-			{Term: 5, Index: 6}, {Term: 5, Index: 7},
-			{Term: 6, Index: 8}, {Term: 6, Index: 9}, {Term: 6, Index: 10},
-			{Term: 7, Index: 11}, {Term: 7, Index: 12},
-		},
-		{
-			{},
-			{Term: 1, Index: 1}, {Term: 1, Index: 2}, {Term: 1, Index: 3},
-			{Term: 4, Index: 4}, {Term: 4, Index: 5}, {Term: 4, Index: 6}, {Term: 4, Index: 7},
-		},
-		{
-			{},
-			{Term: 1, Index: 1}, {Term: 1, Index: 2}, {Term: 1, Index: 3},
-			{Term: 2, Index: 4}, {Term: 2, Index: 5}, {Term: 2, Index: 6},
-			{Term: 3, Index: 7}, {Term: 3, Index: 8}, {Term: 3, Index: 9}, {Term: 3, Index: 10}, {Term: 3, Index: 11},
-		},
-	}
-	for i, tt := range tests {
+	for i, tt := range [][]pb.Entry{
+		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6),
+		index(0).terms(0, 1, 1, 1, 4, 4),
+		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 6),
+		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 7, 7),
+		index(0).terms(0, 1, 1, 1, 4, 4, 4, 4),
+		index(0).terms(0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3),
+	} {
 		leadStorage := newTestMemoryStorage(withPeers(1, 2, 3))
 		leadStorage.Append(ents)
 		lead := newTestRaft(1, 10, 1, leadStorage)
@@ -780,8 +741,8 @@ func TestVoteRequest(t *testing.T) {
 		ents  []pb.Entry
 		wterm uint64
 	}{
-		{[]pb.Entry{{Term: 1, Index: 1}}, 2},
-		{[]pb.Entry{{Term: 1, Index: 1}, {Term: 2, Index: 2}}, 3},
+		{index(1).terms(1), 2},
+		{index(1).terms(1, 2), 3},
 	}
 	for j, tt := range tests {
 		r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
@@ -832,17 +793,18 @@ func TestVoter(t *testing.T) {
 		wreject bool
 	}{
 		// same logterm
-		{[]pb.Entry{{Term: 1, Index: 1}}, 1, 1, false},
-		{[]pb.Entry{{Term: 1, Index: 1}}, 1, 2, false},
-		{[]pb.Entry{{Term: 1, Index: 1}, {Term: 1, Index: 2}}, 1, 1, true},
+		{index(1).terms(1), 1, 1, false},
+		{index(1).terms(1), 1, 2, false},
+		{index(1).terms(1, 1), 1, 1, true},
 		// candidate higher logterm
-		{[]pb.Entry{{Term: 1, Index: 1}}, 2, 1, false},
-		{[]pb.Entry{{Term: 1, Index: 1}}, 2, 2, false},
+		{index(1).terms(1), 2, 1, false},
+		{index(1).terms(1), 2, 2, false},
 		{[]pb.Entry{{Term: 1, Index: 1}, {Term: 1, Index: 2}}, 2, 1, false},
 		// voter higher logterm
-		{[]pb.Entry{{Term: 2, Index: 1}}, 1, 1, true},
-		{[]pb.Entry{{Term: 2, Index: 1}}, 1, 2, true},
-		{[]pb.Entry{{Term: 2, Index: 1}, {Term: 1, Index: 2}}, 1, 1, true},
+		{index(1).terms(2), 1, 1, true},
+		{index(1).terms(2), 1, 2, true},
+		{index(1).terms(2, 2), 1, 1, true},
+		{index(1).terms(1, 1), 1, 1, true},
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2))
