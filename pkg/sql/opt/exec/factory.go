@@ -67,13 +67,16 @@ const (
 	// PlanFlagContainsMutation is set if the whole plan contains any mutations.
 	PlanFlagContainsMutation
 
-	// PlanFlagContainsNonDefaultKeyLocking is set if at least one node in the
-	// plan uses non-default key locking strength.
-	PlanFlagContainsNonDefaultKeyLocking
+	// PlanFlagContainsLocking is set if at least one node in the plan uses
+	// locking. (Examples of plans using locking include SELECT FOR UPDATE and
+	// SELECT FOR SHARE, UPDATE, UPSERT, and FK checks under read committed
+	// isolation.)
+	PlanFlagContainsLocking
 
-	// PlanFlagCheckContainsNonDefaultKeyLocking is set if at least one node in at
-	// least one check query plan uses non-default key locking strength.
-	PlanFlagCheckContainsNonDefaultKeyLocking
+	// PlanFlagCheckContainsLocking is set if at least one node in at least one
+	// check plan uses locking. Typically this is set for plans with FK checks
+	// under read committed isolation.
+	PlanFlagCheckContainsLocking
 )
 
 func (pf PlanFlags) IsSet(flag PlanFlags) bool {

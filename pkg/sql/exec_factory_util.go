@@ -100,11 +100,11 @@ func constructPlan(
 	if flags.IsSet(exec.PlanFlagContainsMutation) {
 		res.flags.Set(planFlagContainsMutation)
 	}
-	if flags.IsSet(exec.PlanFlagContainsNonDefaultKeyLocking) {
-		res.flags.Set(planFlagContainsNonDefaultLocking)
+	if flags.IsSet(exec.PlanFlagContainsLocking) {
+		res.flags.Set(planFlagContainsLocking)
 	}
-	if flags.IsSet(exec.PlanFlagCheckContainsNonDefaultKeyLocking) {
-		res.flags.Set(planFlagCheckContainsNonDefaultLocking)
+	if flags.IsSet(exec.PlanFlagCheckContainsLocking) {
+		res.flags.Set(planFlagCheckContainsLocking)
 	}
 
 	return res, nil
