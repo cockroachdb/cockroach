@@ -394,8 +394,3 @@ func (c *mdVarContainer) IndexedVarEval(
 func (c *mdVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return c.md.ColumnMeta(opt.ColumnID(idx + 1)).Type
 }
-
-// IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
-func (c *mdVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return nil
-}

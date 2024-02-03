@@ -72,11 +72,6 @@ func (r *renderNode) IndexedVarResolvedType(idx int) *types.T {
 	return r.source.columns[idx].Typ
 }
 
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return r.source.columns.Name(idx)
-}
-
 func (r *renderNode) startExec(runParams) error {
 	panic("renderNode can't be run in local mode")
 }

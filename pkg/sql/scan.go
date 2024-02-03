@@ -150,11 +150,6 @@ func (n *scanNode) IndexedVarResolvedType(idx int) *types.T {
 	return n.resultColumns[idx].Typ
 }
 
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (n *scanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return n.resultColumns.Name(idx)
-}
-
 func (n *scanNode) startExec(params runParams) error {
 	panic("scanNode can't be run in local mode")
 }

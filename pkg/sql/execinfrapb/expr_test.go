@@ -12,7 +12,6 @@ package execinfrapb
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -23,31 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-type testVarContainer struct {
-	used []bool
-}
+type testVarContainer struct{}
 
 var _ tree.IndexedVarContainer = &testVarContainer{}
 
 func (d *testVarContainer) IndexedVarResolvedType(idx int) *types.T {
-	// Track usage of the IndexedVar.
-	for idx > len(d.used)-1 {
-		d.used = append(d.used, false)
-	}
-	d.used[idx] = true
 	return types.Int
-}
-
-func (d *testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("var%d", idx))
-	return &n
-}
-
-func (d *testVarContainer) wasUsed(idx int) bool {
-	if idx < len(d.used) {
-		return d.used[idx]
-	}
-	return false
 }
 
 func TestProcessExpression(t *testing.T) {
@@ -65,15 +45,16 @@ func TestProcessExpression(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !c.wasUsed(0) || !c.wasUsed(1) || !c.wasUsed(2) || c.wasUsed(3) {
-		t.Errorf("invalid IndexedVarUsed results %t %t %t %t (expected false false false true)",
-			c.wasUsed(0), c.wasUsed(1), c.wasUsed(2), c.wasUsed(3))
-	}
-
 	str := expr.String()
-	expectedStr := "(var0 * (var1 + var2)) + var0"
+	expectedStr := "(@1 * (@2 + @3)) + @1"
 	if str != expectedStr {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
+	}
+
+	// Verify the expression is fully typed.
+	typ := expr.ResolvedType()
+	if !typ.Equivalent(types.Int) {
+		t.Errorf("invalid expression type %s", typ)
 	}
 
 	// We can process a new expression with the same tree.IndexedVarHelper.
@@ -83,10 +64,17 @@ func TestProcessExpression(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Verify that the new expression can be formatted correctly.
 	str = expr.String()
-	expectedStr = "var3 - var0"
+	expectedStr = "@4 - @1"
 	if str != expectedStr {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
+	}
+
+	// Verify the expression is fully typed.
+	typ = expr.ResolvedType()
+	if !typ.Equivalent(types.Int) {
+		t.Errorf("invalid expression type %s", typ)
 	}
 }
 

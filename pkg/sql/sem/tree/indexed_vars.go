@@ -20,15 +20,9 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// IndexedVarContainer provides the implementation of TypeCheck and formatting
-// for IndexedVars.
+// IndexedVarContainer provides type-checking for an IndexedVar.
 type IndexedVarContainer interface {
 	IndexedVarResolvedType(idx int) *types.T
-	// IndexedVarNodeFormatter returns a NodeFormatter; if an object that
-	// wishes to implement this interface has lost the textual name that an
-	// IndexedVar originates from, this function can return nil (and the
-	// ordinal syntax "@1, @2, .." will be used).
-	IndexedVarNodeFormatter(idx int) NodeFormatter
 }
 
 // IndexedVar is a VariableExpr that can be used as a leaf in expressions; it
@@ -36,7 +30,6 @@ type IndexedVarContainer interface {
 // IndexedVarContainer.
 type IndexedVar struct {
 	Idx int
-	col NodeFormatter
 	typeAnnotation
 }
 
@@ -78,13 +71,10 @@ func (v *IndexedVar) ResolvedType() *types.T {
 
 // Format implements the NodeFormatter interface.
 func (v *IndexedVar) Format(ctx *FmtCtx) {
-	f := ctx.flags
 	if ctx.indexedVarFormat != nil {
 		ctx.indexedVarFormat(ctx, v.Idx)
-	} else if f.HasFlags(fmtSymbolicVars) || v.col == nil {
-		ctx.Printf("@%d", v.Idx+1)
 	} else {
-		ctx.FormatNode(v.col)
+		ctx.Printf("@%d", v.Idx+1)
 	}
 }
 
@@ -145,7 +135,6 @@ func (h *IndexedVarHelper) IndexedVar(idx int) *IndexedVar {
 	v := &h.vars[idx]
 	v.Idx = idx
 	v.typ = h.container.IndexedVarResolvedType(idx)
-	v.col = h.container.IndexedVarNodeFormatter(idx)
 	return v
 }
 
@@ -208,11 +197,6 @@ var _ IndexedVarContainer = &typeContainer{}
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (tc *typeContainer) IndexedVarResolvedType(idx int) *types.T {
 	return tc.types[idx]
-}
-
-// IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
-func (tc *typeContainer) IndexedVarNodeFormatter(idx int) NodeFormatter {
-	return nil
 }
 
 // MakeTypesOnlyIndexedVarHelper creates an IndexedVarHelper which provides

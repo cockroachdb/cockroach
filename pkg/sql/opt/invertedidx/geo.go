@@ -959,12 +959,6 @@ func (g *geoDatumsToInvertedExpr) IndexedVarResolvedType(idx int) *types.T {
 	return g.colTypes[idx]
 }
 
-// IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
-func (g *geoDatumsToInvertedExpr) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("$%d", idx))
-	return &n
-}
-
 // NewGeoDatumsToInvertedExpr returns a new geoDatumsToInvertedExpr.
 func NewGeoDatumsToInvertedExpr(
 	ctx context.Context,

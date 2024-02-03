@@ -410,11 +410,6 @@ func (nrc *nameResolverIVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return nrc.cols[idx].GetType()
 }
 
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (nrc *nameResolverIVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return nil
-}
-
 // SanitizeVarFreeExpr verifies that an expression is valid, has the correct
 // type and contains no variable expressions. It returns the type-checked and
 // constant-folded expression.
