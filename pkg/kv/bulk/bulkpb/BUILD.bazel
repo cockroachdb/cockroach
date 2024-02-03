@@ -52,8 +52,8 @@ go_test(
     srcs = ["ingestion_performance_stats_test.go"],
     embed = [":bulkpb"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         "//pkg/roachpb",

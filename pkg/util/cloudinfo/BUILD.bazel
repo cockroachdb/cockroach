@@ -14,8 +14,8 @@ go_test(
     srcs = ["cloudinfo_test.go"],
     embed = [":cloudinfo"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         "//pkg/util/httputil",

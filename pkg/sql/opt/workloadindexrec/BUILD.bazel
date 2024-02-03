@@ -22,8 +22,8 @@ go_test(
     srcs = ["index_trie_test.go"],
     embed = [":workloadindexrec"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = ["//pkg/sql/sem/tree"],
 )

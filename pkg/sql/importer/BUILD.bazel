@@ -163,8 +163,8 @@ go_test(
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":importer"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     # It's a large test, so use 16 shards to run test cases.
     # See https://docs.bazel.build/versions/master/be/common-definitions.html#test.shard_count

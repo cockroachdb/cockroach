@@ -20,7 +20,7 @@ go_test(
     srcs = ["rsg_test.go"],
     embed = [":rsg"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
 )

@@ -4,7 +4,7 @@ go_test(
     name = "hashbench_test",
     srcs = ["hash_gc_test.go"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
 )

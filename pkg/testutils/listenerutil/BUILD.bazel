@@ -17,8 +17,8 @@ go_test(
     srcs = ["listener_test.go"],
     embed = [":listenerutil"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         "//pkg/util/ctxgroup",

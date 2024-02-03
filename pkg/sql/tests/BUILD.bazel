@@ -65,8 +65,8 @@ go_test(
     ],
     embed = [":tests"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "large"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "large"},
     }),
     shard_count = 16,
     deps = [

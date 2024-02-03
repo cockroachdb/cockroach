@@ -28,8 +28,8 @@ go_test(
     srcs = ["compare_test.go"],
     embed = [":cmpconn"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"Pool": "heavy"},
-        "//conditions:default": {"Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         "@com_github_cockroachdb_apd_v3//:apd",
