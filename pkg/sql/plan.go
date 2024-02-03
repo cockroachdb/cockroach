@@ -619,13 +619,12 @@ const (
 	// planFlagContainsMutation is set if the plan has any mutations.
 	planFlagContainsMutation
 
-	// planFlagContainsNonDefaultLocking is set if the plan has a node with
-	// non-default key locking strength.
-	planFlagContainsNonDefaultLocking
+	// planFlagContainsLocking is set if the plan has a node with locking.
+	planFlagContainsLocking
 
-	// planFlagCheckContainsNonDefaultLocking is set if at least one check plan
-	// has a node with non-default key locking strength.
-	planFlagCheckContainsNonDefaultLocking
+	// planFlagCheckContainsLocking is set if at least one check plan has a node
+	// with locking.
+	planFlagCheckContainsLocking
 
 	// planFlagSessionMigration is set if the plan is being created during
 	// a session migration.
