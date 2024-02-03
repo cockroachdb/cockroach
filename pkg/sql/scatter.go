@@ -77,7 +77,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 		fromVals := make([]tree.Datum, len(n.From))
 		for i, expr := range n.From {
 			typedExpr, err := p.analyzeExpr(
-				ctx, expr, nil, tree.IndexedVarHelper{}, desiredTypes[i], true, "SCATTER",
+				ctx, expr, tree.IndexedVarHelper{}, desiredTypes[i], true, "SCATTER",
 			)
 			if err != nil {
 				return nil, err
@@ -90,7 +90,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 		toVals := make([]tree.Datum, len(n.From))
 		for i, expr := range n.To {
 			typedExpr, err := p.analyzeExpr(
-				ctx, expr, nil, tree.IndexedVarHelper{}, desiredTypes[i], true, "SCATTER",
+				ctx, expr, tree.IndexedVarHelper{}, desiredTypes[i], true, "SCATTER",
 			)
 			if err != nil {
 				return nil, err
