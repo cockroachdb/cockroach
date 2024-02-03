@@ -1993,6 +1993,8 @@ func cmdIterNewIncremental(e *evalCtx) error {
 			opts.IntentPolicy = storage.MVCCIncrementalIterIntentPolicyEmit
 		case "aggregate":
 			opts.IntentPolicy = storage.MVCCIncrementalIterIntentPolicyAggregate
+		case "ignore":
+			opts.IntentPolicy = storage.MVCCIncrementalIterIntentPolicyIgnore
 		default:
 			return errors.Errorf("unknown intent policy %s", arg)
 		}
