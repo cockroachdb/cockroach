@@ -1655,11 +1655,6 @@ func (s *scope) IndexedVarResolvedType(idx int) *types.T {
 	return s.cols[idx].typ
 }
 
-// IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
-func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	panic(errors.AssertionFailedf("unimplemented: scope.IndexedVarNodeFormatter"))
-}
-
 // newAmbiguousSourceError returns an error with a helpful error message to be
 // used in case of an ambiguous table name.
 func newAmbiguousSourceError(tn *tree.TableName) error {

@@ -12,7 +12,6 @@ package tree_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -24,39 +23,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-type testVarContainerSlot struct {
-	d    tree.Datum
-	used bool
-}
-
-type testVarContainer []testVarContainerSlot
+type testVarContainer []tree.Datum
 
 var _ eval.IndexedVarContainer = testVarContainer{}
 
 func (d testVarContainer) IndexedVarEval(
 	ctx context.Context, idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
-	return d[idx].d.Eval(ctx, e)
+	return d[idx].Eval(ctx, e)
 }
 
 func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
-	d[idx].used = true
-	return d[idx].d.ResolvedType()
-}
-
-func (d testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("var%d", idx))
-	return &n
+	return d[idx].ResolvedType()
 }
 
 func TestIndexedVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	c := make(testVarContainer, 4)
-	c[0].d = tree.NewDInt(3)
-	c[1].d = tree.NewDInt(5)
-	c[2].d = tree.NewDInt(6)
-	c[3].d = tree.NewDInt(0)
+	c[0] = tree.NewDInt(3)
+	c[1] = tree.NewDInt(5)
+	c[2] = tree.NewDInt(6)
+	c[3] = tree.NewDInt(0)
 
 	h := tree.MakeIndexedVarHelper(c, 4)
 
@@ -64,11 +52,6 @@ func TestIndexedVars(t *testing.T) {
 	v0 := h.IndexedVar(0)
 	v1 := h.IndexedVar(1)
 	v2 := h.IndexedVar(2)
-
-	if !c[0].used || !c[1].used || !c[2].used || c[3].used {
-		t.Errorf("invalid IndexedVarUsed results %t %t %t %t (expected false false false true)",
-			c[0].used, c[1].used, c[2].used, c[3].used)
-	}
 
 	binary := func(op treebin.BinaryOperator, left, right tree.Expr) tree.Expr {
 		return &tree.BinaryExpr{Operator: op, Left: left, Right: right}
@@ -84,32 +67,20 @@ func TestIndexedVars(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Verify that the expression can be formatted correctly.
 	str := typedExpr.String()
-	expectedStr := "var0 + (var1 * var2)"
+	expectedStr := "@1 + (@2 * @3)"
 	if str != expectedStr {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
 	}
 
-	// Test formatting using the indexed var format interceptor.
-	f := tree.NewFmtCtx(
-		tree.FmtSimple,
-		tree.FmtIndexedVarFormat(
-			func(ctx *tree.FmtCtx, idx int) {
-				ctx.Printf("customVar%d", idx)
-			}),
-	)
-	f.FormatNode(typedExpr)
-	str = f.CloseAndGetString()
-
-	expectedStr = "customVar0 + (customVar1 * customVar2)"
-	if str != expectedStr {
-		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
-	}
-
+	// Verify the expression is fully typed.
 	typ := typedExpr.ResolvedType()
 	if !typ.Equivalent(types.Int) {
 		t.Errorf("invalid expression type %s", typ)
 	}
+
+	// Verify the expression evaluates correctly.
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	evalCtx.IVarContainer = c

@@ -43,11 +43,6 @@ func (f *filterNode) IndexedVarResolvedType(idx int) *types.T {
 	return f.source.columns[idx].Typ
 }
 
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (f *filterNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return f.source.columns.Name(idx)
-}
-
 func (f *filterNode) startExec(runParams) error {
 	return nil
 }
