@@ -102,7 +102,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 				func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
 					sqlExec := func(ctx context.Context, stmt string, args ...interface{}) (int, error) {
 						return ie.ExecEx(ctx, "", nil,
-							sessiondata.RootUserSessionDataOverride, stmt, args...)
+							sessiondata.NodeUserSessionDataOverride, stmt, args...)
 					}
 					if err := loqrecovery.UpdateRangeLogWithRecovery(ctx, sqlExec, record); err != nil {
 						return false, errors.Wrap(err,

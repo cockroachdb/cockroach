@@ -132,7 +132,7 @@ func TestTraceAnalyzer(t *testing.T) {
 			execCtx,
 			t.Name(),
 			nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			testStmt,
 		)
 		require.NoError(t, err)

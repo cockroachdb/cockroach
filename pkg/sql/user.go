@@ -289,7 +289,7 @@ func retrieveAuthInfo(
 	ie := f.Executor()
 	values, err := ie.QueryRowEx(
 		ctx, "get-hashed-pwd", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		getHashedPassword, user)
 
 	if err != nil {
@@ -319,7 +319,7 @@ func retrieveAuthInfo(
 
 	roleOptsIt, err := ie.QueryIteratorEx(
 		ctx, "get-login-dependencies", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		getLoginDependencies,
 		user,
 	)
@@ -403,7 +403,7 @@ WHERE
 	ie := f.Executor()
 	defaultSettingsIt, err := ie.QueryIteratorEx(
 		ctx, "get-default-settings", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		getDefaultSettings,
 		user,
 		databaseID,
@@ -456,7 +456,7 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[username.SQLUsername]boo
 	query := `SELECT username FROM system.users`
 	it, err := p.InternalSQLTxn().QueryIteratorEx(
 		ctx, "read-users", p.txn,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		query)
 	if err != nil {
 		return nil, err
@@ -493,7 +493,7 @@ func RoleExists(ctx context.Context, txn isql.Txn, role username.SQLUsername) (b
 	query := `SELECT username FROM system.users WHERE username = $1`
 	row, err := txn.QueryRowEx(
 		ctx, "read-users", txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		query, role,
 	)
 	if err != nil {

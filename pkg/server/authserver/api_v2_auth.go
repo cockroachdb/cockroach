@@ -228,7 +228,7 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 		a.ctx,
 		"revoke-auth-session",
 		nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionCookie.ID,
 	); err != nil {

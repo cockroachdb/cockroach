@@ -1695,7 +1695,7 @@ func (s *adminServer) rangeLogHelper(
 	}
 	it, err := s.internalExecutor.QueryIteratorEx(
 		ctx, "admin-range-log", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		q.String(), q.QueryArguments()...,
 	)
 	if err != nil {
@@ -1823,7 +1823,7 @@ func (s *adminServer) getUIData(
 	}
 	it, err := s.internalExecutor.QueryIteratorEx(
 		ctx, "admin-getUIData", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		query.String(), query.QueryArguments()...,
 	)
 	if err != nil {
@@ -1903,7 +1903,7 @@ func (s *adminServer) SetUIData(
 		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`
 		rowsAffected, err := ie.ExecEx(
 			ctx, "admin-set-ui-data", nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			query, makeUIKey(userName, key), val)
 		if err != nil {
 			return nil, srverrors.ServerError(ctx, err)
@@ -2021,7 +2021,7 @@ func (s *adminServer) Settings(
 	alteredSettings := make(map[settings.InternalKey]*time.Time)
 	if it, err := s.internalExecutor.QueryIteratorEx(
 		ctx, "read-setting", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		`SELECT name, "lastUpdated" FROM system.settings`,
 	); err != nil {
 		log.Warningf(ctx, "failed to read settings: %s", err)
@@ -2517,7 +2517,7 @@ func (s *adminServer) locationsHelper(
 	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.locations`)
 	it, err := s.internalExecutor.QueryIteratorEx(
 		ctx, "admin-locations", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		q.String(),
 	)
 	if err != nil {
