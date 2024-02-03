@@ -199,10 +199,10 @@ func (tc *typeContainer) IndexedVarResolvedType(idx int) *types.T {
 	return tc.types[idx]
 }
 
-// MakeTypesOnlyIndexedVarHelper creates an IndexedVarHelper which provides
+// MakeIndexedVarHelperWithTypes creates an IndexedVarHelper which provides
 // the given types for indexed vars. It does not support evaluation, unless
 // RebindTyped is used with another container which supports evaluation.
-func MakeTypesOnlyIndexedVarHelper(types []*types.T) IndexedVarHelper {
+func MakeIndexedVarHelperWithTypes(types []*types.T) IndexedVarHelper {
 	c := &typeContainer{types: types}
 	return MakeIndexedVarHelper(c, len(types))
 }

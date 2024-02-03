@@ -395,15 +395,7 @@ type nameResolverIVarContainer struct {
 	cols []catalog.Column
 }
 
-var _ eval.IndexedVarContainer = &nameResolverIVarContainer{}
-
-// IndexedVarEval implements the eval.IndexedVarContainer interface.
-// Evaluation is not supported, so this function panics.
-func (nrc *nameResolverIVarContainer) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
-	panic("unsupported")
-}
+var _ tree.IndexedVarContainer = &nameResolverIVarContainer{}
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (nrc *nameResolverIVarContainer) IndexedVarResolvedType(idx int) *types.T {
