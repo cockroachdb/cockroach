@@ -28,6 +28,11 @@ func TestBackupMixedVersionElements_base_add_column_default_seq(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.BackupMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_seq", newClusterMixed)
 }
+func TestBackupMixedVersionElements_base_add_column_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.BackupMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_multiple", newClusterMixed)
+}
 func TestBackupMixedVersionElements_base_add_column_no_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

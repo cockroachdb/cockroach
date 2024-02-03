@@ -3286,3 +3286,30 @@ CREATE TABLE t_110629 (a INT PRIMARY KEY);
 
 statement error subqueries are not allowed in table storage parameters
 ALTER TABLE t SET ( 'string' = EXISTS ( TABLE error ) );
+
+# Regression test for #117565 and #117820, where the declarative schema changer
+# was not using the new PK for a backfilling a secondary index incorrectly.
+statement ok
+CREATE TABLE t_117565(i INT PRIMARY KEY);
+INSERT INTO t_117565 VALUES(1)
+
+statement ok
+ALTER TABLE t_117565
+	ADD COLUMN j INT8 DEFAULT NULL UNIQUE,
+	ADD COLUMN k INT8 DEFAULT 32,
+	ADD COLUMN l INT8 DEFAULT NULL UNIQUE;
+
+query IIII
+SELECT i, j, k, l FROM t_117565;
+----
+1  NULL  32  NULL
+
+query I
+SELECT i FROM t_117565@t_117565_j_key;
+----
+1
+
+query I
+SELECT i FROM t_117565@t_117565_l_key;
+----
+1

@@ -258,6 +258,12 @@ func manageJobs(
 			if newIDs.Len() < oldIDs.Len() {
 				s.updatedPayload().DescriptorIDs = newIDs.Ordered()
 			}
+			// Once a stage is complete, we can wipe out the backfill information.
+			if s.md.Payload.GetNewSchemaChange().BackfillProgress != nil ||
+				s.md.Payload.GetNewSchemaChange().MergeProgress != nil {
+				s.updatedPayload().GetNewSchemaChange().BackfillProgress = nil
+				s.updatedPayload().GetNewSchemaChange().MergeProgress = nil
+			}
 			return nil
 		}); err != nil {
 			return err
