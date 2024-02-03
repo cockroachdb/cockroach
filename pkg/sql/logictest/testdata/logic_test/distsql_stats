@@ -1661,8 +1661,7 @@ SELECT * FROM [EXPLAIN SELECT * FROM system.locations] OFFSET 2
   table: locations@primary
   spans: FULL SCAN
 
-# Collecting stats on system.lease is disallowed.
-statement error pq: cannot create statistics on system.lease
+statement ok
 ANALYZE system.lease
 
 # Collecting stats on system.table_statistics is disallowed.
