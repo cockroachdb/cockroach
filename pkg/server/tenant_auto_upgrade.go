@@ -149,7 +149,7 @@ func (s *SQLServer) startAttemptTenantUpgrade(
 	for ur := retry.StartWithCtx(ctx, upgradeRetryOpts); ur.Next(); {
 		if _, err := s.internalExecutor.ExecEx(
 			ctx, "set-version", nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			"SET CLUSTER SETTING version = $1;", upgradeToVersion.String(),
 		); err != nil {
 			return errors.Wrap(err, "error when finalizing tenant cluster version upgrade")

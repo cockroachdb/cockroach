@@ -85,7 +85,7 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 	} {
 		if _, err := s.sqlServer.internalExecutor.ExecEx(
 			ctx, "tsdump-cfg", nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			stmt,
 		); err != nil {
 			return errors.Wrapf(err, "%s", stmt)

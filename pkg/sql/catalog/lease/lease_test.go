@@ -2959,7 +2959,7 @@ CREATE TABLE d1.t2 (name int);
 
 			// Select from an unrelated table
 			_, err = txn.ExecEx(ctx, "inline-exec", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				"insert into d1.t2 values (10);")
 			return err
 

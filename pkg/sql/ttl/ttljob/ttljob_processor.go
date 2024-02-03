@@ -303,7 +303,7 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 			nil, /* txn */
 			// This is a test-only knob, so we're ok not specifying custom
 			// InternalExecutorOverride.
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			preSelectStatement,
 		); err != nil {
 			return spanRowCount, err

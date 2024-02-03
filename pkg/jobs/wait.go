@@ -115,7 +115,7 @@ func (r *Registry) waitForJobsToBeTerminalOrPaused(
 			ctx,
 			"poll-show-jobs",
 			nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			query,
 		)
 		if err != nil {

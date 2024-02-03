@@ -103,7 +103,7 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 			for ur := retry.StartWithCtx(ctx, upgradeRetryOpts); ur.Next(); {
 				if _, err := s.sqlServer.internalExecutor.ExecEx(
 					ctx, "set-version", nil, /* txn */
-					sessiondata.RootUserSessionDataOverride,
+					sessiondata.NodeUserSessionDataOverride,
 					"SET CLUSTER SETTING version = crdb_internal.node_executable_version();",
 				); err != nil {
 					log.Errorf(ctx, "error when finalizing cluster version upgrade: %v", err)
@@ -215,7 +215,7 @@ func (s *topLevelServer) upgradeStatus(
 func (s *topLevelServer) clusterVersion(ctx context.Context) (string, error) {
 	row, err := s.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "show-version", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		"SHOW CLUSTER SETTING version;",
 	)
 	if err != nil {

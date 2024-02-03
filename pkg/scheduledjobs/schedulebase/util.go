@@ -76,7 +76,7 @@ func CheckScheduleAlreadyExists(
 	ctx context.Context, p sql.PlanHookState, scheduleLabel string,
 ) (bool, error) {
 	row, err := p.InternalSQLTxn().QueryRowEx(ctx, "check-sched",
-		p.Txn(), sessiondata.RootUserSessionDataOverride,
+		p.Txn(), sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("SELECT count(schedule_name) FROM %s WHERE schedule_name = '%s'",
 			scheduledjobs.ProdJobSchedulerEnv.ScheduledJobsTableName(), scheduleLabel))
 

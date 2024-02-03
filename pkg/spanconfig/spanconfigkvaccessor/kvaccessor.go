@@ -230,7 +230,7 @@ func (k *KVAccessor) getSpanConfigRecordsWithTxn(
 		targetsBatch := targets[startIdx:endIdx]
 		getStmt, getQueryArgs := k.constructGetStmtAndArgs(targetsBatch)
 		it, err := k.ie.QueryIteratorEx(ctx, "get-span-cfgs", txn,
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			getStmt, getQueryArgs...,
 		)
 		if err != nil {
@@ -316,7 +316,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 			toDeleteBatch := toDelete[startIdx:endIdx]
 			deleteStmt, deleteQueryArgs := k.constructDeleteStmtAndArgs(toDeleteBatch)
 			n, err := k.ie.ExecEx(ctx, "delete-span-cfgs", txn,
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				deleteStmt, deleteQueryArgs...,
 			)
 			if err != nil {
@@ -342,7 +342,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 			return err
 		}
 		if n, err := k.ie.ExecEx(ctx, "upsert-span-cfgs", txn,
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			upsertStmt, upsertQueryArgs...,
 		); err != nil {
 			return err
@@ -352,7 +352,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 
 		validationStmt, validationQueryArgs := k.constructValidationStmtAndArgs(toUpsertBatch)
 		if datums, err := k.ie.QueryRowEx(ctx, "validate-span-cfgs", txn,
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			validationStmt, validationQueryArgs...,
 		); err != nil {
 			return err

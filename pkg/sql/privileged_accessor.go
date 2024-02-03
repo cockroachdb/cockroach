@@ -39,7 +39,7 @@ func (p *planner) LookupNamespaceID(
 		ctx,
 		"crdb-internal-get-descriptor-id",
 		p.txn,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		query,
 		parentID,
 		parentSchemaID,

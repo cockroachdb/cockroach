@@ -75,7 +75,7 @@ DO UPDATE SET span_count = system.span_count.span_count + $1
 RETURNING span_count
 `
 	datums, err := l.ie.QueryRowEx(ctx, "update-span-count", txn,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		updateSpanCountStmt, delta)
 	if err != nil {
 		return false, err
