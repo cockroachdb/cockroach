@@ -1100,6 +1100,9 @@ func (s *Server) newConnExecutor(
 	ex.dataMutatorIterator.onTempSchemaCreation = func() {
 		ex.hasCreatedTemporarySchema = true
 	}
+	ex.dataMutatorIterator.upgradedIsolationLevel = func() {
+		ex.metrics.ExecutedStatementCounters.TxnUpgradedCount.Inc(1)
+	}
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
 	ex.applicationStats = applicationStats
@@ -3487,6 +3490,7 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 		}
 	}
 	if upgraded {
+		ex.metrics.ExecutedStatementCounters.TxnUpgradedCount.Inc(1)
 		telemetry.Inc(sqltelemetry.IsolationLevelUpgradedCounter(ctx, level))
 	}
 	if ret != isolation.Serializable {
@@ -4285,6 +4289,7 @@ type StatementCounters struct {
 	TxnBeginCount    telemetry.CounterWithMetric
 	TxnCommitCount   telemetry.CounterWithMetric
 	TxnRollbackCount telemetry.CounterWithMetric
+	TxnUpgradedCount *metric.Counter
 
 	// Savepoint operations. SavepointCount is for real SQL savepoints;
 	// the RestartSavepoint variants are for the
@@ -4321,6 +4326,8 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaTxnCommitStarted, internal)),
 		TxnRollbackCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaTxnRollbackStarted, internal)),
+		TxnUpgradedCount: metric.NewCounter(
+			getMetricMeta(MetaTxnUpgradedFromWeakIsolation, internal)),
 		RestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRestartSavepointStarted, internal)),
 		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
@@ -4362,6 +4369,8 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaTxnCommitExecuted, internal)),
 		TxnRollbackCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaTxnRollbackExecuted, internal)),
+		TxnUpgradedCount: metric.NewCounter(
+			getMetricMeta(MetaTxnUpgradedFromWeakIsolation, internal)),
 		RestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRestartSavepointExecuted, internal)),
 		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
