@@ -702,6 +702,9 @@ func resolveMemberOfWithAdminOption(
 		return nil, sqlerrors.NewUndefinedUserError(member)
 	}
 	ret := map[username.SQLUsername]bool{}
+	if member.IsNodeUser() {
+		ret[username.AdminRoleName()] = true
+	}
 	if singleQuery {
 		type membership struct {
 			role    username.SQLUsername
