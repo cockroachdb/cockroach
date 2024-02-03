@@ -190,7 +190,7 @@ func (p *planner) getUpdatedZoneConfigYamlConfig(
 
 		var err error
 		yamlConfig, err = p.analyzeExpr(
-			ctx, n, nil, tree.IndexedVarHelper{}, types.String, false /*requireType*/, "configure zone")
+			ctx, n, tree.IndexedVarHelper{}, types.String, false /*requireType*/, "configure zone")
 		if err != nil {
 			return nil, err
 		}
@@ -240,7 +240,7 @@ func (p *planner) getUpdatedZoneConfigOptions(
 				continue
 			}
 			valExpr, err := p.analyzeExpr(
-				ctx, opt.Value, nil, tree.IndexedVarHelper{}, req.requiredType, true /*requireType*/, string(opt.Key))
+				ctx, opt.Value, tree.IndexedVarHelper{}, req.requiredType, true /*requireType*/, string(opt.Key))
 			if err != nil {
 				return nil, err
 			}
