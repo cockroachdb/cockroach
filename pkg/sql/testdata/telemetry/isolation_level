@@ -6,7 +6,7 @@ exec
 SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
 ----
 
-feature-list
+feature-allowlist
 sql.txn.isolation.*
 ----
 
