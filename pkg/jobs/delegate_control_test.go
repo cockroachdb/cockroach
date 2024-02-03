@@ -241,7 +241,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 				context.Background(),
 				"test-num-effected",
 				nil,
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				jobControl,
 			)
 			require.NoError(t, err)
@@ -323,7 +323,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 				context.Background(),
 				"test-num-effected",
 				nil,
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				jobControl,
 			)
 			require.NoError(t, err)
@@ -385,7 +385,7 @@ func TestJobControlByType(t *testing.T) {
 			context.Background(),
 			"test-invalid-type",
 			nil,
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			invalidTypeQuery,
 		)
 		require.Error(t, err, "unsupported job type")
@@ -472,7 +472,7 @@ func TestJobControlByType(t *testing.T) {
 					context.Background(),
 					"test-num-effected",
 					nil,
-					sessiondata.RootUserSessionDataOverride,
+					sessiondata.NodeUserSessionDataOverride,
 					commandQuery,
 				)
 				require.NoError(t, err, "%s", delayedShowJobs(t, subJobs))

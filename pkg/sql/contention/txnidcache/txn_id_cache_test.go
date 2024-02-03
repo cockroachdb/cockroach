@@ -145,7 +145,7 @@ func TestTransactionIDCache(t *testing.T) {
 				ctx,
 				appName,
 				txn,
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				stmt,
 			)
 			require.NoError(t, err)

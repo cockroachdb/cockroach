@@ -35,7 +35,7 @@ func createAutoConfigRunnerJob(
 			ctx,
 			"check for existing auto config runner job",
 			txn.KV(),
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			"SELECT 1 FROM system.jobs WHERE id = $1",
 			jobs.AutoConfigRunnerJobID,
 		)

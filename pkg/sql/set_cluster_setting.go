@@ -484,7 +484,7 @@ func writeDefaultSettingValue(
 	expectedEncodedValue = setting.EncodedDefault()
 	_, err = db.Executor().ExecEx(
 		ctx, "reset-setting", nil,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		"DELETE FROM system.settings WHERE name = $1", setting.InternalKey(),
 	)
 	return reportedValue, expectedEncodedValue, err
@@ -530,7 +530,7 @@ func writeNonDefaultSettingValue(
 
 		if _, err = db.Executor().ExecEx(
 			ctx, "update-setting", nil,
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
 			setting.InternalKey(), encoded, setting.Typ(),
 		); err != nil {
@@ -559,7 +559,7 @@ func setVersionSetting(
 	// value change is valid.
 	datums, err := db.Executor().QueryRowEx(
 		ctx, "retrieve-prev-setting", nil,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		"SELECT value FROM system.settings WHERE name = $1", setting.InternalKey(),
 	)
 	if err != nil {

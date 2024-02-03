@@ -102,7 +102,7 @@ SELECT count(1), max(%[2]s) FROM d`,
 				ctx,
 				opName,
 				nil, /* txn */
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				deleteStmt,
 				timestampLowerBound,
 				timestampUpperBound,
