@@ -279,7 +279,6 @@ sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRI
 sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent	application
 sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability	application
 sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job	system-visible
-sql.show_ranges_deprecated_behavior.enabled	boolean	false	if set, SHOW RANGES and crdb_internal.ranges{_no_leases} behave with deprecated pre-v23.1 semantics. NB: the new SHOW RANGES interface has richer WITH options than pre-v23.1 SHOW RANGES.	application
 sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators	application
 sql.stats.activity.persisted_rows.max	integer	200000	maximum number of rows of statement and transaction activity that will be persisted in the system tables	application
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode	application
