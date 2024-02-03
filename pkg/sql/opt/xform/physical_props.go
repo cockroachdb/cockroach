@@ -309,7 +309,7 @@ func init() {
 			return physicalDistribution
 		}
 		o, ok := optimizer.(*Optimizer)
-		if !ok {
+		if !ok || o.mem == nil || !o.mem.IsOptimized() {
 			return physicalDistribution
 		}
 		if o.evalCtx == nil {
