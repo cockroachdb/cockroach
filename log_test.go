@@ -208,9 +208,9 @@ func TestLogMaybeAppend(t *testing.T) {
 	lastterm := uint64(3)
 	commit := uint64(1)
 
+	// TODO(pav-kv): clean-up this test.
 	tests := []struct {
-		logTerm   uint64
-		index     uint64
+		prev      entryID
 		committed uint64
 		ents      []pb.Entry
 
@@ -221,66 +221,76 @@ func TestLogMaybeAppend(t *testing.T) {
 	}{
 		// not match: term is different
 		{
-			lastterm - 1, lastindex, lastindex, []pb.Entry{{Index: lastindex + 1, Term: 4}},
+			entryID{term: lastterm - 1, index: lastindex}, lastindex,
+			[]pb.Entry{{Index: lastindex + 1, Term: 4}},
 			0, false, commit, false,
 		},
 		// not match: index out of bound
 		{
-			lastterm, lastindex + 1, lastindex, []pb.Entry{{Index: lastindex + 2, Term: 4}},
+			entryID{term: lastterm, index: lastindex + 1}, lastindex,
+			[]pb.Entry{{Index: lastindex + 2, Term: 4}},
 			0, false, commit, false,
 		},
 		// match with the last existing entry
 		{
-			lastterm, lastindex, lastindex, nil,
+			entryID{term: lastterm, index: lastindex}, lastindex, nil,
 			lastindex, true, lastindex, false,
 		},
 		{
-			lastterm, lastindex, lastindex + 1, nil,
+			entryID{term: lastterm, index: lastindex}, lastindex + 1, nil,
 			lastindex, true, lastindex, false, // do not increase commit higher than lastnewi
 		},
 		{
-			lastterm, lastindex, lastindex - 1, nil,
+			entryID{term: lastterm, index: lastindex}, lastindex - 1, nil,
 			lastindex, true, lastindex - 1, false, // commit up to the commit in the message
 		},
 		{
-			lastterm, lastindex, 0, nil,
+			entryID{term: lastterm, index: lastindex}, 0, nil,
 			lastindex, true, commit, false, // commit do not decrease
 		},
 		{
-			0, 0, lastindex, nil,
+			entryID{}, lastindex, nil,
 			0, true, commit, false, // commit do not decrease
 		},
 		{
-			lastterm, lastindex, lastindex, []pb.Entry{{Index: lastindex + 1, Term: 4}},
+			entryID{term: lastterm, index: lastindex}, lastindex,
+			[]pb.Entry{{Index: lastindex + 1, Term: 4}},
 			lastindex + 1, true, lastindex, false,
 		},
 		{
-			lastterm, lastindex, lastindex + 1, []pb.Entry{{Index: lastindex + 1, Term: 4}},
+			entryID{term: lastterm, index: lastindex}, lastindex + 1,
+			[]pb.Entry{{Index: lastindex + 1, Term: 4}},
 			lastindex + 1, true, lastindex + 1, false,
 		},
 		{
-			lastterm, lastindex, lastindex + 2, []pb.Entry{{Index: lastindex + 1, Term: 4}},
+			entryID{term: lastterm, index: lastindex}, lastindex + 2,
+			[]pb.Entry{{Index: lastindex + 1, Term: 4}},
 			lastindex + 1, true, lastindex + 1, false, // do not increase commit higher than lastnewi
 		},
 		{
-			lastterm, lastindex, lastindex + 2, []pb.Entry{{Index: lastindex + 1, Term: 4}, {Index: lastindex + 2, Term: 4}},
+			entryID{term: lastterm, index: lastindex}, lastindex + 2,
+			[]pb.Entry{{Index: lastindex + 1, Term: 4}, {Index: lastindex + 2, Term: 4}},
 			lastindex + 2, true, lastindex + 2, false,
 		},
 		// match with the entry in the middle
 		{
-			lastterm - 1, lastindex - 1, lastindex, []pb.Entry{{Index: lastindex, Term: 4}},
+			entryID{term: lastterm - 1, index: lastindex - 1}, lastindex,
+			[]pb.Entry{{Index: lastindex, Term: 4}},
 			lastindex, true, lastindex, false,
 		},
 		{
-			lastterm - 2, lastindex - 2, lastindex, []pb.Entry{{Index: lastindex - 1, Term: 4}},
+			entryID{term: lastterm - 2, index: lastindex - 2}, lastindex,
+			[]pb.Entry{{Index: lastindex - 1, Term: 4}},
 			lastindex - 1, true, lastindex - 1, false,
 		},
 		{
-			lastterm - 3, lastindex - 3, lastindex, []pb.Entry{{Index: lastindex - 2, Term: 4}},
+			entryID{term: lastterm - 3, index: lastindex - 3}, lastindex,
+			[]pb.Entry{{Index: lastindex - 2, Term: 4}},
 			lastindex - 2, true, lastindex - 2, true, // conflict with existing committed entry
 		},
 		{
-			lastterm - 2, lastindex - 2, lastindex, []pb.Entry{{Index: lastindex - 1, Term: 4}, {Index: lastindex, Term: 4}},
+			entryID{term: lastterm - 2, index: lastindex - 2}, lastindex,
+			[]pb.Entry{{Index: lastindex - 1, Term: 4}, {Index: lastindex, Term: 4}},
 			lastindex, true, lastindex, false,
 		},
 	}
@@ -296,7 +306,7 @@ func TestLogMaybeAppend(t *testing.T) {
 					require.True(t, tt.wpanic)
 				}
 			}()
-			glasti, gappend := raftLog.maybeAppend(tt.index, tt.logTerm, tt.committed, tt.ents...)
+			glasti, gappend := raftLog.maybeAppend(tt.prev, tt.committed, tt.ents...)
 			require.Equal(t, tt.wlasti, glasti)
 			require.Equal(t, tt.wappend, gappend)
 			require.Equal(t, tt.wcommit, raftLog.committed)
