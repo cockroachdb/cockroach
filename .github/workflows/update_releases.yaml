@@ -55,6 +55,7 @@ jobs:
 
             Epic: None
             Release note: None
+            Release justification: test-only updates
           commit-message: |
             ${{ matrix.branch }}: Update pkg/testutils/release/cockroach_releases.yaml
 
