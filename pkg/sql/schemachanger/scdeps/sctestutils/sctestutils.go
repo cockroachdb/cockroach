@@ -53,6 +53,8 @@ func WithBuilderDependenciesFromTestServer(
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	sd := sql.NewInternalSessionData(ctx, execCfg.Settings, "test")
 	sd.Database = "defaultdb"
+
+	// This planner is used by the tests in sctest, which runs as the root user.
 	ip, cleanup := sql.NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, s.DB(), nodeID),

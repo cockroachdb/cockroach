@@ -344,7 +344,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		p, cleanup := NewInternalPlanner(
 			desc,
 			txn.KV(),
-			username.RootUserName(),
+			username.NodeUserName(),
 			&MemoryMetrics{},
 			sc.execCfg,
 			sd,

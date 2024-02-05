@@ -187,7 +187,7 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 		permanentUpgrades = append(permanentUpgrades, u)
 	}
 
-	user := username.RootUserName()
+	user := username.NodeUserName()
 
 	if len(permanentUpgrades) == 0 {
 		// If we didn't find any permanent migrations, it must be that a test used

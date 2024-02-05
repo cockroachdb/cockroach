@@ -83,7 +83,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, db, s.NodeID()),
-		username.RootUserName(),
+		username.NodeUserName(),
 		&MemoryMetrics{},
 		&execCfg,
 		sd,
@@ -267,7 +267,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		internalPlanner, cleanup := NewInternalPlanner(
 			"test",
 			txn,
-			username.RootUserName(),
+			username.NodeUserName(),
 			&MemoryMetrics{},
 			&execCfg,
 			sd,

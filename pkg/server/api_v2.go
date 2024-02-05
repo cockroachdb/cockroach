@@ -212,7 +212,7 @@ func registerRoutes(
 			p, cleanup := sql.NewInternalPlanner(
 				opName,
 				txn,
-				username.RootUserName(),
+				username.NodeUserName(),
 				&sql.MemoryMetrics{},
 				a.sqlServer.execCfg,
 				sql.NewInternalSessionData(ctx, a.sqlServer.execCfg.Settings, opName),

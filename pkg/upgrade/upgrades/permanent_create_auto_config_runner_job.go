@@ -53,8 +53,8 @@ func createAutoConfigRunnerJob(
 			Description:   "applies automatic configuration",
 			Details:       jobspb.AutoConfigRunnerDetails{},
 			Progress:      jobspb.AutoConfigRunnerProgress{},
-			CreatedBy:     &jobs.CreatedByInfo{Name: username.RootUser, ID: username.RootUserID},
-			Username:      username.RootUserName(),
+			CreatedBy:     &jobs.CreatedByInfo{Name: username.NodeUser, ID: username.NodeUserID},
+			Username:      username.NodeUserName(),
 			NonCancelable: true,
 		}
 		// Use CreateJob instead of CreateAdoptableJob to ensure this node

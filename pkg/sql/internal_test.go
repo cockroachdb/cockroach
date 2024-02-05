@@ -553,7 +553,7 @@ func TestInternalDBWithOverrides(t *testing.T) {
 	_ = idb1.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		assert.Equal(t, 8, int(txn.SessionData().DefaultIntSize))
 		assert.Equal(t, sessiondatapb.DistSQLAuto, txn.SessionData().DistSQLMode)
-		assert.Equal(t, "root", string(txn.SessionData().UserProto))
+		assert.Equal(t, "node", string(txn.SessionData().UserProto))
 
 		row, err := txn.QueryRow(ctx, "test", txn.KV(), "show default_int_size")
 		require.NoError(t, err)
