@@ -106,23 +106,25 @@ func (l *raftLog) String() string {
 
 // maybeAppend returns (0, false) if the entries cannot be appended. Otherwise,
 // it returns (last index of new entries, true).
-func (l *raftLog) maybeAppend(index, logTerm, committed uint64, ents ...pb.Entry) (lastnewi uint64, ok bool) {
-	if !l.matchTerm(index, logTerm) {
+func (l *raftLog) maybeAppend(a logSlice, committed uint64) (lastnewi uint64, ok bool) {
+	if !l.matchTerm(a.prev) {
 		return 0, false
 	}
+	// TODO(pav-kv): propagate logSlice down the stack. It will be used all the
+	// way down in unstable, for safety checks, and for useful bookkeeping.
 
-	lastnewi = index + uint64(len(ents))
-	ci := l.findConflict(ents)
+	lastnewi = a.prev.index + uint64(len(a.entries))
+	ci := l.findConflict(a.entries)
 	switch {
 	case ci == 0:
 	case ci <= l.committed:
 		l.logger.Panicf("entry %d conflict with committed entry [committed(%d)]", ci, l.committed)
 	default:
-		offset := index + 1
-		if ci-offset > uint64(len(ents)) {
-			l.logger.Panicf("index, %d, is out of range [%d]", ci-offset, len(ents))
+		offset := a.prev.index + 1
+		if ci-offset > uint64(len(a.entries)) {
+			l.logger.Panicf("index, %d, is out of range [%d]", ci-offset, len(a.entries))
 		}
-		l.append(ents[ci-offset:]...)
+		l.append(a.entries[ci-offset:]...)
 	}
 	l.commitTo(min(committed, lastnewi))
 	return lastnewi, true
@@ -150,13 +152,15 @@ func (l *raftLog) append(ents ...pb.Entry) uint64 {
 // a different term.
 // The index of the given entries MUST be continuously increasing.
 func (l *raftLog) findConflict(ents []pb.Entry) uint64 {
-	for _, ne := range ents {
-		if !l.matchTerm(ne.Index, ne.Term) {
-			if ne.Index <= l.lastIndex() {
+	for i := range ents {
+		if id := pbEntryID(&ents[i]); !l.matchTerm(id) {
+			if id.index <= l.lastIndex() {
+				// TODO(pav-kv): can simply print %+v of the id. This will change the
+				// log format though.
 				l.logger.Infof("found conflict at index %d [existing term: %d, conflicting term: %d]",
-					ne.Index, l.zeroTermOnOutOfBounds(l.term(ne.Index)), ne.Term)
+					id.index, l.zeroTermOnOutOfBounds(l.term(id.index)), id.term)
 			}
-			return ne.Index
+			return id.index
 		}
 	}
 	return 0
@@ -360,7 +364,7 @@ func (l *raftLog) acceptApplying(i uint64, size entryEncodingSize, allowUnstable
 		i < l.maxAppliableIndex(allowUnstable)
 }
 
-func (l *raftLog) stableTo(i, t uint64) { l.unstable.stableTo(i, t) }
+func (l *raftLog) stableTo(id entryID) { l.unstable.stableTo(id) }
 
 func (l *raftLog) stableSnapTo(i uint64) { l.unstable.stableSnapTo(i) }
 
@@ -370,12 +374,14 @@ func (l *raftLog) stableSnapTo(i uint64) { l.unstable.stableSnapTo(i) }
 // to Ready().
 func (l *raftLog) acceptUnstable() { l.unstable.acceptInProgress() }
 
-func (l *raftLog) lastTerm() uint64 {
-	t, err := l.term(l.lastIndex())
+// lastEntryID returns the ID of the last entry in the log.
+func (l *raftLog) lastEntryID() entryID {
+	index := l.lastIndex()
+	t, err := l.term(index)
 	if err != nil {
-		l.logger.Panicf("unexpected error when getting the last term (%v)", err)
+		l.logger.Panicf("unexpected error when getting the last term at %d: %v", index, err)
 	}
-	return t
+	return entryID{term: t, index: index}
 }
 
 func (l *raftLog) term(i uint64) (uint64, error) {
@@ -426,30 +432,32 @@ func (l *raftLog) allEntries() []pb.Entry {
 	panic(err)
 }
 
-// isUpToDate determines if the given (lastIndex,term) log is more up-to-date
+// isUpToDate determines if a log with the given last entry is more up-to-date
 // by comparing the index and term of the last entries in the existing logs.
+//
 // If the logs have last entries with different terms, then the log with the
 // later term is more up-to-date. If the logs end with the same term, then
 // whichever log has the larger lastIndex is more up-to-date. If the logs are
 // the same, the given log is up-to-date.
-func (l *raftLog) isUpToDate(lasti, term uint64) bool {
-	return term > l.lastTerm() || (term == l.lastTerm() && lasti >= l.lastIndex())
+func (l *raftLog) isUpToDate(their entryID) bool {
+	our := l.lastEntryID()
+	return their.term > our.term || their.term == our.term && their.index >= our.index
 }
 
-func (l *raftLog) matchTerm(i, term uint64) bool {
-	t, err := l.term(i)
+func (l *raftLog) matchTerm(id entryID) bool {
+	t, err := l.term(id.index)
 	if err != nil {
 		return false
 	}
-	return t == term
+	return t == id.term
 }
 
-func (l *raftLog) maybeCommit(maxIndex, term uint64) bool {
-	// NB: term should never be 0 on a commit because the leader campaigns at
-	// least at term 1. But if it is 0 for some reason, we don't want to consider
-	// this a term match in case zeroTermOnOutOfBounds returns 0.
-	if maxIndex > l.committed && term != 0 && l.zeroTermOnOutOfBounds(l.term(maxIndex)) == term {
-		l.commitTo(maxIndex)
+func (l *raftLog) maybeCommit(at entryID) bool {
+	// NB: term should never be 0 on a commit because the leader campaigned at
+	// least at term 1. But if it is 0 for some reason, we don't consider this a
+	// term match.
+	if at.term != 0 && at.index > l.committed && l.matchTerm(at) {
+		l.commitTo(at.index)
 		return true
 	}
 	return false

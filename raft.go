@@ -458,9 +458,10 @@ func newRaft(c *Config) *raft {
 		stepDownOnRemoval:           c.StepDownOnRemoval,
 	}
 
+	lastID := r.raftLog.lastEntryID()
 	cfg, trk, err := confchange.Restore(confchange.Changer{
 		Tracker:   r.trk,
-		LastIndex: raftlog.lastIndex(),
+		LastIndex: lastID.index,
 	}, cs)
 	if err != nil {
 		panic(err)
@@ -480,8 +481,9 @@ func newRaft(c *Config) *raft {
 		nodesStrs = append(nodesStrs, fmt.Sprintf("%x", n))
 	}
 
+	// TODO(pav-kv): it should be ok to simply print %+v for lastID.
 	r.logger.Infof("newRaft %x [peers: [%s], term: %d, commit: %d, applied: %d, lastindex: %d, lastterm: %d]",
-		r.id, strings.Join(nodesStrs, ","), r.Term, r.raftLog.committed, r.raftLog.applied, r.raftLog.lastIndex(), r.raftLog.lastTerm())
+		r.id, strings.Join(nodesStrs, ","), r.Term, r.raftLog.committed, r.raftLog.applied, lastID.index, lastID.term)
 	return r
 }
 
@@ -755,12 +757,11 @@ func (r *raft) appliedSnap(snap *pb.Snapshot) {
 	r.appliedTo(index, 0 /* size */)
 }
 
-// maybeCommit attempts to advance the commit index. Returns true if
-// the commit index changed (in which case the caller should call
-// r.bcastAppend).
+// maybeCommit attempts to advance the commit index. Returns true if the commit
+// index changed (in which case the caller should call r.bcastAppend). This can
+// only be called in StateLeader.
 func (r *raft) maybeCommit() bool {
-	mci := r.trk.Committed()
-	return r.raftLog.maybeCommit(mci, r.Term)
+	return r.raftLog.maybeCommit(entryID{term: r.Term, index: r.trk.Committed()})
 }
 
 func (r *raft) reset(term uint64) {
@@ -1033,14 +1034,16 @@ func (r *raft) campaign(t CampaignType) {
 			r.send(pb.Message{To: id, Term: term, Type: voteRespMsgType(voteMsg)})
 			continue
 		}
+		// TODO(pav-kv): it should be ok to simply print %+v for the lastEntryID.
+		last := r.raftLog.lastEntryID()
 		r.logger.Infof("%x [logterm: %d, index: %d] sent %s request to %x at term %d",
-			r.id, r.raftLog.lastTerm(), r.raftLog.lastIndex(), voteMsg, id, r.Term)
+			r.id, last.term, last.index, voteMsg, id, r.Term)
 
 		var ctx []byte
 		if t == campaignTransfer {
 			ctx = []byte(t)
 		}
-		r.send(pb.Message{To: id, Term: term, Type: voteMsg, Index: r.raftLog.lastIndex(), LogTerm: r.raftLog.lastTerm(), Context: ctx})
+		r.send(pb.Message{To: id, Term: term, Type: voteMsg, Index: last.index, LogTerm: last.term, Context: ctx})
 	}
 }
 
@@ -1066,8 +1069,10 @@ func (r *raft) Step(m pb.Message) error {
 			if !force && inLease {
 				// If a server receives a RequestVote request within the minimum election timeout
 				// of hearing from a current leader, it does not update its term or grant its vote
+				last := r.raftLog.lastEntryID()
+				// TODO(pav-kv): it should be ok to simply print the %+v of the lastEntryID.
 				r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: lease is not expired (remaining ticks: %d)",
-					r.id, r.raftLog.lastTerm(), r.raftLog.lastIndex(), r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, r.electionTimeout-r.electionElapsed)
+					r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, r.electionTimeout-r.electionElapsed)
 				return nil
 			}
 		}
@@ -1118,8 +1123,10 @@ func (r *raft) Step(m pb.Message) error {
 			// Before Pre-Vote enable, there may have candidate with higher term,
 			// but less log. After update to Pre-Vote, the cluster may deadlock if
 			// we drop messages with a lower term.
+			last := r.raftLog.lastEntryID()
+			// TODO(pav-kv): it should be ok to simply print %+v of the lastEntryID.
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
-				r.id, r.raftLog.lastTerm(), r.raftLog.lastIndex(), r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
+				r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
 			r.send(pb.Message{To: m.From, Term: r.Term, Type: pb.MsgPreVoteResp, Reject: true})
 		} else if m.Type == pb.MsgStorageAppendResp {
 			if m.Index != 0 {
@@ -1154,7 +1161,7 @@ func (r *raft) Step(m pb.Message) error {
 
 	case pb.MsgStorageAppendResp:
 		if m.Index != 0 {
-			r.raftLog.stableTo(m.Index, m.LogTerm)
+			r.raftLog.stableTo(entryID{term: m.LogTerm, index: m.Index})
 		}
 		if m.Snapshot != nil {
 			r.appliedSnap(m.Snapshot)
@@ -1175,7 +1182,9 @@ func (r *raft) Step(m pb.Message) error {
 			// ...or this is a PreVote for a future term...
 			(m.Type == pb.MsgPreVote && m.Term > r.Term)
 		// ...and we believe the candidate is up to date.
-		if canVote && r.raftLog.isUpToDate(m.Index, m.LogTerm) {
+		lastID := r.raftLog.lastEntryID()
+		candLastID := entryID{term: m.LogTerm, index: m.Index}
+		if canVote && r.raftLog.isUpToDate(candLastID) {
 			// Note: it turns out that that learners must be allowed to cast votes.
 			// This seems counter- intuitive but is necessary in the situation in which
 			// a learner has been promoted (i.e. is now a voter) but has not learned
@@ -1195,7 +1204,7 @@ func (r *raft) Step(m pb.Message) error {
 			// in:
 			// https://github.com/etcd-io/etcd/issues/7625#issuecomment-488798263.
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] cast %s for %x [logterm: %d, index: %d] at term %d",
-				r.id, r.raftLog.lastTerm(), r.raftLog.lastIndex(), r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
+				r.id, lastID.term, lastID.index, r.Vote, m.Type, m.From, candLastID.term, candLastID.index, r.Term)
 			// When responding to Msg{Pre,}Vote messages we include the term
 			// from the message, not the local term. To see why, consider the
 			// case where a single node was previously partitioned away and
@@ -1213,7 +1222,7 @@ func (r *raft) Step(m pb.Message) error {
 			}
 		} else {
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
-				r.id, r.raftLog.lastTerm(), r.raftLog.lastIndex(), r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
+				r.id, lastID.term, lastID.index, r.Vote, m.Type, m.From, candLastID.term, candLastID.index, r.Term)
 			r.send(pb.Message{To: m.From, Term: r.Term, Type: voteRespMsgType(m.Type), Reject: true})
 		}
 
@@ -1735,12 +1744,26 @@ func stepFollower(r *raft, m pb.Message) error {
 	return nil
 }
 
+// logSliceFromMsgApp extracts the appended logSlice from a MsgApp message.
+func logSliceFromMsgApp(m *pb.Message) logSlice {
+	// TODO(pav-kv): consider also validating the logSlice here.
+	return logSlice{
+		term:    m.Term,
+		prev:    entryID{term: m.LogTerm, index: m.Index},
+		entries: m.Entries,
+	}
+}
+
 func (r *raft) handleAppendEntries(m pb.Message) {
-	if m.Index < r.raftLog.committed {
+	// TODO(pav-kv): construct logSlice up the stack next to receiving the
+	// message, and validate it before taking any action (e.g. bumping term).
+	a := logSliceFromMsgApp(&m)
+
+	if a.prev.index < r.raftLog.committed {
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed})
 		return
 	}
-	if mlastIndex, ok := r.raftLog.maybeAppend(m.Index, m.LogTerm, m.Commit, m.Entries...); ok {
+	if mlastIndex, ok := r.raftLog.maybeAppend(a, m.Commit); ok {
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: mlastIndex})
 		return
 	}
@@ -1852,9 +1875,12 @@ func (r *raft) restore(s pb.Snapshot) bool {
 
 	// Now go ahead and actually restore.
 
-	if r.raftLog.matchTerm(s.Metadata.Index, s.Metadata.Term) {
+	id := entryID{term: s.Metadata.Term, index: s.Metadata.Index}
+	if r.raftLog.matchTerm(id) {
+		// TODO(pav-kv): can print %+v of the id, but it will change the format.
+		last := r.raftLog.lastEntryID()
 		r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] fast-forwarded commit to snapshot [index: %d, term: %d]",
-			r.id, r.raftLog.committed, r.raftLog.lastIndex(), r.raftLog.lastTerm(), s.Metadata.Index, s.Metadata.Term)
+			r.id, r.raftLog.committed, last.index, last.term, id.index, id.term)
 		r.raftLog.commitTo(s.Metadata.Index)
 		return false
 	}
@@ -1879,8 +1905,9 @@ func (r *raft) restore(s pb.Snapshot) bool {
 	pr := r.trk.Progress[r.id]
 	pr.MaybeUpdate(pr.Next - 1) // TODO(tbg): this is untested and likely unneeded
 
+	last := r.raftLog.lastEntryID()
 	r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] restored snapshot [index: %d, term: %d]",
-		r.id, r.raftLog.committed, r.raftLog.lastIndex(), r.raftLog.lastTerm(), s.Metadata.Index, s.Metadata.Term)
+		r.id, r.raftLog.committed, last.index, last.term, id.index, id.term)
 	return true
 }
 

@@ -354,8 +354,9 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 		// dropped from memory.
 		//
 		// [^1]: https://en.wikipedia.org/wiki/ABA_problem
-		m.Index = r.raftLog.lastIndex()
-		m.LogTerm = r.raftLog.lastTerm()
+		last := r.raftLog.lastEntryID()
+		m.Index = last.index
+		m.LogTerm = last.term
 	}
 	if !IsEmptySnap(rd.Snapshot) {
 		snap := rd.Snapshot

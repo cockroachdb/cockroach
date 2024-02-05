@@ -131,30 +131,30 @@ func (u *unstable) acceptInProgress() {
 // The method should only be called when the caller can attest that the entries
 // can not be overwritten by an in-progress log append. See the related comment
 // in newStorageAppendRespMsg.
-func (u *unstable) stableTo(i, t uint64) {
-	gt, ok := u.maybeTerm(i)
+func (u *unstable) stableTo(id entryID) {
+	gt, ok := u.maybeTerm(id.index)
 	if !ok {
 		// Unstable entry missing. Ignore.
-		u.logger.Infof("entry at index %d missing from unstable log; ignoring", i)
+		u.logger.Infof("entry at index %d missing from unstable log; ignoring", id.index)
 		return
 	}
-	if i < u.offset {
+	if id.index < u.offset {
 		// Index matched unstable snapshot, not unstable entry. Ignore.
-		u.logger.Infof("entry at index %d matched unstable snapshot; ignoring", i)
+		u.logger.Infof("entry at index %d matched unstable snapshot; ignoring", id.index)
 		return
 	}
-	if gt != t {
+	if gt != id.term {
 		// Term mismatch between unstable entry and specified entry. Ignore.
 		// This is possible if part or all of the unstable log was replaced
 		// between that time that a set of entries started to be written to
 		// stable storage and when they finished.
 		u.logger.Infof("entry at (index,term)=(%d,%d) mismatched with "+
-			"entry at (%d,%d) in unstable log; ignoring", i, t, i, gt)
+			"entry at (%d,%d) in unstable log; ignoring", id.index, id.term, id.index, gt)
 		return
 	}
-	num := int(i + 1 - u.offset)
+	num := int(id.index + 1 - u.offset)
 	u.entries = u.entries[num:]
-	u.offset = i + 1
+	u.offset = id.index + 1
 	u.offsetInProgress = max(u.offsetInProgress, u.offset)
 	u.shrinkEntriesArray()
 }

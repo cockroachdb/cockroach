@@ -33,7 +33,7 @@ import (
 func nextEnts(r *raft, s *MemoryStorage) (ents []pb.Entry) {
 	// Append unstable entries.
 	s.Append(r.raftLog.nextUnstableEnts())
-	r.raftLog.stableTo(r.raftLog.lastIndex(), r.raftLog.lastTerm())
+	r.raftLog.stableTo(r.raftLog.lastEntryID())
 
 	// Run post-append steps.
 	r.advanceMessagesAfterAppend()
@@ -1590,7 +1590,7 @@ func testRecvMsgVote(t *testing.T, msgType pb.MessageType) {
 		// what the recipient node does when receiving a message with a
 		// different term number, so we simply initialize both term numbers to
 		// be the same.
-		term := max(sm.raftLog.lastTerm(), tt.logTerm)
+		term := max(sm.raftLog.lastEntryID().term, tt.logTerm)
 		sm.Term = term
 		sm.Step(pb.Message{Type: msgType, Term: term, From: 2, Index: tt.index, LogTerm: tt.logTerm})
 
