@@ -797,7 +797,7 @@ func TestWaitWithRetryableError(t *testing.T) {
 		registry.WaitForJobs(
 			ctx, []jobspb.JobID{id},
 		))
-	if !skip.Stress() {
+	if !skip.Duress() {
 		require.Equalf(t, int64(targetNumberOfRetries), numberOfTimesDetected.Load(), "jobs query did not retry")
 	} else {
 		// For stress be lenient since we are relying on timing for leasing
