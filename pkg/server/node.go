@@ -1020,7 +1020,7 @@ func (n *Node) computeMetricsPeriodically(
 		} else {
 			if storeToMetrics[store] == nil {
 				storeToMetrics[store] = &storage.MetricsForInterval{
-					FlushWriteThroughput: newMetrics.LogWriter.WriteThroughput,
+					FlushWriteThroughput: newMetrics.Flush.WriteThroughput,
 				}
 			} else {
 				storeToMetrics[store].FlushWriteThroughput = newMetrics.Flush.WriteThroughput
