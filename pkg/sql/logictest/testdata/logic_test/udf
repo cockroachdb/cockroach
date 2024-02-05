@@ -789,4 +789,27 @@ FROM purchase
 
 subtest end
 
+# Regression test for missing a cast on top of the generator function to match
+# the expected return type (#113186, #114846).
+statement ok
+CREATE FUNCTION f113186() RETURNS RECORD LANGUAGE SQL AS $$ SELECT 1.99; $$;
 
+query I
+SELECT * FROM f113186() AS foo(x INT);
+----
+2
+
+statement error invalid cast: decimal -> timestamp
+SELECT * FROM f113186() AS foo(x TIMESTAMP);
+
+statement ok
+CREATE FUNCTION array_to_set(anyarray) RETURNS SETOF RECORD AS $$
+   SELECT i AS "index", $1[i] AS "value" FROM generate_subscripts($1, 1) i
+$$ LANGUAGE SQL STRICT IMMUTABLE;
+
+query RT colnames,rowsort
+SELECT * FROM array_to_set(array['one', 'two']) AS t(f1 numeric(4,2), f2 text);
+----
+f1    f2
+1.00  one
+2.00  two

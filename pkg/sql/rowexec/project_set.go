@@ -237,7 +237,10 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 						return false, err
 					}
 					for _, value := range values {
-						ps.rowBuffer[colIdx] = ps.toEncDatum(value, colIdx)
+						ps.rowBuffer[colIdx], err = ps.toEncDatum(value, colIdx)
+						if err != nil {
+							return false, err
+						}
 						colIdx++
 					}
 					newValAvail = true
@@ -245,7 +248,10 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 					ps.done[i] = true
 					// No values left. Fill the buffer with NULLs for future results.
 					for j := 0; j < numCols; j++ {
-						ps.rowBuffer[colIdx] = ps.toEncDatum(tree.DNull, colIdx)
+						ps.rowBuffer[colIdx], err = ps.toEncDatum(tree.DNull, colIdx)
+						if err != nil {
+							return false, err
+						}
 						colIdx++
 					}
 				}
@@ -262,13 +268,19 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 				if err != nil {
 					return false, err
 				}
-				ps.rowBuffer[colIdx] = ps.toEncDatum(value, colIdx)
+				ps.rowBuffer[colIdx], err = ps.toEncDatum(value, colIdx)
+				if err != nil {
+					return false, err
+				}
 				colIdx++
 				newValAvail = true
 				ps.done[i] = true
 			} else {
 				// Ensure that every row after the first returns a NULL value.
-				ps.rowBuffer[colIdx] = ps.toEncDatum(tree.DNull, colIdx)
+				ps.rowBuffer[colIdx], err = ps.toEncDatum(tree.DNull, colIdx)
+				if err != nil {
+					return false, err
+				}
 				colIdx++
 			}
 		}
@@ -327,10 +339,19 @@ func (ps *projectSetProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 	return nil, ps.DrainHelper()
 }
 
-func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) rowenc.EncDatum {
+func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) (rowenc.EncDatum, error) {
 	generatedColIdx := colIdx - len(ps.input.OutputTypes())
 	ctyp := ps.spec.GeneratedColumns[generatedColIdx]
-	return rowenc.DatumToEncDatum(ctyp, d)
+	var err error
+	// In some cases, the expected type is different from the current type of
+	// the datum, so we might need to perform the cast.
+	if dTyp := d.ResolvedType(); d != tree.DNull && !ctyp.Equivalent(dTyp) && !dTyp.IsAmbiguous() {
+		d, err = eval.PerformCast(ps.Ctx(), ps.EvalCtx, d, ctyp)
+		if err != nil {
+			return rowenc.EncDatum{}, err
+		}
+	}
+	return rowenc.DatumToEncDatum(ctyp, d), nil
 }
 
 func (ps *projectSetProcessor) close() {
