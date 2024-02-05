@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,6 +27,7 @@ type multiRegionTestClusterParams struct {
 	replicationMode base.TestClusterReplicationMode
 	useDatabase     string
 	settings        *cluster.Settings
+	scanInterval    time.Duration
 }
 
 // MultiRegionTestClusterParamsOption is an option that can be passed to
@@ -61,6 +63,14 @@ func WithUseDatabase(db string) MultiRegionTestClusterParamsOption {
 func WithSettings(settings *cluster.Settings) MultiRegionTestClusterParamsOption {
 	return func(params *multiRegionTestClusterParams) {
 		params.settings = settings
+	}
+}
+
+// WithScanInterval is used to configure the scan interval for various KV
+// queues.
+func WithScanInterval(interval time.Duration) MultiRegionTestClusterParamsOption {
+	return func(params *multiRegionTestClusterParams) {
+		params.scanInterval = interval
 	}
 }
 
@@ -113,6 +123,7 @@ func TestingCreateMultiRegionClusterWithRegionList(
 				Locality: roachpb.Locality{
 					Tiers: []roachpb.Tier{{Key: "region", Value: region}},
 				},
+				ScanInterval: params.scanInterval,
 			}
 			totalServerCount++
 		}

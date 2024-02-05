@@ -1231,7 +1231,7 @@ func cmdClearTimeRange(e *evalCtx) error {
 
 	rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(batch, key, endKey)
 	resume, err := storage.MVCCClearTimeRange(e.ctx, rw, e.ms, key, endKey, targetTs, ts,
-		leftPeekBound, rightPeekBound, clearRangeThreshold, int64(maxBatchSize), int64(maxBatchByteSize))
+		leftPeekBound, rightPeekBound, clearRangeThreshold, int64(maxBatchSize), int64(maxBatchByteSize), 0)
 	if err != nil {
 		return err
 	}

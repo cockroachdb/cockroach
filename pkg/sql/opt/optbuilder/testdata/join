@@ -2437,6 +2437,21 @@ project
            └── x:1 = y:5
 
 build
+SELECT * FROM onecolumn AS a(x) INNER STRAIGHT JOIN onecolumn AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1!null y:5!null
+ └── inner-join (hash)
+      ├── columns: x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 y:5!null b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+      ├── scan onecolumn [as=a]
+      │    └── columns: x:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4
+      ├── scan onecolumn [as=b]
+      │    └── columns: y:5 b.rowid:6!null b.crdb_internal_mvcc_timestamp:7 b.tableoid:8
+      └── filters
+           └── x:1 = y:5
+
+build
 SELECT * FROM onecolumn AS a NATURAL LEFT LOOKUP JOIN onecolumn as b USING(x)
 ----
 error (42601): at or near "using": syntax error

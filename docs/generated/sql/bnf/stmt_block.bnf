@@ -1436,6 +1436,7 @@ unreserved_keyword ::=
 	| 'STORE'
 	| 'STORED'
 	| 'STORING'
+	| 'STRAIGHT'
 	| 'STREAM'
 	| 'STRICT'
 	| 'SUBSCRIPTION'
@@ -4066,6 +4067,7 @@ bare_label_keywords ::=
 	| 'STORE'
 	| 'STORED'
 	| 'STORING'
+	| 'STRAIGHT'
 	| 'STREAM'
 	| 'STRICT'
 	| 'STRING'
@@ -4177,6 +4179,7 @@ opt_join_hint ::=
 	| 'MERGE'
 	| 'LOOKUP'
 	| 'INVERTED'
+	| 'STRAIGHT'
 	| 
 
 join_type ::=

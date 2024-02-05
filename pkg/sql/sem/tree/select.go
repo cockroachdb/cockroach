@@ -637,6 +637,7 @@ const (
 	AstLookup   = "LOOKUP"
 	AstMerge    = "MERGE"
 	AstInverted = "INVERTED"
+	AstStraight = "STRAIGHT"
 )
 
 // Format implements the NodeFormatter interface.

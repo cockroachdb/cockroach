@@ -80,6 +80,11 @@ SELECT a FROM (VALUES ('{"a": "b"}'::jsonb)) AS a(z) INNER INVERTED JOIN y ON b 
 sql.plan.hints.inverted-join
 
 feature-usage
+SELECT x FROM (VALUES (1)) AS a(x) INNER STRAIGHT JOIN (VALUES (1)) AS b(y) ON x = y
+----
+sql.plan.hints.straight-join
+
+feature-usage
 SELECT * FROM x@x_pkey
 ----
 sql.plan.hints.index

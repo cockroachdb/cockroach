@@ -268,6 +268,12 @@
             "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
         }
     },
+    "loopvarcapture": {
+        "only_files": {
+            "cockroach/pkg/.*$": "first-party code",
+           "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+       }
+    },
     "lostcancel": {
         "only_files": {
             "cockroach/pkg/.*$": "first-party code",

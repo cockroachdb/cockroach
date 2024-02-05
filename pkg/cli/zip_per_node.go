@@ -472,18 +472,18 @@ func (zc *debugZipContext) collectPerNodeData(
 				if err := zc.z.createError(sf, name, requestErr); err != nil {
 					return err
 				}
-				// Log out the list of errors that occurred during log entries request.
-				if len(entries.ParseErrors) > 0 {
-					sf.shout("%d parsing errors occurred:", len(entries.ParseErrors))
-					for _, err := range entries.ParseErrors {
-						sf.shout("%s", err)
-					}
-					parseErr := fmt.Errorf("%d errors occurred:\n%s", len(entries.ParseErrors), strings.Join(entries.ParseErrors, "\n"))
-					if err := zc.z.createError(sf, name, parseErr); err != nil {
-						return err
-					}
-				}
 				continue
+			}
+			// Log the list of errors that occurred during log entries request.
+			if len(entries.ParseErrors) > 0 {
+				sf.shout("%d parsing errors occurred:", len(entries.ParseErrors))
+				for _, err := range entries.ParseErrors {
+					sf.shout("%s", err)
+				}
+				parseErr := fmt.Errorf("%d errors occurred:\n%s", len(entries.ParseErrors), strings.Join(entries.ParseErrors, "\n"))
+				if err := zc.z.createError(sf, name, parseErr); err != nil {
+					return err
+				}
 			}
 			sf.progress("writing output: %s", name)
 			warnRedactLeak := false
