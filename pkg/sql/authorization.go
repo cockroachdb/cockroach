@@ -751,9 +751,8 @@ func resolveMemberOfWithAdminOption(
 		visited[m] = struct{}{}
 
 		it, err := txn.QueryIteratorEx(
-			ctx, "expand-roles", txn.KV(), sessiondata.InternalExecutorOverride{
-				User: username.NodeUserName(),
-			}, lookupRolesStmt, m.Normalized(),
+			ctx, "expand-roles", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+			lookupRolesStmt, m.Normalized(),
 		)
 		if err != nil {
 			return nil, err

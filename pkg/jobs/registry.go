@@ -655,7 +655,7 @@ func (r *Registry) CreateIfNotExistAdoptableJobWithTxn(
 		ctx,
 		"check if job exists",
 		txn.KV(),
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		"SELECT id FROM system.jobs WHERE id = $1",
 		record.JobID,
 	)

@@ -124,7 +124,7 @@ func getInternalExecutorOverride(
 	qosLevel sessiondatapb.QoSLevel,
 ) sessiondata.InternalExecutorOverride {
 	return sessiondata.InternalExecutorOverride{
-		User:                   username.RootUserName(),
+		User:                   username.NodeUserName(),
 		QualityOfService:       &qosLevel,
 		OptimizerUseHistograms: true,
 	}

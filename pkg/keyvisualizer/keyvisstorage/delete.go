@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -36,7 +35,7 @@ func DeleteSamplesBeforeTime(ctx context.Context, ie *sql.InternalExecutor, t ti
 		t.Unix())
 
 	_, err := ie.ExecEx(ctx, "delete-expired-samples", nil,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()}, stmt)
+		sessiondata.NodeUserSessionDataOverride, stmt)
 
 	if err != nil {
 		return err
@@ -58,7 +57,7 @@ func DeleteSamplesBeforeTime(ctx context.Context, ie *sql.InternalExecutor, t ti
 		ctx,
 		"delete-unused-start-keys",
 		nil,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		deleteKeysStmt,
 	)
 	return err
