@@ -21,10 +21,6 @@ go_test(
     size = "small",
     srcs = ["implicator_test.go"],
     data = glob(["testdata/**"]),
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":partialidx",
         "//pkg/settings/cluster",

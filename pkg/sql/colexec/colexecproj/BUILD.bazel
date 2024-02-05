@@ -45,10 +45,6 @@ go_test(
         "projection_ops_test.go",
     ],
     embed = [":colexecproj"],  # keep
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

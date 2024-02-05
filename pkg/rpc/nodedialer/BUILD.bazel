@@ -24,10 +24,6 @@ go_test(
     size = "small",
     srcs = ["nodedialer_test.go"],
     embed = [":nodedialer"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/clusterversion",
         "//pkg/kv/kvpb",

@@ -53,10 +53,6 @@ go_test(
     name = "loqrecoverypb_test",
     srcs = ["recovery_test.go"],
     embed = [":loqrecoverypb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/roachpb",
         "//pkg/util/uuid",

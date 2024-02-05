@@ -23,10 +23,6 @@ go_test(
         "main_test.go",
         "session_protected_ts_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":sessionprotectedts",
         "//pkg/base",

@@ -47,10 +47,6 @@ go_test(
         "scanner_test.go",
     ],
     embed = [":kvfeed"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",

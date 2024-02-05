@@ -35,10 +35,6 @@ go_test(
         ":testdata",
         "@go_sdk//:files",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":forbiddenmethod",
         "//pkg/build/bazel",

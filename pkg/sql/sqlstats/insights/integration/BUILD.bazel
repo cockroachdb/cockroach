@@ -3,10 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 go_test(
     name = "integration_test",
     srcs = ["insights_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/kv/kvpb",

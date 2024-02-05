@@ -79,10 +79,6 @@ go_test(
         "//pkg/sql/opt/testutils/opttester:testfixtures",
     ],
     embed = [":norm"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/opt",

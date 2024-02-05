@@ -28,10 +28,6 @@ go_test(
     size = "small",
     srcs = ["scalar_vars_test.go"],
     embed = [":testutils"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/opt",
         "@com_github_stretchr_testify//assert",

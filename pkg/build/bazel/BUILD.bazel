@@ -14,10 +14,6 @@ go_test(
     name = "bazel_test",
     srcs = ["bazel_test.go"],
     embed = [":bazel"],  # keep
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "@com_github_stretchr_testify//require",
     ],

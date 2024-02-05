@@ -42,10 +42,6 @@ go_test(
         "span_assembler_test.go",
     ],
     embed = [":colexecspan"],  # keep
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

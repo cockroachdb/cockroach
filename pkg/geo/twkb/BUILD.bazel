@@ -16,10 +16,6 @@ go_test(
     name = "twkb_test",
     srcs = ["twkb_test.go"],
     embed = [":twkb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "@com_github_stretchr_testify//require",
         "@com_github_twpayne_go_geom//:go-geom",

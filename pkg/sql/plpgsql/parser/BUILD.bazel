@@ -61,10 +61,6 @@ go_test(
     name = "parser_test",
     srcs = ["parser_test.go"],
     data = glob(["testdata/**"]),
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":plpgparser",
         "//pkg/sql/sem/plpgsqltree/utils",

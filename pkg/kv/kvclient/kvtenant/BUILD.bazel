@@ -62,10 +62,6 @@ go_test(
         "tenant_trace_test.go",
     ],
     embed = [":kvtenant"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/config",

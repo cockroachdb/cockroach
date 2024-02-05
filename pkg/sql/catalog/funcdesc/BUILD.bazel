@@ -39,10 +39,6 @@ go_library(
 go_test(
     name = "funcdesc_test",
     srcs = ["func_desc_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":funcdesc",
         "//pkg/clusterversion",

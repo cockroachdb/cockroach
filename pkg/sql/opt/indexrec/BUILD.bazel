@@ -35,10 +35,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":indexrec"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",

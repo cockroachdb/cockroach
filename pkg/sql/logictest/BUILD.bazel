@@ -108,10 +108,7 @@ go_test(
     ],
     data = [":testdata"],
     embed = [":logictest"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "large"},
-    }),
+    exec_properties = {"test.Pool": "large"},
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",

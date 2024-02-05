@@ -41,10 +41,6 @@ go_test(
         "wrap_test.go",
     ],
     embed = [":pgerror"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/roachpb",

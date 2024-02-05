@@ -43,10 +43,6 @@ go_test(
     name = "tenantcapabilities_test",
     srcs = ["values_test.go"],
     embed = [":tenantcapabilities"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "@com_github_cockroachdb_errors//:errors",

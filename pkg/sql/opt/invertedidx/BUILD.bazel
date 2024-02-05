@@ -51,10 +51,6 @@ go_test(
         "trigram_test.go",
         "tsearch_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":invertedidx",
         "//pkg/geo",

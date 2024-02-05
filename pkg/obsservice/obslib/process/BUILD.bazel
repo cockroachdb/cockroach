@@ -28,10 +28,6 @@ go_test(
         "processor_test.go",
     ],
     embed = [":process"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/obsservice/obslib/queue",
         "//pkg/obsservice/obslib/validate",

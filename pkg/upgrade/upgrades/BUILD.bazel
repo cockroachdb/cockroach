@@ -94,10 +94,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":upgrades"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     shard_count = 16,
     deps = [
         "//pkg/base",

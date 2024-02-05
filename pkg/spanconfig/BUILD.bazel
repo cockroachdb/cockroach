@@ -42,10 +42,6 @@ go_test(
         "target_test.go",
     ],
     embed = [":spanconfig"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/jobs/jobsprotectedts",
         "//pkg/keys",

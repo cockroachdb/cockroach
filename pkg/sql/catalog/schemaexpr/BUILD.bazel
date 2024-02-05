@@ -58,10 +58,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":schemaexpr"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/clusterversion",
         "//pkg/sql/catalog",

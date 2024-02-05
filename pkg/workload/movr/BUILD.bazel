@@ -26,9 +26,5 @@ go_test(
     size = "small",
     srcs = ["movr_test.go"],
     embed = [":movr"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = ["@com_github_stretchr_testify//require"],
 )

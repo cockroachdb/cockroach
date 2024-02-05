@@ -43,10 +43,6 @@ go_test(
         "settings_test.go",
     ],
     embed = [":oidcccl"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",

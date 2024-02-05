@@ -50,10 +50,6 @@ go_test(
     srcs = ["large_schema_test.go"],
     data = glob(["testdata/**"]),
     embed = [":sqltestutils"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",

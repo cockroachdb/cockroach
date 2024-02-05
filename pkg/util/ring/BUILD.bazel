@@ -15,10 +15,6 @@ go_test(
         "ring_buffer_test.go",
     ],
     embed = [":ring"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/randutil",

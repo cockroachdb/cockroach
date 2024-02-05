@@ -29,10 +29,6 @@ go_test(
     size = "small",
     srcs = ["zone_test.go"],
     embed = [":zonepb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",

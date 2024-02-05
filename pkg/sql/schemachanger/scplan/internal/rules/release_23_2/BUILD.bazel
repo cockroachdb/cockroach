@@ -44,10 +44,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":release_23_2"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/schemachanger/rel",

@@ -32,9 +32,5 @@ go_test(
     name = "isolation_test",
     srcs = ["levels_test.go"],
     embed = [":isolation"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = ["@com_github_stretchr_testify//require"],
 )
