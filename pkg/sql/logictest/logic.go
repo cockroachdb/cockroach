@@ -391,10 +391,23 @@ import (
 //    When using a cockroach-go/testserver logictest, upgrades the node at
 //    index N to the version specified by the logictest config.
 //
+//  - skip <ISSUE> [args...]
+//    Skips this entire logic test using skip.WithIssue(). Should be near top of
+//    test file. Note that this is different from `skipif`.
+//
+//  - skip ignorelint [args...]
+//    Skips this entire logic test using skip.IgnoreLint(). Should be near top
+//    of test file. Note that this is different from `skipif`.
+//
+//  - skip under <deadlock/race/stress/stressrace/metamorphic/duress> [ISSUE] [args...]
+//    Skips this entire logic test using skip.UnderDeadlock(), skip.UnderRace(),
+//    etc. Should be near top of test file. Note that this is different from
+//    `skipif`.
+//
 //  - skipif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
-//    Skips the following `statement` or `query` if the argument is
-//    postgresql, cockroachdb, or a config matching the currently
-//    running configuration.
+//    Skips the following `statement` or `query` if the argument is postgresql,
+//    cockroachdb, or a config matching the currently running
+//    configuration. Note that this is different from `skip`.
 //
 //  - onlyif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
 //    Skips the following `statement` or `query` if the argument is not
@@ -3033,11 +3046,94 @@ func (t *logicTest) processSubtest(
 			}
 
 		case "skip":
-			reason := "skipped"
-			if len(fields) > 1 {
-				reason = fields[1]
+			if len(fields) < 2 || fields[1] == "" {
+				return errors.Errorf("skip requires an argument")
 			}
-			skip.IgnoreLint(t.t(), reason)
+
+			// Parse [ISSUE] [args...] as the trailing arguments for most skip
+			// commands. Returns -1 if the first field is not parsable as a GitHub
+			// issue number.
+			parse := func(fields []string) (int, []interface{}) {
+				if len(fields) < 1 {
+					return -1, nil
+				}
+				if githubIssueID, err := strconv.ParseUint(fields[0], 10, 32); err == nil {
+					args := make([]interface{}, len(fields)-1)
+					for i := range args {
+						args[i] = fields[i+1]
+					}
+					return int(githubIssueID), args
+				}
+				args := make([]interface{}, len(fields))
+				for i := range args {
+					args[i] = fields[i]
+				}
+				return -1, args
+			}
+
+			switch fields[1] {
+			case "ignorelint":
+				if githubIssueID, args := parse(fields[2:]); githubIssueID < 0 {
+					skip.IgnoreLint(t.t(), args...)
+				} else {
+					return errors.Errorf("skip ignorelint does not take an issue ID: %v", githubIssueID)
+				}
+			case "under":
+				if len(fields) < 3 || fields[2] == "" {
+					return errors.Errorf("skip under command requires an argument")
+				}
+				switch fields[2] {
+				case "deadlock":
+					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
+						skip.UnderDeadlock(t.t(), args...)
+					} else {
+						skip.UnderDeadlockWithIssue(t.t(), githubIssueID, args...)
+					}
+				case "race":
+					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
+						skip.UnderRace(t.t(), args...)
+					} else {
+						skip.UnderRaceWithIssue(t.t(), githubIssueID, args...)
+					}
+				case "stress":
+					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
+						skip.UnderStress(t.t(), args...)
+					} else {
+						skip.UnderStressWithIssue(t.t(), githubIssueID, args...)
+					}
+				case "stressrace":
+					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
+						skip.UnderStressRace(t.t(), args...)
+					} else {
+						skip.UnderStressRaceWithIssue(t.t(), githubIssueID, args...)
+					}
+				case "metamorphic":
+					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
+						skip.UnderMetamorphic(t.t(), args...)
+					} else {
+						skip.UnderMetamorphicWithIssue(t.t(), githubIssueID, args...)
+					}
+				case "duress":
+					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
+						skip.UnderDuress(t.t(), args...)
+					} else {
+						skip.UnderDuressWithIssue(t.t(), githubIssueID, args...)
+					}
+				default:
+					return errors.Errorf("unsupported skip under command: %v", fields[2])
+				}
+			case "mysql", "mssql", "postgresql", "cockroachdb", "config", "backup-restore":
+				return errors.Errorf(
+					"should be skipif command instead of skip: %s:%d",
+					path, s.Line+subtest.lineLineIndexIntoFile,
+				)
+			default:
+				githubIssueID, args := parse(fields[1:])
+				if githubIssueID < 0 {
+					return errors.Errorf("unsupported skip command: %v", fields[1])
+				}
+				skip.WithIssue(t.t(), githubIssueID, args...)
+			}
 
 		case "force-backup-restore":
 			t.forceBackupAndRestore = true
@@ -3071,6 +3167,11 @@ func (t *logicTest) processSubtest(
 					s.SetSkip("backup-restore interferes with this check")
 				}
 				continue
+			case "under", "ignorelint":
+				return errors.Errorf(
+					"should be skip command instead of skipif: %s:%d",
+					path, s.Line+subtest.lineLineIndexIntoFile,
+				)
 			default:
 				return errors.Errorf("unimplemented test statement: %s", s.Text())
 			}
