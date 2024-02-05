@@ -72,9 +72,10 @@ func MakeExpression(
 // MakeExpression when making multiple expressions because it will reuse
 // allocated objects between calls to ExprFactory.Make.
 type ExprFactory struct {
-	ctx         context.Context
-	eCtx        ExprContext
-	indexVarMap []int
+	ctx             context.Context
+	eCtx            ExprContext
+	indexVarMap     []int
+	indexedVarsHint int
 
 	subqueryVisitor *evalAndReplaceSubqueryVisitor
 	remapper        *ivarRemapper
@@ -92,6 +93,17 @@ func (ef *ExprFactory) Init(ctx context.Context, exprContext ExprContext, indexV
 		eCtx:        exprContext,
 		indexVarMap: indexVarMap,
 	}
+}
+
+// IndexedVarsHint can be used to provide the ExprFactory with an estimate of how
+// many indexed vars exist across all expressions that will be built with the
+// factory. If the indexed vars need to be remapped, this estimate will be used
+// to batch allocations of indexed vars.
+//
+// NOTE: This function must be called before any calls to Make to ensure that
+// the hint is used.
+func (ef *ExprFactory) IndexedVarsHint(hint int) {
+	ef.indexedVarsHint = hint
 }
 
 // Make creates a execinfrapb.Expression. Init must be called on the ExprFactory
@@ -150,6 +162,11 @@ func (ef *ExprFactory) maybeRemapIVarsInTypedExpr(expr tree.TypedExpr) tree.Type
 	if ef.remapper == nil {
 		// Lazily allocate the IndexVar remapper visitor.
 		ef.remapper = &ivarRemapper{indexVarMap: ef.indexVarMap}
+		if ef.indexedVarsHint > 0 {
+			// If there is a hint for the number of indexed vars that will be
+			// needed, allocate them ahead of time.
+			ef.remapper.indexVarAlloc = make([]tree.IndexedVar, ef.indexedVarsHint)
+		}
 	}
 	newExpr, _ := tree.WalkExpr(ef.remapper, expr)
 	return newExpr.(tree.TypedExpr)
@@ -184,18 +201,30 @@ func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Exp
 func (evalAndReplaceSubqueryVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 type ivarRemapper struct {
-	indexVarMap []int
+	indexVarMap   []int
+	indexVarAlloc []tree.IndexedVar
 }
 
 var _ tree.Visitor = &ivarRemapper{}
 
 func (v *ivarRemapper) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	if ivar, ok := expr.(*tree.IndexedVar); ok {
-		newIvar := *ivar
+		newIvar := v.allocIndexedVar()
+		*newIvar = *ivar
 		newIvar.Idx = v.indexVarMap[ivar.Idx]
-		return false, &newIvar
+		return false, newIvar
 	}
 	return true, expr
 }
 
 func (*ivarRemapper) VisitPost(expr tree.Expr) tree.Expr { return expr }
+
+func (v *ivarRemapper) allocIndexedVar() *tree.IndexedVar {
+	if len(v.indexVarAlloc) == 0 {
+		// Allocate indexed vars in small batches.
+		v.indexVarAlloc = make([]tree.IndexedVar, 4)
+	}
+	iv := &v.indexVarAlloc[0]
+	v.indexVarAlloc = v.indexVarAlloc[1:]
+	return iv
+}
