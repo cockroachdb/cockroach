@@ -137,7 +137,7 @@ func TestIsUpToDate(t *testing.T) {
 
 	for i, tt := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			require.Equal(t, tt.wUpToDate, raftLog.isUpToDate(tt.lastIndex, tt.term))
+			require.Equal(t, tt.wUpToDate, raftLog.isUpToDate(entryID{term: tt.term, index: tt.lastIndex}))
 		})
 	}
 }
@@ -208,9 +208,9 @@ func TestLogMaybeAppend(t *testing.T) {
 	lastterm := uint64(3)
 	commit := uint64(1)
 
+	// TODO(pav-kv): clean-up this test.
 	tests := []struct {
-		logTerm   uint64
-		index     uint64
+		prev      entryID
 		committed uint64
 		ents      []pb.Entry
 
@@ -221,71 +221,91 @@ func TestLogMaybeAppend(t *testing.T) {
 	}{
 		// not match: term is different
 		{
-			lastterm - 1, lastindex, lastindex, []pb.Entry{{Index: lastindex + 1, Term: 4}},
+			entryID{term: lastterm - 1, index: lastindex}, lastindex,
+			[]pb.Entry{{Index: lastindex + 1, Term: 4}},
 			0, false, commit, false,
 		},
 		// not match: index out of bound
 		{
-			lastterm, lastindex + 1, lastindex, []pb.Entry{{Index: lastindex + 2, Term: 4}},
+			entryID{term: lastterm, index: lastindex + 1}, lastindex,
+			[]pb.Entry{{Index: lastindex + 2, Term: 4}},
 			0, false, commit, false,
 		},
 		// match with the last existing entry
 		{
-			lastterm, lastindex, lastindex, nil,
+			entryID{term: lastterm, index: lastindex}, lastindex, nil,
 			lastindex, true, lastindex, false,
 		},
 		{
-			lastterm, lastindex, lastindex + 1, nil,
+			entryID{term: lastterm, index: lastindex}, lastindex + 1, nil,
 			lastindex, true, lastindex, false, // do not increase commit higher than lastnewi
 		},
 		{
-			lastterm, lastindex, lastindex - 1, nil,
+			entryID{term: lastterm, index: lastindex}, lastindex - 1, nil,
 			lastindex, true, lastindex - 1, false, // commit up to the commit in the message
 		},
 		{
-			lastterm, lastindex, 0, nil,
+			entryID{term: lastterm, index: lastindex}, 0, nil,
 			lastindex, true, commit, false, // commit do not decrease
 		},
 		{
-			0, 0, lastindex, nil,
+			entryID{}, lastindex, nil,
 			0, true, commit, false, // commit do not decrease
 		},
 		{
-			lastterm, lastindex, lastindex, []pb.Entry{{Index: lastindex + 1, Term: 4}},
+			entryID{term: lastterm, index: lastindex}, lastindex,
+			[]pb.Entry{{Index: lastindex + 1, Term: 4}},
 			lastindex + 1, true, lastindex, false,
 		},
 		{
-			lastterm, lastindex, lastindex + 1, []pb.Entry{{Index: lastindex + 1, Term: 4}},
+			entryID{term: lastterm, index: lastindex}, lastindex + 1,
+			[]pb.Entry{{Index: lastindex + 1, Term: 4}},
 			lastindex + 1, true, lastindex + 1, false,
 		},
 		{
-			lastterm, lastindex, lastindex + 2, []pb.Entry{{Index: lastindex + 1, Term: 4}},
+			entryID{term: lastterm, index: lastindex}, lastindex + 2,
+			[]pb.Entry{{Index: lastindex + 1, Term: 4}},
 			lastindex + 1, true, lastindex + 1, false, // do not increase commit higher than lastnewi
 		},
 		{
-			lastterm, lastindex, lastindex + 2, []pb.Entry{{Index: lastindex + 1, Term: 4}, {Index: lastindex + 2, Term: 4}},
+			entryID{term: lastterm, index: lastindex}, lastindex + 2,
+			[]pb.Entry{{Index: lastindex + 1, Term: 4}, {Index: lastindex + 2, Term: 4}},
 			lastindex + 2, true, lastindex + 2, false,
 		},
 		// match with the entry in the middle
 		{
-			lastterm - 1, lastindex - 1, lastindex, []pb.Entry{{Index: lastindex, Term: 4}},
+			entryID{term: lastterm - 1, index: lastindex - 1}, lastindex,
+			[]pb.Entry{{Index: lastindex, Term: 4}},
 			lastindex, true, lastindex, false,
 		},
 		{
-			lastterm - 2, lastindex - 2, lastindex, []pb.Entry{{Index: lastindex - 1, Term: 4}},
+			entryID{term: lastterm - 2, index: lastindex - 2}, lastindex,
+			[]pb.Entry{{Index: lastindex - 1, Term: 4}},
 			lastindex - 1, true, lastindex - 1, false,
 		},
 		{
-			lastterm - 3, lastindex - 3, lastindex, []pb.Entry{{Index: lastindex - 2, Term: 4}},
+			entryID{term: lastterm - 3, index: lastindex - 3}, lastindex,
+			[]pb.Entry{{Index: lastindex - 2, Term: 4}},
 			lastindex - 2, true, lastindex - 2, true, // conflict with existing committed entry
 		},
 		{
-			lastterm - 2, lastindex - 2, lastindex, []pb.Entry{{Index: lastindex - 1, Term: 4}, {Index: lastindex, Term: 4}},
+			entryID{term: lastterm - 2, index: lastindex - 2}, lastindex,
+			[]pb.Entry{{Index: lastindex - 1, Term: 4}, {Index: lastindex, Term: 4}},
 			lastindex, true, lastindex, false,
 		},
 	}
 
 	for i, tt := range tests {
+		// TODO(pav-kv): for now, we pick a high enough app.term so that it
+		// represents a valid append message. The maybeAppend currently ignores it,
+		// but it must check that the append does not regress the term.
+		app := logSlice{
+			term:    100,
+			prev:    tt.prev,
+			entries: tt.ents,
+		}
+		require.NoError(t, app.valid())
+
 		raftLog := newLog(NewMemoryStorage(), raftLogger)
 		raftLog.append(previousEnts...)
 		raftLog.committed = commit
@@ -296,7 +316,7 @@ func TestLogMaybeAppend(t *testing.T) {
 					require.True(t, tt.wpanic)
 				}
 			}()
-			glasti, gappend := raftLog.maybeAppend(tt.index, tt.logTerm, tt.committed, tt.ents...)
+			glasti, gappend := raftLog.maybeAppend(app, tt.committed)
 			require.Equal(t, tt.wlasti, glasti)
 			require.Equal(t, tt.wappend, gappend)
 			require.Equal(t, tt.wcommit, raftLog.committed)
@@ -316,7 +336,6 @@ func TestCompactionSideEffects(t *testing.T) {
 	// Populate the log with 1000 entries; 750 in stable storage and 250 in unstable.
 	lastIndex := uint64(1000)
 	unstableIndex := uint64(750)
-	lastTerm := lastIndex
 	storage := NewMemoryStorage()
 	for i = 1; i <= unstableIndex; i++ {
 		storage.Append([]pb.Entry{{Term: i, Index: i}})
@@ -326,7 +345,7 @@ func TestCompactionSideEffects(t *testing.T) {
 		raftLog.append(pb.Entry{Term: i + 1, Index: i + 1})
 	}
 
-	require.True(t, raftLog.maybeCommit(lastIndex, lastTerm))
+	require.True(t, raftLog.maybeCommit(raftLog.lastEntryID()))
 	raftLog.appliedTo(raftLog.committed, 0 /* size */)
 
 	offset := uint64(500)
@@ -338,7 +357,7 @@ func TestCompactionSideEffects(t *testing.T) {
 	}
 
 	for j := offset; j <= raftLog.lastIndex(); j++ {
-		require.True(t, raftLog.matchTerm(j, j))
+		require.True(t, raftLog.matchTerm(entryID{term: j, index: j}))
 	}
 
 	unstableEnts := raftLog.nextUnstableEnts()
@@ -397,8 +416,8 @@ func TestHasNextCommittedEnts(t *testing.T) {
 
 			raftLog := newLog(storage, raftLogger)
 			raftLog.append(ents...)
-			raftLog.stableTo(4, 1)
-			raftLog.maybeCommit(5, 1)
+			raftLog.stableTo(entryID{term: 1, index: 4})
+			raftLog.maybeCommit(entryID{term: 1, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
 			raftLog.applyingEntsPaused = tt.paused
@@ -455,8 +474,8 @@ func TestNextCommittedEnts(t *testing.T) {
 
 			raftLog := newLog(storage, raftLogger)
 			raftLog.append(ents...)
-			raftLog.stableTo(4, 1)
-			raftLog.maybeCommit(5, 1)
+			raftLog.stableTo(entryID{term: 1, index: 4})
+			raftLog.maybeCommit(entryID{term: 1, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
 			raftLog.applyingEntsPaused = tt.paused
@@ -514,8 +533,8 @@ func TestAcceptApplying(t *testing.T) {
 
 			raftLog := newLogWithSize(storage, raftLogger, maxSize)
 			raftLog.append(ents...)
-			raftLog.stableTo(4, 1)
-			raftLog.maybeCommit(5, 1)
+			raftLog.stableTo(entryID{term: 1, index: 4})
+			raftLog.maybeCommit(entryID{term: 1, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
 
 			raftLog.acceptApplying(tt.index, tt.size, tt.allowUnstable)
@@ -563,8 +582,8 @@ func TestAppliedTo(t *testing.T) {
 
 			raftLog := newLogWithSize(storage, raftLogger, maxSize)
 			raftLog.append(ents...)
-			raftLog.stableTo(4, 1)
-			raftLog.maybeCommit(5, 1)
+			raftLog.stableTo(entryID{term: 1, index: 4})
+			raftLog.maybeCommit(entryID{term: 1, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
 			raftLog.acceptApplying(5, maxSize+overshoot, false /* allowUnstable */)
 
@@ -601,7 +620,7 @@ func TestNextUnstableEnts(t *testing.T) {
 
 			ents := raftLog.nextUnstableEnts()
 			if l := len(ents); l > 0 {
-				raftLog.stableTo(ents[l-1].Index, ents[l-1].Term)
+				raftLog.stableTo(pbEntryID(&ents[l-1]))
 			}
 			require.Equal(t, tt.wents, ents)
 			require.Equal(t, previousEnts[len(previousEnts)-1].Index+1, raftLog.unstable.offset)
@@ -652,7 +671,7 @@ func TestStableTo(t *testing.T) {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			raftLog := newLog(NewMemoryStorage(), raftLogger)
 			raftLog.append([]pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}}...)
-			raftLog.stableTo(tt.stablei, tt.stablet)
+			raftLog.stableTo(entryID{term: tt.stablet, index: tt.stablei})
 			require.Equal(t, tt.wunstable, raftLog.unstable.offset)
 		})
 	}
@@ -689,7 +708,7 @@ func TestStableToWithSnap(t *testing.T) {
 			require.NoError(t, s.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: snapi, Term: snapt}}))
 			raftLog := newLog(s, raftLogger)
 			raftLog.append(tt.newEnts...)
-			raftLog.stableTo(tt.stablei, tt.stablet)
+			raftLog.stableTo(entryID{term: tt.stablet, index: tt.stablei})
 			require.Equal(t, tt.wunstable, raftLog.unstable.offset)
 		})
 
@@ -723,7 +742,7 @@ func TestCompaction(t *testing.T) {
 				storage.Append([]pb.Entry{{Index: i}})
 			}
 			raftLog := newLog(storage, raftLogger)
-			raftLog.maybeCommit(tt.lastIndex, 0)
+			raftLog.maybeCommit(entryID{term: 0, index: tt.lastIndex}) // TODO(pav-kv): this is a no-op
 
 			raftLog.appliedTo(raftLog.committed, 0 /* size */)
 			for j := 0; j < len(tt.compact); j++ {
