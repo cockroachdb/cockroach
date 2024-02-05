@@ -2,12 +2,23 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "zone",
-    srcs = ["zone_config.go"],
+    srcs = [
+        "zone_config.go",
+        "zones.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/zone",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
+        "//pkg/config",
         "//pkg/config/zonepb",
+        "//pkg/settings/cluster",
         "//pkg/sql/catalog",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
         "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
