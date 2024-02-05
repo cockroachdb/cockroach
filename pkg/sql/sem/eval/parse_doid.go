@@ -140,7 +140,7 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 		}
 		return tree.NewDOidWithTypeAndName(ol.Oid, t, fd.Name), nil
 	case oid.T_regtype:
-		parsedTyp, err := evalCtx.Planner.GetTypeFromValidSQLSyntax(s)
+		parsedTyp, err := evalCtx.Planner.GetTypeFromValidSQLSyntax(ctx, s)
 		if err == nil {
 			return tree.NewDOidWithTypeAndName(
 				parsedTyp.Oid(), t, parsedTyp.SQLStandardName(),

@@ -125,6 +125,7 @@ func NewRowHelper(
 // encodeSecondaryIndexes. includeEmpty details whether the results should
 // include empty secondary index k/v pairs.
 func (rh *RowHelper) encodeIndexes(
+	ctx context.Context,
 	colIDtoRowIndex catalog.TableColMap,
 	values []tree.Datum,
 	ignoreIndexes intsets.Fast,
@@ -138,7 +139,7 @@ func (rh *RowHelper) encodeIndexes(
 	if err != nil {
 		return nil, nil, err
 	}
-	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(colIDtoRowIndex, values, ignoreIndexes, includeEmpty)
+	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(ctx, colIDtoRowIndex, values, ignoreIndexes, includeEmpty)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -180,6 +181,7 @@ func (rh *RowHelper) encodePrimaryIndex(
 // includeEmpty details whether the results should include empty secondary index
 // k/v pairs.
 func (rh *RowHelper) encodeSecondaryIndexes(
+	ctx context.Context,
 	colIDtoRowIndex catalog.TableColMap,
 	values []tree.Datum,
 	ignoreIndexes intsets.Fast,
@@ -197,7 +199,7 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	for i := range rh.Indexes {
 		index := rh.Indexes[i]
 		if !ignoreIndexes.Contains(int(index.GetID())) {
-			entries, err := rowenc.EncodeSecondaryIndex(rh.Codec, rh.TableDesc, index, colIDtoRowIndex, values, includeEmpty)
+			entries, err := rowenc.EncodeSecondaryIndex(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowIndex, values, includeEmpty)
 			if err != nil {
 				return nil, err
 			}

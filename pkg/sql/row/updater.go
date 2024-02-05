@@ -233,7 +233,8 @@ func (ru *Updater) UpdateRow(
 		// compromise in order to avoid having to read all values of
 		// the row that is being updated.
 		_, deleteOldSecondaryIndexEntries, err = ru.DeleteHelper.encodeIndexes(
-			ru.FetchColIDtoRowIndex, oldValues, pm.IgnoreForDel, true /* includeEmpty */)
+			ctx, ru.FetchColIDtoRowIndex, oldValues, pm.IgnoreForDel, true, /* includeEmpty */
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -283,6 +284,7 @@ func (ru *Updater) UpdateRow(
 			ru.oldIndexEntries[i] = nil
 		} else {
 			ru.oldIndexEntries[i], err = rowenc.EncodeSecondaryIndex(
+				ctx,
 				ru.Helper.Codec,
 				ru.Helper.TableDesc,
 				index,
@@ -298,6 +300,7 @@ func (ru *Updater) UpdateRow(
 			ru.newIndexEntries[i] = nil
 		} else {
 			ru.newIndexEntries[i], err = rowenc.EncodeSecondaryIndex(
+				ctx,
 				ru.Helper.Codec,
 				ru.Helper.TableDesc,
 				index,

@@ -414,7 +414,9 @@ func (ep *DummyEvalPlanner) ResolveTableName(
 }
 
 // GetTypeFromValidSQLSyntax is part of the eval.Planner interface.
-func (ep *DummyEvalPlanner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
+func (ep *DummyEvalPlanner) GetTypeFromValidSQLSyntax(
+	ctx context.Context, sql string,
+) (*types.T, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 

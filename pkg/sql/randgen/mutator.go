@@ -12,6 +12,7 @@ package randgen
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"math/rand"
 	"regexp"
@@ -359,9 +360,9 @@ func encodeInvertedIndexHistogramUpperBounds(colType *types.T, val tree.Datum) (
 	var err error
 	switch colType.Family() {
 	case types.GeometryFamily:
-		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, *geoindex.DefaultGeometryIndexConfig())
+		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(context.Background(), val, nil, *geoindex.DefaultGeometryIndexConfig())
 	case types.GeographyFamily:
-		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, *geoindex.DefaultGeographyIndexConfig())
+		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(context.Background(), val, nil, *geoindex.DefaultGeographyIndexConfig())
 	default:
 		keys, err = rowenc.EncodeInvertedIndexTableKeys(val, nil, descpb.LatestIndexDescriptorVersion)
 	}

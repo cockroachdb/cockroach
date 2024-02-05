@@ -364,7 +364,7 @@ func (tc *Catalog) Schema() *Schema {
 
 // Table returns the test table that was previously added with the given name.
 func (tc *Catalog) Table(name *tree.TableName) *Table {
-	ds, _, err := tc.ResolveDataSource(context.TODO(), cat.Flags{}, name)
+	ds, _, err := tc.ResolveDataSource(context.Background(), cat.Flags{}, name)
 	if err != nil {
 		panic(err)
 	}
@@ -378,7 +378,7 @@ func (tc *Catalog) Table(name *tree.TableName) *Table {
 // LookupTable returns the test table that was previously added with the given
 // name but returns an error if the name does not exist instead of panicking.
 func (tc *Catalog) LookupTable(name *tree.TableName) (*Table, error) {
-	ds, _, err := tc.ResolveDataSource(context.TODO(), cat.Flags{}, name)
+	ds, _, err := tc.ResolveDataSource(context.Background(), cat.Flags{}, name)
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +412,7 @@ func (tc *Catalog) AddTable(tab *Table) {
 
 // View returns the test view that was previously added with the given name.
 func (tc *Catalog) View(name *cat.DataSourceName) *View {
-	ds, _, err := tc.ResolveDataSource(context.TODO(), cat.Flags{}, name)
+	ds, _, err := tc.ResolveDataSource(context.Background(), cat.Flags{}, name)
 	if err != nil {
 		panic(err)
 	}
@@ -765,7 +765,7 @@ var _ cat.Table = &Table{}
 
 func (tt *Table) String() string {
 	tp := treeprinter.New()
-	cat.FormatTable(tt.Catalog, tt, tp, false /* redactableValues */)
+	cat.FormatTable(context.Background(), tt.Catalog, tt, tp, false /* redactableValues */)
 	return tp.String()
 }
 

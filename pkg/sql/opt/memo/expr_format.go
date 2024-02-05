@@ -1530,7 +1530,7 @@ func (f *ExprFmtCtx) formatColSimpleToBuffer(buf *bytes.Buffer, label string, id
 		if f.Memo != nil {
 			md := f.Memo.metadata
 			fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-			label = md.QualifiedAlias(id, fullyQualify, false /* alwaysQualify */, f.Catalog)
+			label = md.QualifiedAlias(f.Ctx, id, fullyQualify, false /* alwaysQualify */, f.Catalog)
 		} else {
 			label = fmt.Sprintf("unknown%d", id)
 		}
@@ -1816,7 +1816,7 @@ func tableName(f *ExprFmtCtx, tabID opt.TableID) string {
 	if f.HasFlags(ExprFmtHideQualifications) {
 		return string(tabMeta.Table.Name())
 	}
-	tn, err := f.Catalog.FullyQualifiedName(context.TODO(), tabMeta.Table)
+	tn, err := f.Catalog.FullyQualifiedName(f.Ctx, tabMeta.Table)
 	if err != nil {
 		panic(err)
 	}

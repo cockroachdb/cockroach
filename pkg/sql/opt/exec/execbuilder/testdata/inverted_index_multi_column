@@ -14,6 +14,7 @@ CREATE TABLE t (
 query T kvtrace
 SELECT k FROM t WHERE i = 10 AND j @> '1'
 ----
+Scan /Table/20/1/10{6-7}
 Scan /Table/106/2/10/1{-/PrefixEnd}, /Table/106/2/10/Arr/1{-/PrefixEnd}
 
 query T kvtrace

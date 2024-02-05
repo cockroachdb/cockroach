@@ -346,7 +346,7 @@ func (s *samplerProcessor) mainLoop(
 			}
 			switch s.outTypes[col].Family() {
 			case types.GeographyFamily, types.GeometryFamily:
-				invKeys, err = rowenc.EncodeGeoInvertedIndexTableKeys(row[col].Datum, nil /* inKey */, index.GeoConfig)
+				invKeys, err = rowenc.EncodeGeoInvertedIndexTableKeys(ctx, row[col].Datum, nil /* inKey */, index.GeoConfig)
 			default:
 				invKeys, err = rowenc.EncodeInvertedIndexTableKeys(row[col].Datum, nil /* inKey */, index.Version)
 			}
