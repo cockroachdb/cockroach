@@ -29,9 +29,9 @@ type IdxRecommendations interface {
 		database string,
 		stmtType tree.StatementType,
 		isInternal bool,
-		recommendations []string,
+		recommendations []indexrec.Rec,
 		reset bool,
-	) []string
+	) []indexrec.Rec
 }
 
 // FormatIdxRecommendations formats a list of index recommendations. The output
