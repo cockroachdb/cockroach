@@ -466,10 +466,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
 	}
-	cpuCapacity, err := getCPUCapacity()
-	if err != nil {
-		log.Ops.Errorf(ctx, "unable to get CPU capacity: %v", err)
-	}
+	cpuCapacity := getCPUCapacity()
 
 	fds := gosigar.ProcFDUsage{}
 	if err := fds.Get(pid); err != nil {
@@ -742,19 +739,20 @@ func GetCPUTime(ctx context.Context) (userTimeMillis, sysTimeMillis int64, err e
 // getCPUCapacity returns the number of logical CPU processors available for
 // use by the process. The capacity accounts for cgroup constraints, GOMAXPROCS
 // and the number of host processors.
-func getCPUCapacity() (float64, error) {
+func getCPUCapacity() float64 {
 	numProcs := float64(runtime.GOMAXPROCS(0 /* read only */))
 	cgroupCPU, err := cgroups.GetCgroupCPU()
 	if err != nil {
-		// Return the GOMAXPROCS value if unable to read the cgroup settings, in
-		// practice this is not likely to occur.
-		return numProcs, err
+		// Return the GOMAXPROCS value if unable to read the cgroup settings. This
+		// can happen if cockroach is not running inside a CPU cgroup, which is a
+		// supported deployment mode. We could log here, but we don't to avoid spam.
+		return numProcs
 	}
 	cpuShare := cgroupCPU.CPUShares()
 	// Take the minimum of the CPU shares and the GOMAXPROCS value. The most CPU
 	// the process could use is the lesser of the two.
 	if cpuShare > numProcs {
-		return numProcs, nil
+		return numProcs
 	}
-	return cpuShare, nil
+	return cpuShare
 }
