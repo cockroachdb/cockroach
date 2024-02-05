@@ -444,7 +444,7 @@ func execQuery(
 ) error {
 	it, err := s.InternalExecutor().(isql.Executor).QueryIteratorEx(
 		ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName(), Database: "system"},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName(), Database: "system"},
 		query,
 	)
 	if err != nil {
