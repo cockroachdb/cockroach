@@ -79,6 +79,56 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Elastic CPU Utilization"
+      sources={nodeSources}
+      tooltip={`CPU utilization by elastic work, compared to the limit set for elastic work.`}
+    >
+      <Axis units={AxisUnits.Percentage} label="CPU Utilization">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              name="cr.node.admission.elastic_cpu.utilization"
+              title={
+                "Elastic CPU Utilization " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+            <Metric
+              name="cr.node.admission.elastic_cpu.utilization_limit"
+              title={
+                "Elastic CPU Utilization Limit " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Elastic CPU Exhausted Duration Per Second"
+      sources={nodeSources}
+      tooltip={`Duration of CPU exhaustion by elastic work, in microseconds.`}
+    >
+      <Axis label="duration (micros/sec)">
+        {nodeIDs.map(nid => (
+          <Metric
+            key={nid}
+            name="cr.node.admission.elastic_cpu.nanos_exhausted_duration"
+            title={
+              "Elastic CPU Exhausted " +
+              nodeDisplayName(nodeDisplayNameByID, nid)
+            }
+            sources={[nid]}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="LSM L0 Health"
       sources={storeSources}
       tooltip={`The number of files and sublevels within Level 0.`}
