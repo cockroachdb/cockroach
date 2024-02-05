@@ -7,7 +7,7 @@ concurrency:
   group: ${{ github.event.pull_request.number }}
   cancel-in-progress: true
 jobs:
-  test_job:
+  unit_tests:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +19,51 @@ jobs:
       - name: run tests
         run: bazel test //pkg:all_tests //pkg/ui:lint //pkg/ui:test --config crosslinux --jobs 300 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --config=use_ci_timeouts --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh) --bes_keywords ci-unit-test
       - name: upload test results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  macos_amd64_build:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: ./build/github/get-engflow-keys.sh
+      - name: run tests
+        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev //c-deps:libgeos --config crossmacos --jobs 100 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  macos_arm64_build:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: ./build/github/get-engflow-keys.sh
+      - name: run tests
+        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev //c-deps:libgeos --config crossmacosarm --jobs 100 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  windows_build:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: ./build/github/get-engflow-keys.sh
+      - name: run tests
+        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss --config crosswindows --jobs 100 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --build_event_binary_file=bes.bin --enable_runfiles $(./build/github/engflow-args.sh)
+      - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
       - name: clean up
