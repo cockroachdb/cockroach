@@ -727,6 +727,9 @@ func (p *PhysicalPlan) AddRendering(
 	post.RenderExprs = make([]execinfrapb.Expression, len(exprs))
 	var ef ExprFactory
 	ef.Init(ctx, exprCtx, compositeMap)
+	// The number of expressions to render is a rough estimate for the number of
+	// indexed vars that will be created in all the calls to ef.Make below.
+	ef.IndexedVarsHint(len(exprs))
 	for i, e := range exprs {
 		var err error
 		post.RenderExprs[i], err = ef.Make(e)
