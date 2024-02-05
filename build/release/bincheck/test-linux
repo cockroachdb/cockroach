@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -exuo pipefail
 source ./download_binary.sh
 
 if [[ $# -ne 2 ]]
