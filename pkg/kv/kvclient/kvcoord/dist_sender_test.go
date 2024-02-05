@@ -602,7 +602,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 	ds := NewDistSender(cfg)
 
 	txn := roachpb.MakeTransaction(
-		"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
+		"test", nil                                                                       /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
 		clock.Now(), clock.MaxOffset().Nanoseconds(), int32(ds.nodeIDGetter()), 0, false, /* omitInRangefeeds */
 	)
 	origTxnTs := txn.WriteTimestamp
@@ -1427,9 +1427,9 @@ func TestDistSenderRetryOnTransportErrors(t *testing.T) {
 	}
 }
 
-// This test verifies that when we have a cached leaseholder that is down
-// it is ejected from the cache.
-func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
+// TestDistSenderLeaseholderDown verifies that when we have a cached leaseholder
+// that is down it remains in the cache.
+func TestDistSenderLeaseholderDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1478,10 +1478,9 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 			contacted1 = true
 			return nil, errors.New("mock RPC error")
 		case 2:
-			// The client has cleared the lease in the cache after the failure of the
-			// first RPC.
+			// The client keeps the lease entry but moves onto the other replicas.
 			assert.Equal(t, desc.Generation, ba.ClientRangeInfo.DescriptorGeneration)
-			assert.Equal(t, roachpb.LeaseSequence(0), ba.ClientRangeInfo.LeaseSequence)
+			assert.Equal(t, lease1.Sequence, ba.ClientRangeInfo.LeaseSequence)
 			assert.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ba.ClientRangeInfo.ClosedTimestampPolicy)
 			contacted2 = true
 			br := ba.CreateReply()
@@ -3667,7 +3666,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 	)
 
 	txn := roachpb.MakeTransaction(
-		"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
+		"test", nil                                     /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
 		clock.Now(), clock.MaxOffset().Nanoseconds(), 1 /* coordinatorNodeID */, 0, false, /* omitInRangefeeds */
 	)
 	// We're also going to check that the highest bumped WriteTimestamp makes it
