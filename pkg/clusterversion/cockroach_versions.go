@@ -300,6 +300,10 @@ const (
 	// progress columns from system.jobs table.
 	V24_1_DropPayloadAndProgressFromSystemJobsTable
 
+	// V24_1_MigrateOldStylePTSRecords  migrate old-style PTS records
+	// to the new style.
+	V24_1_MigrateOldStylePTSRecords
+
 	numKeys
 )
 
@@ -368,6 +372,8 @@ var versionTable = [numKeys]roachpb.Version{
 	// *************************************************
 
 	V24_1_DropPayloadAndProgressFromSystemJobsTable: {Major: 23, Minor: 2, Internal: 4},
+
+	V24_1_MigrateOldStylePTSRecords: {Major: 23, Minor: 2, Internal: 6},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster
