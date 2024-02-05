@@ -72,7 +72,7 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 	// migration we should continue write records that protect `spans`.
 	//
 	// TODO(adityamaru): Delete in 22.2 once we exclusively protect `target`s.
-	if useDeprecatedProtectedTSStorage(ctx, p.settings, p.knobs) {
+	if useDeprecatedProtectedTSStorage(ctx, p.settings, p.knobs) || writeDeprecatedPTSRecord(p.knobs, r) {
 		return p.deprecatedProtect(ctx, r, meta)
 	}
 
@@ -255,6 +255,10 @@ func useDeprecatedProtectedTSStorage(
 	ctx context.Context, st *cluster.Settings, knobs *protectedts.TestingKnobs,
 ) bool {
 	return knobs.DisableProtectedTimestampForMultiTenant
+}
+
+func writeDeprecatedPTSRecord(knobs *protectedts.TestingKnobs, r *ptpb.Record) bool {
+	return knobs != nil && knobs.WriteDeprecatedPTSRecords && r.DeprecatedSpans != nil && len(r.DeprecatedSpans) > 0
 }
 
 // New creates a new Storage.
