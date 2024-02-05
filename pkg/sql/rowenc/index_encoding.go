@@ -607,7 +607,11 @@ func (a ByID) Less(i, j int) bool { return a[i].ColID < a[j].ColID }
 // concatenating keyPrefix with the encodings of the column in the
 // index.
 func EncodeInvertedIndexKeys(
-	index catalog.Index, colMap catalog.TableColMap, values []tree.Datum, keyPrefix []byte,
+	ctx context.Context,
+	index catalog.Index,
+	colMap catalog.TableColMap,
+	values []tree.Datum,
+	keyPrefix []byte,
 ) (key [][]byte, err error) {
 	keyPrefix, err = EncodeInvertedIndexPrefixKeys(index, colMap, values, keyPrefix)
 	if err != nil {
@@ -622,7 +626,7 @@ func EncodeInvertedIndexKeys(
 	}
 	indexGeoConfig := index.GetGeoConfig()
 	if !indexGeoConfig.IsEmpty() {
-		return EncodeGeoInvertedIndexTableKeys(val, keyPrefix, indexGeoConfig)
+		return EncodeGeoInvertedIndexTableKeys(ctx, val, keyPrefix, indexGeoConfig)
 	}
 	return EncodeInvertedIndexTableKeys(val, keyPrefix, index.GetVersion())
 }
@@ -1058,7 +1062,7 @@ func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys
 // for Geography and Geometry.
 func EncodeGeoInvertedIndexTableKeys(
-	val tree.Datum, inKey []byte, indexGeoConfig geopb.Config,
+	ctx context.Context, val tree.Datum, inKey []byte, indexGeoConfig geopb.Config,
 ) (key [][]byte, err error) {
 	if val == tree.DNull {
 		return nil, nil
@@ -1066,14 +1070,14 @@ func EncodeGeoInvertedIndexTableKeys(
 	switch val.ResolvedType().Family() {
 	case types.GeographyFamily:
 		index := geoindex.NewS2GeographyIndex(*indexGeoConfig.S2Geography)
-		intKeys, bbox, err := index.InvertedIndexKeys(context.TODO(), val.(*tree.DGeography).Geography)
+		intKeys, bbox, err := index.InvertedIndexKeys(ctx, val.(*tree.DGeography).Geography)
 		if err != nil {
 			return nil, err
 		}
 		return encodeGeoKeys(encoding.EncodeGeoInvertedAscending(inKey), intKeys, bbox)
 	case types.GeometryFamily:
 		index := geoindex.NewS2GeometryIndex(*indexGeoConfig.S2Geometry)
-		intKeys, bbox, err := index.InvertedIndexKeys(context.TODO(), val.(*tree.DGeometry).Geometry)
+		intKeys, bbox, err := index.InvertedIndexKeys(ctx, val.(*tree.DGeometry).Geometry)
 		if err != nil {
 			return nil, err
 		}
@@ -1289,6 +1293,7 @@ func MakeNullPKError(
 // empty values. For forward indexes the returned list of
 // index entries is in family sorted order.
 func EncodeSecondaryIndex(
+	ctx context.Context,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	secondaryIndex catalog.Index,
@@ -1307,7 +1312,7 @@ func EncodeSecondaryIndex(
 	var secondaryKeys [][]byte
 	var err error
 	if secondaryIndex.GetType() == descpb.IndexDescriptor_INVERTED {
-		secondaryKeys, err = EncodeInvertedIndexKeys(secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+		secondaryKeys, err = EncodeInvertedIndexKeys(ctx, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 	} else {
 		var secondaryIndexKey []byte
 		secondaryIndexKey, containsNull, err = EncodeIndexKey(
@@ -1600,7 +1605,7 @@ func EncodeSecondaryIndexes(
 	const sizeOfIndexEntry = int64(unsafe.Sizeof(IndexEntry{}))
 
 	for i := range indexes {
-		entries, err := EncodeSecondaryIndex(codec, tableDesc, indexes[i], colMap, values, includeEmpty)
+		entries, err := EncodeSecondaryIndex(ctx, codec, tableDesc, indexes[i], colMap, values, includeEmpty)
 		if err != nil {
 			return secondaryIndexEntries, 0, err
 		}

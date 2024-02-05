@@ -39,7 +39,7 @@ func (ec *Builtins) NumGeometryInvertedIndexEntries(
 			"index_id %d is not a geography inverted index", indexID,
 		)
 	}
-	keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, geoConfig)
+	keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(ctx, g, nil, geoConfig)
 	if err != nil {
 		return 0, err
 	}
@@ -61,7 +61,7 @@ func (ec *Builtins) NumGeographyInvertedIndexEntries(
 			"index_id %d is not a geography inverted index", indexID,
 		)
 	}
-	keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, geoConfig)
+	keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(ctx, g, nil, geoConfig)
 	if err != nil {
 		return 0, err
 	}
