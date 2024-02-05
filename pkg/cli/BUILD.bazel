@@ -351,7 +351,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":cli"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
         "//conditions:default": {"test.Pool": "default"},
     }),
     shard_count = 16,

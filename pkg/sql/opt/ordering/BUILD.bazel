@@ -51,10 +51,6 @@ go_test(
         "scan_test.go",
     ],
     embed = [":ordering"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/opt",

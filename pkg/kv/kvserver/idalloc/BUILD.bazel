@@ -25,10 +25,6 @@ go_test(
         "main_test.go",
     ],
     embed = [":idalloc"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvclient/kvcoord",

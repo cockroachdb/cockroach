@@ -142,10 +142,6 @@ go_test(
         "test_url_test.go",
     ],
     embed = [":serverutils"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/security/securityassets",

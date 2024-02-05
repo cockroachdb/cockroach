@@ -12,8 +12,4 @@ go_test(
     size = "small",
     srcs = ["tree_printer_test.go"],
     embed = [":treeprinter"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
 )

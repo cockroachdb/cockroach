@@ -15,10 +15,6 @@ go_test(
     name = "randutil_test",
     size = "small",
     srcs = ["rand_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":randutil",
         "//pkg/util/log",

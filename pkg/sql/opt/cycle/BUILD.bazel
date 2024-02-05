@@ -11,8 +11,4 @@ go_test(
     name = "cycle_test",
     srcs = ["detector_test.go"],
     embed = [":cycle"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
 )

@@ -33,10 +33,6 @@ go_test(
         "graph_test.go",
     ],
     embed = [":scgraph"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scop",

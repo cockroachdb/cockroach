@@ -65,10 +65,6 @@ go_test(
         "mvcc_test.go",
     ],
     embed = [":enginepb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",

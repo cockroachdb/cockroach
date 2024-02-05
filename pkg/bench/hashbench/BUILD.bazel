@@ -3,8 +3,4 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 go_test(
     name = "hashbench_test",
     srcs = ["hash_gc_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
 )

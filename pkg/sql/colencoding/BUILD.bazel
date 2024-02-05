@@ -33,10 +33,6 @@ go_test(
     size = "small",
     srcs = ["value_encoding_test.go"],
     embed = [":colencoding"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

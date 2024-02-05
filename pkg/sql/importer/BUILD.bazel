@@ -163,7 +163,7 @@ go_test(
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":importer"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
         "//conditions:default": {"test.Pool": "default"},
     }),
     # It's a large test, so use 16 shards to run test cases.

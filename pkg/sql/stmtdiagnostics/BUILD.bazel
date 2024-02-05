@@ -32,10 +32,6 @@ go_test(
         "statement_diagnostics_test.go",
     ],
     embed = [":stmtdiagnostics"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",

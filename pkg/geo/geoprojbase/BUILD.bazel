@@ -24,10 +24,6 @@ go_test(
     name = "geoprojbase_test",
     size = "small",
     srcs = ["projections_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":geoprojbase",
         "//pkg/geo/geographiclib",

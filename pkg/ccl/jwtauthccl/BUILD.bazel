@@ -36,10 +36,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":jwtauthccl"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",

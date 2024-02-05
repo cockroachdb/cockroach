@@ -22,10 +22,6 @@ go_test(
     size = "small",
     srcs = ["encryption_spec_test.go"],
     embed = [":baseccl"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = ["//pkg/util/leaktest"],
 )

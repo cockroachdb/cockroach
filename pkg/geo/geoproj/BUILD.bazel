@@ -52,10 +52,6 @@ go_test(
     size = "small",
     srcs = ["geoproj_test.go"],
     embed = [":geoproj"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/geo/geoprojbase",
         "//pkg/util/leaktest",

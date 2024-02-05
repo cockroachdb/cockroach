@@ -38,10 +38,6 @@ go_test(
         "setting_test.go",
     ],
     embed = [":clusterversion"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/build",
         "//pkg/roachpb",

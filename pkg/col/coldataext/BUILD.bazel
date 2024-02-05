@@ -34,10 +34,6 @@ go_test(
     size = "small",
     srcs = ["datum_vec_test.go"],
     embed = [":coldataext"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/col/coldata",
         "//pkg/sql/sem/eval",

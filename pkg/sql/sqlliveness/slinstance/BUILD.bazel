@@ -28,10 +28,6 @@ go_test(
     name = "slinstance_test",
     size = "small",
     srcs = ["slinstance_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":slinstance",
         "//pkg/clusterversion",

@@ -33,10 +33,6 @@ go_test(
         "store_rebalancer_test.go",
     ],
     embed = [":storerebalancer"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/load",

@@ -21,10 +21,6 @@ go_test(
     name = "ttlbase_test",
     srcs = ["ttl_helpers_test.go"],
     embed = [":ttlbase"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/catalog/catenumpb",
         "//pkg/util/leaktest",

@@ -28,10 +28,6 @@ go_test(
     name = "doctor_test",
     size = "small",
     srcs = ["doctor_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":doctor",
         "//pkg/clusterversion",

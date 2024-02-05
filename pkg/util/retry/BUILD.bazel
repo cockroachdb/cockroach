@@ -19,10 +19,6 @@ go_test(
         "retry_test.go",
     ],
     embed = [":retry"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",

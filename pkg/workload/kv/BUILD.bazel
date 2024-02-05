@@ -28,9 +28,5 @@ go_test(
     name = "kv_test",
     srcs = ["kv_test.go"],
     embed = [":kv"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = ["@com_github_stretchr_testify//require"],
 )

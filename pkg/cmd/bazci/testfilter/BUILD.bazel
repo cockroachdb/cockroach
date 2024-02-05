@@ -13,10 +13,6 @@ go_test(
     srcs = ["testfilter_test.go"],
     data = glob(["testdata/**"]),
     embed = [":testfilter"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",

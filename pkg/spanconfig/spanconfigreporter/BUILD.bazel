@@ -28,10 +28,6 @@ go_test(
         "main_test.go",
     ],
     data = glob(["testdata/**"]),
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":spanconfigreporter",
         "//pkg/keys",

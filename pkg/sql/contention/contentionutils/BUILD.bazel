@@ -12,10 +12,6 @@ go_test(
     name = "contentionutils_test",
     srcs = ["concurrent_buffer_guard_test.go"],
     embed = [":contentionutils"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/log",

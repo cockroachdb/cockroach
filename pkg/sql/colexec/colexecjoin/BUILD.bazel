@@ -48,10 +48,6 @@ go_test(
         "mergejoiner_test.go",
     ],
     embed = [":colexecjoin"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

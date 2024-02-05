@@ -8,7 +8,7 @@ go_test(
         "tenant_status_test.go",
     ],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
         "//conditions:default": {"test.Pool": "default"},
     }),
     tags = ["ccl_test"],
