@@ -3488,3 +3488,132 @@ inner-join (merge)
 exploretrace rule=ReorderJoins set=reorder_joins_limit=0
 SELECT * FROM bx INNER JOIN cy ON b = c;
 ----
+
+# Tests for straight join - join reordering should not be
+# explored when the STRAIGHT keyword is present.
+exec-ddl
+CREATE TABLE straight_join1 (x INT, PRIMARY KEY (x));
+----
+
+exec-ddl
+CREATE TABLE straight_join2 (x INT, y INT, PRIMARY KEY (x));
+----
+
+exec-ddl
+CREATE TABLE straight_join3 (x INT, z INT, PRIMARY KEY (x));
+----
+
+reorderjoins format=hide-all
+SELECT * FROM straight_join1 INNER STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
+----
+Joins Considered: 0
+================================================================================
+Final Plan
+================================================================================
+inner-join (hash)
+ ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+ ├── scan straight_join1
+ ├── scan straight_join2
+ └── filters
+      └── straight_join1.x = y
+
+reorderjoins format=hide-all
+SELECT * FROM straight_join1 LEFT STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
+----
+Joins Considered: 0
+================================================================================
+Final Plan
+================================================================================
+left-join (hash)
+ ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+ ├── scan straight_join1
+ ├── scan straight_join2
+ └── filters
+      └── straight_join1.x = y
+
+reorderjoins format=hide-all
+SELECT * FROM straight_join1 RIGHT STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
+----
+Joins Considered: 0
+================================================================================
+Final Plan
+================================================================================
+right-join (hash)
+ ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+ ├── scan straight_join1
+ ├── scan straight_join2
+ └── filters
+      └── straight_join1.x = y
+
+# Only 2 joins are considered (instead of 8) when the STRAIGHT hint is present in one join.
+reorderjoins format=hide-all
+SELECT * 
+FROM straight_join1
+INNER STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
+INNER JOIN straight_join3 ON straight_join1.x = straight_join3.z
+----
+--------------------------------------------------------------------------------
+Join Tree #1
+--------------------------------------------------------------------------------
+  inner-join (hash)
+   ├── inner-join (hash)
+   │    ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+   │    ├── scan straight_join1
+   │    ├── scan straight_join2
+   │    └── filters
+   │         └── straight_join1.x = y
+   ├── scan straight_join3
+   └── filters
+        └── straight_join1.x = z
+Vertexes
+  A:
+    inner-join (hash)
+     ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+     ├── scan straight_join1
+     ├── scan straight_join2
+     └── filters
+          └── straight_join1.x = y
+  B:
+    scan straight_join3
+Edges
+  straight_join1.x = z [inner, ses=AB, tes=AB, rules=()]
+Joining AB
+  A B [inner, refs=AB]
+  B A [inner, refs=AB]
+Joins Considered: 2
+================================================================================
+Final Plan
+================================================================================
+inner-join (hash)
+ ├── scan straight_join3
+ ├── inner-join (hash)
+ │    ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+ │    ├── scan straight_join1
+ │    ├── scan straight_join2
+ │    └── filters
+ │         └── straight_join1.x = y
+ └── filters
+      └── straight_join1.x = z
+
+# No joins are considered when the STRAIGHT hint is present in both joins.
+reorderjoins format=hide-all
+SELECT * 
+FROM straight_join1
+INNER STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
+INNER STRAIGHT JOIN straight_join3 ON straight_join1.x = straight_join3.z
+----
+Joins Considered: 0
+================================================================================
+Final Plan
+================================================================================
+inner-join (hash)
+ ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+ ├── inner-join (hash)
+ │    ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+ │    ├── scan straight_join1
+ │    ├── scan straight_join2
+ │    └── filters
+ │         └── straight_join1.x = y
+ ├── scan straight_join3
+ └── filters
+      └── straight_join1.x = z
