@@ -46,6 +46,7 @@ var (
 	_ Details = AutoConfigTaskDetails{}
 	_ Details = AutoUpdateSQLActivityDetails{}
 	_ Details = MVCCStatisticsJobDetails{}
+	_ Details = AutoTenantGlobalMetricsExporterDetails{}
 )
 
 // ProgressDetails is a marker interface for job progress details proto structs.
@@ -71,6 +72,7 @@ var (
 	_ ProgressDetails = AutoConfigTaskProgress{}
 	_ ProgressDetails = AutoUpdateSQLActivityProgress{}
 	_ ProgressDetails = MVCCStatisticsJobProgress{}
+	_ ProgressDetails = AutoTenantGlobalMetricsExporterProgress{}
 )
 
 // Type returns the payload's job type and panics if the type is invalid.
@@ -158,6 +160,7 @@ var AutomaticJobTypes = [...]Type{
 	TypeKeyVisualizer,
 	TypeAutoUpdateSQLActivity,
 	TypeMVCCStatisticsUpdate,
+	TypeAutoTenantGlobalMetricsExporter,
 }
 
 // DetailsType returns the type for a payload detail.
@@ -213,6 +216,8 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		return TypeAutoUpdateSQLActivity, nil
 	case *Payload_MvccStatisticsDetails:
 		return TypeMVCCStatisticsUpdate, nil
+	case *Payload_AutoTenantGlobalMetricsExporter:
+		return TypeAutoTenantGlobalMetricsExporter, nil
 	default:
 		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
@@ -241,23 +246,24 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeAutoCreateStats: CreateStatsDetails{
 		Name: AutoStatsName,
 	},
-	TypeSchemaChangeGC:               SchemaChangeGCDetails{},
-	TypeTypeSchemaChange:             TypeSchemaChangeDetails{},
-	TypeReplicationStreamIngestion:   StreamIngestionDetails{},
-	TypeNewSchemaChange:              NewSchemaChangeDetails{},
-	TypeMigration:                    MigrationDetails{},
-	TypeAutoSpanConfigReconciliation: AutoSpanConfigReconciliationDetails{},
-	TypeAutoSQLStatsCompaction:       AutoSQLStatsCompactionDetails{},
-	TypeReplicationStreamProducer:    StreamReplicationDetails{},
-	TypeRowLevelTTL:                  RowLevelTTLDetails{},
-	TypeAutoSchemaTelemetry:          SchemaTelemetryDetails{},
-	TypeKeyVisualizer:                KeyVisualizerDetails{},
-	TypePollJobsStats:                PollJobsStatsDetails{},
-	TypeAutoConfigRunner:             AutoConfigRunnerDetails{},
-	TypeAutoConfigEnvRunner:          AutoConfigEnvRunnerDetails{},
-	TypeAutoConfigTask:               AutoConfigTaskDetails{},
-	TypeAutoUpdateSQLActivity:        AutoUpdateSQLActivityDetails{},
-	TypeMVCCStatisticsUpdate:         MVCCStatisticsJobDetails{},
+	TypeSchemaChangeGC:                  SchemaChangeGCDetails{},
+	TypeTypeSchemaChange:                TypeSchemaChangeDetails{},
+	TypeReplicationStreamIngestion:      StreamIngestionDetails{},
+	TypeNewSchemaChange:                 NewSchemaChangeDetails{},
+	TypeMigration:                       MigrationDetails{},
+	TypeAutoSpanConfigReconciliation:    AutoSpanConfigReconciliationDetails{},
+	TypeAutoSQLStatsCompaction:          AutoSQLStatsCompactionDetails{},
+	TypeReplicationStreamProducer:       StreamReplicationDetails{},
+	TypeRowLevelTTL:                     RowLevelTTLDetails{},
+	TypeAutoSchemaTelemetry:             SchemaTelemetryDetails{},
+	TypeKeyVisualizer:                   KeyVisualizerDetails{},
+	TypePollJobsStats:                   PollJobsStatsDetails{},
+	TypeAutoConfigRunner:                AutoConfigRunnerDetails{},
+	TypeAutoConfigEnvRunner:             AutoConfigEnvRunnerDetails{},
+	TypeAutoConfigTask:                  AutoConfigTaskDetails{},
+	TypeAutoUpdateSQLActivity:           AutoUpdateSQLActivityDetails{},
+	TypeMVCCStatisticsUpdate:            MVCCStatisticsJobDetails{},
+	TypeAutoTenantGlobalMetricsExporter: AutoTenantGlobalMetricsExporterDetails{},
 }
 
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
@@ -315,6 +321,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_UpdateSqlActivity{UpdateSqlActivity: &d}
 	case MVCCStatisticsJobProgress:
 		return &Progress_MvccStatisticsProgress{MvccStatisticsProgress: &d}
+	case AutoTenantGlobalMetricsExporterProgress:
+		return &Progress_AutoTenantGlobalMetricsExporter{AutoTenantGlobalMetricsExporter: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}
@@ -370,6 +378,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.AutoUpdateSqlActivities
 	case *Payload_MvccStatisticsDetails:
 		return *d.MvccStatisticsDetails
+	case *Payload_AutoTenantGlobalMetricsExporter:
+		return *d.AutoTenantGlobalMetricsExporter
 	default:
 		return nil
 	}
@@ -425,6 +435,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.UpdateSqlActivity
 	case *Progress_MvccStatisticsProgress:
 		return *d.MvccStatisticsProgress
+	case *Progress_AutoTenantGlobalMetricsExporter:
+		return *d.AutoTenantGlobalMetricsExporter
 	default:
 		return nil
 	}
@@ -504,6 +516,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_AutoUpdateSqlActivities{AutoUpdateSqlActivities: &d}
 	case MVCCStatisticsJobDetails:
 		return &Payload_MvccStatisticsDetails{MvccStatisticsDetails: &d}
+	case AutoTenantGlobalMetricsExporterDetails:
+		return &Payload_AutoTenantGlobalMetricsExporter{AutoTenantGlobalMetricsExporter: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -539,7 +553,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 25
+const NumJobTypes = 26
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this

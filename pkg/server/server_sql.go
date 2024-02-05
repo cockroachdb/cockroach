@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
@@ -661,6 +662,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				return sql.MakeJobExecContext(ctx, opName, user, &sql.MemoryMetrics{}, execCfg)
 			},
 			jobAdoptionStopFile,
+			cfg.registry,
 			jobsKnobs,
 		)
 	}
@@ -1269,6 +1271,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.UpgradeJobDeps = upgradeMgr
 		execCfg.VersionUpgradeHook = upgradeMgr.Migrate
 		execCfg.UpgradeTestingKnobs = knobs
+	}
+
+	execCfg.CreateTenantGlobalMetricsExporterJobFunc = func(ctx context.Context) error {
+		record := jobs.Record{
+			JobID:         jobs.AutoTenantGlobalMetricsExporterJobID,
+			Description:   jobspb.TypeAutoTenantGlobalMetricsExporter.String(),
+			Username:      username.NodeUserName(),
+			CreatedBy:     &jobs.CreatedByInfo{Name: username.NodeUser, ID: username.NodeUserID},
+			Details:       jobspb.AutoTenantGlobalMetricsExporterDetails{},
+			Progress:      jobspb.AutoTenantGlobalMetricsExporterProgress{},
+			NonCancelable: true, // The job can't be canceled, but it can be paused.
+		}
+		return cfg.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobRegistry.CreateIfNotExistAdoptableJobWithTxn(ctx, record, txn)
+		})
 	}
 
 	// Instantiate a span config manager.

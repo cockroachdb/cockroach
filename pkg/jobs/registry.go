@@ -97,15 +97,16 @@ const (
 type Registry struct {
 	serverCtx context.Context
 
-	ac        log.AmbientContext
-	stopper   *stop.Stopper
-	clock     *hlc.Clock
-	clusterID *base.ClusterIDContainer
-	nodeID    *base.SQLIDContainer
-	settings  *cluster.Settings
-	execCtx   jobExecCtxMaker
-	metrics   Metrics
-	knobs     TestingKnobs
+	ac              log.AmbientContext
+	stopper         *stop.Stopper
+	clock           *hlc.Clock
+	clusterID       *base.ClusterIDContainer
+	nodeID          *base.SQLIDContainer
+	settings        *cluster.Settings
+	execCtx         jobExecCtxMaker
+	metrics         Metrics
+	metricsRegistry *metric.Registry
+	knobs           TestingKnobs
 
 	// adoptionChan is used to nudge the registry to resume claimed jobs and
 	// potentially attempt to claim jobs.
@@ -226,6 +227,7 @@ func MakeRegistry(
 	histogramWindowInterval time.Duration,
 	execCtxFn jobExecCtxMaker,
 	preventAdoptionFile string,
+	metricsRegistry *metric.Registry,
 	knobs *TestingKnobs,
 ) *Registry {
 	r := &Registry{
@@ -238,6 +240,7 @@ func MakeRegistry(
 		sqlInstance:             sqlInstance,
 		settings:                settings,
 		execCtx:                 execCtxFn,
+		metricsRegistry:         metricsRegistry,
 		preventAdoptionFile:     preventAdoptionFile,
 		preventAdoptionLogEvery: log.Every(time.Minute),
 		// Use a non-zero buffer to allow queueing of notifications.
@@ -273,6 +276,11 @@ func (r *Registry) SetInternalDB(db isql.DB) {
 // cycles.
 func (r *Registry) MetricsStruct() *Metrics {
 	return &r.metrics
+}
+
+// MetricsRegistry returns the metrics registry that stores job-related metrics.
+func (r *Registry) MetricsRegistry() *metric.Registry {
+	return r.metricsRegistry
 }
 
 // CurrentlyRunningJobs returns a slice of the ids of all jobs running on this node.
@@ -322,6 +330,10 @@ const (
 	SqlActivityUpdaterJobID = jobspb.JobID(103)
 
 	MVCCStatisticsJobID = jobspb.JobID(104)
+
+	// AutoTenantGlobalMetricsExporterJobID A static job ID is used by the auto
+	// tenant global metrics exporter job.
+	AutoTenantGlobalMetricsExporterJobID = jobspb.JobID(105)
 )
 
 // MakeJobID generates a new job ID.

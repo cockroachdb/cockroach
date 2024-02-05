@@ -381,3 +381,15 @@ subtest avoid_too_large_ids
 
 query error tenant ID 10000000000 out of range
 SELECT crdb_internal.create_tenant(10000000000)
+
+subtest create_tenant_global_metrics_exporter_job
+
+query B
+SELECT crdb_internal.create_tenant_global_metrics_exporter_job()
+----
+true
+
+user testuser
+
+query error insufficient privilege
+SELECT crdb_internal.create_tenant_global_metrics_exporter_job()

@@ -1252,11 +1252,15 @@ message AutoUpdateSQLActivityProgress {
 }
 
 message MVCCStatisticsJobDetails {
-
 }
 
 message MVCCStatisticsJobProgress {
+}
 
+message AutoTenantGlobalMetricsExporterDetails {
+}
+
+message AutoTenantGlobalMetricsExporterProgress {
 }
 
 message Payload {
@@ -1322,6 +1326,7 @@ message Payload {
     AutoConfigTaskDetails auto_config_task = 43;
     AutoUpdateSQLActivityDetails auto_update_sql_activities = 44;
     MVCCStatisticsJobDetails mvcc_statistics_details = 45;
+    AutoTenantGlobalMetricsExporterDetails auto_tenant_global_metrics_exporter = 46;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1349,7 +1354,7 @@ message Payload {
   // specifies how old such record could get before this job is canceled.
   int64 maximum_pts_age = 40 [(gogoproto.casttype) = "time.Duration",  (gogoproto.customname) = "MaximumPTSAge"];
 
-  // NEXT ID: 45
+  // NEXT ID: 47
 }
 
 message Progress {
@@ -1396,6 +1401,7 @@ message Progress {
     AutoConfigTaskProgress auto_config_task = 31;
     AutoUpdateSQLActivityProgress update_sql_activity = 32;
     MVCCStatisticsJobProgress mvcc_statistics_progress = 33;
+    AutoTenantGlobalMetricsExporterProgress auto_tenant_global_metrics_exporter = 34;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1432,6 +1438,7 @@ enum Type {
   AUTO_CONFIG_TASK = 22 [(gogoproto.enumvalue_customname) = "TypeAutoConfigTask"];
   AUTO_UPDATE_SQL_ACTIVITY = 23 [(gogoproto.enumvalue_customname) = "TypeAutoUpdateSQLActivity"];
   MVCC_STATISTICS_UPDATE = 24 [(gogoproto.enumvalue_customname) = "TypeMVCCStatisticsUpdate"];
+  AUTO_TENANT_GLOBAL_METRICS_EXPORTER = 25 [(gogoproto.enumvalue_customname) = "TypeAutoTenantGlobalMetricsExporter"];
 }
 
 message Job {
