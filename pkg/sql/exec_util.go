@@ -1367,6 +1367,10 @@ type ExecutorConfig struct {
 	// keys (including snapshot pinned keys) at each level of a node store.
 	ScanStorageInternalKeysFunc eval.ScanStorageInternalKeysFunc
 
+	// CreateTenantGlobalMetricsExporterJobFunc is used to create the tenant
+	// global metrics exporter singleton job.
+	CreateTenantGlobalMetricsExporterJobFunc eval.CreateTenantGlobalMetricsExporterJobFunc
+
 	// TraceCollector is used to contact all live nodes in the cluster, and
 	// collect trace spans from their inflight node registries.
 	TraceCollector *collector.TraceCollector

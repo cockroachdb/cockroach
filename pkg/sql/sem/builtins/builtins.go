@@ -5170,6 +5170,36 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	// TODO(jaylim-crl): Remove this in 24.1 since the job will be created
+	// automatically via permanent upgrades then. Remember to remove
+	// CreateTenantGlobalMetricsExporterJob from evalCtx as well.
+	"crdb_internal.create_tenant_global_metrics_exporter_job": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategoryMultiTenancy,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// The user must be an admin to use this builtin.
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+				if err := evalCtx.CreateTenantGlobalMetricsExporterJob(ctx); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used to create the tenant global metrics exporter singleton job.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"crdb_internal.create_tenant": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     builtinconstants.CategoryMultiTenancy,

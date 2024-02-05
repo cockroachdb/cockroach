@@ -130,6 +130,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.SetCompactionConcurrency = execCfg.CompactionConcurrencyFunc
 	evalCtx.GetTableMetrics = execCfg.GetTableMetricsFunc
 	evalCtx.ScanStorageInternalKeys = execCfg.ScanStorageInternalKeysFunc
+	evalCtx.CreateTenantGlobalMetricsExporterJob = execCfg.CreateTenantGlobalMetricsExporterJobFunc
 	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
 	evalCtx.ClusterID = execCfg.NodeInfo.LogicalClusterID()
 	evalCtx.ClusterName = execCfg.RPCContext.ClusterName()

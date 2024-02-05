@@ -459,6 +459,10 @@ type InternalRows interface {
 	Close() error
 }
 
+// CreateTenantGlobalMetricsExporterJobFunc is used to create the tenant global
+// metrics exporter singleton job.
+type CreateTenantGlobalMetricsExporterJobFunc func(ctx context.Context) error
+
 // CompactEngineSpanFunc is used to compact an engine key span at the given
 // (nodeID, storeID). If we add more overloads to the compact_span builtin,
 // this parameter list should be changed to a struct union to accommodate

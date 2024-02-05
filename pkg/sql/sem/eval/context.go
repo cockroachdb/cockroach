@@ -220,6 +220,10 @@ type Context struct {
 
 	IndexUsageStatsController IndexUsageStatsController
 
+	// CreateTenantGlobalMetricsExporterJob is used by a crdb_internal builtin
+	// to create the tenant global metrics exporter singleton job.
+	CreateTenantGlobalMetricsExporterJob CreateTenantGlobalMetricsExporterJobFunc
+
 	// CompactEngineSpan is used to force compaction of a span in a store.
 	CompactEngineSpan CompactEngineSpanFunc
 
