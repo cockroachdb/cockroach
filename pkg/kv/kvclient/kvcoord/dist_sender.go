@@ -2600,9 +2600,8 @@ func (ds *DistSender) sendToReplicas(
 					// happen when the next RPC comes back, but we don't want to wait out
 					// the additional RPC latency.
 
-					var updatedLeaseholder bool
 					if tErr.Lease != nil {
-						updatedLeaseholder = routing.SyncTokenAndMaybeUpdateCache(ctx, tErr.Lease, &tErr.RangeDesc)
+						routing.SyncTokenAndMaybeUpdateCache(ctx, tErr.Lease, &tErr.RangeDesc)
 					}
 					// Move the new leaseholder to the head of the queue for the next
 					// retry. Note that the leaseholder might not be the one indicated by
