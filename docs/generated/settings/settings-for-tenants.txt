@@ -249,6 +249,7 @@ sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in by
 sql.guardrails.max_row_size_err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable	application
 sql.guardrails.max_row_size_log	byte size	64 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use 0 to disable	application
 sql.hash_sharded_range_pre_split.max	integer	16	max pre-split ranges to have when adding hash sharded index to an existing table	application
+sql.index_recommendation.drop_unused_duration	duration	168h0m0s	the index unused duration at which we begin to recommend dropping the index	application
 sql.insights.anomaly_detection.enabled	boolean	true	enable per-fingerprint latency recording and anomaly detection	application
 sql.insights.anomaly_detection.latency_threshold	duration	50ms	statements must surpass this threshold to trigger anomaly detection and identification	application
 sql.insights.anomaly_detection.memory_limit	byte size	1.0 MiB	the maximum amount of memory allowed for tracking statement latencies	application
