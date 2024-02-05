@@ -481,9 +481,11 @@ func populateAggFuncSpec(
 	if len(constArgs) > 0 {
 		spec.Arguments = make([]execinfrapb.Expression, len(constArgs))
 		argumentsColumnTypes = make([]*types.T, len(constArgs))
+		var ef physicalplan.ExprFactory
+		ef.Init(ctx, planCtx, nil /* indexVarMap */)
 		for k, argument := range constArgs {
 			var err error
-			spec.Arguments[k], err = physicalplan.MakeExpression(ctx, argument, planCtx, nil)
+			spec.Arguments[k], err = ef.Make(argument)
 			if err != nil {
 				return nil, err
 			}

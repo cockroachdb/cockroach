@@ -57,45 +57,102 @@ func (fakeExprContext) IsLocal() bool {
 // becomes column indexVarMap[i].
 //
 // ctx can be nil in which case a fakeExprCtx will be used.
+//
+// Note: If making multiple calls to MakeExpression, consider using ExprFactory
+// as it can be more efficient.
 func MakeExpression(
 	ctx context.Context, expr tree.TypedExpr, exprContext ExprContext, indexVarMap []int,
 ) (execinfrapb.Expression, error) {
+	var ef ExprFactory
+	ef.Init(ctx, exprContext, indexVarMap)
+	return ef.Make(expr)
+}
+
+// ExprFactory creates execinfrapb.Expressions. It should be used instead of
+// MakeExpression when making multiple expressions because it will reuse
+// allocated objects between calls to ExprFactory.Make.
+type ExprFactory struct {
+	ctx         context.Context
+	eCtx        ExprContext
+	indexVarMap []int
+
+	subqueryVisitor *evalAndReplaceSubqueryVisitor
+	remapper        *ivarRemapper
+}
+
+// Init initializes the ExprFactory.
+//
+// exprContext can be nil in which case a fakeExprCtx will be used.
+//
+// The factory can optionally remap columns in expression by passing an
+// indexVarMap: an IndexedVar with index i becomes column indexVarMap[i].
+func (ef *ExprFactory) Init(ctx context.Context, exprContext ExprContext, indexVarMap []int) {
+	*ef = ExprFactory{
+		ctx:         ctx,
+		eCtx:        exprContext,
+		indexVarMap: indexVarMap,
+	}
+}
+
+// Make creates a execinfrapb.Expression. Init must be called on the ExprFactory
+// before Make.
+//
+// The execinfrapb.Expression uses the placeholder syntax (@1, @2, @3..) to
+// refer to columns.
+//
+// If the ExprFactory was initialized with an indexVarMap, then the columns in
+// the expression are remapped: an IndexedVar with index i becomes column
+// indexVarMap[i].
+func (ef *ExprFactory) Make(expr tree.TypedExpr) (execinfrapb.Expression, error) {
 	if expr == nil {
 		return execinfrapb.Expression{}, nil
 	}
-	if exprContext == nil {
-		exprContext = &fakeExprContext{}
+	if ef.eCtx == nil {
+		ef.eCtx = &fakeExprContext{}
 	}
 
 	// Always replace the subqueries with their results (they must have been
 	// executed before the main query).
-	evalCtx := exprContext.EvalContext()
-	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
-		evalCtx: evalCtx,
+	evalCtx := ef.eCtx.EvalContext()
+	if ef.subqueryVisitor == nil {
+		// Lazily allocate the subquery visitor.
+		ef.subqueryVisitor = &evalAndReplaceSubqueryVisitor{evalCtx: evalCtx}
 	}
-	outExpr, _ := tree.WalkExpr(subqueryVisitor, expr)
-	if subqueryVisitor.err != nil {
-		return execinfrapb.Expression{}, subqueryVisitor.err
+	outExpr, _ := tree.WalkExpr(ef.subqueryVisitor, expr)
+	if ef.subqueryVisitor.err != nil {
+		return execinfrapb.Expression{}, ef.subqueryVisitor.err
 	}
 	expr = outExpr.(tree.TypedExpr)
 
-	if indexVarMap != nil {
-		// Remap our indexed vars.
-		expr = RemapIVarsInTypedExpr(expr, indexVarMap)
-	}
+	expr = ef.maybeRemapIVarsInTypedExpr(expr)
 	expression := execinfrapb.Expression{LocalExpr: expr}
-	if exprContext.IsLocal() {
+	if ef.eCtx.IsLocal() {
 		return expression, nil
 	}
 
 	// Since the plan is not fully local, serialize the expression.
-	fmtCtx := execinfrapb.ExprFmtCtxBase(ctx, evalCtx)
+	fmtCtx := execinfrapb.ExprFmtCtxBase(ef.ctx, evalCtx)
 	fmtCtx.FormatNode(expr)
 	if log.V(1) {
-		log.Infof(ctx, "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(expr))
+		log.Infof(ef.ctx, "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(expr))
 	}
 	expression.Expr = fmtCtx.CloseAndGetString()
 	return expression, nil
+}
+
+// maybeRemapIVarsInTypedExpr remaps tree.IndexedVars in expr using indexVarMap
+// and the new expression is returned. If indexVarMap is nil, no remapping
+// occurs and the expression is returned as-is.
+func (ef *ExprFactory) maybeRemapIVarsInTypedExpr(expr tree.TypedExpr) tree.TypedExpr {
+	if ef.indexVarMap == nil {
+		return expr
+	}
+	if ef.remapper == nil {
+		// Lazily allocate the IndexVar remapper visitor.
+		ef.remapper = &ivarRemapper{indexVarMap: ef.indexVarMap}
+	}
+	newExpr, _ := tree.WalkExpr(ef.remapper, expr)
+	return newExpr.(tree.TypedExpr)
 }
 
 type evalAndReplaceSubqueryVisitor struct {
@@ -125,14 +182,6 @@ func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Exp
 }
 
 func (evalAndReplaceSubqueryVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
-
-// RemapIVarsInTypedExpr remaps tree.IndexedVars in expr using indexVarMap.
-// Note that a new expression is returned.
-func RemapIVarsInTypedExpr(expr tree.TypedExpr, indexVarMap []int) tree.TypedExpr {
-	v := &ivarRemapper{indexVarMap: indexVarMap}
-	newExpr, _ := tree.WalkExpr(v, expr)
-	return newExpr.(tree.TypedExpr)
-}
 
 type ivarRemapper struct {
 	indexVarMap []int

@@ -725,9 +725,11 @@ func (p *PhysicalPlan) AddRendering(
 		compositeMap = reverseProjection(post.OutputColumns, indexVarMap)
 	}
 	post.RenderExprs = make([]execinfrapb.Expression, len(exprs))
+	var ef ExprFactory
+	ef.Init(ctx, exprCtx, compositeMap)
 	for i, e := range exprs {
 		var err error
-		post.RenderExprs[i], err = MakeExpression(ctx, e, exprCtx, compositeMap)
+		post.RenderExprs[i], err = ef.Make(e)
 		if err != nil {
 			return err
 		}
