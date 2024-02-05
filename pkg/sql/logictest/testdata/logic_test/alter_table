@@ -3495,9 +3495,43 @@ ALTER TABLE t_108974_v DROP COLUMN k;
 subtest end
 
 # Regression test for https://github.com/cockroachdb/cockroach/issues/110629.
+subtest 110629
+
 # Subqueries are not allowed in storage parameters.
 statement ok
 CREATE TABLE t_110629 (a INT PRIMARY KEY);
 
 statement error subqueries are not allowed in table storage parameters
 ALTER TABLE t SET ( 'string' = EXISTS ( TABLE error ) );
+
+subtest end
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/118246
+subtest 118246
+
+statement ok
+CREATE TABLE t_118246 (i INT PRIMARY KEY);
+INSERT INTO t_118246 VALUES (0);
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true;
+
+statement ok
+ALTER TABLE t_118246 ADD COLUMN j INT, ADD UNIQUE WITHOUT INDEX (j);
+
+statement ok
+ALTER TABLE t_118246 ADD COLUMN k INT DEFAULT 30, ADD UNIQUE WITHOUT INDEX (k);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_118246]
+----
+CREATE TABLE public.t_118246 (
+  i INT8 NOT NULL,
+  j INT8 NULL,
+  k INT8 NULL DEFAULT 30:::INT8,
+  CONSTRAINT t_118246_pkey PRIMARY KEY (i ASC),
+  CONSTRAINT unique_j UNIQUE WITHOUT INDEX (j),
+  CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k)
+)
+
+subtest end
