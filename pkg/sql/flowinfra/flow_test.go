@@ -67,7 +67,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 					planner, cleanup := sql.NewInternalPlanner(
 						"test",
 						kv.NewTxn(ctx, s.DB(), s.NodeID()),
-						username.RootUserName(),
+						username.NodeUserName(),
 						&sql.MemoryMetrics{},
 						&execCfg,
 						sd,
@@ -143,7 +143,7 @@ func BenchmarkFlowRenderSetup(b *testing.B) {
 					planner, cleanup := sql.NewInternalPlanner(
 						"test",
 						kv.NewTxn(ctx, s.DB(), s.NodeID()),
-						username.RootUserName(),
+						username.NodeUserName(),
 						&sql.MemoryMetrics{},
 						&execCfg,
 						sd,

@@ -45,7 +45,7 @@ func newDatabaseRegionChangeFinalizer(
 	p, cleanup := NewInternalPlanner(
 		"repartition-regional-by-row-tables",
 		txn.KV(),
-		username.RootUserName(),
+		username.NodeUserName(),
 		&MemoryMetrics{},
 		execCfg,
 		txn.SessionData(),

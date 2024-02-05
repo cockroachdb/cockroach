@@ -56,7 +56,7 @@ func WithBuilderDependenciesFromTestServer(
 	ip, cleanup := sql.NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, s.DB(), nodeID),
-		username.RootUserName(),
+		username.NodeUserName(),
 		&sql.MemoryMetrics{},
 		&execCfg,
 		sd,
