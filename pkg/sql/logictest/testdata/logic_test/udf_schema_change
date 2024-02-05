@@ -329,7 +329,7 @@ $$
 statement ok
 ALTER FUNCTION f_test_sc(INT) SET SCHEMA test_alter_sc;
 
-skip config local-mixed-23.1
+skipif config local-mixed-23.1
 query TT
   WITH fns AS (
             SELECT crdb_internal.pb_to_json(
@@ -376,7 +376,7 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
   ORDER BY id;
 ----
 112  105
-113  115
+113  114
 115  114
 
 query T
