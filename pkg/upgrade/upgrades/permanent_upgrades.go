@@ -181,7 +181,7 @@ func createDefaultDbs(
 	// Create the default databases. These are plain databases with
 	// default permissions. Nothing special happens if they exist
 	// already.
-	const createDbStmt = `CREATE DATABASE IF NOT EXISTS "%s"`
+	const createDbStmt = `CREATE DATABASE IF NOT EXISTS "%s" WITH OWNER root`
 
 	var err error
 	for _, dbName := range []string{catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName} {

@@ -204,7 +204,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 		plannerAsInterface, cleanup := sql.NewInternalPlanner(
 			opName,
 			srv.DB().NewTxn(ctx, "test-allocate-descriptor-rewrite"),
-			username.RootUserName(),
+			username.NodeUserName(),
 			&sql.MemoryMetrics{},
 			&execCfg,
 			sql.NewInternalSessionData(ctx, execCfg.Settings, opName))

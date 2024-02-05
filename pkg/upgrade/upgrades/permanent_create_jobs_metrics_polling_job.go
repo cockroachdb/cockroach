@@ -34,8 +34,8 @@ func createJobsMetricsPollingJob(
 			Description:   jobspb.TypePollJobsStats.String(),
 			Details:       jobspb.PollJobsStatsDetails{},
 			Progress:      jobspb.PollJobsStatsProgress{},
-			CreatedBy:     &jobs.CreatedByInfo{Name: username.RootUser, ID: username.RootUserID},
-			Username:      username.RootUserName(),
+			CreatedBy:     &jobs.CreatedByInfo{Name: username.NodeUser, ID: username.NodeUserID},
+			Username:      username.NodeUserName(),
 			NonCancelable: true,
 		}
 		return d.JobRegistry.CreateIfNotExistAdoptableJobWithTxn(ctx, jr, txn)

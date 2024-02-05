@@ -711,7 +711,7 @@ func TestCheckScheduleAlreadyExists(t *testing.T) {
 	sd.Database = "d"
 	p, cleanup := sql.NewInternalPlanner("test",
 		execCfg.DB.NewTxn(ctx, "test-planner"),
-		username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
+		username.NodeUserName(), &sql.MemoryMetrics{}, &execCfg,
 		sd,
 	)
 	defer cleanup()
@@ -746,7 +746,7 @@ func TestFullyQualifyTables(t *testing.T) {
 	sd.Database = "ocean"
 	p, cleanupPlanHook := sql.NewInternalPlanner("test",
 		execCfg.DB.NewTxn(ctx, "test-planner"),
-		username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
+		username.NodeUserName(), &sql.MemoryMetrics{}, &execCfg,
 		sd,
 	)
 	defer cleanupPlanHook()

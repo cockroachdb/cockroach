@@ -880,7 +880,7 @@ func (ie *InternalExecutor) maybeNodeSessionDataOverride(
 	o := sessiondata.NoSessionDataOverride
 	sd := ie.sessionDataStack.Top()
 	if sd.User().Undefined() {
-		o.User = username.RootUserName()
+		o.User = username.NodeUserName()
 	}
 	if sd.ApplicationName == "" {
 		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
@@ -1661,16 +1661,15 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 	txn *kv.Txn,
 	descCol *descs.Collection,
 ) (InternalExecutor, internalExecutorCommitTxnFunc) {
-	// By default, if not given session data, we initialize a sessionData that
-	// would be the same as what would be created if root logged in.
-	// The sessionData's user can be override when calling the query
-	// functions of internal executor.
+	// By default, if not given session data, we initialize a sessionData that is
+	// for the internal "node" user. The sessionData's user can be override when
+	// calling the query functions of internal executor.
 	// TODO(janexing): since we can be running queries with a higher privilege
 	// than the actual user, a security boundary should be added to the error
 	// handling of internal executor.
 	if sd == nil {
 		sd = NewInternalSessionData(ctx, settings, "" /* opName */)
-		sd.UserProto = username.RootUserName().EncodeProto()
+		sd.UserProto = username.NodeUserName().EncodeProto()
 		sd.SearchPath = sessiondata.DefaultSearchPathForUser(sd.User())
 	}
 
