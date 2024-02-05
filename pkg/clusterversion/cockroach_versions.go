@@ -300,6 +300,11 @@ const (
 	// progress columns from system.jobs table.
 	V24_1_DropPayloadAndProgressFromSystemJobsTable
 
+	// Permanent_V24_1_CreateAutoTenantGlobalMetricsExporterJob creates the
+	// permanent job that is reponsible for running the tenant global metrics
+	// exporter.
+	Permanent_V24_1_CreateAutoTenantGlobalMetricsExporterJob
+
 	numKeys
 )
 
@@ -367,7 +372,8 @@ var versionTable = [numKeys]roachpb.Version{
 	// Do not add new versions to a patch release.
 	// *************************************************
 
-	V24_1_DropPayloadAndProgressFromSystemJobsTable: {Major: 23, Minor: 2, Internal: 4},
+	V24_1_DropPayloadAndProgressFromSystemJobsTable:          {Major: 23, Minor: 2, Internal: 4},
+	Permanent_V24_1_CreateAutoTenantGlobalMetricsExporterJob: {Major: 23, Minor: 2, Internal: 6},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster
