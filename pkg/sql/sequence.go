@@ -108,10 +108,8 @@ func incrementSequenceHelper(
 		}
 	}
 	if !hasRequiredPriviledge {
-
-		return 0, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"user %s does not have UPDATE or USAGE privilege on %s %s",
-			p.User(), descriptor.DescriptorType(), descriptor.GetName())
+		return 0, sqlerrors.NewInsufficientPrivilegeOnDescriptorError(p.User(), requiredPrivileges,
+			string(descriptor.DescriptorType()), descriptor.GetName())
 	}
 
 	var err error

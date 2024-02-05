@@ -646,9 +646,9 @@ func (b *Builder) scanParams(
 	// statement or was stored in the query cache, the column stats would have
 	// been removed by DetachMemo. Update that function if the column stats are
 	// needed here in the future.
-	var rowCount float64
+	var rowCount uint64
 	if relProps.Statistics().Available {
-		rowCount = relProps.Statistics().RowCount
+		rowCount = uint64(math.Ceil(relProps.Statistics().RowCount))
 	}
 
 	if scan.PartitionConstrainedScan {
@@ -1643,7 +1643,7 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 		orderType := exec.GroupingOrderType(groupBy.GroupingOrderType(&groupBy.RequiredPhysical().Ordering))
 		var rowCount uint64
 		if relProps := groupBy.Relational(); relProps.Statistics().Available {
-			rowCount = uint64(relProps.Statistics().RowCount)
+			rowCount = uint64(math.Ceil(relProps.Statistics().RowCount))
 		}
 		ep.root, err = b.factory.ConstructGroupBy(
 			input.root, groupingColIdx, groupingColOrder, aggInfos, reqOrdering, orderType, rowCount,

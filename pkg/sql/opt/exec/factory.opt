@@ -143,7 +143,8 @@ define GroupBy {
     # NoStreaming).
     groupingOrderType exec.GroupingOrderType
 
-    # If set, the estimated number of rows that this GroupBy will output.
+    # If set, the estimated number of rows that this GroupBy will output
+    # (rounded up).
     estimatedRowCount uint64
 }
 
