@@ -164,7 +164,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 	rowsAffected, err := params.p.InternalSQLTxn().ExecEx(
 		params.ctx, opName, params.p.txn,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		stmt, n.roleName, hashedPassword, n.isRole, roleID,
 	)
 	if err != nil {

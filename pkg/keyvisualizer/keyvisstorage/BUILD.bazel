@@ -12,7 +12,6 @@ go_library(
     deps = [
         "//pkg/keyvisualizer/keyvispb",
         "//pkg/roachpb",
-        "//pkg/security/username",
         "//pkg/server/serverpb",
         "//pkg/sql",
         "//pkg/sql/sem/tree",

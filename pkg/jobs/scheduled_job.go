@@ -525,7 +525,7 @@ func (s scheduledJobStorageTxn) Delete(ctx context.Context, j *ScheduledJob) err
 		return errors.New("cannot delete schedule: missing schedule id")
 	}
 	_, err := s.txn.ExecEx(ctx, "sched-delete", s.txn.KV(),
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("DELETE FROM %s WHERE schedule_id = %d",
 			j.env.ScheduledJobsTableName(), j.ScheduleID()),
 	)

@@ -43,7 +43,7 @@ func sqlStatsTTLChange(
 				ctx,
 				"set-SQLStatsTables-TTL",
 				nil,
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 				fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING gc.ttlseconds = $1", table),
 				3600, /* one hour */
 			); err != nil {

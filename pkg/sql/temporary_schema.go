@@ -266,7 +266,7 @@ func cleanupTempSchemaObjects(
 	searchPath := sessiondata.DefaultSearchPathForUser(username.RootUserName()).WithTemporarySchemaName(sc.GetName())
 	override := sessiondata.InternalExecutorOverride{
 		SearchPath:               &searchPath,
-		User:                     username.RootUserName(),
+		User:                     username.NodeUserName(),
 		DatabaseIDToTempSchemaID: databaseIDToTempSchemaID,
 	}
 

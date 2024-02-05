@@ -511,7 +511,7 @@ func TestInternalExecutorWithDefinedQoSOverrideDoesNotPanic(t *testing.T) {
 	qosLevel := sessiondatapb.TTLLow
 	_, err := ie.ExecEx(
 		ctx, "defined_quality_of_service_level_does_not_panic", nil,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName(), QualityOfService: &qosLevel},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName(), QualityOfService: &qosLevel},
 		"SELECT 1",
 	)
 	require.NoError(t, err)
@@ -533,7 +533,7 @@ func TestInternalExecutorWithUndefinedQoSOverridePanics(t *testing.T) {
 			ctx,
 			"undefined_quality_of_service_level_panics",
 			nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: username.RootUserName(), QualityOfService: &qosLevel},
+			sessiondata.InternalExecutorOverride{User: username.NodeUserName(), QualityOfService: &qosLevel},
 			"SELECT 1",
 		)
 		require.Error(t, err)
@@ -629,7 +629,7 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	ieo := sessiondata.InternalExecutorOverride{
-		User:                     username.RootUserName(),
+		User:                     username.NodeUserName(),
 		InjectRetryErrorsEnabled: true,
 	}
 

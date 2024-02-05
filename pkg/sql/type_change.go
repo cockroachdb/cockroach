@@ -919,7 +919,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 			}
 			override := sessiondata.InternalExecutorOverride{
-				User:     username.RootUserName(),
+				User:     username.NodeUserName(),
 				Database: dbDesc.GetName(),
 			}
 			rows, err := txn.QueryRowEx(ctx, "count-value-usage", txn.KV(), override, query.String())
@@ -1139,7 +1139,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
 		override := sessiondata.InternalExecutorOverride{
-			User:     username.RootUserName(),
+			User:     username.NodeUserName(),
 			Database: dbDesc.GetName(),
 		}
 		row, err := txn.QueryRowEx(

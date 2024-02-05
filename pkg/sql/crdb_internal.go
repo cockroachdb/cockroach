@@ -1042,7 +1042,7 @@ func populateSystemJobsTableRows(
 	it, err := p.InternalSQLTxn().QueryIteratorEx(ctx,
 		"system-jobs-scan",
 		p.Txn(),
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		query,
 		params...,
 	)
