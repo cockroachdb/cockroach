@@ -1226,6 +1226,10 @@ func updateElementsToDependOnNewFromOld(
 			if e.IndexIDForValidation == old {
 				e.IndexIDForValidation = new
 			}
+		case *scpb.UniqueWithoutIndexConstraint:
+			if e.IndexIDForValidation == old {
+				e.IndexIDForValidation = new
+			}
 		}
 	})
 }

@@ -1495,6 +1495,45 @@ func (mvb *mixedVersionBackup) setClusterSettings(
 	return u.setClusterSettings(ctx, l, rng)
 }
 
+// waitForDBs waits until every database in the `dbs` field
+// exists. Useful in case a mixed-version hook is called concurrently
+// with the process of actually creating the tables (e.g., workload
+// initialization).
+func (mvb *mixedVersionBackup) waitForDBs(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
+) error {
+	retryOptions := retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     1 * time.Minute,
+		Multiplier:     1.5,
+		MaxRetries:     20,
+	}
+
+	for _, dbName := range mvb.dbs {
+		r := retry.StartWithCtx(ctx, retryOptions)
+		var err error
+		for r.Next() {
+			q := "SELECT 1 FROM [SHOW DATABASES] WHERE database_name = $1"
+			var n int
+			if err = h.QueryRow(rng, q, dbName).Scan(&n); err == nil {
+				break
+			}
+
+			l.Printf("waiting for DB %s (err: %v)", dbName, err)
+		}
+
+		if err != nil {
+			return fmt.Errorf("failed to wait for DB %s (last error: %w)", dbName, err)
+		}
+	}
+
+	// After every database exists, wait for a small amount of time to
+	// make sure *some* data exists (the workloads could be inserting
+	// data concurrently).
+	time.Sleep(1 * time.Minute)
+	return nil
+}
+
 // maybeTakePreviousVersionBackup creates a backup collection (full +
 // incremental), and is supposed to be called before any nodes are
 // upgraded. This ensures that we are able to restore this backup
@@ -1503,18 +1542,12 @@ func (mvb *mixedVersionBackup) setClusterSettings(
 func (mvb *mixedVersionBackup) maybeTakePreviousVersionBackup(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
-	// Wait here for a few minutes to allow the workloads (which are
-	// initializing concurrently with this step) to store some data in
-	// the cluster by the time the backup is taken. The actual wait time
-	// chosen is somewhat arbitrary: it's less time than workloads
-	// typically need to finish initializing (especially tpcc), so the
-	// backup is taken while data is still being inserted. The actual
-	// time is irrelevant as far as correctness is concerned: we should
-	// be able to restore this backup after upgrading regardless of the
-	// amount of data backed up.
-	wait := 3 * time.Minute
-	l.Printf("waiting for %s", wait)
-	time.Sleep(wait)
+	// Wait here to allow the workloads (which are initializing
+	// concurrently with this step) to store some data in the cluster by
+	// the time the backup is taken.
+	if err := mvb.waitForDBs(ctx, l, rng, h); err != nil {
+		return err
+	}
 
 	if err := mvb.initBackupRestoreTestDriver(ctx, l, rng); err != nil {
 		return err
