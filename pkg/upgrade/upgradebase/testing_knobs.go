@@ -78,6 +78,11 @@ type TestingKnobs struct {
 	SkipUpdateSQLActivityJobBootstrap bool
 
 	SkipMVCCStatisticsJobBootstrap bool
+
+	// SkipAutoTenantGlobalMetricsExporterJobBootstrap, if set, disables the
+	// clusterversion.V24_1_CreateAutoTenantGlobalMetricsExporterJob upgrade,
+	// which prevents a job from being created.
+	SkipAutoTenantGlobalMetricsExporterJobBootstrap bool
 }
 
 // ModuleTestingKnobs makes TestingKnobs a base.ModuleTestingKnobs.

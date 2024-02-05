@@ -126,10 +126,11 @@ func TestRegistryGC(t *testing.T) {
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{
 				// This test wants to look at job records.
-				DontUseJobs:                       true,
-				SkipJobMetricsPollingJobBootstrap: true,
-				SkipAutoConfigRunnerJobBootstrap:  true,
-				SkipMVCCStatisticsJobBootstrap:    true,
+				DontUseJobs:                                     true,
+				SkipJobMetricsPollingJobBootstrap:               true,
+				SkipAutoConfigRunnerJobBootstrap:                true,
+				SkipMVCCStatisticsJobBootstrap:                  true,
+				SkipAutoTenantGlobalMetricsExporterJobBootstrap: true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
@@ -285,11 +286,12 @@ func TestRegistryGCPagination(t *testing.T) {
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{
 				// This test wants to count job records.
-				DontUseJobs:                       true,
-				SkipJobMetricsPollingJobBootstrap: true,
-				SkipAutoConfigRunnerJobBootstrap:  true,
-				SkipUpdateSQLActivityJobBootstrap: true,
-				SkipMVCCStatisticsJobBootstrap:    true,
+				DontUseJobs:                                     true,
+				SkipJobMetricsPollingJobBootstrap:               true,
+				SkipAutoConfigRunnerJobBootstrap:                true,
+				SkipUpdateSQLActivityJobBootstrap:               true,
+				SkipMVCCStatisticsJobBootstrap:                  true,
+				SkipAutoTenantGlobalMetricsExporterJobBootstrap: true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
@@ -510,9 +512,10 @@ func TestBatchJobsCreation(t *testing.T) {
 						},
 						// DisableAdoptions needs this.
 						UpgradeManager: &upgradebase.TestingKnobs{
-							DontUseJobs:                       true,
-							SkipJobMetricsPollingJobBootstrap: true,
-							SkipAutoConfigRunnerJobBootstrap:  true,
+							DontUseJobs:                                     true,
+							SkipJobMetricsPollingJobBootstrap:               true,
+							SkipAutoConfigRunnerJobBootstrap:                true,
+							SkipAutoTenantGlobalMetricsExporterJobBootstrap: true,
 						},
 						KeyVisualizer: &keyvisualizer.TestingKnobs{
 							SkipJobBootstrap: true,
@@ -698,11 +701,12 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 					ManagerDisableJobCreation: true,
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
-					DontUseJobs:                       true,
-					SkipJobMetricsPollingJobBootstrap: true,
-					SkipAutoConfigRunnerJobBootstrap:  true,
-					SkipUpdateSQLActivityJobBootstrap: true,
-					SkipMVCCStatisticsJobBootstrap:    true,
+					DontUseJobs:                                     true,
+					SkipJobMetricsPollingJobBootstrap:               true,
+					SkipAutoConfigRunnerJobBootstrap:                true,
+					SkipUpdateSQLActivityJobBootstrap:               true,
+					SkipMVCCStatisticsJobBootstrap:                  true,
+					SkipAutoTenantGlobalMetricsExporterJobBootstrap: true,
 				},
 				KeyVisualizer: &keyvisualizer.TestingKnobs{
 					SkipJobBootstrap: true,

@@ -217,11 +217,12 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			ManagerDisableJobCreation: true,
 		}
 		args.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
-			DontUseJobs:                       true,
-			SkipJobMetricsPollingJobBootstrap: true,
-			SkipAutoConfigRunnerJobBootstrap:  true,
-			SkipUpdateSQLActivityJobBootstrap: true,
-			SkipMVCCStatisticsJobBootstrap:    true,
+			DontUseJobs:                                     true,
+			SkipJobMetricsPollingJobBootstrap:               true,
+			SkipAutoConfigRunnerJobBootstrap:                true,
+			SkipUpdateSQLActivityJobBootstrap:               true,
+			SkipMVCCStatisticsJobBootstrap:                  true,
+			SkipAutoTenantGlobalMetricsExporterJobBootstrap: true,
 		}
 		args.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{SkipJobBootstrap: true}
 

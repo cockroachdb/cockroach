@@ -178,6 +178,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.jobs table"),
 	),
 
+	upgrade.NewPermanentTenantUpgrade(
+		"create auto tenant global metrics exporter job",
+		clusterversion.Permanent_V24_1_CreateAutoTenantGlobalMetricsExporterJob.Version(),
+		createAutoTenantGlobalMetricsExporterJobMigration,
+		"create auto tenant global metrics exporter job", // v22_2StartupMigrationName
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.jobs table"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
