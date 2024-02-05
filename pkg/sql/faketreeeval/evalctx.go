@@ -576,6 +576,13 @@ func (ep *DummySessionAccessor) HasViewActivityOrViewActivityRedactedRole(
 	return false, errors.WithStack(errEvalSessionVar)
 }
 
+// HasGlobalPrivilegeOrRoleOption is part of the eval.SessionAccessor interface.
+func (ep *DummySessionAccessor) HasGlobalPrivilegeOrRoleOption(
+	_ context.Context, _ privilege.Kind,
+) (bool, error) {
+	return false, errors.WithStack(errEvalSessionVar)
+}
+
 // DummyClientNoticeSender implements the eval.ClientNoticeSender interface.
 type DummyClientNoticeSender struct{}
 
