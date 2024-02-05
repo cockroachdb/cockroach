@@ -374,67 +374,6 @@ func (dataBank2TB) runRestoreDetached(
 
 var _ testDataSet = dataBank2TB{}
 
-// This data set restores a backup created from a 500k tpce fixture. The backed
-// up cluster had around 7.6 TB of data on disk, and the restore cluster will
-// have around 8.5TB on disk.
-//
-// Backup Fixture description: This fixture contains two full backups and hourly
-// incremental backups taken over 24 hours, with revision history. The cluster
-// was running the tpce workload, initialized with 500k customers and running
-// with 100k active customers. The init step created 7.6 TB of data, and the
-// running step only created another 100 GB of data. The backups did not begin
-// until after tpce init ended.
-//
-// Fixture recreation steps:
-//
-// 1) Create a roachprod cluster with the same topology as
-// this test.
-//
-// 2) Setup the cluster to run tpc-e init with 500k customers, using
-// the repro steps in the appendix of Nathan's v22.2
-// Scalability & Efficiency Evaluation using TPC-E doc
-// https://docs.google.com/document/d/1wzkBXaA3Ap_daMV1oY1AhQqlnAjO3pIVLZTXY53m0Xk/edit
-//
-// 3) Set the gc ttl for the tpce database to 25 hrs
-//
-// 4) Create a backup schedule with revision history and hourly incremental backups.
-//
-// 6) Run the tpce workload for 24 hours with 100k active customers.
-type tpce10TB struct{}
-
-func (tpce10TB) name() string {
-	return "TPCE10TB"
-}
-func (tpce10TB) runRestore(ctx context.Context, c cluster.Cluster) {
-	// Restore from the first full backup AOST in the last incremental backup in the chain
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE DATABASE tpce FROM '/2022/12/06-190322.57' IN
-				'gs://cockroach-fixtures/backups/tpc-e/customers=500000/v22.2.0-rc.3/inc-count=9?AUTH=implicit'
-				AS OF SYSTEM TIME '2022-12-06 22:40:22'"`)
-}
-
-func (tpce10TB) runRestoreDetached(
-	ctx context.Context, t test.Test, c cluster.Cluster,
-) (jobspb.JobID, error) {
-	// Restore from the first full backup AOST in the last incremental backup in the chain.
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE DATABASE tpce FROM '/2022/12/06-190322.57' IN
-				'gs://cockroach-fixtures/backups/tpc-e/customers=500000/v22.2.0-rc.3/inc-count=9?AUTH=implicit'
-				AS OF SYSTEM TIME '2022-12-06 22:40:22' WITH detached"`)
-	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to connect to node 1; running restore detached")
-	}
-
-	var jobID jobspb.JobID
-	if err := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1`).Scan(
-		&jobID); err != nil {
-		return 0, err
-	}
-
-	return jobID, nil
-}
-
 // checkDetachedRestore returns when the detached restore has completed
 func checkDetachedRestore(
 	ctx context.Context, t test.Test, c cluster.Cluster, jobID jobspb.JobID,
@@ -509,8 +448,6 @@ func registerRestore(r registry.Registry) {
 		{dataSet: dataBank2TB{}, nodes: 32, timeout: 3 * time.Hour},
 		{dataSet: dataBank2TB{}, nodes: 6, timeout: 4 * time.Hour, cpus: 8, pdVolumeSize: 2500,
 			parallelize: true},
-		{dataSet: tpce10TB{}, nodes: 10, timeout: 10 * time.Hour, cpus: 8, pdVolumeSize: 1500,
-			detached: true},
 	} {
 		item := item
 		clusterOpts := make([]spec.Option, 0)
