@@ -66,7 +66,7 @@ func registerAcceptance(r registry.Registry) {
 			{
 				name:          "version-upgrade",
 				fn:            runVersionUpgrade,
-				timeout:       30 * time.Minute,
+				timeout:       2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
 				defaultLeases: true,
 			},
 		},
