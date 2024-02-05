@@ -58,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -11521,8 +11520,8 @@ true, then any plan other then the specified gist will be used`
 		Types:      typs,
 		ReturnType: tree.FixedReturnType(types.Bool),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			hasViewActivity, err := evalCtx.SessionAccessor.HasRoleOption(
-				ctx, roleoption.VIEWACTIVITY)
+			hasViewActivity, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(
+				ctx, privilege.VIEWACTIVITY)
 			if err != nil {
 				return nil, err
 			}
@@ -11537,8 +11536,8 @@ true, then any plan other then the specified gist will be used`
 				return nil, err
 			}
 
-			hasViewActivityRedacted, err := evalCtx.SessionAccessor.HasRoleOption(
-				ctx, roleoption.VIEWACTIVITYREDACTED)
+			hasViewActivityRedacted, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(
+				ctx, privilege.VIEWACTIVITYREDACTED)
 			if err != nil {
 				return nil, err
 			}
