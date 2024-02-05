@@ -97,15 +97,16 @@ const (
 type Registry struct {
 	serverCtx context.Context
 
-	ac        log.AmbientContext
-	stopper   *stop.Stopper
-	clock     *hlc.Clock
-	clusterID *base.ClusterIDContainer
-	nodeID    *base.SQLIDContainer
-	settings  *cluster.Settings
-	execCtx   jobExecCtxMaker
-	metrics   Metrics
-	knobs     TestingKnobs
+	ac              log.AmbientContext
+	stopper         *stop.Stopper
+	clock           *hlc.Clock
+	clusterID       *base.ClusterIDContainer
+	nodeID          *base.SQLIDContainer
+	settings        *cluster.Settings
+	execCtx         jobExecCtxMaker
+	metrics         Metrics
+	metricsRegistry *metric.Registry
+	knobs           TestingKnobs
 
 	// adoptionChan is used to nudge the registry to resume claimed jobs and
 	// potentially attempt to claim jobs.
@@ -226,6 +227,7 @@ func MakeRegistry(
 	histogramWindowInterval time.Duration,
 	execCtxFn jobExecCtxMaker,
 	preventAdoptionFile string,
+	metricsRegistry *metric.Registry,
 	knobs *TestingKnobs,
 ) *Registry {
 	r := &Registry{
@@ -238,6 +240,7 @@ func MakeRegistry(
 		sqlInstance:             sqlInstance,
 		settings:                settings,
 		execCtx:                 execCtxFn,
+		metricsRegistry:         metricsRegistry,
 		preventAdoptionFile:     preventAdoptionFile,
 		preventAdoptionLogEvery: log.Every(time.Minute),
 		// Use a non-zero buffer to allow queueing of notifications.
@@ -275,6 +278,11 @@ func (r *Registry) MetricsStruct() *Metrics {
 	return &r.metrics
 }
 
+// MetricsRegistry returns the metrics registry that stores job-related metrics.
+func (r *Registry) MetricsRegistry() *metric.Registry {
+	return r.metricsRegistry
+}
+
 // CurrentlyRunningJobs returns a slice of the ids of all jobs running on this node.
 func (r *Registry) CurrentlyRunningJobs() []jobspb.JobID {
 	r.mu.Lock()
@@ -290,6 +298,13 @@ func (r *Registry) CurrentlyRunningJobs() []jobspb.JobID {
 // used for keying sqlliveness claims held by the registry.
 func (r *Registry) ID() base.SQLInstanceID {
 	return r.nodeID.SQLInstanceID()
+}
+
+// StandaloneSQLInstance returns true if the registry is running within a
+// standalone SQL instance, or false otherwise.
+func (r *Registry) StandaloneSQLInstance() bool {
+	_, hasNodeID := r.nodeID.OptionalNodeID()
+	return !hasNodeID
 }
 
 // makeCtx returns a new context from r's ambient context and an associated
@@ -321,6 +336,8 @@ const (
 	// SqlActivityUpdaterJobID A static job ID is used for the SQL activity tables.
 	SqlActivityUpdaterJobID = jobspb.JobID(103)
 
+	// MVCCStatisticsJobID A static job ID used for the MVCC statistics update
+	// job.
 	MVCCStatisticsJobID = jobspb.JobID(104)
 )
 
