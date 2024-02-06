@@ -34,7 +34,7 @@ func TestUnstableMaybeFirstIndex(t *testing.T) {
 	}{
 		// no snapshot
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, nil,
+			index(5).terms(1), 5, nil,
 			false, 0,
 		},
 		{
@@ -43,7 +43,7 @@ func TestUnstableMaybeFirstIndex(t *testing.T) {
 		},
 		// has snapshot
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1), 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			true, 5,
 		},
 		{
@@ -78,11 +78,11 @@ func TestMaybeLastIndex(t *testing.T) {
 	}{
 		// last in entries
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, nil,
+			index(5).terms(1), 5, nil,
 			true, 5,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1), 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			true, 5,
 		},
 		// last in snapshot
@@ -124,38 +124,38 @@ func TestUnstableMaybeTerm(t *testing.T) {
 	}{
 		// term from entries
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, nil,
+			index(5).terms(1), 5, nil,
 			5,
 			true, 1,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, nil,
+			index(5).terms(1), 5, nil,
 			6,
 			false, 0,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, nil,
+			index(5).terms(1), 5, nil,
 			4,
 			false, 0,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1), 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			5,
 			true, 1,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1), 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			6,
 			false, 0,
 		},
 		// term from snapshot
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1), 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			4,
 			true, 1,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1), 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			3,
 			false, 0,
 		},
@@ -193,7 +193,7 @@ func TestUnstableMaybeTerm(t *testing.T) {
 
 func TestUnstableRestore(t *testing.T) {
 	u := unstable{
-		entries:            []pb.Entry{{Index: 5, Term: 1}},
+		entries:            index(5).terms(1),
 		offset:             5,
 		offsetInProgress:   6,
 		snapshot:           &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
@@ -220,17 +220,17 @@ func TestUnstableNextEntries(t *testing.T) {
 	}{
 		// nothing in progress
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, 5, 5,
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}},
+			index(5).terms(1, 1), 5, 5,
+			index(5).terms(1, 1),
 		},
 		// partially in progress
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, 5, 6,
-			[]pb.Entry{{Index: 6, Term: 1}},
+			index(5).terms(1, 1), 5, 6,
+			index(6).terms(1),
 		},
 		// everything in progress
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, 5, 7,
+			index(5).terms(1, 1), 5, 7,
 			nil, // nil, not empty slice
 		},
 	}
@@ -303,25 +303,25 @@ func TestUnstableAcceptInProgress(t *testing.T) {
 			5, false,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, nil,
+			index(5).terms(1), nil,
 			5,     // entries not in progress
 			false, // snapshot not already in progress
 			6, false,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, nil,
+			index(5).terms(1, 1), nil,
 			5,     // entries not in progress
 			false, // snapshot not already in progress
 			7, false,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, nil,
+			index(5).terms(1, 1), nil,
 			6,     // in-progress to the first entry
 			false, // snapshot not already in progress
 			7, false,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, nil,
+			index(5).terms(1, 1), nil,
 			7,     // in-progress to the second entry
 			false, // snapshot not already in progress
 			7, false,
@@ -334,25 +334,25 @@ func TestUnstableAcceptInProgress(t *testing.T) {
 			5, true,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1), &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			5,     // entries not in progress
 			false, // snapshot not already in progress
 			6, true,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1, 1), &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			5,     // entries not in progress
 			false, // snapshot not already in progress
 			7, true,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1, 1), &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			6,     // in-progress to the first entry
 			false, // snapshot not already in progress
 			7, true,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1, 1), &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			7,     // in-progress to the second entry
 			false, // snapshot not already in progress
 			7, true,
@@ -364,25 +364,25 @@ func TestUnstableAcceptInProgress(t *testing.T) {
 			5, true,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1), &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			5,    // entries not in progress
 			true, // snapshot already in progress
 			6, true,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1, 1), &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			5,    // entries not in progress
 			true, // snapshot already in progress
 			7, true,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1, 1), &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			6,    // in-progress to the first entry
 			true, // snapshot already in progress
 			7, true,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1, 1), &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			7,    // in-progress to the second entry
 			true, // snapshot already in progress
 			7, true,
@@ -422,63 +422,63 @@ func TestUnstableStableTo(t *testing.T) {
 			0, 0, 0,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, 6, nil,
+			index(5).terms(1), 5, 6, nil,
 			5, 1, // stable to the first entry
 			6, 6, 0,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, 5, 6, nil,
+			index(5).terms(1, 1), 5, 6, nil,
 			5, 1, // stable to the first entry
 			6, 6, 1,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, 5, 7, nil,
+			index(5).terms(1, 1), 5, 7, nil,
 			5, 1, // stable to the first entry and in-progress ahead
 			6, 7, 1,
 		},
 		{
-			[]pb.Entry{{Index: 6, Term: 2}}, 6, 7, nil,
+			index(6).terms(2), 6, 7, nil,
 			6, 1, // stable to the first entry and term mismatch
 			6, 7, 1,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, 6, nil,
+			index(5).terms(1), 5, 6, nil,
 			4, 1, // stable to old entry
 			5, 6, 1,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, 6, nil,
+			index(5).terms(1), 5, 6, nil,
 			4, 2, // stable to old entry
 			5, 6, 1,
 		},
 		// with snapshot
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, 6, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1), 5, 6, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			5, 1, // stable to the first entry
 			6, 6, 0,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, 5, 6, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1, 1), 5, 6, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			5, 1, // stable to the first entry
 			6, 6, 1,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, 5, 7, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1, 1), 5, 7, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			5, 1, // stable to the first entry and in-progress ahead
 			6, 7, 1,
 		},
 		{
-			[]pb.Entry{{Index: 6, Term: 2}}, 6, 7, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 5, Term: 1}},
+			index(6).terms(2), 6, 7, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 5, Term: 1}},
 			6, 1, // stable to the first entry and term mismatch
 			6, 7, 1,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, 6, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+			index(5).terms(1), 5, 6, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			4, 1, // stable to snapshot
 			5, 6, 1,
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 2}}, 5, 6, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 2}},
+			index(5).terms(2), 5, 6, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 2}},
 			4, 1, // stable to old entry
 			5, 6, 1,
 		},
@@ -515,51 +515,51 @@ func TestUnstableTruncateAndAppend(t *testing.T) {
 	}{
 		// append to the end
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, 5, nil,
-			[]pb.Entry{{Index: 6, Term: 1}, {Index: 7, Term: 1}},
-			5, 5, []pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}, {Index: 7, Term: 1}},
+			index(5).terms(1), 5, 5, nil,
+			index(6).terms(1, 1),
+			5, 5, index(5).terms(1, 1, 1),
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, 6, nil,
-			[]pb.Entry{{Index: 6, Term: 1}, {Index: 7, Term: 1}},
-			5, 6, []pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}, {Index: 7, Term: 1}},
+			index(5).terms(1), 5, 6, nil,
+			index(6).terms(1, 1),
+			5, 6, index(5).terms(1, 1, 1),
 		},
 		// replace the unstable entries
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, 5, nil,
-			[]pb.Entry{{Index: 5, Term: 2}, {Index: 6, Term: 2}},
-			5, 5, []pb.Entry{{Index: 5, Term: 2}, {Index: 6, Term: 2}},
+			index(5).terms(1), 5, 5, nil,
+			index(5).terms(2, 2),
+			5, 5, index(5).terms(2, 2),
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, 5, nil,
-			[]pb.Entry{{Index: 4, Term: 2}, {Index: 5, Term: 2}, {Index: 6, Term: 2}},
-			4, 4, []pb.Entry{{Index: 4, Term: 2}, {Index: 5, Term: 2}, {Index: 6, Term: 2}},
+			index(5).terms(1), 5, 5, nil,
+			index(4).terms(2, 2, 2),
+			4, 4, index(4).terms(2, 2, 2),
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}}, 5, 6, nil,
-			[]pb.Entry{{Index: 5, Term: 2}, {Index: 6, Term: 2}},
-			5, 5, []pb.Entry{{Index: 5, Term: 2}, {Index: 6, Term: 2}},
+			index(5).terms(1), 5, 6, nil,
+			index(5).terms(2, 2),
+			5, 5, index(5).terms(2, 2),
 		},
 		// truncate the existing entries and append
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}, {Index: 7, Term: 1}}, 5, 5, nil,
-			[]pb.Entry{{Index: 6, Term: 2}},
-			5, 5, []pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 2}},
+			index(5).terms(1, 1, 1), 5, 5, nil,
+			index(6).terms(2),
+			5, 5, index(5).terms(1, 2),
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}, {Index: 7, Term: 1}}, 5, 5, nil,
-			[]pb.Entry{{Index: 7, Term: 2}, {Index: 8, Term: 2}},
-			5, 5, []pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}, {Index: 7, Term: 2}, {Index: 8, Term: 2}},
+			index(5).terms(1, 1, 1), 5, 5, nil,
+			index(7).terms(2, 2),
+			5, 5, index(5).terms(1, 1, 2, 2),
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}, {Index: 7, Term: 1}}, 5, 6, nil,
-			[]pb.Entry{{Index: 6, Term: 2}},
-			5, 6, []pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 2}},
+			index(5).terms(1, 1, 1), 5, 6, nil,
+			index(6).terms(2),
+			5, 6, index(5).terms(1, 2),
 		},
 		{
-			[]pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}, {Index: 7, Term: 1}}, 5, 7, nil,
-			[]pb.Entry{{Index: 6, Term: 2}},
-			5, 6, []pb.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 2}},
+			index(5).terms(1, 1, 1), 5, 7, nil,
+			index(6).terms(2),
+			5, 6, index(5).terms(1, 2),
 		},
 	}
 
