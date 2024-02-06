@@ -1,0 +1,53 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+ALTER TABLE t ALTER COLUMN j SET DEFAULT 42;
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+ALTER TABLE t ALTER COLUMN j DROP DEFAULT;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.set_default
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert descriptor #104
+  ...
+         oid: 20
+         width: 64
+  -  - defaultExpr: 42:::INT8
+  -    id: 2
+  +  - id: 2
+       name: j
+       nullable: true
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 1 MutationType op
+upsert descriptor #104
+  ...
+         oid: 20
+         width: 64
+  -  - defaultExpr: 42:::INT8
+  -    id: 2
+  +  - id: 2
+       name: j
+       nullable: true
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

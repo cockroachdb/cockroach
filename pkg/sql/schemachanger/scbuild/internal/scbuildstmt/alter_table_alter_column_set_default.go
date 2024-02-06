@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -30,20 +29,24 @@ func alterTableSetDefault(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableSetDefault,
 ) {
 	alterColumnPreChecks(b, tn, tbl, t.Column)
-	// DROP DEFAULT not yet implemented in the DSC. Fall back to legacy schema changer.
-	if t.Default == nil {
-		panic(scerrors.NotImplementedErrorf(t, "Dropping the default on a column is not implemented."))
-	}
-
 	colID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /* required */)
 	col := mustRetrieveColumnElem(b, tbl.TableID, colID)
+	oldDefaultExpr := retrieveColumnDefaultExpressionElem(b, tbl.TableID, colID)
+
+	// For DROP DEFAULT.
+	if t.Default == nil {
+		if oldDefaultExpr != nil {
+			b.Drop(oldDefaultExpr)
+		}
+		return
+	}
+
 	// Block alters on system columns.
 	panicIfSystemColumn(col, t.Column.String())
 
 	// If our target column already has a default expression, we want to drop it first.
-	currDefaultExpr := retrieveColumnDefaultExpressionElem(b, tbl.TableID, colID)
-	if currDefaultExpr != nil {
-		b.Drop(currDefaultExpr)
+	if oldDefaultExpr != nil {
+		b.Drop(oldDefaultExpr)
 	}
 	// If our desired default expression is NULL, do nothing.
 	if t.Default == tree.DNull {

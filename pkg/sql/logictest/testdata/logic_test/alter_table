@@ -539,10 +539,12 @@ INSERT INTO add_default (a) VALUES (1)
 statement ok
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 42
 
-# query TTBTTTB colnames
-# SHOW COLUMNS FROM add_default
-# ----
-# column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
+query TTBTTTB colnames,rowsort
+SHOW COLUMNS FROM add_default
+----
+column_name  data_type  is_nullable  column_default  generation_expression  indices             is_hidden
+a            INT8       false        NULL            ·                      {add_default_pkey}  false
+b            INT8       false        42              ·                      {add_default_pkey}  false
 
 statement ok
 INSERT INTO add_default (a) VALUES (2)
@@ -671,6 +673,29 @@ ALTER TABLE add_default ALTER COLUMN fee DROP DEFAULT
 
 statement error pgcode XXA00 null value in column "fee" violates not-null constraint
 COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE add_default ALTER COLUMN a SET DEFAULT 2
+
+statement ok
+ALTER TABLE add_default ALTER COLUMN a DROP DEFAULT
+
+statement ok
+COMMIT
+
+query TTBTTTB colnames,rowsort
+SHOW COLUMNS FROM add_default
+----
+column_name  data_type  is_nullable  column_default           generation_expression  indices             is_hidden
+a            INT8       false        NULL                     ·                      {add_default_pkey}  false
+b            INT8       true         NULL                     ·                      {add_default_pkey}  false
+c            TIMESTAMP  true         current_timestamp()      ·                      {add_default_pkey}  false
+d            TIMESTAMP  true         transaction_timestamp()  ·                      {add_default_pkey}  false
+e            TIMESTAMP  true         statement_timestamp()    ·                      {add_default_pkey}  false
+f            TIMESTAMP  true         NULL                     ·                      {add_default_pkey}  false
 
 query T rowsort
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.change_in_explicit_txn'
