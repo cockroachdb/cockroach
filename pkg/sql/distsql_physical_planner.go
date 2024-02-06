@@ -2817,7 +2817,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 		if needRender {
 			// Build rendering expressions.
 			renderExprs := make([]execinfrapb.Expression, len(info.aggregations))
-			h := tree.MakeTypesOnlyIndexedVarHelper(finalPreRenderTypes)
+			h := tree.MakeIndexedVarHelperWithTypes(finalPreRenderTypes)
 			// finalIdx is an index inside finalAggs. It is used to
 			// keep track of the finalAggs results that correspond
 			// to each aggregation.

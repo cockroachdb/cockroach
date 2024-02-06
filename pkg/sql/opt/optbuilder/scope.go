@@ -1633,14 +1633,7 @@ func (*scope) VisitPost(expr tree.Expr) tree.Expr {
 // scope implements the IndexedVarContainer interface so it can be used as
 // semaCtx.IVarContainer. This allows tree.TypeCheck to determine the correct
 // type for any IndexedVars.
-var _ eval.IndexedVarContainer = &scope{}
-
-// IndexedVarEval is part of the eval.IndexedVarContainer interface.
-func (s *scope) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
-	panic(errors.AssertionFailedf("unimplemented: scope.IndexedVarEval"))
-}
+var _ tree.IndexedVarContainer = &scope{}
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (s *scope) IndexedVarResolvedType(idx int) *types.T {
@@ -1653,11 +1646,6 @@ func (s *scope) IndexedVarResolvedType(idx int) *types.T {
 			"invalid column ordinal: @%d", idx+1))
 	}
 	return s.cols[idx].typ
-}
-
-// IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
-func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	panic(errors.AssertionFailedf("unimplemented: scope.IndexedVarNodeFormatter"))
 }
 
 // newAmbiguousSourceError returns an error with a helpful error message to be

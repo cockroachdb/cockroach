@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -136,23 +135,11 @@ func (p *planner) Scan() *scanNode {
 }
 
 // scanNode implements eval.IndexedVarContainer.
-var _ eval.IndexedVarContainer = &scanNode{}
-
-// IndexedVarEval implements the eval.IndexedVarContainer interface.
-func (n *scanNode) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
-	panic("scanNode can't be run in local mode")
-}
+var _ tree.IndexedVarContainer = &scanNode{}
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (n *scanNode) IndexedVarResolvedType(idx int) *types.T {
 	return n.resultColumns[idx].Typ
-}
-
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (n *scanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return n.resultColumns.Name(idx)
 }
 
 func (n *scanNode) startExec(params runParams) error {

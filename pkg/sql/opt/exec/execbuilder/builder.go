@@ -381,21 +381,9 @@ type mdVarContainer struct {
 	md *opt.Metadata
 }
 
-var _ eval.IndexedVarContainer = &mdVarContainer{}
-
-// IndexedVarEval is part of the eval.IndexedVarContainer interface.
-func (c *mdVarContainer) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
-	return nil, errors.AssertionFailedf("no eval allowed in mdVarContainer")
-}
+var _ tree.IndexedVarContainer = &mdVarContainer{}
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (c *mdVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return c.md.ColumnMeta(opt.ColumnID(idx + 1)).Type
-}
-
-// IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
-func (c *mdVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return nil
 }

@@ -50,11 +50,6 @@ func (*RowIndexedVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	panic("unsupported")
 }
 
-// IndexedVarNodeFormatter implements tree.IndexedVarContainer.
-func (*RowIndexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return nil
-}
-
 // CannotWriteToComputedColError constructs a write error for a computed column.
 func CannotWriteToComputedColError(colName string) error {
 	return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
