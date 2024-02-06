@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // FileCipherStreamCreator wraps the KeyManager interface and provides functions to create a
@@ -29,6 +30,7 @@ import (
 type FileCipherStreamCreator struct {
 	envType    enginepb.EnvType
 	keyManager PebbleKeyManager
+	version    int64
 }
 
 const (
@@ -56,6 +58,10 @@ func (c *FileCipherStreamCreator) CreateNew(
 	}
 	settings.EncryptionType = key.Info.EncryptionType
 	settings.KeyId = key.Info.KeyId
+	// TODO(bdarnell): Once we drop support for v1, simplify all this
+	// Nonce/Counter complexity into a single 16-byte IV. I'm leaving it
+	// untouched for now so that all the changes are on the v2 side
+	// and we can backport without any risk to v1 users.
 	settings.Nonce = make([]byte, ctrNonceSize)
 	_, err = rand.Read(settings.Nonce)
 	if err != nil {
@@ -67,11 +73,24 @@ func (c *FileCipherStreamCreator) CreateNew(
 	}
 	// Does not matter how we convert 4 random bytes into uint32
 	settings.Counter = binary.LittleEndian.Uint32(counterBytes)
-	ctrCS, err := newCTRBlockCipherStream(key, settings.Nonce, settings.Counter)
-	if err != nil {
-		return nil, nil, err
+	switch c.version {
+	case 0 /* default */, 1:
+		ctrCS, err := newCTRBlockCipherStream(key, settings.Nonce, settings.Counter)
+		if err != nil {
+			return nil, nil, err
+		}
+		return settings, &fileCipherStream{bcs: ctrCS}, nil
+	case 2:
+		var scratch [ctrBlockSize]byte
+		iv := makeIV(0, settings.Nonce, settings.Counter, scratch[:])
+		fcs2, err := newFileCipherStreamV2(key.Key, iv)
+		if err != nil {
+			return nil, nil, err
+		}
+		return settings, fcs2, nil
+	default:
+		return settings, nil, errors.Newf("unsupported version %d", c.version)
 	}
-	return settings, &fileCipherStream{bcs: ctrCS}, nil
 }
 
 // CreateExisting creates a FileStream for an existing file by looking up the key described by
@@ -189,13 +208,20 @@ func newCTRBlockCipherStream(
 	return stream, nil
 }
 
+// makeIV copies nonce and counter into scratch (which must be backed by an
+// array of size ctrBlockSize), and returns the IV.
+func makeIV(blockIndex uint64, nonce []byte, counter uint32, scratch []byte) []byte {
+	iv := append(scratch[:0], nonce[:]...)
+	var blockCounter = uint32(uint64(counter) + blockIndex)
+	binary.BigEndian.PutUint32(iv[len(iv):len(iv)+4], blockCounter)
+	iv = iv[0 : len(iv)+4]
+	return iv
+}
+
 // For CTR, decryption and encryption are the same. data must have length equal to
 // the block size, and scratch must have length >= block size.
 func (s *cTRBlockCipherStream) transform(blockIndex uint64, data []byte, scratch []byte) {
-	iv := append(scratch[:0], s.nonce[:]...)
-	var blockCounter = uint32(uint64(s.counter) + blockIndex)
-	binary.BigEndian.PutUint32(iv[len(iv):len(iv)+4], blockCounter)
-	iv = iv[0 : len(iv)+4]
+	iv := makeIV(blockIndex, s.nonce[:], s.counter, scratch)
 	s.cBlock.Encrypt(iv, iv)
 	subtle.XORBytes(data, data, iv)
 }

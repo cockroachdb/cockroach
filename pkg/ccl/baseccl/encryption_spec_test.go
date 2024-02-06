@@ -45,6 +45,10 @@ func TestNewStoreEncryptionSpec(t *testing.T) {
 		{"path=data,key=new.key,old-key=old.key,rotation-period=1", `could not parse rotation-duration value: 1: time: missing unit in duration "1"`, StoreEncryptionSpec{}},
 		{"path=data,key=new.key,old-key=old.key,rotation-period=1d", `could not parse rotation-duration value: 1d: time: unknown unit "d" in duration "1d"`, StoreEncryptionSpec{}},
 
+		// Version.
+		{"path=/data,key=/new.key,old-key=plain,version=x", `could not parse version: x: strconv.ParseInt: parsing "x": invalid syntax`, StoreEncryptionSpec{}},
+		{"path=/data,key=/new.key,old-key=plain,version=2", "", StoreEncryptionSpec{Path: "/data", KeyPath: "/new.key", OldKeyPath: "plain", RotationPeriod: DefaultRotationPeriod, Version: 2}},
+
 		// Good values.
 		{"path=/data,key=/new.key,old-key=/old.key", "", StoreEncryptionSpec{Path: "/data", KeyPath: "/new.key", OldKeyPath: "/old.key", RotationPeriod: DefaultRotationPeriod}},
 		{"path=/data,key=/new.key,old-key=/old.key,rotation-period=1h", "", StoreEncryptionSpec{Path: "/data", KeyPath: "/new.key", OldKeyPath: "/old.key", RotationPeriod: time.Hour}},

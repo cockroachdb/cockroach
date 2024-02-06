@@ -64,10 +64,6 @@ func TestEncryptedFS(t *testing.T) {
 	keyManager := &StoreKeyManager{fs: memFS, activeKeyFilename: "keyfile", oldKeyFilename: "plain"}
 	require.NoError(t, keyManager.Load(context.Background()))
 
-	streamCreator := &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store}
-
-	fs := &encryptedFS{FS: memFS, fileRegistry: fileRegistry, streamCreator: streamCreator}
-
 	// Style (and most code) is from Pebble's mem_fs_test.go. We are mainly testing the integration of
 	// encryptedFS with FileRegistry and FileCipherStreamCreator. This uses real encryption but the
 	// strings here are not very long since we've tested that in lower-level unit tests.
@@ -108,7 +104,16 @@ func TestEncryptedFS(t *testing.T) {
 		"5e: f.read 3 == abc",
 	}
 
-	for _, tc := range testCases {
+	for idx, tc := range testCases {
+		// Alternate between versions 1 and 2 to verify that we can upgrade and downgrade freely.
+		version := 1
+		if idx%2 == 1 {
+			version = 2
+		}
+		streamCreator := &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store, version: int64(version)}
+
+		fs := &encryptedFS{FS: memFS, fileRegistry: fileRegistry, streamCreator: streamCreator}
+
 		s := strings.Split(tc, " ")[1:]
 
 		saveF := s[0] == "f" && s[1] == "="
