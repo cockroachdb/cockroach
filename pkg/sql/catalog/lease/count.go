@@ -41,7 +41,7 @@ func CountLeases(
 	at hlc.Timestamp,
 	forAnyVersion bool,
 ) (int, error) {
-	leasingMode := SessionBasedLeasingMode(LeaseEnableSessionBasedLeasing.Get(&settings.SV))
+	leasingMode := readSessionBasedLeasingMode(ctx, settings)
 	whereClauses := make([][]string, 2)
 	for _, t := range versions {
 		versionClause := ""

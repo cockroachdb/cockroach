@@ -20,6 +20,7 @@ go_library(
         "v23_2_system_exec_insights.go",
         "v24_1_drop_payload_and_progress_jobs.go",
         "v24_1_migrate_pts_records.go",
+        "v24_1_session_based_lease.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/upgrades",
     visibility = ["//visibility:public"],
