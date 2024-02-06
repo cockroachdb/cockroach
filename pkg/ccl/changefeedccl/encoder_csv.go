@@ -49,7 +49,7 @@ func (e *csvEncoder) EncodeValue(
 	ctx context.Context, evCtx eventContext, updatedRow cdcevent.Row, prevRow cdcevent.Row,
 ) ([]byte, error) {
 	if updatedRow.IsDeleted() {
-		return nil, errors.Errorf(`cannot encode deleted rows into CSV format`)
+		return nil, errors.AssertionFailedf(`cannot encode deleted rows into CSV format`)
 	}
 	e.buf.Reset()
 	if err := updatedRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {

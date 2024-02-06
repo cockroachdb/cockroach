@@ -60,7 +60,7 @@ go_library(
 
 go_test(
     name = "kvnemesis_test",
-    size = "large",
+    size = "medium",
     srcs = [
         "applier_test.go",
         "engine_test.go",
@@ -74,7 +74,7 @@ go_test(
     embed = [":kvnemesis"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
+        "//conditions:default": {"test.Pool": "large"},
     }),
     deps = [
         "//pkg/base",
