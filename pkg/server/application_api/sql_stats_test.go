@@ -47,9 +47,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// additionalTimeoutUnderStress is the additional timeout to use for the http
+// additionalTimeoutUnderDuress is the additional timeout to use for the http
 // client if under stress.
-const additionalTimeoutUnderStress = 30 * time.Second
+const additionalTimeoutUnderDuress = 30 * time.Second
 
 func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -57,8 +57,8 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 
 	// Increase the timeout for the http client if under stress.
 	additionalTimeout := 0 * time.Second
-	if skip.Stress() {
-		additionalTimeout = additionalTimeoutUnderStress
+	if skip.Duress() {
+		additionalTimeout = additionalTimeoutUnderDuress
 	}
 
 	var params base.TestServerArgs
@@ -393,8 +393,8 @@ func TestStatusAPIStatements(t *testing.T) {
 
 	// Increase the timeout for the http client if under stress.
 	additionalTimeout := 0 * time.Second
-	if skip.Stress() {
-		additionalTimeout = additionalTimeoutUnderStress
+	if skip.Duress() {
+		additionalTimeout = additionalTimeoutUnderDuress
 	}
 
 	// Aug 30 2021 19:50:00 GMT+0000
@@ -520,8 +520,8 @@ func TestStatusAPICombinedStatementsTotalLatency(t *testing.T) {
 	skip.UnderRace(t, "test is too slow to run under race")
 	// Increase the timeout for the http client if under stress.
 	additionalTimeout := 0 * time.Second
-	if skip.Stress() {
-		additionalTimeout = additionalTimeoutUnderStress
+	if skip.Duress() {
+		additionalTimeout = additionalTimeoutUnderDuress
 	}
 
 	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
@@ -676,8 +676,8 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 
 	// Increase the timeout for the http client if under stress.
 	additionalTimeout := 0 * time.Second
-	if skip.Stress() {
-		additionalTimeout = additionalTimeoutUnderStress
+	if skip.Duress() {
+		additionalTimeout = additionalTimeoutUnderDuress
 	}
 	skip.UnderStressRace(t, "test is too slow to run under stressrace")
 
