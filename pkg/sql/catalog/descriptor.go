@@ -759,6 +759,10 @@ type TableDescriptor interface {
 	// IsSchemaLocked returns true if we don't allow performing schema changes
 	// on this table descriptor.
 	IsSchemaLocked() bool
+	// IsPrimaryKeySwapMutation returns true if the mutation is a primary key
+	// swap mutation or a secondary index used by the declarative schema changer
+	// for a primary index swap.
+	IsPrimaryKeySwapMutation(m *descpb.DescriptorMutation) bool
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.

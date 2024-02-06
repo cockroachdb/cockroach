@@ -3397,7 +3397,7 @@ ALTER TABLE t_99281 ADD COLUMN p INT DEFAULT unique_rowid(), ADD FOREIGN KEY (j)
 # The following statement is not supported using the legacy schema changer.
 skipif config local-legacy-schema-changer
 skipif config local-mixed-23.1
-statement error pq: foreign key violation: "t_99281" row j=0, i=[0-1] has no match in "t_99281_other"
+statement error pq: foreign key violation: "t_99281" row j=0, k=[0-1] has no match in "t_99281_other"
 ALTER TABLE t_99281 ALTER PRIMARY KEY USING COLUMNS (k), ADD FOREIGN KEY (j) REFERENCES t_99281_other;
 
 query TT
@@ -3535,3 +3535,21 @@ CREATE TABLE public.t_118246 (
 )
 
 subtest end
+
+
+# When the new primary key does not have the same columns as the original primary
+# key schema changes recreating secondary indexes could fail incorrectly during validation,
+# if the secondary had some references to the old primary index key (for example
+# partial expressions). This was because an scan of the new secondary index would
+# not return the old primary key, which query execution was expecting.
+subtest 118626
+
+statement ok
+CREATE TABLE public.t_118626(n int primary key, b int NOT NULL, c int NOT NULL);
+INSERT INTO public.t_118626 VALUES(1, 2, 3);
+
+statement ok
+CREATE UNIQUE INDEX ON public.t_118626(c) WHERE n>= 1;
+
+statement ok
+ALTER TABLE public.t_118626 ALTER PRIMARY KEY USING COLUMNS(b);
