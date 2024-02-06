@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "sqlstats",
     srcs = [
+        "aggregate.go",
         "cluster_settings.go",
         "ssprovider.go",
         "test_utils.go",
@@ -19,7 +20,10 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats/insights",
+        "//pkg/util/container/heap",
+        "//pkg/util/eventagg",
         "//pkg/util/stop",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
