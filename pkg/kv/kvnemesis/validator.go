@@ -439,6 +439,9 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// optimistically try to fit the barrier inside one of the current ranges,
 			// but this may race with a split, so we ignore the error in this case and
 			// try again later.
+		} else if resultIsAmbiguous(t.Result) {
+			// It's possible that the replica is removed by the time the barrier
+			// arrives. That's ok, just ignore it.
 		} else {
 			// Fail or retry on other errors, depending on type.
 			v.failIfError(op, t.Result)
