@@ -69,8 +69,7 @@ describe("DatabaseDetails sagas", () => {
       },
       stats: {
         replicaData: {
-          replicas: [1, 2, 3],
-          regions: ["this", "is", "a", "region"],
+          storeIDs: [1, 2, 3],
         },
         indexStats: { num_index_recommendations: 4 },
       },
