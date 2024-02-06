@@ -671,6 +671,10 @@ func Extend(l *logger.Logger, clusterName string, lifetime time.Duration) error 
 	return nil
 }
 
+// Default scheduled backup runs a full backup every hour and an incremental
+// every 15 minutes.
+const DefaultBackupSchedule = `RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS first_run = 'now'`
+
 // DefaultStartOpts returns a StartOpts populated with default values.
 func DefaultStartOpts() install.StartOpts {
 	return install.StartOpts{
@@ -680,7 +684,7 @@ func DefaultStartOpts() install.StartOpts {
 		StoreCount:         1,
 		VirtualClusterID:   2,
 		ScheduleBackups:    false,
-		ScheduleBackupArgs: "",
+		ScheduleBackupArgs: DefaultBackupSchedule,
 		InitTarget:         1,
 		SQLPort:            0,
 		VirtualClusterName: install.SystemInterfaceName,
