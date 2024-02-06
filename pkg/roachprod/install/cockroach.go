@@ -995,9 +995,6 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 	// TODO(renato): use the same combination once we're able to select
 	// the virtual cluster we are connecting to in the console.
 	var password = startOpts.VirtualClusterName
-	if startOpts.VirtualClusterName == "" {
-		password = SystemInterfaceName
-	}
 
 	stmts := strings.Join([]string{
 		fmt.Sprintf("CREATE USER IF NOT EXISTS %s WITH LOGIN PASSWORD '%s'", username, password),
@@ -1012,9 +1009,6 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 	if err := retryOpts.Do(ctx, func(ctx context.Context) error {
 		// We use the first node in the virtual cluster to create the user.
 		firstNode := c.TargetNodes()[0]
-		if startOpts.VirtualClusterName == "" {
-			startOpts.VirtualClusterName = SystemInterfaceName
-		}
 		results, err := c.ExecSQL(
 			ctx, l, Nodes{firstNode}, startOpts.VirtualClusterName, startOpts.SQLInstance, []string{
 				"-e", stmts,
