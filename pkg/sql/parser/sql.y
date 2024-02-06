@@ -4349,6 +4349,10 @@ comment_stmt:
       sqllex.Error(fmt.Sprintf("invalid column name: %q", tree.ErrString($4.unresolvedName())))
             return 1
     }
+    if columnItem != nil && columnItem.TableName != nil {
+      aIdx := sqllex.(*lexer).NewAnnotation()
+      columnItem.TableName.AnnotatedNode = tree.AnnotatedNode{AnnIdx: aIdx}
+    }
     $$.val = &tree.CommentOnColumn{ColumnItem: columnItem, Comment: $6.strPtr()}
   }
 | COMMENT ON INDEX table_index_name IS comment_text
