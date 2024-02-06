@@ -2921,8 +2921,8 @@ func (c *SyncedCluster) ParallelE(
 // to maintain parity with auto-init behavior of `roachprod start` (when
 // --skip-init) is not specified.
 func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) error {
-	if res, err := c.initializeCluster(ctx, l, node); err != nil || (res != nil && res.Err != nil) {
-		return errors.WithDetail(errors.CombineErrors(err, res.Err), "install.Init() failed: unable to initialize cluster.")
+	if err := c.initializeCluster(ctx, l, node); err != nil {
+		return errors.WithDetail(err, "install.Init() failed: unable to initialize cluster.")
 	}
 
 	if err := c.setClusterSettings(ctx, l, node, ""); err != nil {
