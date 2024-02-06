@@ -1146,6 +1146,14 @@ func TestLeaseEqual(t *testing.T) {
 		t.Fatalf("unexpectedly did not compare equal: %s", pretty.Diff(a, b))
 	}
 
+	// Verify that DeprecatedStartStasis is ignored entirely.
+	a = Lease{DeprecatedStartStasis: &hlc.Timestamp{WallTime: 1}}
+	b = Lease{DeprecatedStartStasis: &hlc.Timestamp{WallTime: 2}}
+	c := Lease{}
+	require.True(t, a.Equal(b))
+	require.True(t, a.Equal(c))
+	require.True(t, b.Equal(c))
+
 	if !(*Lease)(nil).Equal(nil) {
 		t.Fatalf("unexpectedly did not compare equal")
 	}
@@ -1171,7 +1179,6 @@ func TestLeaseEqual(t *testing.T) {
 		{Start: clockTS},
 		{Expiration: &ts},
 		{Replica: ReplicaDescriptor{NodeID: 1}},
-		{DeprecatedStartStasis: &ts},
 		{ProposedTS: &clockTS},
 		{Epoch: 1},
 		{Sequence: 1},
