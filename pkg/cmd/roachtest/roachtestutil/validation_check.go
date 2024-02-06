@@ -46,14 +46,6 @@ func CheckReplicaDivergenceOnDB(ctx context.Context, l *logger.Logger, db *gosql
 		return err
 	}
 
-	// EFOS can slow down consistency checks, since we need to take a snapshot for
-	// every range sequentially. Disable them.
-	_, err = db.ExecContext(ctx,
-		"SET CLUSTER SETTING kv.consistency_queue.testing_fast_efos_acquisition.enabled = true")
-	if err != nil {
-		return err
-	}
-
 	// NB: we set a statement_timeout since context cancellation won't work here.
 	// We've seen the consistency checks hang indefinitely in some cases.
 	// https://github.com/cockroachdb/cockroach/pull/34520

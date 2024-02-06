@@ -76,6 +76,23 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Upgrades of SQL Transaction Isolation Level"
+      isKvGraph={false}
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`The total number of times a SQL transaction was upgraded to a stronger isolation level ${tooltipSelection}. If this metric is non-zero, then your application may be affected by the upcoming support of additional isolation levels.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="transactions">
+        <Metric
+          name="cr.node.sql.txn.upgraded_iso_level.count"
+          title="Upgrades of Transaction Isolation Level"
+          downsampleMax
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Open SQL Transactions"
       isKvGraph={false}
       sources={nodeSources}
