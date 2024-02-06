@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/rcrowley/go-metrics"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
@@ -1078,7 +1079,10 @@ func buildConfluentKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 }
 
 func buildKafkaConfig(
-	ctx context.Context, u sinkURL, jsonStr changefeedbase.SinkSpecificJSONConfig,
+	ctx context.Context,
+	u sinkURL,
+	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	kafkaMetricsGetter KafkaMetricsGetter,
 ) (*sarama.Config, error) {
 	dialConfig, err := buildDialConfig(u)
 	if err != nil {
@@ -1090,6 +1094,7 @@ func buildKafkaConfig(
 	config.Producer.Partitioner = newChangefeedPartitioner
 	// Do not fetch metadata for all topics but just for the necessary ones.
 	config.Metadata.Full = false
+	config.MetricRegistry = newMetricsRegistryInterceptor(kafkaMetricsGetter)
 
 	if dialConfig.tlsEnabled {
 		config.Net.TLS.Enable = true
@@ -1176,7 +1181,8 @@ func makeKafkaSink(
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
-	config, err := buildKafkaConfig(ctx, u, jsonStr)
+	m := mb(requiresResourceAccounting)
+	config, err := buildKafkaConfig(ctx, u, jsonStr, m.newKafkaMetricsGetter())
 	if err != nil {
 		return nil, err
 	}
@@ -1195,7 +1201,7 @@ func makeKafkaSink(
 		ctx:                  ctx,
 		kafkaCfg:             config,
 		bootstrapAddrs:       u.Host,
-		metrics:              mb(requiresResourceAccounting),
+		metrics:              m,
 		topics:               topics,
 		disableInternalRetry: !internalRetryEnabled,
 	}
@@ -1233,4 +1239,27 @@ func (s *kafkaStats) String() string {
 		atomic.LoadInt64(&s.outstandingBytes),
 		atomic.LoadInt64(&s.largestMessageSize),
 	)
+}
+
+type metricsRegistryInterceptor struct {
+	metrics.Registry
+	kafkaThrottlingNanos metrics.Histogram
+}
+
+var _ metrics.Registry = (*metricsRegistryInterceptor)(nil)
+
+func newMetricsRegistryInterceptor(kafkaMetrics KafkaMetricsGetter) *metricsRegistryInterceptor {
+	return &metricsRegistryInterceptor{
+		Registry:             metrics.NewRegistry(),
+		kafkaThrottlingNanos: kafkaMetrics.GetKafkaThrottlingNanos(),
+	}
+}
+
+func (mri *metricsRegistryInterceptor) GetOrRegister(name string, i interface{}) interface{} {
+	const throttleTimeMsMetricsPrefix = "throttle-time-in-ms"
+	if strings.HasPrefix(name, throttleTimeMsMetricsPrefix) {
+		return mri.kafkaThrottlingNanos
+	} else {
+		return mri.Registry.GetOrRegister(name, i)
+	}
 }

@@ -21,11 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/rcrowley/go-metrics"
 )
 
 const (
@@ -35,6 +38,7 @@ const (
 	changefeedIOQueueMaxLatency        = 5 * time.Minute
 	admitLatencyMaxValue               = 1 * time.Minute
 	commitLatencyMaxValue              = 10 * time.Minute
+	kafkaThrottlingTimeMaxValue        = 5 * time.Minute
 )
 
 // max length for the scope name.
@@ -43,6 +47,13 @@ const maxSLIScopeNameLen = 128
 // defaultSLIScope is the name of the default SLI scope -- i.e. the set of metrics
 // keeping track of all changefeeds which did not have explicit sli scope specified.
 const defaultSLIScope = "default"
+
+// enableSaramaMetricsPanicHandling configures the sarama metrics to trigger a
+// panic if something unexpected happens.
+var enableSaramaMetricsPanicHandling = buildutil.CrdbTestBuild ||
+	envutil.EnvOrDefaultBool(
+		"COCKROACH_CHANGEFEED_TESTING_SARAMA_METRICS_PANIC_HANDLING_ENABLED",
+		false)
 
 // AggMetrics are aggregated metrics keeping track of aggregated changefeed performance
 // indicators, combined with a limited number of per-changefeed indicators.
@@ -76,6 +87,7 @@ type AggMetrics struct {
 	CheckpointProgress          *aggmetric.AggGauge
 	LaggingRanges               *aggmetric.AggGauge
 	CloudstorageBufferedBytes   *aggmetric.AggGauge
+	KafkaThrottlingNanos        *aggmetric.AggHistogram
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -106,6 +118,7 @@ type metricsRecorder interface {
 	newParallelIOMetricsRecorder() parallelIOMetricsRecorder
 	recordSinkIOInflightChange(int64)
 	makeCloudstorageFileAllocCallback() func(delta int64)
+	newKafkaMetricsGetter() KafkaMetricsGetter
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -145,6 +158,7 @@ type sliMetrics struct {
 	CheckpointProgress          *aggmetric.Gauge
 	LaggingRanges               *aggmetric.Gauge
 	CloudstorageBufferedBytes   *aggmetric.Gauge
+	KafkaThrottlingNanos        *aggmetric.Histogram
 
 	mu struct {
 		syncutil.Mutex
@@ -325,6 +339,118 @@ func (m *sliMetrics) recordSizeBasedFlush() {
 	m.SizeBasedFlushes.Inc(1)
 }
 
+type kafkaHistogramAdapter struct {
+	wrapped *aggmetric.Histogram
+}
+
+var _ metrics.Histogram = (*kafkaHistogramAdapter)(nil)
+
+func (k *kafkaHistogramAdapter) Update(valueInMs int64) {
+	if k != nil {
+		// valueInMs is passed in from sarama with a unit of milliseconds. To
+		// convert this value to nanoseconds, valueInMs * 10^6 is recorded here.
+		k.wrapped.RecordValue(valueInMs * 1000000)
+	}
+}
+
+func (k *kafkaHistogramAdapter) Clear() {
+	if enableSaramaMetricsPanicHandling {
+		panic("clear is not expected to be called on kafkaHistogramAdapter")
+	}
+}
+
+func (k *kafkaHistogramAdapter) Count() (_ int64) {
+	if enableSaramaMetricsPanicHandling {
+		panic("count is not expected to be called on kafkaHistogramAdapter")
+	}
+	return
+}
+
+func (k *kafkaHistogramAdapter) Max() (_ int64) {
+	if enableSaramaMetricsPanicHandling {
+		panic("max is not expected to be called on kafkaHistogramAdapter")
+	}
+	return
+}
+
+func (k *kafkaHistogramAdapter) Mean() (_ float64) {
+	if enableSaramaMetricsPanicHandling {
+		panic("mean is not expected to be called on kafkaHistogramAdapter")
+	}
+	return
+}
+
+func (k *kafkaHistogramAdapter) Min() (_ int64) {
+	if enableSaramaMetricsPanicHandling {
+		panic("min is not expected to be called on kafkaHistogramAdapter")
+	}
+	return
+}
+
+func (k *kafkaHistogramAdapter) Percentile(float64) (_ float64) {
+	if enableSaramaMetricsPanicHandling {
+		panic("percentile is not expected to be called on kafkaHistogramAdapter")
+	}
+	return
+}
+
+func (k *kafkaHistogramAdapter) Percentiles([]float64) (_ []float64) {
+	if enableSaramaMetricsPanicHandling {
+		panic("percentiles is not expected to be called on kafkaHistogramAdapter")
+	}
+	return
+}
+
+func (k *kafkaHistogramAdapter) Sample() (_ metrics.Sample) {
+	if enableSaramaMetricsPanicHandling {
+		panic("sample is not expected to be called on kafkaHistogramAdapter")
+	}
+	return
+}
+
+func (k *kafkaHistogramAdapter) Snapshot() (_ metrics.Histogram) {
+	if enableSaramaMetricsPanicHandling {
+		panic("snapshot is not expected to be called on kafkaHistogramAdapter")
+	}
+	return
+}
+
+func (k *kafkaHistogramAdapter) StdDev() (_ float64) {
+	if enableSaramaMetricsPanicHandling {
+		panic("stdDev is not expected to be called on kafkaHistogramAdapter")
+	}
+	return
+}
+
+func (k *kafkaHistogramAdapter) Sum() (_ int64) {
+	if enableSaramaMetricsPanicHandling {
+		panic("sum is not expected to be called on kafkaHistogramAdapter")
+	}
+	return
+}
+
+func (k *kafkaHistogramAdapter) Variance() (_ float64) {
+	if enableSaramaMetricsPanicHandling {
+		panic("variance is not expected to be called on kafkaHistogramAdapter")
+	}
+	return
+}
+
+type KafkaMetricsGetter interface {
+	GetKafkaThrottlingNanos() *kafkaHistogramAdapter
+}
+
+type kafkaMetricsGetterImpl struct {
+	kafkaThrottlingNanos *kafkaHistogramAdapter
+}
+
+func (kg *kafkaMetricsGetterImpl) GetKafkaThrottlingNanos() *kafkaHistogramAdapter {
+	if kg == nil {
+		return (*kafkaHistogramAdapter)(nil)
+	}
+	return kg.kafkaThrottlingNanos
+}
+
 type parallelIOMetricsRecorder interface {
 	recordPendingQueuePush(numKeys int64)
 	recordPendingQueuePop(numKeys int64, latency time.Duration)
@@ -377,6 +503,17 @@ func (m *sliMetrics) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
 		pendingRows:       m.ParallelIOPendingRows,
 		resultQueueNanos:  m.ParallelIOResultQueueNanos,
 		inFlight:          m.ParallelIOInFlightKeys,
+	}
+}
+
+func (m *sliMetrics) newKafkaMetricsGetter() KafkaMetricsGetter {
+	if m == nil {
+		return (*kafkaMetricsGetterImpl)(nil)
+	}
+	return &kafkaMetricsGetterImpl{
+		kafkaThrottlingNanos: &kafkaHistogramAdapter{
+			wrapped: m.KafkaThrottlingNanos,
+		},
 	}
 }
 
@@ -468,6 +605,10 @@ func (w *wrappingCostController) recordSinkIOInflightChange(delta int64) {
 
 func (w *wrappingCostController) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
 	return w.inner.newParallelIOMetricsRecorder()
+}
+
+func (w *wrappingCostController) newKafkaMetricsGetter() KafkaMetricsGetter {
+	return w.inner.newKafkaMetricsGetter()
 }
 
 var (
@@ -721,6 +862,12 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedKafkaThrottlingNanos := metric.Metadata{
+		Name:        "changefeed.kafka_throttling_hist_nanos",
+		Help:        "Time spent in throttling due to exceeding kafka quota",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	functionalGaugeMinFn := func(childValues []int64) int64 {
 		var min int64
@@ -813,6 +960,13 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		CheckpointProgress:        b.FunctionalGauge(metaCheckpointProgress, functionalGaugeMinFn),
 		LaggingRanges:             b.Gauge(metaLaggingRangePercentage),
 		CloudstorageBufferedBytes: b.Gauge(metaCloudstorageBufferedBytes),
+		KafkaThrottlingNanos: b.Histogram(metric.HistogramOptions{
+			Metadata:     metaChangefeedKafkaThrottlingNanos,
+			Duration:     histogramWindow,
+			MaxVal:       kafkaThrottlingTimeMaxValue.Nanoseconds(),
+			SigFigs:      2,
+			BucketConfig: metric.BatchProcessLatencyBuckets,
+		}),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -878,6 +1032,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		SchemaRegistrations:         a.SchemaRegistrations.AddChild(scope),
 		LaggingRanges:               a.LaggingRanges.AddChild(scope),
 		CloudstorageBufferedBytes:   a.CloudstorageBufferedBytes.AddChild(scope),
+		KafkaThrottlingNanos:        a.KafkaThrottlingNanos.AddChild(scope),
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
