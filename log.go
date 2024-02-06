@@ -16,7 +16,6 @@ package raft
 
 import (
 	"fmt"
-	"log"
 
 	pb "go.etcd.io/raft/v3/raftpb"
 )
@@ -72,14 +71,6 @@ func newLog(storage Storage, logger Logger) *raftLog {
 // newLogWithSize returns a log using the given storage and max
 // message size.
 func newLogWithSize(storage Storage, logger Logger, maxApplyingEntsSize entryEncodingSize) *raftLog {
-	if storage == nil {
-		log.Panic("storage must not be nil")
-	}
-	log := &raftLog{
-		storage:             storage,
-		logger:              logger,
-		maxApplyingEntsSize: maxApplyingEntsSize,
-	}
 	firstIndex, err := storage.FirstIndex()
 	if err != nil {
 		panic(err) // TODO(bdarnell)
@@ -88,15 +79,22 @@ func newLogWithSize(storage Storage, logger Logger, maxApplyingEntsSize entryEnc
 	if err != nil {
 		panic(err) // TODO(bdarnell)
 	}
-	log.unstable.offset = lastIndex + 1
-	log.unstable.offsetInProgress = lastIndex + 1
-	log.unstable.logger = logger
-	// Initialize our committed and applied pointers to the time of the last compaction.
-	log.committed = firstIndex - 1
-	log.applying = firstIndex - 1
-	log.applied = firstIndex - 1
+	return &raftLog{
+		storage: storage,
+		unstable: unstable{
+			offset:           lastIndex + 1,
+			offsetInProgress: lastIndex + 1,
+			logger:           logger,
+		},
+		maxApplyingEntsSize: maxApplyingEntsSize,
 
-	return log
+		// Initialize our committed and applied pointers to the time of the last compaction.
+		committed: firstIndex - 1,
+		applying:  firstIndex - 1,
+		applied:   firstIndex - 1,
+
+		logger: logger,
+	}
 }
 
 func (l *raftLog) String() string {
