@@ -12,12 +12,13 @@ import React from "react";
 import classNames from "classnames/bind";
 import styles from "./sqlActivity.module.scss";
 import moment from "moment-timezone";
+import { isRequestError, RequestError } from "../util";
 
 const cx = classNames.bind(styles);
 
 interface SQLActivityErrorProps {
   statsType: string;
-  error: Error;
+  error: Error | RequestError;
   sourceTables?: string[];
 }
 
@@ -84,6 +85,10 @@ const LoadingError: React.FC<SQLActivityErrorProps> = props => {
       ? `Source Tables: ${props.sourceTables.join(", ")}`
       : "";
 
+  const respCode = isRequestError(props?.error)
+    ? props?.error?.status
+    : undefined;
+
   return (
     <div>
       <div className={cx("row")}>
@@ -105,6 +110,12 @@ const LoadingError: React.FC<SQLActivityErrorProps> = props => {
             .utc()
             .format("YYYY.MM.DD HH:mm:ss")} utc;`}
           <br />
+          {respCode && (
+            <>
+              {`Response code: ${respCode};`}
+              <br />
+            </>
+          )}
           {`Error message: ${props?.error?.message};`}
           <br />
           {`URL: ${url};`}
