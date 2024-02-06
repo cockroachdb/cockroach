@@ -69,9 +69,10 @@ const deriveDatabaseDetails = (
   isTenant: boolean,
 ): DatabasesPageDataDatabase => {
   const dbStats = dbDetails?.data?.results.stats;
-  const nodes = dbStats?.replicaData.replicas || [];
+  // TODO #118957 (xinhaoz) Use store id to regions mapping.
+  const stores = dbStats?.replicaData.storeIDs || [];
   const nodesByRegionString = getNodesByRegionString(
-    nodes,
+    stores,
     nodeRegionsByID,
     isTenant,
   );
@@ -86,7 +87,7 @@ const deriveDatabaseDetails = (
     name: database,
     spanStats: dbStats?.spanStats,
     tables: dbDetails?.data?.results.tablesResp,
-    nodes: nodes,
+    nodes: stores,
     nodesByRegionString,
     numIndexRecommendations,
   };
