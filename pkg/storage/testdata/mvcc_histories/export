@@ -86,6 +86,11 @@ data: "o"/7.000000000,0 -> /BYTES/n7
 run error
 export k=a end=z
 ----
+error: (*kvpb.LockConflictError:) conflicting locks on "a", "d", "j", "l", "o"
+
+run error
+export k=a end=z maxLockConflicts=1
+----
 error: (*kvpb.LockConflictError:) conflicting locks on "a"
 
 run error
