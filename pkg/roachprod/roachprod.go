@@ -683,6 +683,7 @@ func DefaultStartOpts() install.StartOpts {
 		ScheduleBackupArgs: "",
 		InitTarget:         1,
 		SQLPort:            0,
+		VirtualClusterName: install.SystemInterfaceName,
 		// TODO(DarrylWong): revert back to 0 once #117125 is addressed.
 		AdminUIPort: config.DefaultAdminUIPort,
 	}
