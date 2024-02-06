@@ -120,7 +120,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		reportedValue = "DEFAULT"
 		if _, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx, "reset-tenant-setting", params.p.Txn(),
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			"DELETE FROM system.tenant_settings WHERE tenant_id = $1 AND name = $2", tenantID, n.setting.InternalKey(),
 		); err != nil {
 			return err
@@ -137,7 +137,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		}
 		if _, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx, "update-tenant-setting", params.p.Txn(),
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			`UPSERT INTO system.tenant_settings (tenant_id, name, value, last_updated, value_type) VALUES ($1, $2, $3, now(), $4)`,
 			tenantID, n.setting.InternalKey(), encoded, n.setting.Typ(),
 		); err != nil {

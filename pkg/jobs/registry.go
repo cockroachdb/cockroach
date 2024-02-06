@@ -424,7 +424,7 @@ func createJobsInBatchWithTxn(
 	}
 	_, err = txn.ExecEx(
 		ctx, "job-rows-batch-insert", txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		stmt, args...,
 	)
 	if err != nil {
@@ -596,7 +596,7 @@ func (r *Registry) CreateJobWithTxn(
 		}
 		// We need to override the database in case we're in a situation where the
 		// database in question is being dropped.
-		override := sessiondata.RootUserSessionDataOverride
+		override := sessiondata.NodeUserSessionDataOverride
 		override.Database = catconstants.SystemDatabaseName
 		insertStmt := fmt.Sprintf(`INSERT INTO system.jobs (%s) VALUES (%s)`,
 			strings.Join(cols[:numCols], ","), placeholders())
@@ -655,7 +655,7 @@ func (r *Registry) CreateIfNotExistAdoptableJobWithTxn(
 		ctx,
 		"check if job exists",
 		txn.KV(),
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		"SELECT id FROM system.jobs WHERE id = $1",
 		record.JobID,
 	)
@@ -938,7 +938,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			_, err := txn.ExecEx(
 				ctx, "expire-sessions", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				removeClaimsForDeadSessionsQuery,
 				s.ID().UnsafeBytes(),
 				cancellationsUpdateLimitSetting.Get(&r.settings.SV),
@@ -988,7 +988,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			_, err := txn.ExecEx(
 				ctx, "remove-claims-for-session", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				removeClaimsForSessionQuery, s.ID().UnsafeBytes(),
 			)
 			return err

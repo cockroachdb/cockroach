@@ -619,7 +619,7 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		planner, cleanup := sql.NewInternalPlanner(
-			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sd,
+			"resolve-index", txn.KV(), username.NodeUserName(), &sql.MemoryMetrics{}, &execCfg, sd,
 		)
 		defer cleanup()
 
@@ -703,7 +703,7 @@ CREATE INDEX baz_idx ON baz (s);
 	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		planner, cleanup := sql.NewInternalPlanner(
-			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sd,
+			"resolve-index", txn.KV(), username.NodeUserName(), &sql.MemoryMetrics{}, &execCfg, sd,
 		)
 		defer cleanup()
 

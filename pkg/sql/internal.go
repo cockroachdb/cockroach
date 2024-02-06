@@ -623,7 +623,7 @@ func (r *rowsIterator) HasResults() bool {
 func (ie *InternalExecutor) QueryBuffered(
 	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) ([]tree.Datums, error) {
-	return ie.QueryBufferedEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+	return ie.QueryBufferedEx(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), stmt, qargs...)
 }
 
 // QueryBufferedEx executes the supplied SQL statement and returns the resulting
@@ -700,7 +700,7 @@ func (ie *InternalExecutor) queryInternalBuffered(
 func (ie *InternalExecutor) QueryRow(
 	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) (tree.Datums, error) {
-	return ie.QueryRowEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+	return ie.QueryRowEx(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), stmt, qargs...)
 }
 
 // QueryRowEx is like QueryRow, but allows the caller to override some session data
@@ -755,7 +755,7 @@ func (ie *InternalExecutor) QueryRowExWithCols(
 func (ie *InternalExecutor) Exec(
 	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) (int, error) {
-	return ie.ExecEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+	return ie.ExecEx(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), stmt, qargs...)
 }
 
 // ExecEx is like Exec, but allows the caller to override some session data
@@ -802,7 +802,7 @@ func (ie *InternalExecutor) ExecEx(
 func (ie *InternalExecutor) QueryIterator(
 	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) (isql.Rows, error) {
-	return ie.QueryIteratorEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+	return ie.QueryIteratorEx(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), stmt, qargs...)
 }
 
 // QueryIteratorEx executes the query, returning an iterator that can be used
@@ -868,19 +868,19 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	}
 }
 
-func (ie *InternalExecutor) maybeRootSessionDataOverride(
+func (ie *InternalExecutor) maybeNodeSessionDataOverride(
 	opName string,
 ) sessiondata.InternalExecutorOverride {
 	if ie.sessionDataStack == nil {
 		return sessiondata.InternalExecutorOverride{
-			User:            username.RootUserName(),
+			User:            username.NodeUserName(),
 			ApplicationName: catconstants.InternalAppNamePrefix + "-" + opName,
 		}
 	}
 	o := sessiondata.NoSessionDataOverride
 	sd := ie.sessionDataStack.Top()
 	if sd.User().Undefined() {
-		o.User = username.RootUserName()
+		o.User = username.NodeUserName()
 	}
 	if sd.ApplicationName == "" {
 		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
@@ -1661,16 +1661,15 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 	txn *kv.Txn,
 	descCol *descs.Collection,
 ) (InternalExecutor, internalExecutorCommitTxnFunc) {
-	// By default, if not given session data, we initialize a sessionData that
-	// would be the same as what would be created if root logged in.
-	// The sessionData's user can be override when calling the query
-	// functions of internal executor.
+	// By default, if not given session data, we initialize a sessionData that is
+	// for the internal "node" user. The sessionData's user can be override when
+	// calling the query functions of internal executor.
 	// TODO(janexing): since we can be running queries with a higher privilege
 	// than the actual user, a security boundary should be added to the error
 	// handling of internal executor.
 	if sd == nil {
 		sd = NewInternalSessionData(ctx, settings, "" /* opName */)
-		sd.UserProto = username.RootUserName().EncodeProto()
+		sd.UserProto = username.NodeUserName().EncodeProto()
 		sd.SearchPath = sessiondata.DefaultSearchPathForUser(sd.User())
 	}
 

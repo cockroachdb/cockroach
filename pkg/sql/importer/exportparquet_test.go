@@ -94,7 +94,7 @@ func validateParquetFile(
 		"",
 		nil,
 		sessiondata.InternalExecutorOverride{
-			User:     username.RootUserName(),
+			User:     username.NodeUserName(),
 			Database: test.dbName,
 		},
 		validationStmt)
@@ -234,7 +234,7 @@ func TestRandomParquetExports(t *testing.T) {
 						"",
 						nil,
 						sessiondata.InternalExecutorOverride{
-							User:     username.RootUserName(),
+							User:     username.NodeUserName(),
 							Database: dbName},
 						fmt.Sprintf("SELECT * FROM %s LIMIT 1", tree.NameString(tableName)))
 					require.NoError(t, err)

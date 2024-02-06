@@ -85,7 +85,7 @@ CREATE TABLE foo (
 	sd.Database = "defaultdb"
 
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
-		username.RootUserName(), &MemoryMetrics{}, &execCfg, sd,
+		username.NodeUserName(), &MemoryMetrics{}, &execCfg, sd,
 	)
 	defer cleanup()
 
@@ -465,7 +465,7 @@ func TestChangefeedStreamsResults(t *testing.T) {
 	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 	sd.Database = "defaultdb"
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
-		username.RootUserName(), &MemoryMetrics{}, &execCfg, sd,
+		username.NodeUserName(), &MemoryMetrics{}, &execCfg, sd,
 	)
 	defer cleanup()
 	stmt, err := parser.ParseOne("SELECT * FROM foo WHERE a < 10")
@@ -511,7 +511,7 @@ FAMILY extra (extra)
 	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 	sd.Database = "defaultdb"
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
-		username.RootUserName(), &MemoryMetrics{}, &execCfg, sd,
+		username.NodeUserName(), &MemoryMetrics{}, &execCfg, sd,
 	)
 	defer cleanup()
 	planner := p.(*planner)

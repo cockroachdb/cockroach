@@ -78,15 +78,15 @@ key  val
 query TTTTIT rowsort
 SHOW TABLES
 ----
-public  save_table_test_scan_1  table  root  0  NULL
-public  st_lookup_join_2        table  root  0  NULL
-public  st_project_1            table  root  0  NULL
-public  st_scan_4               table  root  0  NULL
-public  st_select_3             table  root  0  NULL
-public  st_test_merge_join_2    table  root  0  NULL
-public  st_test_project_1       table  root  0  NULL
-public  st_test_scan_3          table  root  0  NULL
-public  st_test_scan_4          table  root  0  NULL
+public  save_table_test_scan_1  table  node  0  NULL
+public  st_lookup_join_2        table  node  0  NULL
+public  st_project_1            table  node  0  NULL
+public  st_scan_4               table  node  0  NULL
+public  st_select_3             table  node  0  NULL
+public  st_test_merge_join_2    table  node  0  NULL
+public  st_test_project_1       table  node  0  NULL
+public  st_test_scan_3          table  node  0  NULL
+public  st_test_scan_4          table  node  0  NULL
 public  t                       table  root  0  NULL
 public  u                       table  root  0  NULL
 

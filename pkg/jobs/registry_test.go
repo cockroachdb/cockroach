@@ -469,7 +469,7 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 				ctx,
 				"check if job exists",
 				txn.KV(),
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				sessiondata.NodeUserSessionDataOverride,
 				"SELECT id FROM system.jobs WHERE id = $1",
 				tempRecord.JobID,
 			)

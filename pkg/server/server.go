@@ -1167,7 +1167,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		p, cleanup := sql.NewInternalPlanner(
 			opName,
 			txn,
-			username.RootUserName(),
+			username.NodeUserName(),
 			&sql.MemoryMetrics{},
 			sqlServer.execCfg,
 			sql.NewInternalSessionData(ctx, sqlServer.execCfg.Settings, opName),

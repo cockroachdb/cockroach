@@ -71,7 +71,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 		p, cleanup := sql.NewInternalPlanner(
 			opName,
 			txn,
-			username.RootUserName(),
+			username.NodeUserName(),
 			&sql.MemoryMetrics{},
 			&execCfg,
 			sql.NewInternalSessionData(ctx, execCfg.Settings, opName),

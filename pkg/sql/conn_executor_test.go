@@ -1690,7 +1690,7 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 		_, err := s.InternalExecutor().(*sql.InternalExecutor).ExecEx(ctx,
 			"test-internal-active-stmt-wait",
 			nil,
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			selectQuery)
 		require.NoError(t, err, "expected internal SELECT query to be successful, but encountered an error")
 		waitChannel <- struct{}{}

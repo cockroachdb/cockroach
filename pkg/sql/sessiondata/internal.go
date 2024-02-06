@@ -62,9 +62,3 @@ var NoSessionDataOverride = InternalExecutorOverride{}
 var NodeUserSessionDataOverride = InternalExecutorOverride{
 	User: username.MakeSQLUsernameFromPreNormalizedString(username.NodeUser),
 }
-
-// RootUserSessionDataOverride is an InternalExecutorOverride which overrides
-// the user to the RootUser.
-var RootUserSessionDataOverride = InternalExecutorOverride{
-	User: username.MakeSQLUsernameFromPreNormalizedString(username.RootUser),
-}

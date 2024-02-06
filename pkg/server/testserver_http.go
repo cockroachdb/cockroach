@@ -194,7 +194,7 @@ func (ts *httpTestServer) GetAuthenticatedHTTPClientAndCookie(
 func (ts *httpTestServer) CreateAuthUser(userName username.SQLUsername, isAdmin bool) error {
 	if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
 		"create-auth-user", nil,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("CREATE USER %s", userName.Normalized()),
 	); err != nil {
 		return err
@@ -202,7 +202,7 @@ func (ts *httpTestServer) CreateAuthUser(userName username.SQLUsername, isAdmin 
 	if isAdmin {
 		if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
 			"grant-admin", nil,
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf("GRANT admin TO %s WITH ADMIN OPTION", userName.Normalized()),
 		); err != nil {
 			return err

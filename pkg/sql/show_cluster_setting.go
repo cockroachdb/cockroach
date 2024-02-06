@@ -64,7 +64,7 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 					datums, err := txn.QueryRowEx(
 						ctx, "read-setting",
 						txn.KV(),
-						sessiondata.RootUserSessionDataOverride,
+						sessiondata.NodeUserSessionDataOverride,
 						"SELECT value FROM system.settings WHERE name = $1", key,
 					)
 					if err != nil {

@@ -382,7 +382,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	fingerprintCols, err := params.p.InternalSQLTxn().QueryRowEx(
 		params.ctx, "hash-fingerprint",
 		params.p.txn,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		sql,
 	)
 	if err != nil {

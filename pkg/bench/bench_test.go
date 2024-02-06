@@ -1510,7 +1510,7 @@ func BenchmarkFuncExprTypeCheck(b *testing.B) {
 	p, cleanup := sql.NewInternalPlanner(
 		"type-check-benchmark",
 		kvDB.NewTxn(ctx, "type-check-benchmark-planner"),
-		username.RootUserName(),
+		username.NodeUserName(),
 		&sql.MemoryMetrics{},
 		&execCfg,
 		sd,

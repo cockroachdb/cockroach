@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,7 +49,7 @@ func updatePausedMetrics(ctx context.Context, execCtx sql.JobExecContext) error 
 			return err
 		}
 		rows, err := txn.QueryBufferedEx(
-			ctx, "poll-jobs-metrics-job", txn.KV(), sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			ctx, "poll-jobs-metrics-job", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			pausedJobsCountQuery,
 		)
 		if err != nil {

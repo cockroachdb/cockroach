@@ -55,7 +55,7 @@ func (e *inlineScheduledJobExecutor) ExecuteJob(
 	// Also, performing this under the same transaction as the scan loop is not ideal
 	// since a single failure would result in rollback for all of the changes.
 	_, err := txn.ExecEx(ctx, "inline-exec", txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		sqlArgs.Statement,
 	)
 
