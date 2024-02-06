@@ -15,6 +15,7 @@ package settingswatcher
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -259,12 +260,23 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	)
 	s.rfc = c
 
+	allowedFailures := 10
+
 	// Kick off the rangefeedcache which will retry until the stopper stops.
 	if err := rangefeedcache.Start(ctx, s.stopper, c, func(err error) {
 		if !initialScan.done {
-			initialScan.err = err
-			initialScan.done = true
-			close(initialScan.ch)
+			// TODO(dt): ideally the auth checker, which makes rejection decisions
+			// based on cached data that is updated async via rangefeed, would block
+			// for some amount of time before rejecting a request if it can determine
+			// that its information is old/maybe stale, to avoid spurious rejections
+			// while making correct rejection potentially slightly slower to return.
+			if strings.Contains(err.Error(), `operation not allowed when in service mode "none"`) && allowedFailures > 0 {
+				allowedFailures--
+			} else {
+				initialScan.err = err
+				initialScan.done = true
+				close(initialScan.ch)
+			}
 		} else {
 			s.resetUpdater()
 		}
