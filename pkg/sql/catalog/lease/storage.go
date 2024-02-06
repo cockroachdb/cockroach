@@ -84,8 +84,8 @@ type writer interface {
 }
 
 type sessionBasedLeasingModeReader interface {
-	sessionBasedLeasingModeAtLeast(minimumMode SessionBasedLeasingMode) bool
-	getSessionBasedLeasingMode() SessionBasedLeasingMode
+	sessionBasedLeasingModeAtLeast(ctx context.Context, minimumMode SessionBasedLeasingMode) bool
+	getSessionBasedLeasingMode(ctx context.Context) SessionBasedLeasingMode
 }
 
 // LeaseRenewalDuration controls the default time before a lease expires when

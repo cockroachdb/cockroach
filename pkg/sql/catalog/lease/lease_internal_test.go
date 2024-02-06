@@ -1582,20 +1582,21 @@ func TestSessionLeasingClusterSetting(t *testing.T) {
 
 	// Validate all settings can be set and the provider works correctly.
 	for idx, setting := range []string{"off", "dual_write", "drain", "session"} {
+		sessionMode := SessionBasedLeasingMode(idx + 1)
 		_, err := sqlDB.Exec("SET CLUSTER SETTING sql.catalog.experimental_use_session_based_leasing=$1::STRING", setting)
 		require.NoError(t, err)
 		lm := srv.LeaseManager().(*Manager)
 
 		// Validate that the mode we just set is active and the provider handles
 		// it properly.
-		require.True(t, lm.sessionBasedLeasingModeAtLeast(SessionBasedLeasingMode(idx)))
-		require.Equal(t, lm.getSessionBasedLeasingMode(), SessionBasedLeasingMode(idx))
+		require.True(t, lm.sessionBasedLeasingModeAtLeast(ctx, sessionMode))
+		require.Equal(t, lm.getSessionBasedLeasingMode(ctx), sessionMode)
 		// Validate that the previous minimums are active and forwards ones are not.
-		for mode := SessionBasedLeasingOff; mode <= SessionBasedLeasingMode(idx); mode++ {
-			require.True(t, lm.sessionBasedLeasingModeAtLeast(mode))
+		for mode := SessionBasedLeasingOff; mode <= sessionMode; mode++ {
+			require.True(t, lm.sessionBasedLeasingModeAtLeast(ctx, mode))
 		}
-		for mode := SessionBasedLeasingMode(idx) + 1; mode <= SessionBasedOnly; mode++ {
-			require.False(t, lm.sessionBasedLeasingModeAtLeast(mode))
+		for mode := sessionMode + 1; mode <= SessionBasedOnly; mode++ {
+			require.False(t, lm.sessionBasedLeasingModeAtLeast(ctx, mode))
 		}
 	}
 }

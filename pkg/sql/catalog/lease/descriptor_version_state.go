@@ -156,7 +156,7 @@ func (s *descriptorVersionState) getExpirationLocked() hlc.Timestamp {
 	// eventually be *drained*.
 	expiration := s.mu.expiration
 	if s.mu.session != nil &&
-		s.t.m.sessionBasedLeasingModeAtLeast(SessionBasedDrain) {
+		s.t.m.sessionBasedLeasingModeAtLeast(context.TODO(), SessionBasedDrain) {
 		sessionExpiry := s.mu.session.Expiration()
 		if expiration.Less(sessionExpiry) {
 			expiration = sessionExpiry

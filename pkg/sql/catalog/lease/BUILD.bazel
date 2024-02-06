@@ -20,6 +20,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
@@ -49,7 +50,6 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlliveness",
         "//pkg/storage",
-        "//pkg/util",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",

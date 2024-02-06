@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -41,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -79,8 +79,11 @@ var LeaseJitterFraction = settings.RegisterFloatSetting(
 type SessionBasedLeasingMode int64
 
 const (
+	// SessionBasedLeasingAuto automatically pick a leasing mode
+	// based on the current version.
+	SessionBasedLeasingAuto SessionBasedLeasingMode = iota
 	// SessionBasedLeasingOff expiry based leasing is being used.
-	SessionBasedLeasingOff SessionBasedLeasingMode = iota
+	SessionBasedLeasingOff
 	// SessionBasedDualWrite expiry based and session based leasing are
 	// active concurrently, and both tables must be consulted schema changes.
 	SessionBasedDualWrite
@@ -98,25 +101,48 @@ var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.experimental_use_session_based_leasing",
 	"enables session based leasing for internal testing.",
-	util.ConstantWithMetamorphicTestChoice("experimental_use_session_based_leasing",
-		"off", "dual_write", "drain", "session").(string),
+	"auto",
 	map[int64]string{
-		int64(SessionBasedLeasingOff): "off",
-		int64(SessionBasedDualWrite):  "dual_write",
-		int64(SessionBasedDrain):      "drain",
-		int64(SessionBasedOnly):       "session",
+		int64(SessionBasedLeasingAuto): "auto",
+		int64(SessionBasedLeasingOff):  "off",
+		int64(SessionBasedDualWrite):   "dual_write",
+		int64(SessionBasedDrain):       "drain",
+		int64(SessionBasedOnly):        "session",
 	},
 )
 
 // sessionBasedLeasingModeActive determines if the current mode at least meets
 // the required minimum.
-func (m *Manager) sessionBasedLeasingModeAtLeast(minimumMode SessionBasedLeasingMode) bool {
-	return m.getSessionBasedLeasingMode() >= minimumMode
+func (m *Manager) sessionBasedLeasingModeAtLeast(
+	ctx context.Context, minimumMode SessionBasedLeasingMode,
+) bool {
+	return m.getSessionBasedLeasingMode(ctx) >= minimumMode
+}
+
+func readSessionBasedLeasingMode(
+	ctx context.Context, settings *cluster.Settings,
+) SessionBasedLeasingMode {
+	// When leasing mode is set to OFF we will use the version to determine what
+	// mode we are executing in.
+	settingMode := SessionBasedLeasingMode(LeaseEnableSessionBasedLeasing.Get(&settings.SV))
+	if settingMode == SessionBasedLeasingAuto {
+		if settings.Version.IsActive(ctx, clusterversion.V24_1_SessionBasedLeasingOnly) {
+			return SessionBasedOnly
+		} else if settings.Version.IsActive(ctx, clusterversion.V24_1_SessionBasedLeasingDrain) {
+			return SessionBasedDrain
+		} else if settings.Version.IsActive(ctx, clusterversion.V24_1_SessionBasedLeasingDualWrite) {
+			return SessionBasedDualWrite
+		} else {
+			return SessionBasedLeasingOff
+		}
+	} else {
+		return settingMode
+	}
 }
 
 // getSessionBasedLeasingMode returns the current session based leasing mode.
-func (m *Manager) getSessionBasedLeasingMode() SessionBasedLeasingMode {
-	return SessionBasedLeasingMode(LeaseEnableSessionBasedLeasing.Get(&m.settings.SV))
+func (m *Manager) getSessionBasedLeasingMode(ctx context.Context) SessionBasedLeasingMode {
+	return readSessionBasedLeasingMode(ctx, m.settings)
 }
 
 // WaitForNoVersion returns once there are no unexpired leases left
@@ -594,7 +620,7 @@ func acquireNodeLease(
 			// consulted for the expiry depending on the mode
 			// (see SessionBasedLeasingMode).
 			var session sqlliveness.Session
-			if m.sessionBasedLeasingModeAtLeast(SessionBasedDualWrite) {
+			if m.sessionBasedLeasingModeAtLeast(ctx, SessionBasedDualWrite) {
 				var err error
 				session, err = m.livenessProvider.Session(ctx)
 				if err != nil {
@@ -1419,7 +1445,7 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 				// Refreshing leases is enabled unless we are past the drain mode,
 				// after which no expiry based leases should be created or updated.
 				// Existing ones can still be queried by schema changes.
-				if !m.sessionBasedLeasingModeAtLeast(SessionBasedDrain) &&
+				if !m.sessionBasedLeasingModeAtLeast(ctx, SessionBasedDrain) &&
 					!renewalsDisabled {
 					m.refreshSomeLeases(ctx)
 				}
