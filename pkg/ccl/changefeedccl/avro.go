@@ -75,8 +75,8 @@ const (
 type avroLogicalType struct {
 	SchemaType  avroSchemaType `json:"type"`
 	LogicalType string         `json:"logicalType"`
-	Precision   int            `json:"precision,omitempty"`
-	Scale       int            `json:"scale,omitempty"`
+	Precision   int            `json:"precision"`
+	Scale       int            `json:"scale"`
 }
 
 type avroArrayType struct {
