@@ -158,6 +158,11 @@ func NewInvalidWildcardError(name string) error {
 		"%q does not match any valid database or schema", name)
 }
 
+// NewUndefinedObjectError creates an error that represents a missing object.
+func NewUndefinedObjectError(name tree.NodeFormatter) error {
+	return pgerror.Newf(pgcode.UndefinedObject, "object %q does not exist", tree.ErrString(name))
+}
+
 // NewUndefinedTypeError creates an error that represents a missing type.
 func NewUndefinedTypeError(name tree.NodeFormatter) error {
 	return pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", tree.ErrString(name))

@@ -2410,3 +2410,29 @@ subtest regression_106838
 
 statement error pgcode 42601 pq: invalid OWNED BY option
 CREATE SEQUENCE s_106838 OWNED BY col;
+
+subtest serial_normalization_type_name_conflict
+
+statement ok
+SET serial_normalization = 'sql_sequence';
+SET default_int_size=8;
+
+statement ok
+CREATE TYPE t72820_i_seq AS enum ('a')
+
+statement ok
+CREATE TABLE t72820 (i SERIAL PRIMARY KEY)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t72820]
+----
+CREATE TABLE public.t72820 (
+   i INT8 NOT NULL DEFAULT nextval('public.t72820_i_seq1'::REGCLASS),
+   CONSTRAINT t72820_pkey PRIMARY KEY (i ASC)
+)
+
+statement ok
+RESET serial_normalization;
+RESET default_int_size;
+
+subtest end
