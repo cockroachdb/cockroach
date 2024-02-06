@@ -36,11 +36,7 @@ func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) 
 		return nil, err
 	}
 
-	var tableName tree.TableName
-	if n.ColumnItem.TableName != nil {
-		tableName = n.ColumnItem.TableName.ToTableName()
-	}
-	tableDesc, err := p.resolveUncachedTableDescriptor(ctx, &tableName, true, tree.ResolveRequireTableDesc)
+	tableDesc, err := p.ResolveUncachedTableDescriptorEx(ctx, n.ColumnItem.TableName, true, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
