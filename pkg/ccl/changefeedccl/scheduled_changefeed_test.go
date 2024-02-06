@@ -142,7 +142,7 @@ func (h *testHelper) createChangefeedSchedule(
 	// Query system.scheduled_job table and load those schedules.
 	datums, cols, err := h.cfg.DB.Executor().QueryRowExWithCols(
 		context.Background(), "sched-load", nil,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		"SELECT * FROM system.scheduled_jobs WHERE schedule_id = $1",
 		id,
 	)
@@ -356,7 +356,7 @@ func TestCreateChangefeedScheduleIfNotExists(t *testing.T) {
 
 	rows, err := th.cfg.DB.Executor().QueryBufferedEx(
 		context.Background(), "check-sched", nil,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		selectQuery)
 
 	require.NoError(t, err)
@@ -369,7 +369,7 @@ func TestCreateChangefeedScheduleIfNotExists(t *testing.T) {
 
 	rows, err = th.cfg.DB.Executor().QueryBufferedEx(
 		context.Background(), "check-sched2", nil,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		selectQuery)
 
 	require.NoError(t, err)
@@ -711,7 +711,7 @@ func TestCheckScheduleAlreadyExists(t *testing.T) {
 	sd.Database = "d"
 	p, cleanup := sql.NewInternalPlanner("test",
 		execCfg.DB.NewTxn(ctx, "test-planner"),
-		username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
+		username.NodeUserName(), &sql.MemoryMetrics{}, &execCfg,
 		sd,
 	)
 	defer cleanup()
@@ -746,7 +746,7 @@ func TestFullyQualifyTables(t *testing.T) {
 	sd.Database = "ocean"
 	p, cleanupPlanHook := sql.NewInternalPlanner("test",
 		execCfg.DB.NewTxn(ctx, "test-planner"),
-		username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
+		username.NodeUserName(), &sql.MemoryMetrics{}, &execCfg,
 		sd,
 	)
 	defer cleanupPlanHook()

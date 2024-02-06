@@ -141,7 +141,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		params.ctx,
 		opName,
 		params.p.txn,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(`select "isRole" from %s where username = $1`, sessioninit.UsersTableName),
 		n.roleName,
 	)
@@ -164,7 +164,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 	rowsAffected, err := params.p.InternalSQLTxn().ExecEx(
 		params.ctx, opName, params.p.txn,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		stmt, n.roleName, hashedPassword, n.isRole, roleID,
 	)
 	if err != nil {
@@ -247,7 +247,7 @@ func updateRoleOptions(
 			params.ctx,
 			opName,
 			params.p.txn,
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			stmt,
 			qargs...,
 		)

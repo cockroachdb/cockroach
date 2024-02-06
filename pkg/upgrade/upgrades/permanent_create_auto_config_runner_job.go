@@ -35,7 +35,7 @@ func createAutoConfigRunnerJob(
 			ctx,
 			"check for existing auto config runner job",
 			txn.KV(),
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			"SELECT 1 FROM system.jobs WHERE id = $1",
 			jobs.AutoConfigRunnerJobID,
 		)
@@ -53,8 +53,8 @@ func createAutoConfigRunnerJob(
 			Description:   "applies automatic configuration",
 			Details:       jobspb.AutoConfigRunnerDetails{},
 			Progress:      jobspb.AutoConfigRunnerProgress{},
-			CreatedBy:     &jobs.CreatedByInfo{Name: username.RootUser, ID: username.RootUserID},
-			Username:      username.RootUserName(),
+			CreatedBy:     &jobs.CreatedByInfo{Name: username.NodeUser, ID: username.NodeUserID},
+			Username:      username.NodeUserName(),
 			NonCancelable: true,
 		}
 		// Use CreateJob instead of CreateAdoptableJob to ensure this node

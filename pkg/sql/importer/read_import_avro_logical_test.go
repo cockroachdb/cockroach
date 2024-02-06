@@ -296,7 +296,7 @@ func TestImportAvroLogicalTypes(t *testing.T) {
 		"",
 		nil,
 		sessiondata.InternalExecutorOverride{
-			User:     username.RootUserName(),
+			User:     username.NodeUserName(),
 			Database: "log"},
 		fmt.Sprintf("SELECT * FROM %s", origTableName))
 	require.NoError(t, err, "failed to pull datums from table")

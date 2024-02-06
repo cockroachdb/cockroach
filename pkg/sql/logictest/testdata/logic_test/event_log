@@ -477,7 +477,7 @@ AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
 ORDER BY "timestamp", info
 ----
-1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
+1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}
 1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
 1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
 1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}
@@ -496,7 +496,7 @@ AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
 ORDER BY "timestamp", info
 ----
-1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
+1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}
 1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
 1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.label", "Statement": "SET CLUSTER SETTING \"cluster.label\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
 
@@ -523,11 +523,11 @@ FROM system.eventlog
 WHERE "eventType" = 'set_zone_config'
 ORDER BY "timestamp", info
 ----
-1  {"ApplicationName": "$ internal-set-SpanStatsTenantBoundariesTable-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.span_stats_tenant_boundaries CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.span_stats_tenant_boundaries", "User": "root"}
-1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.statement_statistics CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.statement_statistics", "User": "root"}
-1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.transaction_statistics CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.transaction_statistics", "User": "root"}
-1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.statement_activity CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.statement_activity", "User": "root"}
-1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.transaction_activity CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.transaction_activity", "User": "root"}
+1  {"ApplicationName": "$ internal-set-SpanStatsTenantBoundariesTable-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.span_stats_tenant_boundaries CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.span_stats_tenant_boundaries", "User": "node"}
+1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.statement_statistics CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.statement_statistics", "User": "node"}
+1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.transaction_statistics CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.transaction_statistics", "User": "node"}
+1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.statement_activity CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.statement_activity", "User": "node"}
+1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.transaction_activity CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.transaction_activity", "User": "node"}
 1  {"EventType": "set_zone_config", "Options": ["range_max_bytes = 67108865", "range_min_bytes = 16777216"], "Statement": "ALTER TABLE \"\".\"\".a CONFIGURE ZONE USING range_max_bytes = 67108865, range_min_bytes = 16777216", "Tag": "CONFIGURE ZONE", "Target": "TABLE test.public.a", "User": "root"}
 
 skipif config 3node-tenant-default-configs

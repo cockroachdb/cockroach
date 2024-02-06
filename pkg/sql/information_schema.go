@@ -2932,7 +2932,7 @@ func forEachRole(
 	// first.
 	rows, err := p.InternalSQLTxn().QueryBufferedEx(
 		ctx, "read-roles", p.txn,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		query,
 	)
 	if err != nil {
@@ -2979,9 +2979,8 @@ func forEachRoleMembership(
 	ctx context.Context, txn isql.Txn, fn func(role, member username.SQLUsername, isAdmin bool) error,
 ) (retErr error) {
 	const query = `SELECT "role", "member", "isAdmin" FROM system.role_members`
-	it, err := txn.QueryIteratorEx(ctx, "read-members", txn.KV(), sessiondata.InternalExecutorOverride{
-		User: username.NodeUserName(),
-	}, query)
+	it, err := txn.QueryIteratorEx(ctx, "read-members", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride, query)
 	if err != nil {
 		return err
 	}

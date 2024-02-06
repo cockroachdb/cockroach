@@ -3724,7 +3724,7 @@ https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html`,
 			ctx,
 			"select-db-role-settings",
 			p.Txn(),
-			sessiondata.RootUserSessionDataOverride,
+			sessiondata.NodeUserSessionDataOverride,
 			`SELECT database_id, role_name, settings FROM system.public.database_role_settings`,
 		)
 		if err != nil {

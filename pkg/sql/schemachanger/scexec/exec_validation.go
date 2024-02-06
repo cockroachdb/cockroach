@@ -37,8 +37,8 @@ func executeValidateUniqueIndex(
 	if err != nil {
 		return err
 	}
-	// Execute the validation operation as a root user.
-	execOverride := sessiondata.RootUserSessionDataOverride
+	// Execute the validation operation as a node user.
+	execOverride := sessiondata.NodeUserSessionDataOverride
 	if index.GetType() == descpb.IndexDescriptor_FORWARD {
 		err = deps.Validator().ValidateForwardIndexes(ctx, deps.TransactionalJobRegistry().CurrentJob(), table, []catalog.Index{index}, execOverride)
 	} else {
@@ -67,8 +67,8 @@ func executeValidateConstraint(
 		return err
 	}
 
-	// Execute the validation operation as a root user.
-	execOverride := sessiondata.RootUserSessionDataOverride
+	// Execute the validation operation as a node user.
+	execOverride := sessiondata.NodeUserSessionDataOverride
 	err = deps.Validator().ValidateConstraint(ctx, table, constraint, op.IndexIDForValidation, execOverride)
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)
@@ -96,8 +96,8 @@ func executeValidateColumnNotNull(
 		}
 	}
 
-	// Execute the validation operation as a root user.
-	execOverride := sessiondata.RootUserSessionDataOverride
+	// Execute the validation operation as a node user.
+	execOverride := sessiondata.NodeUserSessionDataOverride
 	err = deps.Validator().ValidateConstraint(ctx, table, constraint, op.IndexIDForValidation, execOverride)
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)

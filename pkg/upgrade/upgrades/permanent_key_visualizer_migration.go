@@ -64,7 +64,7 @@ func keyVisualizerTablesMigration(
 			ctx,
 			"set-SpanStatsTenantBoundariesTable-TTL",
 			nil,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 			"ALTER TABLE system.span_stats_tenant_boundaries CONFIGURE ZONE USING gc.ttlseconds = $1",
 			3600, /* one hour */
 		); err != nil {

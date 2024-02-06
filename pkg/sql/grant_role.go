@@ -194,7 +194,7 @@ ON CONFLICT ("role", "member")`
 		for _, m := range n.members {
 			memberStmtRowsAffected, err := params.p.InternalSQLTxn().ExecEx(
 				params.ctx, "grant-role", params.p.Txn(),
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				memberStmt,
 				r.Normalized(),
 				m.Normalized(),
