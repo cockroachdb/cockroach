@@ -401,7 +401,7 @@ var varGen = map[string]sessionVar{
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-ISOLATION
 	`default_transaction_isolation`: {
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
 			allowReadCommitted := allowReadCommittedIsolation.Get(&m.settings.SV)
 			allowSnapshot := allowSnapshotIsolation.Get(&m.settings.SV)
 			var allowedValues = []string{"serializable"}
@@ -412,20 +412,38 @@ var varGen = map[string]sessionVar{
 				allowedValues = append(allowedValues, "read committed")
 			}
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
+			originalLevel := level
+			upgraded := false
 			if !ok {
 				return newVarValueError(`default_transaction_isolation`, s, allowedValues...)
 			}
 			switch level {
-			case tree.ReadUncommittedIsolation, tree.ReadCommittedIsolation:
+			case tree.ReadUncommittedIsolation:
+				upgraded = true
+				fallthrough
+			case tree.ReadCommittedIsolation:
 				level = tree.SerializableIsolation
 				if allowReadCommitted {
 					level = tree.ReadCommittedIsolation
+				} else {
+					upgraded = true
 				}
-			case tree.RepeatableReadIsolation, tree.SnapshotIsolation:
+			case tree.RepeatableReadIsolation:
+				upgraded = true
+				fallthrough
+			case tree.SnapshotIsolation:
 				level = tree.SerializableIsolation
 				if allowSnapshot {
 					level = tree.SnapshotIsolation
+				} else {
+					upgraded = true
 				}
+			}
+			if upgraded {
+				if f := m.upgradedIsolationLevel; f != nil {
+					f()
+				}
+				telemetry.Inc(sqltelemetry.IsolationLevelUpgradedCounter(ctx, originalLevel))
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
 			return nil
