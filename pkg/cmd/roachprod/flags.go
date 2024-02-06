@@ -202,13 +202,6 @@ func initFlags() {
 		"init-target", startOpts.InitTarget, "node on which to run initialization")
 	startCmd.Flags().IntVar(&startOpts.StoreCount,
 		"store-count", startOpts.StoreCount, "number of stores to start each node with")
-	startCmd.Flags().BoolVar(&startOpts.ScheduleBackups,
-		"schedule-backups", startOpts.ScheduleBackups,
-		"create a cluster backup schedule once the cluster has started (by default, "+
-			"full backup hourly and incremental every 15 minutes)")
-	startCmd.Flags().StringVar(&startOpts.ScheduleBackupArgs, "schedule-backup-args", "",
-		`Recurrence and scheduled backup options specification.
-Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS first_run = 'now'"`)
 
 	startInstanceCmd.Flags().StringVarP(&storageCluster, "storage-cluster", "S", "", "storage cluster")
 	_ = startInstanceCmd.MarkFlagRequired("storage-cluster")
@@ -337,6 +330,13 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	}
 
 	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd} {
+		cmd.Flags().BoolVar(&startOpts.ScheduleBackups,
+			"schedule-backups", startOpts.ScheduleBackups,
+			"create a cluster backup schedule once the cluster has started (by default, "+
+				"full backup hourly and incremental every 15 minutes)")
+		cmd.Flags().StringVar(&startOpts.ScheduleBackupArgs,
+			"schedule-backup-args", startOpts.ScheduleBackupArgs,
+			"Recurrence and scheduled backup options specification")
 		cmd.Flags().Int64Var(&startOpts.NumFilesLimit, "num-files-limit", startOpts.NumFilesLimit,
 			"limit the number of files that can be created by the cockroach process")
 	}
