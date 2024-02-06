@@ -203,11 +203,13 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 
 	// The rejection must be stale if "rejected" does not match next - 1. This
 	// is because non-replicating followers are probed one entry at a time.
+	// The check is a best effort assuming message reordering is rare.
 	if pr.Next-1 != rejected {
 		return false
 	}
 
-	pr.Next = max(min(rejected, matchHint+1), 1)
+	// Next index shall always be larger than match index.
+	pr.Next = max(min(rejected, matchHint+1), pr.Match+1)
 	pr.MsgAppFlowPaused = false
 	return true
 }
