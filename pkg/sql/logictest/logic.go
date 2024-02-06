@@ -65,7 +65,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
@@ -4080,15 +4079,6 @@ func RunLogicTest(
 	// Note: there is special code in teamcity-trigger/main.go to run this package
 	// with less concurrency in the nightly stress runs. If you see problems
 	// please make adjustments there.
-
-	// This test relies on repeated sequential storage.EventuallyFileOnlySnapshot
-	// acquisitions. Reduce the max wait time for each acquisition to speed up
-	// this test.
-	origEFOSWait := storage.MaxEFOSWait
-	storage.MaxEFOSWait = 30 * time.Millisecond
-	defer func() {
-		storage.MaxEFOSWait = origEFOSWait
-	}()
 
 	if skipLogicTests {
 		skip.IgnoreLint(t, "COCKROACH_LOGIC_TESTS_SKIP")

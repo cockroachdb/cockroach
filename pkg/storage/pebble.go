@@ -64,15 +64,6 @@ import (
 // Default for MaxSyncDuration below.
 var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT", 20*time.Second)
 
-// Default maximum wait time before an EventuallyFileOnlySnapshot transitions
-// to a file-only snapshot.
-var MaxEFOSWait = envutil.EnvOrDefaultDuration("COCKROACH_EFOS_MAX_WAIT", func() time.Duration {
-	if buildutil.CrdbTestBuild {
-		return 100 * time.Millisecond
-	}
-	return 3 * time.Second
-}())
-
 // MaxSyncDuration is the threshold above which an observed engine sync duration
 // triggers either a warning or a fatal error.
 var MaxSyncDuration = settings.RegisterDurationSetting(

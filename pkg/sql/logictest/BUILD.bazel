@@ -77,7 +77,6 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlstats",
         "//pkg/sql/stats",
-        "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/floatcmp",
         "//pkg/testutils/physicalplanutils",
