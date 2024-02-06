@@ -101,25 +101,6 @@ function stubGet(path: string, writer: $protobuf.Writer, prefix: string) {
   fetchMock.get(`${prefix}${path}`, writer.finish());
 }
 
-export function createMockDatabaseRangesForTable(
-  numRangesCreate: number,
-  numNodes: number,
-): clusterUiApi.DatabaseDetailsRow[] {
-  const res = [];
-  const replicas = [];
-  for (let i = 1; i <= numNodes; i++) {
-    replicas.push(i);
-  }
-  for (let i = 0; i < numRangesCreate; i++) {
-    res.push({
-      replicas: replicas,
-      regions: ["gcp-europe-west1", "gcp-europe-west2"],
-      range_size: 10,
-    });
-  }
-  return res;
-}
-
 export function stubSqlApiCall<T>(
   req: clusterUiApi.SqlExecutionRequest,
   mockTxnResults: mockSqlTxnResult<T>[],
