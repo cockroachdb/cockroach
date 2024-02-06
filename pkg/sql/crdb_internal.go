@@ -2812,7 +2812,8 @@ CREATE TABLE crdb_internal.%s (
   status             STRING,         -- the status of the session (open, closed)
   session_end        TIMESTAMPTZ,    -- the time when the session was closed
   pg_backend_pid     INT,            -- the numerical ID attached to the session which is used to mimic a Postgres backend PID
-  trace_id           INT             -- the ID of the trace of the session
+  trace_id           INT,            -- the ID of the trace of the session
+  goroutine_id       INT             -- the ID of the goroutine of the session
 )
 `
 
@@ -2915,6 +2916,7 @@ func populateSessionsTable(
 			endTSDatum,
 			tree.NewDInt(tree.DInt(session.PGBackendPID)),
 			tree.NewDInt(tree.DInt(session.TraceID)),
+			tree.NewDInt(tree.DInt(session.GoroutineID)),
 		); err != nil {
 			return err
 		}
@@ -2943,6 +2945,7 @@ func populateSessionsTable(
 				tree.DNull,                             // session_end
 				tree.DNull,                             // pg_backend_pid
 				tree.DNull,                             // trace_id
+				tree.DNull,                             // goroutine_id
 			); err != nil {
 				return err
 			}

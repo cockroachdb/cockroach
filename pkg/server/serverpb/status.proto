@@ -1056,6 +1056,9 @@ message Session {
 
   // The ID of the session's active trace. It will be 0 if tracing is off.
   uint64 trace_id = 20 [(gogoproto.customname) = "TraceID"];
+
+  // The ID of the session's goroutine.
+  int64 goroutine_id = 21 [(gogoproto.customname) = "GoroutineID"];
 }
 
 // An error wrapper object for ListSessionsResponse.
