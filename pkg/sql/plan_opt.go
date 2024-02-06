@@ -709,10 +709,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 
 	planTop.planComponents = *result
 	planTop.stmt = stmt
-	planTop.flags = opc.flags
-	if bld.IsDDL {
-		planTop.flags.Set(planFlagIsDDL)
-
+	planTop.flags |= opc.flags
+	if planTop.flags.IsSet(planFlagIsDDL) {
 		// The declarative schema changer mode would have already been set here,
 		// since all declarative schema changes are built opaquely. However, some
 		// DDLs (e.g. CREATE TABLE) are built non-opaquely, so we need to set the
@@ -721,27 +719,6 @@ func (opc *optPlanningCtx) runExecBuilder(
 			telemetry.Inc(sqltelemetry.LegacySchemaChangerCounter)
 			planTop.instrumentation.schemaChangerMode = schemaChangerModeLegacy
 		}
-	}
-	if bld.ContainsFullTableScan {
-		planTop.flags.Set(planFlagContainsFullTableScan)
-	}
-	if bld.ContainsFullIndexScan {
-		planTop.flags.Set(planFlagContainsFullIndexScan)
-	}
-	if bld.ContainsLargeFullTableScan {
-		planTop.flags.Set(planFlagContainsLargeFullTableScan)
-	}
-	if bld.ContainsLargeFullIndexScan {
-		planTop.flags.Set(planFlagContainsLargeFullIndexScan)
-	}
-	if bld.ContainsMutation {
-		planTop.flags.Set(planFlagContainsMutation)
-	}
-	if bld.ContainsNonDefaultKeyLocking {
-		planTop.flags.Set(planFlagContainsNonDefaultLocking)
-	}
-	if bld.CheckContainsNonDefaultKeyLocking {
-		planTop.flags.Set(planFlagCheckContainsNonDefaultLocking)
 	}
 	planTop.mem = mem
 	planTop.catalog = opc.catalog

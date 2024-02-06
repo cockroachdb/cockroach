@@ -112,43 +112,12 @@ type Builder struct {
 
 	// -- output --
 
-	// IsDDL is set to true if the statement contains DDL.
-	IsDDL bool
-
-	// ContainsFullTableScan is set to true if the statement contains an
-	// unconstrained primary index scan. This could be a full scan of any
-	// cardinality.
-	ContainsFullTableScan bool
-
-	// ContainsFullIndexScan is set to true if the statement contains an
-	// unconstrained non-partial secondary index scan. This could be a full scan
-	// of any cardinality.
-	ContainsFullIndexScan bool
-
-	// ContainsLargeFullTableScan is set to true if the statement contains an
-	// unconstrained primary index scan estimated to read more than
-	// large_full_scan_rows (or without available stats).
-	ContainsLargeFullTableScan bool
-
-	// ContainsLargeFullIndexScan is set to true if the statement contains an
-	// unconstrained non-partial secondary index scan estimated to read more than
-	// large_full_scan_rows (or without without available stats).
-	ContainsLargeFullIndexScan bool
+	// flags tracks various properties of the plan accumulated while building.
+	flags exec.PlanFlags
 
 	// containsBoundedStalenessScan is true if the query uses bounded
 	// staleness and contains a scan.
 	containsBoundedStalenessScan bool
-
-	// ContainsMutation is set to true if the whole plan contains any mutations.
-	ContainsMutation bool
-
-	// ContainsNonDefaultKeyLocking is set to true if at least one node in the
-	// plan uses non-default key locking strength.
-	ContainsNonDefaultKeyLocking bool
-
-	// CheckContainsNonDefaultKeyLocking is set to true if at least one node in at
-	// least one check query plan uses non-default key locking strength.
-	CheckContainsNonDefaultKeyLocking bool
 
 	// MaxFullScanRows is the maximum number of rows scanned by a full scan, as
 	// estimated by the optimizer.
@@ -267,7 +236,9 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 	}
 
 	rootRowCount := int64(b.e.(memo.RelExpr).Relational().Statistics().RowCountIfAvailable())
-	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks, rootRowCount)
+	return b.factory.ConstructPlan(
+		plan.root, b.subqueries, b.cascades, b.checks, rootRowCount, b.flags,
+	)
 }
 
 func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference, error) {

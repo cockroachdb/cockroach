@@ -147,8 +147,9 @@ func (f *PlanGistFactory) ConstructPlan(
 	cascades []exec.Cascade,
 	checks []exec.Node,
 	rootRowCount int64,
+	flags exec.PlanFlags,
 ) (exec.Plan, error) {
-	plan, err := f.wrappedFactory.ConstructPlan(root, subqueries, cascades, checks, rootRowCount)
+	plan, err := f.wrappedFactory.ConstructPlan(root, subqueries, cascades, checks, rootRowCount, flags)
 	return plan, err
 }
 
