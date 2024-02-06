@@ -375,15 +375,19 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 				ExtraLabels:          []string{"release-blocker"},
 				ExtraParams:          map[string]string{"ROACHTEST_cloud": "gce"},
 			}
-			require.NoError(t, p.post(context.Background(), UnitTestFormatter, req))
+			issue, err := p.post(context.Background(), UnitTestFormatter, req)
+			require.NoError(t, err)
+			require.Equal(t, issueNumber, issue.ID)
 
 			switch foundIssue {
 			case foundNoIssue, foundOnlyRelatedIssue:
 				require.True(t, createdIssue)
 				require.False(t, createdComment)
+				require.Equal(t, TestFailureNewIssue, issue.Type)
 			case foundOnlyMatchingIssue, foundMatchingAndRelatedIssue:
 				require.False(t, createdIssue)
 				require.True(t, createdComment)
+				require.Equal(t, TestFailureIssueComment, issue.Type)
 			default:
 				t.Errorf("unhandled: %s", foundIssue)
 			}
@@ -430,7 +434,8 @@ func TestPostEndToEnd(t *testing.T) {
 		HelpCommand: UnitTestHelpCommand(""),
 	}
 
-	require.NoError(t, Post(context.Background(), log.Default(), UnitTestFormatter, req))
+	_, err := Post(context.Background(), log.Default(), UnitTestFormatter, req)
+	require.NoError(t, err)
 }
 
 // setEnv overrides the env variables corresponding to the input map. The

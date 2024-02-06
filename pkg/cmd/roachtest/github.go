@@ -34,7 +34,7 @@ type githubIssues struct {
 	disable      bool
 	cluster      *clusterImpl
 	vmCreateOpts *vm.CreateOpts
-	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest) error
+	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest) (*issues.TestFailureIssue, error)
 	teamLoader   func() (team.Map, error)
 }
 
@@ -262,11 +262,13 @@ func (g *githubIssues) createPostRequest(
 	}, nil
 }
 
-func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) error {
+func (g *githubIssues) MaybePost(
+	t *testImpl, l *logger.Logger, message string,
+) (*issues.TestFailureIssue, error) {
 	doPost, skipReason := g.shouldPost(t)
 	if !doPost {
 		l.Printf("skipping GitHub issue posting (%s)", skipReason)
-		return nil
+		return nil, nil
 	}
 
 	var metamorphicBuild bool
@@ -280,7 +282,7 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 	}
 	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.failures(), message, metamorphicBuild)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	return g.issuePoster(

@@ -101,7 +101,8 @@ func getIssueFilerForFormatter(formatterName string) func(ctx context.Context, f
 
 	return func(ctx context.Context, f failure) error {
 		fmter, req := reqFromFailure(ctx, f)
-		return issues.Post(ctx, log.Default(), fmter, req)
+		_, err := issues.Post(ctx, log.Default(), fmter, req)
+		return err
 	}
 }
 
