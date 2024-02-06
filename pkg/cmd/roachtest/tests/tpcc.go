@@ -589,6 +589,40 @@ func registerTPCC(r registry.Registry) {
 			})
 		},
 	})
+	r.Add(registry.TestSpec{
+		Name:              "tpcc-nowait/isolation-level=mixed/nodes=3/w=1",
+		Owner:             registry.OwnerTestEng,
+		Benchmark:         true,
+		Cluster:           r.MakeClusterSpec(4, spec.CPU(16)),
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses:      5,
+				Duration:        10 * time.Minute,
+				ExtraRunArgs:    "--wait=false",
+				SetupType:       usingImport,
+				ExpensiveChecks: true,
+				WorkloadInstances: func() (ret []workloadInstance) {
+					isoLevels := []string{"read_uncommitted", "read_committed", "repeatable_read", "snapshot", "serializable"}
+					for i, isoLevel := range isoLevels {
+						args := "--isolation-level=" + isoLevel
+						if i <= 1 { // read_uncommitted and read_committed
+							args += " --txn-retries=false"
+						}
+						ret = append(ret, workloadInstance{
+							nodes:          c.Range(1, c.Spec().NodeCount-1),
+							prometheusPort: 2112 + i,
+							extraRunArgs:   args,
+						})
+					}
+					return ret
+				}(),
+			})
+		},
+	})
 
 	r.Add(registry.TestSpec{
 		Name:             "weekly/tpcc/headroom",
