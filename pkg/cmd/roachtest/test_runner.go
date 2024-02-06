@@ -743,7 +743,7 @@ func (r *testRunner) runWorker(
 			t.Error(clusterError)
 
 			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
-			if err := github.MaybePost(t, l, t.failureMsg()); err != nil {
+			if _, err := github.MaybePost(t, l, t.failureMsg()); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		}
@@ -1011,6 +1011,17 @@ func (r *testRunner) runTest(
 				}
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
 
+				issue, err := github.MaybePost(t, l, output)
+				if err != nil {
+					shout(ctx, l, stdout, "failed to post issue: %s", err)
+				}
+
+				// If an issue was created (or comment added) on GitHub,
+				// include that information in the output so that it can be
+				// easily inspected on the TeamCity overview page.
+				if issue != nil {
+					output += "\n" + issue.String()
+				}
 				if roachtestflags.TeamCity {
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 					// TeamCity regards the test as successful.
@@ -1019,10 +1030,6 @@ func (r *testRunner) runTest(
 				}
 
 				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", testRunID, durationStr, output)
-
-				if err := github.MaybePost(t, l, output); err != nil {
-					shout(ctx, l, stdout, "failed to post issue: %s", err)
-				}
 			} else {
 				shout(ctx, l, stdout, "--- PASS: %s (%s)", testRunID, durationStr)
 			}
