@@ -637,3 +637,42 @@ func (desc *wrapper) ForEachUDTDependentForHydration(fn func(t *types.T) error) 
 func (desc *wrapper) IsSchemaLocked() bool {
 	return desc.SchemaLocked
 }
+
+// IsPrimaryKeySwapMutation implements the TableDescriptor interface.
+func (desc *wrapper) IsPrimaryKeySwapMutation(m *descpb.DescriptorMutation) bool {
+	switch t := m.Descriptor_.(type) {
+	case *descpb.DescriptorMutation_PrimaryKeySwap:
+		return true
+	case *descpb.DescriptorMutation_Index:
+		// The declarative schema changer handles primary key swaps differently,
+		// and does not use a PrimaryKeySwap mutation for this operation. Instead,
+		// it will create a new secondary index with a primary index encoding and
+		// make it public later. To detect a primary index swap scenario we are going
+		// for the declarative case detect the encoding type and if the index is
+		// going public.
+		if t.Index.EncodingType != catenumpb.PrimaryIndexEncoding {
+			return false
+		}
+		state := desc.GetDeclarativeSchemaChangerState()
+		if state == nil {
+			return false
+		}
+		// Loop over all targets searching for primary indexes.
+		for _, pk := range state.Targets {
+			// Confirm the target is a primary index going to public.
+			if pk.TargetStatus != scpb.Status_PUBLIC {
+				continue
+			}
+			pk, ok := pk.ElementOneOf.(*scpb.ElementProto_PrimaryIndex)
+			if !ok {
+				continue
+			}
+			// If the primary index going public matches any current mutation
+			// then this is an index swap scenario.
+			if pk.PrimaryIndex.IndexID == t.Index.ID {
+				return true
+			}
+		}
+	}
+	return false
+}

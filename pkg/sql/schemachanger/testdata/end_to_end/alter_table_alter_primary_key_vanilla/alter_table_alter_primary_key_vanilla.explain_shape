@@ -1,6 +1,9 @@
 /* setup */
-CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, k INT DEFAULT 54);
 INSERT INTO t(i, j) VALUES (-4, -4), (-2, -2), (-3, -3);
+CREATE INDEX ON t(i) WHERE i<=0;
+CREATE INDEX ON t(j) WHERE j<= 0;
+CREATE INDEX ON t(k);
 
 /* test */
 EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
@@ -8,18 +11,27 @@ EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›);
  ├── execute 2 system table mutations transactions
  ├── backfill using primary index t_pkey- in relation t
- │    └── into t_pkey+ (j; i)
+ │    ├── into t_i_idx+ (i: j)
+ │    ├── into t_j_idx+ (j)
+ │    ├── into t_k_idx+ (k: j)
+ │    └── into t_pkey+ (j; i, k)
  ├── execute 2 system table mutations transactions
  ├── merge temporary indexes into backfilled indexes in relation t
- │    └── from t@[5] into t_pkey+
+ │    ├── from t@[9] into t_i_idx+
+ │    ├── from t@[11] into t_j_idx+
+ │    ├── from t@[13] into t_k_idx+
+ │    └── from t@[17] into t_pkey+
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ ├── validate UNIQUE constraint backed by index t_i_idx+ in relation t
+ ├── validate UNIQUE constraint backed by index t_j_idx+ in relation t
+ ├── validate UNIQUE constraint backed by index t_k_idx+ in relation t
  ├── execute 2 system table mutations transactions
  ├── backfill using primary index t_pkey+ in relation t
  │    └── into t_i_key+ (i: j)
  ├── execute 2 system table mutations transactions
  ├── merge temporary indexes into backfilled indexes in relation t
- │    └── from t@[3] into t_i_key+
+ │    └── from t@[15] into t_i_key+
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index t_i_key+ in relation t
  └── execute 2 system table mutations transactions
