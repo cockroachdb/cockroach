@@ -632,6 +632,16 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		cfg, err = getSaramaConfig(opts)
 		require.NoError(t, err)
 		require.NoError(t, cfg.Validate())
+
+		opts = `{"ClientID": "clientID1"}`
+		cfg, err = getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.NoError(t, cfg.Validate())
+
+		opts = `{"Flush": {"Messages": 1000, "Frequency": "1s"}, "ClientID": "clientID1"}`
+		cfg, err = getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.NoError(t, cfg.Validate())
 	})
 	t.Run("validate returns error for bad flush configuration", func(t *testing.T) {
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"Messages": 1000}}`)
