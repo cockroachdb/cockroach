@@ -300,6 +300,22 @@ const (
 	// progress columns from system.jobs table.
 	V24_1_DropPayloadAndProgressFromSystemJobsTable
 
+	// V24_1_SessionBasedLeasingDualWrite both session based and expiry based leases
+	// are written to the system.lease table under different primary indexes.
+	V24_1_SessionBasedLeasingDualWrite
+
+	// V24_1_SessionBasedLeasingDrain all leases are forcefully renewed, so that
+	// a session based equivalent exists.
+	V24_1_SessionBasedLeasingDrain
+
+	// V24_1_SessionBasedLeasingOnly only session based leases are written to
+	// system.lease.
+	V24_1_SessionBasedLeasingOnly
+
+	// V24_1_SessionBasedLeasingUpgradeDescriptor upgrades the system.lease table
+	// to be only session based.
+	V24_1_SessionBasedLeasingUpgradeDescriptor
+
 	numKeys
 )
 
@@ -368,6 +384,10 @@ var versionTable = [numKeys]roachpb.Version{
 	// *************************************************
 
 	V24_1_DropPayloadAndProgressFromSystemJobsTable: {Major: 23, Minor: 2, Internal: 4},
+	V24_1_SessionBasedLeasingDualWrite:              {Major: 23, Minor: 2, Internal: 6},
+	V24_1_SessionBasedLeasingDrain:                  {Major: 23, Minor: 2, Internal: 8},
+	V24_1_SessionBasedLeasingOnly:                   {Major: 23, Minor: 2, Internal: 10},
+	V24_1_SessionBasedLeasingUpgradeDescriptor:      {Major: 23, Minor: 2, Internal: 12},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster

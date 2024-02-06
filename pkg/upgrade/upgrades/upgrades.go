@@ -177,6 +177,37 @@ var upgrades = []upgradebase.Upgrade{
 		dropPayloadProgressFromSystemJobs,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.jobs table"),
 	),
+	upgrade.NewTenantUpgrade(
+		"enable dual writes to system.lease table",
+		clusterversion.V24_1_SessionBasedLeasingDualWrite.Version(),
+		upgrade.NoPrecondition,
+		enabledSessionBasedDualWrites,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"stop writing expiration based leases to system.lease table",
+		clusterversion.V24_1_SessionBasedLeasingDrain.Version(),
+		upgrade.NoPrecondition,
+		disableWritesForExpiryBasedLeases,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"only use session based leases",
+		clusterversion.V24_1_SessionBasedLeasingOnly.Version(),
+		upgrade.NoPrecondition,
+		adoptUsingOnlySessionBasedLeases,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"update system.lease descriptor to be session based.",
+		clusterversion.V24_1_SessionBasedLeasingOnly.Version(),
+		upgrade.NoPrecondition,
+		upgradeSystemLeasesDescriptor,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
+	),
 
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
