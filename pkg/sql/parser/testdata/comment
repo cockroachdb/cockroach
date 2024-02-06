@@ -1,3 +1,12 @@
+# Using an unqualified column name should still parse, even though it can't be
+# executed.
+parse
+COMMENT ON COLUMN a IS 'a'
+----
+COMMENT ON COLUMN a IS 'a'
+(COMMENT ON COLUMN (a) IS 'a') -- fully parenthesized
+COMMENT ON COLUMN a IS '_' -- literals removed
+COMMENT ON COLUMN _ IS 'a' -- identifiers removed
 
 parse
 COMMENT ON COLUMN a.b IS 'a'

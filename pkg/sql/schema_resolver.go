@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -173,6 +174,11 @@ func (sr *schemaResolver) LookupObject(
 		prefix, desc, err = descs.PrefixAndTable(ctx, g, &tn)
 	case tree.TypeObject:
 		prefix, desc, err = descs.PrefixAndType(ctx, g, &tn)
+	case tree.AnyObject:
+		prefix, desc, err = descs.PrefixAndTable(ctx, g, &tn)
+		if err != nil && sqlerrors.IsUndefinedRelationError(err) {
+			prefix, desc, err = descs.PrefixAndType(ctx, g, &tn)
+		}
 	default:
 		return false, prefix, nil, errors.AssertionFailedf(
 			"unknown desired object kind %v", flags.DesiredObjectKind,
@@ -187,6 +193,8 @@ func (sr *schemaResolver) LookupObject(
 			desc, err = sr.descCollection.MutableByID(sr.txn).Table(ctx, desc.GetID())
 		case tree.TypeObject:
 			desc, err = sr.descCollection.MutableByID(sr.txn).Type(ctx, desc.GetID())
+		case tree.AnyObject:
+			desc, err = sr.descCollection.MutableByID(sr.txn).Desc(ctx, desc.GetID())
 		}
 	}
 	return desc != nil, prefix, desc, err
