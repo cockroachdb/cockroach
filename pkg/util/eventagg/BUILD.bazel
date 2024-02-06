@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "eventagg",
+    srcs = [
+        "doc.go",
+        "event_agg.go",
+        "flush_consumer.go",
+        "map_reduce.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/eventagg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/envutil",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "eventagg_test",
+    srcs = ["map_reduce_test.go"],
+    embed = [":eventagg"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)
