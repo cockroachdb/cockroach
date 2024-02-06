@@ -1,6 +1,6 @@
 module github.com/cockroachdb/cockroach
 
-go 1.21
+go 1.22
 
 // golang.org/x/* packages are maintained and curated by the go project, just
 // without the backwards compatibility promises the standard library, and thus
