@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -81,6 +83,7 @@ type AggMetrics struct {
 	LaggingRanges               *aggmetric.AggGauge
 	CloudstorageBufferedBytes   *aggmetric.AggGauge
 	KafkaThrottlingNanos        *aggmetric.AggHistogram
+	WatchedTargets              *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -152,12 +155,15 @@ type sliMetrics struct {
 	LaggingRanges               *aggmetric.Gauge
 	CloudstorageBufferedBytes   *aggmetric.Gauge
 	KafkaThrottlingNanos        *aggmetric.Histogram
+	WatchedTargets              *aggmetric.Gauge
 
 	mu struct {
 		syncutil.Mutex
-		id         int64
-		resolved   map[int64]hlc.Timestamp
-		checkpoint map[int64]hlc.Timestamp
+		id          int64
+		resolved    map[int64]hlc.Timestamp
+		checkpoint  map[int64]hlc.Timestamp
+		targets     map[int]int64
+		lastTargets map[jobspb.JobID]intsets.Fast
 	}
 }
 
@@ -185,6 +191,57 @@ func (m *sliMetrics) setCheckpoint(id int64, ts hlc.Timestamp) {
 	defer m.mu.Unlock()
 	if _, ok := m.mu.checkpoint[id]; ok {
 		m.mu.checkpoint[id] = ts
+	}
+}
+
+func (m *sliMetrics) updateLastTargets(id jobspb.JobID, newTargets intsets.Fast) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var addedTargets, removedTargets intsets.Fast
+	if oldTargets, ok := m.mu.lastTargets[id]; ok {
+		if oldTargets.Equals(newTargets) {
+			// No need to update metrics if targets haven't changed.
+			return
+		}
+		addedTargets = newTargets.Difference(oldTargets)
+		removedTargets = oldTargets.Difference(newTargets)
+	} else {
+		// All targets are new.
+		addedTargets = newTargets
+	}
+	addedTargets.ForEach(func(i int) {
+		m.incrTargetLocked(i)
+	})
+	removedTargets.ForEach(func(i int) {
+		m.decrTargetLocked(i)
+	})
+	if newTargets.Empty() {
+		delete(m.mu.lastTargets, id)
+	} else {
+		m.mu.lastTargets[id] = newTargets
+	}
+
+}
+
+// incrTarget increments the count with the target ID and increments the
+// WatchedTargets metrics if this is the first target with this id.
+// Requires m.mu to be locked.
+func (m *sliMetrics) incrTargetLocked(id int) {
+	m.mu.AssertHeld()
+	m.mu.targets[id]++
+	if m.mu.targets[id] == 1 {
+		m.WatchedTargets.Inc(1)
+	}
+}
+
+// decrTarget decrements the count with the target ID and decrements the
+// WatchedTargets metric if this was the last target with this id.
+// Requires m.mu to be locked.
+func (m *sliMetrics) decrTargetLocked(id int) {
+	m.mu.AssertHeld()
+	m.mu.targets[id]--
+	if m.mu.targets[id] == 0 {
+		m.WatchedTargets.Dec(1)
 	}
 }
 
@@ -824,6 +881,12 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaChangefeedWatchedTargets := metric.Metadata{
+		Name:        "changefeed.watched_targets",
+		Help:        "Targets watched by all feeds",
+		Measurement: "Tables",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	functionalGaugeMinFn := func(childValues []int64) int64 {
 		var min int64
@@ -923,6 +986,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 			SigFigs:      2,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
+		WatchedTargets: b.Gauge(metaChangefeedWatchedTargets),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -989,9 +1053,12 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		LaggingRanges:               a.LaggingRanges.AddChild(scope),
 		CloudstorageBufferedBytes:   a.CloudstorageBufferedBytes.AddChild(scope),
 		KafkaThrottlingNanos:        a.KafkaThrottlingNanos.AddChild(scope),
+		WatchedTargets:              a.WatchedTargets.AddChild(scope),
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
+	sm.mu.targets = make(map[int]int64)
+	sm.mu.lastTargets = make(map[jobspb.JobID]intsets.Fast)
 	sm.mu.id = 1 // start the first id at 1 so we can detect intiialization
 
 	minTimestampGetter := func(m map[int64]hlc.Timestamp) func() int64 {

@@ -1375,3 +1375,13 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 		`CREATE USER regularUser`,
 	)
 }
+
+func waitForChangefeedRunning(t *testing.T, sli *sliMetrics, targetCount int64) {
+	testutils.SucceedsSoon(t, func() error {
+		runningCount := sli.RunningCount.Value()
+		if runningCount == targetCount {
+			return nil
+		}
+		return errors.Newf("waiting for number of running changefeeds to be %d (value=%d)", targetCount, runningCount)
+	})
+}
