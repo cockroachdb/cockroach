@@ -1002,11 +1002,24 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 				if err := n.computeMetricsPeriodically(ctx, previousMetrics, tick); err != nil {
 					log.Errorf(ctx, "failed computing periodic metrics: %s", err)
 				}
+				n.updateNodeRangeCount()
 			case <-stopper.ShouldQuiesce():
 				return
 			}
 		}
 	})
+}
+
+// TODO(baptist): Remove this once we make expiration leases the only option.
+// This is used to make a global decision on whether this store should use
+// expiration leases.
+func (n *Node) updateNodeRangeCount() {
+	var count int64
+	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
+		count += store.Metrics().RangeCount.Value()
+		return nil
+	})
+	n.storeCfg.RangeCount.Store(count)
 }
 
 // computeMetricsPeriodically instructs each store to compute the value of

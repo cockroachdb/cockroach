@@ -323,6 +323,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		ProtectedTimestampReader:    spanconfig.EmptyProtectedTSReader(clock),
 		SnapshotSendLimit:           DefaultSnapshotSendLimit,
 		SnapshotApplyLimit:          DefaultSnapshotApplyLimit,
+		RangeCount:                  &atomic.Int64{},
 
 		// Use a constant empty system config, which mirrors the previously
 		// existing logic to install an empty system config in gossip.
@@ -1261,6 +1262,10 @@ type StoreConfig struct {
 	// RangeFeedSchedulerShardSize specifies the maximum number of workers per
 	// scheduler shard.
 	RangeFeedSchedulerShardSize int
+
+	// RangeCount is populated by the node and represents the total number of
+	// ranges this node has.
+	RangeCount *atomic.Int64
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
@@ -3797,6 +3802,10 @@ func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 
 func (s *Store) getRangefeedScheduler() *rangefeed.Scheduler {
 	return s.rangefeedScheduler
+}
+
+func (s *Store) getNodeRangeCount() int64 {
+	return s.cfg.RangeCount.Load()
 }
 
 // Implementation of the storeForTruncator interface.

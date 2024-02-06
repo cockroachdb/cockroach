@@ -92,6 +92,15 @@ var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 		util.ConstantWithMetamorphicTestBool("kv.expiration_leases_only.enabled", false),
 )
 
+// TODO(baptist): Remove this setting once we have sufficiently reduced the cost
+// of expiration based leases so we can enable them for everyone.
+var ExpirationLeasesMaxReplicasPerNode = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.expiration_leases.max_replicas_per_node",
+	"maximum number of replicas a node can have before expiration leases are disabled (0 disables this setting)",
+	3000,
+)
+
 // DisableExpirationLeasesOnly is an escape hatch for ExpirationLeasesOnly,
 // which can be used to hard-disable expiration-based leases e.g. if clusters
 // are unable to start back up due to the lease extension load.
@@ -847,10 +856,17 @@ func (r *Replica) requiresExpirationLeaseRLocked() bool {
 
 // shouldUseExpirationLeaseRLocked returns true if this range should be using an
 // expiration-based lease, either because it requires one or because
-// kv.expiration_leases_only.enabled is enabled.
+// kv.expiration_leases_only.enabled is enabled and there are few enough ranges
+// on the system based on kv.expiration_leases.max_replicas_per_node.
 func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
-	return (ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) && !DisableExpirationLeasesOnly) ||
-		r.requiresExpirationLeaseRLocked()
+	settingEnabled := ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) && !DisableExpirationLeasesOnly
+	maxAllowedReplics := ExpirationLeasesMaxReplicasPerNode.Get(&r.ClusterSettings().SV)
+	// Disable the setting if there are too many replicas.
+	if maxAllowedReplics > 0 && r.store.getNodeRangeCount() > maxAllowedReplics {
+		settingEnabled = false
+	}
+
+	return settingEnabled || r.requiresExpirationLeaseRLocked()
 }
 
 // requestLeaseLocked executes a request to obtain or extend a lease
