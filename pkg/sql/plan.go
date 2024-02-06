@@ -313,9 +313,6 @@ type planTop struct {
 	// is eligible for auditing (see sql/audit_logging.go)
 	auditEventBuilders []auditlogging.AuditEventBuilder
 
-	// flags is populated during planning and execution.
-	flags planFlags
-
 	// avoidBuffering, when set, causes the execution to avoid buffering
 	// results.
 	avoidBuffering bool
@@ -422,6 +419,9 @@ func (t planComponentType) String() string {
 type planComponents struct {
 	// subqueryPlans contains all the sub-query plans.
 	subqueryPlans []subquery
+
+	// flags is populated during planning and execution.
+	flags planFlags
 
 	// plan for the main query.
 	main planMaybePhysical
@@ -619,13 +619,12 @@ const (
 	// planFlagContainsMutation is set if the plan has any mutations.
 	planFlagContainsMutation
 
-	// planFlagContainsNonDefaultLocking is set if the plan has a node with
-	// non-default key locking strength.
-	planFlagContainsNonDefaultLocking
+	// planFlagContainsLocking is set if the plan has a node with locking.
+	planFlagContainsLocking
 
-	// planFlagCheckContainsNonDefaultLocking is set if at least one check plan
-	// has a node with non-default key locking strength.
-	planFlagCheckContainsNonDefaultLocking
+	// planFlagCheckContainsLocking is set if at least one check plan has a node
+	// with locking.
+	planFlagCheckContainsLocking
 
 	// planFlagSessionMigration is set if the plan is being created during
 	// a session migration.
@@ -641,7 +640,7 @@ func (pf *planFlags) Set(flag planFlags) {
 }
 
 func (pf *planFlags) Unset(flag planFlags) {
-	*pf &= ^flag
+	*pf &^= flag
 }
 
 // IsDistributed returns true if either the fully or the partially distributed
