@@ -124,14 +124,6 @@ func (p *joinPredicate) IndexedVarResolvedType(idx int) *types.T {
 	return p.rightCols[idx-p.numLeftCols].Typ
 }
 
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (p *joinPredicate) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	if idx < p.numLeftCols {
-		return p.leftCols.Name(idx)
-	}
-	return p.rightCols.Name(idx - p.numLeftCols)
-}
-
 // eval for joinPredicate runs the on condition across the columns that do
 // not participate in the equality (the equality columns are checked
 // in the join algorithm already).

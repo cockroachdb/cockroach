@@ -44,12 +44,6 @@ func (p *MockTypeContext) IndexedVarResolvedType(idx int) *types.T {
 	return p.Typs[idx]
 }
 
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (p *MockTypeContext) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("$%d", idx))
-	return &n
-}
-
 // CreateTestProjectingOperator creates a projecting operator that performs
 // projectingExpr on input that has inputTypes as its output columns. It does
 // so by making a noop processor core with post-processing step that passes

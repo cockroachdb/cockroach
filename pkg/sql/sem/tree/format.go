@@ -106,10 +106,6 @@ const (
 	// resolutions.
 	fmtDisambiguateDatumTypes
 
-	// fmtSymbolicVars indicates that IndexedVars must be pretty-printed
-	// using numeric notation (@123).
-	fmtSymbolicVars
-
 	// fmtUnicodeStrings prints strings and JSON using the Go string
 	// formatter. This is used e.g. for emitting values to CSV files.
 	fmtRawStrings
@@ -216,8 +212,7 @@ const (
 	//  - user defined types and datums of user defined types are formatted
 	//    using static representations to avoid name resolution and invalidation
 	//    due to changes in the underlying type.
-	FmtCheckEquivalence = fmtSymbolicVars |
-		fmtDisambiguateDatumTypes |
+	FmtCheckEquivalence = fmtDisambiguateDatumTypes |
 		FmtParsableNumerics |
 		fmtStaticallyFormatUserDefinedTypes
 
