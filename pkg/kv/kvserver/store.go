@@ -323,6 +323,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		ProtectedTimestampReader:    spanconfig.EmptyProtectedTSReader(clock),
 		SnapshotSendLimit:           DefaultSnapshotSendLimit,
 		SnapshotApplyLimit:          DefaultSnapshotApplyLimit,
+		RangeCount:                  &atomic.Int64{},
 
 		// Use a constant empty system config, which mirrors the previously
 		// existing logic to install an empty system config in gossip.
@@ -1099,6 +1100,7 @@ var _ OutgoingRaftMessageHandler = &Store{}
 // required to create a store.
 // All fields holding a pointer or an interface are required to create
 // a store; the rest will have sane defaults set if omitted.
+// TODO(baptist): Split into StoreConfig (immutable) and NodeState (mutable).
 type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
@@ -1261,6 +1263,10 @@ type StoreConfig struct {
 	// RangeFeedSchedulerShardSize specifies the maximum number of workers per
 	// scheduler shard.
 	RangeFeedSchedulerShardSize int
+
+	// RangeCount is populated by the node and represents the total number of
+	// ranges this node has.
+	RangeCount *atomic.Int64
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
@@ -3793,6 +3799,12 @@ func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 
 func (s *Store) getRangefeedScheduler() *rangefeed.Scheduler {
 	return s.rangefeedScheduler
+}
+
+// getNodeRangeCount returns the number of total ranges on this node. The value
+// is cached and updated every few seconds by Node.computeMetricsPeriodically.
+func (s *Store) getNodeRangeCount() int64 {
+	return s.cfg.RangeCount.Load()
 }
 
 // Implementation of the storeForTruncator interface.
