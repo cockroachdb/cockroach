@@ -42,34 +42,13 @@ func (t *TypeName) Type() string {
 
 // Format implements the NodeFormatter interface.
 func (t *TypeName) Format(ctx *FmtCtx) {
-	ctx.FormatNode(&t.ObjectNamePrefix)
-	if t.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
-		ctx.WriteByte('.')
-	}
-	ctx.FormatNode(&t.ObjectName)
-}
-
-// String implements the Stringer interface.
-func (t *TypeName) String() string {
-	return AsString(t)
+	t.objName.Format(ctx)
 }
 
 // SQLString implements the ResolvableTypeReference interface.
 func (t *TypeName) SQLString() string {
 	// FmtBareIdentifiers prevents the TypeName string from being wrapped in quotations.
 	return AsStringWithFlags(t, FmtBareIdentifiers)
-}
-
-// FQString renders the type name in full, not omitting the prefix
-// schema and catalog names. Suitable for logging, etc.
-func (t *TypeName) FQString() string {
-	ctx := NewFmtCtx(FmtSimple)
-	ctx.FormatNode(&t.CatalogName)
-	ctx.WriteByte('.')
-	ctx.FormatNode(&t.SchemaName)
-	ctx.WriteByte('.')
-	ctx.FormatNode(&t.ObjectName)
-	return ctx.CloseAndGetString()
 }
 
 func (t *TypeName) objectName() {}
@@ -103,12 +82,9 @@ func MakeTypeNameWithPrefix(prefix ObjectNamePrefix, typ string) TypeName {
 
 // MakeQualifiedTypeName creates a fully qualified type name.
 func MakeQualifiedTypeName(db, schema, typ string) TypeName {
-	return MakeTypeNameWithPrefix(ObjectNamePrefix{
-		ExplicitCatalog: true,
-		CatalogName:     Name(db),
-		ExplicitSchema:  true,
-		SchemaName:      Name(schema),
-	}, typ)
+	return TypeName{
+		objName: makeQualifiedObjName(Name(db), Name(schema), Name(typ)),
+	}
 }
 
 // NewQualifiedTypeName returns a fully qualified type name.
