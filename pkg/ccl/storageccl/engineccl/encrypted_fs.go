@@ -325,6 +325,7 @@ func newEncryptedEnv(
 		streamCreator: &FileCipherStreamCreator{
 			envType:    enginepb.EnvType_Store,
 			keyManager: storeKeyManager,
+			version:    options.Version,
 		},
 	}
 	dataKeyManager := &DataKeyManager{
@@ -342,6 +343,7 @@ func newEncryptedEnv(
 		streamCreator: &FileCipherStreamCreator{
 			envType:    enginepb.EnvType_Data,
 			keyManager: dataKeyManager,
+			version:    options.Version,
 		},
 	}
 

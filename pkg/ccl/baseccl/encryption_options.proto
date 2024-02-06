@@ -31,4 +31,15 @@ message EncryptionOptions {
 
   // Default data key rotation in seconds.
   int64 data_key_rotation_period = 3;
+
+  // The implementation version is used to select between implementations
+  // that do not change the on-disk data. This allows for low-risk rollouts
+  // of optimized implementations. Options which affect the on-disk data
+  // (such as different encrpytion algorithms) would be managed elsewhere
+  // to allow for migrations.
+  //
+  // There are currently two versions, 1 and 2, defined in
+  // storageccl/engineccl/ctr_stream.go.
+  // A value of zero will use the default, currently 1.
+  int64 version = 4;
 }

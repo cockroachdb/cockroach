@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +36,7 @@ type StoreEncryptionSpec struct {
 	KeyPath        string
 	OldKeyPath     string
 	RotationPeriod time.Duration
+	Version        int64
 }
 
 // ToEncryptionOptions convert to a serialized EncryptionOptions protobuf.
@@ -46,6 +48,7 @@ func (es StoreEncryptionSpec) ToEncryptionOptions() ([]byte, error) {
 			OldKey:     es.OldKeyPath,
 		},
 		DataKeyRotationPeriod: int64(es.RotationPeriod / time.Second),
+		Version:               es.Version,
 	}
 
 	return protoutil.Marshal(&opts)
@@ -54,8 +57,8 @@ func (es StoreEncryptionSpec) ToEncryptionOptions() ([]byte, error) {
 // String returns a fully parsable version of the encryption spec.
 func (es StoreEncryptionSpec) String() string {
 	// All fields are set.
-	return fmt.Sprintf("path=%s,key=%s,old-key=%s,rotation-period=%s",
-		es.Path, es.KeyPath, es.OldKeyPath, es.RotationPeriod)
+	return fmt.Sprintf("path=%s,key=%s,old-key=%s,rotation-period=%s,version=%d",
+		es.Path, es.KeyPath, es.OldKeyPath, es.RotationPeriod, es.Version)
 }
 
 // NewStoreEncryptionSpec parses the string passed in and returns a new
@@ -122,12 +125,18 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 			if err != nil {
 				return StoreEncryptionSpec{}, errors.Wrapf(err, "could not parse rotation-duration value: %s", value)
 			}
+		case "version":
+			var err error
+			es.Version, err = strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return StoreEncryptionSpec{}, errors.Wrapf(err, "could not parse version: %s", value)
+			}
 		default:
 			return StoreEncryptionSpec{}, fmt.Errorf("%s is not a valid enterprise-encryption field", field)
 		}
 	}
 
-	// Check that all fields are set.
+	// Check that all required fields are set.
 	if es.Path == "" {
 		return StoreEncryptionSpec{}, fmt.Errorf("no path specified")
 	}
@@ -215,7 +224,7 @@ func PopulateStoreSpecWithEncryption(
 			break
 		}
 		if !found {
-			return fmt.Errorf("no store with path %s found for encryption setting: %v", es.Path, es)
+			return fmt.Errorf("no store with path %s found in %s for encryption setting: %v", es.Path, storeSpecs, es)
 		}
 	}
 	return nil
