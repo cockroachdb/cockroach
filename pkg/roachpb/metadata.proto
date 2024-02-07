@@ -330,6 +330,8 @@ message StoreCapacity {
   // bytes_per_replica and writes_per_replica contain percentiles for the
   // number of bytes and writes-per-second to each replica in the store.
   // This information can be used for rebalancing decisions.
+  // TODO(kvoli): Remove these fields in 25.1. The field is no longer consulted
+  // in 24.1.
   optional Percentiles bytes_per_replica = 6 [(gogoproto.nullable) = false];
   optional Percentiles writes_per_replica = 7 [(gogoproto.nullable) = false];
   reserved 11;

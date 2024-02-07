@@ -481,8 +481,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"range_count",
 			"lease_count",
 			"writes_per_second",
-			"bytes_per_replica",
-			"writes_per_replica",
 			"metrics",
 			"properties",
 		},

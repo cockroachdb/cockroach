@@ -2850,17 +2850,6 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	if e, a := int32(1), cap.RangeCount; e != a {
 		t.Errorf("expected cap.RangeCount=%d, got %d", e, a)
 	}
-	bpr1 := cap.BytesPerReplica
-	if bpr1.P10 != 0 {
-		t.Errorf("expected all bytes-per-replica to be 0, got %+v", bpr1)
-	}
-	if bpr1.P10 != bpr1.P25 || bpr1.P10 != bpr1.P50 || bpr1.P10 != bpr1.P75 || bpr1.P10 != bpr1.P90 {
-		t.Errorf("expected all bytes-per-replica percentiles to be identical, got %+v", bpr1)
-	}
-	wpr1 := cap.WritesPerReplica
-	if wpr1.P10 != wpr1.P25 || wpr1.P10 != wpr1.P50 || wpr1.P10 != wpr1.P75 || wpr1.P10 != wpr1.P90 {
-		t.Errorf("expected all writes-per-replica percentiles to be identical, got %+v", wpr1)
-	}
 
 	// Increment the manual clock and do a write to increase the qps above zero.
 	manualClock.Increment(int64(replicastats.MinStatsDuration))
@@ -2903,25 +2892,6 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 		t.Errorf("expected cap.WritesPerSecond >= %f, got %f", minExpected, a)
 	}
 
-	bpr2 := cap.BytesPerReplica
-	if bpr2.P10 <= bpr1.P10 {
-		t.Errorf("expected BytesPerReplica to have increased from %+v, but got %+v", bpr1, bpr2)
-	}
-	if bpr2.P10 != bpr2.P25 || bpr2.P10 != bpr2.P50 || bpr2.P10 != bpr2.P75 || bpr2.P10 != bpr2.P90 {
-		t.Errorf("expected all bytes-per-replica percentiles to be identical, got %+v", bpr2)
-	}
-	wpr2 := cap.WritesPerReplica
-	if wpr2.P10 <= wpr1.P10 {
-		t.Errorf("expected WritesPerReplica to have increased from %+v, but got %+v", wpr1, wpr2)
-	}
-	if wpr2.P10 != wpr2.P25 || wpr2.P10 != wpr2.P50 || wpr2.P10 != wpr2.P75 || wpr2.P10 != wpr2.P90 {
-		t.Errorf("expected all writes-per-replica percentiles to be identical, got %+v", wpr2)
-	}
-	if wpr2.P10 != cap.WritesPerSecond {
-		t.Errorf("expected WritesPerReplica.percentiles to equal cap.WritesPerSecond, but got %f and %f",
-			wpr2.P10, cap.WritesPerSecond)
-	}
-
 	// Split the range to verify stats work properly with more than one range.
 	sArgs := adminSplitArgs(key.Next().Next())
 	if _, pErr := kv.SendWrapped(ctx, s.TestSender(), sArgs); pErr != nil {
@@ -2937,18 +2907,6 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	}
 	if e, a := int32(2), cap.LeaseCount; e != a {
 		t.Errorf("expected cap.LeaseCount=%d, got %d", e, a)
-	}
-	{
-		bpr := cap.BytesPerReplica
-		if bpr.P10 != bpr.P25 {
-			t.Errorf("expected BytesPerReplica p10 and p25 to be equal with 2 replicas, got %+v", bpr)
-		}
-		if bpr.P50 != bpr.P75 || bpr.P50 != bpr.P90 {
-			t.Errorf("expected BytesPerReplica p50, p75, and p90 to be equal with 2 replicas, got %+v", bpr)
-		}
-		if bpr.P10 == bpr.P90 {
-			t.Errorf("expected BytesPerReplica p10 and p90 to be different with 2 replicas, got %+v", bpr)
-		}
 	}
 }
 

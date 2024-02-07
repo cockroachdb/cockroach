@@ -12,7 +12,6 @@ package roachpb
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -476,36 +475,6 @@ func (r ReplicaDescriptor) IsNonVoter() bool {
 	}
 }
 
-// PercentilesFromData derives percentiles from a slice of data points.
-// Sorts the input data if it isn't already sorted.
-func PercentilesFromData(data []float64) Percentiles {
-	sort.Float64s(data)
-
-	return Percentiles{
-		P10:  percentileFromSortedData(data, 10),
-		P25:  percentileFromSortedData(data, 25),
-		P50:  percentileFromSortedData(data, 50),
-		P75:  percentileFromSortedData(data, 75),
-		P90:  percentileFromSortedData(data, 90),
-		PMax: percentileFromSortedData(data, 100),
-	}
-}
-
-func percentileFromSortedData(data []float64, percent float64) float64 {
-	if len(data) == 0 {
-		return 0
-	}
-	if percent < 0 {
-		percent = 0
-	}
-	if percent >= 100 {
-		return data[len(data)-1]
-	}
-	// TODO(a-robinson): Use go's rounding function once we're using 1.10.
-	idx := int(float64(len(data)) * percent / 100.0)
-	return data[idx]
-}
-
 // String returns a string representation of the Percentiles.
 func (p Percentiles) String() string {
 	return redact.StringWithoutMarkers(p)
@@ -540,11 +509,11 @@ func (sc StoreCapacity) String() string {
 func (sc StoreCapacity) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
 		"ranges=%d, leases=%d, queries=%.2f, writes=%.2f, "+
-		"ioThreshold={%v} bytesPerReplica={%s}, writesPerReplica={%s}",
+		"ioThreshold={%v}",
 		humanizeutil.IBytes(sc.Capacity), humanizeutil.IBytes(sc.Available),
 		humanizeutil.IBytes(sc.Used), humanizeutil.IBytes(sc.LogicalBytes),
 		sc.RangeCount, sc.LeaseCount, sc.QueriesPerSecond, sc.WritesPerSecond,
-		sc.IOThreshold, sc.BytesPerReplica, sc.WritesPerReplica)
+		sc.IOThreshold)
 }
 
 // FractionUsed computes the fraction of storage capacity that is in use.
