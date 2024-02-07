@@ -201,18 +201,6 @@ type saramaConfig struct {
 	Version string `json:",omitempty"`
 }
 
-func (c saramaConfig) Validate() error {
-	// If Flush.Bytes > 0 or Flush.Messages > 1 without
-	// Flush.Frequency, sarama may wait forever to flush the
-	// messages to Kafka.  We want to guard against such
-	// configurations to ensure that we don't get into a situation
-	// where our call to Flush() would block forever.
-	if (c.Flush.Bytes > 0 || c.Flush.Messages > 1) && c.Flush.Frequency == 0 {
-		return errors.New("Flush.Frequency must be > 0 when Flush.Bytes > 0 or Flush.Messages > 1")
-	}
-	return nil
-}
-
 func defaultSaramaConfig() *saramaConfig {
 	config := &saramaConfig{}
 
@@ -1157,12 +1145,12 @@ func buildKafkaConfig(
 			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
 	}
 
-	if err := saramaCfg.Validate(); err != nil {
-		return nil, errors.Wrap(err, "invalid sarama configuration")
-	}
-
 	if err := saramaCfg.Apply(config); err != nil {
 		return nil, errors.Wrap(err, "failed to apply kafka client configuration")
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, errors.Wrap(err, "invalid sarama configuration")
 	}
 	return config, nil
 }
