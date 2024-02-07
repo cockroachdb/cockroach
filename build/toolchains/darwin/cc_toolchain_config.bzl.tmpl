@@ -112,7 +112,6 @@ def _impl(ctx):
                         flags = [
                             "-g1",
                             "-Wall",
-                            "-I%{repo_path}/SDK/MacOSX12.1.sdk/usr/include/c++/v1",
                         ],
                     ),
                 ]),
@@ -122,7 +121,7 @@ def _impl(ctx):
 
     linker_flags = [
         "-lstdc++",
-        "-L%{repo_path}/lib",
+        "-Lexternal/%{repo_name}/lib",
     ]
 
     default_linker_flags = feature(
@@ -138,7 +137,7 @@ def _impl(ctx):
             env_set(
                 actions = all_link_actions,
                 env_entries = [
-                    env_entry(key = "LD_LIBRARY_PATH", value = "%{repo_path}/lib"),
+                    env_entry(key = "LD_LIBRARY_PATH", value = "external/%{repo_name}/lib"),
                 ],
             ),
 	]
@@ -204,7 +203,7 @@ def _impl(ctx):
             "%sysroot%/usr/include",
             "/usr/lib/llvm-10/lib/clang/10.0.0/include",
         ],
-        builtin_sysroot = "%{repo_path}/SDK/MacOSX12.1.sdk",
+        builtin_sysroot = "external/%{repo_name}/SDK/MacOSX12.1.sdk",
     )
 
 cc_toolchain_config = rule(
