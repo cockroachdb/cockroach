@@ -5572,8 +5572,6 @@ CREATE TABLE crdb_internal.kv_store_status (
   range_count        INT NOT NULL,
   lease_count        INT NOT NULL,
   writes_per_second  FLOAT NOT NULL,
-  bytes_per_replica  JSON NOT NULL,
-  writes_per_replica JSON NOT NULL,
   metrics            JSON NOT NULL,
   properties         JSON NOT NULL
 )
@@ -5620,50 +5618,6 @@ CREATE TABLE crdb_internal.kv_store_status (
 					properties.Add("file_store_properties", jprops.Build())
 				}
 
-				percentilesToJSON := func(ps roachpb.Percentiles) (json.JSON, error) {
-					b := json.NewObjectBuilder(5)
-					v, err := json.FromFloat64(ps.P10)
-					if err != nil {
-						return nil, err
-					}
-					b.Add("P10", v)
-					v, err = json.FromFloat64(ps.P25)
-					if err != nil {
-						return nil, err
-					}
-					b.Add("P25", v)
-					v, err = json.FromFloat64(ps.P50)
-					if err != nil {
-						return nil, err
-					}
-					b.Add("P50", v)
-					v, err = json.FromFloat64(ps.P75)
-					if err != nil {
-						return nil, err
-					}
-					b.Add("P75", v)
-					v, err = json.FromFloat64(ps.P90)
-					if err != nil {
-						return nil, err
-					}
-					b.Add("P90", v)
-					v, err = json.FromFloat64(ps.PMax)
-					if err != nil {
-						return nil, err
-					}
-					b.Add("PMax", v)
-					return b.Build(), nil
-				}
-
-				bytesPerReplica, err := percentilesToJSON(s.Desc.Capacity.BytesPerReplica)
-				if err != nil {
-					return err
-				}
-				writesPerReplica, err := percentilesToJSON(s.Desc.Capacity.WritesPerReplica)
-				if err != nil {
-					return err
-				}
-
 				if err := addRow(
 					tree.NewDInt(tree.DInt(s.Desc.Node.NodeID)),
 					tree.NewDInt(tree.DInt(s.Desc.StoreID)),
@@ -5675,8 +5629,6 @@ CREATE TABLE crdb_internal.kv_store_status (
 					tree.NewDInt(tree.DInt(s.Desc.Capacity.RangeCount)),
 					tree.NewDInt(tree.DInt(s.Desc.Capacity.LeaseCount)),
 					tree.NewDFloat(tree.DFloat(s.Desc.Capacity.WritesPerSecond)),
-					tree.NewDJSON(bytesPerReplica),
-					tree.NewDJSON(writesPerReplica),
 					tree.NewDJSON(metrics.Build()),
 					tree.NewDJSON(properties.Build()),
 				); err != nil {
