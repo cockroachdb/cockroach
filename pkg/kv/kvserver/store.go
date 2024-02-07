@@ -2864,9 +2864,6 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	var totalQueriesPerSecond float64
 	var totalWritesPerSecond float64
 	var totalStoreCPUTimePerSecond float64
-	replicaCount := s.metrics.ReplicaCount.Value()
-	bytesPerReplica := make([]float64, 0, replicaCount)
-	writesPerReplica := make([]float64, 0, replicaCount)
 	// We wish to track both CPU and QPS, due to different usecases between UI
 	// and rebalancing. By default rebalancing uses CPU whilst the UI will use
 	// QPS.
@@ -2884,7 +2881,6 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		}
 		usage := r.RangeUsageInfo()
 		logicalBytes += usage.LogicalBytes
-		bytesPerReplica = append(bytesPerReplica, float64(usage.LogicalBytes))
 		// TODO(a-robinson): How dangerous is it that these numbers will be
 		// incorrectly low the first time or two it gets gossiped when a store
 		// starts? We can't easily have a countdown as its value changes like for
@@ -2893,7 +2889,6 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		totalStoreCPUTimePerSecond += usage.RequestCPUNanosPerSecond + usage.RaftCPUNanosPerSecond
 		totalQueriesPerSecond += usage.QueriesPerSecond
 		totalWritesPerSecond += usage.WritesPerSecond
-		writesPerReplica = append(writesPerReplica, usage.WritesPerSecond)
 		cr := candidateReplica{
 			Replica: r,
 			usage:   usage,
@@ -2927,8 +2922,6 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		capacity.IOThreshold = *s.ioThreshold.t
 		s.ioThreshold.Unlock()
 	}
-	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
-	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
 	s.storeGossip.RecordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)
 	s.replRankings.Update(rankingsAccumulator)
 	s.replRankingsByTenant.Update(rankingsByTenantAccumulator)
