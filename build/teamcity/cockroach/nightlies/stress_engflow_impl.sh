@@ -30,7 +30,7 @@ bazel test //pkg:all_tests $ENGFLOW_FLAGS --remote_download_minimal \
     || status=$?
 
 # Upload results to GitHub.
-bazel build //pkg/cmd/bazci/process-bep-file $ENGFLOW_FLAGS
+bazel build //pkg/cmd/bazci/process-bep-file $ENGFLOW_FLAGS --bes_keywords helper-binary
 _bazel/bin/pkg/cmd/bazci/process-bep-file/process-bep-file_/process-bep-file \
     -branch $TC_BUILD_BRANCH -eventsfile artifacts/eventstream \
     -cert /home/agent/engflow/engflow.crt -key /home/agent/engflow/engflow.key \
