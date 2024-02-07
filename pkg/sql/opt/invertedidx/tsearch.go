@@ -59,7 +59,7 @@ func (t *tsqueryFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		return inverted.NonInvertedColExpression{}, expr, nil
 	}
 	d := memo.ExtractConstDatum(constantVal)
-	if d.ResolvedType() != types.TSQuery {
+	if !d.ResolvedType().Identical(types.TSQuery) {
 		panic(errors.AssertionFailedf(
 			"trying to apply tsvector inverted index to unsupported type %s", d.ResolvedType().SQLStringForError(),
 		))

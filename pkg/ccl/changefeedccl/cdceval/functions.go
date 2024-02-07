@@ -168,7 +168,7 @@ func cdcTimestampBuiltin(
 				},
 				Info:              doc + " as HLC timestamp",
 				Volatility:        v,
-				PreferredOverload: preferredOverloadReturnType == types.Decimal,
+				PreferredOverload: preferredOverloadReturnType.Identical(types.Decimal),
 			},
 			{
 				Types:      tree.ParamTypes{},
@@ -179,7 +179,7 @@ func cdcTimestampBuiltin(
 				},
 				Info:              doc + " as TIMESTAMPTZ",
 				Volatility:        v,
-				PreferredOverload: preferredOverloadReturnType == types.TimestampTZ,
+				PreferredOverload: preferredOverloadReturnType.Identical(types.TimestampTZ),
 			},
 			{
 				Types:      tree.ParamTypes{},
@@ -190,7 +190,7 @@ func cdcTimestampBuiltin(
 				},
 				Info:              doc + " as TIMESTAMP",
 				Volatility:        v,
-				PreferredOverload: preferredOverloadReturnType == types.Timestamp,
+				PreferredOverload: preferredOverloadReturnType.Identical(types.Timestamp),
 			},
 		},
 	)

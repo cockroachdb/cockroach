@@ -432,7 +432,7 @@ func BenchmarkAppend(b *testing.B) {
 		for _, nullProbability := range []float64{0, 0.2} {
 			for _, bc := range benchCases {
 				// Only test the AppendNoInline case for bytes.
-				if typ != types.Bytes && bc.bytesLen == longBytesLen {
+				if !typ.Identical(types.Bytes) && bc.bytesLen == longBytesLen {
 					continue
 				}
 				src := coldata.NewMemColumn(typ, coldata.BatchSize(), coldata.StandardColumnFactory)

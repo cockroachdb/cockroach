@@ -961,7 +961,7 @@ func performCastWithoutPrecisionTruncation(
 	case types.TupleFamily:
 		switch v := d.(type) {
 		case *tree.DTuple:
-			if t == types.AnyTuple {
+			if t.Identical(types.AnyTuple) {
 				// If AnyTuple is the target type, we can just use the input tuple.
 				return v, nil
 			}

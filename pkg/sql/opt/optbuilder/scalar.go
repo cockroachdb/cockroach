@@ -221,11 +221,11 @@ func (b *Builder) buildScalar(
 		// arguments with a CastExpr that preserves the static type.
 
 		left := t.TypedLeft()
-		if left.ResolvedType() == types.Unknown {
+		if left.ResolvedType().Family() == types.UnknownFamily {
 			left = reType(left, t.ResolvedBinOp().LeftType)
 		}
 		right := t.TypedRight()
-		if right.ResolvedType() == types.Unknown {
+		if right.ResolvedType().Family() == types.UnknownFamily {
 			right = reType(right, t.ResolvedBinOp().RightType)
 		}
 		out = b.constructBinary(

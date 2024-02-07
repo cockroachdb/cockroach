@@ -53,7 +53,7 @@ func TestRandParseDatumStringAs(t *testing.T) {
 	},
 		types.Scalar...)
 	for _, ty := range types.Scalar {
-		if ty != types.Jsonb {
+		if !ty.Identical(types.Jsonb) {
 			tests = append(tests, types.MakeArray(ty))
 		}
 	}
