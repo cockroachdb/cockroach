@@ -220,11 +220,22 @@ func (b *Builder) buildRoutine(
 			panic(unimplemented.NewWithIssue(88947,
 				"variadiac user-defined functions are not yet supported"))
 		}
+		if len(paramTypes) != len(args) {
+			panic(errors.AssertionFailedf(
+				"different number of static parameters %d and actual arguments %d", len(paramTypes), len(args),
+			))
+		}
 		params = make(opt.ColList, len(paramTypes))
 		for i := range paramTypes {
 			paramType := &paramTypes[i]
 			argColName := funcParamColName(tree.Name(paramType.Name), i)
-			col := b.synthesizeColumn(bodyScope, argColName, paramType.Typ, nil /* expr */, nil /* scalar */)
+			// Use statically defined argument type (unless it is a wildcard in
+			// which case we use the actual parameter type).
+			argType := paramType.Typ
+			if argType.IsWildcardType() {
+				argType = args[i].DataType()
+			}
+			col := b.synthesizeColumn(bodyScope, argColName, argType, nil /* expr */, nil /* scalar */)
 			col.setParamOrd(i)
 			params[i] = col.id
 		}
