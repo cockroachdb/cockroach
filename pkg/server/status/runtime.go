@@ -12,10 +12,12 @@ package status
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"runtime/metrics"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -26,11 +28,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/elastic/gosigar"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/net"
 )
+
+func init() {
+	samples := []metrics.Sample{{
+		Name: GcAssist,
+	}}
+	lookup := make(map[string]int, len(samples))
+	for i, s := range samples {
+		lookup[s.Name] = i
+	}
+	RtSamples = runtimeSamples{
+		Samples: samples,
+		LookUp:  lookup,
+	}
+
+	m := metrics.All()
+	runtimeValue = make(map[string]metrics.ValueKind, len(m))
+	for _, desc := range m {
+		runtimeValue[desc.Name] = desc.Kind
+	}
+}
 
 var (
 	metaCgoCalls = metric.Metadata{
@@ -92,6 +115,12 @@ var (
 		Help:        "Current GC pause percentage",
 		Measurement: "GC Pause",
 		Unit:        metric.Unit_PERCENT,
+	}
+	metaGCAssitSeconds = metric.Metadata{
+		Name:        "sys.gc.assit.seconds",
+		Help:        "Estimated total CPU time goroutines spent to assist the GC process",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_SECONDS,
 	}
 
 	metaCPUUserNS = metric.Metadata{
@@ -292,6 +321,109 @@ var diskMetricsIgnoredDevices = envutil.EnvOrDefaultString("COCKROACH_DISK_METRI
 // error           : any issues fetching stats. This should be a warning only.
 var getCgoMemStats func(context.Context) (uint, uint, error)
 
+// Estimated total CPU time goroutines spent performing GC tasks to assist the GC and prevent it from falling behind the
+// application. This metric is an overestimate, and not directly comparable to system CPU time measurements. Compare
+// only with other /cpu/classes metrics.
+const GcAssist = "/cpu/classes/gc/mark/assist:cpu-seconds"
+
+// runtimeSamples are a collection of metrics to sample from golang's runtime metrics.
+// https://pkg.go.dev/runtime/metrics
+type runtimeSamples struct {
+	mu      syncutil.Mutex
+	Samples []metrics.Sample
+	LookUp  map[string]int
+}
+
+type runtimeMetricValue struct {
+	uintField  uint64
+	floatField float64
+}
+
+// Get value by metric name from sampled runtime metrics, valid values are uint64 or float64.
+func (rts *runtimeSamples) GetValue(
+	name string, m map[string]metrics.ValueKind,
+) runtimeMetricValue {
+	e := getExpectedValueType(name, m)
+	res := runtimeMetricValue{}
+	switch e {
+	case metrics.KindUint64:
+		res.uintField = rts.getUint64(name)
+	case metrics.KindFloat64:
+		res.floatField = rts.getFloat64(name)
+	default:
+		panic(fmt.Sprintf("%s has supported metric type: %+v", name, e))
+	}
+	return res
+}
+
+func (rts *runtimeSamples) getIndex(name string) int {
+	i, found := rts.LookUp[name]
+	if !found {
+		panic(fmt.Sprintf("unsampled metric: %s", name))
+	}
+	return i
+}
+
+func (rts *runtimeSamples) getUint64(name string) uint64 {
+	i := rts.getIndex(name)
+	rts.mu.Mutex.Lock()
+	defer rts.mu.Mutex.Unlock()
+	return rts.Samples[i].Value.Uint64()
+}
+
+func (rts *runtimeSamples) getFloat64(name string) float64 {
+	i := rts.getIndex(name)
+	rts.mu.Mutex.Lock()
+	defer rts.mu.Mutex.Unlock()
+	return rts.Samples[i].Value.Float64()
+}
+
+// getExpectedValueType from a list of supported metrics from runtime/metrics api.
+func getExpectedValueType(name string, m map[string]metrics.ValueKind) metrics.ValueKind {
+	e, hasDesc := m[name]
+	if !hasDesc {
+		panic(fmt.Sprintf("unexpected metric: %s", name))
+	}
+	return e
+}
+
+// Read the scalar part of the go runtime metric sample's Value.
+// The results may be translated to one of uint64 or float64 value types.
+func (rts *runtimeSamples) readValueScalar(name string, e metrics.ValueKind) uint64 {
+	rts.mu.Mutex.Lock()
+	defer rts.mu.Mutex.Unlock()
+
+	var res uint64
+	sampled := false
+	for _, s := range rts.Samples {
+		if s.Name == name {
+			sampled = true
+			if s.Value.Kind() != e {
+				panic(fmt.Sprintf("%s has unexpected metric type: %+v expecting %+v", name, s.Value.Kind(), e))
+			}
+			res = s.Value.Uint64()
+		}
+	}
+	if !sampled {
+		panic(fmt.Sprintf("metric %s is not sampled", name))
+	}
+	return res
+}
+
+// sampleRuntimeMetrics reads from go metrics fill in the value
+// in the Samples field.
+func (rts *runtimeSamples) sampleRuntimeMetrics() {
+	rts.mu.Mutex.Lock()
+	defer rts.mu.Mutex.Unlock()
+	metrics.Read(rts.Samples)
+}
+
+// RtSamples captures all the go runtime metric samples.
+var RtSamples runtimeSamples
+
+// runtimeValue recorded the maping from metric name to expected valueKind.
+var runtimeValue map[string]metrics.ValueKind
+
 // RuntimeStatSampler is used to periodically sample the runtime environment
 // for useful statistics, performing some rudimentary calculations and storing
 // the resulting information in a format that can be easily consumed by status
@@ -338,6 +470,7 @@ type RuntimeStatSampler struct {
 	GcCount                  *metric.Gauge
 	GcPauseNS                *metric.Gauge
 	GcPausePercent           *metric.GaugeFloat64
+	GcAssitSeconds           *metric.Gauge
 	// CPU stats for the CRDB process usage.
 	CPUUserNS              *metric.Gauge
 	CPUUserPercent         *metric.GaugeFloat64
@@ -424,6 +557,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		GcCount:                  metric.NewGauge(metaGCCount),
 		GcPauseNS:                metric.NewGauge(metaGCPauseNS),
 		GcPausePercent:           metric.NewGaugeFloat64(metaGCPausePercent),
+		GcAssitSeconds:           metric.NewGauge(metaGCAssitSeconds),
 
 		CPUUserNS:              metric.NewGauge(metaCPUUserNS),
 		CPUUserPercent:         metric.NewGaugeFloat64(metaCPUUserPercent),
@@ -514,6 +648,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	// source.
 	gc := &debug.GCStats{}
 	debug.ReadGCStats(gc)
+
+	RtSamples.sampleRuntimeMetrics()
 
 	numCgoCall := runtime.NumCgoCall()
 	numGoroutine := runtime.NumGoroutine()
@@ -615,6 +751,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	combinedNormalizedHostPerc := (hostSrate + hostUrate) / float64(numHostCPUs)
 	gcPauseRatio := float64(uint64(gc.PauseTotal)-rsr.last.gcPauseTime) / dur
 	runnableSum := goschedstats.CumulativeNormalizedRunnableGoroutines()
+	gcAssitSeconds := RtSamples.GetValue(GcAssist, runtimeValue).uintField
 	// The number of runnable goroutines per CPU is a count, but it can vary
 	// quickly. We don't just want to get a current snapshot of it, we want the
 	// average value since the last sampling.
@@ -651,6 +788,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		GCRunCount:        uint64(gc.NumGC),
 		NetHostRecvBytes:  deltaNet.BytesRecv,
 		NetHostSendBytes:  deltaNet.BytesSent,
+		GCAssistSeconds:   gcAssitSeconds,
 	}
 
 	logStats(ctx, stats)
@@ -668,6 +806,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	rsr.GcCount.Update(gc.NumGC)
 	rsr.GcPauseNS.Update(int64(gc.PauseTotal))
 	rsr.GcPausePercent.Update(gcPauseRatio)
+	rsr.GcAssitSeconds.Update(int64(gcAssitSeconds))
 
 	rsr.CPUUserNS.Update(procUtime)
 	rsr.CPUUserPercent.Update(procUrate)

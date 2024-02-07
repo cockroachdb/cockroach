@@ -12,6 +12,7 @@ package status
 
 import (
 	"reflect"
+	"runtime/metrics"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -167,5 +168,32 @@ func TestSubtractNetCounters(t *testing.T) {
 	subtractNetworkCounters(&from, sub)
 	if !reflect.DeepEqual(from, expected) {
 		t.Fatalf("expected %+v; got %+v", expected, from)
+	}
+}
+
+func TestGoRuntimeSamples(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	m := metrics.All()
+	rtv := make(map[string]metrics.ValueKind, len(m))
+	samples := []metrics.Sample{}
+	lookup := map[string]int{}
+	for i, desc := range m {
+		rtv[desc.Name] = desc.Kind
+		samples = append(samples, metrics.Sample{Name: desc.Name})
+		lookup[desc.Name] = i
+	}
+	rts := runtimeSamples{Samples: samples, LookUp: lookup}
+	rts.sampleRuntimeMetrics()
+	// make sure GetValue method will not panic when the parameters are appropriate
+	for _, desc := range m {
+		switch k := desc.Kind; k {
+		case metrics.KindUint64:
+			rts.GetValue(desc.Name, rtv)
+		case metrics.KindFloat64:
+			rts.GetValue(desc.Name, rtv)
+		default:
+			continue
+		}
 	}
 }
