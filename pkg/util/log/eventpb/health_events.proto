@@ -64,4 +64,7 @@ message RuntimeStats {
   uint64 net_host_recv_bytes = 18 [(gogoproto.jsontag) = ",omitempty"];
   // The bytes sent on all network interfaces since this process started.
   uint64 net_host_send_bytes = 19 [(gogoproto.jsontag) = ",omitempty"];
+  // Estimated total CPU time user goroutines spent performing GC tasks to
+  // assist the GC. Expressed in nanoseconds.
+  uint64 gc_assist_ns = 20 [(gogoproto.customname) = "GCAssistNs", (gogoproto.jsontag) = ",omitempty"];
 }

@@ -266,6 +266,7 @@ An event of type `runtime_stats` is recorded every 10 seconds as server health m
 | `GCRunCount` | The total number of GC runs. | no |
 | `NetHostRecvBytes` | The bytes received on all network interfaces since this process started. | no |
 | `NetHostSendBytes` | The bytes sent on all network interfaces since this process started. | no |
+| `GCAssistNs` | Estimated total CPU time user goroutines spent performing GC tasks to assist the GC. Expressed in nanoseconds. | no |
 
 
 #### Common fields

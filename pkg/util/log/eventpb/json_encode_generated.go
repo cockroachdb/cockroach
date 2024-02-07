@@ -4251,6 +4251,15 @@ func (m *RuntimeStats) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = strconv.AppendUint(b, uint64(m.NetHostSendBytes), 10)
 	}
 
+	if m.GCAssistNs != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"GCAssistNs\":"...)
+		b = strconv.AppendUint(b, uint64(m.GCAssistNs), 10)
+	}
+
 	return printComma, b
 }
 

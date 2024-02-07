@@ -12,10 +12,12 @@ package status
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"runtime/metrics"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -92,6 +94,12 @@ var (
 		Help:        "Current GC pause percentage",
 		Measurement: "GC Pause",
 		Unit:        metric.Unit_PERCENT,
+	}
+	metaGCAssistNS = metric.Metadata{
+		Name:        "sys.gc.assist.ns",
+		Help:        "Estimated total CPU time user goroutines spent to assist the GC process",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 
 	metaCPUUserNS = metric.Metadata{
@@ -292,6 +300,85 @@ var diskMetricsIgnoredDevices = envutil.EnvOrDefaultString("COCKROACH_DISK_METRI
 // error           : any issues fetching stats. This should be a warning only.
 var getCgoMemStats func(context.Context) (uint, uint, error)
 
+// Estimated total CPU time goroutines spent performing GC tasks to assist the
+// GC and prevent it from falling behind the application. This metric is an
+// overestimate, and not directly comparable to system CPU time measurements.
+// Compare only with other /cpu/classes metrics.
+const runtimeMetricGCAssist = "/cpu/classes/gc/mark/assist:cpu-seconds"
+
+var runtimeMetrics = []string{runtimeMetricGCAssist}
+
+// GoRuntimeSampler are a collection of metrics to sample from golang's runtime environment and
+// runtime metrics metadata. It fetches go runtime metrics and provides read access.
+// https://pkg.go.dev/runtime/metrics
+type GoRuntimeSampler struct {
+	// The collection of metrics we want to sample.
+	metricSamples []metrics.Sample
+	// The mapping to find metric slot in metricSamples by name.
+	metricIndexes map[string]int
+}
+
+// getIndex finds the position of metrics in the sample array by name.
+func (grm *GoRuntimeSampler) getIndex(name string) int {
+	i, found := grm.metricIndexes[name]
+	if !found {
+		panic(fmt.Sprintf("unsampled metric: %s", name))
+	}
+	return i
+}
+
+// float64 gets the sampled value by metrics name as float64.
+// N.B. This method will panic if the metrics value is not metrics.KindFloat64.
+func (grm *GoRuntimeSampler) float64(name string) float64 {
+	i := grm.getIndex(name)
+	return grm.metricSamples[i].Value.Float64()
+}
+
+// sampleRuntimeMetrics reads from metrics.Read api and fill in the value
+// in the metricSamples field.
+// Benchmark results on 12 core Apple M3 Pro:
+// goos: darwin
+// goarch: arm64
+// pkg: github.com/cockroachdb/cockroach/pkg/server/status
+// BenchmarkGoRuntimeSampler
+// BenchmarkGoRuntimeSampler-12    	28886398	        40.03 ns/op
+//
+//	func BenchmarkGoRuntimeSampler(b *testing.B) {
+//		 s := NewGoRuntimeSampler([]string{runtimeMetricGCAssist})
+//		 for n := 0; n < b.N; n++ {
+//			 s.sampleRuntimeMetrics()
+//		 }
+//	}
+func (grm *GoRuntimeSampler) sampleRuntimeMetrics() {
+	metrics.Read(grm.metricSamples)
+}
+
+// NewGoRuntimeSampler constructs a new GoRuntimeSampler object.
+// This method will panic on invalid metrics names provided.
+func NewGoRuntimeSampler(metricNames []string) *GoRuntimeSampler {
+	m := metrics.All()
+	metricTypes := make(map[string]metrics.ValueKind, len(m))
+	for _, desc := range m {
+		metricTypes[desc.Name] = desc.Kind
+	}
+	metricSamples := make([]metrics.Sample, len(metricNames))
+	metricIndexes := make(map[string]int, len(metricNames))
+	for i, n := range metricNames {
+		_, hasDesc := metricTypes[n]
+		if !hasDesc {
+			panic(fmt.Sprintf("unexpected metric: %s", n))
+		}
+		metricSamples[i] = metrics.Sample{Name: n}
+		metricIndexes[n] = i
+	}
+
+	grm := &GoRuntimeSampler{
+		metricSamples: metricSamples,
+		metricIndexes: metricIndexes,
+	}
+	return grm
+}
+
 // RuntimeStatSampler is used to periodically sample the runtime environment
 // for useful statistics, performing some rudimentary calculations and storing
 // the resulting information in a format that can be easily consumed by status
@@ -326,6 +413,8 @@ type RuntimeStatSampler struct {
 	// Only show "not implemented" errors once, we don't need the log spam.
 	fdUsageNotImplemented bool
 
+	goRuntimeSampler *GoRuntimeSampler
+
 	// Metric gauges maintained by the sampler.
 	// Go runtime stats.
 	CgoCalls                 *metric.Gauge
@@ -338,6 +427,7 @@ type RuntimeStatSampler struct {
 	GcCount                  *metric.Gauge
 	GcPauseNS                *metric.Gauge
 	GcPausePercent           *metric.GaugeFloat64
+	GcAssistNS               *metric.Gauge
 	// CPU stats for the CRDB process usage.
 	CPUUserNS              *metric.Gauge
 	CPUUserPercent         *metric.GaugeFloat64
@@ -414,6 +504,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		startTimeNanos:           clock.Now().UnixNano(),
 		initialNetCounters:       netCounters,
 		initialDiskCounters:      diskCounters,
+		goRuntimeSampler:         NewGoRuntimeSampler(runtimeMetrics),
 		CgoCalls:                 metric.NewGauge(metaCgoCalls),
 		Goroutines:               metric.NewGauge(metaGoroutines),
 		RunnableGoroutinesPerCPU: metric.NewGaugeFloat64(metaRunnableGoroutinesPerCPU),
@@ -424,6 +515,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		GcCount:                  metric.NewGauge(metaGCCount),
 		GcPauseNS:                metric.NewGauge(metaGCPauseNS),
 		GcPausePercent:           metric.NewGaugeFloat64(metaGCPausePercent),
+		GcAssistNS:               metric.NewGauge(metaGCAssistNS),
 
 		CPUUserNS:              metric.NewGauge(metaCPUUserNS),
 		CPUUserPercent:         metric.NewGaugeFloat64(metaCPUUserPercent),
@@ -514,6 +606,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	// source.
 	gc := &debug.GCStats{}
 	debug.ReadGCStats(gc)
+
+	rsr.goRuntimeSampler.sampleRuntimeMetrics()
 
 	numCgoCall := runtime.NumCgoCall()
 	numGoroutine := runtime.NumGoroutine()
@@ -615,6 +709,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	combinedNormalizedHostPerc := (hostSrate + hostUrate) / float64(numHostCPUs)
 	gcPauseRatio := float64(uint64(gc.PauseTotal)-rsr.last.gcPauseTime) / dur
 	runnableSum := goschedstats.CumulativeNormalizedRunnableGoroutines()
+	gcAssistSeconds := rsr.goRuntimeSampler.float64(runtimeMetricGCAssist)
+	gcAssistNS := int64(gcAssistSeconds * 1e9)
 	// The number of runnable goroutines per CPU is a count, but it can vary
 	// quickly. We don't just want to get a current snapshot of it, we want the
 	// average value since the last sampling.
@@ -651,6 +747,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		GCRunCount:        uint64(gc.NumGC),
 		NetHostRecvBytes:  deltaNet.BytesRecv,
 		NetHostSendBytes:  deltaNet.BytesSent,
+		GCAssistNs:        uint64(gcAssistNS),
 	}
 
 	logStats(ctx, stats)
@@ -668,6 +765,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	rsr.GcCount.Update(gc.NumGC)
 	rsr.GcPauseNS.Update(int64(gc.PauseTotal))
 	rsr.GcPausePercent.Update(gcPauseRatio)
+	rsr.GcAssistNS.Update(gcAssistNS)
 
 	rsr.CPUUserNS.Update(procUtime)
 	rsr.CPUUserPercent.Update(procUrate)
