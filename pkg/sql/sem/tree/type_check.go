@@ -1833,7 +1833,7 @@ func (expr *Array) TypeCheck(
 	}
 
 	if len(expr.Exprs) == 0 {
-		if desiredParam == types.Any {
+		if desiredParam.Identical(types.Any) {
 			return nil, errAmbiguousArrayType
 		}
 		expr.typ = types.MakeArray(desiredParam)
