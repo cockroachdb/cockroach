@@ -3374,13 +3374,11 @@ func MVCCClearTimeRange(
 	// swaths of uninteresting keys, but then use a normal iteration to actually
 	// do the delete including updating the live key stats correctly.
 	//
-	// The MVCCIncrementalIterator checks for and fails on any intents in our
-	// time-range. However, we've already scanned over the lock table with the
-	// call to ScanLocks above, so this is not strictly necessary. If performance
-	// of this function is a concern, we could instruct the MVCCIncrementalIterator
-	// to forgo intent interleaving.
+	// We've already scanned over the lock table with the call to ScanLocks above,
+	// so we disable intent interleaving.
 	iter, err := NewMVCCIncrementalIterator(ctx, rw, MVCCIncrementalIterOptions{
 		KeyTypes:     IterKeyTypePointsAndRanges,
+		IntentPolicy: MVCCIncrementalIterIntentPolicyIgnore,
 		StartKey:     key,
 		EndKey:       endKey,
 		StartTime:    startTime,
@@ -4129,10 +4127,13 @@ func MVCCDeleteRangeUsingTombstone(
 
 	// If we're omitting point keys in the stats/conflict scan below, we need to
 	// do a separate time-bound scan for point key conflicts.
+	//
+	// We can disable intent interleaving, since we've already scanned for locks.
 	if msCovered != nil {
 		if err := func() error {
 			iter, err := NewMVCCIncrementalIterator(ctx, rw, MVCCIncrementalIterOptions{
 				KeyTypes:     IterKeyTypePointsOnly,
+				IntentPolicy: MVCCIncrementalIterIntentPolicyIgnore,
 				StartKey:     startKey,
 				EndKey:       endKey,
 				StartTime:    timestamp.Prev(), // make inclusive

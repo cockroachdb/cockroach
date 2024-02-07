@@ -881,6 +881,7 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 		"pubsub":       1,
 		"sinkless":     2,
 		"cloudstorage": 0,
+		"pulsar":       1,
 	}
 	if options.externalIODir != "" {
 		sinkWeights["cloudstorage"] = 3
@@ -996,6 +997,11 @@ func makeFeedFactoryWithOptions(
 		f := makePubsubFeedFactory(srvOrCluster, db)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*pubsubFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
+		return f, func() { cleanup() }
+	case "pulsar":
+		f := makePulsarFeedFactory(srvOrCluster, db)
+		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
+		f.(*pulsarFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
 		return f, func() { cleanup() }
 	case "sinkless":
 		pgURLForUserSinkless := func(u string, pass ...string) (url.URL, func()) {
@@ -1150,7 +1156,7 @@ func maybeUseExternalConnection(
 	// percentExternal is the chance of randomly running a test using an `external://` uri.
 	// Set to 1 to always do this.
 	const percentExternal = 0.5
-	if sinkType == `sinkless` || sinkType == `enterprise` || strings.Contains(flakyWhenExternalConnection, sinkType) ||
+	if sinkType == `sinkless` || sinkType == `enterprise` || sinkType == `pulsar` || strings.Contains(flakyWhenExternalConnection, sinkType) ||
 		options.forceNoExternalConnectionURI || rand.Float32() > percentExternal {
 		return factory
 	}

@@ -206,6 +206,7 @@ const (
 	SinkSchemeNull                  = `null`
 	SinkSchemeWebhookHTTP           = `webhook-http`
 	SinkSchemeWebhookHTTPS          = `webhook-https`
+	SinkSchemePulsar                = `pulsar`
 	SinkSchemeExternalConnection    = `external`
 	SinkParamSASLEnabled            = `sasl_enabled`
 	SinkParamSASLHandshake          = `sasl_handshake`
