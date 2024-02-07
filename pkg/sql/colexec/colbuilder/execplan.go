@@ -2293,7 +2293,7 @@ func planProjectionOperators(
 			// anything extra for them, but we do need to handle the string
 			// case.
 			leftType, rightType := leftExpr.ResolvedType(), rightExpr.ResolvedType()
-			if t.Op.ReturnType == types.String && leftType.Family() != rightType.Family() {
+			if t.Op.ReturnType.Identical(types.String) && leftType.Family() != rightType.Family() {
 				// This is a special case of the STRING concatenation - we have
 				// to plan a cast of the non-string type to a STRING.
 				if leftType.Family() == types.StringFamily {

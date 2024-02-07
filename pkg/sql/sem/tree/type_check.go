@@ -538,7 +538,7 @@ func resolveCast(context string, castFrom, castTo *types.T, allowStable bool) er
 		// the same, and if there are casts resolvable across all of the elements
 		// pointwise. Casts to AnyTuple are always allowed since they are
 		// implemented as a no-op.
-		if castTo == types.AnyTuple {
+		if castTo.Identical(types.AnyTuple) {
 			return nil
 		}
 		fromTuple := castFrom.TupleContents()
@@ -1833,7 +1833,7 @@ func (expr *Array) TypeCheck(
 	}
 
 	if len(expr.Exprs) == 0 {
-		if desiredParam == types.Any {
+		if desiredParam.Family() == types.AnyFamily {
 			return nil, errAmbiguousArrayType
 		}
 		expr.typ = types.MakeArray(desiredParam)
@@ -2109,7 +2109,8 @@ func (d *DArray) TypeCheck(_ context.Context, _ *SemaContext, desired *types.T) 
 	// mark the array's type as the desired one.
 	// ARRAY[]
 	// ARRAY[NULL, NULL]
-	if (d.ParamTyp == types.Unknown || d.ParamTyp == types.Any) && (!d.HasNonNulls) {
+	if (d.ParamTyp.Family() == types.UnknownFamily || d.ParamTyp.Family() == types.AnyFamily) &&
+		(!d.HasNonNulls) {
 		if desired.Family() != types.ArrayFamily {
 			// We can't desire a non-array type here.
 			return d, nil
@@ -2712,7 +2713,7 @@ func typeCheckSameTypedExprs(
 			return nil, nil, err
 		}
 		typ := typedExpr.ResolvedType()
-		if typ == types.Unknown && !desired.IsWildcardType() {
+		if typ.Family() == types.UnknownFamily && !desired.IsWildcardType() {
 			// The expression had a NULL type, so we can return the desired type as
 			// the expression type.
 			typ = desired
@@ -3532,7 +3533,7 @@ func CheckUnsupportedType(ctx context.Context, semaCtx *SemaContext, typ *types.
 // various locations throughout the codebase.
 func checkRefCursorComparison(op treecmp.ComparisonOperatorSymbol, left, right *types.T) error {
 	if (op == treecmp.IsNotDistinctFrom || op == treecmp.IsDistinctFrom) &&
-		(left.Family() == types.RefCursorFamily && right == types.Unknown) {
+		(left.Family() == types.RefCursorFamily && right.Family() == types.UnknownFamily) {
 		// Special case: "REFCURSOR IS [NOT] DISTINCT FROM NULL" is allowed.
 		return nil
 	}

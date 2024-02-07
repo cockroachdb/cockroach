@@ -64,7 +64,8 @@ func TestCreateAsVTable(t *testing.T) {
 						}
 						// Filter out vector columns to prevent error in CTAS:
 						// "VECTOR column types are unsupported".
-						if colDef.Type == types.Int2Vector || colDef.Type == types.OidVector {
+						if colDef.Type.(*types.T).Identical(types.Int2Vector) ||
+							colDef.Type.(*types.T).Identical(types.OidVector) {
 							continue
 						}
 						ctasColumns = append(ctasColumns, colDef.Name.String())

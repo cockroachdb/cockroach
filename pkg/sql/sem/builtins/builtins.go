@@ -10786,7 +10786,7 @@ func makeEnumTypeFunc(impl func(t *types.T) (tree.Datum, error)) tree.FnWithExpr
 		ctx context.Context, evalCtx *eval.Context, args tree.Exprs,
 	) (tree.Datum, error) {
 		enumType := args[0].(tree.TypedExpr).ResolvedType()
-		if enumType == types.Unknown || enumType == types.AnyEnum {
+		if enumType.Family() == types.UnknownFamily || enumType.Identical(types.AnyEnum) {
 			return nil, errors.WithHint(pgerror.New(pgcode.InvalidParameterValue, "input expression must always resolve to the same enum type"),
 				"Try NULL::yourenumtype")
 		}

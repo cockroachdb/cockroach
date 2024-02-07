@@ -105,7 +105,7 @@ func (s *Smither) randType() *types.T {
 			(s.disableOIDs && typ.Family() == types.OidFamily) {
 			continue
 		}
-		if s.postgres && typ == types.Name {
+		if s.postgres && typ.Identical(types.Name) {
 			// Name type in CRDB doesn't match Postgres behavior. Exclude for tests
 			// which compare CRDB behavior to Postgres.
 			continue

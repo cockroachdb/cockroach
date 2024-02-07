@@ -1062,7 +1062,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 			// will have 15 duplicates.
 			dupCount = 16
 		}
-		if typ == types.Int {
+		if typ.Identical(types.Int) {
 			cols = newIntColumns(nCols, length, dupCount)
 		} else {
 			cols = newBytesColumns(nCols, length, dupCount)

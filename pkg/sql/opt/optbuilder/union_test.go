@@ -67,15 +67,14 @@ func TestUnionType(t *testing.T) {
 			expected: types.Decimal,
 		},
 		{
-			// Error.
-			left:     types.Float,
-			right:    types.String,
-			expected: nil,
+			left:     types.MakeArray(types.MakeTuple([]*types.T{types.Any})),
+			right:    types.MakeArray(types.MakeTuple([]*types.T{types.Bool})),
+			expected: types.MakeArray(types.MakeTuple([]*types.T{types.Bool})),
 		},
 		{
 			// Error.
-			left:     types.MakeArray(types.MakeTuple([]*types.T{types.Any})),
-			right:    types.MakeArray(types.MakeTuple([]*types.T{types.Bool})),
+			left:     types.Float,
+			right:    types.String,
 			expected: nil,
 		},
 	}

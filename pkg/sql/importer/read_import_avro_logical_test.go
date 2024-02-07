@@ -70,7 +70,7 @@ type avroLogicalInfo struct {
 }
 
 func logicalEncoder(datum tree.Datum, avroType string) (ans interface{}, err error) {
-	if datum.ResolvedType() == types.Unknown {
+	if datum.ResolvedType().Family() == types.UnknownFamily {
 		return nil, nil
 	}
 	switch datum.ResolvedType().Family() {

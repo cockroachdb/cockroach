@@ -177,12 +177,12 @@ func runConversionBenchmarks(
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}
 		var typNameSuffix string
-		if typ == types.Bytes {
+		if typ.Identical(types.Bytes) {
 			tc.numBytes = int64(tc.bytesFixedLength * coldata.BatchSize())
 			if tc.bytesFixedLength == bytesInlinedLen {
 				typNameSuffix = "_inlined"
 			}
-		} else if typ == types.Decimal {
+		} else if typ.Identical(types.Decimal) {
 			// Decimal is variable length type, so we want to calculate precisely the
 			// total size of all decimals in the vector.
 			decimals := batch.ColVec(0).Decimal()
