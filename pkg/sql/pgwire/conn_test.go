@@ -585,8 +585,15 @@ func getSessionArgs(
 		if version != version30 {
 			return nil, sql.SessionArgs{}, errors.Errorf("unexpected protocol version: %d", version)
 		}
-
 		ctx := context.Background()
+		w := errWriter{
+			sv:         &cluster.MakeTestingClusterSettings().SV,
+			msgBuilder: newWriteBuffer(metric.NewCounter(metric.Metadata{})),
+		}
+		// Send a specific error so the client knows the server received the
+		// connection. This is easier than implementing the entire pgwire
+		// connection handshake.
+		_ /* err */ = w.writeErr(ctx, errors.New("received connection"), conn)
 		cp, err := parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr(), trustRemoteAddr,
 			false /* acceptTenantName */, false /* acceptSystemIdentityOption */)
 		if err != nil {
@@ -1610,11 +1617,16 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 			wg.Add(1)
 			go func(query string) {
 				defer wg.Done()
-				ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+				ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 				defer cancel()
 				url := fmt.Sprintf("%s&%s", baseURL, query)
 				c, connErr := pgx.Connect(ctx, url)
 				if connErr != nil {
+					// If we didn't get the expected error from the server, then it
+					// means there was a connection failure.
+					if !testutils.IsError(connErr, "received connection") {
+						t.Error(connErr)
+					}
 					return
 				}
 				// ignore the error because there is no answer from the server, we are
