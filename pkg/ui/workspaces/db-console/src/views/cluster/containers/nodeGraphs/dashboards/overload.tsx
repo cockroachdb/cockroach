@@ -89,6 +89,60 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Elastic CPU Utilization"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`CPU utilization by elastic work, compared to the limit set for elastic work.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Percentage} label="CPU Utilization">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              name="cr.node.admission.elastic_cpu.utilization"
+              title={
+                "Elastic CPU Utilization " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+            <Metric
+              name="cr.node.admission.elastic_cpu.utilization_limit"
+              title={
+                "Elastic CPU Utilization Limit " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Elastic CPU Exhausted Duration Per Second"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`Duration of CPU exhaustion by elastic work, in microseconds.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="duration (micros/sec)">
+        {nodeIDs.map(nid => (
+          <Metric
+            key={nid}
+            name="cr.node.admission.elastic_cpu.nanos_exhausted_duration"
+            title={
+              "Elastic CPU Exhausted " +
+              nodeDisplayName(nodeDisplayNameByID, nid)
+            }
+            sources={[nid]}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="IO Overload"
       sources={storeSources}
       tenantSource={tenantSource}

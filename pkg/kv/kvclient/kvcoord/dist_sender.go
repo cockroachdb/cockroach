@@ -2534,22 +2534,6 @@ func (ds *DistSender) sendToReplicas(
 			if withCommit && !grpcutil.RequestDidNotStart(err) {
 				ambiguousError = err
 			}
-
-			// If the error wasn't just a context cancellation and the down replica
-			// is cached as the lease holder, evict it. The only other eviction
-			// happens below on NotLeaseHolderError, but if the next replica is the
-			// actual lease holder, we're never going to receive one of those and
-			// will thus pay the price of trying the down node first forever.
-			//
-			// NB: we should consider instead adding a successful reply from the next
-			// replica into the cache, but without a leaseholder (and taking into
-			// account that the local node can't be down) it won't take long until we
-			// talk to a replica that tells us who the leaseholder is.
-			if ctx.Err() == nil {
-				if lh := routing.Leaseholder(); lh != nil && lh.IsSame(curReplica) {
-					routing.EvictLease(ctx)
-				}
-			}
 		} else {
 			// If the reply contains a timestamp, update the local HLC with it.
 			if br.Error != nil {
