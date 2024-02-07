@@ -973,3 +973,15 @@ SELECT * FROM test_49144 WHERE ("test_49144"."value" -> 'c') > '2.33' ORDER BY 1
 ----
 {"c": 2.5}
 {"c": 3}
+
+# Regression test for not using value-encoding for JSON when fingerprinting a
+# tuple (#118380).
+query T rowsort
+WITH cte1 AS (SELECT * FROM (VALUES
+  (('1':::JSON, 1)),
+  (('2':::JSON, 2))
+) AS tab (col1))
+SELECT * FROM cte1 GROUP BY cte1.col1;
+----
+(1,1)
+(2,2)
