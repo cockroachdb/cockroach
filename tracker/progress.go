@@ -28,7 +28,15 @@ import (
 // strewn around `*raft.raft`. Additionally, some fields are only used when in a
 // certain State. All of this isn't ideal.
 type Progress struct {
-	Match, Next uint64
+	// Match is the index up to which the follower's log is known to match the
+	// leader's.
+	Match uint64
+	// Next is the log index of the next entry to send to this follower. All
+	// entries with indices in (Match, Next) interval are already in flight.
+	//
+	// Invariant: 0 <= Match < Next.
+	Next uint64
+
 	// State defines how the leader should interact with the follower.
 	//
 	// When in StateProbe, leader sends at most one replication message
@@ -208,7 +216,6 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 		return false
 	}
 
-	// Next index shall always be larger than match index.
 	pr.Next = max(min(rejected, matchHint+1), pr.Match+1)
 	pr.MsgAppFlowPaused = false
 	return true
