@@ -322,6 +322,11 @@ func (s *TestState) MayResolveTable(
 	}
 	table, err := catalog.AsTableDescriptor(desc)
 	if err != nil {
+		// Finding a descriptor of a different type is not an error; it is
+		// equivalent to "not found".
+		if errors.Is(err, catalog.ErrDescriptorWrongType) {
+			return prefix, nil
+		}
 		panic(err)
 	}
 	return prefix, table
@@ -340,6 +345,11 @@ func (s *TestState) MayResolveType(
 	}
 	typ, err := catalog.AsTypeDescriptor(desc)
 	if err != nil {
+		// Finding a descriptor of a different type is not an error; it is
+		// equivalent to "not found".
+		if errors.Is(err, catalog.ErrDescriptorWrongType) {
+			return prefix, nil
+		}
 		panic(err)
 	}
 	return prefix, typ

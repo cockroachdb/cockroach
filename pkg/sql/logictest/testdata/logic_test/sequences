@@ -2411,7 +2411,7 @@ subtest regression_106838
 statement error pgcode 42601 pq: invalid OWNED BY option
 CREATE SEQUENCE s_106838 OWNED BY col;
 
-subtest serial_normalization_type_name_conflict
+subtest sequence_type_name_conflict
 
 statement ok
 SET serial_normalization = 'sql_sequence';
@@ -2430,6 +2430,19 @@ CREATE TABLE public.t72820 (
    i INT8 NOT NULL DEFAULT nextval('public.t72820_i_seq1'::REGCLASS),
    CONSTRAINT t72820_pkey PRIMARY KEY (i ASC)
 )
+
+# Also make sure that creating a sequence directly handles the name conflict.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.1
+skipif config local-mixed-23.2
+statement error relation "test.public.t72820_i_seq" already exists
+CREATE SEQUENCE t72820_i_seq
+
+onlyif config local-legacy-schema-changer
+onlyif config local-mixed-23.1
+onlyif config local-mixed-23.2
+statement error type "test.public.t72820_i_seq" already exists
+CREATE SEQUENCE t72820_i_seq
 
 statement ok
 RESET serial_normalization;

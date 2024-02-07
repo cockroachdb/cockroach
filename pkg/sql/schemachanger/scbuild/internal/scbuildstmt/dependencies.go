@@ -344,6 +344,10 @@ type ResolveParams struct {
 	// WithOffline, if set, instructs the catalog reader to include offline
 	// descriptors.
 	WithOffline bool
+
+	// ResolveTypes if set, instructs the catalog reader to resolve types
+	// and not just tables, sequences, and views.
+	ResolveTypes bool
 }
 
 // NameResolver looks up elements in the catalog by name, and vice-versa.
