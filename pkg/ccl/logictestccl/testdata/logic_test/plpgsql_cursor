@@ -1923,3 +1923,133 @@ CREATE OR REPLACE FUNCTION f(curs STRING) RETURNS INT AS $$
     RETURN 0;
   END
 $$ LANGUAGE PLpgSQL;
+
+subtest hold_setting
+
+# Test the open_plpgsql_cursor_with_hold setting, which causes PL/pgSQL cursors
+# to remain open after their transaction closes.
+statement ok
+CREATE PROCEDURE make_curs(curs REFCURSOR) AS $$
+  BEGIN
+    OPEN curs FOR SELECT 1, 2;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# The cursors should be closed when the implicit transaction closes.
+statement ok
+CALL make_curs('foo');
+CALL make_curs('bar');
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+# The cursors should be visible within the explicit transcation.
+statement ok
+BEGIN;
+CALL make_curs('foo');
+CALL make_curs('bar');
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+foo
+bar
+
+# The cursors should be closed when the explicit transaction commits.
+statement ok
+COMMIT;
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+# The cursors should still be visible even through they were opened within
+# implicit transactions.
+statement ok
+SET close_cursors_at_commit = false;
+CALL make_curs('foo');
+CALL make_curs('bar');
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+foo
+bar
+
+query II
+FETCH FROM foo;
+----
+1  2
+
+# A CLOSE statement should still close the open cursors.
+statement ok
+CLOSE ALL;
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+# Cursors should remain open after the explicit transaction commits.
+statement ok
+BEGIN;
+CALL make_curs('foo');
+CALL make_curs('bar');
+COMMIT;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+foo
+bar
+
+query II
+FETCH FROM bar;
+----
+1  2
+
+statement ok
+CLOSE ALL;
+
+# Cursors should be rolled back if opened in a transaction that is rolled back.
+statement ok
+BEGIN;
+CALL make_curs('foo');
+CALL make_curs('bar');
+ROLLBACK;
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+# A preexisting cursor should not be rolled back when a transaction aborts.
+statement ok
+CALL make_curs('foo');
+
+statement ok
+BEGIN;
+CALL make_curs('bar');
+ROLLBACK;
+
+query T
+SELECT name FROM pg_cursors;
+----
+foo
+
+query II
+FETCH FROM foo;
+----
+1  2
+
+# The preexisting cursor should still be closed by CLOSE ALL.
+statement ok
+CLOSE ALL;
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+statement ok
+RESET close_cursors_at_commit;
+
+subtest end

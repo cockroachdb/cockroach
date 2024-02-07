@@ -485,6 +485,9 @@ message LocalOnlySessionData {
   // in the transaction block will instead be executed in their own
   // implicit transaction.
   bool autocommit_before_ddl = 121 [(gogoproto.customname) = "AutoCommitBeforeDDL"];
+  // CloseCursorsAtCommit determines whether cursors remain open after their
+  // parent transaction closes.
+  bool close_cursors_at_commit = 122;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

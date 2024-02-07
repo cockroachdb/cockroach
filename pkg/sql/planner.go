@@ -200,7 +200,16 @@ type planner struct {
 		innerPlansMustUseLeafTxn int32
 	}
 
+	// monitor tracks the memory usage of txn-bound objects - for example,
+	// execution operators.
 	monitor *mon.BytesMonitor
+
+	// sessionMonitor tracks the memory of session-bound objects. It is currently
+	// only used internally for tracking SQL cursors declared using WITH HOLD.
+	//
+	// NOTE: sessionMonitor is unset for queries that are not associated with a
+	// session (e.g. internal queries).
+	sessionMonitor *mon.BytesMonitor
 
 	// Corresponding Statement for this query.
 	stmt Statement
@@ -873,11 +882,13 @@ func (p *planner) resetPlanner(
 	stmtTS time.Time,
 	sd *sessiondata.SessionData,
 	plannerMon *mon.BytesMonitor,
+	sessionMon *mon.BytesMonitor,
 ) {
 	p.txn = txn
 	p.stmt = Statement{}
 	p.instrumentation = instrumentationHelper{}
 	p.monitor = plannerMon
+	p.sessionMonitor = sessionMon
 
 	p.cancelChecker.Reset(ctx)
 

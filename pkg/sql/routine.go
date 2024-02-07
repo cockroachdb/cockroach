@@ -471,11 +471,20 @@ func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursor
 		ctx:        context.Background(),
 		cursorName: cursorName,
 		resultCols: make(colinfo.ResultColumns, len(planCols)),
+		cursorSql:  open.CursorSQL,
 	}
 	copy(cursorHelper.resultCols, planCols)
-	cursorHelper.container.Init(
+	mon := g.p.Mon()
+	if !g.p.SessionData().CloseCursorsAtCommit {
+		mon = g.p.sessionMonitor
+		if mon == nil {
+			return nil, errors.AssertionFailedf("cannot open cursor WITH HOLD without an active session")
+		}
+	}
+	cursorHelper.container.InitWithParentMon(
 		cursorHelper.ctx,
 		getTypesFromResultColumns(planCols),
+		mon,
 		g.p.ExtendedEvalContextCopy(),
 		"routine_open_cursor", /* opName */
 	)
@@ -509,6 +518,7 @@ func (h *plpgsqlCursorHelper) createCursor(p *planner, blockState *tree.BlockSta
 		txn:            p.txn,
 		statement:      h.cursorSql,
 		created:        timeutil.Now(),
+		withHold:       !p.SessionData().CloseCursorsAtCommit,
 		eagerExecution: true,
 	}
 	if err := p.checkIfCursorExists(h.cursorName); err != nil {

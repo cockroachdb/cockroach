@@ -77,6 +77,34 @@ func (c *rowContainerHelper) InitWithDedup(
 	c.scratch = make(rowenc.EncDatumRow, len(typs))
 }
 
+// InitWithParentMon is a variant of Init that allows the parent memory monitor
+// to be specified. This is useful when the container should not be owned by the
+// current transaction (e.g. a SQL cursor that lives on the session).
+func (c *rowContainerHelper) InitWithParentMon(
+	ctx context.Context,
+	typs []*types.T,
+	parent *mon.BytesMonitor,
+	evalContext *extendedEvalContext,
+	opName redact.RedactableString,
+) {
+	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
+	// TODO(yuzefovich): currently the memory usage of c.memMonitor doesn't
+	// count against sql.mem.distsql.current metric. Fix it.
+	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
+		ctx, parent, distSQLCfg, evalContext.SessionData(),
+		redact.Sprintf("%s-limited", opName),
+	)
+	c.diskMonitor = execinfra.NewMonitor(
+		ctx, distSQLCfg.ParentDiskMonitor, redact.Sprintf("%s-disk", opName),
+	)
+	c.rows = &rowcontainer.DiskBackedRowContainer{}
+	c.rows.Init(
+		colinfo.NoOrdering, typs, &evalContext.Context,
+		distSQLCfg.TempStorage, c.memMonitor, c.diskMonitor,
+	)
+	c.scratch = make(rowenc.EncDatumRow, len(typs))
+}
+
 func (c *rowContainerHelper) initMonitors(
 	ctx context.Context, evalContext *extendedEvalContext, opName redact.RedactableString,
 ) {
