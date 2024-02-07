@@ -129,8 +129,8 @@ func TestOIDCEnabled(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.redirect_url = "https://cockroachlabs.com/oidc/v1/callback"`)
 	sqlDB.Exec(t, `set cluster setting server.oidc_authentication.claim_json_key = "email"`)
 	sqlDB.Exec(t, `set cluster setting server.oidc_authentication.principal_regex = '^([^@]+)@[^@]+$'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.enabled = "true"`)
 	sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING server.http.base_path = "%s"`, basePath))
+	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.enabled = "true"`)
 
 	testCertsContext := s.NewClientRPCContext(ctx, username.TestUserName())
 	client, err := testCertsContext.GetHTTPClient()
@@ -203,7 +203,7 @@ func TestOIDCEnabled(t *testing.T) {
 		t.Fatalf("expected 307 status code but got: %d", resp.StatusCode)
 	}
 	if resp.Header.Get("Location") != basePath {
-		t.Fatalf("expected to be redirected to root")
+		t.Fatalf("expected to be redirected to %s", basePath)
 	}
 	foundCookie := false
 	for _, c := range resp.Cookies() {
