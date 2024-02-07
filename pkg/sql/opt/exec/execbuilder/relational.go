@@ -515,6 +515,7 @@ func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (ex
 		return execPlan{}, err
 	}
 	ep := execPlan{root: node}
+	ep.outputCols.HintSize(len(cols))
 	for i, col := range cols {
 		ep.outputCols.Set(int(col), i)
 	}
@@ -534,8 +535,10 @@ func (b *Builder) buildLiteralValues(values *memo.LiteralValuesExpr) (execPlan, 
 	if err != nil {
 		return execPlan{}, err
 	}
+	cols := values.ColList()
 	ep := execPlan{root: node}
-	for i, col := range values.ColList() {
+	ep.outputCols.HintSize(len(cols))
+	for i, col := range cols {
 		ep.outputCols.Set(int(col), i)
 	}
 
@@ -550,6 +553,7 @@ func (b *Builder) getColumns(
 ) (exec.TableColumnOrdinalSet, opt.ColMap) {
 	var needed exec.TableColumnOrdinalSet
 	var output opt.ColMap
+	output.HintSize(cols.Len())
 
 	columnCount := b.mem.Metadata().Table(tableID).ColumnCount()
 	n := 0
@@ -1015,6 +1019,7 @@ func (b *Builder) applySimpleProject(
 	// We have only pass-through columns.
 	colList := make([]exec.NodeColumnOrdinal, 0, cols.Len())
 	var res execPlan
+	res.outputCols.HintSize(cap(colList))
 	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
 		res.outputCols.Set(int(i), len(colList))
 		ord, err := input.getNodeColumnOrdinal(i)
@@ -1052,6 +1057,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 
 	var res execPlan
 	numExprs := len(projections) + prj.Passthrough.Len()
+	res.outputCols.HintSize(numExprs)
 	exprs := make(tree.TypedExprs, 0, numExprs)
 	cols := make(colinfo.ResultColumns, 0, numExprs)
 	ctx := input.makeBuildScalarCtx()
@@ -1128,6 +1134,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	// a column bound by the left side of this apply join to the column ordinal
 	// in the left side that contains the binding.
 	var leftBoundColMap opt.ColMap
+	leftBoundColMap.HintSize(leftBoundCols.Len())
 	for col, ok := leftBoundCols.Next(0); ok; col, ok = leftBoundCols.Next(col + 1) {
 		v, ok := leftPlan.outputCols.Get(int(col))
 		if !ok {
@@ -1234,6 +1241,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	// The right plan will always produce the columns in the presentation, in
 	// the same order.
 	var rightOutputCols opt.ColMap
+	rightOutputCols.HintSize(len(rightRequiredProps.Presentation))
 	for i := range rightRequiredProps.Presentation {
 		rightOutputCols.Set(int(rightRequiredProps.Presentation[i].ID), i)
 	}
@@ -1555,10 +1563,12 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
+	aggregations := *groupBy.Child(1).(*memo.AggregationsExpr)
 
 	var ep execPlan
 	groupingCols := groupBy.Private().(*memo.GroupingPrivate).GroupingCols
 	groupingColIdx := make([]exec.NodeColumnOrdinal, 0, groupingCols.Len())
+	ep.outputCols.HintSize(cap(groupingColIdx) + len(aggregations))
 	for i, ok := groupingCols.Next(0); ok; i, ok = groupingCols.Next(i + 1) {
 		ep.outputCols.Set(int(i), len(groupingColIdx))
 		ord, err := input.getNodeColumnOrdinal(i)
@@ -1568,7 +1578,6 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 		groupingColIdx = append(groupingColIdx, ord)
 	}
 
-	aggregations := *groupBy.Child(1).(*memo.AggregationsExpr)
 	aggInfos := make([]exec.AggInfo, len(aggregations))
 	for i := range aggregations {
 		item := &aggregations[i]
@@ -1749,6 +1758,7 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 	// The input is producing columns that are not useful; set up a projection.
 	cols := make([]exec.NodeColumnOrdinal, 0, neededCols.Len())
 	var newOutputCols opt.ColMap
+	newOutputCols.HintSize(cap(cols))
 	for colID, ok := neededCols.Next(0); ok; colID, ok = neededCols.Next(colID + 1) {
 		ordinal, ordOk := input.outputCols.Get(int(colID))
 		if !ordOk {
@@ -1859,6 +1869,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	}
 
 	ep := execPlan{}
+	ep.outputCols.HintSize(len(private.OutCols))
 	for i, col := range private.OutCols {
 		ep.outputCols.Set(int(col), i)
 	}
@@ -3028,6 +3039,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 	// Renumber the columns so they match the columns expected by the recursive
 	// query.
 	initial.outputCols = util.FastIntMap{}
+	initial.outputCols.HintSize(len(rec.OutCols))
 	for i, col := range rec.OutCols {
 		initial.outputCols.Set(int(col), i)
 	}
@@ -3074,6 +3086,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 	if err != nil {
 		return execPlan{}, err
 	}
+	ep.outputCols.HintSize(len(rec.OutCols))
 	for i, col := range rec.OutCols {
 		ep.outputCols.Set(int(col), i)
 	}
@@ -3108,6 +3121,7 @@ func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
 
 	// Renumber the columns.
 	res.outputCols = opt.ColMap{}
+	res.outputCols.HintSize(len(withScan.OutCols))
 	for i, col := range withScan.OutCols {
 		res.outputCols.Set(int(col), i)
 	}
@@ -3605,6 +3619,7 @@ func (b *Builder) ensureColumns(
 	// in buildRelational() will attach them to the project.
 	b.maybeAnnotateWithEstimates(input.root, inputExpr)
 	var res execPlan
+	res.outputCols.HintSize(len(colList))
 	for i, col := range colList {
 		res.outputCols.Set(int(col), i)
 	}
@@ -3623,6 +3638,7 @@ func (b *Builder) applyPresentation(input execPlan, pres physical.Presentation) 
 	cols := make([]exec.NodeColumnOrdinal, len(pres))
 	colNames := make([]string, len(pres))
 	var res execPlan
+	res.outputCols.HintSize(len(pres))
 	for i := range pres {
 		ord, err := input.getNodeColumnOrdinal(pres[i].ID)
 		if err != nil {

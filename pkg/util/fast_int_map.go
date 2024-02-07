@@ -51,10 +51,19 @@ func (m *FastIntMap) Set(key, val int) {
 			m.setSmallVal(uint32(key), int32(val))
 			return
 		}
-		m.large = m.toLarge()
+		m.large = m.toLarge(numVals)
 		m.small = [numWords]uint64{}
 	}
 	m.large[key] = val
+}
+
+// HintSize grows the map to accommodate size key/value pairs, if necessary. It
+// only has an effect for a map that has not yet grown large enough to morph
+// into a standard Go map.
+func (m *FastIntMap) HintSize(size int) {
+	if m.large == nil && size > numVals {
+		m.large = m.toLarge(size)
+	}
 }
 
 // Unset unmaps the given key.
@@ -279,8 +288,8 @@ func (m *FastIntMap) setSmallVal(idx uint32, val int32) {
 	m.small[word] |= uint64(val+1) << pos
 }
 
-func (m *FastIntMap) toLarge() map[int]int {
-	res := make(map[int]int, numVals)
+func (m *FastIntMap) toLarge(size int) map[int]int {
+	res := make(map[int]int, size)
 	for i := 0; i < numVals; i++ {
 		val := m.getSmallVal(uint32(i))
 		if val != -1 {
