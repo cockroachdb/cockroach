@@ -33,7 +33,9 @@ filegroup(
     srcs = [
         "bin/%{target}-apple-darwin21.2-cc",
         "bin/%{target}-apple-darwin21.2-c++",
-    ],
+    ] + glob(
+        ["SDK/**"], exclude=["SDK/MacOSX12.1.sdk/usr/share/**"]
+    ) + glob(["lib/**"]),
 )
 
 filegroup(
@@ -47,6 +49,7 @@ filegroup(
     name = "linker_files",
     srcs = [
         "bin/%{target}-apple-darwin21.2-cc",
+        "bin/%{target}-apple-darwin21.2-ld",
         "bin/xcrun",
     ],
 )

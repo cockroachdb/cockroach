@@ -11,8 +11,6 @@ def _impl(rctx):
         stripPrefix = "x-tools/x86_64-apple-darwin21.2/",
     )
 
-    repo_path = str(rctx.path(""))
-
     rctx.template(
         "BUILD",
         Label("@com_github_cockroachdb_cockroach//build:toolchains/darwin/BUILD.tmpl"),
@@ -27,7 +25,7 @@ def _impl(rctx):
         Label("@com_github_cockroachdb_cockroach//build:toolchains/darwin/cc_toolchain_config.bzl.tmpl"),
         substitutions = {
             "%{host}": rctx.attr.host,
-            "%{repo_path}": repo_path,
+            "%{repo_name}": rctx.name,
             "%{target}": rctx.attr.target,
         },
         executable = False,
