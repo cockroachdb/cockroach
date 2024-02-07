@@ -130,8 +130,8 @@ var upgrades = []upgradebase.Upgrade{
 	),
 
 	upgrade.NewTenantUpgrade(
-		"update system.lease descriptor to be session based.",
-		clusterversion.V24_1_SessionBasedLeasingOnly.Version(),
+		"update system.lease descriptor to be session base",
+		clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version(),
 		upgrade.NoPrecondition,
 		upgradeSystemLeasesDescriptor,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),

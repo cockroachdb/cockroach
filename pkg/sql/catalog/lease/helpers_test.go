@@ -299,7 +299,7 @@ func (m *Manager) Publish(
 }
 
 func (m *Manager) TestingRefreshSomeLeases(ctx context.Context) {
-	m.refreshSomeLeases(ctx)
+	m.refreshSomeLeases(ctx, false /*refreshAll*/)
 }
 
 func (m *Manager) TestingDescriptorStateIsNil(id descpb.ID) bool {
