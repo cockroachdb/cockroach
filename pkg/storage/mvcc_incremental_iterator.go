@@ -158,6 +158,13 @@ const (
 	// MVCCIncrementalIterIntentPolicyEmit will return intents to
 	// the caller if they are inside or outside the time range.
 	MVCCIncrementalIterIntentPolicyEmit
+	// MVCCIncrementalIterIntentPolicyIgnore will not emit intents at all, by
+	// disabling intent interleaving and filtering out any encountered intents.
+	// This gives a minor performance improvement, but is only safe if the caller
+	// has already checked the lock table prior to using the iterator. Otherwise,
+	// any provisional values will be emitted, as they can't be disambiguated from
+	// committed values.
+	MVCCIncrementalIterIntentPolicyIgnore
 )
 
 // MVCCIncrementalIterOptions bundles options for NewMVCCIncrementalIterator.
@@ -213,13 +220,19 @@ func NewMVCCIncrementalIterator(
 		useTBI = mvccIncrementalIteratorMetamorphicTBI
 	}
 
+	// Disable intent interleaving if requested.
+	iterKind := MVCCKeyAndIntentsIterKind
+	if opts.IntentPolicy == MVCCIncrementalIterIntentPolicyIgnore {
+		iterKind = MVCCKeyIterKind
+	}
+
 	var iter MVCCIterator
 	var err error
 	var timeBoundIter MVCCIterator
 	if useTBI {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
-		iter, err = reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
+		iter, err = reader.NewMVCCIterator(ctx, iterKind, IterOptions{
 			KeyTypes:             opts.KeyTypes,
 			LowerBound:           opts.StartKey,
 			UpperBound:           opts.EndKey,
@@ -254,7 +267,7 @@ func NewMVCCIncrementalIterator(
 			return nil, err
 		}
 	} else {
-		iter, err = reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
+		iter, err = reader.NewMVCCIterator(ctx, iterKind, IterOptions{
 			KeyTypes:             opts.KeyTypes,
 			LowerBound:           opts.StartKey,
 			UpperBound:           opts.EndKey,
@@ -493,8 +506,15 @@ func (i *MVCCIncrementalIterator) updateMeta() error {
 		case MVCCIncrementalIterIntentPolicyEmit:
 			// We will emit this intent to the caller.
 			return nil
+		case MVCCIncrementalIterIntentPolicyIgnore:
+			// We don't expect to see this since we disabled intent interleaving.
+			i.err = errors.AssertionFailedf("unexpected intent (interleaving disabled): %s", &i.meta)
+			i.valid = false
+			return i.err
 		default:
-			return errors.AssertionFailedf("unknown intent policy: %d", i.intentPolicy)
+			i.err = errors.AssertionFailedf("unknown intent policy: %d", i.intentPolicy)
+			i.valid = false
+			return i.err
 		}
 	}
 	return nil
@@ -593,11 +613,13 @@ func (i *MVCCIncrementalIterator) advance(seeked bool) {
 				// If our policy is emit, we may want this
 				// intent. If it is outside our time bounds, it
 				// will be filtered below.
-			case MVCCIncrementalIterIntentPolicyError, MVCCIncrementalIterIntentPolicyAggregate:
+			case MVCCIncrementalIterIntentPolicyError,
+				MVCCIncrementalIterIntentPolicyAggregate,
+				MVCCIncrementalIterIntentPolicyIgnore:
 				// We have encountered an intent but it must lie outside the timestamp
-				// span (startTime, endTime] or we have aggregated it. In either case,
-				// we want to advance past it, unless we're also on a new range key that
-				// must be emitted.
+				// span (startTime, endTime], or have been aggregated or ignored. In
+				// either case, we want to advance past it, unless we're also on a new
+				// range key that must be emitted.
 				if newRangeKey {
 					i.hasPoint = false
 					return

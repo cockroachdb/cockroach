@@ -1051,8 +1051,9 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 	}
 
 	var res execPlan
-	exprs := make(tree.TypedExprs, 0, len(projections)+prj.Passthrough.Len())
-	cols := make(colinfo.ResultColumns, 0, len(exprs))
+	numExprs := len(projections) + prj.Passthrough.Len()
+	exprs := make(tree.TypedExprs, 0, numExprs)
+	cols := make(colinfo.ResultColumns, 0, numExprs)
 	ctx := input.makeBuildScalarCtx()
 	for i := range projections {
 		item := &projections[i]
