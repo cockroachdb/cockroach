@@ -41,6 +41,7 @@ func CountLeases(
 	at hlc.Timestamp,
 	forAnyVersion bool,
 ) (int, error) {
+	useSyntheticDescriptors := useSyntheticLeaseDescriptor(settings)
 	leasingMode := readSessionBasedLeasingMode(ctx, settings)
 	whereClauses := make([][]string, 2)
 	for _, t := range versions {
@@ -61,11 +62,20 @@ func CountLeases(
 	whereClauseIdx := make([]int, 0, 2)
 	syntheticDescriptors := make(catalog.Descriptors, 0, 2)
 	if leasingMode != SessionBasedOnly {
-		syntheticDescriptors = append(syntheticDescriptors, nil)
+		if !useSyntheticDescriptors {
+			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V23_2())
+		} else {
+			syntheticDescriptors = append(syntheticDescriptors, nil)
+		}
 		whereClauseIdx = append(whereClauseIdx, 0)
+
 	}
 	if leasingMode >= SessionBasedDrain {
-		syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V24_1())
+		if useSyntheticDescriptors {
+			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable())
+		} else {
+			syntheticDescriptors = append(syntheticDescriptors, nil)
+		}
 		whereClauseIdx = append(whereClauseIdx, 1)
 	}
 
