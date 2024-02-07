@@ -13,6 +13,7 @@ package log
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
@@ -59,6 +60,10 @@ type bufferedSink struct {
 	flushC chan struct{}
 
 	format *bufferFmtConfig
+
+	// hasFlushedSuccessfully indicates whether the buffered sink has ever
+	// successfully flushed yet.
+	hasFlushedSuccessfully atomic.Bool
 
 	mu struct {
 		syncutil.Mutex
@@ -347,10 +352,15 @@ func (bs *bufferedSink) runFlusher(stopC <-chan struct{}) {
 		}
 
 		err := bs.child.output(msg.Bytes(), sinkOutputOptions{extraFlush: true, tryForceSync: errC != nil})
+		// Mark when the sink has been flushed to successfully for the first time.
+		if err == nil && !bs.hasFlushedSuccessfully.Load(){
+			bs.hasFlushedSuccessfully.Store(true)
+		}
+
 		if errC != nil {
 			errC <- err
 		} else if err != nil {
-			Ops.Errorf(context.Background(), "logging error from %T: %v", bs.child, err)
+			bs.maybeLogFlushError(err)
 			if bs.crashOnAsyncFlushFailure {
 				f := func() func(exit.Code, error) {
 					logging.mu.Lock()
@@ -368,6 +378,15 @@ func (bs *bufferedSink) runFlusher(stopC <-chan struct{}) {
 		if done {
 			return
 		}
+	}
+}
+
+// maybeLogFlushError will log err to the OPS channel with the ERROR severity
+// ONLY if the bufferedSink has flushed successfully before. This is to prevent
+// creating a cycle of noise when a sink is intentionally unavailable.
+func (bs *bufferedSink) maybeLogFlushError(err error){
+	if bs.hasFlushedSuccessfully.Load() {
+		Ops.Errorf(context.Background(), "logging error from %T: %v", bs.child, err)
 	}
 }
 
