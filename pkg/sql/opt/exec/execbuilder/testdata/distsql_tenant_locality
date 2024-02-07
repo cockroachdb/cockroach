@@ -1,4 +1,5 @@
 # LogicTest: 3node-tenant-multiregion
+skip under duress 118627
 
 # Create a table on the secondary tenant.
 statement ok
