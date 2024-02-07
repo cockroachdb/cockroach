@@ -339,6 +339,7 @@ func NewTestCluster(
 		if noLocalities {
 			tiers := []roachpb.Tier{
 				{Key: "region", Value: "test"},
+				{Key: "zone", Value: fmt.Sprintf("zone%d", i+1)},
 				{Key: "dc", Value: fmt.Sprintf("dc%d", i+1)},
 			}
 			serverArgs.Locality = roachpb.Locality{Tiers: tiers}

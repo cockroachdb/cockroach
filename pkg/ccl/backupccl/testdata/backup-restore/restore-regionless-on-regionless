@@ -62,7 +62,7 @@ RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH remove_regions;
 query-sql
 SHOW REGIONS FROM CLUSTER;
 ----
-test {}
+test {zone1}
 
 query-sql
 SHOW DATABASES;

@@ -58,7 +58,7 @@ FROM [SHOW RANGES FROM TABLE t WITH DETAILS]`
 	for _, row := range result {
 		// Verify the leaseholder localities.
 		leaseHolder := row[leaseHolderIdx]
-		leaseHolderLocalityExpected := fmt.Sprintf(`region=test,dc=dc%s`, leaseHolder)
+		leaseHolderLocalityExpected := fmt.Sprintf(`region=test,zone=zone%s,dc=dc%s`, leaseHolder, leaseHolder)
 		require.Equal(t, leaseHolderLocalityExpected, row[leaseHolderLocalityIdx])
 
 		// Verify the replica localities.
@@ -74,7 +74,7 @@ FROM [SHOW RANGES FROM TABLE t WITH DETAILS]`
 		var builder strings.Builder
 		builder.WriteString("{")
 		for i, replica := range replicas {
-			builder.WriteString(fmt.Sprintf(`"region=test,dc=dc%d"`, replica))
+			builder.WriteString(fmt.Sprintf(`"region=test,zone=zone%d,dc=dc%d"`, replica, replica))
 			if i != len(replicas)-1 {
 				builder.WriteString(",")
 			}

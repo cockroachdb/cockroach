@@ -676,8 +676,8 @@ CREATE TABLE tbl_for_row(i INT PRIMARY KEY);
 query TT_ITTTTT colnames
 SHOW RANGE FROM TABLE tbl_for_row FOR ROW (0)
 ----
-start_key                     end_key       range_id  lease_holder  lease_holder_locality  replicas  replica_localities      voting_replicas  non_voting_replicas
-<before:/Table/130/1/"\x80">  <after:/Max>  _         1             region=test,dc=dc1     {1}       {"region=test,dc=dc1"}  {1}              {}
+start_key                     end_key       range_id  lease_holder  lease_holder_locality          replicas  replica_localities                 voting_replicas  non_voting_replicas
+<before:/Table/130/1/"\x80">  <after:/Max>  _         1             region=test,zone=zone1,dc=dc1  {1}       {"region=test,zone=zone1,dc=dc1"}  {1}              {}
 
 subtest end
 
@@ -690,7 +690,7 @@ CREATE TABLE tbl_with_idx_for_row(i INT, INDEX idx (i));
 query TT_ITTTTT colnames
 SHOW RANGE FROM INDEX tbl_with_idx_for_row@idx FOR ROW (NULL, 0)
 ----
-start_key                     end_key       range_id  lease_holder  lease_holder_locality  replicas  replica_localities      voting_replicas  non_voting_replicas
-<before:/Table/130/1/"\x80">  <after:/Max>  _         1             region=test,dc=dc1     {1}       {"region=test,dc=dc1"}  {1}              {}
+start_key                     end_key       range_id  lease_holder  lease_holder_locality          replicas  replica_localities                 voting_replicas  non_voting_replicas
+<before:/Table/130/1/"\x80">  <after:/Max>  _         1             region=test,zone=zone1,dc=dc1  {1}       {"region=test,zone=zone1,dc=dc1"}  {1}              {}
 
 subtest end
