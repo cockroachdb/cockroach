@@ -12,6 +12,7 @@
 package sqlerrors
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -374,6 +375,7 @@ func NewInsufficientPrivilegeOnDescriptorError(
 	for _, priv := range orPrivs {
 		orPrivsInStr = append(orPrivsInStr, string(priv.DisplayName()))
 	}
+	sort.Strings(orPrivsInStr)
 	privsStr := strings.Join(orPrivsInStr, " or ")
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",

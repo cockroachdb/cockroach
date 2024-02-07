@@ -295,7 +295,7 @@ CREATE VIEW v (x, y) AS SELECT a, b FROM zc; ALTER TABLE v CONFIGURE ZONE USING 
 
 user root
 
-statement error pq: user root does not have ZONECONFIG or CREATE privilege on relation pg_type
+statement error pq: user root does not have CREATE or ZONECONFIG privilege on relation pg_type
 ALTER TABLE pg_catalog.pg_type CONFIGURE ZONE USING gc.ttlseconds = 100000
 
 statement error pq: user root does not have ZONECONFIG or CREATE privilege on relation columns
