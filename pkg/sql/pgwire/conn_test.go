@@ -1626,10 +1626,12 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 
 			var netConn net.Conn
-			wg := sync.WaitGroup{}
-			wg.Add(1)
+			clientDone := sync.WaitGroup{}
+			clientDone.Add(1)
+			serverReceivedConn := sync.WaitGroup{}
+			serverReceivedConn.Add(1)
 			go func(query string) {
-				defer wg.Done()
+				defer clientDone.Done()
 				ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 				defer cancel()
 				url := fmt.Sprintf("%s&%s", baseURL, query)
@@ -1641,6 +1643,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 				// ignore the error because there is no answer from the server, we are
 				// interested in parsing session arguments only. We close the connection
 				// immediately, since getSessionArgs is blocking.
+				serverReceivedConn.Wait()
 				_ = netConn.Close()
 				_ = c.Close(ctx)
 
@@ -1652,10 +1655,15 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 					t.Error("pgconn asyncClose did not clean up on time")
 				}
 			}(tc.query)
-			// Wait for the client to connect and perform the handshake.
+			// Wait for the client to connect and perform the handshake. Use a
+			// closure so that the WaitGroup is marked as done even if there's a
+			// panic.
 			var args sql.SessionArgs
-			netConn, args, err = getSessionArgs(ln, true /* trustRemoteAddr */)
-			wg.Wait()
+			func() {
+				defer serverReceivedConn.Done()
+				netConn, args, err = getSessionArgs(ln, true /* trustRemoteAddr */)
+			}()
+			clientDone.Wait()
 			tc.assert(t, args, err)
 		})
 	}
