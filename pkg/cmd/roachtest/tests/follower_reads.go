@@ -189,10 +189,30 @@ func runFollowerReadsTest(
 	rc readConsistency,
 	data map[int]int64,
 ) {
+	// Set the default_transaction_isolation variable for each connection to a
+	// random isolation level, to ensure that the test exercises all available
+	// isolation levels. These isolation levels may be promoted to different
+	// levels in the mixed-version variant of this test than they are on master.
+	isoLevels := []string{"read committed", "snapshot", "serializable"}
+	require.NoError(t, func() error {
+		db := c.Conn(ctx, t.L(), 1)
+		defer db.Close()
+		err := enableIsolationLevels(ctx, t, db)
+		if err != nil && strings.Contains(err.Error(), "unknown cluster setting") {
+			// v23.1 and below does not have these cluster settings. That's fine, as
+			// all isolation levels will be transparently promoted to "serializable".
+			err = nil
+		}
+		return err
+	}())
+
 	var conns []*gosql.DB
 	for i := 0; i < c.Spec().NodeCount; i++ {
-		conns = append(conns, c.Conn(ctx, t.L(), i+1))
-		defer conns[i].Close()
+		isoLevel := isoLevels[rand.Intn(len(isoLevels))]
+		isoLevelOpt := option.ConnectionOption("default_transaction_isolation", isoLevel)
+		conn := c.Conn(ctx, t.L(), i+1, isoLevelOpt)
+		defer conn.Close()
+		conns = append(conns, conn)
 	}
 	db := conns[0]
 
