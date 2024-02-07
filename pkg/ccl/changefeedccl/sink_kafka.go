@@ -182,6 +182,9 @@ func (j *compressionCodec) UnmarshalText(b []byte) error {
 	return nil
 }
 
+// saramaConfig is a custom struct which contains a selection of options chosen
+// from sarama.Config. This facilitates users with limited sarama
+// configurations.
 type saramaConfig struct {
 	// These settings mirror ones in sarama config.
 	// We just tag them w/ JSON annotations.
@@ -1157,12 +1160,20 @@ func buildKafkaConfig(
 			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
 	}
 
+	// Note that the sarama.Config.Validate() below only logs an error in some
+	// cases, so we explicitly validate sarama config from our side.
 	if err := saramaCfg.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid sarama configuration")
 	}
 
+	// Apply configures config based on saramaCfg.
 	if err := saramaCfg.Apply(config); err != nil {
 		return nil, errors.Wrap(err, "failed to apply kafka client configuration")
+	}
+
+	// Validate sarama.Config using sarama's own exported validation function.
+	if err := config.Validate(); err != nil {
+		return nil, errors.Wrap(err, "invalid sarama configuration")
 	}
 	return config, nil
 }
