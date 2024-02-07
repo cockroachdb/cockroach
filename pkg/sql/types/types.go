@@ -2159,9 +2159,14 @@ func (t *T) Equal(other *T) bool {
 // IsWildcardType returns true if the type is only used as a wildcard during
 // static analysis, and cannot be used during execution.
 func (t *T) IsWildcardType() bool {
-	switch t {
-	case Any, AnyArray, AnyCollatedString, AnyEnum, AnyEnumArray, AnyTuple, AnyTupleArray:
-		return true
+	for _, wildcard := range []*T{
+		Any, AnyArray, AnyCollatedString, AnyEnum, AnyEnumArray, AnyTuple, AnyTupleArray,
+	} {
+		// Note that pointer comparison is insufficient since we might have
+		// deserialized t from disk.
+		if t.Identical(wildcard) {
+			return true
+		}
 	}
 	return false
 }
