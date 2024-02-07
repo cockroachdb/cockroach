@@ -3721,6 +3721,10 @@ func (m *sessionDataMutator) SetDistSQLPlanGatewayBias(val int64) {
 	m.data.DistsqlPlanGatewayBias = val
 }
 
+func (m *sessionDataMutator) SetCloseCursorsAtCommit(val bool) {
+	m.data.CloseCursorsAtCommit = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

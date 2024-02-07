@@ -38,6 +38,7 @@ bytea_output                                               hex
 check_function_bodies                                      on
 client_encoding                                            UTF8
 client_min_messages                                        notice
+close_cursors_at_commit                                    on
 copy_from_atomic_enabled                                   on
 copy_from_retries_enabled                                  on
 copy_num_retries_per_batch                                 5
