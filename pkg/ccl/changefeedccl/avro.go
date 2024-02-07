@@ -75,8 +75,8 @@ const (
 type avroLogicalType struct {
 	SchemaType  avroSchemaType `json:"type"`
 	LogicalType string         `json:"logicalType"`
-	Precision   int            `json:"precision,omitempty"`
-	Scale       int            `json:"scale,omitempty"`
+	Precision   *int           `json:"precision,omitempty"`
+	Scale       *int           `json:"scale,omitempty"`
 }
 
 type avroArrayType struct {
@@ -508,8 +508,8 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		decimalType := avroLogicalType{
 			SchemaType:  avroSchemaBytes,
 			LogicalType: `decimal`,
-			Precision:   prec,
-			Scale:       width,
+			Precision:   &prec,
+			Scale:       &width,
 		}
 		setNullableWithStringFallback(
 			decimalType,
