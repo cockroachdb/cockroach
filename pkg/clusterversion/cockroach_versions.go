@@ -284,7 +284,7 @@ const (
 	// system.lease.
 	V24_1_SessionBasedLeasingOnly
 
-	// V24_1_SessionBasedLeasingUpgradeDescriptor upgrades the system.lease table
+	// V24_1_SessionBasedLeasingUpgradeDescriptor upgrades the leasing descriptor
 	// to be only session based.
 	V24_1_SessionBasedLeasingUpgradeDescriptor
 
