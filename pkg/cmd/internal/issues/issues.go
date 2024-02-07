@@ -231,7 +231,8 @@ func (o *Options) CanPost() bool {
 // IsReleaseBranch returns true for branches that we want to treat as
 // "release" branches, including master and provisional branches.
 func (o *Options) IsReleaseBranch() bool {
-	return o.Branch == "master" || strings.HasPrefix(o.Branch, "release-") || strings.HasPrefix(o.Branch, "provisional_")
+	// return o.Branch == "master" || strings.HasPrefix(o.Branch, "release-") || strings.HasPrefix(o.Branch, "provisional_")
+	return true
 }
 
 // TemplateData is the input on which an IssueFormatter operates. It has

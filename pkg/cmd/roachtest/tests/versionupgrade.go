@@ -124,7 +124,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 			}
 
 			l.Printf("executing workload init on node %d", node)
-			return c.RunE(ctx, option.WithNodes(c.Node(node)), fmt.Sprintf("%s init schemachange {pgurl%s}", workloadPath, c.All()))
+			return c.RunE(ctx, option.WithNodes(c.Node(node)), fmt.Sprintf("%s foobar schemachange {pgurl%s}", workloadPath, c.All()))
 		})
 	mvt.InMixedVersion(
 		"run backup",
