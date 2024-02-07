@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -155,6 +156,8 @@ func TestMemoryLimit(t *testing.T) {
 func TestStreamerTightBudget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRemoteExecutionWithIssue(t, 118004, "sporadic max memory usage assertion failures")
 
 	// Start a cluster with large --max-sql-memory parameter so that the
 	// Streamer isn't hitting the root budget exceeded error.
