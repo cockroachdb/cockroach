@@ -433,6 +433,7 @@ type Provider interface {
 	// zones for the given provider.
 	ConfigSSH(l *logger.Logger, zones []string) error
 	Create(l *logger.Logger, names []string, opts CreateOpts, providerOpts ProviderOpts) error
+	Grow(l *logger.Logger, vms List, clusterName string, names []string) error
 	Reset(l *logger.Logger, vms List) error
 	Delete(l *logger.Logger, vms List) error
 	Extend(l *logger.Logger, vms List, lifetime time.Duration) error

@@ -596,6 +596,10 @@ func (p *Provider) Create(
 	return p.waitForIPs(l, names, regions, providerOpts)
 }
 
+func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
+	panic("unimplemented")
+}
+
 // waitForIPs waits until AWS reports both internal and external IP addresses
 // for all newly created VMs. If we did not wait for these IPs then attempts to
 // list the new VMs after the creation might find VMs without an external IP.

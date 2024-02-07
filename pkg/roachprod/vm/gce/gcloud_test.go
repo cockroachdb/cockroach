@@ -11,12 +11,18 @@
 package gce
 
 import (
+	"math"
+	"math/rand"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"testing/quick"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -186,5 +192,76 @@ func Test_buildFilterPreemptionCliArgs(t *testing.T) {
 				assert.Equalf(t, tt.wantErr.Error(), err.Error(), "buildFilterPreemptionCliArgs(%v, %v, %v)", tt.args.vms, tt.args.projectName, tt.args.since)
 			}
 		})
+	}
+}
+
+func randInstanceGroupSizes(r *rand.Rand) []jsonManagedInstanceGroup {
+	// We do not test empty sets, hence the +1.
+	count := r.Intn(10) + 1
+	groups := make([]jsonManagedInstanceGroup, count)
+	for i := 0; i < count; i++ {
+		groups[i].Size = r.Intn(32)
+	}
+	return groups
+}
+
+func TestComputeGrowDistribution(t *testing.T) {
+	rng, _ := randutil.NewTestRand()
+	c := quick.Config{MaxCount: 128,
+		Rand: rng,
+		Values: func(values []reflect.Value, r *rand.Rand) {
+			values[0] = reflect.ValueOf(randInstanceGroupSizes(r))
+		}}
+
+	testDistribution := func(groups []jsonManagedInstanceGroup) bool {
+		// Generate a random number of new nodes to add to the groups.
+		newNodeCount := rng.Intn(24) + 1
+
+		// Compute the total number of nodes before the distribution and
+		// the maximum distance between the number of nodes in the groups.
+		totalNodesBefore := 0
+		curMax, curMin := 0.0, math.MaxFloat64
+		for _, g := range groups {
+			totalNodesBefore += g.Size
+			curMax = math.Max(curMax, float64(g.Size))
+			curMin = math.Min(curMin, float64(g.Size))
+		}
+		maxDistanceBefore := curMax - curMin
+
+		// Sort the groups, compute the new distribution and apply it to the
+		// group sizes.
+		sort.Slice(groups, func(i, j int) bool {
+			return groups[i].Size < groups[j].Size
+		})
+		newTargetSize := computeGrowDistribution(groups, newNodeCount)
+		for idx := range newTargetSize {
+			groups[idx].Size += newTargetSize[idx]
+		}
+
+		// Compute the total number of nodes after the distribution and the maximum
+		// distance between the number of nodes in the groups.
+		totalNodesAfter := 0
+		curMax, curMin = 0.0, math.MaxFloat64
+		for _, g := range groups {
+			totalNodesAfter += g.Size
+			curMax = math.Max(curMax, float64(g.Size))
+			curMin = math.Min(curMin, float64(g.Size))
+		}
+		maxDistanceAfter := curMax - curMin
+
+		// The total number of nodes should be the sum of the new node count and the
+		// total number of nodes before the distribution.
+		if totalNodesAfter != totalNodesBefore+newNodeCount {
+			return false
+		}
+		// The maximum distance between the number of nodes in the groups should not
+		// increase by more than 1, otherwise the new distribution was not fair.
+		if maxDistanceAfter > maxDistanceBefore+1.0 {
+			return false
+		}
+		return true
+	}
+	if err := quick.Check(testDistribution, &c); err != nil {
+		t.Error(err)
 	}
 }
