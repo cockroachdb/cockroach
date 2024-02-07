@@ -242,6 +242,10 @@ func (p *Provider) Create(
 	return nil
 }
 
+func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names []string) error {
+	return errors.New("unimplemented")
+}
+
 // Delete is part of the vm.Provider interface.
 func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	panic("DeleteCluster should be used")
