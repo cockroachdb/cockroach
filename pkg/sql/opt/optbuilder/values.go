@@ -155,9 +155,9 @@ func rightHasMoreSpecificTuple(left, right *types.T) (isMoreSpecific bool, isEqu
 		return rightHasMoreSpecificTuple(left.ArrayContents(), right.ArrayContents())
 	}
 	if left.Family() == types.TupleFamily && right.Family() == types.TupleFamily {
-		if right == types.AnyTuple {
+		if right.Identical(types.AnyTuple) {
 			return false, true
-		} else if left == types.AnyTuple {
+		} else if left.Identical(types.AnyTuple) {
 			return true, true
 		} else if len(left.TupleContents()) != len(right.TupleContents()) {
 			return false, false

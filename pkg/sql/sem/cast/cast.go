@@ -164,7 +164,8 @@ func ValidCast(src, tgt *types.T, ctx Context) bool {
 	// Casts from a tuple type to AnyTuple are a no-op so they are always valid.
 	// If tgt is AnyTuple, we continue to LookupCast below which contains a
 	// special case for these casts.
-	if srcFamily == types.TupleFamily && tgtFamily == types.TupleFamily && tgt != types.AnyTuple {
+	if srcFamily == types.TupleFamily && tgtFamily == types.TupleFamily &&
+		!tgt.Identical(types.AnyTuple) {
 		srcTypes := src.TupleContents()
 		tgtTypes := tgt.TupleContents()
 		// The tuple types must have the same number of elements.

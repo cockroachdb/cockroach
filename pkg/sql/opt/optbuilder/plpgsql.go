@@ -1649,7 +1649,7 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, re
 		}
 	case *ast.Return:
 		desired := types.Any
-		if r.typ != types.Unknown {
+		if r.typ.Family() != types.UnknownFamily {
 			desired = r.typ
 		}
 		expr, _ := tree.WalkExpr(r.s, t.Expr)
@@ -1658,13 +1658,13 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, re
 			panic(err)
 		}
 		typ := typedExpr.ResolvedType()
-		if typ == types.Unknown {
+		if r.typ.Family() == types.UnknownFamily {
 			return stmt, false
 		}
 		if typ.Family() != types.TupleFamily {
 			panic(nonCompositeErr)
 		}
-		if r.typ == types.Unknown {
+		if r.typ.Family() == types.UnknownFamily {
 			r.typ = typ
 			return stmt, false
 		}

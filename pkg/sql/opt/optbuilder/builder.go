@@ -493,7 +493,7 @@ func (b *Builder) trackReferencedColumnForViews(col *scopeColumn) {
 
 func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 	if b.trackSchemaDeps {
-		if texpr.ResolvedType() == types.RegClass {
+		if texpr.ResolvedType().Identical(types.RegClass) {
 			// We do not add a dependency if the RegClass Expr contains variables,
 			// we cannot resolve the variables in this context. This matches Postgres
 			// behavior.

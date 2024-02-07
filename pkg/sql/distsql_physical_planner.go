@@ -354,12 +354,12 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 		// We need to check for arrays of untyped tuples here since constant-folding
 		// on builtin functions sometimes produces this. DecodeUntaggedDatum
 		// requires that all the types of the tuple contents are known.
-		if t.ResolvedType().ArrayContents() == types.AnyTuple {
+		if t.ResolvedType().ArrayContents().Identical(types.AnyTuple) {
 			v.err = newQueryNotSupportedErrorf("array %s cannot be executed with distsql", t)
 			return false, expr
 		}
 	case *tree.DTuple:
-		if t.ResolvedType() == types.AnyTuple {
+		if t.ResolvedType().Identical(types.AnyTuple) {
 			v.err = newQueryNotSupportedErrorf("tuple %s cannot be executed with distsql", t)
 			return false, expr
 		}
