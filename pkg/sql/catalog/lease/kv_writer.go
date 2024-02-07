@@ -49,8 +49,8 @@ func newKVWriter(
 ) *kvWriter {
 	return &kvWriter{
 		db:                 db,
-		sessionBasedWriter: bootstrap.MakeKVWriter(codec, leaseTableWithID(id, systemschema.LeaseTable_V24_1())),
-		expiryBasedWriter:  bootstrap.MakeKVWriter(codec, leaseTableWithID(id, systemschema.LeaseTable())),
+		sessionBasedWriter: bootstrap.MakeKVWriter(codec, leaseTableWithID(id, systemschema.LeaseTable())),
+		expiryBasedWriter:  bootstrap.MakeKVWriter(codec, leaseTableWithID(id, systemschema.LeaseTable_V23_2())),
 		settingsWatcher:    settingsWatcher,
 		sessionBasedReader: sessionModeReader,
 	}

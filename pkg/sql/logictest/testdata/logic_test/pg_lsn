@@ -92,4 +92,3 @@ SELECT '1'::PG_LSN;
 
 statement error pgcode 22P02 pq: invalid input syntax for type pg_lsn: \"\"
 SELECT ''::PG_LSN;
-

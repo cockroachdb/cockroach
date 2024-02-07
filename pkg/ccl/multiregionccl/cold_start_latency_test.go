@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
@@ -117,10 +116,6 @@ func TestColdStartLatency(t *testing.T) {
 		perServerArgs[i] = args
 	}
 	cs := cluster.MakeTestingClusterSettings()
-	// Until a migration is added, we cannot guarantee that the descriptor will have
-	// the appropriate zone config for MR testing with fake latency. So, avoid using
-	// session based leases here (#116271)
-	lease.LeaseEnableSessionBasedLeasing.Override(context.Background(), &cs.SV, int64(lease.SessionBasedLeasingOff))
 	tc := testcluster.NewTestCluster(t, numNodes, base.TestClusterArgs{
 		ParallelStart:     true,
 		ServerArgsPerNode: perServerArgs,

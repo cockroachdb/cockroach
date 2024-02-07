@@ -1583,8 +1583,12 @@ func TestSessionLeasingClusterSetting(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	// Validate all settings can be set and the provider works correctly.
-	for idx, setting := range []string{"off", "dual_write", "drain", "session"} {
-		sessionMode := SessionBasedLeasingMode(idx + 1)
+	for setting, sessionMode := range SessionBasedLeasingModeByName {
+		// Automatic mode is based off the version number so the tests below do
+		// not apply.
+		if sessionMode == SessionBasedLeasingAuto {
+			continue
+		}
 		_, err := sqlDB.Exec("SET CLUSTER SETTING sql.catalog.experimental_use_session_based_leasing=$1::STRING", setting)
 		require.NoError(t, err)
 		lm := srv.LeaseManager().(*Manager)

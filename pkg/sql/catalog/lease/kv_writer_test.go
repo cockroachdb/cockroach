@@ -48,6 +48,21 @@ var MoveTablePrimaryIndexIDtoTarget func(
 	context.Context, *testing.T, serverutils.ApplicationLayerInterface, descpb.ID, descpb.IndexID,
 )
 
+type dummySessionModeReader struct {
+	mode SessionBasedLeasingMode
+}
+
+func (d *dummySessionModeReader) sessionBasedLeasingModeAtLeast(
+	_ context.Context, minimumMode SessionBasedLeasingMode,
+) bool {
+	return d.mode >= minimumMode
+}
+func (d *dummySessionModeReader) getSessionBasedLeasingMode(
+	_ context.Context,
+) SessionBasedLeasingMode {
+	return d.mode
+}
+
 // TestKVWriterMatchesIEWriter is a rather involved test to exercise the
 // kvWriter and ieWriter and confirm that they write exactly the same thing
 // to the underlying key-value store. It does this by teeing operations to
@@ -97,12 +112,11 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 			ie := s.InternalExecutor().(isql.Executor)
 			codec := s.Codec()
 			settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
-			modeReader := s.LeaseManager().(sessionBasedLeasingModeReader)
+			modeReader := &dummySessionModeReader{mode: mode}
 			w := teeWriter{
 				a: newInternalExecutorWriter(ie, "defaultdb.public.lease1", mode),
 				b: newKVWriter(codec, kvDB, lease2ID, settingsWatcher, modeReader),
 			}
-			require.Equal(t, modeReader.getSessionBasedLeasingMode(), mode)
 			start := kvDB.Clock().Now()
 			groups := generateWriteOps(2<<10, 1<<10)
 			for {

@@ -1100,12 +1100,9 @@ var zipSystemTables = DebugZipTableRegistry{
 			FROM system.job_info`,
 	},
 	"system.lease": {
-		nonSensitiveCols: NonSensitiveColumns{
-			`"descID"`,
-			"version",
-			`"nodeID"`,
-			"expiration",
-		},
+		customQueryUnredacted: `
+			SELECT * FROM system.lease;
+		`,
 	},
 	"system.locations": {
 		nonSensitiveCols: NonSensitiveColumns{
