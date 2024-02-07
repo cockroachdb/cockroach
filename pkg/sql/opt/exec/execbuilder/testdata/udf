@@ -362,3 +362,23 @@ vectorized: true
   columns: (f88259)
   size: 1 column, 1 row
   row 0, expr 0: f88259(333, 444)
+
+# Regression test for not using actual parameter types (#114846).
+statement ok
+CREATE FUNCTION array_to_set(anyarray) RETURNS SETOF RECORD AS $$
+   SELECT i AS "index", $1[i] AS "value" FROM generate_subscripts($1, 1) i
+$$ LANGUAGE SQL STRICT IMMUTABLE;
+
+query T
+EXPLAIN (VERBOSE, TYPES) SELECT * FROM array_to_set(array['one', 'two']) AS t(f1 numeric(4,2), f2 text);
+----
+distribution: local
+vectorized: true
+·
+• project set
+│ columns: (f1 decimal, f2 string)
+│ estimated row count: 1
+│ render 0: (array_to_set((ARRAY[('one')[string],('two')[string]])[string[]]))[tuple{int AS index, string AS value}]
+│
+└── • emptyrow
+      columns: ()
