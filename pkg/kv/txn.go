@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -864,7 +863,7 @@ func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) erro
 // the current time, except in extraordinary circumstances. In cases where
 // considering it helps, it helps a lot. In cases where considering it
 // does not help, it does not hurt much.
-func (txn *Txn) DeadlineLikelySufficient(sv *settings.Values) bool {
+func (txn *Txn) DeadlineLikelySufficient() bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	// Instead of using the current HLC clock we will
@@ -876,6 +875,7 @@ func (txn *Txn) DeadlineLikelySufficient(sv *settings.Values) bool {
 	// 3) If we are writing to non-blocking ranges than any
 	//    push will be into the future.
 	getTargetTS := func() hlc.Timestamp {
+		sv := txn.db.SettingsValues()
 		now := txn.db.Clock().NowAsClockTimestamp()
 		maxClockOffset := txn.db.Clock().MaxOffset()
 		lagTargetDuration := closedts.TargetDuration.Get(sv)
