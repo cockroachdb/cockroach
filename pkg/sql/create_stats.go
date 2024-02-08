@@ -433,6 +433,12 @@ func createStatsDefaultColumns(
 			return err
 		}
 
+		// There shouldn't be any non-public columns, but defensively skip over them
+		// if there are.
+		if !col.Public() {
+			return nil
+		}
+
 		// Skip unsupported virtual computed columns.
 		if isUnsupportedVirtual(col) {
 			return nil
@@ -479,9 +485,30 @@ func createStatsDefaultColumns(
 			continue
 		}
 
-		colIDs := make([]descpb.ColumnID, i+1)
+		colIDs := make([]descpb.ColumnID, 0, i+1)
 		for j := 0; j <= i; j++ {
-			colIDs[j] = desc.GetPrimaryIndex().GetKeyColumnID(j)
+			col, err := catalog.MustFindColumnByID(desc, desc.GetPrimaryIndex().GetKeyColumnID(j))
+			if err != nil {
+				return nil, err
+			}
+
+			// There shouldn't be any non-public columns, but defensively skip over
+			// them if there are.
+			if !col.Public() {
+				continue
+			}
+
+			// Skip unsupported virtual computed columns.
+			if isUnsupportedVirtual(col) {
+				continue
+			}
+			colIDs = append(colIDs, col.GetID())
+		}
+
+		// Do not attempt to create multi-column stats with < 2 columns. This can
+		// happen when an index contains only virtual computed columns.
+		if len(colIDs) < 2 {
+			continue
 		}
 
 		// Remember the requested stats so we don't request duplicates.
@@ -516,6 +543,13 @@ func createStatsDefaultColumns(
 				if err != nil {
 					return nil, err
 				}
+
+				// There shouldn't be any non-public columns, but defensively skip them
+				// if there are.
+				if !col.Public() {
+					continue
+				}
+
 				// Skip unsupported virtual computed columns.
 				if isUnsupportedVirtual(col) {
 					continue
@@ -523,9 +557,9 @@ func createStatsDefaultColumns(
 				colIDs = append(colIDs, col.GetID())
 			}
 
-			// Do not attempt to create multi-column stats with no columns. This
-			// can happen when an index contains only virtual computed columns.
-			if len(colIDs) == 0 {
+			// Do not attempt to create multi-column stats with < 2 columns. This can
+			// happen when an index contains only virtual computed columns.
+			if len(colIDs) < 2 {
 				continue
 			}
 
