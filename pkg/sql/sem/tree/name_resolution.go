@@ -152,10 +152,14 @@ func newInvTableNameError(n fmt.Stringer) error {
 type DesiredObjectKind byte
 
 const (
+	_ DesiredObjectKind = iota
 	// TableObject is used when a table-like object is desired from resolution.
-	TableObject DesiredObjectKind = iota
+	TableObject
 	// TypeObject is used when a type-like object is desired from resolution.
 	TypeObject
+	// AnyObject is used when any object is acceptable. This is primary used when
+	// looking for name conflicts.
+	AnyObject
 )
 
 // RequiredTableKind controls what kind of TableDescriptor backed object is

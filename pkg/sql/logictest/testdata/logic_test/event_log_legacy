@@ -980,7 +980,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'comment_on_column'
 ----
-1  {"ColumnName": "id", "Comment": "This is a column.", "EventType": "comment_on_column", "Statement": "COMMENT ON COLUMN a.id IS 'This is a column.'", "TableName": "defaultdb.public.a", "Tag": "COMMENT ON COLUMN", "User": "root"}
+1  {"ColumnName": "id", "Comment": "This is a column.", "EventType": "comment_on_column", "Statement": "COMMENT ON COLUMN defaultdb.public.a.id IS 'This is a column.'", "TableName": "defaultdb.public.a", "Tag": "COMMENT ON COLUMN", "User": "root"}
 
 statement ok
 CREATE INDEX b_index ON a (b)

@@ -80,6 +80,7 @@ server.identity_map.configuration	string		system-identity to database-username m
 server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries to delete on each purge of log-like system tables	application
 server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries	application
 server.max_connections_per_gateway	integer	-1	the maximum number of SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
+server.max_open_transactions_per_gateway	integer	-1	the maximum number of open SQL transactions per gateway allowed at a given time. Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
 server.oidc_authentication.autologin.enabled	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint	application
 server.oidc_authentication.button_text	string	Log in with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)	application
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)	application

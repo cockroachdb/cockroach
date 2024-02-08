@@ -548,6 +548,25 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.noticeSender = res
 	ih := &p.instrumentation
 
+	if maxOpen := maxOpenTransactions.Get(&ex.server.cfg.Settings.SV); maxOpen > 0 {
+		// NB: SQLTxnsOpen does not include internal executor transactions.
+		if ex.metrics.EngineMetrics.SQLTxnsOpen.Value() > maxOpen {
+			hasAdmin, err := ex.planner.HasAdminRole(ctx)
+			if err != nil {
+				return makeErrEvent(err)
+			}
+			if !hasAdmin {
+				return makeErrEvent(errors.WithHintf(
+					pgerror.Newf(
+						pgcode.ConfigurationLimitExceeded,
+						"cannot execute operation due to server.max_open_transactions_per_gateway cluster setting",
+					),
+					"the maximum number of open transactions is %d", maxOpen,
+				))
+			}
+		}
+	}
+
 	// Special top-level handling for EXPLAIN ANALYZE.
 	if e, ok := ast.(*tree.ExplainAnalyze); ok {
 		switch e.Mode {

@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -36,11 +38,10 @@ func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) 
 		return nil, err
 	}
 
-	var tableName tree.TableName
-	if n.ColumnItem.TableName != nil {
-		tableName = n.ColumnItem.TableName.ToTableName()
+	if n.ColumnItem.TableName == nil {
+		return nil, pgerror.New(pgcode.Syntax, "column name must be qualified")
 	}
-	tableDesc, err := p.resolveUncachedTableDescriptor(ctx, &tableName, true, tree.ResolveRequireTableDesc)
+	tableDesc, err := p.ResolveUncachedTableDescriptorEx(ctx, n.ColumnItem.TableName, true, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}

@@ -207,6 +207,8 @@ func ResolveExistingObject(
 				return nil, prefix, sqlerrors.NewUndefinedRelationError(un)
 			case tree.TypeObject:
 				return nil, prefix, sqlerrors.NewUndefinedTypeError(un)
+			case tree.AnyObject:
+				return nil, prefix, sqlerrors.NewUndefinedObjectError(un)
 			default:
 				return nil, prefix, errors.AssertionFailedf("unknown object kind %d", lookupFlags.DesiredObjectKind)
 			}
@@ -254,6 +256,8 @@ func ResolveExistingObject(
 		}
 
 		return obj.(catalog.TableDescriptor), prefix, nil
+	case tree.AnyObject:
+		return obj, prefix, nil
 	default:
 		return nil, prefix, errors.AssertionFailedf(
 			"unknown desired object kind %d", lookupFlags.DesiredObjectKind)

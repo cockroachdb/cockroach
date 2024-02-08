@@ -41,11 +41,12 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 	owner := b.CurrentUser()
 
 	// Detect duplicate sequence names.
-	ers := b.ResolveSequence(n.Name.ToUnresolvedObjectName(),
+	ers := b.ResolveRelation(n.Name.ToUnresolvedObjectName(),
 		ResolveParams{
 			IsExistenceOptional: true,
 			RequiredPrivilege:   privilege.USAGE,
 			WithOffline:         true, // We search sequence with provided name, including offline ones.
+			ResolveTypes:        true, // Check for collisions with type names.
 		})
 	if ers != nil && !ers.IsEmpty() {
 		if n.IfNotExists {
