@@ -1226,7 +1226,7 @@ func makeTenantSQLServerArgs(
 		ds,
 	)
 
-	dbCtx := kv.DefaultDBContext(stopper)
+	dbCtx := kv.DefaultDBContext(st, stopper)
 	dbCtx.NodeID = deps.instanceIDContainer
 	db := kv.NewDBWithContext(baseCfg.AmbientCtx, tcsFactory, clock, dbCtx)
 

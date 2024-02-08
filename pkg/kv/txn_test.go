@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -164,8 +165,9 @@ func TestTransactionConfig(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
+	st := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClockForTesting(nil)
-	dbCtx := DefaultDBContext(stopper)
+	dbCtx := DefaultDBContext(st, stopper)
 	dbCtx.UserPriority = 101
 	db := NewDBWithContext(
 		log.MakeTestingAmbientCtxWithNewTracer(),
