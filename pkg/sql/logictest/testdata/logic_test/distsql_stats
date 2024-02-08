@@ -2674,5 +2674,40 @@ upper_bound            range_rows  distinct_range_rows  equal_rows
 statement ok
 RESET enable_create_stats_using_extremes
 
+# Regression test for #118537. Do not create stats on non-public mutation
+# columns.
+statement ok
+CREATE TABLE t118537 (
+  a INT,
+  PRIMARY KEY (a) USING HASH WITH (bucket_count = 3)
+)
+
+statement ok
+INSERT INTO t118537 SELECT generate_series(0, 9)
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'newschemachanger.before.exec'
+
+skipif config local-legacy-schema-changer
+statement error job \d+ was paused before it completed with reason: pause point "newschemachanger.before.exec" hit
+ALTER TABLE t118537 ALTER PRIMARY KEY USING COLUMNS (a) USING HASH
+
+statement ok
+CREATE STATISTICS mutation FROM t118537
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE t118537]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  has_histogram
+mutation         {a}           10         true
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = ''
+
+statement ok
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TABLE %t118537 ALTER PRIMARY KEY USING COLUMNS (a) USING HASH' AND status = 'paused' FETCH FIRST 1 ROWS ONLY)
+
 statement ok
 RESET CLUSTER SETTING sql.stats.virtual_computed_columns.enabled
