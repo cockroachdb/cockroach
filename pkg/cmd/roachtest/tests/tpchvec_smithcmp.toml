@@ -47,7 +47,7 @@ WHERE
 	p_partkey = ps_partkey
 	AND s_suppkey = ps_suppkey
 	AND p_size = $1
-	AND p_type LIKE '%BRASS'
+	AND p_type LIKE '%%BRASS'
 	AND s_nationkey = n_nationkey
 	AND n_regionkey = r_regionkey
 	AND r_name = 'EUROPE'
@@ -334,7 +334,7 @@ ORDER BY
 """
 SELECT
 	100.00 * sum(CASE
-		WHEN p_type LIKE 'PROMO%'
+		WHEN p_type LIKE 'PROMO%%'
 			THEN l_extendedprice * (1 - l_discount)
 		ELSE 0
 	END) / sum(l_extendedprice * (1 - l_discount)) AS promo_revenue
@@ -438,7 +438,7 @@ WHERE
 				FROM
 					part
 				WHERE
-					p_name LIKE 'forest%'
+					p_name LIKE 'forest%%'
 			)
 			AND ps_availqty > (
 				SELECT
@@ -508,14 +508,14 @@ ORDER BY
 # find and replace it with a valid connection string.
 
 [databases.vec-off]
-addr = "PG_Connection_String"
+addr = "%[1]s"
 allowmutations = true
 initsql = """
 set vectorize=off;
 """
 
 [databases.vec-on]
-addr = "PG_Connection_String"
+addr = "%[1]s"
 allowmutations = true
 initsql = """
 set vectorize=on;
