@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -66,6 +68,17 @@ var statsOnVirtualCols = settings.RegisterBoolSetting(
 	"sql.stats.virtual_computed_columns.enabled",
 	"set to true to collect table statistics on virtual computed columns",
 	true,
+	settings.WithPublic)
+
+// statsJobReplaceableAfterDuration controls the cluster setting for
+// sql.stats.job_replaceable_after_duration.
+var statsJobReplaceableAfterDuration = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"sql.stats.job_replaceable_after_duration",
+	"duration after which a stats job can be automatically canceled and replaced by another "+
+		"stats job. 0 means never replaceable",
+	time.Hour*24*7, // one week
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 const nonIndexColHistogramBuckets = 2
@@ -717,19 +730,34 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 }
 
 // checkRunningJobs checks whether there are any other CreateStats jobs in the
-// pending, running, or paused status that started earlier than this one. If
-// there are, checkRunningJobs returns an error. If job is nil, checkRunningJobs
-// just checks if there are any pending, running, or paused CreateStats jobs.
+// pending, running, or paused status that started earlier than this one. If job
+// is nil, checkRunningJobs just checks if there are any pending, running, or
+// paused CreateStats jobs. If there are, checkRunningJobs also checks whether
+// the existing job has been running for too long. If that job is too old,
+// checkRunningJobs marks it as failed, allowing the new job to proceed. If the
+// existing job is not too old, checkRunningJobs returns an error.
 func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) error {
-	jobID := jobspb.InvalidJobID
+	ignoreJobID := jobspb.InvalidJobID
 	if job != nil {
-		jobID = job.ID()
+		ignoreJobID = job.ID()
 	}
 	var exists bool
 	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		exists, err = jobs.RunningJobExists(ctx, jobID, txn, p.ExecCfg().Settings.Version,
+		var jobID jobspb.JobID
+		var created time.Time
+		exists, jobID, created, err = jobs.RunningJobExists(ctx, ignoreJobID, txn, p.ExecCfg().Settings.Version,
 			jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats,
 		)
+		if err == nil && exists {
+			canceled, innerErr := checkJobRunningForTooLong(ctx, txn, jobID, created, p)
+			if innerErr != nil {
+				log.Warningf(ctx,
+					"could not mark stats collection job running for too long as failed: %v (jobID: %v, created: %v)",
+					innerErr, jobID, created)
+			} else {
+				exists = !canceled
+			}
+		}
 		return err
 	}); err != nil {
 		return err
@@ -740,6 +768,23 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 	}
 
 	return nil
+}
+
+// checkJobRunningForTooLong checks whether the given job, which was created at
+// the given time, has been running for too long. If it has, mark it as failed.
+func checkJobRunningForTooLong(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, created time.Time, p JobExecContext,
+) (canceled bool, err error) {
+	maxDuration := statsJobReplaceableAfterDuration.Get(p.ExecCfg().SV())
+	// Check that the job was not created more than maxDuration ago. maxDuration=0
+	// is treated as no limit.
+	if maxDuration == 0 || created.Add(maxDuration).After(timeutil.Now()) {
+		return false, nil
+	}
+
+	// The job has been running for too long, so mark it as failed.
+	err = p.ExecCfg().JobRegistry.Failed(ctx, txn, jobID, errors.Newf("stats job has been running for too long"))
+	return err == nil, err
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

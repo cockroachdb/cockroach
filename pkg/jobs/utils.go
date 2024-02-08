@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -27,17 +28,20 @@ import (
 // in the pending, running, or paused status, optionally ignoring the job with
 // the ID specified by ignoreJobID as well as any jobs created after it, if
 // the passed ID is not InvalidJobID.
+//
+// If a running job is found, returns exists=true, along with the jobID and the
+// timestamp when the job was created.
 func RunningJobExists(
 	ctx context.Context,
 	ignoreJobID jobspb.JobID,
 	txn isql.Txn,
 	cv clusterversion.Handle,
 	jobTypes ...jobspb.Type,
-) (exists bool, retErr error) {
+) (exists bool, jobID jobspb.JobID, created time.Time, retErr error) {
 	var typeStrs string
 	switch len(jobTypes) {
 	case 0:
-		return false, errors.AssertionFailedf("must specify job types")
+		return false, jobspb.InvalidJobID, time.Time{}, errors.AssertionFailedf("must specify job types")
 	case 1:
 		typeStrs = fmt.Sprintf("('%s')", jobTypes[0].String())
 	case 2:
@@ -61,7 +65,7 @@ func RunningJobExists(
 
 	stmt := `
 SELECT
-  id
+  id, created
 FROM
   system.jobs@jobs_status_created_idx
 WHERE
@@ -75,21 +79,25 @@ LIMIT 1`
 		stmt,
 	)
 	if err != nil {
-		return false, err
+		return false, jobspb.InvalidJobID, time.Time{}, err
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
 	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
-	ok, err := it.Next(ctx)
-	if err != nil {
-		return false, err
-	}
 	// The query is ordered by `created` so if the first is the ignored ID, then
 	// any additional rows that would match the passed types must be created after
 	// the ignored ID and are also supposed to be ignored, meaning we only return
 	// true when the there are non-zero results and the first does not match.
-	return ok && jobspb.JobID(*it.Cur()[0].(*tree.DInt)) != ignoreJobID, nil
+	// If a matching job is found, we also return the jobID and its created
+	// timestamp (the caller may decide to cancel the job if it has been running
+	// for too long).
+	ok, err := it.Next(ctx)
+	if !ok || err != nil {
+		return false, jobspb.InvalidJobID, time.Time{}, err
+	}
+	jobID = jobspb.JobID(*it.Cur()[0].(*tree.DInt))
+	return jobID != ignoreJobID, jobID, it.Cur()[1].(*tree.DTimestamp).Time, nil
 }
 
 // JobExists returns true if there is a row corresponding to jobID in the
