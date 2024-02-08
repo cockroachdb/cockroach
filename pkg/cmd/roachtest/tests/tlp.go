@@ -136,7 +136,7 @@ func runOneTLP(
 	// statements with the MutationsOnly option. Smither.GenerateTLP always
 	// returns SELECT queries, so the MutationsOnly option is used only for
 	// randomly mutating the database.
-	mutSmither, err := sqlsmith.NewSmither(conn, rnd, sqlsmith.MutationsOnly())
+	mutSmither, err := sqlsmith.NewSmither(conn, rnd, sqlsmith.MutationsOnly(), sqlsmith.SimpleNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,8 @@ func runOneTLP(
 
 	// Initialize a smither that will never generate mutations.
 	tlpSmither, err := sqlsmith.NewSmither(conn, rnd,
-		sqlsmith.DisableMutations(), sqlsmith.DisableNondeterministicFns())
+		sqlsmith.DisableMutations(), sqlsmith.DisableNondeterministicFns(), sqlsmith.SimpleNames(),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

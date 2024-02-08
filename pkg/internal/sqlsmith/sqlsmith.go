@@ -60,14 +60,17 @@ const retryCount = 20
 
 // Smither is a sqlsmith generator.
 type Smither struct {
-	rnd              *rand.Rand
-	db               *gosql.DB
-	lock             syncutil.RWMutex
-	dbName           string
-	schemas          []*schemaRef
-	tables           []*tableRef
-	columns          map[tree.TableName]map[tree.Name]*tree.ColumnTableDef
-	indexes          map[tree.TableName]map[tree.Name]*tree.CreateIndex
+	rnd     *rand.Rand
+	db      *gosql.DB
+	lock    syncutil.RWMutex
+	dbName  string
+	schemas []*schemaRef
+	tables  []*tableRef
+	columns map[tree.TableName]map[tree.Name]*tree.ColumnTableDef
+	indexes map[tree.TableName]map[tree.Name]*tree.CreateIndex
+	// Only one of nameCounts and nameGens will be used. nameCounts is used when
+	// simpleNames is true.
+	nameCounts       map[string]int
 	nameGens         map[string]*nameGenInfo
 	nameGenCfg       randidentcfg.Config
 	activeSavepoints []string
@@ -89,6 +92,7 @@ type Smither struct {
 	disableAggregateFuncs      bool
 	disableMutations           bool
 	simpleDatums               bool
+	simpleNames                bool
 	avoidConsts                bool
 	outputSort                 bool
 	postgres                   bool
@@ -128,6 +132,7 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 	s := &Smither{
 		rnd:        rnd,
 		db:         db,
+		nameCounts: map[string]int{},
 		nameGens:   map[string]*nameGenInfo{},
 		nameGenCfg: randident.DefaultNameGeneratorConfig(),
 
@@ -214,6 +219,11 @@ type nameGenInfo struct {
 func (s *Smither) name(prefix string) tree.Name {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+	if s.simpleNames {
+		s.nameCounts[prefix]++
+		count := s.nameCounts[prefix]
+		return tree.Name(fmt.Sprintf("%s_%d", prefix, count))
+	}
 	g := s.nameGens[prefix]
 	if g == nil {
 		g = &nameGenInfo{
@@ -386,6 +396,11 @@ func DisableCRDBFns() SmitherOption {
 // SimpleDatums causes the Smither to emit simpler constant datums.
 var SimpleDatums = simpleOption("simple datums", func(s *Smither) {
 	s.simpleDatums = true
+})
+
+// SimpleNames specifies that complex name generation should be disabled.
+var SimpleNames = simpleOption("simple names", func(s *Smither) {
+	s.simpleNames = true
 })
 
 // MutationsOnly causes the Smither to emit 80% INSERT, 10% UPDATE, and 10%
