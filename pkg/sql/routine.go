@@ -540,15 +540,16 @@ var _ isql.Rows = &plpgsqlCursorHelper{}
 
 // Next implements the isql.Rows interface.
 func (h *plpgsqlCursorHelper) Next(_ context.Context) (bool, error) {
-	var err error
-	h.lastRow, err = h.iter.Next()
-	if err != nil {
+	row, err := h.iter.Next()
+	if err != nil || row == nil {
 		return false, err
 	}
-	if h.lastRow != nil {
-		h.rowsAffected++
-	}
-	return h.lastRow != nil, nil
+	// Shallow-copy the row to ensure that it is safe to hold on to after Next()
+	// and Close() calls - see the isql.Rows interface.
+	h.lastRow = make(tree.Datums, len(row))
+	copy(h.lastRow, row)
+	h.rowsAffected++
+	return true, nil
 }
 
 // Cur implements the isql.Rows interface.
