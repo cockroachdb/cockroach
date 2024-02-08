@@ -946,11 +946,8 @@ func (sm SpanMeta) ToProto() *tracingpb.TraceInfo {
 func SpanMetaFromProto(info tracingpb.TraceInfo) SpanMeta {
 	var otelCtx oteltrace.SpanContext
 	if info.Otel != nil {
-		// NOTE: The ugly starry expressions below can be simplified once/if direct
-		// conversions from slices to arrays gets adopted:
-		// https://github.com/golang/go/issues/46505
-		traceID := *(*[16]byte)(info.Otel.TraceID)
-		spanID := *(*[8]byte)(info.Otel.SpanID)
+		traceID := [16]byte(info.Otel.TraceID)
+		spanID := [8]byte(info.Otel.SpanID)
 		otelCtx = otelCtx.WithRemote(true).WithTraceID(traceID).WithSpanID(spanID)
 	}
 
