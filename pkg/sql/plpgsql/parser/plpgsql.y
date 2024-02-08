@@ -364,7 +364,7 @@ func (u *plpgsqlSymUnion) sqlStatement() tree.Statement {
 
 %type <tree.CursorScrollOption>	opt_scrollable
 
-%type <*tree.NumVal>	opt_transaction_chain
+%type <bool>	opt_transaction_chain
 
 %type <str>	unreserved_keyword
 %%
@@ -725,9 +725,13 @@ proc_stmt:pl_block ';'
     $$.val = $1.statement()
   }
 | stmt_commit
-  { }
+  {
+    $$.val = $1.statement()
+  }
 | stmt_rollback
-  { }
+  {
+    $$.val = $1.statement()
+  }
 ;
 
 stmt_perform: PERFORM stmt_until_semi ';'
@@ -1363,23 +1367,29 @@ stmt_null: NULL ';'
 
 stmt_commit: COMMIT opt_transaction_chain ';'
   {
-    return unimplemented(plpgsqllex, "commit")
+    $$.val = &plpgsqltree.TransactionControl{Chain: $2.bool()}
   }
 ;
 
 stmt_rollback: ROLLBACK opt_transaction_chain ';'
   {
-    return unimplemented(plpgsqllex, "rollback")
+    $$.val = &plpgsqltree.TransactionControl{Chain: $2.bool(), Rollback: true}
   }
 ;
 
 opt_transaction_chain:
 AND CHAIN
-  { }
+  {
+    $$.val = true
+  }
 | AND NO CHAIN
-  { }
+  {
+    $$.val = false
+  }
 | /* EMPTY */
-  { }
+  {
+    $$.val = false
+  }
 
 exception_sect: /* EMPTY */
   {
