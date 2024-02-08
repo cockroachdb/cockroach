@@ -10,7 +10,17 @@
 
 package metric
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+// precisionTestEnabledEnv enables precision testing buckets for histograms.
+// For details, see pkg/cmd/roachtest/tests/histogram_precision.go.
+const precisionTestEnabledEnv = "COCKROACH_HISTOGRAM_PRECISION_TESTING"
+const precisionTestBucketCount = 200
+
+var precisionTesting = envutil.EnvOrDefaultBool(precisionTestEnabledEnv, false)
 
 // staticBucketConfig describes the buckets we want to generate for a specific
 // category of metrics.
@@ -20,17 +30,18 @@ type staticBucketConfig struct {
 	max          float64
 	count        int
 	units        unitType
-	distribution distribution
+	distribution Distribution
 }
 
-// distribution describes the population distribution that best describes the
+// Distribution describes the population distribution that best describes the
 // metric for which we record histogram data
-type distribution int
+type Distribution int
 
 const (
-	Uniform distribution = iota
+	Uniform Distribution = iota
 	Exponential
-	// TODO(ericharmeling): add more distributions
+	Normal
+	LogNormal
 )
 
 // unitType describes the unit type of the metric for which we record
@@ -139,6 +150,10 @@ var StaticBucketConfigs = []staticBucketConfig{IOLatencyBuckets,
 
 func (config staticBucketConfig) GetBucketsFromBucketConfig() []float64 {
 	var buckets []float64
+	if precisionTesting {
+		config.distribution = Uniform
+		config.count = precisionTestBucketCount
+	}
 	if config.distribution == Uniform {
 		width := (config.max - config.min) / float64(config.count)
 		buckets = prometheus.LinearBuckets(config.min, width, config.count)
