@@ -517,7 +517,7 @@ func (b *Builder) buildArrayFlatten(
 		return nil, b.decorrelationError()
 	}
 
-	root, err := b.buildRelational(af.Input)
+	root, _, err := b.buildRelational(af.Input)
 	if err != nil {
 		return nil, err
 	}
@@ -577,14 +577,14 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Build the execution plan for the input subquery.
-	plan, err := b.buildRelational(any.Input)
+	plan, planCols, err := b.buildRelational(any.Input)
 	if err != nil {
 		return nil, err
 	}
 
 	// Construct tuple type of columns in the row.
-	contents := make([]*types.T, plan.numOutputCols())
-	plan.outputCols.ForEach(func(key, val int) {
+	contents := make([]*types.T, numOutputColsInMap(planCols))
+	planCols.ForEach(func(key, val int) {
 		contents[val] = b.mem.Metadata().ColumnMeta(opt.ColumnID(key)).Type
 	})
 	typs := types.MakeTuple(contents)
@@ -723,7 +723,7 @@ func (b *Builder) buildExistsSubquery(
 	// ConvertUncorrelatedExistsToCoalesceSubquery converts all uncorrelated
 	// Exists with Coalesce+Subquery expressions. Remove this and the execution
 	// support for the Exists mode.
-	plan, err := b.buildRelational(exists.Input)
+	plan, _, err := b.buildRelational(exists.Input)
 	if err != nil {
 		return nil, err
 	}
@@ -843,7 +843,7 @@ func (b *Builder) buildSubquery(
 			eb.withExprs = withExprs
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
-			ePlan, err := eb.buildRelational(input)
+			ePlan, _, err := eb.buildRelational(input)
 			if err != nil {
 				return err
 			}
@@ -887,7 +887,7 @@ func (b *Builder) buildSubquery(
 
 	// Build the execution plan for the subquery. Note that the subquery could
 	// have subqueries of its own which are added to b.subqueries.
-	plan, err := b.buildRelational(input)
+	plan, _, err := b.buildRelational(input)
 	if err != nil {
 		return nil, err
 	}

@@ -230,7 +230,7 @@ func New(
 // Build constructs the execution node tree and returns its root node if no
 // error occurred.
 func (b *Builder) Build() (_ exec.Plan, err error) {
-	plan, err := b.build(b.e)
+	plan, _, err := b.build(b.e)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference,
 	return tree.WrapFunction(fnName), nil
 }
 
-func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
+func (b *Builder) build(e opt.Expr) (_ execPlan, outputCols opt.ColMap, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate errors without adding lots of checks
@@ -274,7 +274,7 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 
 	rel, ok := e.(memo.RelExpr)
 	if !ok {
-		return execPlan{}, errors.AssertionFailedf(
+		return execPlan{}, opt.ColMap{}, errors.AssertionFailedf(
 			"building execution for non-relational operator %s", redact.Safe(e.Op()),
 		)
 	}
