@@ -573,6 +573,9 @@ CREATE USER user1;
 statement ok
 CREATE SCHEMA AUTHORIZATION user1
 
+statement error pq: role/user "typo" does not exist
+CREATE SCHEMA AUTHORIZATION typo
+
 statement error pq: schema "user1" already exists
 CREATE SCHEMA AUTHORIZATION user1
 
