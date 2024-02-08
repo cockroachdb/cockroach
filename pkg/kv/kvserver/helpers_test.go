@@ -159,6 +159,12 @@ func (s *Store) SplitQueuePurgatoryLength() int {
 	return s.splitQueue.PurgatoryLength()
 }
 
+// LeaseQueuePurgatoryLength returns the number of replicas in lease queue
+// purgatory.
+func (s *Store) LeaseQueuePurgatoryLength() int {
+	return s.leaseQueue.PurgatoryLength()
+}
+
 // SetRaftLogQueueActive enables or disables the raft log queue.
 func (s *Store) SetRaftLogQueueActive(active bool) {
 	s.setRaftLogQueueActive(active)

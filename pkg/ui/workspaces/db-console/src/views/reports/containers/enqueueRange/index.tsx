@@ -28,6 +28,7 @@ const QUEUES = [
   "mvccGC",
   "merge",
   "split",
+  "lease",
   "replicaGC",
   "raftlog",
   "raftsnapshot",

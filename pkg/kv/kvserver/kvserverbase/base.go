@@ -26,6 +26,15 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
+// LeaseQueueEnabled is a setting that controls whether the lease queue
+// is enabled.
+var LeaseQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lease_queue.enabled",
+	"whether the lease queue is enabled",
+	true,
+)
+
 // MergeQueueEnabled is a setting that controls whether the merge queue is
 // enabled.
 var MergeQueueEnabled = settings.RegisterBoolSetting(
