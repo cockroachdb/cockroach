@@ -274,7 +274,6 @@ type DB struct {
 	// Especially SettingsValue.
 	SQLKVResponseAdmissionQ *admission.WorkQueue
 	AdmissionPacerFactory   admission.PacerFactory
-	SettingsValues          *settings.Values
 }
 
 // NonTransactionalSender returns a Sender that can be used for sending
@@ -300,6 +299,14 @@ func (db *DB) Clock() *hlc.Clock {
 // Context returns the DB's DBContext.
 func (db *DB) Context() DBContext {
 	return db.ctx
+}
+
+// SettingsValues returns the DB's settings.Values, if configured.
+func (db *DB) SettingsValues() *settings.Values {
+	if db.ctx.Settings == nil {
+		return nil
+	}
+	return &db.ctx.Settings.SV
 }
 
 // NewBatch creates a new empty batch.

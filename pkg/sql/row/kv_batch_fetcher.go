@@ -342,7 +342,7 @@ func (f *txnKVFetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) {
 	f.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
 
 	f.admissionPacer.Close()
-	f.maybeInitAdmissionPacer(txn.AdmissionHeader(), txn.DB().AdmissionPacerFactory, txn.DB().SettingsValues)
+	f.maybeInitAdmissionPacer(txn.AdmissionHeader(), txn.DB().AdmissionPacerFactory, txn.DB().SettingsValues())
 }
 
 // maybeInitAdmissionPacer selectively initializes an admission.Pacer for work
