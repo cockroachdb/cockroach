@@ -134,7 +134,7 @@ const deriveDatabaseTableDetails = (
   const normalizedPrivileges = normalizePrivileges(
     [].concat(...grants.map(grant => grant.privileges)),
   );
-  const nodes = results?.stats.replicaData.nodeIDs || [];
+  const storeIDs = results?.stats.replicaData.storeIDs || [];
   return {
     name: table,
     loading: !!details?.inFlight,
@@ -151,8 +151,13 @@ const deriveDatabaseTableDetails = (
       statsLastUpdated: results?.heuristicsDetails,
       indexStatRecs: results?.stats.indexStats,
       spanStats: results?.stats.spanStats,
-      nodes: nodes,
-      nodesByRegionString: getNodesByRegionString(nodes, nodeRegions, isTenant),
+      // TODO #118957 (xinhaoz) Store IDs and node IDs cannot be used interchangeably.
+      nodes: storeIDs,
+      nodesByRegionString: getNodesByRegionString(
+        storeIDs,
+        nodeRegions,
+        isTenant,
+      ),
     },
   };
 };
@@ -175,7 +180,7 @@ export const deriveTablePageDetailsMemoized = createSelector(
         user: grant.user,
         privileges: normalizePrivileges(grant.privileges),
       })) || [];
-    const nodes = results?.stats.replicaData.nodeIDs || [];
+    const nodes = results?.stats.replicaData.storeIDs || [];
     return {
       loading: !!details?.inFlight,
       loaded: !!details?.valid,

@@ -320,7 +320,7 @@ describe("Database Details Page", function () {
         {},
         // Table replicas query
         {
-          rows: [{ replicas: [1, 2, 3] }],
+          rows: [{ store_ids: [1, 2, 3], replica_count: 5 }],
         },
       ],
     );
@@ -370,7 +370,7 @@ describe("Database Details Page", function () {
         {},
         // Table replicas query
         {
-          rows: [{ replicas: [1, 2, 3, 4, 5] }],
+          rows: [{ store_ids: [1, 2, 3, 4, 5], replica_count: 5 }],
         },
       ],
     );
