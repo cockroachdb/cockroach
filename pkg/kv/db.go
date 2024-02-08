@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -183,18 +184,22 @@ type DBContext struct {
 	// NodeID provides the node ID for setting the gateway node and avoiding
 	// clock uncertainty for root transactions started at the gateway.
 	NodeID *base.SQLIDContainer
+	// Settings is the collection of cluster settings. The field is optional and
+	// can be set to nil in tests.
+	Settings *cluster.Settings
 	// Stopper is used for async tasks.
 	Stopper *stop.Stopper
 }
 
 // DefaultDBContext returns (a copy of) the default options for
 // NewDBWithContext.
-func DefaultDBContext(stopper *stop.Stopper) DBContext {
+func DefaultDBContext(settings *cluster.Settings, stopper *stop.Stopper) DBContext {
 	return DBContext{
 		UserPriority: roachpb.NormalUserPriority,
 		// TODO(tbg): this is ugly. Force callers to pass in an SQLIDContainer.
-		NodeID:  &base.SQLIDContainer{},
-		Stopper: stopper,
+		NodeID:   &base.SQLIDContainer{},
+		Settings: settings,
+		Stopper:  stopper,
 	}
 }
 
@@ -306,7 +311,7 @@ func (db *DB) NewBatch() *Batch {
 func NewDB(
 	actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock, stopper *stop.Stopper,
 ) *DB {
-	return NewDBWithContext(actx, factory, clock, DefaultDBContext(stopper))
+	return NewDBWithContext(actx, factory, clock, DefaultDBContext(nil /* settings */, stopper))
 }
 
 // NewDBWithContext returns a new DB with the given parameters.

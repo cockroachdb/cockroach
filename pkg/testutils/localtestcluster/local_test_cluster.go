@@ -177,8 +177,9 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 
 	ltc.dbContext = &kv.DBContext{
 		UserPriority: roachpb.NormalUserPriority,
-		Stopper:      ltc.stopper,
 		NodeID:       base.NewSQLIDContainerForNode(&nodeIDContainer),
+		Settings:     cfg.Settings,
+		Stopper:      ltc.stopper,
 	}
 	ltc.DB = kv.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.dbContext)
 	transport := kvserver.NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
