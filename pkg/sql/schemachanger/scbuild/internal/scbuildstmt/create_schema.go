@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -72,9 +71,13 @@ func CreateSchema(b BuildCtx, n *tree.CreateSchema) {
 	// via AUTHORIZATION clause.
 	owner := b.CurrentUser()
 	if !n.AuthRole.Undefined() {
-		// TODO (xiang): Support "CREATE SCHEMA AUTHORIZATION <owner>".
-		panic(scerrors.NotImplementedErrorf(n, "create schema specifying owner with "+
-			"AUTHORIZATION is not implemented yet"))
+		authRole, err := decodeusername.FromRoleSpec(
+			b.SessionData(), username.PurposeValidation, n.AuthRole,
+		)
+		if err != nil {
+			panic(err)
+		}
+		owner = authRole
 	}
 
 	// 6. Finally, create and add constituent elements to builder state.
