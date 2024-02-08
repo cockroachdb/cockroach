@@ -845,6 +845,7 @@ type Store struct {
 	replRankingsByTenant *ReplicaRankingMap
 	storeRebalancer      *StoreRebalancer
 	rangeIDAlloc         *idalloc.Allocator // Range ID allocator
+	leaseQueue           *leaseQueue        // Lease queue
 	mvccGCQueue          *mvccGCQueue       // MVCC GC queue
 	mergeQueue           *mergeQueue        // Range merging queue
 	splitQueue           *splitQueue        // Range splitting queue
@@ -1621,6 +1622,7 @@ func NewStore(
 			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
+		s.leaseQueue = newLeaseQueue(s, s.allocator)
 		s.mvccGCQueue = newMVCCGCQueue(s)
 		s.mergeQueue = newMergeQueue(s, s.db)
 		s.splitQueue = newSplitQueue(s, s.db)
@@ -1634,7 +1636,7 @@ func NewStore(
 		// pkg/ui/src/views/reports/containers/enqueueRange/index.tsx
 		s.scanner.AddQueues(
 			s.mvccGCQueue, s.mergeQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue,
-			s.raftLogQueue, s.raftSnapshotQueue, s.consistencyQueue)
+			s.raftLogQueue, s.raftSnapshotQueue, s.consistencyQueue, s.leaseQueue)
 		tsDS := s.cfg.TimeSeriesDataStore
 		if s.cfg.TestingKnobs.TimeSeriesDataStore != nil {
 			tsDS = s.cfg.TestingKnobs.TimeSeriesDataStore
@@ -1649,6 +1651,9 @@ func NewStore(
 
 	if cfg.TestingKnobs.DisableGCQueue {
 		s.setGCQueueActive(false)
+	}
+	if cfg.TestingKnobs.DisableLeaseQueue {
+		s.setLeaseQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableMergeQueue {
 		s.setMergeQueueActive(false)
