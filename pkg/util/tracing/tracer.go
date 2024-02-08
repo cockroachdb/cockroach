@@ -155,6 +155,26 @@ var ZipkinCollector = settings.RegisterStringSetting(
 	settings.WithPublic,
 )
 
+var forceVerboseSpanRegexp = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"trace.span.force_verbose_regexp",
+	"a regular expression representing trace span operation names that should be "+
+		"forced into a verbose recording mode. If a span is created whose operation name matches "+
+		"the provided regular expression, the span and all of its children are forced into a verbose "+
+		"recording mode, meaning that the spans will capture all structured logs and events recorded "+
+		"during the lifetime of the span(s). NOTE: the verbose recording mode is known to cause non-trivial "+
+		"amounts of overhead. Using this setting could have a negative impact on cluster latency.",
+	"", /*defaultValue*/
+	settings.WithValidateString(func(_ *settings.Values, s string) error {
+		if s == "" {
+			return nil
+		}
+		_, err := regexp.Compile(s)
+		return err
+	}),
+	settings.WithVisibility(settings.Reserved),
+)
+
 // EnableActiveSpansRegistry controls Tracers configured as
 // WithTracingMode(TracingModeFromEnv) (which is the default). When enabled,
 // spans are allocated and registered with the active spans registry until
@@ -643,7 +663,6 @@ func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
 	for _, opt := range opts {
 		opt.apply(&o)
 	}
-
 	t := NewTracer()
 	if o.useAfterFinishOpt != nil {
 		t.panicOnUseAfterFinish = o.useAfterFinishOpt.panicOnUseAfterFinish
@@ -656,6 +675,11 @@ func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
 	t.SetActiveSpansRegistryEnabled(o.tracingDefault != TracingModeOnDemand)
 	if o.sv != nil {
 		t.configure(ctx, o.sv, o.tracingDefault)
+		forceVerboseSpanRegexp.SetOnChange(o.sv, func(ctx context.Context) {
+			if err := t.setVerboseOpNameRegexp(forceVerboseSpanRegexp.Get(o.sv)); err != nil {
+				fmt.Fprintf(os.Stderr, "error compiling verbose span operation name regexp: %s\n", err)
+			}
+		})
 	}
 	return t
 }
@@ -1142,13 +1166,8 @@ child operation: %s, tracer created at:
 	shouldBeNoopSpan := !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan || opts.recordingType() != tracingpb.RecordingOff)
 	// Finally, we should check to see if this opName is configured to always be forced to the
 	// tracingpb.RecordingVerbose RecordingType. If it is, we'll want to create a real trace
-	// span. If one of the previous checks for shouldBeNoopSpan passed, we'll make these checks
-	// later.
-	forceVerbose, forceVerboseChecked := false, false
-	if shouldBeNoopSpan {
-		forceVerboseChecked = true
-		forceVerbose = t.forceOpNameVerbose(opName)
-	}
+	// span.
+	forceVerbose := t.forceOpNameVerbose(opName)
 	if shouldBeNoopSpan && !forceVerbose {
 		if !opts.Sterile {
 			return maybeWrapCtx(ctx, t.noopSpan)
@@ -1215,7 +1234,7 @@ child operation: %s, tracer created at:
 		otelSpan, netTr, opts.Sterile)
 
 	var recType tracingpb.RecordingType
-	if forceVerbose || (!forceVerboseChecked && t.forceOpNameVerbose(opName)) {
+	if forceVerbose {
 		recType = tracingpb.RecordingVerbose
 	} else {
 		recType = opts.recordingType()
