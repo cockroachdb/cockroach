@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -276,6 +277,27 @@ func CreateCluster(
 
 	return vm.ProvidersParallel(opts.VMProviders, func(p vm.Provider) error {
 		return p.Create(l, vmLocations[p.Name()], opts, providerOptsContainer[p.Name()])
+	})
+}
+
+// GrowCluster adds new nodes to an existing cluster.
+func GrowCluster(l *logger.Logger, c *Cluster, NumNodes int) error {
+	names := make([]string, 0, NumNodes)
+	offset := len(c.VMs) + 1
+	for i := offset; i < offset+NumNodes; i++ {
+		vmName := vm.Name(c.Name, i)
+		names = append(names, vmName)
+	}
+
+	providers := c.Clouds()
+	if len(providers) != 1 && providers[0] != gce.ProviderName {
+		return errors.Errorf("cluster %s is not on gce, growing a cluster is currently only supported on %s",
+			c.Name, gce.ProviderName)
+	}
+
+	// Only GCE supports expanding a cluster.
+	return vm.ForProvider(gce.ProviderName, func(p vm.Provider) error {
+		return p.Grow(l, c.VMs, c.Name, names)
 	})
 }
 

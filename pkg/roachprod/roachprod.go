@@ -1499,6 +1499,27 @@ func Create(
 	return SetupSSH(ctx, l, clusterName)
 }
 
+func Grow(ctx context.Context, l *logger.Logger, clusterName string, numNodes int) error {
+	if numNodes <= 0 || numNodes >= 1000 {
+		// Upper limit is just for safety.
+		return fmt.Errorf("number of nodes must be in [1..999]")
+	}
+
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	err = cloud.GrowCluster(l, &c.Cluster, numNodes)
+	if err != nil {
+		return err
+	}
+	return SetupSSH(ctx, l, clusterName)
+}
+
 // GC garbage-collects expired clusters, unused SSH key pairs in AWS, and unused
 // DNS records.
 func GC(l *logger.Logger, dryrun bool) error {
