@@ -11,7 +11,7 @@
 //go:build bazel
 // +build bazel
 
-// extract-test-results is a binary to parse test results from a "build event
+// bazel-github-helper is a binary to parse test results from a "build event
 // protocol" binary file, as constructed by
 // `bazel ... --build_event_binary_file`. We use this data to construct a JSON
 // test report.

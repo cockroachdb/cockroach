@@ -1,9 +1,9 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
-    name = "extract-test-results_lib",
+    name = "bazel-github-helper_lib",
     srcs = ["main.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/bazci/extract-test-results",
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/bazci/bazel-github-helper",
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/build/engflow",
@@ -12,7 +12,7 @@ go_library(
 )
 
 go_binary(
-    name = "extract-test-results",
-    embed = [":extract-test-results_lib"],
+    name = "bazel-github-helper",
+    embed = [":bazel-github-helper_lib"],
     visibility = ["//visibility:public"],
 )
