@@ -1981,8 +1981,8 @@ func equivalentTimestamps(a, b *hlc.Timestamp) bool {
 
 // Equal implements the gogoproto Equal interface. This implementation is
 // forked from the gogoproto generated code to allow l.Expiration == nil and
-// l.Expiration == &hlc.Timestamp{} to compare equal. Ditto for
-// DeprecatedStartStasis.
+// l.Expiration == &hlc.Timestamp{} to compare equal. It also ignores
+// DeprecatedStartStasis entirely to allow for its removal in a later release.
 func (l *Lease) Equal(that interface{}) bool {
 	if that == nil {
 		return l == nil
@@ -2010,9 +2010,6 @@ func (l *Lease) Equal(that interface{}) bool {
 		return false
 	}
 	if !l.Replica.Equal(&that1.Replica) {
-		return false
-	}
-	if !equivalentTimestamps(l.DeprecatedStartStasis, that1.DeprecatedStartStasis) {
 		return false
 	}
 	if !l.ProposedTS.Equal(that1.ProposedTS) {

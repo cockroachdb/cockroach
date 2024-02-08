@@ -49,7 +49,7 @@ func registerDiskFull(r registry.Registry) {
 			// a range on node 1, but node 1 will not restart until the query
 			// completes.
 			db := c.Conn(ctx, t.L(), 1)
-			err := WaitFor3XReplication(ctx, t, db)
+			err := WaitFor3XReplication(ctx, t, t.L(), db)
 			require.NoError(t, err)
 			_ = db.Close()
 

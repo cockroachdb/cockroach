@@ -331,7 +331,7 @@ func runClusterNotAtQuorum(ctx context.Context, t test.Test, c cluster.Cluster) 
 	db := c.Conn(ctx, t.L(), 1)
 	defer func() { _ = db.Close() }()
 
-	err := WaitFor3XReplication(ctx, t, db)
+	err := WaitFor3XReplication(ctx, t, t.L(), db)
 	require.NoError(t, err)
 
 	stopOpts := option.DefaultStopOpts()

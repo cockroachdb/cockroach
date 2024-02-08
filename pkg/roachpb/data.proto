@@ -664,6 +664,16 @@ message Lease {
   ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
 
   // The start of the lease stasis period. This field is deprecated.
+  //
+  // TODO(erikgrinaker): remove this. Migration:
+  //
+  // - 2016: the field was deprecated (#10305).
+  //
+  // - 24.1: stop reading the field. 23.2 nodes compare the field below Raft in
+  //   Lease.Equal(), so we must populate the field for backwards compatibility.
+  //
+  // - 24.2 or later: remove the field when backwards compatibility with 23.2
+  //   is no longer needed.
   util.hlc.Timestamp deprecated_start_stasis = 4;
 
   // The current timestamp when this lease has been proposed. Used after a

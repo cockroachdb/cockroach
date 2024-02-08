@@ -109,7 +109,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	defer db.Close()
 
 	// Wait for up-replication. This will also print a progress message.
-	err = WaitFor3XReplication(ctx, t, db)
+	err = WaitFor3XReplication(ctx, t, t.L(), db)
 	require.NoError(t, err)
 
 	t.L().Printf("creating test user...")

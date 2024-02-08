@@ -37,7 +37,7 @@ func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// a node starts and contacts the cluster.
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
-	err := WaitFor3XReplication(ctx, t, db)
+	err := WaitFor3XReplication(ctx, t, t.L(), db)
 	require.NoError(t, err)
 
 	err = retry.ForDuration(10*time.Second, func() error {

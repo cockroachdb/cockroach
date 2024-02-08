@@ -90,7 +90,7 @@ func executeNodeShutdown(
 		// is in a healthy state before we start bringing any
 		// nodes down.
 		t.Status("waiting for cluster to be 3x replicated")
-		err := WaitFor3XReplication(ctx, t, watcherDB)
+		err := WaitFor3XReplication(ctx, t, t.L(), watcherDB)
 		if err != nil {
 			return err
 		}

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -30,8 +31,8 @@ import (
 
 // WaitFor3XReplication is like WaitForReplication but specifically requires
 // three as the minimum number of voters a range must be replicated on.
-func WaitFor3XReplication(ctx context.Context, t test.Test, db *gosql.DB) error {
-	return WaitForReplication(ctx, t, db, 3 /* replicationFactor */, atLeastReplicationFactor)
+func WaitFor3XReplication(ctx context.Context, t test.Test, l *logger.Logger, db *gosql.DB) error {
+	return WaitForReplication(ctx, t, l, db, 3 /* replicationFactor */, atLeastReplicationFactor)
 }
 
 // WaitForReady waits until the given nodes report ready via health checks.
@@ -95,11 +96,12 @@ const (
 func WaitForReplication(
 	ctx context.Context,
 	t test.Test,
+	l *logger.Logger,
 	db *gosql.DB,
 	replicationFactor int,
 	waitForReplicationType waitForReplicationType,
 ) error {
-	t.L().Printf("waiting for initial up-replication... (<%s)", 2*time.Minute)
+	l.Printf("waiting for initial up-replication... (<%s)", 2*time.Minute)
 	tStart := timeutil.Now()
 	var compStr string
 	switch waitForReplicationType {
@@ -124,11 +126,11 @@ func WaitForReplication(
 			return err
 		}
 		if n == 0 {
-			t.L().Printf("up-replication complete")
+			l.Printf("up-replication complete")
 			return nil
 		}
 		if timeutil.Since(tStart) > 30*time.Second || oldN != n {
-			t.L().Printf("still waiting for full replication (%d ranges left)", n)
+			l.Printf("still waiting for full replication (%d ranges left)", n)
 		}
 		oldN = n
 		time.Sleep(time.Second)

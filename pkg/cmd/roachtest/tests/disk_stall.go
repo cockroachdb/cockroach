@@ -120,7 +120,7 @@ func runDiskStalledDetection(
 	require.NoError(t, n1Conn.PingContext(ctx))
 
 	// Wait for upreplication.
-	require.NoError(t, WaitFor3XReplication(ctx, t, n2conn))
+	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), n2conn))
 
 	c.Run(ctx, option.WithNodes(c.Node(4)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 

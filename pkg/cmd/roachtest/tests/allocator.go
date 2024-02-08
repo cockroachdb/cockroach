@@ -112,7 +112,7 @@ func registerAllocator(r registry.Registry) {
 		startTime := timeutil.Now()
 		m = c.NewMonitor(ctx, clusNodes)
 		m.Go(func(ctx context.Context) error {
-			err := WaitFor3XReplication(ctx, t, db)
+			err := WaitFor3XReplication(ctx, t, t.L(), db)
 			replicateTime = timeutil.Now()
 			return err
 		})

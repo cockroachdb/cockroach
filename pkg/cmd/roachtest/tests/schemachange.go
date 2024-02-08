@@ -325,7 +325,7 @@ func makeIndexAddTpccTest(
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          length * 3,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCC(ctx, t, c, tpccOptions{
+			runTPCC(ctx, t, t.L(), c, tpccOptions{
 				Warehouses: warehouses,
 				// We limit the number of workers because the default results in a lot
 				// of connections which can lead to OOM issues (see #40566).
@@ -451,7 +451,7 @@ func makeSchemaChangeDuringTPCC(
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          length * 3,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCC(ctx, t, c, tpccOptions{
+			runTPCC(ctx, t, t.L(), c, tpccOptions{
 				Warehouses: warehouses,
 				// We limit the number of workers because the default results in a lot
 				// of connections which can lead to OOM issues (see #40566).

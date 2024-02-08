@@ -68,7 +68,7 @@ func makeElasticControlRowLevelTTL(spec spec.ClusterSpec, expiredRows bool) regi
 				t.Status(fmt.Sprintf("initializing + running tpcc for %s (<%s)", workloadDuration, estimatedSetupTime))
 			}
 
-			runTPCC(ctx, t, c, tpccOptions{
+			runTPCC(ctx, t, t.L(), c, tpccOptions{
 				Warehouses:         numWarehouses,
 				Duration:           workloadDuration,
 				SetupType:          usingImport,

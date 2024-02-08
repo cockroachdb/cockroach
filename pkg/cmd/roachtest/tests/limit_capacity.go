@@ -87,7 +87,7 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
 
-	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 	var cancels []func()
 
 	c.Run(ctx, option.WithNodes(appNode), "./cockroach workload init kv --splits=1000 {pgurl:1}")

@@ -2393,3 +2393,36 @@ inner-join (hash)
  │    └── unfiltered-cols: (6-9)
  └── filters
       └── k:6 = a:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# Regression test for overflow when printing out the estimated row count.
+statement ok
+CREATE TABLE very_large_table (k INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE very_large_table INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2024-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000000000,
+    "distinct_count": 1000000000000
+  }
+]'
+
+query T
+EXPLAIN SELECT t1.k FROM very_large_table AS t1, very_large_table AS t2;
+----
+distribution: local
+vectorized: true
+·
+• cross join
+│ estimated row count: 9,223,372,036,854,775,807
+│
+├── • scan
+│     estimated row count: 1,000,000,000,000 (100% of the table; stats collected <hidden> ago)
+│     table: very_large_table@very_large_table_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      estimated row count: 1,000,000,000,000 (100% of the table; stats collected <hidden> ago)
+      table: very_large_table@very_large_table_pkey
+      spans: FULL SCAN

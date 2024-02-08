@@ -76,7 +76,7 @@ func registerExportParquet(r registry.Registry) {
 				ExtraSetupArgs:                "--checks=false",
 				DisableDefaultScheduledBackup: true,
 			}
-			setupTPCC(ctx, t, c, tpccOpts)
+			setupTPCC(ctx, t, t.L(), c, tpccOpts)
 			t.Status("finished initializing tpcc database")
 
 			// Add padding to let the cluster metrics settle after initializing tpcc.
@@ -144,7 +144,7 @@ func registerExportParquet(r registry.Registry) {
 				ExtraSetupArgs:                "--checks=false",
 				DisableDefaultScheduledBackup: true,
 			}
-			setupTPCC(ctx, t, c, tpccOpts)
+			setupTPCC(ctx, t, t.L(), c, tpccOpts)
 			t.Status("finished initializing tpcc database")
 
 			// Add padding to let the cluster metrics settle after initializing tpcc.
