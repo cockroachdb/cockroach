@@ -57,39 +57,6 @@ import (
 
 type execPlan struct {
 	root exec.Node
-
-	// outputCols is a map from opt.ColumnID to exec.NodeColumnOrdinal. It maps
-	// columns in the output set of a relational expression to indices in the
-	// result columns of the exec.Node.
-	//
-	// The reason we need to keep track of this (instead of using just the
-	// relational properties) is that the relational properties don't force a
-	// single "schema": any ordering of the output columns is possible. We choose
-	// the schema that is most convenient: for scans, we use the table's column
-	// ordering. Consider:
-	//   SELECT a, b FROM t WHERE a = b
-	// and the following two cases:
-	//   1. The table is defined as (k INT PRIMARY KEY, a INT, b INT). The scan will
-	//      return (k, a, b).
-	//   2. The table is defined as (k INT PRIMARY KEY, b INT, a INT). The scan will
-	//      return (k, b, a).
-	// In these two cases, the relational properties are effectively the same.
-	//
-	// An alternative to this would be to always use a "canonical" schema, for
-	// example the output columns in increasing index order. However, this would
-	// require a lot of otherwise unnecessary projections.
-	//
-	// Note: conceptually, this could be a ColList; however, the map is more
-	// convenient when converting VariableOps to IndexedVars.
-	outputCols opt.ColMap
-}
-
-// numOutputCols returns the number of columns emitted by the execPlan's Node.
-// This will typically be equal to ep.outputCols.Len(), but might be different
-// if the node outputs the same optimizer ColumnID multiple times.
-// TODO(justin): we should keep track of this instead of computing it each time.
-func (ep *execPlan) numOutputCols() int {
-	return numOutputColsInMap(ep.outputCols)
 }
 
 // numOutputColsInMap returns the number of slots required to fill in all of
@@ -104,28 +71,30 @@ func numOutputColsInMap(m opt.ColMap) int {
 
 // makeBuildScalarCtx returns a buildScalarCtx that can be used with expressions
 // that refer the output columns of this plan.
-func (ep *execPlan) makeBuildScalarCtx() buildScalarCtx {
+func makeBuildScalarCtx(cols opt.ColMap) buildScalarCtx {
 	return buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, ep.numOutputCols()),
-		ivarMap: ep.outputCols,
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numOutputColsInMap(cols)),
+		ivarMap: cols,
 	}
 }
 
 // getNodeColumnOrdinal takes a column that is known to be produced by the execPlan
 // and returns the ordinal index of that column in the result columns of the
 // node.
-func (ep *execPlan) getNodeColumnOrdinal(col opt.ColumnID) (exec.NodeColumnOrdinal, error) {
-	ord, ok := ep.outputCols.Get(int(col))
+func getNodeColumnOrdinal(colMap opt.ColMap, col opt.ColumnID) (exec.NodeColumnOrdinal, error) {
+	ord, ok := colMap.Get(int(col))
 	if !ok {
 		return 0, errors.AssertionFailedf("column %d not in input", redact.Safe(col))
 	}
 	return exec.NodeColumnOrdinal(ord), nil
 }
 
-func (ep *execPlan) getNodeColumnOrdinalSet(cols opt.ColSet) (exec.NodeColumnOrdinalSet, error) {
+func getNodeColumnOrdinalSet(
+	colMap opt.ColMap, cols opt.ColSet,
+) (exec.NodeColumnOrdinalSet, error) {
 	var res exec.NodeColumnOrdinalSet
 	for colID, ok := cols.Next(0); ok; colID, ok = cols.Next(colID + 1) {
-		colOrd, err := ep.getNodeColumnOrdinal(colID)
+		colOrd, err := getNodeColumnOrdinal(colMap, colID)
 		if err != nil {
 			return exec.NodeColumnOrdinalSet{}, err
 		}
@@ -136,20 +105,20 @@ func (ep *execPlan) getNodeColumnOrdinalSet(cols opt.ColSet) (exec.NodeColumnOrd
 
 // reqOrdering converts the provided ordering of a relational expression to an
 // OutputOrdering (according to the outputCols map).
-func (ep *execPlan) reqOrdering(expr memo.RelExpr) (exec.OutputOrdering, error) {
-	ordering, err := ep.sqlOrdering(expr.ProvidedPhysical().Ordering)
+func reqOrdering(expr memo.RelExpr, cols opt.ColMap) (exec.OutputOrdering, error) {
+	ordering, err := sqlOrdering(expr.ProvidedPhysical().Ordering, cols)
 	return exec.OutputOrdering(ordering), err
 }
 
 // sqlOrdering converts an Ordering to a ColumnOrdering (according to the
 // outputCols map).
-func (ep *execPlan) sqlOrdering(ordering opt.Ordering) (colinfo.ColumnOrdering, error) {
+func sqlOrdering(ordering opt.Ordering, cols opt.ColMap) (colinfo.ColumnOrdering, error) {
 	if ordering.Empty() {
 		return nil, nil
 	}
 	colOrder := make(colinfo.ColumnOrdering, len(ordering))
 	for i := range ordering {
-		ord, err := ep.getNodeColumnOrdinal(ordering[i].ID())
+		ord, err := getNodeColumnOrdinal(cols, ordering[i].ID())
 		if err != nil {
 			return nil, err
 		}
@@ -164,9 +133,37 @@ func (ep *execPlan) sqlOrdering(ordering opt.Ordering) (colinfo.ColumnOrdering, 
 	return colOrder, nil
 }
 
-func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
+// builRelational builds a relational expression into an execPlan.
+//
+// outputCols is a map from opt.ColumnID to exec.NodeColumnOrdinal. It maps
+// columns in the output set of a relational expression to indices in the
+// result columns of the exec.Node.
+//
+// The reason we need to keep track of this (instead of using just the
+// relational properties) is that the relational properties don't force a
+// single "schema": any ordering of the output columns is possible. We choose
+// the schema that is most convenient: for scans, we use the table's column
+// ordering. Consider:
+//
+//	SELECT a, b FROM t WHERE a = b
+//
+// and the following two cases:
+//  1. The table is defined as (k INT PRIMARY KEY, a INT, b INT). The scan will
+//     return (k, a, b).
+//  2. The table is defined as (k INT PRIMARY KEY, b INT, a INT). The scan will
+//     return (k, b, a).
+//
+// In these two cases, the relational properties are effectively the same.
+//
+// An alternative to this would be to always use a "canonical" schema, for
+// example the output columns in increasing index order. However, this would
+// require a lot of otherwise unnecessary projections.
+//
+// Note: conceptually, this could be a ColList; however, the map is more
+// convenient when converting VariableOps to IndexedVars.
+// outputCols opt.ColMap
+func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols opt.ColMap, err error) {
 	var ep execPlan
-	var err error
 
 	if opt.IsDDLOp(e) {
 		// Mark the statement as containing DDL for use
@@ -178,7 +175,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		b.flags.Set(exec.PlanFlagContainsMutation)
 		// Raise error if mutation op is part of a read-only transaction.
 		if b.evalCtx.TxnReadOnly {
-			return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+			return execPlan{}, opt.ColMap{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
 				"cannot execute %s in a read-only transaction", b.statementTag(e))
 		}
 	}
@@ -186,7 +183,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	// Raise error if bounded staleness is used incorrectly.
 	if b.boundedStaleness() {
 		if _, ok := boundedStalenessAllowList[e.Op()]; !ok {
-			return execPlan{}, unimplemented.NewWithIssuef(67562,
+			return execPlan{}, opt.ColMap{}, unimplemented.NewWithIssuef(67562,
 				"cannot use bounded staleness for %s", b.statementTag(e),
 			)
 		}
@@ -211,176 +208,176 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	switch t := e.(type) {
 	case *memo.ValuesExpr:
-		ep, err = b.buildValues(t)
+		ep, outputCols, err = b.buildValues(t)
 
 	case *memo.LiteralValuesExpr:
-		ep, err = b.buildLiteralValues(t)
+		ep, outputCols, err = b.buildLiteralValues(t)
 
 	case *memo.ScanExpr:
-		ep, err = b.buildScan(t)
+		ep, outputCols, err = b.buildScan(t)
 
 	case *memo.PlaceholderScanExpr:
-		ep, err = b.buildPlaceholderScan(t)
+		ep, outputCols, err = b.buildPlaceholderScan(t)
 
 	case *memo.SelectExpr:
-		ep, err = b.buildSelect(t)
+		ep, outputCols, err = b.buildSelect(t)
 
 	case *memo.ProjectExpr:
-		ep, err = b.buildProject(t)
+		ep, outputCols, err = b.buildProject(t)
 
 	case *memo.GroupByExpr, *memo.ScalarGroupByExpr:
-		ep, err = b.buildGroupBy(e)
+		ep, outputCols, err = b.buildGroupBy(e)
 
 	case *memo.DistinctOnExpr, *memo.EnsureDistinctOnExpr, *memo.UpsertDistinctOnExpr,
 		*memo.EnsureUpsertDistinctOnExpr:
-		ep, err = b.buildDistinct(t)
+		ep, outputCols, err = b.buildDistinct(t)
 
 	case *memo.TopKExpr:
-		ep, err = b.buildTopK(t)
+		ep, outputCols, err = b.buildTopK(t)
 
 	case *memo.LimitExpr, *memo.OffsetExpr:
-		ep, err = b.buildLimitOffset(e)
+		ep, outputCols, err = b.buildLimitOffset(e)
 
 	case *memo.SortExpr:
-		ep, err = b.buildSort(t)
+		ep, outputCols, err = b.buildSort(t)
 
 	case *memo.DistributeExpr:
-		ep, err = b.buildDistribute(t)
+		ep, outputCols, err = b.buildDistribute(t)
 
 	case *memo.IndexJoinExpr:
-		ep, err = b.buildIndexJoin(t)
+		ep, outputCols, err = b.buildIndexJoin(t)
 
 	case *memo.LookupJoinExpr:
-		ep, err = b.buildLookupJoin(t)
+		ep, outputCols, err = b.buildLookupJoin(t)
 
 	case *memo.InvertedJoinExpr:
-		ep, err = b.buildInvertedJoin(t)
+		ep, outputCols, err = b.buildInvertedJoin(t)
 
 	case *memo.ZigzagJoinExpr:
-		ep, err = b.buildZigzagJoin(t)
+		ep, outputCols, err = b.buildZigzagJoin(t)
 
 	case *memo.OrdinalityExpr:
-		ep, err = b.buildOrdinality(t)
+		ep, outputCols, err = b.buildOrdinality(t)
 
 	case *memo.MergeJoinExpr:
-		ep, err = b.buildMergeJoin(t)
+		ep, outputCols, err = b.buildMergeJoin(t)
 
 	case *memo.Max1RowExpr:
-		ep, err = b.buildMax1Row(t)
+		ep, outputCols, err = b.buildMax1Row(t)
 
 	case *memo.ProjectSetExpr:
-		ep, err = b.buildProjectSet(t)
+		ep, outputCols, err = b.buildProjectSet(t)
 
 	case *memo.WindowExpr:
-		ep, err = b.buildWindow(t)
+		ep, outputCols, err = b.buildWindow(t)
 
 	case *memo.SequenceSelectExpr:
-		ep, err = b.buildSequenceSelect(t)
+		ep, outputCols, err = b.buildSequenceSelect(t)
 
 	case *memo.InsertExpr:
-		ep, err = b.buildInsert(t)
+		ep, outputCols, err = b.buildInsert(t)
 
 	case *memo.InvertedFilterExpr:
-		ep, err = b.buildInvertedFilter(t)
+		ep, outputCols, err = b.buildInvertedFilter(t)
 
 	case *memo.UpdateExpr:
-		ep, err = b.buildUpdate(t)
+		ep, outputCols, err = b.buildUpdate(t)
 
 	case *memo.UpsertExpr:
-		ep, err = b.buildUpsert(t)
+		ep, outputCols, err = b.buildUpsert(t)
 
 	case *memo.DeleteExpr:
-		ep, err = b.buildDelete(t)
+		ep, outputCols, err = b.buildDelete(t)
 
 	case *memo.LockExpr:
-		ep, err = b.buildLock(t)
+		ep, outputCols, err = b.buildLock(t)
 
 	case *memo.BarrierExpr:
-		ep, err = b.buildBarrier(t)
+		ep, outputCols, err = b.buildBarrier(t)
 
 	case *memo.CreateTableExpr:
-		ep, err = b.buildCreateTable(t)
+		ep, outputCols, err = b.buildCreateTable(t)
 
 	case *memo.CreateViewExpr:
-		ep, err = b.buildCreateView(t)
+		ep, outputCols, err = b.buildCreateView(t)
 
 	case *memo.CreateFunctionExpr:
-		ep, err = b.buildCreateFunction(t)
+		ep, outputCols, err = b.buildCreateFunction(t)
 
 	case *memo.WithExpr:
-		ep, err = b.buildWith(t)
+		ep, outputCols, err = b.buildWith(t)
 
 	case *memo.WithScanExpr:
-		ep, err = b.buildWithScan(t)
+		ep, outputCols, err = b.buildWithScan(t)
 
 	case *memo.RecursiveCTEExpr:
-		ep, err = b.buildRecursiveCTE(t)
+		ep, outputCols, err = b.buildRecursiveCTE(t)
 
 	case *memo.CallExpr:
-		ep, err = b.buildCall(t)
+		ep, outputCols, err = b.buildCall(t)
 
 	case *memo.ExplainExpr:
-		ep, err = b.buildExplain(t)
+		ep, outputCols, err = b.buildExplain(t)
 
 	case *memo.ShowTraceForSessionExpr:
-		ep, err = b.buildShowTrace(t)
+		ep, outputCols, err = b.buildShowTrace(t)
 
 	case *memo.OpaqueRelExpr, *memo.OpaqueMutationExpr, *memo.OpaqueDDLExpr:
-		ep, err = b.buildOpaque(t.Private().(*memo.OpaqueRelPrivate))
+		ep, outputCols, err = b.buildOpaque(t.Private().(*memo.OpaqueRelPrivate))
 
 	case *memo.AlterTableSplitExpr:
-		ep, err = b.buildAlterTableSplit(t)
+		ep, outputCols, err = b.buildAlterTableSplit(t)
 
 	case *memo.AlterTableUnsplitExpr:
-		ep, err = b.buildAlterTableUnsplit(t)
+		ep, outputCols, err = b.buildAlterTableUnsplit(t)
 
 	case *memo.AlterTableUnsplitAllExpr:
-		ep, err = b.buildAlterTableUnsplitAll(t)
+		ep, outputCols, err = b.buildAlterTableUnsplitAll(t)
 
 	case *memo.AlterTableRelocateExpr:
-		ep, err = b.buildAlterTableRelocate(t)
+		ep, outputCols, err = b.buildAlterTableRelocate(t)
 
 	case *memo.AlterRangeRelocateExpr:
-		ep, err = b.buildAlterRangeRelocate(t)
+		ep, outputCols, err = b.buildAlterRangeRelocate(t)
 
 	case *memo.ControlJobsExpr:
-		ep, err = b.buildControlJobs(t)
+		ep, outputCols, err = b.buildControlJobs(t)
 
 	case *memo.ControlSchedulesExpr:
-		ep, err = b.buildControlSchedules(t)
+		ep, outputCols, err = b.buildControlSchedules(t)
 
 	case *memo.ShowCompletionsExpr:
-		ep, err = b.buildShowCompletions(t)
+		ep, outputCols, err = b.buildShowCompletions(t)
 
 	case *memo.CancelQueriesExpr:
-		ep, err = b.buildCancelQueries(t)
+		ep, outputCols, err = b.buildCancelQueries(t)
 
 	case *memo.CancelSessionsExpr:
-		ep, err = b.buildCancelSessions(t)
+		ep, outputCols, err = b.buildCancelSessions(t)
 
 	case *memo.CreateStatisticsExpr:
-		ep, err = b.buildCreateStatistics(t)
+		ep, outputCols, err = b.buildCreateStatistics(t)
 
 	case *memo.ExportExpr:
-		ep, err = b.buildExport(t)
+		ep, outputCols, err = b.buildExport(t)
 
 	default:
 		switch {
 		case opt.IsSetOp(e):
-			ep, err = b.buildSetOp(e)
+			ep, outputCols, err = b.buildSetOp(e)
 
 		case opt.IsJoinNonApplyOp(e):
-			ep, err = b.buildHashJoin(e)
+			ep, outputCols, err = b.buildHashJoin(e)
 
 		case opt.IsJoinApplyOp(e):
-			ep, err = b.buildApplyJoin(e)
+			ep, outputCols, err = b.buildApplyJoin(e)
 
 		default:
 			err = errors.AssertionFailedf("no execbuild for %T", t)
 		}
 	}
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// In test builds, assert that the exec plan output columns match the opt
@@ -388,11 +385,11 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	if buildutil.CrdbTestBuild {
 		optCols := e.Relational().OutputCols
 		var execCols opt.ColSet
-		ep.outputCols.ForEach(func(key, val int) {
+		outputCols.ForEach(func(key, val int) {
 			execCols.Add(opt.ColumnID(key))
 		})
 		if !execCols.Equals(optCols) {
-			return execPlan{}, errors.AssertionFailedf(
+			return execPlan{}, opt.ColMap{}, errors.AssertionFailedf(
 				"exec columns do not match opt columns: expected %v, got %v. op: %T", optCols, execCols, e)
 		}
 	}
@@ -400,17 +397,18 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	b.maybeAnnotateWithEstimates(ep.root, e)
 
 	if saveTableName != "" {
-		ep, err = b.applySaveTable(ep, e, saveTableName)
+		// The output columns do not change in applySaveTable.
+		ep, err = b.applySaveTable(ep, outputCols, e, saveTableName)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 	}
 
 	// Wrap the expression in a render expression if presentation requires it.
 	if p := e.RequiredPhysical(); !p.Presentation.Any() {
-		ep, err = b.applyPresentation(ep, p.Presentation)
+		ep, outputCols, err = b.applyPresentation(ep, outputCols, p.Presentation)
 	}
-	return ep, err
+	return ep, outputCols, err
 }
 
 // maybeAnnotateWithEstimates checks if we are building against an
@@ -461,10 +459,12 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 	}
 }
 
-func (b *Builder) buildValues(values *memo.ValuesExpr) (execPlan, error) {
+func (b *Builder) buildValues(
+	values *memo.ValuesExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	rows, err := b.buildValuesRows(values)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	return b.constructValues(rows, values.Cols)
 }
@@ -502,7 +502,9 @@ func makeTypedExprMatrix(numRows, numCols int) [][]tree.TypedExpr {
 	return rows
 }
 
-func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (execPlan, error) {
+func (b *Builder) constructValues(
+	rows [][]tree.TypedExpr, cols opt.ColList,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	md := b.mem.Metadata()
 	resultCols := make(colinfo.ResultColumns, len(cols))
 	for i, col := range cols {
@@ -512,17 +514,19 @@ func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (ex
 	}
 	node, err := b.factory.ConstructValues(rows, resultCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	ep := execPlan{root: node}
 	for i, col := range cols {
-		ep.outputCols.Set(int(col), i)
+		outputCols.Set(int(col), i)
 	}
 
-	return ep, nil
+	return ep, outputCols, nil
 }
 
-func (b *Builder) buildLiteralValues(values *memo.LiteralValuesExpr) (execPlan, error) {
+func (b *Builder) buildLiteralValues(
+	values *memo.LiteralValuesExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	md := b.mem.Metadata()
 	resultCols := make(colinfo.ResultColumns, len(values.ColList()))
 	for i, col := range values.ColList() {
@@ -532,14 +536,14 @@ func (b *Builder) buildLiteralValues(values *memo.LiteralValuesExpr) (execPlan, 
 	}
 	node, err := b.factory.ConstructLiteralValues(values.Rows.Rows, resultCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	ep := execPlan{root: node}
 	for i, col := range values.ColList() {
-		ep.outputCols.Set(int(col), i)
+		outputCols.Set(int(col), i)
 	}
 
-	return ep, nil
+	return ep, outputCols, nil
 }
 
 // getColumns returns the set of column ordinals in the table for the set of
@@ -737,7 +741,7 @@ func (b *Builder) scanParams(
 	}, outputMap, nil
 }
 
-func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
+func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols opt.ColMap, err error) {
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
 
@@ -746,7 +750,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	}
 
 	if scan.Flags.ForceZigzag {
-		return execPlan{}, fmt.Errorf("could not produce a query plan conforming to the FORCE_ZIGZAG hint")
+		return execPlan{}, opt.ColMap{}, fmt.Errorf("could not produce a query plan conforming to the FORCE_ZIGZAG hint")
 	}
 
 	isUnfiltered := scan.IsUnfiltered(md)
@@ -756,13 +760,13 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		// user has explicitly forced the partial index *and* used NO_FULL_SCAN, we
 		// disallow the full index scan.
 		if isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan(md)) {
-			return execPlan{}, fmt.Errorf("could not produce a query plan conforming to the NO_FULL_SCAN hint")
+			return execPlan{}, opt.ColMap{}, fmt.Errorf("could not produce a query plan conforming to the NO_FULL_SCAN hint")
 		}
 	}
 
 	idx := tab.Index(scan.Index)
 	if idx.IsInverted() && len(scan.InvertedConstraint) == 0 {
-		return execPlan{},
+		return execPlan{}, opt.ColMap{},
 			errors.AssertionFailedf("expected inverted index scan to have an inverted constraint")
 	}
 	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
@@ -840,14 +844,14 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		}
 	}
 
-	params, outputCols, err := b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical())
+	var params exec.ScanParams
+	params, outputCols, err = b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical())
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	res := execPlan{outputCols: outputCols}
-	reqOrdering, err := res.reqOrdering(scan)
+	reqOrdering, err := reqOrdering(scan, outputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	root, err := b.factory.ConstructScan(
 		tab,
@@ -856,9 +860,10 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		reqOrdering,
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
+	var res execPlan
 	res.root = root
 	if b.evalCtx.SessionData().EnforceHomeRegion && b.IsANSIDML && b.doScanExprCollection {
 		if b.builtScans == nil {
@@ -868,12 +873,14 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		}
 		b.builtScans = append(b.builtScans, scan)
 	}
-	return res, nil
+	return res, outputCols, nil
 }
 
-func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan, error) {
+func (b *Builder) buildPlaceholderScan(
+	scan *memo.PlaceholderScanExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	if scan.Constraint != nil || scan.InvertedConstraint != nil {
-		return execPlan{}, errors.AssertionFailedf("PlaceholderScan cannot have constraints")
+		return execPlan{}, opt.ColMap{}, errors.AssertionFailedf("PlaceholderScan cannot have constraints")
 	}
 
 	md := b.mem.Metadata()
@@ -898,7 +905,7 @@ func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan
 		if p, ok := expr.(*memo.PlaceholderExpr); ok {
 			val, err := eval.Expr(b.ctx, b.evalCtx, p.Value)
 			if err != nil {
-				return execPlan{}, err
+				return execPlan{}, opt.ColMap{}, err
 			}
 			values[i] = val
 		} else {
@@ -918,14 +925,14 @@ func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan
 	private := scan.ScanPrivate
 	private.SetConstraint(b.evalCtx, &c)
 
-	params, outputCols, err := b.scanParams(tab, &private, scan.Relational(), scan.RequiredPhysical())
+	var params exec.ScanParams
+	params, outputCols, err = b.scanParams(tab, &private, scan.Relational(), scan.RequiredPhysical())
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	res := execPlan{outputCols: outputCols}
-	reqOrdering, err := res.reqOrdering(scan)
+	reqOrdering, err := reqOrdering(scan, outputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	root, err := b.factory.ConstructScan(
 		tab,
@@ -934,45 +941,48 @@ func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan
 		reqOrdering,
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
+	var res execPlan
 	res.root = root
-	return res, nil
+	return res, outputCols, nil
 }
 
-func (b *Builder) buildSelect(sel *memo.SelectExpr) (execPlan, error) {
-	input, err := b.buildRelational(sel.Input)
+func (b *Builder) buildSelect(sel *memo.SelectExpr) (_ execPlan, outputCols opt.ColMap, err error) {
+	input, inputCols, err := b.buildRelational(sel.Input)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	filter, err := b.buildScalarWithMap(input.outputCols, &sel.Filters)
+	filter, err := b.buildScalarWithMap(inputCols, &sel.Filters)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	// A filtering node does not modify the schema.
-	res := execPlan{outputCols: input.outputCols}
-	reqOrder, err := res.reqOrdering(sel)
+	reqOrder, err := reqOrdering(sel, inputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
+	var res execPlan
 	res.root, err = b.factory.ConstructFilter(input.root, filter, reqOrder)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return res, nil
+	// A filtering node does not modify the schema, so we can pass along the
+	// input's output columns.
+	return res, inputCols, nil
 }
 
-func (b *Builder) buildInvertedFilter(invFilter *memo.InvertedFilterExpr) (execPlan, error) {
-	input, err := b.buildRelational(invFilter.Input)
+func (b *Builder) buildInvertedFilter(
+	invFilter *memo.InvertedFilterExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
+	input, inputCols, err := b.buildRelational(invFilter.Input)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	// A filtering node does not modify the schema.
-	res := execPlan{outputCols: input.outputCols}
-	invertedCol, err := input.getNodeColumnOrdinal(invFilter.InvertedColumn)
+	var res execPlan
+	invertedCol, err := getNodeColumnOrdinal(inputCols, invFilter.InvertedColumn)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	var typedPreFilterExpr tree.TypedExpr
 	var typ *types.T
@@ -987,27 +997,31 @@ func (b *Builder) buildInvertedFilter(invFilter *memo.InvertedFilterExpr) (execP
 		}
 		typedPreFilterExpr, err = b.buildScalar(&ctx, invFilter.PreFiltererState.Expr)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 		typ = invFilter.PreFiltererState.Typ
 	}
 	res.root, err = b.factory.ConstructInvertedFilter(
 		input.root, invFilter.InvertedExpression, typedPreFilterExpr, typ, invertedCol)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	// Apply a post-projection to remove the inverted column.
 	//
 	// TODO(rytaft): the invertedFilter used to do this post-projection, but we
 	// had difficulty integrating that behavior. Investigate and restore that
 	// original behavior.
-	return b.applySimpleProject(res, invFilter, invFilter.Relational().OutputCols, invFilter.ProvidedPhysical().Ordering)
+	return b.applySimpleProject(res, inputCols, invFilter, invFilter.Relational().OutputCols, invFilter.ProvidedPhysical().Ordering)
 }
 
 // applySimpleProject adds a simple projection on top of an existing plan.
 func (b *Builder) applySimpleProject(
-	input execPlan, inputExpr memo.RelExpr, cols opt.ColSet, providedOrd opt.Ordering,
-) (execPlan, error) {
+	input execPlan,
+	inputCols opt.ColMap,
+	inputExpr memo.RelExpr,
+	cols opt.ColSet,
+	providedOrd opt.Ordering,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	// Since we are constructing a simple project on top of the main operator,
 	// we need to explicitly annotate the latter with estimates since the code
 	// in buildRelational() will attach them to the project.
@@ -1016,52 +1030,52 @@ func (b *Builder) applySimpleProject(
 	colList := make([]exec.NodeColumnOrdinal, 0, cols.Len())
 	var res execPlan
 	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
-		res.outputCols.Set(int(i), len(colList))
-		ord, err := input.getNodeColumnOrdinal(i)
+		outputCols.Set(int(i), len(colList))
+		ord, err := getNodeColumnOrdinal(inputCols, i)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 		colList = append(colList, ord)
 	}
-	var err error
-	sqlOrdering, err := res.sqlOrdering(providedOrd)
+	sqlOrdering, err := sqlOrdering(providedOrd, outputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	res.root, err = b.factory.ConstructSimpleProject(
 		input.root, colList, exec.OutputOrdering(sqlOrdering),
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return res, nil
+	return res, outputCols, nil
 }
 
-func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
+func (b *Builder) buildProject(
+	prj *memo.ProjectExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	md := b.mem.Metadata()
-	input, err := b.buildRelational(prj.Input)
+	input, inputCols, err := b.buildRelational(prj.Input)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	projections := prj.Projections
 	if len(projections) == 0 {
 		// We have only pass-through columns.
-		return b.applySimpleProject(input, prj.Input, prj.Passthrough, prj.ProvidedPhysical().Ordering)
+		return b.applySimpleProject(input, inputCols, prj.Input, prj.Passthrough, prj.ProvidedPhysical().Ordering)
 	}
 
-	var res execPlan
 	numExprs := len(projections) + prj.Passthrough.Len()
 	exprs := make(tree.TypedExprs, 0, numExprs)
 	cols := make(colinfo.ResultColumns, 0, numExprs)
-	ctx := input.makeBuildScalarCtx()
+	ctx := makeBuildScalarCtx(inputCols)
 	for i := range projections {
 		item := &projections[i]
 		expr, err := b.buildScalar(&ctx, item.Element)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
-		res.outputCols.Set(int(item.Col), i)
+		outputCols.Set(int(item.Col), i)
 		exprs = append(exprs, expr)
 		cols = append(cols, colinfo.ResultColumn{
 			Name: md.ColumnMeta(item.Col).Alias,
@@ -1069,10 +1083,10 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 		})
 	}
 	for colID, ok := prj.Passthrough.Next(0); ok; colID, ok = prj.Passthrough.Next(colID + 1) {
-		res.outputCols.Set(int(colID), len(exprs))
+		outputCols.Set(int(colID), len(exprs))
 		indexedVar, err := b.indexedVar(&ctx, md, colID)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 		exprs = append(exprs, indexedVar)
 		meta := md.ColumnMeta(colID)
@@ -1081,26 +1095,27 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 			Typ:  meta.Type,
 		})
 	}
-	reqOrdering, err := res.reqOrdering(prj)
+	reqOrdering, err := reqOrdering(prj, outputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
+	var res execPlan
 	res.root, err = b.factory.ConstructRender(input.root, cols, exprs, reqOrdering)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return res, nil
+	return res, outputCols, nil
 }
 
-func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
+func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols opt.ColMap, err error) {
 	switch join.Op() {
 	case opt.InnerJoinApplyOp, opt.LeftJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 	default:
-		return execPlan{}, fmt.Errorf("couldn't execute correlated subquery with op %s", join.Op())
+		return execPlan{}, opt.ColMap{}, fmt.Errorf("couldn't execute correlated subquery with op %s", join.Op())
 	}
 	joinType, err := joinOpToJoinType(join.Op())
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	leftExpr := join.Child(0).(memo.RelExpr)
 	leftProps := leftExpr.Relational()
@@ -1112,9 +1127,9 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	withExprs := make([]builtWithExpr, len(b.withExprs))
 	copy(withExprs, b.withExprs)
 
-	leftPlan, err := b.buildRelational(leftExpr)
+	leftPlan, leftCols, err := b.buildRelational(leftExpr)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// Make a copy of the required props for the right side.
@@ -1129,9 +1144,9 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	// in the left side that contains the binding.
 	var leftBoundColMap opt.ColMap
 	for col, ok := leftBoundCols.Next(0); ok; col, ok = leftBoundCols.Next(col + 1) {
-		v, ok := leftPlan.outputCols.Get(int(col))
+		v, ok := leftCols.Get(int(col))
 		if !ok {
-			return execPlan{}, fmt.Errorf("couldn't find binding column %d in left output columns", col)
+			return execPlan{}, opt.ColMap{}, fmt.Errorf("couldn't find binding column %d in left output columns", col)
 		}
 		leftBoundColMap.Set(int(col), v)
 	}
@@ -1237,7 +1252,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	for i := range rightRequiredProps.Presentation {
 		rightOutputCols.Set(int(rightRequiredProps.Presentation[i].ID), i)
 	}
-	allCols := joinOutputMap(leftPlan.outputCols, rightOutputCols)
+	allCols := joinOutputMap(leftCols, rightOutputCols)
 
 	var onExpr tree.TypedExpr
 	if len(*filters) != 0 {
@@ -1247,18 +1262,17 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 		}
 		onExpr, err = b.buildScalar(&scalarCtx, filters)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 	}
 
-	var outputCols opt.ColMap
 	if !joinType.ShouldIncludeRightColsInOutput() {
-		outputCols = leftPlan.outputCols
+		outputCols = leftCols
 	} else {
 		outputCols = allCols
 	}
 
-	ep := execPlan{outputCols: outputCols}
+	var ep execPlan
 
 	b.recordJoinType(joinType)
 	b.recordJoinAlgorithm(exec.ApplyJoin)
@@ -1270,9 +1284,9 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 		planRightSideFn,
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return ep, nil
+	return ep, outputCols, nil
 }
 
 // makePresentation creates a Presentation that contains the given columns, in
@@ -1303,7 +1317,7 @@ func (b *Builder) presentationToResultColumns(pres physical.Presentation) colinf
 	return result
 }
 
-func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
+func (b *Builder) buildHashJoin(join memo.RelExpr) (_ execPlan, outputCols opt.ColMap, err error) {
 	if f := join.Private().(*memo.JoinPrivate).Flags; f.Has(memo.DisallowHashJoinStoreRight) {
 		// We need to do a bit of reverse engineering here to determine what the
 		// hint was.
@@ -1314,14 +1328,14 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 			hint = tree.AstInverted
 		}
 
-		return execPlan{}, errors.Errorf(
+		return execPlan{}, opt.ColMap{}, errors.Errorf(
 			"could not produce a query plan conforming to the %s JOIN hint", hint,
 		)
 	}
 
 	joinType, err := joinOpToJoinType(join.Op())
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	leftExpr := join.Child(0).(memo.RelExpr)
 	rightExpr := join.Child(1).(memo.RelExpr)
@@ -1363,29 +1377,28 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 		telemetry.Inc(opt.JoinTypeToUseCounter(join.Op()))
 	}
 
-	left, right, onExpr, outputCols, err := b.initJoinBuild(
+	left, right, onExpr, leftCols, rightCols, outputCols, err := b.initJoinBuild(
 		leftExpr,
 		rightExpr,
 		memo.ExtractRemainingJoinFilters(*filters, leftEq, rightEq),
 		joinType,
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	ep := execPlan{outputCols: outputCols}
 
 	// Convert leftEq/rightEq to ordinals.
 	eqColsBuf := make([]exec.NodeColumnOrdinal, 2*len(leftEq))
 	leftEqOrdinals := eqColsBuf[:len(leftEq):len(leftEq)]
 	rightEqOrdinals := eqColsBuf[len(leftEq):]
 	for i := range leftEq {
-		leftEqOrdinals[i], err = left.getNodeColumnOrdinal(leftEq[i])
+		leftEqOrdinals[i], err = getNodeColumnOrdinal(leftCols, leftEq[i])
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
-		rightEqOrdinals[i], err = right.getNodeColumnOrdinal(rightEq[i])
+		rightEqOrdinals[i], err = getNodeColumnOrdinal(rightCols, rightEq[i])
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 	}
 
@@ -1398,6 +1411,7 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 	} else {
 		b.recordJoinAlgorithm(exec.HashJoin)
 	}
+	var ep execPlan
 	ep.root, err = b.factory.ConstructHashJoin(
 		joinType,
 		left.root, right.root,
@@ -1406,12 +1420,14 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 		onExpr,
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return ep, nil
+	return ep, outputCols, nil
 }
 
-func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
+func (b *Builder) buildMergeJoin(
+	join *memo.MergeJoinExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	if !b.disableTelemetry {
 		telemetry.Inc(sqltelemetry.JoinAlgoMergeUseCounter)
 		telemetry.Inc(opt.JoinTypeToUseCounter(join.JoinType))
@@ -1419,7 +1435,7 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 
 	joinType, err := joinOpToJoinType(join.JoinType)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	leftExpr, rightExpr := join.Left, join.Right
 	leftEq, rightEq := join.LeftEq, join.RightEq
@@ -1443,29 +1459,29 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 		}
 	}
 
-	left, right, onExpr, outputCols, err := b.initJoinBuild(
+	left, right, onExpr, leftCols, rightCols, outputCols, err := b.initJoinBuild(
 		leftExpr, rightExpr, join.On, joinType,
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	leftOrd, err := left.sqlOrdering(leftEq)
+	leftOrd, err := sqlOrdering(leftEq, leftCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	rightOrd, err := right.sqlOrdering(rightEq)
+	rightOrd, err := sqlOrdering(rightEq, rightCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	ep := execPlan{outputCols: outputCols}
-	reqOrd, err := ep.reqOrdering(join)
+	reqOrd, err := reqOrdering(join, outputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	leftEqColsAreKey := leftExpr.Relational().FuncDeps.ColsAreStrictKey(leftEq.ColSet())
 	rightEqColsAreKey := rightExpr.Relational().FuncDeps.ColsAreStrictKey(rightEq.ColSet())
 	b.recordJoinType(joinType)
 	b.recordJoinAlgorithm(exec.MergeJoin)
+	var ep execPlan
 	ep.root, err = b.factory.ConstructMergeJoin(
 		joinType,
 		left.root, right.root,
@@ -1474,9 +1490,9 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 		leftEqColsAreKey, rightEqColsAreKey,
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return ep, nil
+	return ep, outputCols, nil
 }
 
 // initJoinBuild builds the inputs to the join as well as the ON expression.
@@ -1485,32 +1501,37 @@ func (b *Builder) initJoinBuild(
 	rightChild memo.RelExpr,
 	filters memo.FiltersExpr,
 	joinType descpb.JoinType,
-) (leftPlan, rightPlan execPlan, onExpr tree.TypedExpr, outputCols opt.ColMap, _ error) {
-	leftPlan, err := b.buildRelational(leftChild)
+) (
+	leftPlan, rightPlan execPlan,
+	onExpr tree.TypedExpr,
+	leftCols, rightCols, outputCols opt.ColMap,
+	_ error,
+) {
+	leftPlan, leftCols, err := b.buildRelational(leftChild)
 	if err != nil {
-		return execPlan{}, execPlan{}, nil, opt.ColMap{}, err
+		return execPlan{}, execPlan{}, nil, opt.ColMap{}, opt.ColMap{}, opt.ColMap{}, err
 	}
-	rightPlan, err = b.buildRelational(rightChild)
+	rightPlan, rightCols, err = b.buildRelational(rightChild)
 	if err != nil {
-		return execPlan{}, execPlan{}, nil, opt.ColMap{}, err
+		return execPlan{}, execPlan{}, nil, opt.ColMap{}, opt.ColMap{}, opt.ColMap{}, err
 	}
 
-	allCols := joinOutputMap(leftPlan.outputCols, rightPlan.outputCols)
+	allCols := joinOutputMap(leftCols, rightCols)
 
 	if len(filters) != 0 {
 		onExpr, err = b.buildScalarWithMap(allCols, &filters)
 		if err != nil {
-			return execPlan{}, execPlan{}, nil, opt.ColMap{}, err
+			return execPlan{}, execPlan{}, nil, opt.ColMap{}, opt.ColMap{}, opt.ColMap{}, err
 		}
 	}
 
 	if !joinType.ShouldIncludeLeftColsInOutput() {
-		return leftPlan, rightPlan, onExpr, rightPlan.outputCols, nil
+		return leftPlan, rightPlan, onExpr, leftCols, rightCols, rightCols, nil
 	}
 	if !joinType.ShouldIncludeRightColsInOutput() {
-		return leftPlan, rightPlan, onExpr, leftPlan.outputCols, nil
+		return leftPlan, rightPlan, onExpr, leftCols, rightCols, leftCols, nil
 	}
-	return leftPlan, rightPlan, onExpr, allCols, nil
+	return leftPlan, rightPlan, onExpr, leftCols, rightCols, allCols, nil
 }
 
 // joinOutputMap determines the outputCols map for a (non-semi/anti) join, given
@@ -1550,20 +1571,21 @@ func joinOpToJoinType(op opt.Operator) (descpb.JoinType, error) {
 	}
 }
 
-func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
-	input, err := b.buildGroupByInput(groupBy)
+func (b *Builder) buildGroupBy(
+	groupBy memo.RelExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
+	input, inputCols, err := b.buildGroupByInput(groupBy)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
-	var ep execPlan
 	groupingCols := groupBy.Private().(*memo.GroupingPrivate).GroupingCols
 	groupingColIdx := make([]exec.NodeColumnOrdinal, 0, groupingCols.Len())
 	for i, ok := groupingCols.Next(0); ok; i, ok = groupingCols.Next(i + 1) {
-		ep.outputCols.Set(int(i), len(groupingColIdx))
-		ord, err := input.getNodeColumnOrdinal(i)
+		outputCols.Set(int(i), len(groupingColIdx))
+		ord, err := getNodeColumnOrdinal(inputCols, i)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 		groupingColIdx = append(groupingColIdx, ord)
 	}
@@ -1578,11 +1600,11 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 		if aggFilter, ok := agg.(*memo.AggFilterExpr); ok {
 			filter, ok := aggFilter.Filter.(*memo.VariableExpr)
 			if !ok {
-				return execPlan{}, errors.AssertionFailedf("only VariableOp args supported")
+				return execPlan{}, opt.ColMap{}, errors.AssertionFailedf("only VariableOp args supported")
 			}
-			filterOrd, err = input.getNodeColumnOrdinal(filter.Col)
+			filterOrd, err = getNodeColumnOrdinal(inputCols, filter.Col)
 			if err != nil {
-				return execPlan{}, err
+				return execPlan{}, opt.ColMap{}, err
 			}
 			agg = aggFilter.Input
 		}
@@ -1603,16 +1625,16 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 			child := agg.Child(j)
 			if variable, ok := child.(*memo.VariableExpr); ok {
 				if len(constArgs) != 0 {
-					return execPlan{}, errors.Errorf("constant args must come after variable args")
+					return execPlan{}, opt.ColMap{}, errors.Errorf("constant args must come after variable args")
 				}
-				ord, err := input.getNodeColumnOrdinal(variable.Col)
+				ord, err := getNodeColumnOrdinal(inputCols, variable.Col)
 				if err != nil {
-					return execPlan{}, err
+					return execPlan{}, opt.ColMap{}, err
 				}
 				argCols = append(argCols, ord)
 			} else {
 				if len(argCols) == 0 {
-					return execPlan{}, errors.Errorf("a constant arg requires at least one variable arg")
+					return execPlan{}, opt.ColMap{}, errors.Errorf("a constant arg requires at least one variable arg")
 				}
 				constArgs = append(constArgs, memo.ExtractConstDatum(child))
 			}
@@ -1627,24 +1649,25 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 			Filter:           filterOrd,
 			DistsqlBlocklist: overload.DistsqlBlocklist,
 		}
-		ep.outputCols.Set(int(item.Col), len(groupingColIdx)+i)
+		outputCols.Set(int(item.Col), len(groupingColIdx)+i)
 	}
 
+	var ep execPlan
 	if groupBy.Op() == opt.ScalarGroupByOp {
 		ep.root, err = b.factory.ConstructScalarGroupBy(input.root, aggInfos)
 	} else {
 		groupBy := groupBy.(*memo.GroupByExpr)
 		var groupingColOrder colinfo.ColumnOrdering
-		groupingColOrder, err = input.sqlOrdering(ordering.StreamingGroupingColOrdering(
+		groupingColOrder, err = sqlOrdering(ordering.StreamingGroupingColOrdering(
 			&groupBy.GroupingPrivate, &groupBy.RequiredPhysical().Ordering,
-		))
+		), inputCols)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
-		var reqOrdering exec.OutputOrdering
-		reqOrdering, err = ep.reqOrdering(groupBy)
+		var reqOrd exec.OutputOrdering
+		reqOrd, err = reqOrdering(groupBy, outputCols)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 		orderType := exec.GroupingOrderType(groupBy.GroupingOrderType(&groupBy.RequiredPhysical().Ordering))
 		var rowCount uint64
@@ -1652,70 +1675,74 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 			rowCount = uint64(math.Ceil(relProps.Statistics().RowCount))
 		}
 		ep.root, err = b.factory.ConstructGroupBy(
-			input.root, groupingColIdx, groupingColOrder, aggInfos, reqOrdering, orderType, rowCount,
+			input.root, groupingColIdx, groupingColOrder, aggInfos, reqOrd, orderType, rowCount,
 		)
 	}
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return ep, nil
+	return ep, outputCols, nil
 }
 
-func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
+func (b *Builder) buildDistinct(
+	distinct memo.RelExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	private := distinct.Private().(*memo.GroupingPrivate)
 
 	if private.GroupingCols.Empty() {
 		// A DistinctOn with no grouping columns should have been converted to a
 		// LIMIT 1 or Max1Row by normalization rules.
-		return execPlan{}, fmt.Errorf("cannot execute distinct on no columns")
+		return execPlan{}, opt.ColMap{}, fmt.Errorf("cannot execute distinct on no columns")
 	}
-	input, err := b.buildGroupByInput(distinct)
+	input, inputCols, err := b.buildGroupByInput(distinct)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
-	distinctCols, err := input.getNodeColumnOrdinalSet(private.GroupingCols)
+	distinctCols, err := getNodeColumnOrdinalSet(inputCols, private.GroupingCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	var orderedCols exec.NodeColumnOrdinalSet
 	ordering := ordering.StreamingGroupingColOrdering(
 		private, &distinct.RequiredPhysical().Ordering,
 	)
 	for i := range ordering {
-		ord, err := input.getNodeColumnOrdinal(ordering[i].ID())
+		ord, err := getNodeColumnOrdinal(inputCols, ordering[i].ID())
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 		orderedCols.Add(int(ord))
 	}
-	ep := execPlan{outputCols: input.outputCols}
 
-	reqOrdering, err := ep.reqOrdering(distinct)
+	reqOrdering, err := reqOrdering(distinct, inputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
+	var ep execPlan
 	ep.root, err = b.factory.ConstructDistinct(
 		input.root, distinctCols, orderedCols, reqOrdering,
 		private.NullsAreDistinct, private.ErrorOnDup)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// buildGroupByInput can add extra sort column(s), so discard those if they
 	// are present by using an additional projection.
 	outCols := distinct.Relational().OutputCols
-	if input.outputCols.Len() == outCols.Len() {
-		return ep, nil
+	if inputCols.Len() == outCols.Len() {
+		return ep, inputCols, nil
 	}
-	return b.ensureColumns(ep, distinct, outCols.ToList(), distinct.ProvidedPhysical().Ordering)
+	return b.ensureColumns(ep, inputCols, distinct, outCols.ToList(), distinct.ProvidedPhysical().Ordering)
 }
 
-func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
+func (b *Builder) buildGroupByInput(
+	groupBy memo.RelExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	groupByInput := groupBy.Child(0).(memo.RelExpr)
-	input, err := b.buildRelational(groupByInput)
+	input, inputCols, err := b.buildRelational(groupByInput)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// TODO(radu): this is a one-off fix for an otherwise bigger gap: we should
@@ -1743,44 +1770,42 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 
 	if neededCols.Equals(groupByInput.Relational().OutputCols) {
 		// All columns produced by the input are used.
-		return input, nil
+		return input, inputCols, nil
 	}
 
 	// The input is producing columns that are not useful; set up a projection.
 	cols := make([]exec.NodeColumnOrdinal, 0, neededCols.Len())
-	var newOutputCols opt.ColMap
 	for colID, ok := neededCols.Next(0); ok; colID, ok = neededCols.Next(colID + 1) {
-		ordinal, ordOk := input.outputCols.Get(int(colID))
+		ordinal, ordOk := inputCols.Get(int(colID))
 		if !ordOk {
-			return execPlan{},
+			return execPlan{}, opt.ColMap{},
 				errors.AssertionFailedf("needed column not produced by group-by input")
 		}
-		newOutputCols.Set(int(colID), len(cols))
+		outputCols.Set(int(colID), len(cols))
 		cols = append(cols, exec.NodeColumnOrdinal(ordinal))
 	}
 
-	input.outputCols = newOutputCols
-	reqOrdering, err := input.reqOrdering(groupByInput)
+	reqOrdering, err := reqOrdering(groupByInput, outputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	input.root, err = b.factory.ConstructSimpleProject(input.root, cols, reqOrdering)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return input, nil
+	return input, outputCols, nil
 }
 
-func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
+func (b *Builder) buildSetOp(set memo.RelExpr) (_ execPlan, outputCols opt.ColMap, err error) {
 	leftExpr := set.Child(0).(memo.RelExpr)
-	left, err := b.buildRelational(leftExpr)
+	left, leftCols, err := b.buildRelational(leftExpr)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	rightExpr := set.Child(1).(memo.RelExpr)
-	right, err := b.buildRelational(rightExpr)
+	right, rightCols, err := b.buildRelational(rightExpr)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	private := set.Private().(*memo.SetPrivate)
@@ -1804,13 +1829,13 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	// Note that (unless this is part of a larger query) the presentation property
 	// will ensure that the columns are presented correctly in the output (i.e. in
 	// the order `b, c, a`).
-	left, err = b.ensureColumns(left, leftExpr, private.LeftCols, leftExpr.ProvidedPhysical().Ordering)
+	left, leftCols, err = b.ensureColumns(left, leftCols, leftExpr, private.LeftCols, leftExpr.ProvidedPhysical().Ordering)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	right, err = b.ensureColumns(right, rightExpr, private.RightCols, rightExpr.ProvidedPhysical().Ordering)
+	right, rightCols, err = b.ensureColumns(right, rightCols, rightExpr, private.RightCols, rightExpr.ProvidedPhysical().Ordering)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	var typ tree.UnionType
@@ -1829,7 +1854,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	case opt.ExceptAllOp:
 		typ, all = tree.ExceptOp, true
 	default:
-		return execPlan{}, errors.AssertionFailedf("invalid operator %s", redact.Safe(set.Op()))
+		return execPlan{}, opt.ColMap{}, errors.AssertionFailedf("invalid operator %s", redact.Safe(set.Op()))
 	}
 
 	switch typ {
@@ -1858,21 +1883,22 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		enforceHomeRegion = b.IsANSIDML && b.evalCtx.SessionData().EnforceHomeRegion
 	}
 
-	ep := execPlan{}
 	for i, col := range private.OutCols {
-		ep.outputCols.Set(int(col), i)
+		outputCols.Set(int(col), i)
 	}
-	streamingOrdering, err := ep.sqlOrdering(
-		ordering.StreamingSetOpOrdering(set, &set.RequiredPhysical().Ordering),
+	streamingOrdering, err := sqlOrdering(
+		ordering.StreamingSetOpOrdering(set, &set.RequiredPhysical().Ordering), outputCols,
 	)
 	if err != nil {
-		return execPlan{}, err
-	}
-	reqOrdering, err := ep.reqOrdering(set)
-	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
+	reqOrdering, err := reqOrdering(set, outputCols)
+	if err != nil {
+		return execPlan{}, opt.ColMap{}, err
+	}
+
+	var ep execPlan
 	if typ == tree.UnionOp && all {
 		ep.root, err = b.factory.ConstructUnionAll(left.root, right.root, reqOrdering, hardLimit, enforceHomeRegion)
 	} else if len(streamingOrdering) > 0 {
@@ -1882,7 +1908,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		ep.root, err = b.factory.ConstructStreamingSetOp(typ, all, left.root, right.root, streamingOrdering, reqOrdering)
 	} else {
 		if len(reqOrdering) > 0 {
-			return execPlan{}, errors.AssertionFailedf("hash set op is not supported with a required ordering")
+			return execPlan{}, opt.ColMap{}, errors.AssertionFailedf("hash set op is not supported with a required ordering")
 		}
 		if typ != tree.UnionOp {
 			b.recordJoinAlgorithm(exec.HashJoin)
@@ -1890,73 +1916,74 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		ep.root, err = b.factory.ConstructHashSetOp(typ, all, left.root, right.root)
 	}
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return ep, nil
+	return ep, outputCols, nil
 }
 
 // buildTopK builds a plan for a TopKOp, which is like a combined SortOp and LimitOp.
-func (b *Builder) buildTopK(e *memo.TopKExpr) (execPlan, error) {
+func (b *Builder) buildTopK(e *memo.TopKExpr) (_ execPlan, outputCols opt.ColMap, err error) {
 	inputExpr := e.Input
-	input, err := b.buildRelational(inputExpr)
+	input, inputCols, err := b.buildRelational(inputExpr)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	ordering := e.Ordering.ToOrdering()
 	inputOrdering := e.Input.ProvidedPhysical().Ordering
 	alreadyOrderedPrefix := 0
 	for i := range inputOrdering {
 		if i == len(ordering) {
-			return execPlan{}, errors.AssertionFailedf("sort ordering already provided by input")
+			return execPlan{}, opt.ColMap{}, errors.AssertionFailedf("sort ordering already provided by input")
 		}
 		if inputOrdering[i] != ordering[i] {
 			break
 		}
 		alreadyOrderedPrefix = i + 1
 	}
-	sqlOrdering, err := input.sqlOrdering(ordering)
+	sqlOrdering, err := sqlOrdering(ordering, inputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	node, err := b.factory.ConstructTopK(
+	var ep execPlan
+	ep.root, err = b.factory.ConstructTopK(
 		input.root,
 		e.K,
 		exec.OutputOrdering(sqlOrdering),
 		alreadyOrderedPrefix)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return execPlan{root: node, outputCols: input.outputCols}, nil
+	return ep, inputCols, nil
 }
 
 // buildLimitOffset builds a plan for a LimitOp or OffsetOp
-func (b *Builder) buildLimitOffset(e memo.RelExpr) (execPlan, error) {
-	input, err := b.buildRelational(e.Child(0).(memo.RelExpr))
+func (b *Builder) buildLimitOffset(e memo.RelExpr) (_ execPlan, outputCols opt.ColMap, err error) {
+	input, inputCols, err := b.buildRelational(e.Child(0).(memo.RelExpr))
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	// LIMIT/OFFSET expression should never need buildScalarContext, because it
 	// can't refer to the input expression.
 	expr, err := b.buildScalar(nil, e.Child(1).(opt.ScalarExpr))
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	var node exec.Node
+	var ep execPlan
 	if e.Op() == opt.LimitOp {
-		node, err = b.factory.ConstructLimit(input.root, expr, nil)
+		ep.root, err = b.factory.ConstructLimit(input.root, expr, nil)
 	} else {
-		node, err = b.factory.ConstructLimit(input.root, nil, expr)
+		ep.root, err = b.factory.ConstructLimit(input.root, nil, expr)
 	}
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return execPlan{root: node, outputCols: input.outputCols}, nil
+	return ep, inputCols, nil
 }
 
-func (b *Builder) buildSort(sort *memo.SortExpr) (execPlan, error) {
-	input, err := b.buildRelational(sort.Input)
+func (b *Builder) buildSort(sort *memo.SortExpr) (_ execPlan, outputCols opt.ColMap, err error) {
+	input, inputCols, err := b.buildRelational(sort.Input)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	ordering := sort.ProvidedPhysical().Ordering
@@ -1964,7 +1991,7 @@ func (b *Builder) buildSort(sort *memo.SortExpr) (execPlan, error) {
 	alreadyOrderedPrefix := 0
 	for i := range inputOrdering {
 		if i == len(ordering) {
-			return execPlan{}, errors.AssertionFailedf("sort ordering already provided by input")
+			return execPlan{}, opt.ColMap{}, errors.AssertionFailedf("sort ordering already provided by input")
 		}
 		if inputOrdering[i] != ordering[i] {
 			break
@@ -1972,19 +1999,20 @@ func (b *Builder) buildSort(sort *memo.SortExpr) (execPlan, error) {
 		alreadyOrderedPrefix = i + 1
 	}
 
-	sqlOrdering, err := input.sqlOrdering(ordering)
+	sqlOrdering, err := sqlOrdering(ordering, inputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	node, err := b.factory.ConstructSort(
+	var ep execPlan
+	ep.root, err = b.factory.ConstructSort(
 		input.root,
 		exec.OutputOrdering(sqlOrdering),
 		alreadyOrderedPrefix,
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return execPlan{root: node, outputCols: input.outputCols}, nil
+	return ep, inputCols, nil
 }
 
 func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
@@ -2082,17 +2110,19 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 	return nil
 }
 
-func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (input execPlan, err error) {
-	input, err = b.buildRelational(distribute.Input)
+func (b *Builder) buildDistribute(
+	distribute *memo.DistributeExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
+	input, inputCols, err := b.buildRelational(distribute.Input)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	if distribute.NoOpDistribution() {
 		// Don't bother creating a no-op distribution. This likely exists because
 		// the input is a Sort expression, and this is an artifact of how physical
 		// properties are enforced.
-		return input, err
+		return input, inputCols, err
 	}
 
 	if b.evalCtx.SessionData().EnforceHomeRegion && b.IsANSIDML {
@@ -2113,14 +2143,15 @@ func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (input execPl
 		b.doScanExprCollection = true
 		// Traverse the tree again, this time collecting ScanExprs that should
 		// be processed for error handling.
-		_, err = b.buildRelational(distribute.Input)
+		// TODO(mgartner): Can we avoid re-traversing the tree?
+		_, _, err = b.buildRelational(distribute.Input)
 		b.doScanExprCollection = saveDoScanExprCollection
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 		err = b.enforceScanWithHomeRegion(mutationStableID)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 
 		homeRegion, ok := distribute.GetInputHomeRegion()
@@ -2146,39 +2177,45 @@ func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (input execPl
 			msgString := errorStringBuilder.String()
 			err = pgerror.Newf(errCode, "%s", msgString)
 		}
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// TODO(rytaft): This is currently a no-op. We should pass this distribution
 	// info to the DistSQL planner.
-	return input, err
+	return input, inputCols, err
 }
 
-func (b *Builder) buildOrdinality(ord *memo.OrdinalityExpr) (execPlan, error) {
-	input, err := b.buildRelational(ord.Input)
+func (b *Builder) buildOrdinality(
+	ord *memo.OrdinalityExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
+	input, inputCols, err := b.buildRelational(ord.Input)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	colName := b.mem.Metadata().ColumnMeta(ord.ColID).Alias
 
-	node, err := b.factory.ConstructOrdinality(input.root, colName)
+	var ep execPlan
+	ep.root, err = b.factory.ConstructOrdinality(input.root, colName)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// We have one additional ordinality column, which is ordered at the end of
 	// the list.
-	outputCols := input.outputCols.Copy()
+	// TODO(mgartner): Is the copy here necessary?
+	outputCols = inputCols.Copy()
 	outputCols.Set(int(ord.ColID), outputCols.Len())
 
-	return execPlan{root: node, outputCols: outputCols}, nil
+	return ep, outputCols, nil
 }
 
-func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
-	input, err := b.buildRelational(join.Input)
+func (b *Builder) buildIndexJoin(
+	join *memo.IndexJoinExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
+	input, inputCols, err := b.buildRelational(join.Input)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	md := b.mem.Metadata()
@@ -2190,34 +2227,34 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), pri.ID())})
 	keyCols := make([]exec.NodeColumnOrdinal, pri.KeyColumnCount())
 	for i := range keyCols {
-		keyCols[i], err = input.getNodeColumnOrdinal(join.Table.ColumnID(pri.Column(i).Ordinal()))
+		keyCols[i], err = getNodeColumnOrdinal(inputCols, join.Table.ColumnID(pri.Column(i).Ordinal()))
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 	}
 
-	cols := join.Cols
-	needed, output := b.getColumns(cols, join.Table)
+	var needed exec.TableColumnOrdinalSet
+	needed, outputCols = b.getColumns(join.Cols, join.Table)
 
 	locking, err := b.buildLocking(join.Locking)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
-	res := execPlan{outputCols: output}
 	b.recordJoinAlgorithm(exec.IndexJoin)
-	reqOrdering, err := res.reqOrdering(join)
+	reqOrdering, err := reqOrdering(join, outputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
+	var res execPlan
 	res.root, err = b.factory.ConstructIndexJoin(
 		input.root, tab, keyCols, needed, reqOrdering, locking, join.RequiredPhysical().LimitHintInt64(),
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
-	return res, nil
+	return res, outputCols, nil
 }
 
 func (b *Builder) indexColumnNames(
@@ -2428,7 +2465,9 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 	return nil
 }
 
-func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
+func (b *Builder) buildLookupJoin(
+	join *memo.LookupJoinExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	md := b.mem.Metadata()
 	if !b.disableTelemetry {
 		telemetry.Inc(sqltelemetry.JoinAlgoLookupUseCounter)
@@ -2451,9 +2490,9 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 			b.doScanExprCollection = false
 		}
 	}
-	input, err := b.buildRelational(join.Input)
+	input, inputCols, err := b.buildRelational(join.Input)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	if enforceHomeRegion {
 		b.doScanExprCollection = saveDoScanExprCollection
@@ -2462,26 +2501,26 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		//               merged.
 		err = b.handleRemoteLookupJoinError(join)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 	}
 	keyCols := make([]exec.NodeColumnOrdinal, len(join.KeyCols))
 	for i, c := range join.KeyCols {
-		keyCols[i], err = input.getNodeColumnOrdinal(c)
+		keyCols[i], err = getNodeColumnOrdinal(inputCols, c)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 	}
 
-	inputCols := join.Input.Relational().OutputCols
-	lookupCols := join.Cols.Difference(inputCols)
+	joinInputCols := join.Input.Relational().OutputCols
+	lookupCols := join.Cols.Difference(joinInputCols)
 	if join.IsFirstJoinInPairedJoiner {
 		lookupCols.Remove(join.ContinuationCol)
 	}
 
 	lookupOrdinals, lookupColMap := b.getColumns(lookupCols, join.Table)
 	// allExprCols are the columns used in expressions evaluated by this join.
-	allExprCols := joinOutputMap(input.outputCols, lookupColMap)
+	allExprCols := joinOutputMap(inputCols, lookupColMap)
 	allCols := allExprCols
 	if join.IsFirstJoinInPairedJoiner {
 		// allCols needs to include the continuation column since it will be
@@ -2489,15 +2528,15 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		allCols = allExprCols.Copy()
 		maxValue, ok := allCols.MaxValue()
 		if !ok {
-			return execPlan{}, errors.AssertionFailedf("allCols should not be empty")
+			return execPlan{}, opt.ColMap{}, errors.AssertionFailedf("allCols should not be empty")
 		}
 		// Assign the continuation column the next unused value in the map.
 		allCols.Set(int(join.ContinuationCol), maxValue+1)
 	}
-	res := execPlan{outputCols: allCols}
+	outputCols = allCols
 	if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
 		// For semi and anti join, only the left columns are output.
-		res.outputCols = input.outputCols
+		outputCols = inputCols
 	}
 
 	ctx := buildScalarCtx{
@@ -2509,14 +2548,14 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		var err error
 		lookupExpr, err = b.buildScalar(&ctx, &join.LookupExpr)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 	}
 	if len(join.RemoteLookupExpr) > 0 {
 		var err error
 		remoteLookupExpr, err = b.buildScalar(&ctx, &join.RemoteLookupExpr)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 	}
 	var onExpr tree.TypedExpr
@@ -2524,7 +2563,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		var err error
 		onExpr, err = b.buildScalar(&ctx, &join.On)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 	}
 
@@ -2534,19 +2573,20 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 
 	locking, err := b.buildLocking(join.Locking)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	joinType, err := joinOpToJoinType(join.JoinType)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	b.recordJoinType(joinType)
 	b.recordJoinAlgorithm(exec.LookupJoin)
-	reqOrdering, err := res.reqOrdering(join)
+	reqOrdering, err := reqOrdering(join, outputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
+	var res execPlan
 	res.root, err = b.factory.ConstructLookupJoin(
 		joinType,
 		input.root,
@@ -2566,7 +2606,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		join.RemoteOnlyLookups,
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// Apply a post-projection if Cols doesn't contain all input columns.
@@ -2574,14 +2614,14 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	// NB: For paired-joins, this is where the continuation column and the PK
 	// columns for the right side, which were part of the inputCols, are projected
 	// away.
-	if !inputCols.SubsetOf(join.Cols) {
+	if !joinInputCols.SubsetOf(join.Cols) {
 		outCols := join.Cols
 		if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
-			outCols = join.Cols.Intersection(inputCols)
+			outCols = join.Cols.Intersection(joinInputCols)
 		}
-		return b.applySimpleProject(res, join, outCols, join.ProvidedPhysical().Ordering)
+		return b.applySimpleProject(res, outputCols, join, outCols, join.ProvidedPhysical().Ordering)
 	}
-	return res, nil
+	return res, outputCols, nil
 }
 
 func (b *Builder) handleRemoteInvertedJoinError(join *memo.InvertedJoinExpr) (err error) {
@@ -2672,7 +2712,9 @@ func (b *Builder) handleRemoteInvertedJoinError(join *memo.InvertedJoinExpr) (er
 	return nil
 }
 
-func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, error) {
+func (b *Builder) buildInvertedJoin(
+	join *memo.InvertedJoinExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	enforceHomeRegion := b.evalCtx.SessionData().EnforceHomeRegion && b.IsANSIDML
 	saveDoScanExprCollection := false
 	if enforceHomeRegion {
@@ -2686,9 +2728,9 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 			b.doScanExprCollection = false
 		}
 	}
-	input, err := b.buildRelational(join.Input)
+	input, inputCols, err := b.buildRelational(join.Input)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	if enforceHomeRegion {
@@ -2698,7 +2740,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		//               merged.
 		err = b.handleRemoteInvertedJoinError(join)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 	}
 	md := b.mem.Metadata()
@@ -2708,14 +2750,14 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 
 	prefixEqCols := make([]exec.NodeColumnOrdinal, len(join.PrefixKeyCols))
 	for i, c := range join.PrefixKeyCols {
-		prefixEqCols[i], err = input.getNodeColumnOrdinal(c)
+		prefixEqCols[i], err = getNodeColumnOrdinal(inputCols, c)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 	}
 
-	inputCols := join.Input.Relational().OutputCols
-	lookupCols := join.Cols.Difference(inputCols)
+	joinInputCols := join.Input.Relational().OutputCols
+	lookupCols := join.Cols.Difference(joinInputCols)
 	if join.IsFirstJoinInPairedJoiner {
 		lookupCols.Remove(join.ContinuationCol)
 	}
@@ -2729,7 +2771,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 
 	lookupOrdinals, lookupColMap := b.getColumns(lookupCols, join.Table)
 	// allExprCols are the columns used in expressions evaluated by this join.
-	allExprCols := joinOutputMap(input.outputCols, lookupColMap)
+	allExprCols := joinOutputMap(inputCols, lookupColMap)
 
 	allCols := allExprCols
 	if join.IsFirstJoinInPairedJoiner {
@@ -2738,15 +2780,15 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		allCols = allExprCols.Copy()
 		maxValue, ok := allCols.MaxValue()
 		if !ok {
-			return execPlan{}, errors.AssertionFailedf("allCols should not be empty")
+			return execPlan{}, opt.ColMap{}, errors.AssertionFailedf("allCols should not be empty")
 		}
 		// Assign the continuation column the next unused value in the map.
 		allCols.Set(int(join.ContinuationCol), maxValue+1)
 	}
-	res := execPlan{outputCols: allCols}
+	outputCols = allCols
 	if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
 		// For semi and anti join, only the left columns are output.
-		res.outputCols = input.outputCols
+		outputCols = inputCols
 	}
 
 	ctx := buildScalarCtx{
@@ -2755,7 +2797,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	}
 	onExpr, err := b.buildScalar(&ctx, &join.On)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// The inverted filter refers to the inverted column's source column, but it
@@ -2770,24 +2812,25 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	ctx.ivarMap.Set(int(join.Table.ColumnID(invertedColumn.InvertedSourceColumnOrdinal())), ord)
 	invertedExpr, err := b.buildScalar(&ctx, join.InvertedExpr)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	locking, err := b.buildLocking(join.Locking)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	joinType, err := joinOpToJoinType(join.JoinType)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	b.recordJoinType(joinType)
 	b.recordJoinAlgorithm(exec.InvertedJoin)
-	reqOrdering, err := res.reqOrdering(join)
+	reqOrdering, err := reqOrdering(join, outputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
+	var res execPlan
 	res.root, err = b.factory.ConstructInvertedJoin(
 		joinType,
 		invertedExpr,
@@ -2802,14 +2845,16 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		locking,
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// Apply a post-projection to remove the inverted column.
-	return b.applySimpleProject(res, join, join.Cols, join.ProvidedPhysical().Ordering)
+	return b.applySimpleProject(res, outputCols, join, join.Cols, join.ProvidedPhysical().Ordering)
 }
 
-func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
+func (b *Builder) buildZigzagJoin(
+	join *memo.ZigzagJoinExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	md := b.mem.Metadata()
 
 	leftTable := md.Table(join.LeftTable)
@@ -2854,16 +2899,15 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 
 	leftLocking, err := b.buildLocking(join.LeftLocking)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	rightLocking, err := b.buildLocking(join.RightLocking)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	allCols := joinOutputMap(leftColMap, rightColMap)
-
-	res := execPlan{outputCols: allCols}
+	outputCols = allCols
 
 	ctx := buildScalarCtx{
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, leftColMap.Len()+rightColMap.Len()),
@@ -2871,7 +2915,7 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	}
 	onExpr, err := b.buildScalar(&ctx, &join.On)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// Build the fixed value scalars.
@@ -2888,18 +2932,19 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 
 	leftFixedVals, err := tupleToExprs(join.FixedVals[0].(*memo.TupleExpr))
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	rightFixedVals, err := tupleToExprs(join.FixedVals[1].(*memo.TupleExpr))
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	b.recordJoinAlgorithm(exec.ZigZagJoin)
-	reqOrdering, err := res.reqOrdering(join)
+	reqOrdering, err := reqOrdering(join, outputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
+	var res execPlan
 	res.root, err = b.factory.ConstructZigzagJoin(
 		leftTable,
 		leftIndex,
@@ -2917,11 +2962,11 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 		reqOrdering,
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// Apply a post-projection to retain only the columns we need.
-	return b.applySimpleProject(res, join, join.Cols, join.ProvidedPhysical().Ordering)
+	return b.applySimpleProject(res, outputCols, join, join.Cols, join.ProvidedPhysical().Ordering)
 }
 
 func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
@@ -2960,23 +3005,26 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 	return locking, nil
 }
 
-func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {
-	input, err := b.buildRelational(max1Row.Input)
+func (b *Builder) buildMax1Row(
+	max1Row *memo.Max1RowExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
+	input, inputCols, err := b.buildRelational(max1Row.Input)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
-	node, err := b.factory.ConstructMax1Row(input.root, max1Row.ErrorText)
+	var ep execPlan
+	ep.root, err = b.factory.ConstructMax1Row(input.root, max1Row.ErrorText)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return execPlan{root: node, outputCols: input.outputCols}, nil
+	return ep, inputCols, nil
 }
 
-func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
-	value, err := b.buildRelational(with.Binding)
+func (b *Builder) buildWith(with *memo.WithExpr) (_ execPlan, outputCols opt.ColMap, err error) {
+	value, valuesCols, err := b.buildRelational(with.Binding)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	var label bytes.Buffer
@@ -2987,7 +3035,7 @@ func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
 
 	buffer, err := b.factory.ConstructBuffer(value.root, label.String())
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// TODO(justin): if the binding here has a spoolNode at its root, we can
@@ -3008,28 +3056,30 @@ func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
 		RowCount: int64(with.Relational().Statistics().RowCountIfAvailable()),
 	})
 
-	b.addBuiltWithExpr(with.ID, value.outputCols, buffer)
+	b.addBuiltWithExpr(with.ID, valuesCols, buffer)
 
 	return b.buildRelational(with.Main)
 }
 
-func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error) {
-	initial, err := b.buildRelational(rec.Initial)
+func (b *Builder) buildRecursiveCTE(
+	rec *memo.RecursiveCTEExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
+	initial, initialCols, err := b.buildRelational(rec.Initial)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// Make sure we have the columns in the correct order.
-	initial, err = b.ensureColumns(initial, rec.Initial, rec.InitialCols, nil /* ordering */)
+	initial, initialCols, err = b.ensureColumns(initial, initialCols, rec.Initial, rec.InitialCols, nil /* ordering */)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// Renumber the columns so they match the columns expected by the recursive
 	// query.
-	initial.outputCols = util.FastIntMap{}
+	initialCols = util.FastIntMap{}
 	for i, col := range rec.OutCols {
-		initial.outputCols.Set(int(col), i)
+		initialCols.Set(int(col), i)
 	}
 
 	// To implement exec.RecursiveCTEIterationFn, we create a special Builder.
@@ -3051,13 +3101,13 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		// Use a separate builder each time.
 		innerBld := *innerBldTemplate
 		innerBld.factory = ef
-		innerBld.addBuiltWithExpr(rec.WithID, initial.outputCols, bufferRef)
-		plan, err := innerBld.build(rec.Recursive)
+		innerBld.addBuiltWithExpr(rec.WithID, initialCols, bufferRef)
+		plan, planCols, err := innerBld.build(rec.Recursive)
 		if err != nil {
 			return nil, err
 		}
 		// Ensure columns are output in the same order.
-		plan, err = innerBld.ensureColumns(plan, rec.Recursive, rec.RecursiveCols, opt.Ordering{})
+		plan, planCols, err = innerBld.ensureColumns(plan, planCols, rec.Recursive, rec.RecursiveCols, opt.Ordering{})
 		if err != nil {
 			return nil, err
 		}
@@ -3072,18 +3122,20 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 	var ep execPlan
 	ep.root, err = b.factory.ConstructRecursiveCTE(initial.root, fn, label, rec.Deduplicate)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	for i, col := range rec.OutCols {
-		ep.outputCols.Set(int(col), i)
+		outputCols.Set(int(col), i)
 	}
-	return ep, nil
+	return ep, outputCols, nil
 }
 
-func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
+func (b *Builder) buildWithScan(
+	withScan *memo.WithScanExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	e := b.findBuiltWithExpr(withScan.With)
 	if e == nil {
-		return execPlan{}, errors.AssertionFailedf(
+		return execPlan{}, opt.ColMap{}, errors.AssertionFailedf(
 			"couldn't find With expression with ID %d", withScan.With,
 		)
 	}
@@ -3096,76 +3148,75 @@ func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
 
 	node, err := b.factory.ConstructScanBuffer(e.bufferNode, label.String())
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	res := execPlan{root: node, outputCols: e.outputCols}
+	res := execPlan{root: node}
 
 	// Apply any necessary projection to produce the InCols in the given order.
-	res, err = b.ensureColumns(res, withScan, withScan.InCols, withScan.ProvidedPhysical().Ordering)
+	res, _, err = b.ensureColumns(res, e.outputCols, withScan, withScan.InCols, withScan.ProvidedPhysical().Ordering)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// Renumber the columns.
-	res.outputCols = opt.ColMap{}
 	for i, col := range withScan.OutCols {
-		res.outputCols.Set(int(col), i)
+		outputCols.Set(int(col), i)
 	}
 
-	return res, nil
+	return res, outputCols, nil
 }
 
-func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, error) {
-	input, err := b.buildRelational(projectSet.Input)
+func (b *Builder) buildProjectSet(
+	projectSet *memo.ProjectSetExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
+	input, inputCols, err := b.buildRelational(projectSet.Input)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	zip := projectSet.Zip
 	md := b.mem.Metadata()
-	scalarCtx := input.makeBuildScalarCtx()
+	scalarCtx := makeBuildScalarCtx(inputCols)
 
 	exprs := make(tree.TypedExprs, len(zip))
 	zipCols := make(colinfo.ResultColumns, 0, len(zip))
 	numColsPerGen := make([]int, len(zip))
 
-	ep := execPlan{outputCols: input.outputCols}
-	n := ep.numOutputCols()
-
+	n := numOutputColsInMap(inputCols)
 	for i := range zip {
 		item := &zip[i]
 		exprs[i], err = b.buildScalar(&scalarCtx, item.Fn)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 
 		for _, col := range item.Cols {
 			colMeta := md.ColumnMeta(col)
 			zipCols = append(zipCols, colinfo.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
 
-			ep.outputCols.Set(int(col), n)
+			outputCols.Set(int(col), n)
 			n++
 		}
 
 		numColsPerGen[i] = len(item.Cols)
 	}
 
+	var ep execPlan
 	ep.root, err = b.factory.ConstructProjectSet(input.root, exprs, zipCols, numColsPerGen)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
-	return ep, nil
+	return ep, outputCols, nil
 }
 
-func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
+func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols opt.ColMap, err error) {
 	udf := c.Proc.(*memo.UDFCallExpr)
 	if udf.Def == nil {
-		return execPlan{}, errors.AssertionFailedf("expected non-nil UDF definition")
+		return execPlan{}, opt.ColMap{}, errors.AssertionFailedf("expected non-nil UDF definition")
 	}
 
 	// Build the argument expressions.
-	var err error
 	var args tree.TypedExprs
 	ctx := buildScalarCtx{}
 	if len(udf.Args) > 0 {
@@ -3173,7 +3224,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
 		for i := range udf.Args {
 			args[i], err = b.buildScalar(&ctx, udf.Args[i])
 			if err != nil {
-				return execPlan{}, err
+				return execPlan{}, opt.ColMap{}, err
 			}
 		}
 	}
@@ -3213,9 +3264,9 @@ func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
 	var ep execPlan
 	ep.root, err = b.factory.ConstructCall(r)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	return ep, nil
+	return ep, opt.ColMap{}, nil
 }
 
 func (b *Builder) resultColumn(id opt.ColumnID) colinfo.ResultColumn {
@@ -3276,8 +3327,8 @@ func (b *Builder) isOffsetMode(boundType treewindow.WindowFrameBoundType) bool {
 	return boundType == treewindow.OffsetPreceding || boundType == treewindow.OffsetFollowing
 }
 
-func (b *Builder) buildFrame(input execPlan, w *memo.WindowsItem) (*tree.WindowFrame, error) {
-	scalarCtx := input.makeBuildScalarCtx()
+func (b *Builder) buildFrame(inputCols opt.ColMap, w *memo.WindowsItem) (*tree.WindowFrame, error) {
+	scalarCtx := makeBuildScalarCtx(inputCols)
 	newDef := &tree.WindowFrame{
 		Mode: w.Frame.Mode,
 		Bounds: tree.WindowFrameBounds{
@@ -3320,10 +3371,10 @@ func (b *Builder) buildFrame(input execPlan, w *memo.WindowsItem) (*tree.WindowF
 	return newDef, nil
 }
 
-func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
-	input, err := b.buildRelational(w.Input)
+func (b *Builder) buildWindow(w *memo.WindowExpr) (_ execPlan, outputCols opt.ColMap, err error) {
+	input, inputCols, err := b.buildRelational(w.Input)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
 	// Rearrange the input so that the input has all the passthrough columns
@@ -3339,12 +3390,12 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	// TODO(justin): this call to ensureColumns is kind of unfortunate because it
 	// can result in an extra render beneath each window function. Figure out a
 	// way to alleviate this.
-	input, err = b.ensureColumns(input, w, desiredCols, opt.Ordering{})
+	input, inputCols, err = b.ensureColumns(input, inputCols, w, desiredCols, opt.Ordering{})
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
-	ctx := input.makeBuildScalarCtx()
+	ctx := makeBuildScalarCtx(inputCols)
 
 	ord := w.Ordering.ToOrdering()
 
@@ -3356,7 +3407,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		}
 		indexedVar, err := b.indexedVar(&ctx, b.mem.Metadata(), c.ID())
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 		orderingExprs[i] = &tree.Order{
 			Expr:      indexedVar,
@@ -3369,11 +3420,11 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 
 	i := 0
 	for col, ok := w.Partition.Next(0); ok; col, ok = w.Partition.Next(col + 1) {
-		ordinal, _ := input.outputCols.Get(int(col))
+		ordinal, _ := inputCols.Get(int(col))
 		partitionIdxs[i] = exec.NodeColumnOrdinal(ordinal)
 		indexedVar, err := b.indexedVar(&ctx, b.mem.Metadata(), col)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 		partitionExprs[i] = indexedVar
 		i++
@@ -3399,16 +3450,16 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 			col := fn.Child(j).(*memo.VariableExpr).Col
 			indexedVar, err := b.indexedVar(&ctx, b.mem.Metadata(), col)
 			if err != nil {
-				return execPlan{}, err
+				return execPlan{}, opt.ColMap{}, err
 			}
 			args[j] = indexedVar
-			idx, _ := input.outputCols.Get(int(col))
+			idx, _ := inputCols.Get(int(col))
 			argIdxs[i][j] = exec.NodeColumnOrdinal(idx)
 		}
 
-		frame, err := b.buildFrame(input, item)
+		frame, err := b.buildFrame(inputCols, item)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 
 		var builtFilter tree.TypedExpr
@@ -3416,14 +3467,14 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		if ok {
 			f, ok := filter.(*memo.VariableExpr)
 			if !ok {
-				return execPlan{},
+				return execPlan{}, opt.ColMap{},
 					errors.AssertionFailedf("expected FILTER expression to be a VariableExpr")
 			}
-			filterIdxs[i], _ = input.outputCols.Get(int(f.Col))
+			filterIdxs[i], _ = inputCols.Get(int(f.Col))
 
 			builtFilter, err = b.buildScalar(&ctx, filter)
 			if err != nil {
-				return execPlan{}, err
+				return execPlan{}, opt.ColMap{}, err
 			}
 		} else {
 			filterIdxs[i] = -1
@@ -3436,7 +3487,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		}
 		wrappedFn, err := b.wrapFunction(name)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 		exprs[i] = tree.NewTypedFuncExpr(
 			wrappedFn,
@@ -3454,12 +3505,11 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 
 	// All the passthrough cols will keep their ordinal index.
 	passthrough.ForEach(func(col opt.ColumnID) {
-		ordinal, _ := input.outputCols.Get(int(col))
+		ordinal, _ := inputCols.Get(int(col))
 		resultCols[ordinal] = b.resultColumn(col)
 	})
 
-	var outputCols opt.ColMap
-	input.outputCols.ForEach(func(key, val int) {
+	inputCols.ForEach(func(key, val int) {
 		if passthrough.Contains(opt.ColumnID(key)) {
 			outputCols.Set(key, val)
 		}
@@ -3477,11 +3527,12 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		outputIdxs[i] = windowStart + i
 	}
 
-	sqlOrdering, err := input.sqlOrdering(ord)
+	sqlOrdering, err := sqlOrdering(ord, inputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
-	node, err := b.factory.ConstructWindow(input.root, exec.WindowInfo{
+	var ep execPlan
+	ep.root, err = b.factory.ConstructWindow(input.root, exec.WindowInfo{
 		Cols:       resultCols,
 		Exprs:      exprs,
 		OutputIdxs: outputIdxs,
@@ -3491,32 +3542,31 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		Ordering:   sqlOrdering,
 	})
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
-	return execPlan{
-		root:       node,
-		outputCols: outputCols,
-	}, nil
+	return ep, outputCols, nil
 }
 
-func (b *Builder) buildSequenceSelect(seqSel *memo.SequenceSelectExpr) (execPlan, error) {
+func (b *Builder) buildSequenceSelect(
+	seqSel *memo.SequenceSelectExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	seq := b.mem.Metadata().Sequence(seqSel.Sequence)
-	node, err := b.factory.ConstructSequenceSelect(seq)
+	var ep execPlan
+	ep.root, err = b.factory.ConstructSequenceSelect(seq)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
-	ep := execPlan{root: node}
 	for i, c := range seqSel.Cols {
-		ep.outputCols.Set(int(c), i)
+		outputCols.Set(int(c), i)
 	}
 
-	return ep, nil
+	return ep, outputCols, nil
 }
 
 func (b *Builder) applySaveTable(
-	input execPlan, e memo.RelExpr, saveTableName string,
+	input execPlan, inputCols opt.ColMap, e memo.RelExpr, saveTableName string,
 ) (execPlan, error) {
 	name := tree.NewTableNameWithSchema(tree.Name(opt.SaveTablesDatabase), catconstants.PublicSchemaName, tree.Name(saveTableName))
 
@@ -3526,7 +3576,7 @@ func (b *Builder) applySaveTable(
 	colNames := make([]string, outputCols.Len())
 	colNameGen := memo.NewColumnNameGenerator(e)
 	for col, ok := outputCols.Next(0); ok; col, ok = outputCols.Next(col + 1) {
-		ord, _ := input.outputCols.Get(int(col))
+		ord, _ := inputCols.Get(int(col))
 		colNames[ord] = colNameGen.GenerateName(col)
 	}
 
@@ -3538,21 +3588,25 @@ func (b *Builder) applySaveTable(
 	return input, err
 }
 
-func (b *Builder) buildOpaque(opaque *memo.OpaqueRelPrivate) (execPlan, error) {
-	node, err := b.factory.ConstructOpaque(opaque.Metadata)
+func (b *Builder) buildOpaque(
+	opaque *memo.OpaqueRelPrivate,
+) (_ execPlan, outputCols opt.ColMap, err error) {
+	var ep execPlan
+	ep.root, err = b.factory.ConstructOpaque(opaque.Metadata)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 
-	ep := execPlan{root: node}
 	for i, c := range opaque.Columns {
-		ep.outputCols.Set(int(c), i)
+		outputCols.Set(int(c), i)
 	}
 
-	return ep, nil
+	return ep, outputCols, nil
 }
 
-func (b *Builder) buildBarrier(barrier *memo.BarrierExpr) (execPlan, error) {
+func (b *Builder) buildBarrier(
+	barrier *memo.BarrierExpr,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	// BarrierExpr is only used as an optimization barrier. In the execution plan,
 	// it is replaced with its input.
 	return b.buildRelational(barrier.Input)
@@ -3562,12 +3616,12 @@ func (b *Builder) buildBarrier(barrier *memo.BarrierExpr) (execPlan, error) {
 // to produce the given list of columns. If the input plan already produces
 // the columns (in the same order), returns needProj=false.
 func (b *Builder) needProjection(
-	input execPlan, colList opt.ColList,
+	inputCols opt.ColMap, colList opt.ColList,
 ) (_ []exec.NodeColumnOrdinal, needProj bool, err error) {
-	if input.numOutputCols() == len(colList) {
+	if numOutputColsInMap(inputCols) == len(colList) {
 		identity := true
 		for i, col := range colList {
-			if ord, ok := input.outputCols.Get(int(col)); !ok || ord != i {
+			if ord, ok := inputCols.Get(int(col)); !ok || ord != i {
 				identity = false
 				break
 			}
@@ -3579,7 +3633,7 @@ func (b *Builder) needProjection(
 	cols := make([]exec.NodeColumnOrdinal, 0, len(colList))
 	for _, col := range colList {
 		if col != 0 {
-			ord, err := input.getNodeColumnOrdinal(col)
+			ord, err := getNodeColumnOrdinal(inputCols, col)
 			if err != nil {
 				return nil, false, err
 			}
@@ -3592,50 +3646,55 @@ func (b *Builder) needProjection(
 // ensureColumns applies a projection as necessary to make the output match the
 // given list of columns; colNames is optional.
 func (b *Builder) ensureColumns(
-	input execPlan, inputExpr memo.RelExpr, colList opt.ColList, provided opt.Ordering,
-) (execPlan, error) {
-	cols, needProj, err := b.needProjection(input, colList)
+	input execPlan,
+	inputCols opt.ColMap,
+	inputExpr memo.RelExpr,
+	colList opt.ColList,
+	provided opt.Ordering,
+) (_ execPlan, outputCols opt.ColMap, err error) {
+	cols, needProj, err := b.needProjection(inputCols, colList)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	if !needProj {
-		return input, nil
+		return input, inputCols, nil
 	}
 	// Since we are constructing a simple project on top of the main operator,
 	// we need to explicitly annotate the latter with estimates since the code
 	// in buildRelational() will attach them to the project.
 	b.maybeAnnotateWithEstimates(input.root, inputExpr)
-	var res execPlan
 	for i, col := range colList {
-		res.outputCols.Set(int(col), i)
+		outputCols.Set(int(col), i)
 	}
-	sqlOrdering, err := res.sqlOrdering(provided)
+	sqlOrdering, err := sqlOrdering(provided, outputCols)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, opt.ColMap{}, err
 	}
 	reqOrdering := exec.OutputOrdering(sqlOrdering)
+	var res execPlan
 	res.root, err = b.factory.ConstructSimpleProject(input.root, cols, reqOrdering)
-	return res, err
+	return res, outputCols, err
 }
 
 // applyPresentation adds a projection to a plan to satisfy a required
 // Presentation property.
-func (b *Builder) applyPresentation(input execPlan, pres physical.Presentation) (execPlan, error) {
+func (b *Builder) applyPresentation(
+	input execPlan, inputCols opt.ColMap, pres physical.Presentation,
+) (_ execPlan, outputCols opt.ColMap, err error) {
 	cols := make([]exec.NodeColumnOrdinal, len(pres))
 	colNames := make([]string, len(pres))
 	var res execPlan
 	for i := range pres {
-		ord, err := input.getNodeColumnOrdinal(pres[i].ID)
+		ord, err := getNodeColumnOrdinal(inputCols, pres[i].ID)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, opt.ColMap{}, err
 		}
 		cols[i] = ord
-		res.outputCols.Set(int(pres[i].ID), i)
+		outputCols.Set(int(pres[i].ID), i)
 		colNames[i] = pres[i].Alias
 	}
-	var err error
 	res.root, err = b.factory.ConstructSerializingProject(input.root, cols, colNames)
-	return res, err
+	return res, outputCols, err
 }
 
 // getEnvData consolidates the information that must be presented in
