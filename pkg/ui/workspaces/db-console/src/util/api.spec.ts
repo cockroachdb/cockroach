@@ -383,7 +383,7 @@ describe("rest api", function () {
           },
           // Table replicas query
           {
-            rows: [{ replicas: [1, 2, 3] }],
+            rows: [{ storeIDs: [1, 2, 3] }],
           },
         ],
       );
@@ -425,8 +425,6 @@ describe("rest api", function () {
           expect(resp.results.zoneConfigResp.zone_config_level).toBe(
             ZoneConfigurationLevel.DATABASE,
           );
-          expect(resp.results.stats.replicaData.replicaCount).toBe(3);
-          expect(resp.results.stats.replicaData.nodeCount).toBe(3);
           expect(resp.results.stats.replicaData.nodeIDs).toEqual([1, 2, 3]);
         });
     });

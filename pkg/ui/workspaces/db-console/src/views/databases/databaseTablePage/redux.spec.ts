@@ -279,7 +279,7 @@ describe("Database Table Page", function () {
         {},
         // Table replicas query
         {
-          rows: [{ replicas: [1, 2, 3, 4, 5] }],
+          rows: [{ storeIDs: [1, 2, 3, 4, 5] }],
         },
       ],
     );
@@ -292,7 +292,7 @@ describe("Database Table Page", function () {
       requestError: null,
       queryError: undefined,
       createStatement: { create_statement: "CREATE TABLE foo" },
-      replicaData: { replicaCount: 5, nodeCount: 5, nodeIDs: [1, 2, 3, 4, 5] },
+      replicaData: { replicaCount: 5, nodeIDs: [1, 2, 3, 4, 5] },
       spanStats: {
         approximate_disk_bytes: 23,
         live_bytes: 45,
