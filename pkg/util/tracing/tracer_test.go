@@ -253,6 +253,58 @@ func TestSterileSpan(t *testing.T) {
 	require.Len(t, carrier.MD, 0)
 }
 
+func TestTracer_ForceVerboseOperationName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type testCase struct {
+		name             string
+		opName           string
+		opNameRegexp     string
+		spanOpts         []SpanOption
+		expRecordingType tracingpb.RecordingType
+	}
+	for _, tc := range []testCase{
+		{
+			name:             "span maintains OFF recording type when opName regex unset",
+			opName:           "opName",
+			expRecordingType: tracingpb.RecordingOff,
+		},
+		{
+			name:             "span set to VERBOSE recording type when opName regex matches",
+			opName:           "opName",
+			opNameRegexp:     "someOtherName|opName",
+			expRecordingType: tracingpb.RecordingVerbose,
+		},
+		{
+			name:         "span set to VERBOSE when regex matches despite SpanOption specifying other recording",
+			opName:       "opName",
+			opNameRegexp: "someOtherName|opName",
+			spanOpts: []SpanOption{
+				WithRecording(tracingpb.RecordingStructured),
+			},
+			expRecordingType: tracingpb.RecordingVerbose,
+		},
+		{
+			name:         "span set to VERBOSE when regex matches despite noop span parent",
+			opName:       "opName",
+			opNameRegexp: "someOtherName|opName",
+			spanOpts: []SpanOption{
+				WithRemoteParentFromSpanMeta(noopSpanMeta),
+			},
+			expRecordingType: tracingpb.RecordingVerbose,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
+			if tc.opNameRegexp != "" {
+				require.NoError(t, tr.setVerboseOpNameRegexp(tc.opNameRegexp))
+			}
+			sp := tr.StartSpan(tc.opName, tc.spanOpts...)
+			require.Equal(t, tc.expRecordingType, sp.RecordingType())
+		})
+	}
+}
+
 func TestTracerInjectExtractNoop(t *testing.T) {
 	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
 	tr2 := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -296,6 +297,13 @@ type Tracer struct {
 	// enabled, span creation is generally a no-op unless a recording span is
 	// explicitly requested.
 	_activeSpansRegistryEnabled int32 // accessed atomically
+
+	forceVerboseMu struct {
+		syncutil.RWMutex
+		// opNameRegexp is matched against during span initialization. If the span
+		// operation name matches, then the span is forced to a VERBOSE recording mode.
+		opNameRegexp *regexp.Regexp
+	}
 
 	// activeSpans is a map that references all non-Finish'ed local root spans,
 	// i.e. those for which no WithParent(<non-nil>) option was supplied.
@@ -746,6 +754,21 @@ func WithUseAfterFinishOpt(panicOnUseAfterFinish, debugUseAfterFinish bool) Trac
 	}
 }
 
+func (t *Tracer) setVerboseOpNameRegexp(s string) error {
+	t.forceVerboseMu.Lock()
+	defer t.forceVerboseMu.Unlock()
+	if s == "" {
+		t.forceVerboseMu.opNameRegexp = nil
+		return nil
+	}
+	compiled, err := regexp.Compile(s)
+	if err != nil {
+		return err
+	}
+	t.forceVerboseMu.opNameRegexp = compiled
+	return nil
+}
+
 // configure sets up the Tracer according to the cluster settings (and keeps
 // it updated if they change).
 func (t *Tracer) configure(ctx context.Context, sv *settings.Values, tracingDefault TracingMode) {
@@ -1056,6 +1079,15 @@ func (t *Tracer) AlwaysTrace() bool {
 	return t.useNetTrace() || otelTracer != nil
 }
 
+func (t *Tracer) forceOpNameVerbose(opName string) bool {
+	t.forceVerboseMu.RLock()
+	defer t.forceVerboseMu.RUnlock()
+	if t.forceVerboseMu.opNameRegexp == nil {
+		return false
+	}
+	return t.forceVerboseMu.opNameRegexp.MatchString(opName)
+}
+
 // startSpanGeneric is the implementation of StartSpanCtx and StartSpan. In
 // the latter case, ctx == noCtx and the returned Context is the supplied one;
 // otherwise the returned Context embeds the returned Span.
@@ -1107,7 +1139,17 @@ child operation: %s, tracer created at:
 	// Are we tracing everything, or have a parent, or want a real span, or were
 	// asked for a recording? Then we create a real trace span. In all other
 	// cases, a noop span will do.
-	if !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan || opts.recordingType() != tracingpb.RecordingOff) {
+	shouldBeNoopSpan := !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan || opts.recordingType() != tracingpb.RecordingOff)
+	// Finally, we should check to see if this opName is configured to always be forced to the
+	// tracingpb.RecordingVerbose RecordingType. If it is, we'll want to create a real trace
+	// span. If one of the previous checks for shouldBeNoopSpan passed, we'll make these checks
+	// later.
+	forceVerbose, forceVerboseChecked := false, false
+	if shouldBeNoopSpan {
+		forceVerboseChecked = true
+		forceVerbose = t.forceOpNameVerbose(opName)
+	}
+	if shouldBeNoopSpan && !forceVerbose {
 		if !opts.Sterile {
 			return maybeWrapCtx(ctx, t.noopSpan)
 		}
@@ -1172,7 +1214,13 @@ child operation: %s, tracer created at:
 		startTime, opts.LogTags, opts.EventListeners, opts.SpanKind,
 		otelSpan, netTr, opts.Sterile)
 
-	s.i.crdb.SetRecordingType(opts.recordingType())
+	var recType tracingpb.RecordingType
+	if forceVerbose || (!forceVerboseChecked && t.forceOpNameVerbose(opName)) {
+		recType = tracingpb.RecordingVerbose
+	} else {
+		recType = opts.recordingType()
+	}
+	s.i.crdb.SetRecordingType(recType)
 	s.i.crdb.parentSpanID = opts.parentSpanID()
 
 	var localRoot bool
