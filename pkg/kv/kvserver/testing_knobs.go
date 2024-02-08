@@ -171,6 +171,8 @@ type StoreTestingKnobs struct {
 	LeaseTransferBlockedOnExtensionEvent func(nextLeader roachpb.ReplicaDescriptor)
 	// DisableGCQueue disables the GC queue.
 	DisableGCQueue bool
+	// DisableLeaseQueue disables the lease queue.
+	DisableLeaseQueue bool
 	// DisableMergeQueue disables the merge queue.
 	DisableMergeQueue bool
 	// DisableReplicateQueue disables the raft log queue.
