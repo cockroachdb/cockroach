@@ -1823,6 +1823,30 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaLeaseQueueSuccesses = metric.Metadata{
+		Name:        "queue.lease.process.success",
+		Help:        "Number of replicas successfully processed by the replica lease queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLeaseQueueFailures = metric.Metadata{
+		Name:        "queue.lease.process.failure",
+		Help:        "Number of replicas which failed processing in the replica lease queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLeaseQueuePending = metric.Metadata{
+		Name:        "queue.lease.pending",
+		Help:        "Number of pending replicas in the replica lease queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLeaseQueueProcessingNanos = metric.Metadata{
+		Name:        "queue.lease.processingnanos",
+		Help:        "Nanoseconds spent processing replicas in the replica lease queue",
+		Measurement: "Processing Time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaReplicateQueueSuccesses = metric.Metadata{
 		Name:        "queue.replicate.process.success",
 		Help:        "Number of replicas successfully processed by the replicate queue",
@@ -1832,6 +1856,12 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 	metaReplicateQueueFailures = metric.Metadata{
 		Name:        "queue.replicate.process.failure",
 		Help:        "Number of replicas which failed processing in the replicate queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLeaseQueuePurgatory = metric.Metadata{
+		Name:        "queue.lease.purgatory",
+		Help:        "Number of replicas in the lease queue's purgatory, awaiting lease transfer operations",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -2615,6 +2645,11 @@ type StoreMetrics struct {
 	ConsistencyQueueFailures                  *metric.Counter
 	ConsistencyQueuePending                   *metric.Gauge
 	ConsistencyQueueProcessingNanos           *metric.Counter
+	LeaseQueueSuccesses                       *metric.Counter
+	LeaseQueueFailures                        *metric.Counter
+	LeaseQueuePending                         *metric.Gauge
+	LeaseQueueProcessingNanos                 *metric.Counter
+	LeaseQueuePurgatory                       *metric.Gauge
 	ReplicaGCQueueSuccesses                   *metric.Counter
 	ReplicaGCQueueFailures                    *metric.Counter
 	ReplicaGCQueuePending                     *metric.Gauge
@@ -3340,6 +3375,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ConsistencyQueueFailures:                  metric.NewCounter(metaConsistencyQueueFailures),
 		ConsistencyQueuePending:                   metric.NewGauge(metaConsistencyQueuePending),
 		ConsistencyQueueProcessingNanos:           metric.NewCounter(metaConsistencyQueueProcessingNanos),
+		LeaseQueueSuccesses:                       metric.NewCounter(metaLeaseQueueSuccesses),
+		LeaseQueueFailures:                        metric.NewCounter(metaLeaseQueueFailures),
+		LeaseQueuePending:                         metric.NewGauge(metaLeaseQueuePending),
+		LeaseQueueProcessingNanos:                 metric.NewCounter(metaLeaseQueueProcessingNanos),
+		LeaseQueuePurgatory:                       metric.NewGauge(metaLeaseQueuePurgatory),
 		ReplicaGCQueueSuccesses:                   metric.NewCounter(metaReplicaGCQueueSuccesses),
 		ReplicaGCQueueFailures:                    metric.NewCounter(metaReplicaGCQueueFailures),
 		ReplicaGCQueuePending:                     metric.NewGauge(metaReplicaGCQueuePending),
