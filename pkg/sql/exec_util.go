@@ -992,6 +992,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaTxnUpgradedFromWeakIsolation = metric.Metadata{
+		Name:        "sql.txn.upgraded_iso_level.count",
+		Help:        "Number of times a weak isolation level was automatically upgraded to a stronger one",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaSelectExecuted = metric.Metadata{
 		Name:        "sql.select.count",
 		Help:        "Number of SQL SELECT statements successfully executed",
@@ -2990,6 +2996,10 @@ type sessionDataMutatorCallbacks struct {
 	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
 	// It can be nil, in which case nothing triggers on execution.
 	setCurTxnReadOnly func(val bool)
+	// upgradedIsolationLevel is called whenever the transaction isolation
+	// session variable is configured and the isolation level is automatically
+	// upgraded to a stronger one.
+	upgradedIsolationLevel func()
 	// onTempSchemaCreation is called when the temporary schema is set
 	// on the search path (the first and only time).
 	// It can be nil, in which case nothing triggers on execution.
