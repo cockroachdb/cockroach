@@ -186,6 +186,7 @@ func fetchStdoutStderrForBuildAction(
 func LoadInvocationInfo(
 	eventStreamFile io.Reader, certFile string, keyFile string,
 ) (*InvocationInfo, error) {
+	fmt.Println("called LoadInvocationInfo")
 	httpClient, err := getHttpClient(certFile, keyFile)
 	if err != nil {
 		return nil, err
@@ -200,9 +201,14 @@ func LoadInvocationInfo(
 	testResults := make(map[string][]*testResultWithMetadata)
 	failedActions := make(map[string][]*buildActionWithDownloadUris)
 
+	i := 0
 	for {
+		i += 1
 		var event bes.BuildEvent
 		err := buf.DecodeMessage(&event)
+		if i % 500 == 0 {
+			fmt.Fprintf("processed %d iterations\n", i)
+		}
 		if err != nil {
 			// This is probably OK: just no more stuff left in the buffer.
 			break
@@ -266,12 +272,16 @@ func LoadInvocationInfo(
 		}
 	}
 	go func(wg *sync.WaitGroup) {
+		fmt.Println("waiting to collect test results...")
 		wg.Wait()
 		close(testCh)
+		fmt.Println("collected all test results")
 	}(&testWg)
 	go func(wg *sync.WaitGroup) {
+		fmt.Println("waiting to collect action logs...")
 		wg.Wait()
 		close(actionCh)
+		fmt.Println("collected all action logs")
 	}(&actionWg)
 
 	var finalWg sync.WaitGroup
@@ -322,6 +332,7 @@ func LoadInvocationInfo(
 		})
 	}
 
+	fmt.Printf("exited LoadInvocationInfo\n")
 	return ret, nil
 }
 
