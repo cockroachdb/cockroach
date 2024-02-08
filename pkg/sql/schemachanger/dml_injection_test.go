@@ -382,6 +382,14 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			skipIssue:    97813,
 		},
 		{
+			desc: "drop column with check constraint",
+			setup: []string{
+				"ALTER TABLE tbl ADD COLUMN i INT NOT NULL DEFAULT 1",
+				"ALTER TABLE tbl ADD CONSTRAINT check_i CHECK (i > 0)",
+			},
+			schemaChange: "ALTER TABLE tbl DROP COLUMN i",
+		},
+		{
 			desc:         "create expression index",
 			schemaChange: "CREATE INDEX idx ON tbl ((val + 1))",
 		},
