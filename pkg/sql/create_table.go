@@ -556,7 +556,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				*ti = tableInserter{}
 				tableInserterPool.Put(ti)
 			}()
-			if err := tw.init(params.ctx, params.p.txn, params.p.EvalContext(), &params.p.EvalContext().Settings.SV); err != nil {
+			if err := tw.init(params.ctx, params.p.txn, params.p.EvalContext()); err != nil {
 				return err
 			}
 
