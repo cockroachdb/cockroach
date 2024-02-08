@@ -11,15 +11,19 @@
 package admission
 
 import (
+	"context"
 	"fmt"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
@@ -184,6 +188,35 @@ func TestElasticCPUGranter(t *testing.T) {
 			}
 		},
 	)
+}
+
+func TestGrunningMonotonic(t *testing.T) {
+	runtime.GOMAXPROCS(1)
+	defer runtime.GOMAXPROCS(runtime.NumCPU())
+	var gTime atomic.Int64
+	numGoroutines := 60
+	var wg sync.WaitGroup
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// do busy work
+			k := 0
+			for j := 0; j < 10; j++ {
+				k += j
+			}
+			g1 := grunning.Time().Nanoseconds()
+			runtime.Gosched()
+			g2 := grunning.Time().Nanoseconds()
+
+			gTime.Add(g2 - g1)
+			if g2 < g1 {
+				log.Fatal(context.TODO(), "non-montonic")
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 type testElasticCPURequester struct {
