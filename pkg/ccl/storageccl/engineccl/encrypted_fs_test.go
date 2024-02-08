@@ -106,11 +106,11 @@ func TestEncryptedFS(t *testing.T) {
 
 	for idx, tc := range testCases {
 		// Alternate between versions 1 and 2 to verify that we can upgrade and downgrade freely.
-		version := 1
+		implVersion := 1
 		if idx%2 == 1 {
-			version = 2
+			implVersion = 2
 		}
-		streamCreator := &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store, version: int64(version)}
+		streamCreator := &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store, implVersion: int64(implVersion)}
 
 		fs := &encryptedFS{FS: memFS, fileRegistry: fileRegistry, streamCreator: streamCreator}
 

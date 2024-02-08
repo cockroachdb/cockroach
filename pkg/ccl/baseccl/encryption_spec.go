@@ -36,7 +36,7 @@ type StoreEncryptionSpec struct {
 	KeyPath        string
 	OldKeyPath     string
 	RotationPeriod time.Duration
-	Version        int64
+	ImplVersion    int64
 }
 
 // ToEncryptionOptions convert to a serialized EncryptionOptions protobuf.
@@ -48,7 +48,7 @@ func (es StoreEncryptionSpec) ToEncryptionOptions() ([]byte, error) {
 			OldKey:     es.OldKeyPath,
 		},
 		DataKeyRotationPeriod: int64(es.RotationPeriod / time.Second),
-		Version:               es.Version,
+		ImplVersion:           es.ImplVersion,
 	}
 
 	return protoutil.Marshal(&opts)
@@ -57,8 +57,8 @@ func (es StoreEncryptionSpec) ToEncryptionOptions() ([]byte, error) {
 // String returns a fully parsable version of the encryption spec.
 func (es StoreEncryptionSpec) String() string {
 	// All fields are set.
-	return fmt.Sprintf("path=%s,key=%s,old-key=%s,rotation-period=%s,version=%d",
-		es.Path, es.KeyPath, es.OldKeyPath, es.RotationPeriod, es.Version)
+	return fmt.Sprintf("path=%s,key=%s,old-key=%s,rotation-period=%s,impl_version=%d",
+		es.Path, es.KeyPath, es.OldKeyPath, es.RotationPeriod, es.ImplVersion)
 }
 
 // NewStoreEncryptionSpec parses the string passed in and returns a new
@@ -125,11 +125,11 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 			if err != nil {
 				return StoreEncryptionSpec{}, errors.Wrapf(err, "could not parse rotation-duration value: %s", value)
 			}
-		case "version":
+		case "impl_version":
 			var err error
-			es.Version, err = strconv.ParseInt(value, 10, 64)
+			es.ImplVersion, err = strconv.ParseInt(value, 10, 64)
 			if err != nil {
-				return StoreEncryptionSpec{}, errors.Wrapf(err, "could not parse version: %s", value)
+				return StoreEncryptionSpec{}, errors.Wrapf(err, "could not parse impl_version: %s", value)
 			}
 		default:
 			return StoreEncryptionSpec{}, fmt.Errorf("%s is not a valid enterprise-encryption field", field)

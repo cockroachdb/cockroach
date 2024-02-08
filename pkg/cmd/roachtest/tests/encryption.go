@@ -44,9 +44,9 @@ func registerEncryption(r registry.Registry) {
 
 		keys := []string{"plain", "plain", "aes-128.key", "aes-256.key"}
 		for keyIdx := 1; keyIdx < len(keys); keyIdx++ {
-			for _, version := range []int{1, 2} {
+			for _, implVersion := range []int{1, 2} {
 				opts := option.DefaultStartOpts()
-				opts.RoachprodOpts.ExtraArgs = []string{fmt.Sprintf("--enterprise-encryption=path=data,key=%s,old-key=%s,version=%d", keys[keyIdx], keys[keyIdx-1], version)}
+				opts.RoachprodOpts.ExtraArgs = []string{fmt.Sprintf("--enterprise-encryption=path=data,key=%s,old-key=%s,impl_version=%d", keys[keyIdx], keys[keyIdx-1], implVersion)}
 				c.Start(ctx, t.L(), opts, install.MakeClusterSettings(), c.Range(1, nodes))
 				WaitForReady(ctx, t, c, c.Range(1, nodes))
 

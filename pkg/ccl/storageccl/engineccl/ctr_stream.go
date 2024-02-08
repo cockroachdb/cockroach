@@ -28,9 +28,9 @@ import (
 // FileStream for either a new file (using the active key provided by the KeyManager) or an
 // existing file (by looking up the key in the KeyManager).
 type FileCipherStreamCreator struct {
-	envType    enginepb.EnvType
-	keyManager PebbleKeyManager
-	version    int64
+	envType     enginepb.EnvType
+	keyManager  PebbleKeyManager
+	implVersion int64
 }
 
 const (
@@ -73,7 +73,7 @@ func (c *FileCipherStreamCreator) CreateNew(
 	}
 	// Does not matter how we convert 4 random bytes into uint32
 	settings.Counter = binary.LittleEndian.Uint32(counterBytes)
-	switch c.version {
+	switch c.implVersion {
 	case 0 /* default */, 1:
 		ctrCS, err := newCTRBlockCipherStream(key, settings.Nonce, settings.Counter)
 		if err != nil {
@@ -89,7 +89,7 @@ func (c *FileCipherStreamCreator) CreateNew(
 		}
 		return settings, fcs2, nil
 	default:
-		return settings, nil, errors.Newf("unsupported version %d", c.version)
+		return settings, nil, errors.Newf("unsupported version %d", c.implVersion)
 	}
 }
 
