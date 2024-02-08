@@ -45,7 +45,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// to expect it.
 		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
 		require.NoError(t, err)
-		require.NoError(t, WaitFor3XReplication(ctx, t, db))
+		require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), db))
 		require.NoError(t, db.Close())
 	}
 

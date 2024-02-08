@@ -374,7 +374,7 @@ func registerImportDecommissioned(r registry.Registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.Run(ctx, option.WithNodes(c.Node(1)), tpccImportCmd(warehouses, pgurl))
+		c.Run(ctx, option.WithNodes(c.Node(1)), tpccImportCmd("", warehouses, pgurl))
 	}
 
 	r.Add(registry.TestSpec{

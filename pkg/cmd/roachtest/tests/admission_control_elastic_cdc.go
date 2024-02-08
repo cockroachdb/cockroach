@@ -79,7 +79,7 @@ func registerElasticControlForCDC(r registry.Registry) {
 				t.Fatal(err)
 			}
 
-			runTPCC(ctx, t, c, tpccOptions{
+			runTPCC(ctx, t, t.L(), c, tpccOptions{
 				Warehouses:                    numWarehouses,
 				Duration:                      workloadDuration,
 				SetupType:                     usingImport,

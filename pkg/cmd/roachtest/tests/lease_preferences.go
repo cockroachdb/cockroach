@@ -242,13 +242,13 @@ func runLeasePreferences(
 	// Wait for the existing ranges (not kv) to be up-replicated. That way,
 	// creating the splits and waiting for up-replication on kv will be much
 	// quicker.
-	require.NoError(t, WaitForReplication(ctx, t, conn, spec.replFactor, atLeastReplicationFactor))
+	require.NoError(t, WaitForReplication(ctx, t, t.L(), conn, spec.replFactor, atLeastReplicationFactor))
 	c.Run(ctx, option.WithNodes(c.Node(numNodes)), fmt.Sprintf(
 		`./cockroach workload init kv --scatter --splits %d {pgurl:%d}`,
 		spec.ranges, numNodes))
 	// Wait for under-replicated ranges before checking lease preference
 	// enforcement.
-	require.NoError(t, WaitForReplication(ctx, t, conn, spec.replFactor, atLeastReplicationFactor))
+	require.NoError(t, WaitForReplication(ctx, t, t.L(), conn, spec.replFactor, atLeastReplicationFactor))
 
 	// Set a lease preference for the liveness range, to be on n5. This test
 	// would occasionally fail due to the liveness heartbeat failures, when the

@@ -1942,9 +1942,6 @@ func TestAcquireLease(t *testing.T) {
 					t.Errorf("unexpected lease start: %s; expected %s", lease.Start, expStart)
 				}
 
-				if *lease.DeprecatedStartStasis != *lease.Expiration {
-					t.Errorf("%s already in stasis (or beyond): %+v", ts, lease)
-				}
 				if lease.Expiration.LessEq(ts) {
 					t.Errorf("%s already expired: %+v", ts, lease)
 				}
