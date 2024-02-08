@@ -101,6 +101,7 @@ go_test(
     size = "medium",
     srcs = [
         "cmd_add_sstable_test.go",
+        "cmd_barrier_test.go",
         "cmd_clear_range_test.go",
         "cmd_delete_range_gchint_test.go",
         "cmd_delete_range_test.go",
@@ -109,6 +110,7 @@ go_test(
         "cmd_get_test.go",
         "cmd_is_span_empty_test.go",
         "cmd_lease_test.go",
+        "cmd_push_txn_test.go",
         "cmd_query_intent_test.go",
         "cmd_query_resolved_timestamp_test.go",
         "cmd_recover_txn_test.go",

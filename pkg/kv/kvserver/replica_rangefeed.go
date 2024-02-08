@@ -141,8 +141,9 @@ func (s *lockedRangefeedStream) Send(e *kvpb.RangeFeedEvent) error {
 // rangefeedTxnPusher is a shim around intentResolver that implements the
 // rangefeed.TxnPusher interface.
 type rangefeedTxnPusher struct {
-	ir *intentresolver.IntentResolver
-	r  *Replica
+	ir   *intentresolver.IntentResolver
+	r    *Replica
+	span roachpb.RSpan
 }
 
 // PushTxns is part of the rangefeed.TxnPusher interface. It performs a
@@ -150,7 +151,7 @@ type rangefeedTxnPusher struct {
 // transactions.
 func (tp *rangefeedTxnPusher) PushTxns(
 	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
-) ([]*roachpb.Transaction, error) {
+) ([]*roachpb.Transaction, bool, error) {
 	pushTxnMap := make(map[uuid.UUID]*enginepb.TxnMeta, len(txns))
 	for i := range txns {
 		txn := &txns[i]
@@ -166,18 +167,18 @@ func (tp *rangefeedTxnPusher) PushTxns(
 		},
 	}
 
-	pushedTxnMap, pErr := tp.ir.MaybePushTransactions(
+	pushedTxnMap, anyAmbiguousAbort, pErr := tp.ir.MaybePushTransactions(
 		ctx, pushTxnMap, h, kvpb.PUSH_TIMESTAMP, false, /* skipIfInFlight */
 	)
 	if pErr != nil {
-		return nil, pErr.GoError()
+		return nil, false, pErr.GoError()
 	}
 
 	pushedTxns := make([]*roachpb.Transaction, 0, len(pushedTxnMap))
 	for _, txn := range pushedTxnMap {
 		pushedTxns = append(pushedTxns, txn)
 	}
-	return pushedTxns, nil
+	return pushedTxns, anyAmbiguousAbort, nil
 }
 
 // ResolveIntents is part of the rangefeed.TxnPusher interface.
@@ -197,6 +198,40 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 			NoMemoryReservedAtSource: true,
 		}},
 	).GoError()
+}
+
+// Barrier is part of the rangefeed.TxnPusher interface.
+func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
+	// Execute a Barrier on the leaseholder, and obtain its LAI. Error out on any
+	// range changes (e.g. splits/merges) that we haven't applied yet.
+	lai, desc, err := tp.r.store.db.BarrierWithLAI(ctx, tp.span.Key, tp.span.EndKey)
+	if err != nil {
+		if errors.HasType(err, &kvpb.RangeKeyMismatchError{}) {
+			return errors.Wrap(err, "range barrier failed, range split")
+		}
+		return errors.Wrap(err, "range barrier failed")
+	}
+	if lai == 0 {
+		// We may be talking to a binary which doesn't support
+		// BarrierRequest.WithLeaseAppliedIndex, so just degrade to the previous
+		// (buggy) behavior.
+		return nil
+	}
+	if desc.RangeID != tp.r.RangeID {
+		return errors.Errorf("range barrier failed, range ID changed: %d -> %s", tp.r.RangeID, desc)
+	}
+	if !desc.RSpan().Equal(tp.span) {
+		return errors.Errorf("range barrier failed, range span changed: %s -> %s", tp.span, desc)
+	}
+
+	// Wait for the local replica to apply it. In the common case where we are the
+	// leaseholder, the Barrier call will already have waited for application, so
+	// this succeeds immediately.
+	if _, err = tp.r.WaitForLeaseAppliedIndex(ctx, lai); err != nil {
+		return errors.Wrap(err, "range barrier failed")
+	}
+
+	return nil
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
@@ -441,7 +476,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	}
 
 	desc := r.Desc()
-	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
+	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r, span: desc.RSpan()}
 	cfg := rangefeed.Config{
 		AmbientContext:   r.AmbientContext,
 		Clock:            r.Clock(),

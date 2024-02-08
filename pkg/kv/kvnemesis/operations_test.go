@@ -87,6 +87,8 @@ func TestOperationsFormat(t *testing.T) {
 		{
 			step: step(addSSTable(sstFile.Data(), sstSpan, sstTS, sstValueHeader.KVNemesisSeq.Get(), true)),
 		},
+		{step: step(barrier(k1, k2, false /* withLAI */))},
+		{step: step(barrier(k3, k4, true /* withLAI */))},
 	}
 
 	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))

@@ -47,7 +47,20 @@ type ScheduledProcessor struct {
 
 	// processCtx is the annotated background context used for process(). It is
 	// stored here to avoid reconstructing it on every call.
-	processCtx   context.Context
+	processCtx context.Context
+	// taskCtx is the context used to spawn async tasks (e.g. the txn pusher),
+	// along with its cancel function which is called when the processor stops or
+	// the stopper quiesces. It is independent of processCtx, and constructed
+	// during Start().
+	//
+	// TODO(erikgrinaker): the context handling here should be cleaned up.
+	// processCtx should be passed in from the scheduler and propagate stopper
+	// quiescence, and the async tasks should probably be run on scheduler
+	// threads or at least a separate bounded worker pool. But this will do for
+	// now.
+	taskCtx    context.Context
+	taskCancel func()
+
 	requestQueue chan request
 	eventC       chan *event
 	// If true, processor is not processing data anymore and waiting for registrations
@@ -55,9 +68,6 @@ type ScheduledProcessor struct {
 	stopping bool
 	stoppedC chan struct{}
 
-	// Processor startup runs background tasks to scan intents. If processor is
-	// stopped early, this task needs to be terminated to avoid resource waste.
-	startupCancel func()
 	// stopper passed by start that is used for firing up async work from scheduler.
 	stopper       *stop.Stopper
 	txnPushActive bool
@@ -94,9 +104,9 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 func (p *ScheduledProcessor) Start(
 	stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor,
 ) error {
-	ctx := p.Config.AmbientContext.AnnotateCtx(context.Background())
-	ctx, p.startupCancel = context.WithCancel(ctx)
 	p.stopper = stopper
+	p.taskCtx, p.taskCancel = p.stopper.WithCancelOnQuiesce(
+		p.Config.AmbientContext.AnnotateCtx(context.Background()))
 
 	// Note that callback registration must be performed before starting resolved
 	// timestamp init because resolution posts resolvedTS event when it is done.
@@ -112,13 +122,14 @@ func (p *ScheduledProcessor) Start(
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		// TODO(oleg): we need to cap number of tasks that we can fire up across
 		// all feeds as they could potentially generate O(n) tasks during start.
-		if err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run); err != nil {
+		err := stopper.RunAsyncTask(p.taskCtx, "rangefeed: init resolved ts", initScan.Run)
+		if err != nil {
 			initScan.Cancel()
 			p.scheduler.StopProcessor()
 			return err
 		}
 	} else {
-		p.initResolvedTS(ctx)
+		p.initResolvedTS(p.taskCtx)
 	}
 
 	p.Metrics.RangeFeedProcessorsScheduler.Inc(1)
@@ -195,7 +206,7 @@ func (p *ScheduledProcessor) processPushTxn(ctx context.Context) {
 			// Launch an async transaction push attempt that pushes the
 			// timestamp of all transactions beneath the push offset.
 			// Ignore error if quiescing.
-			pushTxns := newTxnPushAttempt(p.Span, p.TxnPusher, p, toPush, now, func() {
+			pushTxns := newTxnPushAttempt(p.Settings, p.Span, p.TxnPusher, p, toPush, now, func() {
 				p.enqueueRequest(func(ctx context.Context) {
 					p.txnPushActive = false
 				})
@@ -203,7 +214,7 @@ func (p *ScheduledProcessor) processPushTxn(ctx context.Context) {
 			p.txnPushActive = true
 			// TODO(oleg): we need to cap number of tasks that we can fire up across
 			// all feeds as they could potentially generate O(n) tasks for push.
-			err := p.stopper.RunAsyncTask(ctx, "rangefeed: pushing old txns", pushTxns.Run)
+			err := p.stopper.RunAsyncTask(p.taskCtx, "rangefeed: pushing old txns", pushTxns.Run)
 			if err != nil {
 				pushTxns.Cancel()
 			}
@@ -231,7 +242,7 @@ func (p *ScheduledProcessor) cleanup() {
 	// Unregister callback from scheduler
 	p.scheduler.Unregister()
 
-	p.startupCancel()
+	p.taskCancel()
 	close(p.stoppedC)
 	p.MemBudget.Close(context.Background())
 }
@@ -343,6 +354,7 @@ func (p *ScheduledProcessor) Register(
 				}
 			}
 		}
+		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
 		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
 			// If we can't schedule internally, processor is already stopped which
 			// could only happen on shutdown. Disconnect stream and just remove
@@ -686,7 +698,7 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 
 		// Determine whether the operation caused the resolved timestamp to
 		// move forward. If so, publish a RangeFeedCheckpoint notification.
-		if p.rts.ConsumeLogicalOp(op) {
+		if p.rts.ConsumeLogicalOp(ctx, op) {
 			p.publishCheckpoint(ctx)
 		}
 	}
