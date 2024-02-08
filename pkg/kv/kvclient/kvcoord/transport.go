@@ -49,7 +49,7 @@ type SendOptions struct {
 //
 // The caller is responsible for ordering the replicas in the slice according to
 // the order in which the should be tried.
-type TransportFactory func(SendOptions, ReplicaSlice) (Transport, error)
+type TransportFactory func(SendOptions, roachpb.ReplicaSet) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
 // All calls to Transport methods are made from a single thread, so
@@ -101,31 +101,26 @@ const (
 // During race builds, we wrap this to hold on to and read all obtained
 // requests in a tight loop, exposing data races; see transport_race.go.
 func grpcTransportFactoryImpl(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, rs ReplicaSlice,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, rs roachpb.ReplicaSet,
 ) (Transport, error) {
 	transport := grpcTransportPool.Get().(*grpcTransport)
 	// Grab the saved slice memory from grpcTransport.
-	replicas := transport.replicas
-
-	if cap(replicas) < len(rs) {
-		replicas = make([]roachpb.ReplicaDescriptor, len(rs))
-	} else {
-		replicas = replicas[:len(rs)]
-	}
+	descriptors := rs.Descriptors()
+	// TODO(baptist): Remove this copy once transport no longer modifies replicas.
+	replicas := make([]roachpb.ReplicaDescriptor, len(descriptors))
+	copy(replicas, descriptors)
 
 	// We'll map the index of the replica descriptor in its slice to its health.
 	var health util.FastIntMap
-	for i := range rs {
-		r := &rs[i]
-		replicas[i] = r.ReplicaDescriptor
-		healthy := nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
+	for i, desc := range descriptors {
+		replicas[i] = desc
+		healthy := nodeDialer.ConnHealth(desc.NodeID, opts.class) == nil
 		if healthy {
 			health.Set(i, healthHealthy)
 		} else {
 			health.Set(i, healthUnhealthy)
 		}
 	}
-
 	*transport = grpcTransport{
 		opts:          opts,
 		nodeDialer:    nodeDialer,
@@ -317,9 +312,9 @@ func (h *byHealth) Less(i, j int) bool {
 // Transport. This is useful for tests that want to use DistSender
 // without a full RPC stack.
 func SenderTransportFactory(tracer *tracing.Tracer, sender kv.Sender) TransportFactory {
-	return func(_ SendOptions, replicas ReplicaSlice) (Transport, error) {
+	return func(_ SendOptions, replicas roachpb.ReplicaSet) (Transport, error) {
 		// Always send to the first replica.
-		replica := replicas[0].ReplicaDescriptor
+		replica := replicas.First()
 		return &senderTransport{tracer, sender, replica, false}, nil
 	}
 }

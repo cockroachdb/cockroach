@@ -755,7 +755,7 @@ func newTransportForRange(
 	}
 	replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
 	opts := SendOptions{class: defRangefeedConnClass}
-	return ds.transportFactory(opts, replicas)
+	return ds.transportFactory(opts, replicas.AsReplicaSet())
 }
 
 // makeRangeFeedRequest constructs kvpb.RangeFeedRequest for specified span and

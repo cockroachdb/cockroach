@@ -816,12 +816,12 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n4Cache := tc.Server(3).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 	entry := n4Cache.GetCached(ctx, tablePrefix, false /* inverted */)
 	require.NotNil(t, entry)
-	require.False(t, entry.Lease().Empty())
-	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
+	require.False(t, entry.Lease.Empty())
+	require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
 		{NodeID: 2, StoreID: 2, ReplicaID: 2},
-	}, entry.Desc().Replicas().Descriptors())
+	}, entry.Desc.Replicas().Descriptors())
 
 	// Remove the follower and add a new non-voter to n3. n2 will no longer have a
 	// replica.
@@ -839,12 +839,12 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	// Check that the cache was properly updated.
 	entry = n4Cache.GetCached(ctx, tablePrefix, false /* inverted */)
 	require.NotNil(t, entry)
-	require.False(t, entry.Lease().Empty())
-	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
+	require.False(t, entry.Lease.Empty())
+	require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
 		{NodeID: 3, StoreID: 3, ReplicaID: 3, Type: roachpb.NON_VOTER},
-	}, entry.Desc().Replicas().Descriptors())
+	}, entry.Desc.Replicas().Descriptors())
 
 	// Make a note of the follower reads metric on n3. We'll check that it was
 	// incremented.
@@ -882,12 +882,12 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n3Cache := tc.Server(2).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 	entry = n3Cache.GetCached(ctx, tablePrefix, false /* inverted */)
 	require.NotNil(t, entry)
-	require.False(t, entry.Lease().Empty())
-	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
+	require.False(t, entry.Lease.Empty())
+	require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
 		{NodeID: 3, StoreID: 3, ReplicaID: 3, Type: roachpb.NON_VOTER},
-	}, entry.Desc().Replicas().Descriptors())
+	}, entry.Desc.Replicas().Descriptors())
 
 	// Enable DistSQL so that we have a distributed plan with a single flow on
 	// n3 (local plans ignore the misplanned ranges).
@@ -1131,13 +1131,13 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			cache := tenants[gatewayNode].DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 			entry := cache.GetCached(ctx, tablePrefix, false /* inverted */)
 			require.NotNil(t, entry)
-			require.False(t, entry.Lease().Empty())
-			require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
+			require.False(t, entry.Lease.Empty())
+			require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
 			require.Equal(t, []roachpb.ReplicaDescriptor{
 				{NodeID: 1, StoreID: 1, ReplicaID: 1},
 				{NodeID: 2, StoreID: 2, ReplicaID: 2},
 				{NodeID: 3, StoreID: 3, ReplicaID: 3},
-			}, entry.Desc().Replicas().Descriptors())
+			}, entry.Desc.Replicas().Descriptors())
 
 			tenantSQL.Exec(t, historicalQuery)
 			rec := <-recCh
