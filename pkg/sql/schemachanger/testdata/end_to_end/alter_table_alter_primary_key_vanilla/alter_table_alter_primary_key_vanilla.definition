@@ -1,6 +1,9 @@
 setup
-CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, k INT DEFAULT 54);
 INSERT INTO t(i, j) VALUES (-4, -4), (-2, -2), (-3, -3);
+CREATE INDEX ON t(i) WHERE i<=0;
+CREATE INDEX ON t(j) WHERE j<= 0;
+CREATE INDEX ON t(k);
 ----
 
 # Note: Unlike other tests, we intentionally avoid
