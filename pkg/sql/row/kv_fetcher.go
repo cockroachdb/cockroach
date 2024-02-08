@@ -105,7 +105,7 @@ func newTxnKVFetcher(
 	fetcherArgs.admission.requestHeader = txn.AdmissionHeader()
 	fetcherArgs.admission.responseQ = txn.DB().SQLKVResponseAdmissionQ
 	fetcherArgs.admission.pacerFactory = txn.DB().AdmissionPacerFactory
-	fetcherArgs.admission.settingsValues = txn.DB().SettingsValues
+	fetcherArgs.admission.settingsValues = txn.DB().SettingsValues()
 
 	return newTxnKVFetcherInternal(fetcherArgs)
 }
