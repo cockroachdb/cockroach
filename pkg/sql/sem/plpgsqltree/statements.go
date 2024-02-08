@@ -1227,38 +1227,33 @@ func (s *Close) WalkStmt(visitor StatementVisitor) Statement {
 	return newStmt
 }
 
-// stmt_commit
-type Commit struct {
+// stmt_commit and stmt_rollback
+type TransactionControl struct {
 	StatementImpl
-	Chain bool
+	Rollback bool
+	Chain    bool
 }
 
-func (s *Commit) Format(ctx *tree.FmtCtx) {
+func (s *TransactionControl) Format(ctx *tree.FmtCtx) {
+	if s.Rollback {
+		ctx.WriteString("ROLLBACK")
+	} else {
+		ctx.WriteString("COMMIT")
+	}
+	if s.Chain {
+		ctx.WriteString(" AND CHAIN")
+	}
+	ctx.WriteString(";\n")
 }
 
-func (s *Commit) PlpgSQLStatementTag() string {
+func (s *TransactionControl) PlpgSQLStatementTag() string {
+	if s.Rollback {
+		return "stmt_rollback"
+	}
 	return "stmt_commit"
 }
 
-func (s *Commit) WalkStmt(visitor StatementVisitor) Statement {
-	newStmt, _ := visitor.Visit(s)
-	return newStmt
-}
-
-// stmt_rollback
-type Rollback struct {
-	StatementImpl
-	Chain bool
-}
-
-func (s *Rollback) Format(ctx *tree.FmtCtx) {
-}
-
-func (s *Rollback) PlpgSQLStatementTag() string {
-	return "stmt_rollback"
-}
-
-func (s *Rollback) WalkStmt(visitor StatementVisitor) Statement {
+func (s *TransactionControl) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	return newStmt
 }
