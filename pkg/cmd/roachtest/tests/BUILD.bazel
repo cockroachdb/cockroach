@@ -187,6 +187,11 @@ go_library(
         "versionupgrade.go",
         "ycsb.go",
     ],
+    embedsrcs = [
+        "ruby_pg_helpers.rb",
+        "tpchvec_smithcmp.toml",
+        "knexfile.js",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests",
     visibility = ["//visibility:public"],
     deps = [
