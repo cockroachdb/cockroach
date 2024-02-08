@@ -479,9 +479,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
-	dbCtx := kv.DefaultDBContext(stopper)
+	dbCtx := kv.DefaultDBContext(st, stopper)
 	dbCtx.NodeID = idContainer
-	dbCtx.Stopper = stopper
 	db := kv.NewDBWithContext(cfg.AmbientCtx, tcsFactory, clock, dbCtx)
 
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
