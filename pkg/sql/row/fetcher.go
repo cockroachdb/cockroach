@@ -473,7 +473,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			fetcherArgs.admission.requestHeader = args.Txn.AdmissionHeader()
 			fetcherArgs.admission.responseQ = args.Txn.DB().SQLKVResponseAdmissionQ
 			fetcherArgs.admission.pacerFactory = args.Txn.DB().AdmissionPacerFactory
-			fetcherArgs.admission.settingsValues = args.Txn.DB().SettingsValues
+			fetcherArgs.admission.settingsValues = args.Txn.DB().SettingsValues()
 		}
 		rf.kvFetcher = newKVFetcher(newTxnKVFetcherInternal(fetcherArgs))
 	}

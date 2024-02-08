@@ -342,7 +342,7 @@ func (f *txnKVFetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) {
 	f.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
 
 	f.admissionPacer.Close()
-	f.maybeInitAdmissionPacer(txn.AdmissionHeader(), txn.DB().AdmissionPacerFactory, txn.DB().SettingsValues)
+	f.maybeInitAdmissionPacer(txn.AdmissionHeader(), txn.DB().AdmissionPacerFactory, txn.DB().SettingsValues())
 }
 
 // maybeInitAdmissionPacer selectively initializes an admission.Pacer for work
@@ -351,15 +351,14 @@ func (f *txnKVFetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) {
 func (f *txnKVFetcher) maybeInitAdmissionPacer(
 	admissionHeader kvpb.AdmissionHeader, pacerFactory admission.PacerFactory, sv *settings.Values,
 ) {
-	if sv == nil {
+	if pacerFactory == nil {
 		// Only nil in tests and in SQL pods (we don't have admission pacing in
 		// the latter anyway).
 		return
 	}
 	admissionPri := admissionpb.WorkPriority(admissionHeader.Priority)
 	if internalLowPriReadElasticControlEnabled.Get(sv) &&
-		admissionPri < admissionpb.UserLowPri &&
-		pacerFactory != nil {
+		admissionPri < admissionpb.UserLowPri {
 
 		f.admissionPacer = pacerFactory.NewPacer(
 			elasticCPUDurationPerLowPriReadResponse.Get(sv),
