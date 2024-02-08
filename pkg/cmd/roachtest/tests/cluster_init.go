@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -48,10 +49,14 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// via the join targets.
 	startOpts.RoachprodOpts.JoinTargets = c.All()
 
+	// Start the cluster in insecure mode to allow it to test both
+	// authenticated and unauthenticated code paths.
+	settings := install.MakeClusterSettings(install.SecureOption(false))
+
 	for _, initNode := range []int{2, 1} {
 		c.Wipe(ctx, false /* preserveCerts */)
 		t.L().Printf("starting test with init node %d", initNode)
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings())
+		c.Start(ctx, t.L(), startOpts, settings)
 
 		urlMap := make(map[int]string)
 		adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.All())
@@ -150,8 +155,12 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 
 		t.L().Printf("sending init command to node %d", initNode)
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(initNode), install.AuthPassword)
+		if err != nil {
+			t.Fatal(err)
+		}
 		c.Run(ctx, option.WithNodes(c.Node(initNode)),
-			fmt.Sprintf(`./cockroach init --insecure --port={pgport:%d}`, initNode))
+			fmt.Sprintf(`./cockroach init --url=%s`, pgurl))
 
 		// This will only succeed if 3 nodes joined the cluster.
 		err = WaitFor3XReplication(ctx, t, dbs[0])
@@ -160,8 +169,11 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 		execCLI := func(runNode int, extraArgs ...string) (string, error) {
 			args := []string{"./cockroach"}
 			args = append(args, extraArgs...)
-			args = append(args, "--insecure")
-			args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
+			pgurl, err = roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(runNode), install.AuthPassword)
+			if err != nil {
+				t.Fatal(err)
+			}
+			args = append(args, fmt.Sprintf("--url=%s", pgurl))
 			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(runNode)), args...)
 			combinedOutput := result.Stdout + result.Stderr
 			t.L().Printf("%s\n", combinedOutput)

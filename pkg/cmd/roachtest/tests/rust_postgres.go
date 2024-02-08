@@ -35,7 +35,11 @@ func registerRustPostgres(r registry.Registry) {
 		// We hardcode port 5433 since that's the port rust-postgres expects.
 		startOpts := option.DefaultStartOptsInMemory()
 		startOpts.RoachprodOpts.SQLPort = 5433
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
+		// rust-postgres currently doesn't support changing the config through
+		// the environment, which means we can't pass it ssl connection details
+		// and must run the cluster in insecure mode.
+		// See: https://github.com/sfackler/rust-postgres/issues/654
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.All())
 		db := c.Conn(ctx, t.L(), 1)
 		_, err := db.Exec("create user postgres with createdb createlogin createrole cancelquery")
 		if err != nil {

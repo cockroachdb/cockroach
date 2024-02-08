@@ -201,7 +201,7 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 		extraArgs...,
 	)
 
-	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), "" /* tenant */, 0 /* sqlInstance */)
+	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), roachprod.PGURLOptions{})
 	require.NoError(t, err)
 	u, err := url.Parse(externalUrls[0])
 	require.NoError(t, err)
@@ -373,7 +373,9 @@ func startInMemoryTenant(
 	var tenantConn *gosql.DB
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName))
+		// Skip authentication here as the connection created here will be used
+		// to create an admin user.
+		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName), option.SkipAuth(true))
 		if err != nil {
 			return err
 		}

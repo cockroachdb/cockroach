@@ -111,7 +111,8 @@ func registerPsycopg(r registry.Registry) {
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			`cd /mnt/data1/psycopg/ &&
 			export PSYCOPG2_TESTDB=defaultdb &&
-			export PSYCOPG2_TESTDB_USER=test_admin &&
+			export PSYCOPG2_TESTDB_USER=roach &&
+			export PSYCOPG2_TESTDB_PASSWORD=system &&
 			export PSYCOPG2_TESTDB_PORT={pgport:1} &&
 			export PSYCOPG2_TESTDB_HOST=localhost &&
 			make check PYTHON_VERSION=3`,

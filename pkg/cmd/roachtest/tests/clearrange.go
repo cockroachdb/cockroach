@@ -66,16 +66,12 @@ func registerClearRange(r registry.Registry) {
 func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressiveChecks bool) {
 	t.Status("restoring fixture")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
-	if err != nil {
-		t.Fatal(err)
-	}
 	m := c.NewMonitor(ctx)
 	m.Go(func(ctx context.Context) error {
 		// NB: on a 10 node cluster, this should take well below 3h.
 		tBegin := timeutil.Now()
 		c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach", "workload", "fixtures", "import", "bank",
-			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank", pgurl)
+			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank", "{pgurl:1}")
 		t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
 		return nil
 	})
@@ -101,13 +97,17 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	t.Status(`restoring tiny table`)
 	defer t.WorkerStatus()
 
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Use a 120s connect timeout to work around the fact that the server will
 	// declare itself ready before it's actually 100% ready. See:
 	// https://github.com/cockroachdb/cockroach/issues/34897#issuecomment-465089057
 	c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf(
-		`COCKROACH_CONNECT_TIMEOUT=120 ./cockroach sql --url=%s --insecure -e "DROP DATABASE IF EXISTS tinybank"`, pgurl))
+		`COCKROACH_CONNECT_TIMEOUT=120 ./cockroach sql --url='%s' -e "DROP DATABASE IF EXISTS tinybank"`, pgurl))
 	c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach", "workload", "fixtures", "import", "bank", "--db=tinybank",
-		"--payload-bytes=100", "--ranges=10", "--rows=800", "--seed=1", pgurl)
+		"--payload-bytes=100", "--ranges=10", "--rows=800", "--seed=1", "{pgurl:1}")
 
 	t.Status()
 

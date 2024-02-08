@@ -428,6 +428,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 	workloadNode := c.Node(c.Spec().NodeCount)
 
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
+
 	// We run this without metamorphic constants as the tests make
 	// incorrect assumptions about the absolute values of QPS.
 	// See: https://github.com/cockroachdb/cockroach/issues/112664

@@ -176,9 +176,11 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 			t.Fatal(err)
 		}
 
-		t.Status("running TypeORM test suite - approx 12 mins")
+		// We have to pass in the root cert with NODE_EXTRA_CA_CERTS because the JSON
+		// config only accepts the actual certificate contents and not a path.
+		t.Status("running TypeORM test suite - approx 2 mins")
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
-			`cd /mnt/data1/typeorm/ && npm test`,
+			`cd /mnt/data1/typeorm/ && NODE_EXTRA_CA_CERTS=$HOME/certs/ca.crt npm test`,
 		)
 		rawResults := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResults)
@@ -295,9 +297,15 @@ const typeORMConfigJSON = `
     "type": "cockroachdb",
     "host": "localhost",
     "port": {pgport:1},
-    "username": "test_admin",
-    "password": "",
-    "database": "defaultdb"
+    "username": "roach",
+    "password": "system",
+    "database": "defaultdb",
+		"ssl": true,
+  	"extra": {
+			"ssl": {
+      	"rejectUnauthorized": true
+    	}
+  	}
   },
   {
     "skip": true,

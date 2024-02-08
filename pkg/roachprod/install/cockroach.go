@@ -174,6 +174,8 @@ const (
 	NoSQLTimeout = 0
 
 	defaultInitTarget = Node(1)
+
+	Username = "roach"
 )
 
 func (st StartTarget) String() string {
@@ -485,26 +487,52 @@ func (c *SyncedCluster) CertsDir(node Node) string {
 	return "certs"
 }
 
+type PGAuthMode int
+
+const (
+	AuthRootCert PGAuthMode = iota
+	AuthPassword
+	AuthCertPassword
+)
+
 // NodeURL constructs a postgres URL. If sharedTenantName is not empty, it will
 // be used as the virtual cluster name in the URL. This is used to connect to a
 // shared process running services for multiple virtual clusters.
 func (c *SyncedCluster) NodeURL(
-	host string, port int, virtualClusterName string, serviceMode ServiceMode,
+	host string, port int, virtualClusterName string, serviceMode ServiceMode, auth PGAuthMode,
 ) string {
 	var u url.URL
-	u.User = url.User("root")
 	u.Scheme = "postgres"
+	u.User = url.User("root")
 	u.Host = fmt.Sprintf("%s:%d", host, port)
 	v := url.Values{}
 	if c.Secure {
-		v.Add("sslcert", c.PGUrlCertsDir+"/client.root.crt")
-		v.Add("sslkey", c.PGUrlCertsDir+"/client.root.key")
-		v.Add("sslrootcert", c.PGUrlCertsDir+"/ca.crt")
-		v.Add("sslmode", "verify-full")
+		user := Username
+		password := SystemInterfaceName
+		if serviceMode == ServiceModeShared && virtualClusterName != "" {
+			user = "secure"
+			password = "roach"
+		}
+
+		switch auth {
+		case AuthRootCert:
+			user = "root"
+		case AuthPassword:
+			u.User = url.UserPassword(user, password)
+			v.Add("sslmode", "allow")
+		case AuthCertPassword:
+			u.User = url.UserPassword(user, password)
+		}
+
+		if auth != AuthPassword {
+			v.Add("sslcert", fmt.Sprintf("%s/client.%s.crt", c.PGUrlCertsDir, user))
+			v.Add("sslkey", fmt.Sprintf("%s/client.%s.key", c.PGUrlCertsDir, user))
+			v.Add("sslrootcert", fmt.Sprintf("%s/ca.crt", c.PGUrlCertsDir))
+			v.Add("sslmode", "verify-full")
+		}
 	} else {
 		v.Add("sslmode", "disable")
 	}
-
 	// Add the virtual cluster name option explicitly for shared-process
 	// tenants or for the system tenant. This is to make sure we connect
 	// to the system tenant in case we have previously changed the
@@ -555,7 +583,7 @@ func (c *SyncedCluster) ExecOrInteractiveSQL(
 	if err != nil {
 		return err
 	}
-	url := c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode)
+	url := c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, AuthRootCert)
 	binary := cockroachNodeBinary(c, c.Nodes[0])
 	allArgs := []string{binary, "sql", "--url", url}
 	allArgs = append(allArgs, ssh.Escape(args))
@@ -585,9 +613,8 @@ func (c *SyncedCluster) ExecSQL(
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 			}
 			cmd += cockroachNodeBinary(c, node) + " sql --url " +
-				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode) + " " +
+				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, AuthRootCert) + " " +
 				ssh.Escape(args)
-
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
 		})
 
@@ -990,7 +1017,6 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 		return
 	}
 
-	const username = "roach"
 	// N.B.: although using the same username/password combination would
 	// be easier to remember, if we do it for the system interface and
 	// virtual clusters we would be unable to log-in to the virtual
@@ -1004,8 +1030,8 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 	}
 
 	stmts := strings.Join([]string{
-		fmt.Sprintf("CREATE USER IF NOT EXISTS %s WITH LOGIN PASSWORD '%s'", username, password),
-		fmt.Sprintf("GRANT ADMIN TO %s", username),
+		fmt.Sprintf("CREATE USER IF NOT EXISTS %s WITH LOGIN PASSWORD '%s'", Username, password),
+		fmt.Sprintf("GRANT ADMIN TO %s WITH ADMIN OPTION", Username),
 	}, "; ")
 
 	// We retry a few times here because cockroach process might not be
@@ -1040,7 +1066,7 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 		virtualClusterInfo = fmt.Sprintf(" for virtual cluster %s", startOpts.VirtualClusterName)
 	}
 
-	l.Printf("log into DB console%s with user=%s password=%s", virtualClusterInfo, username, password)
+	l.Printf("log into DB console%s with user=%s password=%s", virtualClusterInfo, Username, password)
 }
 
 func (c *SyncedCluster) setClusterSettings(
@@ -1107,7 +1133,7 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 	if err != nil {
 		return "", err
 	}
-	url := c.NodeURL("localhost", port, SystemInterfaceName /* virtualClusterName */, ServiceModeShared)
+	url := c.NodeURL("localhost", port, SystemInterfaceName /* virtualClusterName */, ServiceModeShared, AuthRootCert)
 
 	// We use `mkdir -p` here since the directory may not exist if an in-memory
 	// store is used.
@@ -1129,7 +1155,7 @@ func (c *SyncedCluster) generateInitCmd(ctx context.Context, node Node) (string,
 	if err != nil {
 		return "", err
 	}
-	url := c.NodeURL("localhost", port, SystemInterfaceName /* virtualClusterName */, ServiceModeShared)
+	url := c.NodeURL("localhost", port, SystemInterfaceName /* virtualClusterName */, ServiceModeShared, AuthRootCert)
 	binary := cockroachNodeBinary(c, node)
 	initCmd += fmt.Sprintf(`
 		if ! test -e %[1]s ; then
@@ -1336,7 +1362,7 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 	if err != nil {
 		return err
 	}
-	url := c.NodeURL("localhost", port, SystemInterfaceName /* virtualClusterName */, ServiceModeShared)
+	url := c.NodeURL("localhost", port, SystemInterfaceName /* virtualClusterName */, ServiceModeShared, AuthRootCert)
 	fullCmd := fmt.Sprintf(`COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e %q`,
 		startSQLTimeout, binary, url, createScheduleCmd)
 	// Instead of using `c.ExecSQL()`, use `c.runCmdOnSingleNode()`, which allows us to

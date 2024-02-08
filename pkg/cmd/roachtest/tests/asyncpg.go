@@ -23,9 +23,9 @@ import (
 )
 
 const asyncpgRunTestCmd = `
-source venv/bin/activate && 
+source venv/bin/activate &&
 cd /mnt/data1/asyncpg && 
-PGPORT={pgport:1} PGHOST=localhost PGUSER=test_admin PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
+PGPORT={pgport:1} PGHOST=localhost PGUSER=roach PGPASSWORD=system PGSSLROOTCERT=$HOME/certs/ca.crt PGSSLMODE=require PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
 `
 
 var asyncpgReleaseTagRegex = regexp.MustCompile(`^(?P<major>v\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)

@@ -105,11 +105,11 @@ func registerGORM(r registry.Registry) {
 		ignorelistName, ignoredFailures := "gormIgnorelist", gormIgnorelist
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1), install.AuthPassword)
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = c.RunE(ctx, option.WithNodes(node), fmt.Sprintf(`./cockroach sql -e "CREATE DATABASE gorm" --insecure --url=%s`, pgurl))
+		err = c.RunE(ctx, option.WithNodes(node), fmt.Sprintf(`./cockroach sql -e "CREATE DATABASE gorm" --url=%s`, pgurl))
 		require.NoError(t, err)
 
 		t.Status("downloading go dependencies for tests")
@@ -130,7 +130,7 @@ func registerGORM(r registry.Registry) {
 			ctx,
 			option.WithNodes(node),
 			fmt.Sprintf(`cd %s && rm migrate_test.go &&
-				GORM_DIALECT="postgres" GORM_DSN="user=test_admin password= dbname=gorm host=localhost port={pgport:1} sslmode=disable"
+				GORM_DIALECT="postgres" GORM_DSN="user=system password=roach dbname=gorm host=localhost port={pgport:1} sslmode=require"
 				go test -v ./... 2>&1 | %s/bin/go-junit-report > %s`,
 				gormTestPath, goPath, resultsPath),
 		)

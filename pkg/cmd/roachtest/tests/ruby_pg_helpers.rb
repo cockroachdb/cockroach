@@ -277,7 +277,7 @@ module PG::TestingHelpers
 				end
 
 				td = @test_pgdata
-				@conninfo = "user=test_admin host=localhost port=#{@port} dbname=test"
+				@conninfo = "user=#{ENV['PGUSER']} password=#{ENV['PGPASSWORD']} host=localhost port=#{@port} dbname=test"
 				@unix_socket = @test_dir.to_s
 			rescue => err
 				$stderr.puts "%p during test setup: %s" % [ err.class, err.message ]
@@ -307,8 +307,8 @@ module PG::TestingHelpers
 
 		def create_test_db
 			trace "Creating the test DB"
-			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--insecure', '-e', 'DROP DATABASE IF EXISTS test'
-			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--insecure', '-e', 'CREATE DATABASE test'
+			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--url=postgres://roach:system@localhost:26257?sslmode=allow', '-e', 'DROP DATABASE IF EXISTS test'
+			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--url=postgres://roach:system@localhost:26257?sslmode=allow', '-e', 'CREATE DATABASE test'
 		end
 
 		def connect
@@ -555,7 +555,7 @@ module PG::TestingHelpers
 		# Run examples with gated scheduler
 		sched = Helpers::TcpGateScheduler.new(external_host: 'localhost', external_port: ENV['PGPORT'].to_i, debug: ENV['PG_DEBUG']=='1')
 		Fiber.set_scheduler(sched)
-		@conninfo_gate = @conninfo.gsub(/(^| )port=\d+/, " port=#{sched.internal_port} sslmode=disable")
+		@conninfo_gate = @conninfo.gsub(/(^| )port=\d+/, " port=#{sched.internal_port} sslmode=#{ENV['PGSSLMODE']}")
 
 		# Run examples with default scheduler
 		#Fiber.set_scheduler(Helpers::Scheduler.new)
@@ -605,7 +605,7 @@ module PG::TestingHelpers
 	def gate_setup
 		# Run examples with gate
 		gate = Helpers::TcpGateSwitcher.new(external_host: 'localhost', external_port: ENV['PGPORT'].to_i, debug: ENV['PG_DEBUG']=='1')
-		@conninfo_gate = @conninfo.gsub(/(^| )port=\d+/, " port=#{gate.internal_port} sslmode=disable")
+		@conninfo_gate = @conninfo.gsub(/(^| )port=\d+/, " port=#{gate.internal_port} sslmode=#{ENV['PGSSLMODE']}")
 
 		# Run examples without gate
 		#@conninfo_gate = @conninfo
@@ -678,7 +678,9 @@ RSpec.configure do |config|
 		ENV['PGHOST'] = 'localhost'
 		ENV['PGPORT'] ||= "26257"
 		port = ENV['PGPORT'].to_i
-    ENV['PGUSER'] = 'test_admin'
+    ENV['PGUSER'] = 'roach'
+    ENV['PGPASSWORD'] = 'system'
+    ENV['PGSSLMODE'] = 'require'
 		$pg_server = PG::TestingHelpers::PostgresServer.new("specs", port: port)
 		$pg_server.create_test_db
 	end

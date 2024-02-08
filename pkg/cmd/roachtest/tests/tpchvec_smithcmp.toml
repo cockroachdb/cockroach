@@ -512,7 +512,7 @@ set vectorize=off;
 """
 
 [databases.vec-on]
-addr = "postgresql://root@localhost:26257/tpch?sslmode=disable"
+addr = "postgresql://roach:system@localhost:26257/tpch?sslmode=require"
 allowmutations = true
 initsql = """
 set vectorize=on;
