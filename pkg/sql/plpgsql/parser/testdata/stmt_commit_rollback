@@ -1,4 +1,4 @@
-error
+parse
 DECLARE
 BEGIN
 IF x THEN
@@ -6,28 +6,36 @@ IF x THEN
 END IF;
 END
 ----
-----
-at or near ";": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
 DECLARE
 BEGIN
 IF x THEN
-  COMMIT;
-        ^
-HINT: You have attempted to use a feature that is not yet implemented.
+	COMMIT;
+END IF;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+IF (x) THEN
+	COMMIT;
+END IF;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+IF x THEN
+	COMMIT;
+END IF;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+IF _ THEN
+	COMMIT;
+END IF;
+END;
+ -- identifiers removed
 
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
-
-error
+parse
 DECLARE
 BEGIN
 IF x THEN
@@ -35,28 +43,36 @@ IF x THEN
 END IF;
 END
 ----
-----
-at or near ";": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
 DECLARE
 BEGIN
 IF x THEN
-  ROLLBACK;
-          ^
-HINT: You have attempted to use a feature that is not yet implemented.
+	ROLLBACK;
+END IF;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+IF (x) THEN
+	ROLLBACK;
+END IF;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+IF x THEN
+	ROLLBACK;
+END IF;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+IF _ THEN
+	ROLLBACK;
+END IF;
+END;
+ -- identifiers removed
 
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
-
-error
+parse
 DECLARE
 BEGIN
 IF x THEN
@@ -66,52 +82,72 @@ ELSIF y THEN
 END IF;
 END
 ----
-----
-at or near ";": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
 DECLARE
 BEGIN
 IF x THEN
-  COMMIT;
-        ^
-HINT: You have attempted to use a feature that is not yet implemented.
+	COMMIT;
+ELSIF y THEN
+	ROLLBACK;
+END IF;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+IF (x) THEN
+	COMMIT;
+ELSIF (y) THEN
+	ROLLBACK;
+END IF;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+IF x THEN
+	COMMIT;
+ELSIF y THEN
+	ROLLBACK;
+END IF;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+IF _ THEN
+	COMMIT;
+ELSIF _ THEN
+	ROLLBACK;
+END IF;
+END;
+ -- identifiers removed
 
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
 
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
-
-
-error
+parse
 DECLARE
 BEGIN
   INSERT INTO t1 VALUES (1,2) RETURNING x INTO y;
   COMMIT;
 END
 ----
-----
-at or near ";": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
 DECLARE
 BEGIN
-  INSERT INTO t1 VALUES (1,2) RETURNING x INTO y;
-  COMMIT;
-        ^
-HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+INSERT INTO t1 VALUES (1, 2) RETURNING x INTO y;
+COMMIT;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+INSERT INTO t1 VALUES ((1), (2)) RETURNING (x) INTO y;
+COMMIT;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+INSERT INTO t1 VALUES (_, _) RETURNING x INTO y;
+COMMIT;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+INSERT INTO _ VALUES (1, 2) RETURNING _ INTO _;
+COMMIT;
+END;
+ -- identifiers removed
