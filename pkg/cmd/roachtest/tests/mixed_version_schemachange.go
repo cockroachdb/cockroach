@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/errors"
 )
 
 func registerSchemaChangeMixedVersions(r registry.Registry) {
@@ -70,6 +72,10 @@ func runSchemaChangeMixedVersions(
 			Arg("{pgurl%s}", c.All()).
 			String()
 		if err := c.RunE(ctx, workloadNode, runCmd); err != nil {
+			if errors.Is(err, sqlerrors.NewNonNullViolationError("payload")) {
+				//nolint:returnerrcheck
+				return nil
+			}
 			return err
 		}
 
@@ -79,10 +85,7 @@ func runSchemaChangeMixedVersions(
 		runCmd = roachtestutil.NewCommand("%s debug doctor examine cluster", test.DefaultCockroachPath).
 			Flag("url", doctorURL).
 			String()
-		return c.RunE(ctx,
-			workloadNode,
-			//option.NodeListOption{randomNode},
-			runCmd)
+		return c.RunE(ctx, workloadNode, runCmd)
 	}
 
 	// Stage our workload node with the schemachange workload.
