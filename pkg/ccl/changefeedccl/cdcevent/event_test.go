@@ -127,9 +127,9 @@ CREATE TABLE foo (
 
 			// Verify primary key and family columns are as expected.
 			r := Row{EventDescriptor: ed}
-			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedKeyCols), slurpColumns(t, r.ForEachKeyColumn()))
-			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedColumns), slurpColumns(t, r.ForEachColumn()))
-			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedUDTCols), slurpColumns(t, r.ForEachUDTColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.expectedKeyCols), slurpColumns(t, r.ForEachKeyColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.expectedColumns), slurpColumns(t, r.ForEachColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.expectedUDTCols), slurpColumns(t, r.ForEachUDTColumn()))
 		})
 	}
 }
@@ -637,23 +637,20 @@ func mustGetFamily(
 }
 
 func expectResultColumns(
-	t *testing.T, desc catalog.TableDescriptor, includeVirtual bool, colNames []string,
+	t *testing.T, desc catalog.TableDescriptor, colNames []string,
 ) (res []ResultColumn) {
 	t.Helper()
 
-	// Map the column names to the expected ordinality.
+	// Map the column names to their expected ordinal positions.
 	//
-	// The ordinality values in EventDescriptor.keyCols,
-	// EventDescriptor.valueCols, and EventDescriptor.udtCols (which are indexes
-	// into a rowenc.EncDatumRow) are calculated in the following manner: Start
-	// with catalog.TableDescriptor.PublicColumns() and keep (i) the primary key
-	// columns, (ii) columns in a specified family, and (iii) virtual columns (
-	// which may be outside the specified family). The
-	// remaining columns get filtered out. The position of a particular column in
-	// this array determines its ordinality.
+	// The ordinal positions in EventDescriptor.keyCols, EventDescriptor.valueCols,
+	// and EventDescriptor.udtCols (which are indexes into a rowenc.EncDatumRow)
+	// are calculated in the following manner: Start with catalog.TableDescriptor.PublicColumns()
+	// and enumerate any (i) primary key columns and (ii) columns in a specified family.
+	// All remaining columns are filtered out.
 	//
-	// This function generates ordinality in the same manner, except it uses
-	// colNames instead of a column family descriptor when filtering columns.
+	// This test helper function generates ordinal positions in the same manner,
+	// except it uses colNames instead of a column family descriptor when filtering columns.
 	colNamesSet := make(map[string]int)
 	for _, colName := range colNames {
 		colNamesSet[colName] = -1
@@ -662,15 +659,15 @@ func expectResultColumns(
 	for _, col := range desc.PublicColumns() {
 		colName := string(col.ColName())
 		if _, ok := colNamesSet[colName]; ok {
-			if col.IsVirtual() {
+			switch {
+			case col.IsVirtual():
 				colNamesSet[colName] = virtualColOrd
-			} else {
+			default:
 				colNamesSet[colName] = ord
+				ord++
 			}
-			ord++
 		} else if desc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(col.GetID()) {
-			ord++
-		} else if col.IsVirtual() && includeVirtual {
+			// Primary index column that's not part of colNames.
 			ord++
 		}
 	}

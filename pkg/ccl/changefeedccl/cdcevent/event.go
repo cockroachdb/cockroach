@@ -45,7 +45,6 @@ type Metadata struct {
 	FamilyID         descpb.FamilyID          // Column family ID.
 	FamilyName       string                   // Column family name.
 	HasOtherFamilies bool                     // True if the table multiple families.
-	HasVirtual       bool                     // True if table has virtual columns.
 	SchemaTS         hlc.Timestamp            // Schema timestamp for table descriptor.
 }
 
@@ -121,22 +120,6 @@ func (r Row) DatumNamed(n string) (Iterator, error) {
 	return iter{r: r, cols: []int{idx}}, nil
 }
 
-// DatumAt returns Datum at specified position.
-func (r Row) DatumAt(at int) (tree.Datum, error) {
-	if at >= len(r.cols) {
-		return nil, errors.AssertionFailedf("column at %d out of bounds", at)
-	}
-	col := r.cols[at]
-	if col.ord >= len(r.datums) {
-		return nil, errors.AssertionFailedf("column ordinal at %d out of bounds", col.ord)
-	}
-	encDatum := r.datums[col.ord]
-	if err := encDatum.EnsureDecoded(col.Typ, r.alloc); err != nil {
-		return nil, errors.Wrapf(err, "error decoding column %q as type %s", col.Name, col.Typ.String())
-	}
-	return encDatum.Datum, nil
-}
-
 // IsDeleted returns true if event corresponds to a deletion event.
 func (r Row) IsDeleted() bool {
 	return r.deleted
@@ -179,29 +162,25 @@ func (r Row) DebugString() string {
 
 // forEachColumn is a helper which invokes fn for reach column in the ordColumn list.
 func (r Row) forEachDatum(fn DatumFn, colIndexes []int) error {
-	numVirtualCols := 0
 	for _, colIdx := range colIndexes {
 		col := r.cols[colIdx]
-		// A datum row will never contain virtual columns. If we encounter a column that is virtual,
-		// then we need to offset each subsequent col.ord by 1. This offset is tracked by numVirtualCols.
-		physicalOrd := col.ord - numVirtualCols
-		if physicalOrd < len(r.datums) {
-			encDatum := r.datums[physicalOrd]
-			if err := encDatum.EnsureDecoded(col.Typ, r.alloc); err != nil {
-				return errors.Wrapf(err, "error decoding column %q as type %s", col.Name, col.Typ.String())
-			}
-
-			if err := fn(encDatum.Datum, col); err != nil {
-				return iterutil.Map(err)
-			}
-		} else if col.ord == virtualColOrd {
+		switch {
+		case col.ord == virtualColOrd:
+			// A datum row will never contain virtual columns.
 			// Insert null values as placeholders for virtual columns.
 			if err := fn(tree.DNull, col); err != nil {
 				return iterutil.Map(err)
 			}
-			numVirtualCols++
-		} else {
-			return errors.AssertionFailedf("index [%d] out of range for column %q", physicalOrd, col.Name)
+		case col.ord < len(r.datums):
+			encDatum := r.datums[col.ord]
+			if err := encDatum.EnsureDecoded(col.Typ, r.alloc); err != nil {
+				return errors.Wrapf(err, "error decoding column %q as type %s", col.Name, col.Typ.String())
+			}
+			if err := fn(encDatum.Datum, col); err != nil {
+				return iterutil.Map(err)
+			}
+		default:
+			return errors.AssertionFailedf("index [%d] out of range for column %q", col.ord, col.Name)
 		}
 	}
 	return nil
@@ -247,11 +226,12 @@ type EventDescriptor struct {
 	cols []ResultColumn
 
 	// Precomputed index lists into cols.
+	// TODO(yang): Consider refactoring so that valueCols is empty when keyOnly.
 	keyCols    []int          // Primary key columns.
-	valueCols  []int          // All column family columns.
-	udtCols    []int          // Columns containing UDTs.
-	allCols    []int          // Contains all the columns
-	colsByName map[string]int // All columns, map[col.GetName()]idx in cols
+	valueCols  []int          // Column family (+ virtual if includeVirtualColumns) columns / primary key columns (if keyOnly).
+	udtCols    []int          // UDT columns.
+	allCols    []int          // All columns.
+	colsByName map[string]int // All columns, map[col.GetName()]idx in cols.
 }
 
 // NewEventDescriptor returns EventDescriptor for specified table and family descriptors.
@@ -314,39 +294,43 @@ func NewEventDescriptor(
 		primaryKeyOrdinal.Set(desc.PublicColumns()[ord].GetID(), i)
 	}
 
-	// Remaining columns go in same order as public columns,
-	// with the exception that virtual columns are reordered
-	// to be at the end.
-	inFamily := catalog.MakeTableColSet(family.ColumnIDs...)
-	ord := 0
-	for _, col := range desc.PublicColumns() {
-		isInFamily := inFamily.Contains(col.GetID())
-		if col.IsVirtual() {
-			sd.HasVirtual = true
-		}
-		virtual := col.IsVirtual() && includeVirtualColumns
-		pKeyOrd, isPKey := primaryKeyOrdinal.Get(col.GetID())
-		if keyOnly {
-			if isPKey {
-				colIdx := addColumn(col, ord)
-				sd.valueCols = append(sd.valueCols, colIdx)
-				sd.keyCols[pKeyOrd] = colIdx
-				ord++
+	switch {
+	case keyOnly:
+		ord := 0
+		for _, col := range desc.PublicColumns() {
+			pKeyOrd, isPKey := primaryKeyOrdinal.Get(col.GetID())
+			if !isPKey {
+				continue
 			}
-		} else {
-			if isInFamily || isPKey {
-				colIdx := addColumn(col, ord)
-				ord++
-				if isInFamily {
-					sd.valueCols = append(sd.valueCols, colIdx)
-				}
-				if isPKey {
-					sd.keyCols[pKeyOrd] = colIdx
-				}
-			} else if virtual {
+			colIdx := addColumn(col, ord)
+			ord++
+			sd.keyCols[pKeyOrd] = colIdx
+			sd.valueCols = append(sd.valueCols, colIdx)
+		}
+	default:
+		// Remaining columns go in same order as public columns,
+		// with the exception that virtual columns are assigned
+		// a sentinel ordinal position of virtualColOrd.
+		inFamily := catalog.MakeTableColSet(family.ColumnIDs...)
+		ord := 0
+		for _, col := range desc.PublicColumns() {
+			if isVirtual := col.IsVirtual(); isVirtual && includeVirtualColumns {
 				colIdx := addColumn(col, virtualColOrd)
 				sd.valueCols = append(sd.valueCols, colIdx)
-				ord++
+				continue
+			}
+			pKeyOrd, isPKey := primaryKeyOrdinal.Get(col.GetID())
+			isInFamily := inFamily.Contains(col.GetID())
+			if !isPKey && !isInFamily {
+				continue
+			}
+			colIdx := addColumn(col, ord)
+			ord++
+			if isPKey {
+				sd.keyCols[pKeyOrd] = colIdx
+			}
+			if isInFamily {
+				sd.valueCols = append(sd.valueCols, colIdx)
 			}
 		}
 	}
