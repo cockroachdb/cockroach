@@ -959,6 +959,7 @@ func (b *builderState) checkOwnershipOrPrivilegesOnSchemaDesc(
 func (b *builderState) ResolveUserDefinedTypeType(
 	name *tree.UnresolvedObjectName, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
+	p.ResolveTypes = true
 	prefix, typ := b.cr.MayResolveType(b.ctx, *name)
 	if typ == nil {
 		if p.IsExistenceOptional {
@@ -1007,23 +1008,32 @@ func (b *builderState) ResolveRelation(
 func (b *builderState) resolveRelation(
 	name *tree.UnresolvedObjectName, p scbuildstmt.ResolveParams,
 ) *cachedDesc {
-	prefix, rel := b.cr.MayResolveTable(b.ctx, *name)
+	var prefix catalog.ResolvedObjectPrefix
+	var rel catalog.Descriptor
+	prefix, rel = b.cr.MayResolveTable(b.ctx, *name)
 	if rel == nil {
-		if p.IsExistenceOptional {
-			return nil
+		if p.ResolveTypes {
+			prefix, rel = b.cr.MayResolveType(b.ctx, *name)
 		}
-		panic(sqlerrors.NewUndefinedRelationError(name))
-	}
-	if rel.IsVirtualTable() {
-		if prefix.Schema.GetName() == catconstants.PgCatalogName {
-			panic(pgerror.Newf(pgcode.InsufficientPrivilege,
-				"%s is a system catalog", tree.ErrNameString(rel.GetName())))
+		if rel == nil {
+			if p.IsExistenceOptional {
+				return nil
+			}
+			panic(sqlerrors.NewUndefinedRelationError(name))
 		}
-		panic(pgerror.Newf(pgcode.WrongObjectType,
-			"%s is a virtual object and cannot be modified", tree.ErrNameString(rel.GetName())))
 	}
-	if rel.IsTemporary() {
-		panic(scerrors.NotImplementedErrorf(nil /* n */, "dropping a temporary table"))
+	if t, isTable := rel.(catalog.TableDescriptor); isTable {
+		if t.IsVirtualTable() {
+			if prefix.Schema.GetName() == catconstants.PgCatalogName {
+				panic(pgerror.Newf(pgcode.InsufficientPrivilege,
+					"%s is a system catalog", tree.ErrNameString(rel.GetName())))
+			}
+			panic(pgerror.Newf(pgcode.WrongObjectType,
+				"%s is a virtual object and cannot be modified", tree.ErrNameString(rel.GetName())))
+		}
+		if t.IsTemporary() {
+			panic(scerrors.NotImplementedErrorf(nil /* n */, "dropping a temporary table"))
+		}
 	}
 
 	// If we own the schema then we can manipulate the underlying relation,
@@ -1049,11 +1059,16 @@ func (b *builderState) resolveRelation(
 	if p.RequiredPrivilege != privilege.CREATE {
 		panic(err)
 	}
-	relationType := "table"
-	if rel.IsView() {
-		relationType = "view"
-	} else if rel.IsSequence() {
-		relationType = "sequence"
+	relationType := "relation"
+	if t, isTable := rel.(catalog.TableDescriptor); isTable {
+		relationType = "table"
+		if t.IsView() {
+			relationType = "view"
+		} else if t.IsSequence() {
+			relationType = "sequence"
+		}
+	} else if _, isType := rel.(catalog.TypeDescriptor); isType {
+		relationType = "type"
 	}
 	panic(pgerror.Newf(pgcode.InsufficientPrivilege,
 		"must be owner of %s %s or have %s privilege on %s %s",
@@ -1072,8 +1087,8 @@ func (b *builderState) ResolveTable(
 	if c == nil {
 		return nil
 	}
-	if rel := c.desc.(catalog.TableDescriptor); !rel.IsTable() {
-		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a table", rel.GetName()))
+	if rel, ok := c.desc.(catalog.TableDescriptor); !ok || !rel.IsTable() {
+		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a table", c.desc.GetName()))
 	}
 	return b.QueryByID(c.desc.GetID())
 }
@@ -1086,8 +1101,8 @@ func (b *builderState) ResolveSequence(
 	if c == nil {
 		return nil
 	}
-	if rel := c.desc.(catalog.TableDescriptor); !rel.IsSequence() {
-		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a sequence", rel.GetName()))
+	if rel, ok := c.desc.(catalog.TableDescriptor); !ok || !rel.IsSequence() {
+		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a sequence", c.desc.GetName()))
 	}
 	return b.QueryByID(c.desc.GetID())
 }
@@ -1100,8 +1115,8 @@ func (b *builderState) ResolveView(
 	if c == nil {
 		return nil
 	}
-	if rel := c.desc.(catalog.TableDescriptor); !rel.IsView() {
-		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a view", rel.GetName()))
+	if rel, ok := c.desc.(catalog.TableDescriptor); !ok || !rel.IsView() {
+		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a view", c.desc.GetName()))
 	}
 	return b.QueryByID(c.desc.GetID())
 }
@@ -1146,11 +1161,15 @@ func (b *builderState) ResolveIndexByName(
 ) scbuildstmt.ElementResultSet {
 	// If a table name is specified, confirm it is not a system table first.
 	if tableIndexName.Table.ObjectName != "" {
-		desc := b.resolveRelation(tableIndexName.Table.ToUnresolvedObjectName(), p)
+		un := tableIndexName.Table.ToUnresolvedObjectName()
+		desc := b.resolveRelation(un, p)
 		if desc == nil {
 			return nil
 		}
-		tableDesc := desc.desc.(catalog.TableDescriptor)
+		tableDesc, ok := desc.desc.(catalog.TableDescriptor)
+		if !ok {
+			panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a table", un))
+		}
 		b.ensureDescriptor(tableDesc.GetParentSchemaID())
 		if catalog.IsSystemDescriptor(tableDesc) {
 			schemaDesc := b.descCache[tableDesc.GetParentSchemaID()].desc
