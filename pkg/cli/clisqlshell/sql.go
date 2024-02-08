@@ -276,7 +276,7 @@ func (c *cliState) printCliHelp() {
 	fmt.Fprintf(c.iCtx.stdout, helpMessageFmt,
 		demoHelpStr,
 		docs.URL("sql-statements.html"),
-		docs.URL("use-the-built-in-sql-client.html"),
+		docs.URL("cockroach-sql.html"),
 	)
 	fmt.Fprintln(c.iCtx.stdout)
 }
