@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -33,10 +32,8 @@ var _ tableWriter = &tableInserter{}
 func (*tableInserter) desc() string { return "inserter" }
 
 // init is part of the tableWriter interface.
-func (ti *tableInserter) init(
-	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
-) error {
-	return ti.tableWriterBase.init(txn, ti.tableDesc(), evalCtx, sv)
+func (ti *tableInserter) init(_ context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
+	return ti.tableWriterBase.init(txn, ti.tableDesc(), evalCtx)
 }
 
 // row is part of the tableWriter interface.
