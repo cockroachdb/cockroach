@@ -99,11 +99,20 @@ func (s *Store) ForceConsistencyQueueProcess() error {
 	return forceScanAndProcess(context.TODO(), s, s.consistencyQueue.baseQueue)
 }
 
+// ForceLeaseQueueScanAndProcess iterates over all ranges and
+// enqueues any that need to have leases transfered.
+func (s *Store) ForceLeaseQueueProcess() error {
+	return forceScanAndProcess(context.TODO(), s, s.leaseQueue.baseQueue)
+}
+
 // The methods below can be used to control a store's queues. Stopping a queue
 // is only meant to happen in tests.
 
 func (s *Store) setGCQueueActive(active bool) {
 	s.mvccGCQueue.SetDisabled(!active)
+}
+func (s *Store) setLeaseQueueActive(active bool) {
+	s.leaseQueue.SetDisabled(!active)
 }
 func (s *Store) setMergeQueueActive(active bool) {
 	s.mergeQueue.SetDisabled(!active)
