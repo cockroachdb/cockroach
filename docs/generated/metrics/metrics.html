@@ -488,8 +488,8 @@
 <tr><td>STORAGE</td><td>range.snapshots.rcvd-bytes</td><td>Number of snapshot bytes received</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>range.snapshots.rebalancing.rcvd-bytes</td><td>Number of rebalancing snapshot bytes received</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>range.snapshots.rebalancing.sent-bytes</td><td>Number of rebalancing snapshot bytes sent</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
-<tr><td>STORAGE</td><td>range.snapshots.recovery.rcvd-bytes</td><td>Number of recovery snapshot bytes received</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
-<tr><td>STORAGE</td><td>range.snapshots.recovery.sent-bytes</td><td>Number of recovery snapshot bytes sent</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>STORAGE</td><td>range.snapshots.recovery.rcvd-bytes</td><td>Number of raft recovery snapshot bytes received</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>STORAGE</td><td>range.snapshots.recovery.sent-bytes</td><td>Number of raft recovery snapshot bytes sent</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>range.snapshots.recv-failed</td><td>Number of range snapshot initialization messages that errored out on the recipient, typically before any data is transferred</td><td>Snapshots</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>range.snapshots.recv-in-progress</td><td>Number of non-empty snapshots being received</td><td>Snapshots</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>range.snapshots.recv-queue</td><td>Number of snapshots queued to receive</td><td>Snapshots</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
@@ -503,6 +503,8 @@
 <tr><td>STORAGE</td><td>range.snapshots.sent-bytes</td><td>Number of snapshot bytes sent</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>range.snapshots.unknown.rcvd-bytes</td><td>Number of unknown snapshot bytes received</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>range.snapshots.unknown.sent-bytes</td><td>Number of unknown snapshot bytes sent</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>STORAGE</td><td>range.snapshots.upreplication.rcvd-bytes</td><td>Number of upreplication snapshot bytes received</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>STORAGE</td><td>range.snapshots.upreplication.sent-bytes</td><td>Number of upreplication snapshot bytes sent</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>range.splits</td><td>Number of range splits</td><td>Range Ops</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>rangekeybytes</td><td>Number of bytes taken up by range keys (e.g. MVCC range tombstones)</td><td>Storage</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>rangekeycount</td><td>Count of all range keys (e.g. MVCC range tombstones)</td><td>Keys</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>

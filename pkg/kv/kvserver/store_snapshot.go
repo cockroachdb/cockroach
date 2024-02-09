@@ -1392,12 +1392,10 @@ func (s *Store) receiveSnapshot(
 		} else if header.SenderQueueName == kvserverpb.SnapshotRequest_OTHER {
 			s.metrics.RangeSnapshotRebalancingRcvdBytes.Inc(inc)
 		} else {
-			// TODO(baptist): This logic is pretty messy. Consider refactoring all the
-			// snapshot related metrics.
 			// Replicate queue does both types, so split based on priority.
 			// See AllocatorAction.Priority
 			if header.SenderQueuePriority > 0 {
-				s.metrics.RangeSnapshotRecoveryRcvdBytes.Inc(inc)
+				s.metrics.RangeSnapshotUpreplicationRcvdBytes.Inc(inc)
 			} else {
 				s.metrics.RangeSnapshotRebalancingRcvdBytes.Inc(inc)
 			}

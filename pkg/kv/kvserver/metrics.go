@@ -1049,13 +1049,25 @@ var (
 	}
 	metaRangeSnapshotRecoveryRcvdBytes = metric.Metadata{
 		Name:        "range.snapshots.recovery.rcvd-bytes",
-		Help:        "Number of recovery snapshot bytes received",
+		Help:        "Number of raft recovery snapshot bytes received",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapshotRecoverySentBytes = metric.Metadata{
 		Name:        "range.snapshots.recovery.sent-bytes",
-		Help:        "Number of recovery snapshot bytes sent",
+		Help:        "Number of raft recovery snapshot bytes sent",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRangeSnapshotUpreplicationRcvdBytes = metric.Metadata{
+		Name:        "range.snapshots.upreplication.rcvd-bytes",
+		Help:        "Number of upreplication snapshot bytes received",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRangeSnapshotUpreplicationSentBytes = metric.Metadata{
+		Name:        "range.snapshots.upreplication.sent-bytes",
+		Help:        "Number of upreplication snapshot bytes sent",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -2498,6 +2510,8 @@ type StoreMetrics struct {
 	RangeSnapshotUnknownSentBytes                *metric.Counter
 	RangeSnapshotRecoveryRcvdBytes               *metric.Counter
 	RangeSnapshotRecoverySentBytes               *metric.Counter
+	RangeSnapshotUpreplicationRcvdBytes          *metric.Counter
+	RangeSnapshotUpreplicationSentBytes          *metric.Counter
 	RangeSnapshotRebalancingRcvdBytes            *metric.Counter
 	RangeSnapshotRebalancingSentBytes            *metric.Counter
 	RangeSnapshotRecvFailed                      *metric.Counter
@@ -3173,6 +3187,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotUnknownSentBytes:                metric.NewCounter(metaRangeSnapshotUnknownSentBytes),
 		RangeSnapshotRecoveryRcvdBytes:               metric.NewCounter(metaRangeSnapshotRecoveryRcvdBytes),
 		RangeSnapshotRecoverySentBytes:               metric.NewCounter(metaRangeSnapshotRecoverySentBytes),
+		RangeSnapshotUpreplicationRcvdBytes:          metric.NewCounter(metaRangeSnapshotUpreplicationRcvdBytes),
+		RangeSnapshotUpreplicationSentBytes:          metric.NewCounter(metaRangeSnapshotUpreplicationSentBytes),
 		RangeSnapshotRebalancingRcvdBytes:            metric.NewCounter(metaRangeSnapshotRebalancingRcvdBytes),
 		RangeSnapshotRebalancingSentBytes:            metric.NewCounter(metaRangeSnapshotRebalancingSentBytes),
 		RangeSnapshotRecvFailed:                      metric.NewCounter(metaRangeSnapshotRecvFailed),
