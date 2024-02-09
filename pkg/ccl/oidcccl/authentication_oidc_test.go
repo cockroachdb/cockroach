@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -407,6 +408,107 @@ func Test_getRegionSpecificRedirectURL(t *testing.T) {
 				require.NoError(t, err)
 			}
 			require.Equal(t, got, tt.want)
+		})
+	}
+}
+
+func TestOIDCManagerInitialisationUnderNetworkAvailability(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	unavailableProviderURL := "auth.unavailableurl.com"
+	availableProviderURL := "auth.availableurl.com"
+
+	for _, tc := range []struct {
+		testName    string
+		providerURL string
+		wantError   bool
+	}{
+		{
+			testName:    "network unavailable URL",
+			providerURL: unavailableProviderURL,
+			wantError:   true,
+		},
+		{
+			testName:    "network available URL",
+			providerURL: availableProviderURL,
+			wantError:   false,
+		},
+	} {
+		t.Run(tc.testName, func(t *testing.T) {
+			ctx := context.Background()
+			srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			defer srv.Stopper().Stop(ctx)
+			s := srv.ApplicationLayer()
+
+			basePath := "/some/random/path"
+			testUserName := "testcrl"
+
+			realNewManager := NewOIDCManager
+			NewOIDCManager = func(ctx context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string) (IOIDCManager, error) {
+				if conf.providerURL == unavailableProviderURL {
+					return nil, fmt.Errorf("unavailable provider URL")
+				}
+
+				c := &oauth2.Config{
+					ClientID:     conf.clientID,
+					ClientSecret: conf.clientSecret,
+					RedirectURL:  redirectURL,
+
+					Endpoint: oauth2.Endpoint{
+						AuthURL: conf.providerURL,
+					},
+					Scopes: scopes,
+				}
+				return &mockOidcManager{oauth2Config: c, claimEmail: fmt.Sprintf("%s@example.com", testUserName)}, nil
+			}
+			defer func() {
+				NewOIDCManager = realNewManager
+			}()
+
+			// Set minimum settings to successfully enable the OIDC client
+			sqlDB := sqlutils.MakeSQLRunner(db)
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE USER %s with password 'unused'`, testUserName))
+			sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING server.oidc_authentication.provider_url = "%s"`, tc.providerURL))
+			sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.client_id = "fake_client_id"`)
+			sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_client_secret"`)
+			sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.redirect_url = "https://cockroachlabs.com/oidc/v1/callback"`)
+			sqlDB.Exec(t, `set cluster setting server.oidc_authentication.claim_json_key = "email"`)
+			sqlDB.Exec(t, `set cluster setting server.oidc_authentication.principal_regex = '^([^@]+)@[^@]+$'`)
+			sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING server.http.base_path = "%s"`, basePath))
+			sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.enabled = "true"`)
+
+			testOIDCManagerInitialisation := s.NewClientRPCContext(ctx, username.TestUserName())
+			client, err := testOIDCManagerInitialisation.GetHTTPClient()
+			require.NoError(t, err)
+
+			// Don't follow redirects as we are only testing setting of oidc  manager, expecting 302
+			// status code on success
+			client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			}
+
+			resp, err := client.Get(s.AdminURL().WithPath("/oidc/v1/login").String())
+			if err != nil {
+				t.Fatalf("could not issue GET request to admin server: %s", err)
+			}
+			defer resp.Body.Close()
+			bodyBytes, _ := io.ReadAll(resp.Body)
+
+			if !tc.wantError {
+				require.NoError(t, err)
+
+				if resp.StatusCode != 302 {
+					t.Fatalf("expected 302 status code but got: %d, responseBody: %s", resp.StatusCode, string(bodyBytes))
+				}
+			} else {
+				require.Contains(t, string(bodyBytes), "OIDC: auth manager could not be initialized")
+
+				if resp.StatusCode != 500 {
+					t.Fatalf("expected 500 status code but got: %d", resp.StatusCode)
+				}
+			}
+
 		})
 	}
 }
