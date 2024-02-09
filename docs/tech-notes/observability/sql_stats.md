@@ -44,16 +44,12 @@ and view names.
 ```mermaid
 flowchart TD
     exec[Statement executed]
-    memory[[crdb_internal.
-    cluster_statement_statistics]]
-    persisted[(system.
-    statement_statistics)]
-    combined[[crdb_internal.statement_statistics]]
-    activity[(system.
-    statement_activity)]
-    persisted_view[[crdb_internal.
-    statement_statistics_persisted]]
-    activity_view[[crdb_internal.statement_activity]]
+    memory[[crdb_internal.\ncluster_statement_statistics]]
+    persisted[(system.\nstatement_statistics)]
+    combined[[crdb_internal.\nstatement_statistics]]
+    activity[(system.\nstatement_activity)]
+    persisted_view[[crdb_internal.\nstatement_statistics_persisted]]
+    activity_view[[crdb_internal.\nstatement_activity]]
     console(["Console"])
     exec --> memory
     memory --> |flushed| persisted
@@ -167,9 +163,7 @@ The diagram below show how these tables are used to populate the SQL Activity pa
 
 ```mermaid
 flowchart TD;
-    A[Compare the Timestamp on ACTIVITY Table
-    with the Requested Timestamp] --> B{Is the requested time
-    period completely \non the table?}
+    A[Compare the Timestamp on \nACTIVITY Table \nwith the Requested Timestamp] --> B{Is the requested time \nperiod completely \non the table?}
     B -- Yes --> C[SELECT on ACTIVITY table]
     C --> D{Had results?}
     D -- Yes --> E[Return RESULTS]
