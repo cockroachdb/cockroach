@@ -335,7 +335,12 @@ func (b *Builder) buildSingleRowSubquery(
 ) (out opt.ScalarExpr, outScope *scope) {
 	subqueryPrivate := memo.SubqueryPrivate{OriginalExpr: s.Subquery}
 	if s.Exists {
-		return b.factory.ConstructExists(s.node, &subqueryPrivate), inScope
+		col := b.factory.Metadata().AddColumn("exists", types.Bool)
+		ex := memo.ExistsPrivate{
+			LazyEvalProjectionCol: col,
+			SubqueryPrivate:       subqueryPrivate,
+		}
+		return b.factory.ConstructExists(s.node, &ex), inScope
 	}
 
 	var input memo.RelExpr

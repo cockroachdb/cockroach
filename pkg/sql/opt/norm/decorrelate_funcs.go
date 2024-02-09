@@ -733,6 +733,16 @@ func (c *CustomFuncs) ConstructAnyCondition(
 	return c.ConstructBinary(private.Cmp, scalar, inputVar)
 }
 
+// ConvertSubToExistsPrivate converts the given SubqueryPrivate to an
+// ExistsPrivate.
+func (c *CustomFuncs) ConvertSubToExistsPrivate(sub *memo.SubqueryPrivate) *memo.ExistsPrivate {
+	col := c.f.Metadata().AddColumn("exists", types.Bool)
+	return &memo.ExistsPrivate{
+		LazyEvalProjectionCol: col,
+		SubqueryPrivate:       *sub,
+	}
+}
+
 // ConstructBinary builds a dynamic binary expression, given the binary
 // operator's type and its two arguments.
 func (c *CustomFuncs) ConstructBinary(op opt.Operator, left, right opt.ScalarExpr) opt.ScalarExpr {
