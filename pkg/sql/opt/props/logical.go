@@ -360,26 +360,26 @@ func (r *Relational) Statistics() *Statistics {
 	return &r.stats
 }
 
-// IsAvailable returns true if the specified rule property has been populated
-// on this relational properties instance.
-func (r *Relational) IsAvailable(p AvailableRuleProps) bool {
-	return (r.Rule.Available & p) != 0
+// IsAvailable returns true if all of the specified rule properties have been
+// populated on this relational properties instance.
+func (r *Relational) IsAvailable(ps AvailableRuleProps) bool {
+	return (r.Rule.Available & ps) == ps
 }
 
-// SetAvailable sets the available bits for the given properties, in order to
-// mark them as populated on this relational properties instance.
-func (r *Relational) SetAvailable(p AvailableRuleProps) {
-	r.Rule.Available |= p
+// SetAvailable sets the available bits for all of the given properties, in
+// order to mark them as populated on this relational properties instance.
+func (r *Relational) SetAvailable(ps AvailableRuleProps) {
+	r.Rule.Available |= ps
 }
 
-// IsAvailable returns true if the specified rule property has been populated
-// on this scalar properties instance.
-func (s *Scalar) IsAvailable(p AvailableRuleProps) bool {
-	return (s.Rule.Available & p) != 0
+// IsAvailable returns true if all of the specified rule property have been
+// populated on this scalar properties instance.
+func (s *Scalar) IsAvailable(ps AvailableRuleProps) bool {
+	return (s.Rule.Available & ps) == ps
 }
 
-// SetAvailable sets the available bits for the given properties, in order to
-// mark them as populated on this scalar properties instance.
-func (s *Scalar) SetAvailable(p AvailableRuleProps) {
-	s.Rule.Available |= p
+// SetAvailable sets the available bits for all of the given properties, in
+// order to mark them as populated on this scalar properties instance.
+func (s *Scalar) SetAvailable(ps AvailableRuleProps) {
+	s.Rule.Available |= ps
 }
