@@ -285,6 +285,15 @@ export default function (props: GraphDashboardProps) {
               sources={storeIDsForNode(storeIDsByNodeID, nid)}
               nonNegativeRate
             />
+            <Metric
+              key={nid}
+              name="cr.store.range.snapshots.upreplication.rcvd-bytes"
+              title={
+                nodeDisplayName(nodeDisplayNameByID, nid) + "-upreplication"
+              }
+              sources={storeIDsForNode(storeIDsByNodeID, nid)}
+              nonNegativeRate
+            />
           </>
         ))}
       </Axis>
