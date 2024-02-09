@@ -202,7 +202,7 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 		extraArgs...,
 	)
 
-	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), roachprod.PGURLOptions{})
+	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), roachprod.PGURLOptions{Auth: install.AuthRootCert})
 	require.NoError(t, err)
 	u, err := url.Parse(externalUrls[0])
 	require.NoError(t, err)
@@ -217,7 +217,9 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	// (i.e. to run workload on the tenant).
 	secureUrls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(tn.node)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
 		External: false,
-		Secure:   true})
+		Secure:   true,
+		Auth:     install.AuthRootCert,
+	})
 	require.NoError(t, err)
 	u, err = url.Parse(strings.Trim(secureUrls[0], "'"))
 	require.NoError(t, err)
