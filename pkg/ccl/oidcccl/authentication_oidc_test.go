@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -24,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -407,6 +410,94 @@ func Test_getRegionSpecificRedirectURL(t *testing.T) {
 				require.NoError(t, err)
 			}
 			require.Equal(t, got, tt.want)
+		})
+	}
+}
+
+func TestOIDCManagerInitialisationUnderNetworkAvailability(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	basePath := "/some/random/path"
+	testUserName := "testcrl"
+	networkAvailable := false
+
+	// Intercept the call to NewOIDCManager and return the mocked NewOIDCManager function
+	defer testutils.TestingHook(
+		&NewOIDCManager,
+		func(ctx context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string) (IOIDCManager, error) {
+			if !networkAvailable {
+				return nil, fmt.Errorf("network unavailable, check your network connection")
+			}
+			c := &oauth2.Config{
+				ClientID:     conf.clientID,
+				ClientSecret: conf.clientSecret,
+				RedirectURL:  redirectURL,
+				Endpoint: oauth2.Endpoint{
+					AuthURL: conf.providerURL,
+				},
+				Scopes: scopes,
+			}
+			return &mockOidcManager{oauth2Config: c, claimEmail: fmt.Sprintf("%s@example.com", testUserName)}, nil
+		})()
+
+	// Set/Override minimum settings to successfully enable the OIDC client
+	OIDCProviderURL.Override(ctx, &s.ClusterSettings().SV, "providerURL")
+	OIDCClientID.Override(ctx, &s.ClusterSettings().SV, "fake_client_id")
+	OIDCClientSecret.Override(ctx, &s.ClusterSettings().SV, "fake_client_secret")
+	OIDCRedirectURL.Override(ctx, &s.ClusterSettings().SV, "https://cockroachlabs.com/oidc/v1/callback")
+	OIDCClaimJSONKey.Override(ctx, &s.ClusterSettings().SV, "email")
+	OIDCPrincipalRegex.Override(ctx, &s.ClusterSettings().SV, "^([^@]+)@[^@]+$")
+	server.ServerHTTPBasePath.Override(ctx, &s.ClusterSettings().SV, basePath)
+	OIDCEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+
+	for _, tc := range []struct {
+		testName  string
+		network   bool
+		wantError bool
+	}{
+		{
+			testName:  "network unavailable test",
+			network:   false,
+			wantError: true,
+		},
+		{
+			testName:  "network available test",
+			network:   true,
+			wantError: false,
+		},
+	} {
+		t.Run(tc.testName, func(t *testing.T) {
+			networkAvailable = tc.network
+			testOIDCManagerInitialisation := s.NewClientRPCContext(ctx, username.TestUserName())
+			client, err := testOIDCManagerInitialisation.GetHTTPClient()
+			require.NoError(t, err)
+
+			// Don't follow redirects as we are only testing setting of oidc  manager, expecting 302
+			// status code on success
+			client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			}
+
+			resp, err := client.Get(s.AdminURL().WithPath("/oidc/v1/login").String())
+			if err != nil {
+				t.Fatalf("could not issue GET request to admin server: %s", err)
+			}
+			defer resp.Body.Close()
+			bodyBytes, _ := io.ReadAll(resp.Body)
+
+			if !tc.wantError {
+				log.Infof(ctx, "response body %v", string(bodyBytes))
+				require.Equal(t, 302, resp.StatusCode)
+			} else {
+				require.Contains(t, string(bodyBytes), "OIDC: auth server could not be initialized")
+				require.Equal(t, 500, resp.StatusCode)
+			}
 		})
 	}
 }
