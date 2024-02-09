@@ -76,9 +76,9 @@ WHERE
   );
 ----
 with &1 (t0)
- ├── columns: "?column?":29(unknown)
+ ├── columns: "?column?":30(unknown)
  ├── stats: [rows=10000]
- ├── fd: ()-->(29)
+ ├── fd: ()-->(30)
  ├── union
  │    ├── columns: column1:10(int) column2:11(oid!null) column3:12(date) column4:13(string)
  │    ├── left columns: column1:1(int) column2:2(oid) column3:9(date) column4:4(string)
@@ -101,9 +101,9 @@ with &1 (t0)
  │         ├── fd: ()-->(5-8)
  │         └── (NULL, 0, '1970-09-08', NULL) [type=tuple{int, oid, date, string}]
  └── with &2 (t1)
-      ├── columns: "?column?":29(unknown)
+      ├── columns: "?column?":30(unknown)
       ├── stats: [rows=10000]
-      ├── fd: ()-->(29)
+      ├── fd: ()-->(30)
       ├── values
       │    ├── columns: "?column?":23(unknown)
       │    ├── cardinality: [1 - 1]
@@ -112,53 +112,53 @@ with &1 (t0)
       │    ├── fd: ()-->(23)
       │    └── (NULL,) [type=tuple{unknown}]
       └── project
-           ├── columns: "?column?":29(unknown)
+           ├── columns: "?column?":30(unknown)
            ├── stats: [rows=10000]
-           ├── fd: ()-->(29)
+           ├── fd: ()-->(30)
            ├── inner-join (cross)
-           │    ├── columns: true_agg:27(bool!null)
+           │    ├── columns: true_agg:28(bool!null)
            │    ├── stats: [rows=10000]
-           │    ├── fd: ()-->(27)
+           │    ├── fd: ()-->(28)
            │    ├── scan a
            │    │    └── stats: [rows=5000]
            │    ├── inner-join (cross)
-           │    │    ├── columns: true_agg:27(bool!null)
+           │    │    ├── columns: true_agg:28(bool!null)
            │    │    ├── cardinality: [0 - 2]
            │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(one-or-more)
            │    │    ├── stats: [rows=2]
-           │    │    ├── fd: ()-->(27)
+           │    │    ├── fd: ()-->(28)
            │    │    ├── with-scan &1 (t0)
            │    │    │    ├── mapping:
            │    │    │    ├── cardinality: [1 - 2]
            │    │    │    └── stats: [rows=2]
            │    │    ├── select
-           │    │    │    ├── columns: true_agg:27(bool!null)
+           │    │    │    ├── columns: true_agg:28(bool!null)
            │    │    │    ├── cardinality: [0 - 1]
-           │    │    │    ├── stats: [rows=1, distinct(27)=1, null(27)=0]
+           │    │    │    ├── stats: [rows=1, distinct(28)=1, null(28)=0]
            │    │    │    ├── key: ()
-           │    │    │    ├── fd: ()-->(27)
+           │    │    │    ├── fd: ()-->(28)
            │    │    │    ├── scalar-group-by
-           │    │    │    │    ├── columns: true_agg:27(bool)
+           │    │    │    │    ├── columns: true_agg:28(bool)
            │    │    │    │    ├── cardinality: [1 - 1]
-           │    │    │    │    ├── stats: [rows=1, distinct(27)=1, null(27)=0]
+           │    │    │    │    ├── stats: [rows=1, distinct(28)=1, null(28)=0]
            │    │    │    │    ├── key: ()
-           │    │    │    │    ├── fd: ()-->(27)
+           │    │    │    │    ├── fd: ()-->(28)
            │    │    │    │    ├── values
-           │    │    │    │    │    ├── columns: true:26(bool!null)
+           │    │    │    │    │    ├── columns: true:27(bool!null)
            │    │    │    │    │    ├── cardinality: [1 - 1]
            │    │    │    │    │    ├── stats: [rows=1]
            │    │    │    │    │    ├── key: ()
-           │    │    │    │    │    ├── fd: ()-->(26)
+           │    │    │    │    │    ├── fd: ()-->(27)
            │    │    │    │    │    └── (true,) [type=tuple{bool}]
            │    │    │    │    └── aggregations
-           │    │    │    │         └── const-agg [as=true_agg:27, type=bool, outer=(26)]
-           │    │    │    │              └── true:26 [type=bool]
+           │    │    │    │         └── const-agg [as=true_agg:28, type=bool, outer=(27)]
+           │    │    │    │              └── true:27 [type=bool]
            │    │    │    └── filters
-           │    │    │         └── true_agg:27 IS NOT NULL [type=bool, outer=(27), constraints=(/27: (/NULL - ]; tight)]
+           │    │    │         └── true_agg:28 IS NOT NULL [type=bool, outer=(28), constraints=(/28: (/NULL - ]; tight)]
            │    │    └── filters (true)
            │    └── filters (true)
            └── projections
-                └── NULL [as="?column?":29, type=unknown]
+                └── NULL [as="?column?":30, type=unknown]
 
 exec-ddl
 CREATE TABLE test (

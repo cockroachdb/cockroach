@@ -968,23 +968,23 @@ project
       ├── distribution: east
       ├── locality-optimized-search
       │    ├── columns: a:11!null
-      │    ├── left columns: a:19
-      │    ├── right columns: a:27
+      │    ├── left columns: a:20
+      │    ├── right columns: a:28
       │    ├── cardinality: [0 - 3]
       │    ├── key: (11)
       │    ├── distribution: east
       │    ├── scan abc_part@b_idx
-      │    │    ├── columns: a:19!null
-      │    │    ├── constraint: /17/20: [/'east' - /'east']
+      │    │    ├── columns: a:20!null
+      │    │    ├── constraint: /18/21: [/'east' - /'east']
       │    │    ├── limit: 3
-      │    │    └── key: (19)
+      │    │    └── key: (20)
       │    └── scan abc_part@b_idx
-      │         ├── columns: a:27!null
-      │         ├── constraint: /25/28
+      │         ├── columns: a:28!null
+      │         ├── constraint: /26/29
       │         │    ├── [/'central' - /'central']
       │         │    └── [/'west' - /'west']
       │         ├── limit: 3
-      │         └── key: (27)
+      │         └── key: (28)
       └── filters (true)
 
 # Correlated semijoin with LIMIT in outer query block should not enable
@@ -1034,27 +1034,27 @@ distribute
                 └── coalesce [subquery]
                      ├── subquery
                      │    └── project
-                     │         ├── columns: column18:18!null
+                     │         ├── columns: column19:19!null
                      │         ├── cardinality: [0 - 1]
                      │         ├── key: ()
-                     │         ├── fd: ()-->(18)
+                     │         ├── fd: ()-->(19)
                      │         ├── distribution: east
                      │         ├── locality-optimized-search
                      │         │    ├── cardinality: [0 - 1]
                      │         │    ├── key: ()
                      │         │    ├── distribution: east
                      │         │    ├── scan abc_part@b_idx
-                     │         │    │    ├── constraint: /19/22: [/'east' - /'east']
+                     │         │    │    ├── constraint: /20/23: [/'east' - /'east']
                      │         │    │    ├── limit: 1
                      │         │    │    └── key: ()
                      │         │    └── scan abc_part@b_idx
-                     │         │         ├── constraint: /27/30
+                     │         │         ├── constraint: /28/31
                      │         │         │    ├── [/'central' - /'central']
                      │         │         │    └── [/'west' - /'west']
                      │         │         ├── limit: 1
                      │         │         └── key: ()
                      │         └── projections
-                     │              └── true [as=column18:18]
+                     │              └── true [as=column19:19]
                      └── false
 
 # Partitioning without CHECK constraints

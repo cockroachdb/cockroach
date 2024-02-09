@@ -248,18 +248,18 @@ WHERE t1.b IN (
 ORDER BY t1.a ASC;
 ----
 sort
- ├── columns: "?column?":22(int!null)  [hidden: t1.a:1(int!null)]
+ ├── columns: "?column?":23(int!null)  [hidden: t1.a:1(int!null)]
  ├── key: (1)
- ├── fd: ()-->(22)
- ├── ordering: +1 opt(22) [actual: +1]
- ├── prune: (1,22)
- ├── interesting orderings: (+1 opt(22))
+ ├── fd: ()-->(23)
+ ├── ordering: +1 opt(23) [actual: +1]
+ ├── prune: (1,23)
+ ├── interesting orderings: (+1 opt(23))
  └── project
-      ├── columns: "?column?":22(int!null) t1.a:1(int!null)
+      ├── columns: "?column?":23(int!null) t1.a:1(int!null)
       ├── key: (1)
-      ├── fd: ()-->(22)
-      ├── prune: (1,22)
-      ├── interesting orderings: (+1 opt(22))
+      ├── fd: ()-->(23)
+      ├── prune: (1,23)
+      ├── interesting orderings: (+1 opt(23))
       ├── semi-join (cross)
       │    ├── columns: t1.a:1(int!null) t1.b:2(int!null)
       │    ├── key: (1)
@@ -323,7 +323,7 @@ sort
       │    │         └── filters (true)
       │    └── filters (true)
       └── projections
-           └── const: 1 [as="?column?":22, type=int]
+           └── const: 1 [as="?column?":23, type=int]
 
 opt
 SELECT * FROM xyzs ORDER BY y DESC LIMIT 10
