@@ -657,10 +657,8 @@ func (b *Builder) buildExistsSubquery(
 			args[i] = indexedVar
 		}
 
-		// Create a new column for the boolean result.
-		existsCol := b.mem.Metadata().AddColumn("exists", types.Bool)
-
 		// Create a single-element RelListExpr representing the subquery.
+		existsCol := exists.LazyEvalProjectionCol
 		aliasedCol := opt.AliasedColumn{
 			Alias: b.mem.Metadata().ColumnMeta(existsCol).Alias,
 			ID:    existsCol,

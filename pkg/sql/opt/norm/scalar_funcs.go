@@ -288,6 +288,12 @@ func (c *CustomFuncs) SubqueryCmp(sub *memo.SubqueryPrivate) opt.Operator {
 	return sub.Cmp
 }
 
+// EmbeddedSubqueryPrivate returns the SubqueryPrivate embedded in the given
+// ExistsPrivate.
+func (c *CustomFuncs) EmbeddedSubqueryPrivate(ex *memo.ExistsPrivate) *memo.SubqueryPrivate {
+	return &ex.SubqueryPrivate
+}
+
 // MakeArrayAggCol returns a ColumnID with the given type and an "array_agg"
 // label.
 func (c *CustomFuncs) MakeArrayAggCol(typ *types.T) opt.ColumnID {
@@ -296,17 +302,16 @@ func (c *CustomFuncs) MakeArrayAggCol(typ *types.T) opt.ColumnID {
 
 // IsLimited indicates whether a limit was pushed under the subquery
 // already. See e.g. the rule IntroduceExistsLimit.
-func (c *CustomFuncs) IsLimited(sub *memo.SubqueryPrivate) bool {
-	return sub.WasLimited
+func (c *CustomFuncs) IsLimited(ex *memo.ExistsPrivate) bool {
+	return ex.WasLimited
 }
 
-// MakeLimited specifies that the subquery has a limit set
-// already. This prevents e.g. the rule IntroduceExistsLimit from
-// applying twice.
-func (c *CustomFuncs) MakeLimited(sub *memo.SubqueryPrivate) *memo.SubqueryPrivate {
-	newSub := *sub
-	newSub.WasLimited = true
-	return &newSub
+// MakeLimited specifies that the Exists subquery has a limit set already. This
+// prevents e.g. the rule IntroduceExistsLimit from applying twice.
+func (c *CustomFuncs) MakeLimited(ex *memo.ExistsPrivate) *memo.ExistsPrivate {
+	newEx := *ex
+	newEx.WasLimited = true
+	return &newEx
 }
 
 // InlineValues converts a Values operator to a tuple. If there are

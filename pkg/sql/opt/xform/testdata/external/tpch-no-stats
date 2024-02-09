@@ -433,15 +433,15 @@ ORDER BY
     o_orderpriority;
 ----
 sort
- ├── columns: o_orderpriority:6!null order_count:30!null
+ ├── columns: o_orderpriority:6!null order_count:31!null
  ├── key: (6)
- ├── fd: (6)-->(30)
+ ├── fd: (6)-->(31)
  ├── ordering: +6
  └── group-by (hash)
-      ├── columns: o_orderpriority:6!null count_rows:30!null
+      ├── columns: o_orderpriority:6!null count_rows:31!null
       ├── grouping columns: o_orderpriority:6!null
       ├── key: (6)
-      ├── fd: (6)-->(30)
+      ├── fd: (6)-->(31)
       ├── inner-join (lookup orders)
       │    ├── columns: o_orderkey:1!null o_orderdate:5!null o_orderpriority:6!null l_orderkey:12!null
       │    ├── key columns: [12] = [1]
@@ -464,7 +464,7 @@ sort
       │    └── filters
       │         └── (o_orderdate:5 >= '1993-07-01') AND (o_orderdate:5 < '1993-10-01') [outer=(5), constraints=(/5: [/'1993-07-01' - /'1993-09-30']; tight)]
       └── aggregations
-           └── count-rows [as=count_rows:30]
+           └── count-rows [as=count_rows:31]
 
 # --------------------------------------------------
 # Q5
@@ -1678,15 +1678,15 @@ ORDER BY
     p_size;
 ----
 sort
- ├── columns: p_brand:11!null p_type:12!null p_size:13!null supplier_cnt:28!null
+ ├── columns: p_brand:11!null p_type:12!null p_size:13!null supplier_cnt:29!null
  ├── key: (11-13)
- ├── fd: (11-13)-->(28)
- ├── ordering: -28,+11,+12,+13
+ ├── fd: (11-13)-->(29)
+ ├── ordering: -29,+11,+12,+13
  └── group-by (hash)
-      ├── columns: p_brand:11!null p_type:12!null p_size:13!null count:28!null
+      ├── columns: p_brand:11!null p_type:12!null p_size:13!null count:29!null
       ├── grouping columns: p_brand:11!null p_type:12!null p_size:13!null
       ├── key: (11-13)
-      ├── fd: (11-13)-->(28)
+      ├── fd: (11-13)-->(29)
       ├── distinct-on
       │    ├── columns: ps_suppkey:2!null p_brand:11!null p_type:12!null p_size:13!null
       │    ├── grouping columns: ps_suppkey:2!null p_brand:11!null p_type:12!null p_size:13!null
@@ -1724,7 +1724,7 @@ sort
       │              ├── p_type:12 NOT LIKE 'MEDIUM POLISHED %' [outer=(12), constraints=(/12: (/NULL - ])]
       │              └── p_size:13 IN (3, 9, 14, 19, 23, 36, 45, 49) [outer=(13), constraints=(/13: [/3 - /3] [/9 - /9] [/14 - /14] [/19 - /19] [/23 - /23] [/36 - /36] [/45 - /45] [/49 - /49]; tight)]
       └── aggregations
-           └── count-rows [as=count:28]
+           └── count-rows [as=count:29]
 
 # --------------------------------------------------
 # Q17
@@ -1884,19 +1884,19 @@ ORDER BY
 LIMIT 100;
 ----
 top-k
- ├── columns: c_name:2!null c_custkey:1!null o_orderkey:11!null o_orderdate:15!null o_totalprice:14!null sum:59!null
+ ├── columns: c_name:2!null c_custkey:1!null o_orderkey:11!null o_orderdate:15!null o_totalprice:14!null sum:60!null
  ├── internal-ordering: -14,+15
  ├── k: 100
  ├── cardinality: [0 - 100]
  ├── key: (11)
- ├── fd: (1)-->(2), (11)-->(1,2,14,15,59)
+ ├── fd: (1)-->(2), (11)-->(1,2,14,15,60)
  ├── ordering: -14,+15
  └── group-by (streaming)
-      ├── columns: c_custkey:1!null c_name:2!null o_orderkey:11!null o_totalprice:14!null o_orderdate:15!null sum:59!null
+      ├── columns: c_custkey:1!null c_name:2!null o_orderkey:11!null o_totalprice:14!null o_orderdate:15!null sum:60!null
       ├── grouping columns: o_orderkey:11!null
       ├── internal-ordering: +(11|22)
       ├── key: (11)
-      ├── fd: (1)-->(2), (11)-->(1,2,14,15,59)
+      ├── fd: (1)-->(2), (11)-->(1,2,14,15,60)
       ├── inner-join (merge)
       │    ├── columns: c_custkey:1!null c_name:2!null o_orderkey:11!null o_custkey:12!null o_totalprice:14!null o_orderdate:15!null l_orderkey:22!null l_quantity:26!null
       │    ├── left ordering: +22
@@ -1953,7 +1953,7 @@ top-k
       │    │    └── filters (true)
       │    └── filters (true)
       └── aggregations
-           ├── sum [as=sum:59, outer=(26)]
+           ├── sum [as=sum:60, outer=(26)]
            │    └── l_quantity:26
            ├── const-agg [as=c_custkey:1, outer=(1)]
            │    └── c_custkey:1
@@ -2228,18 +2228,18 @@ ORDER BY
 LIMIT 100;
 ----
 top-k
- ├── columns: s_name:2!null numwait:81!null
- ├── internal-ordering: -81,+2
+ ├── columns: s_name:2!null numwait:83!null
+ ├── internal-ordering: -83,+2
  ├── k: 100
  ├── cardinality: [0 - 100]
  ├── key: (2)
- ├── fd: (2)-->(81)
- ├── ordering: -81,+2
+ ├── fd: (2)-->(83)
+ ├── ordering: -83,+2
  └── group-by (hash)
-      ├── columns: s_name:2!null count_rows:81!null
+      ├── columns: s_name:2!null count_rows:83!null
       ├── grouping columns: s_name:2!null
       ├── key: (2)
-      ├── fd: (2)-->(81)
+      ├── fd: (2)-->(83)
       ├── inner-join (lookup nation)
       │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:10!null l1.l_suppkey:12!null l1.l_commitdate:21!null l1.l_receiptdate:22!null o_orderkey:28!null o_orderstatus:30!null n_nationkey:39!null n_name:40!null
       │    ├── key columns: [4] = [39]
@@ -2285,7 +2285,7 @@ top-k
       │    └── filters
       │         └── n_name:40 = 'SAUDI ARABIA' [outer=(40), constraints=(/40: [/'SAUDI ARABIA' - /'SAUDI ARABIA']; tight), fd=()-->(40)]
       └── aggregations
-           └── count-rows [as=count_rows:81]
+           └── count-rows [as=count_rows:83]
 
 # --------------------------------------------------
 # Q22
@@ -2337,18 +2337,18 @@ ORDER BY
     cntrycode;
 ----
 group-by (streaming)
- ├── columns: cntrycode:33 numcust:34!null totacctbal:35!null
- ├── grouping columns: cntrycode:33
+ ├── columns: cntrycode:34 numcust:35!null totacctbal:36!null
+ ├── grouping columns: cntrycode:34
  ├── immutable
- ├── key: (33)
- ├── fd: (33)-->(34,35)
- ├── ordering: +33
+ ├── key: (34)
+ ├── fd: (34)-->(35,36)
+ ├── ordering: +34
  ├── sort
- │    ├── columns: c_acctbal:6!null cntrycode:33
+ │    ├── columns: c_acctbal:6!null cntrycode:34
  │    ├── immutable
- │    ├── ordering: +33
+ │    ├── ordering: +34
  │    └── project
- │         ├── columns: cntrycode:33 c_acctbal:6!null
+ │         ├── columns: cntrycode:34 c_acctbal:6!null
  │         ├── immutable
  │         ├── anti-join (merge)
  │         │    ├── columns: c_custkey:1!null c_phone:5!null c_acctbal:6!null
@@ -2395,8 +2395,8 @@ group-by (streaming)
  │         │    │    └── ordering: +23
  │         │    └── filters (true)
  │         └── projections
- │              └── substring(c_phone:5, 1, 2) [as=cntrycode:33, outer=(5), immutable]
+ │              └── substring(c_phone:5, 1, 2) [as=cntrycode:34, outer=(5), immutable]
  └── aggregations
-      ├── count-rows [as=count_rows:34]
-      └── sum [as=sum:35, outer=(6)]
+      ├── count-rows [as=count_rows:35]
+      └── sum [as=sum:36, outer=(6)]
            └── c_acctbal:6

@@ -99,18 +99,18 @@ root
  └── cascade
       └── delete child
            ├── columns: <none>
-           ├── fetch columns: c:14 child.p:15
+           ├── fetch columns: c:15 child.p:16
            └── semi-join (hash)
-                ├── columns: c:14!null child.p:15!null
+                ├── columns: c:15!null child.p:16!null
                 ├── scan child
-                │    ├── columns: c:14!null child.p:15!null
+                │    ├── columns: c:15!null child.p:16!null
                 │    └── flags: disabled not visible index feature
                 ├── with-scan &1
-                │    ├── columns: p:18!null
+                │    ├── columns: p:19!null
                 │    └── mapping:
-                │         └──  parent.p:4 => p:18
+                │         └──  parent.p:4 => p:19
                 └── filters
-                     └── child.p:15 = p:18
+                     └── child.p:16 = p:19
 
 # Delete with volatile UDF; no fast path.
 build-cascades

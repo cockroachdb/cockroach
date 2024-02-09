@@ -22,7 +22,7 @@
         (FiltersItem
             (Exists
                 (MemoCycleTestRel $input $filters)
-                (EmptySubqueryPrivate)
+                (EmptyExistsPrivate)
             )
         )
     ]

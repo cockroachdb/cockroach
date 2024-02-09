@@ -3422,7 +3422,7 @@ WHERE ST_Intersects(geo_table2.geom, geo_table.geom))
 ----
 semi-join (lookup geo_table)
  ├── columns: k:1 geom:2
- ├── key columns: [11] = [5]
+ ├── key columns: [12] = [5]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
@@ -3433,14 +3433,14 @@ semi-join (lookup geo_table)
  ├── distribution: test
  ├── prune: (1)
  ├── inner-join (inverted geo_table@geom_index)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
- │    ├── first join in paired joiner; continuation column: continuation:16
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:12 continuation:17
+ │    ├── first join in paired joiner; continuation column: continuation:17
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(11)=999.957, null(11)=0]
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:13)
+ │    ├── stats: [rows=10000, distinct(12)=999.957, null(12)=0]
  │    ├── cost: 41812.84
- │    ├── key: (1,11)
- │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── key: (1,12)
+ │    ├── fd: (1)-->(2), (12)-->(17)
  │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
@@ -3462,7 +3462,7 @@ WHERE ST_Intersects(geo_table2.geom, geo_table.geom))
 ----
 anti-join (lookup geo_table)
  ├── columns: k:1 geom:2
- ├── key columns: [11] = [5]
+ ├── key columns: [12] = [5]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
@@ -3473,14 +3473,14 @@ anti-join (lookup geo_table)
  ├── distribution: test
  ├── prune: (1)
  ├── left-join (inverted geo_table@geom_index)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
- │    ├── first join in paired joiner; continuation column: continuation:16
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:12 continuation:17
+ │    ├── first join in paired joiner; continuation column: continuation:17
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(11)=999.957, null(11)=0]
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:13)
+ │    ├── stats: [rows=10000, distinct(12)=999.957, null(12)=0]
  │    ├── cost: 41812.84
- │    ├── key: (1,11)
- │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── key: (1,12)
+ │    ├── fd: (1)-->(2), (12)-->(17)
  │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
