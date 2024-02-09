@@ -115,14 +115,14 @@ func (s *SemaProperties) Require(context string, rejectFlags SemaRejectFlags) {
 	s.Ancestors.clear()
 }
 
-// Reject adds the given flags to the set of required constraints of s.
+// Reject adds all of the given flags to the set of required constraints of s.
 func (s *SemaProperties) Reject(rejectFlags SemaRejectFlags) {
 	s.required.rejectFlags |= rejectFlags
 }
 
-// IsSet checks if the given rejectFlag is set as a required property.
+// IsSet checks if all of the given rejectFlags are set as a required property.
 func (s *SemaProperties) IsSet(rejectFlags SemaRejectFlags) bool {
-	return s.required.rejectFlags&rejectFlags != 0
+	return s.required.rejectFlags&rejectFlags == rejectFlags
 }
 
 // Restore restores a copy of a SemaProperties. Use with:
@@ -236,9 +236,9 @@ func (s *ScalarAncestors) Push(other ScalarAncestors) {
 	*s = *s | other
 }
 
-// Has returns true if s has the given ancestor.
+// Has returns true if s has all of the given ancestors.
 func (s ScalarAncestors) Has(other ScalarAncestors) bool {
-	return s&other != 0
+	return s&other == other
 }
 
 // PopTo returns s to the given set of ancestors. Use with:

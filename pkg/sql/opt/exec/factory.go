@@ -76,16 +76,19 @@ const (
 	PlanFlagCheckContainsLocking
 )
 
-func (pf PlanFlags) IsSet(flag PlanFlags) bool {
-	return (pf & flag) != 0
+// IsSet returns true if the receiver has all of the given flags set.
+func (pf PlanFlags) IsSet(flags PlanFlags) bool {
+	return (pf & flags) == flags
 }
 
-func (pf *PlanFlags) Set(flag PlanFlags) {
-	*pf |= flag
+// Set sets all of the given flags in the receiver.
+func (pf *PlanFlags) Set(flags PlanFlags) {
+	*pf |= flags
 }
 
-func (pf *PlanFlags) Unset(flag PlanFlags) {
-	*pf &^= flag
+// Unset unsets all of the given flags in the receiver.
+func (pf *PlanFlags) Unset(flags PlanFlags) {
+	*pf &^= flags
 }
 
 // ScanParams contains all the parameters for a table scan.
