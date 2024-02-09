@@ -239,3 +239,46 @@ func (w *scalarExprSampler) Next() scalarExpr {
 	w.mu.Unlock()
 	return v
 }
+
+// newWeightedPLpgSQLStmtSampler creates a plpgsqlStmtSampler that produces
+// plpgsqlStatements. They are returned at the relative frequency of the values
+// of weights. All weights must be >= 1.
+func newWeightedPLpgSQLStmtSampler(
+	weights []plpgsqlStatementWeight, seed int64,
+) *plpgsqlStmtSampler {
+	sum := 0
+	for _, w := range weights {
+		if w.weight < 1 {
+			panic("expected weight >= 1")
+		}
+		sum += w.weight
+	}
+	if sum == 0 {
+		panic("expected weights")
+	}
+	samples := make([]plpgsqlStatement, sum)
+	pos := 0
+	for _, w := range weights {
+		for count := 0; count < w.weight; count++ {
+			samples[pos] = w.elem
+			pos++
+		}
+	}
+	return &plpgsqlStmtSampler{
+		rnd:     rand.New(rand.NewSource(seed)),
+		samples: samples,
+	}
+}
+
+type plpgsqlStmtSampler struct {
+	mu      syncutil.Mutex
+	rnd     *rand.Rand
+	samples []plpgsqlStatement
+}
+
+func (s *plpgsqlStmtSampler) Next() plpgsqlStatement {
+	s.mu.Lock()
+	v := s.samples[s.rnd.Intn(len(s.samples))]
+	s.mu.Unlock()
+	return v
+}

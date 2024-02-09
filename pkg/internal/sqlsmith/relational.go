@@ -885,63 +885,17 @@ func makeCreateFunc(s *Smither) (tree.Statement, bool) {
 func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 	fname := s.name("func")
 	name := tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, fname)
-	// Return a record 50% of the time, which means the UDF can return any number
-	// or type in its final SQL statement. Otherwise, pick a random type from
-	// this smither's available types.
-	rtyp := types.AnyTuple
-	if s.coin() {
-		// Do not allow collated string types. These are not supported in UDFs.
-		rtyp = s.randType()
-		for rtyp.Family() == types.CollatedStringFamily {
-			rtyp = s.randType()
-		}
-	}
-	// Return multiple rows with the SETOF option about 33% of the time.
-	setof := false
-	if s.d6() < 3 {
-		setof = true
-	}
-	rtype := tree.RoutineReturnType{
-		Type:  rtyp,
-		SetOf: setof,
-	}
-
-	paramCnt := s.rnd.Intn(10)
-	if s.types == nil || len(s.types.scalarTypes) == 0 {
-		paramCnt = 0
-	}
-	// TODO(100405): Add support for non-default param classes. Currently, only IN
-	// parameters are supported.
-	// TODO(100962): Set a param default value sometimes.
-	params := make(tree.RoutineParams, paramCnt)
-	paramTypes := make(tree.ParamTypes, paramCnt)
-	refs := make(colRefs, paramCnt)
-	for i := 0; i < paramCnt; i++ {
-		// Do not allow collated string types. These are not supported in UDFs.
-		ptyp := s.randType()
-		for ptyp.Family() == types.CollatedStringFamily {
-			ptyp = s.randType()
-		}
-		pname := fmt.Sprintf("p%d", i)
-		params[i] = tree.RoutineParam{
-			Name: tree.Name(pname),
-			Type: ptyp,
-		}
-		paramTypes[i] = tree.ParamType{
-			Name: pname,
-			Typ:  ptyp,
-		}
-		refs[i] = &colRef{
-			typ: ptyp,
-			item: &tree.ColumnItem{
-				ColumnName: tree.Name(pname),
-			},
-		}
-	}
 
 	// There are up to 5 function options that may be applied to UDFs.
 	var opts tree.RoutineOptions
 	opts = make(tree.RoutineOptions, 0, 5)
+
+	// RoutineLanguage
+	lang := tree.RoutineLangSQL
+	if s.coin() {
+		lang = tree.RoutineLangPLpgSQL
+	}
+	opts = append(opts, lang)
 
 	// RoutineNullInputBehavior
 	// 50%: Do not specify behavior (default is RoutineCalledOnNullInput).
@@ -991,17 +945,55 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 		opts = append(opts, tree.RoutineLeakproof(leakproof))
 	}
 
-	// RoutineLanguage
-	// Currently only SQL is supported.
-	opts = append(opts, tree.RoutineLangSQL)
+	// Determine the parameters before the RoutineBody, but after the language.
+	paramCnt := s.rnd.Intn(10)
+	if s.types == nil || len(s.types.scalarTypes) == 0 {
+		paramCnt = 0
+	}
+	// TODO(100405): Add support for non-default param classes. Currently, only IN
+	// parameters are supported.
+	// TODO(100962): Set a param default value sometimes.
+	params := make(tree.RoutineParams, paramCnt)
+	paramTypes := make(tree.ParamTypes, paramCnt)
+	refs := make(colRefs, paramCnt)
+	for i := 0; i < paramCnt; i++ {
+		// Do not allow collated string types. These are not supported in UDFs.
+		// Do not allow RECORD-type parameters for PL/pgSQL routines.
+		// TODO(#105713): lift the RECORD-type restriction.
+		ptyp := s.randType()
+		for ptyp.Family() == types.CollatedStringFamily ||
+			(lang == tree.RoutineLangPLpgSQL && types.IsRecordType(ptyp)) {
+			ptyp = s.randType()
+		}
+		pname := fmt.Sprintf("p%d", i)
+		params[i] = tree.RoutineParam{
+			Name: tree.Name(pname),
+			Type: ptyp,
+		}
+		paramTypes[i] = tree.ParamType{
+			Name: pname,
+			Typ:  ptyp,
+		}
+		refs[i] = &colRef{
+			typ: ptyp,
+			item: &tree.ColumnItem{
+				ColumnName: tree.Name(pname),
+			},
+		}
+	}
 
-	// RoutineBodyStr
-	// Generate SQL statements for the function body. More than one may be
-	// generated, but only the result of the final statement will matter for
-	// the function return type. Use the RoutineBodyStr option so the statements
-	// are formatted correctly.
-	stmtCnt := s.rnd.Intn(11)
-	stmts := make([]string, 0, stmtCnt)
+	// Return a record 50% of the time, which means the UDF can return any number
+	// or type in its final SQL statement. Otherwise, pick a random type from
+	// this smither's available types.
+	rTyp := types.AnyTuple
+	if s.coin() {
+		// Do not allow collated string types. These are not supported in UDFs.
+		rTyp = s.randType()
+		for rTyp.Family() == types.CollatedStringFamily {
+			rTyp = s.randType()
+		}
+	}
+
 	// Disable CTEs temporarily, since they are not currently supported in UDFs.
 	// TODO(92961): Allow CTEs in generated statements in UDF bodies.
 	// TODO(93049): Allow UDFs to call other UDFs, as well as create other UDFs.
@@ -1015,73 +1007,56 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 	s.disableWith = true
 	s.disableUDFs = true
 	s.disableMutations = (funcVol != tree.RoutineVolatile) || s.disableMutations
-	for i := 0; i < stmtCnt; i++ {
-		var stmt tree.Statement
-		if i == stmtCnt-1 {
-			// The return type of the last statement should match the function return
-			// type.
-			// If mutations are enabled, also use anything from mutatingTableExprs -- needs returning
-			if s.disableMutations || funcVol != tree.RoutineVolatile || s.coin() {
-				if stmt, _, ok = s.makeSelect([]*types.T{rtyp}, refs); !ok {
-					return nil, false
-				}
+
+	// RoutineBodyStr
+	var body string
+	if lang == tree.RoutineLangSQL {
+		var stmtRefs colRefs
+		body, stmtRefs, ok = s.makeRoutineBodySQL(funcVol, refs, rTyp)
+		if !ok {
+			return nil, false
+		}
+		// If the rType isn't a RECORD, change it to stmtRefs or RECORD depending
+		// how many columns there are to avoid return type mismatch errors.
+		if !rTyp.Identical(types.AnyTuple) {
+			if len(stmtRefs) == 1 && s.coin() && stmtRefs[0].typ.Family() != types.CollatedStringFamily {
+				rTyp = stmtRefs[0].typ
 			} else {
-				var expr tree.TableExpr
-				var rrefs colRefs
-				switch s.d6() {
-				case 1, 2:
-					expr, rrefs, ok = s.makeInsertReturning(refs)
-				case 3, 4:
-					expr, rrefs, ok = s.makeDeleteReturning(refs)
-				case 5, 6:
-					expr, rrefs, ok = s.makeUpdateReturning(refs)
-				}
-				if !ok {
-					return nil, false
-				}
-				stmt = expr.(*tree.StatementSource).Statement
-				// If the rtype isn't a RECORD, change it to rrefs or RECORD depending
-				// how many columns there are to avoid return type mismatch errors.
-				if !rtyp.Identical(types.AnyTuple) {
-					if len(rrefs) == 1 && s.coin() && rrefs[0].typ.Family() != types.CollatedStringFamily {
-						rtyp = rrefs[0].typ
-					} else {
-						rtyp = types.AnyTuple
-					}
-					rtype.Type = rtyp
-				}
-			}
-		} else {
-			if s.disableMutations || funcVol != tree.RoutineVolatile || s.coin() {
-				if stmt, _, ok = s.makeSelect(nil /* desiredTypes */, refs); !ok {
-					continue
-				}
-			} else {
-				switch s.d6() {
-				case 1, 2:
-					stmt, _, ok = s.makeInsert(refs)
-				case 3, 4:
-					stmt, _, ok = s.makeDelete(refs)
-				case 5, 6:
-					stmt, _, ok = s.makeUpdate(refs)
-				}
-				if !ok {
-					continue
-				}
+				rTyp = types.AnyTuple
 			}
 		}
-		stmts = append(stmts, tree.AsStringWithFlags(stmt, tree.FmtParsable))
+	} else {
+		plpgsqlRTyp := rTyp
+		if plpgsqlRTyp.Identical(types.AnyTuple) {
+			// If the return type is RECORD, choose a concrete type for generating
+			// RETURN statements.
+			numTyps := s.rnd.Intn(3) + 1
+			typs := make([]*types.T, numTyps)
+			for i := range typs {
+				typs[i] = s.randType()
+			}
+			plpgsqlRTyp = types.MakeTuple(typs)
+		}
+		body = s.makeRoutineBodyPLpgSQL(paramTypes, plpgsqlRTyp, funcVol)
 	}
-	if len(stmts) > 0 {
-		opts = append(opts, tree.RoutineBodyStr(strings.Join(stmts, ";\n")))
+	opts = append(opts, tree.RoutineBodyStr(body))
+
+	// Return multiple rows with the SETOF option about 33% of the time.
+	// PL/pgSQL functions do not currently support SETOF.
+	setof := false
+	if lang == tree.RoutineLangSQL && s.d6() < 3 {
+		setof = true
 	}
 
 	stmt := &tree.CreateRoutine{
-		Replace:    s.coin(),
-		Name:       name,
-		Params:     params,
-		ReturnType: &rtype,
-		Options:    opts,
+		Replace: s.coin(),
+		Name:    name,
+		Params:  params,
+		Options: opts,
+		ReturnType: &tree.RoutineReturnType{
+			Type:  rTyp,
+			SetOf: setof,
+		},
 	}
 
 	// Add this function to the functions list so that we can use it in future
@@ -1101,12 +1076,80 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 	}
 
 	functions.Lock()
-	functions.fns[class][rtyp.Oid()] = append(functions.fns[class][rtyp.Oid()], function{
+	functions.fns[class][rTyp.Oid()] = append(functions.fns[class][rTyp.Oid()], function{
 		def:      tree.NewFunctionDefinition(name.String(), &tree.FunctionProperties{}, nil /* def */),
 		overload: ov,
 	})
 	functions.Unlock()
 	return stmt, true
+}
+
+func (s *Smither) makeRoutineBodySQL(
+	vol tree.RoutineVolatility, refs colRefs, rTyp *types.T,
+) (body string, lastStmtRefs colRefs, ok bool) {
+	// Generate SQL statements for the function body. More than one may be
+	// generated, but only the result of the final statement will matter for
+	// the function return type. Use the RoutineBodyStr option so the statements
+	// are formatted correctly.
+	stmtCnt := s.rnd.Intn(11)
+	stmts := make([]string, 0, stmtCnt)
+	var stmt tree.Statement
+	for i := 0; i < stmtCnt-1; i++ {
+		stmt, ok = s.makeSQLStmtForRoutine(vol, refs)
+		if !ok {
+			continue
+		}
+		stmts = append(stmts, tree.AsStringWithFlags(stmt, tree.FmtParsable))
+	}
+	// The return type of the last statement should match the function return
+	// type.
+	// If mutations are enabled, also use anything from mutatingTableExprs -- needs returning
+	if s.disableMutations || vol != tree.RoutineVolatile || s.coin() {
+		stmt, lastStmtRefs, ok = s.makeSelect([]*types.T{rTyp}, refs)
+		if !ok {
+			return "", nil, false
+		}
+	} else {
+		var expr tree.TableExpr
+		switch s.d6() {
+		case 1, 2:
+			expr, lastStmtRefs, ok = s.makeInsertReturning(refs)
+		case 3, 4:
+			expr, lastStmtRefs, ok = s.makeDeleteReturning(refs)
+		case 5, 6:
+			expr, lastStmtRefs, ok = s.makeUpdateReturning(refs)
+		}
+		if !ok {
+			return "", nil, false
+		}
+		stmt = expr.(*tree.StatementSource).Statement
+	}
+	stmts = append(stmts, tree.AsStringWithFlags(stmt, tree.FmtParsable))
+	return "\n" + strings.Join(stmts, ";\n") + "\n", lastStmtRefs, true
+}
+
+func (s *Smither) makeSQLStmtForRoutine(
+	vol tree.RoutineVolatility, refs colRefs,
+) (stmt tree.Statement, ok bool) {
+	const numRetries = 5
+	for i := 0; i < numRetries; i++ {
+		if s.disableMutations || vol != tree.RoutineVolatile || s.coin() {
+			stmt, _, ok = s.makeSelect(nil /* desiredTypes */, refs)
+		} else {
+			switch s.d6() {
+			case 1, 2:
+				stmt, _, ok = s.makeInsert(refs)
+			case 3, 4:
+				stmt, _, ok = s.makeDelete(refs)
+			case 5, 6:
+				stmt, _, ok = s.makeUpdate(refs)
+			}
+		}
+		if ok {
+			return stmt, true
+		}
+	}
+	return nil, false
 }
 
 func makeDelete(s *Smither) (tree.Statement, bool) {
