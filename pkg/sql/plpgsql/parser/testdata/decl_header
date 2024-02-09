@@ -25,7 +25,7 @@ END foo;
  -- literals removed
 <<_>>
 DECLARE
-var1 INT8 := 30;
+_ INT8 := 30;
 BEGIN
 END _;
  -- identifiers removed
@@ -57,7 +57,7 @@ END foo;
  -- literals removed
 <<_>>
 DECLARE
-var1 CONSTANT INT8 COLLATE _ NOT NULL := 30;
+_ CONSTANT INT8 COLLATE _ NOT NULL := 30;
 BEGIN
 END _;
  -- identifiers removed
@@ -84,7 +84,34 @@ BEGIN
 END;
  -- literals removed
 DECLARE
-var1 CONSTANT INT8 COLLATE _ NOT NULL := 30;
+_ CONSTANT INT8 COLLATE _ NOT NULL := 30;
+BEGIN
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+  "%_2jd9$f foo" integer := 30;
+BEGIN
+END
+----
+DECLARE
+"%_2jd9$f foo" INT8 := 30;
+BEGIN
+END;
+ -- normalized!
+DECLARE
+"%_2jd9$f foo" INT8 := (30);
+BEGIN
+END;
+ -- fully parenthesized
+DECLARE
+"%_2jd9$f foo" INT8 := _;
+BEGIN
+END;
+ -- literals removed
+DECLARE
+_ INT8 := 30;
 BEGIN
 END;
  -- identifiers removed
@@ -138,7 +165,7 @@ BEGIN
 END;
  -- literals removed
 DECLARE
-var1 CURSOR FOR SELECT * FROM _ WHERE _ = _;
+_ CURSOR FOR SELECT * FROM _ WHERE _ = _;
 BEGIN
 END;
  -- identifiers removed

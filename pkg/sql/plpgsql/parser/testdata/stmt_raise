@@ -198,7 +198,7 @@ RAISE '_', i;
 END;
  -- literals removed
 DECLARE
-i INT8 := 0;
+_ INT8 := 0;
 BEGIN
 RAISE 'foo %', _;
 END;
@@ -230,7 +230,7 @@ RAISE '_', i, i * _, i * _;
 END;
  -- literals removed
 DECLARE
-i INT8 := 0;
+_ INT8 := 0;
 BEGIN
 RAISE 'foo %, %, %.', _, _ * 2, _ * 100;
 END;
@@ -262,7 +262,7 @@ RAISE '_', (SELECT count(*) FROM xy WHERE x = i);
 END;
  -- literals removed
 DECLARE
-i INT8 := 0;
+_ INT8 := 0;
 BEGIN
 RAISE 'foo %', (SELECT _(*) FROM _ WHERE _ = _);
 END;

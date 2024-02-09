@@ -662,7 +662,9 @@ proc_stmt:pl_block ';'
     $$.val = $1.statement()
   }
 | stmt_while
-  { }
+  {
+    $$.val = $1.statement()
+  }
 | stmt_for
   { }
 | stmt_foreach_a

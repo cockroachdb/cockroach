@@ -306,7 +306,7 @@ RETURN i;
 END;
  -- literals removed
 DECLARE
-i INT8;
+_ INT8;
 BEGIN
 SET testing_optimizer_disable_rule_probability = 0;
 INSERT INTO _ VALUES (1, 2);
