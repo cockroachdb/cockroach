@@ -197,7 +197,7 @@ func (b *Builder) finishBuildGeneratorFunction(
 ) (out opt.ScalarExpr) {
 	lastAlias := inScope.alias
 	if def.ReturnsRecordType {
-		if lastAlias == nil {
+		if lastAlias == nil && !def.HasNamedReturnColumns {
 			panic(pgerror.New(pgcode.Syntax, "a column definition list is required for functions returning \"record\""))
 		}
 	} else if lastAlias != nil {
