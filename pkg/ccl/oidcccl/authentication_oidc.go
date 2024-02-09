@@ -232,6 +232,14 @@ var NewOIDCManager func(context.Context, oidcAuthenticationConf, string, []strin
 	redirectURL string,
 	scopes []string,
 ) (IOIDCManager, error) {
+	// We need to provide a context which cannot be cancelled because of a specific implementation
+	// which prohibits context to be cancelled if we are to reuse the provider object
+	// https://github.com/coreos/go-oidc/issues/339
+	// TODO(souravcrl): Update go-oidc version - to control the context, in the current version of
+	// go-oidc, verifier instance can be created with VerifierContext
+	// https://github.com/coreos/go-oidc/blob/6d6be43e852de391805e5a5bc14146ba3cdd4195/oidc/verify.go#L125
+	ctx = context.WithoutCancel(ctx)
+
 	provider, err := oidc.NewProvider(ctx, conf.providerURL)
 	if err != nil {
 		return nil, err
@@ -701,12 +709,21 @@ var ConfigureOIDC = func(
 		oidcAuthentication.mutex.Lock()
 		defer oidcAuthentication.mutex.Unlock()
 
+		if !oidcAuthentication.enabled {
+			http.Error(w, "OIDC: disabled #2", http.StatusBadRequest)
+			return
+		}
+
 		if oidcAuthentication.enabled && !oidcAuthentication.initialized {
 			reloadConfigLocked(ctx, oidcAuthentication, locality, st)
+			if !oidcAuthentication.initialized {
+				http.Error(w, "OIDC: auth manager could not be initialized", http.StatusInternalServerError)
+				return
+			}
 		}
 
 		if !oidcAuthentication.enabled {
-			http.Error(w, "OIDC: disabled", http.StatusBadRequest)
+			http.Error(w, "OIDC: disabled #3", http.StatusBadRequest)
 			return
 		}
 
