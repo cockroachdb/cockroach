@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 )
 
-func TestParseDataDriven(t *testing.T) {
+func TestParseDatadriven(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
