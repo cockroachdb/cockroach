@@ -2802,7 +2802,12 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	stmt.sql = fmt.Sprintf(`COMMENT ON %s IS 'comment from the RSW'`, picked)
+	comment := "comment from the RSW"
+	if og.params.rng.Float64() < 0.3 {
+		// Delete the comment with some probability.
+		comment = ""
+	}
+	stmt.sql = fmt.Sprintf(`COMMENT ON %s IS '%s'`, picked, comment)
 	return stmt, nil
 }
 
