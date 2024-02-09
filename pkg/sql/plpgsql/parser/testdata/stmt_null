@@ -1,0 +1,51 @@
+parse
+BEGIN
+  NULL;
+  IF foo THEN
+    NULL;
+  ELSE
+    NULL;
+  END IF;
+  NULL;
+END
+----
+BEGIN
+NULL;
+IF foo THEN
+	NULL;
+ELSE
+	NULL;
+END IF;
+NULL;
+END;
+ -- normalized!
+BEGIN
+NULL;
+IF (foo) THEN
+	NULL;
+ELSE
+	NULL;
+END IF;
+NULL;
+END;
+ -- fully parenthesized
+BEGIN
+NULL;
+IF foo THEN
+	NULL;
+ELSE
+	NULL;
+END IF;
+NULL;
+END;
+ -- literals removed
+BEGIN
+NULL;
+IF _ THEN
+	NULL;
+ELSE
+	NULL;
+END IF;
+NULL;
+END;
+ -- identifiers removed

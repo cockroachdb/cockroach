@@ -785,6 +785,10 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			b.appendBodyStmt(&fetchCon, intoScope)
 			return b.callContinuation(&fetchCon, s)
 
+		case *ast.Null:
+			// PL/pgSQL NULL statements are a no-op.
+			continue
+
 		default:
 			panic(unsupportedPLStmtErr)
 		}
