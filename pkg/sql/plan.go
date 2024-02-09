@@ -641,20 +641,23 @@ const (
 	planFlagOptimized
 )
 
-func (pf planFlags) IsSet(flag planFlags) bool {
-	return (pf & flag) != 0
+// IsSet returns true if the receiver has all of the given flags set.
+func (pf planFlags) IsSet(flags planFlags) bool {
+	return (pf & flags) == flags
 }
 
-func (pf *planFlags) Set(flag planFlags) {
-	*pf |= flag
+// Set sets all of the given flags in the receiver.
+func (pf *planFlags) Set(flags planFlags) {
+	*pf |= flags
 }
 
-func (pf *planFlags) Unset(flag planFlags) {
-	*pf &^= flag
+// Unset unsets all of the given flags in the receiver.
+func (pf *planFlags) Unset(flags planFlags) {
+	*pf &^= flags
 }
 
 // IsDistributed returns true if either the fully or the partially distributed
 // flags is set.
 func (pf planFlags) IsDistributed() bool {
-	return pf.IsSet(planFlagFullyDistributed) || pf.IsSet(planFlagPartiallyDistributed)
+	return pf&(planFlagFullyDistributed|planFlagPartiallyDistributed) != 0
 }
