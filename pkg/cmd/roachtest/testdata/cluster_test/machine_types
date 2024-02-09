@@ -1,0 +1,66 @@
+# Test various machine types selected by roachtests, in accordance with MemPerCPU and CPUArch specification,
+# across all three cloud providers, namely GCE, AWS, and Azure. 
+
+select-machine-type mem-per-cpu=Auto cpu-arch=ARM64
+----
+cpus | 1,2,4,8,16 | 32,64 | 96,128
+----
+GCE | t2a-standard-1, t2a-standard-2, t2a-standard-4, t2a-standard-8, t2a-standard-16 | n2-custom-32-65536 (amd64), n2-custom-64-131072 (amd64) | n2d-custom-96-196608 (amd64), n2d-custom-128-262144 (amd64)
+AWS | m7g.large, m7g.large, m7g.xlarge, m7g.2xlarge, m7g.4xlarge | c7g.8xlarge, c7g.16xlarge | c6a.24xlarge (amd64), c6a.24xlarge (amd64)
+Azure | Standard_D2pds_v5, Standard_D2pds_v5, Standard_D4pds_v5, Standard_D8pds_v5, Standard_D16pds_v5 | Standard_D32plds_v5,Standard_D64plds_v5 | Standard_D96lds_v5 (amd64), Standard_D128lds_v5 (amd64)
+
+select-machine-type mem-per-cpu=Auto cpu-arch=AMD64
+----
+cpus | 1,2,4,8,16 | 32,64 | 96,128
+----
+GCE | n2-standard-2, n2-standard-2, n2-standard-4, n2-standard-8, n2-standard-16 | n2-custom-32-65536, n2-custom-64-131072 | n2d-custom-96-196608, n2d-custom-128-262144
+AWS | m6i.large, m6i.large, m6i.xlarge, m6i.2xlarge, m6i.4xlarge | c6i.8xlarge, c6i.16xlarge | c6a.24xlarge, c6a.24xlarge
+Azure | Standard_D2ds_v5, Standard_D2ds_v5, Standard_D4ds_v5, Standard_D8ds_v5, Standard_D16ds_v5 | Standard_D32lds_v5,Standard_D64lds_v5 | Standard_D96lds_v5, Standard_D128lds_v5
+
+select-machine-type mem-per-cpu=Standard cpu-arch=ARM64
+----
+cpus | 1,2,4,8,16 | 32,64 | 96,128
+----
+GCE | t2a-standard-1, t2a-standard-2, t2a-standard-4, t2a-standard-8, t2a-standard-16 | t2a-standard-32, n2-standard-64 (amd64) | n2-standard-96 (amd64), n2-standard-128 (amd64)
+AWS | m7g.large, m7g.large, m7g.xlarge, m7g.2xlarge, m7g.4xlarge | m7g.8xlarge, m7g.16xlarge | m6i.24xlarge (amd64), m6i.24xlarge (amd64)
+Azure | Standard_D2pds_v5, Standard_D2pds_v5, Standard_D4pds_v5, Standard_D8pds_v5, Standard_D16pds_v5 | Standard_D32pds_v5,Standard_D64pds_v5 | Standard_D96ds_v5 (amd64), Standard_D128ds_v5 (amd64)
+
+select-machine-type mem-per-cpu=Standard cpu-arch=AMD64
+----
+cpus | 1,2,4,8,16 | 32,64 | 96,128
+----
+GCE | n2-standard-2, n2-standard-2, n2-standard-4, n2-standard-8, n2-standard-16 | n2-standard-32, n2-standard-64 | n2-standard-96, n2-standard-128
+AWS | m6i.large, m6i.large, m6i.xlarge, m6i.2xlarge, m6i.4xlarge | m6i.8xlarge, m6i.16xlarge | m6i.24xlarge, m6i.24xlarge
+Azure | Standard_D2ds_v5, Standard_D2ds_v5, Standard_D4ds_v5, Standard_D8ds_v5, Standard_D16ds_v5 | Standard_D32ds_v5,Standard_D64ds_v5 | Standard_D96ds_v5, Standard_D128ds_v5
+
+select-machine-type mem-per-cpu=High cpu-arch=ARM64
+----
+cpus | 1,2,4,8,16 | 32,64 | 96,128
+----
+GCE | n2-highmem-2 (amd64), n2-highmem-2 (amd64), n2-highmem-4 (amd64), n2-highmem-8 (amd64), n2-highmem-16 (amd64) | n2-highmem-32 (amd64), n2-highmem-64 (amd64) | n2-highmem-96 (amd64), n2-highmem-128 (amd64)
+AWS | r6i.large (amd64), r6i.large (amd64), r6i.xlarge (amd64), r6i.2xlarge (amd64), r6i.4xlarge (amd64) | r6i.8xlarge (amd64), r6i.16xlarge (amd64) | r6i.24xlarge (amd64), r6i.24xlarge (amd64)
+Azure | Standard_E2pds_v5, Standard_E2pds_v5, Standard_E4pds_v5, Standard_E8pds_v5, Standard_E16pds_v5 | Standard_E32pds_v5,Standard_E64ds_v5 (amd64) | Standard_E96ds_v5 (amd64), Standard_E128ds_v5 (amd64)
+
+select-machine-type mem-per-cpu=High cpu-arch=AMD64
+----
+cpus | 1,2,4,8,16 | 32,64 | 96,128
+----
+GCE | n2-highmem-2, n2-highmem-2, n2-highmem-4, n2-highmem-8, n2-highmem-16 | n2-highmem-32, n2-highmem-64 | n2-highmem-96, n2-highmem-128
+AWS | r6i.large, r6i.large, r6i.xlarge, r6i.2xlarge, r6i.4xlarge | r6i.8xlarge, r6i.16xlarge | r6i.24xlarge, r6i.24xlarge
+Azure | Standard_E2ds_v5, Standard_E2ds_v5, Standard_E4ds_v5, Standard_E8ds_v5, Standard_E16ds_v5 | Standard_E32ds_v5,Standard_E64ds_v5 | Standard_E96ds_v5, Standard_E128ds_v5
+
+select-machine-type mem-per-cpu=Low cpu-arch=ARM64
+----
+cpus | 1,2,4,8,16 | 32,64 | 96,128
+----
+GCE | n2-highcpu-2 (amd64), n2-highcpu-2 (amd64), n2-highcpu-4 (amd64), n2-highcpu-8 (amd64), n2-highcpu-16 (amd64) | n2-highcpu-32 (amd64), n2-highcpu-64 (amd64) | n2-highcpu-96 (amd64), n2-highcpu-128 (amd64)
+AWS | unsupported, unsupported, unsupported, unsupported, unsupported | unsupported, unsupported | unsupported, unsupported
+Azure | unsupported, unsupported, unsupported, unsupported, unsupported | unsupported,unsupported | unsupported, unsupported
+
+select-machine-type mem-per-cpu=Low cpu-arch=AMD64
+----
+cpus | 1,2,4,8,16 | 32,64 | 96,128
+----
+GCE | n2-highcpu-2, n2-highcpu-2, n2-highcpu-4, n2-highcpu-8, n2-highcpu-16 | n2-highcpu-32, n2-highcpu-64 | n2-highcpu-96, n2-highcpu-128
+AWS | unsupported, unsupported, unsupported, unsupported, unsupported | unsupported, unsupported | unsupported, unsupported
+Azure | unsupported, unsupported, unsupported, unsupported, unsupported | unsupported,unsupported | unsupported, unsupported

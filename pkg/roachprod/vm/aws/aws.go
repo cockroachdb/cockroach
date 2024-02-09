@@ -1137,7 +1137,8 @@ func (p *Provider) runInstance(
 		return *fl
 	}
 	imageID := withFlagOverride(az.region.AMI_X86_64, &providerOpts.ImageAMI)
-	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "7g.") == 1
+	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "6gd.") == 1 ||
+		strings.Index(machineType, "7g.") == 1 || strings.Index(machineType, "7gd.") == 1
 	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
 		return errors.Errorf("machine type %s is arm64, but requested arch is %s", machineType, opts.Arch)
 	}
