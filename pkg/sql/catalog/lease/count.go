@@ -19,6 +19,7 @@ import (
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -136,13 +137,16 @@ func countLeasesNonMultiRegion(
 	ctx context.Context, txn isql.Txn, at hlc.Timestamp, whereClauses []string,
 ) (int, error) {
 	stmt := fmt.Sprintf(
-		`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE `,
+		`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE 
+crdb_region=$2 AND`,
 		at.AsOfSystemTime(),
 	) + strings.Join(whereClauses, " OR ")
 	values, err := txn.QueryRowEx(
 		ctx, "count-leases", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		stmt, at.GoTime(),
+		stmt,
+		at.GoTime(),
+		enum.One, // Single region database can only have one region prefix assigned.
 	)
 	if err != nil {
 		return 0, err
