@@ -141,10 +141,12 @@ func (s *SQLStats) IterateStatementStats(
 	return nil
 }
 
-// ConsumeStats leverages the process of retrieving stats from in-memory storage and then iterating over them
-// calling stmtVisitor and txnVisitor on statement and transaction stats respectively.
+// ConsumeStats leverages the process of atomic pulling stats from in-memory storage, cleaning in-memory stats, and
+// then iterating over them pulled stats calling stmtVisitor and txnVisitor on statement and transaction stats
+// respectively. ConsumeStats allows to process pulled statements while new sql stats can be added to in-memory statistics.
 func (s *SQLStats) ConsumeStats(
 	ctx context.Context,
+	stopper *stop.Stopper,
 	stmtVisitor sqlstats.StatementVisitor,
 	txnVisitor sqlstats.TransactionVisitor,
 ) {
@@ -171,7 +173,7 @@ func (s *SQLStats) ConsumeStats(
 		var wg sync.WaitGroup
 		wg.Add(2)
 
-		go func() {
+		err := stopper.RunAsyncTask(ctx, "sql-stmt-stats-flush", func(ctx context.Context) {
 			defer wg.Done()
 			for _, stat := range stmtStats {
 				stat := stat
@@ -179,9 +181,12 @@ func (s *SQLStats) ConsumeStats(
 					log.Warningf(ctx, "failed to consume statement statistics, %s", err.Error())
 				}
 			}
-		}()
+		})
+		if err != nil {
+			return
+		}
 
-		go func() {
+		err = stopper.RunAsyncTask(ctx, "sql-txn-stats-flush", func(ctx context.Context) {
 			defer wg.Done()
 			for _, stat := range txnStats {
 				stat := stat
@@ -189,7 +194,10 @@ func (s *SQLStats) ConsumeStats(
 					log.Warningf(ctx, "failed to consume transaction statistics, %s", err.Error())
 				}
 			}
-		}()
+		})
+		if err != nil {
+			return
+		}
 		wg.Wait()
 	}
 }
