@@ -61,6 +61,7 @@ type Builder struct {
 	disableTelemetry bool
 	semaCtx          *tree.SemaContext
 	evalCtx          *eval.Context
+	colOrdsAlloc     colOrdMapAllocator
 
 	// subqueries accumulates information about subqueries that are part of scalar
 	// expressions we built. Each entry is associated with a tree.Subquery
@@ -205,6 +206,7 @@ func New(
 		initialAllowAutoCommit: allowAutoCommit,
 		IsANSIDML:              isANSIDML,
 	}
+	b.colOrdsAlloc.Init(mem.Metadata().MaxColumn())
 	if evalCtx != nil {
 		sd := evalCtx.SessionData()
 		if sd.SaveTablesPrefix != "" {
@@ -257,7 +259,7 @@ func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference,
 	return tree.WrapFunction(fnName), nil
 }
 
-func (b *Builder) build(e opt.Expr) (_ execPlan, outputCols opt.ColMap, err error) {
+func (b *Builder) build(e opt.Expr) (_ execPlan, outputCols colOrdMap, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate errors without adding lots of checks
@@ -274,7 +276,7 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, outputCols opt.ColMap, err erro
 
 	rel, ok := e.(memo.RelExpr)
 	if !ok {
-		return execPlan{}, opt.ColMap{}, errors.AssertionFailedf(
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
 			"building execution for non-relational operator %s", redact.Safe(e.Op()),
 		)
 	}
@@ -297,12 +299,13 @@ func (b *Builder) BuildScalar() (tree.TypedExpr, error) {
 	if !ok {
 		return nil, errors.AssertionFailedf("BuildScalar cannot be called for non-scalar operator %s", redact.Safe(b.e.Op()))
 	}
-	var ctx buildScalarCtx
 	md := b.mem.Metadata()
-	ctx.ivh = tree.MakeIndexedVarHelper(&mdVarContainer{md: md}, md.NumColumns())
+	b.colOrdsAlloc.Init(md.MaxColumn())
+	cols := b.colOrdsAlloc.Alloc()
 	for i := 0; i < md.NumColumns(); i++ {
-		ctx.ivarMap.Set(i+1, i)
+		cols.Set(opt.ColumnID(i+1), i)
 	}
+	ctx := makeBuildScalarCtx(cols)
 	return b.buildScalar(&ctx, scalar)
 }
 
@@ -320,11 +323,11 @@ type builtWithExpr struct {
 	id opt.WithID
 	// outputCols maps the output ColumnIDs of the With expression to the ordinal
 	// positions they are output to. See execPlan.outputCols for more details.
-	outputCols opt.ColMap
+	outputCols colOrdMap
 	bufferNode exec.Node
 }
 
-func (b *Builder) addBuiltWithExpr(id opt.WithID, outputCols opt.ColMap, bufferNode exec.Node) {
+func (b *Builder) addBuiltWithExpr(id opt.WithID, outputCols colOrdMap, bufferNode exec.Node) {
 	b.withExprs = append(b.withExprs, builtWithExpr{
 		id:         id,
 		outputCols: outputCols,

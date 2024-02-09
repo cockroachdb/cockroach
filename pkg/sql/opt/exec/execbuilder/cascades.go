@@ -113,7 +113,7 @@ type cascadeBuilder struct {
 	mutationBuffer exec.Node
 	// mutationBufferCols maps With column IDs from the original memo to buffer
 	// node column ordinals; see builtWithExpr.outputCols.
-	mutationBufferCols opt.ColMap
+	mutationBufferCols colOrdMap
 
 	// colMeta remembers the metadata of the With columns from the original memo.
 	colMeta []opt.ColumnMeta
@@ -142,10 +142,9 @@ func makeCascadeBuilder(b *Builder, mutationWithID opt.WithID) (*cascadeBuilder,
 	// Remember the column metadata, as we will need to recreate it in the new
 	// memo.
 	md := b.mem.Metadata()
-	cb.colMeta = make([]opt.ColumnMeta, 0, cb.mutationBufferCols.Len())
-	cb.mutationBufferCols.ForEach(func(key, val int) {
-		id := opt.ColumnID(key)
-		cb.colMeta = append(cb.colMeta, *md.ColumnMeta(id))
+	cb.colMeta = make([]opt.ColumnMeta, 0, cb.mutationBufferCols.MaxOrd())
+	cb.mutationBufferCols.ForEach(func(col opt.ColumnID, ord int) {
+		cb.colMeta = append(cb.colMeta, *md.ColumnMeta(col))
 	})
 
 	return cb, nil
@@ -198,7 +197,7 @@ func (cb *cascadeBuilder) planCascade(
 	var relExpr memo.RelExpr
 	// bufferColMap is the mapping between the column IDs in the new memo and
 	// the column ordinal in the buffer node.
-	var bufferColMap opt.ColMap
+	var bufferColMap colOrdMap
 	if bufferRef == nil {
 		// No input buffering.
 		var err error
@@ -219,6 +218,10 @@ func (cb *cascadeBuilder) planCascade(
 	} else {
 		// Set up metadata for the buffer columns.
 
+		// Allocate a map with enough capacity to store the new columns being
+		// added below.
+		bufferColMap = newColOrdMap(md.MaxColumn() + opt.ColumnID(len(cb.colMeta)))
+
 		// withColRemap is the mapping between the With column IDs in the original
 		// memo and the corresponding column IDs in the new memo.
 		var withColRemap opt.ColMap
@@ -226,8 +229,8 @@ func (cb *cascadeBuilder) planCascade(
 		for i := range cb.colMeta {
 			id := md.AddColumn(cb.colMeta[i].Alias, cb.colMeta[i].Type)
 			withCols.Add(id)
-			ordinal, _ := cb.mutationBufferCols.Get(int(cb.colMeta[i].MetaID))
-			bufferColMap.Set(int(id), ordinal)
+			ordinal, _ := cb.mutationBufferCols.Get(cb.colMeta[i].MetaID)
+			bufferColMap.Set(id, ordinal)
 			withColRemap.Set(int(cb.colMeta[i].MetaID), int(id))
 		}
 
