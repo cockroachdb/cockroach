@@ -57,9 +57,9 @@ const (
 	DeflakeAll DeflakeFlags = DeflakeDistribution | DeflakeVectorized | DeflakeNodes | DeflakeVolatile
 )
 
-// Has returns true if the receiver has the given deflake flag set.
-func (f DeflakeFlags) Has(flag DeflakeFlags) bool {
-	return (f & flag) != 0
+// HasAny returns true if the receiver has any of the given deflake flags set.
+func (f DeflakeFlags) HasAny(flags DeflakeFlags) bool {
+	return (f & flags) != 0
 }
 
 // MakeFlags crates Flags from ExplainOptions.
