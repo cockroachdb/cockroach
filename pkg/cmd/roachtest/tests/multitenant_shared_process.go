@@ -44,7 +44,7 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 
 			// In order to observe the app tenant's db console, create a secure
 			// cluster and add Admin roles to the system and app tenant.
-			clusterSettings := install.MakeClusterSettings(install.SecureOption(true))
+			clusterSettings := install.MakeClusterSettings()
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), clusterSettings, crdbNodes)
 
 			startOpts := option.DefaultStartSharedVirtualClusterOpts(appTenantName)

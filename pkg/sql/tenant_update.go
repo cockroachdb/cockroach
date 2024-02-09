@@ -14,10 +14,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -27,8 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -198,7 +203,7 @@ func ActivateTenant(
 }
 
 func (p *planner) setTenantService(
-	ctx context.Context, info *mtinfopb.TenantInfo, newMode mtinfopb.TenantServiceMode,
+	ctx context.Context, info *mtinfopb.TenantInfo, targetMode mtinfopb.TenantServiceMode,
 ) error {
 	if p.EvalContext().TxnReadOnly {
 		return readOnlyError("ALTER VIRTUAL CLUSTER SERVICE")
@@ -214,21 +219,167 @@ func (p *planner) setTenantService(
 		return err
 	}
 
-	if newMode == info.ServiceMode {
-		// No-op. Do nothing.
-		return nil
+	if !p.extendedEvalCtx.TxnIsSingleStmt {
+		return errors.Errorf("ALTER VIRTUAL CLUSTER SERVICE cannot be used inside a multi-statement transaction")
 	}
 
-	if newMode != mtinfopb.ServiceModeNone && info.ServiceMode != mtinfopb.ServiceModeNone {
-		return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"cannot change service mode %v to %v directly",
-			info.ServiceMode, newMode),
-			"Use ALTER VIRTUAL CLUSTER STOP SERVICE first.")
+	lastMode := info.ServiceMode
+	for {
+		mode, err := stepTenantServiceState(ctx,
+			p.ExecCfg().InternalDB,
+			p.execCfg.SQLStatusServer,
+			p.ExecCfg().Settings, info, targetMode)
+		if err != nil {
+			return err
+		}
+		if targetMode == mode {
+			return nil
+		}
+		if mode == lastMode {
+			return errors.AssertionFailedf("service mode did not advance from %q", lastMode)
+		}
+	}
+}
+
+func stepTenantServiceState(
+	ctx context.Context,
+	db *InternalDB,
+	statusSrv serverpb.SQLStatusServer,
+	settings *cluster.Settings,
+	inInfo *mtinfopb.TenantInfo,
+	targetMode mtinfopb.TenantServiceMode,
+) (mtinfopb.TenantServiceMode, error) {
+	updateTenantMode := func(txn isql.Txn, info *mtinfopb.TenantInfo, mode mtinfopb.TenantServiceMode) error {
+		// Zero the LastRevertTenantTimestamp since
+		// starting the service invalidates any
+		// previous revert.
+		if mode == mtinfopb.ServiceModeShared || mode == mtinfopb.ServiceModeExternal {
+			info.LastRevertTenantTimestamp = hlc.Timestamp{}
+		}
+		log.Infof(ctx, "transitioning tenant %d from %s to %s", info.ID, info.ServiceMode, mode)
+		info.ServiceMode = mode
+		return UpdateTenantRecord(ctx, settings, txn, info)
 	}
 
-	info.ServiceMode = newMode
-	info.LastRevertTenantTimestamp = hlc.Timestamp{}
-	return UpdateTenantRecord(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), info)
+	// In 24.1 we support the following state transitions
+	//
+	//      +-> External -+
+	// None-|             |-> Stopping
+	//   ^  +->  Shared  -+      |
+	//   |                       |
+	//   +-----------------------+
+	//
+	// NB: We could eliminate some of the error cases here. For
+	// instance we could support External -> Shared now but still
+	// return an error in that case.
+	nextMode := func(currentMode mtinfopb.TenantServiceMode, targetMode mtinfopb.TenantServiceMode) (mtinfopb.TenantServiceMode, error) {
+		switch currentMode {
+		case mtinfopb.ServiceModeNone:
+			switch targetMode {
+			case mtinfopb.ServiceModeShared, mtinfopb.ServiceModeExternal:
+				return targetMode, nil
+			default:
+				return 0, errors.AssertionFailedf("unsupported service mode transition from %s to %s", currentMode, targetMode)
+			}
+		case mtinfopb.ServiceModeShared, mtinfopb.ServiceModeExternal:
+			switch targetMode {
+			case mtinfopb.ServiceModeNone:
+				if settings.Version.IsActive(ctx, clusterversion.V24_1) {
+					return mtinfopb.ServiceModeStopping, nil
+				} else {
+					return mtinfopb.ServiceModeNone, nil
+				}
+			case mtinfopb.ServiceModeExternal, mtinfopb.ServiceModeShared:
+				return 0, errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"cannot change service mode %v to %v directly", currentMode, targetMode),
+					"Use ALTER VIRTUAL CLUSTER STOP SERVICE first.")
+			default:
+				return 0, errors.AssertionFailedf("unsupported service mode transition from %s to %s", currentMode, targetMode)
+			}
+		case mtinfopb.ServiceModeStopping:
+			switch targetMode {
+			case mtinfopb.ServiceModeNone:
+				return targetMode, nil
+			case mtinfopb.ServiceModeShared, mtinfopb.ServiceModeExternal:
+				return 0, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"service currently stopping, cannot start service until stop has completed")
+			default:
+				return 0, errors.AssertionFailedf("unsupported service mode transition from %s to %s", currentMode, targetMode)
+			}
+		default:
+			return 0, errors.AssertionFailedf("unknown service mode %q", currentMode)
+		}
+
+	}
+
+	var mode mtinfopb.TenantServiceMode
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		tid, err := roachpb.MakeTenantID(inInfo.ID)
+		if err != nil {
+			return err
+		}
+
+		info, err := GetTenantRecordByID(ctx, txn, tid, settings)
+		if err != nil {
+			return err
+		}
+
+		if targetMode == info.ServiceMode {
+			// No-op. Do nothing.
+			mode = targetMode
+			return nil
+		}
+
+		mode, err = nextMode(info.ServiceMode, targetMode)
+		if err != nil {
+			return err
+		}
+		return updateTenantMode(txn, info, mode)
+	}); err != nil {
+		return mode, err
+	}
+
+	if mode == mtinfopb.ServiceModeStopping {
+		// The timeout here is to protect against a scenario
+		// in which another client also stops the service,
+		// observes the stopped state first, and then restarts
+		// the service while we are still waiting for all
+		// nodes to observe the stopped state.
+		//
+		// We could avoid this by treating these transitions
+		// more like schema changes.
+		log.Infof(ctx, "waiting for all nodes to stop service for tenant %d", inInfo.ID)
+		if err := timeutil.RunWithTimeout(ctx, "wait-for-tenant-stop", 10*time.Minute, func(ctx context.Context) error {
+			retryOpts := retry.Options{MaxBackoff: 10 * time.Second}
+			for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
+				resp, err := statusSrv.TenantServiceStatus(ctx, &serverpb.TenantServiceStatusRequest{TenantID: inInfo.ID})
+				if err != nil {
+					return errors.Wrap(err, "failed waiting for tenant service status")
+				}
+				if len(resp.ErrorsByNodeID) > 0 {
+					for _, errStr := range resp.ErrorsByNodeID {
+						return errors.Newf("failed to poll service status on all nodes (first error): %s", errStr)
+					}
+				}
+				allStopped := true
+				for n, info := range resp.StatusByNodeID {
+					stoppedOrStopping := info.ServiceMode == mtinfopb.ServiceModeStopping || info.ServiceMode == mtinfopb.ServiceModeNone
+					if !stoppedOrStopping {
+						log.Infof(ctx, "tenant %d is still running on node %s", info.ID, n)
+						allStopped = false
+					}
+				}
+				if allStopped {
+					break
+				}
+			}
+			return nil
+		}); err != nil {
+			return mode, err
+		}
+	}
+
+	return mode, nil
 }
 
 func (p *planner) renameTenant(

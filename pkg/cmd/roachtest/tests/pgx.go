@@ -116,9 +116,9 @@ func registerPgx(r registry.Registry) {
 		result, err := repeatRunWithDetailsSingleNode(
 			ctx, c, t, node,
 			"run pgx test suite",
-			"cd /mnt/data1/pgx && "+
-				"PGX_TEST_DATABASE='postgresql://test_admin:@localhost:{pgport:1}/pgx_test' go test -v 2>&1 | "+
-				"`go env GOPATH`/bin/go-junit-report",
+			fmt.Sprintf("cd /mnt/data1/pgx && "+
+				"PGX_TEST_DATABASE='postgresql://%s:%s@localhost:{pgport:1}/pgx_test?sslmode=require' go test -v 2>&1 | "+
+				"`go env GOPATH`/bin/go-junit-report", install.DefaultUser, install.DefaultPassword),
 		)
 
 		// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.

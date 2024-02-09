@@ -1641,6 +1641,7 @@ fi
 %[1]s cert create-ca --certs-dir=certs --ca-key=certs/ca.key
 %[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key $TENANT_SCOPE_OPT
 %[1]s cert create-client testuser --certs-dir=certs --ca-key=certs/ca.key $TENANT_SCOPE_OPT
+%[1]s cert create-client roach --certs-dir=certs --ca-key=certs/ca.key $TENANT_SCOPE_OPT
 %[1]s cert create-node %[2]s --certs-dir=certs --ca-key=certs/ca.key
 tar cvf %[3]s certs
 `, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "), certsTarName)
@@ -2577,7 +2578,7 @@ func (c *SyncedCluster) pgurls(
 		if err != nil {
 			return nil, err
 		}
-		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode)
+		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode, AuthRootCert)
 	}
 	return m, nil
 }

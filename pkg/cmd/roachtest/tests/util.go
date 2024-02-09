@@ -20,9 +20,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -41,8 +41,9 @@ func WaitFor3XReplication(ctx context.Context, t test.Test, l *logger.Logger, db
 func WaitForReady(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
 ) {
+	client := roachtestutil.DefaultHTTPClient(c, t.L())
 	checkReady := func(ctx context.Context, url string) error {
-		resp, err := httputil.Get(ctx, url)
+		resp, err := client.Get(ctx, url)
 		if err != nil {
 			return err
 		}
@@ -63,7 +64,7 @@ func WaitForReady(
 	require.NoError(t, timeutil.RunWithTimeout(
 		ctx, "waiting for ready", time.Minute, func(ctx context.Context) error {
 			for i, adminAddr := range adminAddrs {
-				url := fmt.Sprintf(`http://%s/health?ready=1`, adminAddr)
+				url := fmt.Sprintf(`https://%s/health?ready=1`, adminAddr)
 
 				for err := checkReady(ctx, url); err != nil; err = checkReady(ctx, url) {
 					t.L().Printf("n%d not ready, retrying: %s", nodes[i], err)

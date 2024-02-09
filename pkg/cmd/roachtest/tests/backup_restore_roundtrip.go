@@ -110,7 +110,7 @@ func backupRestoreRoundTrip(
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
 	})
 
-	c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings(install.SecureOption(true), envOption), roachNodes)
+	c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings(envOption), roachNodes)
 	m := c.NewMonitor(ctx, roachNodes)
 
 	m.Go(func(ctx context.Context) error {

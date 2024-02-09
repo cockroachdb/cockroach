@@ -54,8 +54,8 @@ type tpceConnectionOpts struct {
 
 const (
 	defaultFixtureBucket = "gs://cockroach-fixtures-us-east1/tpce-csv"
-	defaultUser          = "root"
-	defaultPassword      = ""
+	defaultUser          = install.DefaultUser
+	defaultPassword      = install.DefaultPassword
 )
 
 func defaultTPCEConnectionOpts() tpceConnectionOpts {

@@ -200,15 +200,27 @@ func (c *cachedCatalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.
 	c.hasScanAll = true
 	c.hasScanNamespaceForDatabases = true
 	c.hasScanAllComments = true
-	for id, s := range c.byIDState {
-		s.hasScanNamespaceForDatabaseEntries = true
-		s.hasScanNamespaceForDatabaseSchemas = true
-		s.hasGetDescriptorEntries = true
-		c.byIDState[id] = s
-	}
-	for ni, s := range c.byNameState {
-		s.hasGetNamespaceEntries = true
-		c.byNameState[ni] = s
+	if err := read.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		// We must update the byID and byName states for each descriptor that
+		// was read.
+		var idState byIDStateValue
+		var nameState byNameStateValue
+		idState.hasScanNamespaceForDatabaseEntries = true
+		idState.hasScanNamespaceForDatabaseSchemas = true
+		idState.hasGetDescriptorEntries = true
+		nameState.hasGetNamespaceEntries = true
+		c.setByIDState(desc.GetID(), idState)
+		ni := descpb.NameInfo{
+			ParentID: desc.GetParentID(),
+			Name:     desc.GetName(),
+		}
+		if typ := desc.DescriptorType(); typ != catalog.Database && typ != catalog.Schema {
+			ni.ParentSchemaID = desc.GetParentSchemaID()
+		}
+		c.setByNameState(ni, nameState)
+		return nil
+	}); err != nil {
+		return nstree.Catalog{}, err
 	}
 	return read, nil
 }

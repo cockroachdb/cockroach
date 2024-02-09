@@ -53,7 +53,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	// 3 will re-recreate a separate set of certs, which
 	// we don't want. Starting all nodes at once ensures
 	// that they use coherent certs.
-	settings := install.MakeClusterSettings(install.SecureOption(true))
+	settings := install.MakeClusterSettings()
 
 	// Don't create a backup schedule as this test shuts the cluster down immediately.
 	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, serverNodes)
@@ -326,7 +326,7 @@ func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c clust
 	}
 	n := c.Spec().NodeCount
 	serverNodes, clientNode := c.Range(1, n-1), c.Nodes(n)
-	settings := install.MakeClusterSettings(install.SecureOption(true))
+	settings := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, serverNodes)
 	certsDir := "/home/ubuntu/certs"
 	t.L().Printf("connecting to cluster from roachtest...")

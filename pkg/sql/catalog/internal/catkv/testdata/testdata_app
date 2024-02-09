@@ -405,6 +405,15 @@ is_desc_id_known_to_not_exist id=123
 ----
 true
 
+# Make sure scan_all properly updated the cache.
+is_id_in_cache id=107
+----
+true
+
+is_id_in_cache id=108
+----
+true
+
 # Get* queries involving IDs or names which don't exist after a
 # ScanAll should bypass storage in the cached CatalogReader.
 get_by_ids id=456
