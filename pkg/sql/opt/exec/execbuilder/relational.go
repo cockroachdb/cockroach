@@ -1004,7 +1004,8 @@ func (b *Builder) buildInvertedFilter(
 	return b.applySimpleProject(res, inputCols, invFilter, invFilter.Relational().OutputCols, invFilter.ProvidedPhysical().Ordering)
 }
 
-// applySimpleProject adds a simple projection on top of an existing plan.
+// applySimpleProject adds a simple projection on top of an existing plan. The
+// returned outputCols are always a new map distinct from inputCols.
 func (b *Builder) applySimpleProject(
 	input execPlan,
 	inputCols colOrdMap,
@@ -1046,6 +1047,10 @@ func (b *Builder) buildProject(
 ) (_ execPlan, outputCols colOrdMap, err error) {
 	md := b.mem.Metadata()
 	input, inputCols, err := b.buildRelational(prj.Input)
+	// The input column map is only used for the lifetime of this function, so
+	// free the map afterward. In the case of a simple project,
+	// applySimpleProject will create a new map.
+	defer b.colOrdsAlloc.Free(inputCols)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -1239,8 +1244,10 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 	}
 
 	// The right plan will always produce the columns in the presentation, in
-	// the same order.
+	// the same order. This map is only used for the lifetime of this function,
+	// so free the map afterward.
 	rightOutputCols := b.colOrdsAlloc.Alloc()
+	defer b.colOrdsAlloc.Free(rightOutputCols)
 	for i := range rightRequiredProps.Presentation {
 		rightOutputCols.Set(rightRequiredProps.Presentation[i].ID, i)
 	}
@@ -1260,8 +1267,12 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 
 	if !joinType.ShouldIncludeRightColsInOutput() {
 		outputCols = leftCols
+		// allCols is no longer used, so it can be freed.
+		b.colOrdsAlloc.Free(allCols)
 	} else {
 		outputCols = allCols
+		// leftCols is no longer used, so it can be freed.
+		b.colOrdsAlloc.Free(leftCols)
 	}
 
 	var ep execPlan
@@ -1369,14 +1380,34 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (_ execPlan, outputCols colOr
 		telemetry.Inc(opt.JoinTypeToUseCounter(join.Op()))
 	}
 
-	left, right, onExpr, leftCols, rightCols, outputCols, err := b.initJoinBuild(
+	left, right, onExpr, leftCols, rightCols, allCols, err := b.initJoinBuild(
 		leftExpr,
 		rightExpr,
 		memo.ExtractRemainingJoinFilters(*filters, leftEq, rightEq),
-		joinType,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
+	}
+
+	switch {
+	case !joinType.ShouldIncludeLeftColsInOutput():
+		outputCols = rightCols
+		// leftCols and allCols are only used for the lifetime of the function,
+		// so they can be freed afterward.
+		defer b.colOrdsAlloc.Free(leftCols)
+		defer b.colOrdsAlloc.Free(allCols)
+	case !joinType.ShouldIncludeRightColsInOutput():
+		outputCols = leftCols
+		// rightCols and allCols are only used for the lifetime of the function,
+		// so they can be freed afterward.
+		defer b.colOrdsAlloc.Free(rightCols)
+		defer b.colOrdsAlloc.Free(allCols)
+	default:
+		outputCols = allCols
+		// leftCols and rightCols are only used for the lifetime of the
+		// function, so they can be freed afterward.
+		defer b.colOrdsAlloc.Free(leftCols)
+		defer b.colOrdsAlloc.Free(rightCols)
 	}
 
 	// Convert leftEq/rightEq to ordinals.
@@ -1451,12 +1482,34 @@ func (b *Builder) buildMergeJoin(
 		}
 	}
 
-	left, right, onExpr, leftCols, rightCols, outputCols, err := b.initJoinBuild(
-		leftExpr, rightExpr, join.On, joinType,
+	left, right, onExpr, leftCols, rightCols, allCols, err := b.initJoinBuild(
+		leftExpr, rightExpr, join.On,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
+
+	switch {
+	case !joinType.ShouldIncludeLeftColsInOutput():
+		outputCols = rightCols
+		// leftCols and allCols are only used for the lifetime of the function,
+		// so they can be freed afterward.
+		defer b.colOrdsAlloc.Free(leftCols)
+		defer b.colOrdsAlloc.Free(allCols)
+	case !joinType.ShouldIncludeRightColsInOutput():
+		outputCols = leftCols
+		// rightCols and allCols are only used for the lifetime of the function,
+		// so they can be freed afterward.
+		defer b.colOrdsAlloc.Free(rightCols)
+		defer b.colOrdsAlloc.Free(allCols)
+	default:
+		outputCols = allCols
+		// leftCols and rightCols are only used for the lifetime of the
+		// function, so they can be freed afterward.
+		defer b.colOrdsAlloc.Free(leftCols)
+		defer b.colOrdsAlloc.Free(rightCols)
+	}
+
 	leftOrd, err := sqlOrdering(leftEq, leftCols)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -1489,14 +1542,11 @@ func (b *Builder) buildMergeJoin(
 
 // initJoinBuild builds the inputs to the join as well as the ON expression.
 func (b *Builder) initJoinBuild(
-	leftChild memo.RelExpr,
-	rightChild memo.RelExpr,
-	filters memo.FiltersExpr,
-	joinType descpb.JoinType,
+	leftChild memo.RelExpr, rightChild memo.RelExpr, filters memo.FiltersExpr,
 ) (
 	leftPlan, rightPlan execPlan,
 	onExpr tree.TypedExpr,
-	leftCols, rightCols, outputCols colOrdMap,
+	leftCols, rightCols, allCols colOrdMap,
 	_ error,
 ) {
 	leftPlan, leftCols, err := b.buildRelational(leftChild)
@@ -1508,7 +1558,7 @@ func (b *Builder) initJoinBuild(
 		return execPlan{}, execPlan{}, nil, colOrdMap{}, colOrdMap{}, colOrdMap{}, err
 	}
 
-	allCols := b.joinOutputMap(leftCols, rightCols)
+	allCols = b.joinOutputMap(leftCols, rightCols)
 
 	if len(filters) != 0 {
 		onExpr, err = b.buildScalarWithMap(allCols, &filters)
@@ -1517,12 +1567,6 @@ func (b *Builder) initJoinBuild(
 		}
 	}
 
-	if !joinType.ShouldIncludeLeftColsInOutput() {
-		return leftPlan, rightPlan, onExpr, leftCols, rightCols, rightCols, nil
-	}
-	if !joinType.ShouldIncludeRightColsInOutput() {
-		return leftPlan, rightPlan, onExpr, leftCols, rightCols, leftCols, nil
-	}
 	return leftPlan, rightPlan, onExpr, leftCols, rightCols, allCols, nil
 }
 
@@ -1565,6 +1609,9 @@ func joinOpToJoinType(op opt.Operator) (descpb.JoinType, error) {
 
 func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (_ execPlan, outputCols colOrdMap, err error) {
 	input, inputCols, err := b.buildGroupByInput(groupBy)
+	// The input column map is only used for the lifetime of this function, so
+	// free the map afterward.
+	defer b.colOrdsAlloc.Free(inputCols)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -1724,7 +1771,10 @@ func (b *Builder) buildDistinct(
 	if inputCols.MaxOrd()+1 == outCols.Len() {
 		return ep, inputCols, nil
 	}
-	return b.ensureColumns(ep, inputCols, distinct, outCols.ToList(), distinct.ProvidedPhysical().Ordering)
+	return b.ensureColumns(
+		ep, inputCols, distinct, outCols.ToList(),
+		distinct.ProvidedPhysical().Ordering, true, /* reuseInputCols */
+	)
 }
 
 func (b *Builder) buildGroupByInput(
@@ -1781,6 +1831,10 @@ func (b *Builder) buildGroupByInput(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
+
+	// The input column map no longer used, so free it.
+	defer b.colOrdsAlloc.Free(inputCols)
+
 	input.root, err = b.factory.ConstructSimpleProject(input.root, cols, reqOrdering)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -1821,14 +1875,25 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (_ execPlan, outputCols colOrdMap
 	// Note that (unless this is part of a larger query) the presentation property
 	// will ensure that the columns are presented correctly in the output (i.e. in
 	// the order `b, c, a`).
-	left, leftCols, err = b.ensureColumns(left, leftCols, leftExpr, private.LeftCols, leftExpr.ProvidedPhysical().Ordering)
+	left, leftCols, err = b.ensureColumns(
+		left, leftCols, leftExpr, private.LeftCols,
+		leftExpr.ProvidedPhysical().Ordering, true, /* reuseInputCols */
+	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	right, rightCols, err = b.ensureColumns(right, rightCols, rightExpr, private.RightCols, rightExpr.ProvidedPhysical().Ordering)
+	right, rightCols, err = b.ensureColumns(
+		right, rightCols, rightExpr, private.RightCols,
+		rightExpr.ProvidedPhysical().Ordering, true, /* reuseInputCols */
+	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
+
+	// The left and right  column maps are only used for the lifetime of this
+	// function, so free them afterward.
+	defer b.colOrdsAlloc.Free(leftCols)
+	defer b.colOrdsAlloc.Free(rightCols)
 
 	var typ tree.UnionType
 	var all bool
@@ -2196,11 +2261,9 @@ func (b *Builder) buildOrdinality(
 
 	// We have one additional ordinality column, which is ordered at the end of
 	// the list.
-	// TODO(mgartner): Is the copy here necessary?
-	outputCols = b.colOrdsAlloc.Copy(inputCols)
-	outputCols.Set(ord.ColID, outputCols.MaxOrd()+1)
+	inputCols.Set(ord.ColID, outputCols.MaxOrd()+1)
 
-	return ep, outputCols, nil
+	return ep, inputCols, nil
 }
 
 func (b *Builder) buildIndexJoin(
@@ -2225,6 +2288,9 @@ func (b *Builder) buildIndexJoin(
 			return execPlan{}, colOrdMap{}, err
 		}
 	}
+
+	// The input column map is no longer used, so it can be freed.
+	b.colOrdsAlloc.Free(inputCols)
 
 	var needed exec.TableColumnOrdinalSet
 	needed, outputCols = b.getColumns(join.Cols, join.Table)
@@ -2512,30 +2578,53 @@ func (b *Builder) buildLookupJoin(
 	}
 
 	lookupOrdinals, lookupColMap := b.getColumns(lookupCols, join.Table)
-	// allExprCols are the columns used in expressions evaluated by this join.
-	allExprCols := b.joinOutputMap(inputCols, lookupColMap)
-	allCols := allExprCols
-	if join.IsFirstJoinInPairedJoiner {
-		// allCols needs to include the continuation column since it will be
-		// in the result output by this join.
-		allCols = b.colOrdsAlloc.Copy(allExprCols)
-		maxOrd := allCols.MaxOrd()
+
+	// leftAndRightCols are the columns used in expressions evaluated by this
+	// join.
+	leftAndRightCols := b.joinOutputMap(inputCols, lookupColMap)
+
+	// lookupColMap is no longer used, so it can be freed.
+	b.colOrdsAlloc.Free(lookupColMap)
+
+	// Create the output column mapping.
+	switch {
+	case join.IsFirstJoinInPairedJoiner:
+		// For the first join in a left-join pair, outputCols needs to include
+		// the continuation column since it will be in the result output by this
+		// join.
+		outputCols = b.colOrdsAlloc.Copy(leftAndRightCols)
+
+		maxOrd := outputCols.MaxOrd()
 		if maxOrd == -1 {
-			return execPlan{}, colOrdMap{}, errors.AssertionFailedf("allCols should not be empty")
+			return execPlan{}, colOrdMap{}, errors.AssertionFailedf("outputCols should not be empty")
 		}
 		// Assign the continuation column the next unused value in the map.
-		allCols.Set(join.ContinuationCol, maxOrd+1)
-	}
-	outputCols = allCols
-	if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
-		// For semi and anti join, only the left columns are output.
+		outputCols.Set(join.ContinuationCol, maxOrd+1)
+
+		// allExprCols is only needed for the lifetime of the function, so free
+		// it afterward.
+		defer b.colOrdsAlloc.Free(leftAndRightCols)
+
+		// inputCols is no longer used, so it can be freed.
+		b.colOrdsAlloc.Free(inputCols)
+
+	case join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp:
+		// For semi and anti joins, only the left columns are output.
 		outputCols = inputCols
+
+		// allExprCols is only needed for the lifetime of the function, so free
+		// it afterward.
+		defer b.colOrdsAlloc.Free(leftAndRightCols)
+
+	default:
+		// For all other joins, the left and right columns are output.
+		outputCols = leftAndRightCols
+
+		// inputCols is no longer used, so it can be freed.
+		b.colOrdsAlloc.Free(inputCols)
 	}
 
-	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allExprCols.MaxOrd()+1),
-		ivarMap: allExprCols,
-	}
+	ctx := makeBuildScalarCtx(leftAndRightCols)
 	var lookupExpr, remoteLookupExpr tree.TypedExpr
 	if len(join.LookupExpr) > 0 {
 		var err error
@@ -2612,6 +2701,9 @@ func (b *Builder) buildLookupJoin(
 		if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
 			outCols = join.Cols.Intersection(joinInputCols)
 		}
+		// applySimpleProject creates a new map for outputCols, so outputCols
+		// can be freed.
+		defer b.colOrdsAlloc.Free(outputCols)
 		return b.applySimpleProject(res, outputCols, join, outCols, join.ProvidedPhysical().Ordering)
 	}
 	return res, outputCols, nil
@@ -2721,6 +2813,7 @@ func (b *Builder) buildInvertedJoin(
 			b.doScanExprCollection = false
 		}
 	}
+	// TODO(mgartner): Free inputCols and other ordColMaps below when possible.
 	input, inputCols, err := b.buildRelational(join.Input)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -2887,6 +2980,8 @@ func (b *Builder) buildZigzagJoin(
 		rightCols.Add(join.RightTable.IndexColumnID(rightIndex, i))
 	}
 
+	// TODO(mgartner): Free leftColMap, rightColMap, and other ordColMaps below
+	// when possible.
 	leftOrdinals, leftColMap := b.getColumns(leftCols, join.LeftTable)
 	rightOrdinals, rightColMap := b.getColumns(rightCols, join.RightTable)
 
@@ -3063,14 +3158,17 @@ func (b *Builder) buildRecursiveCTE(
 	}
 
 	// Make sure we have the columns in the correct order.
-	initial, initialCols, err = b.ensureColumns(initial, initialCols, rec.Initial, rec.InitialCols, nil /* ordering */)
+	initial, initialCols, err = b.ensureColumns(
+		initial, initialCols, rec.Initial, rec.InitialCols,
+		nil /* ordering */, true, /* reuseInputCols */
+	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
 
 	// Renumber the columns so they match the columns expected by the recursive
 	// query.
-	initialCols = b.colOrdsAlloc.Alloc()
+	initialCols.Clear()
 	for i, col := range rec.OutCols {
 		initialCols.Set(col, i)
 	}
@@ -3100,7 +3198,10 @@ func (b *Builder) buildRecursiveCTE(
 			return nil, err
 		}
 		// Ensure columns are output in the same order.
-		plan, planCols, err = innerBld.ensureColumns(plan, planCols, rec.Recursive, rec.RecursiveCols, opt.Ordering{})
+		plan, _, err = innerBld.ensureColumns(
+			plan, planCols, rec.Recursive, rec.RecursiveCols,
+			opt.Ordering{}, true, /* reuseInputCols */
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -3147,7 +3248,10 @@ func (b *Builder) buildWithScan(
 	res := execPlan{root: node}
 
 	// Apply any necessary projection to produce the InCols in the given order.
-	res, _, err = b.ensureColumns(res, e.outputCols, withScan, withScan.InCols, withScan.ProvidedPhysical().Ordering)
+	res, _, err = b.ensureColumns(
+		res, e.outputCols, withScan, withScan.InCols,
+		withScan.ProvidedPhysical().Ordering, false, /* reuseInputCols */
+	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -3164,7 +3268,9 @@ func (b *Builder) buildWithScan(
 func (b *Builder) buildProjectSet(
 	projectSet *memo.ProjectSetExpr,
 ) (_ execPlan, outputCols colOrdMap, err error) {
+	// TODO(mgartner): Free inputCols and other ordColMaps below when possible.
 	input, inputCols, err := b.buildRelational(projectSet.Input)
+
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -3367,6 +3473,7 @@ func (b *Builder) buildFrame(inputCols colOrdMap, w *memo.WindowsItem) (*tree.Wi
 }
 
 func (b *Builder) buildWindow(w *memo.WindowExpr) (_ execPlan, outputCols colOrdMap, err error) {
+	// TODO(mgartner): Free inputCols and other ordColMaps below when possible.
 	input, inputCols, err := b.buildRelational(w.Input)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -3385,7 +3492,9 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (_ execPlan, outputCols colOrd
 	// TODO(justin): this call to ensureColumns is kind of unfortunate because it
 	// can result in an extra render beneath each window function. Figure out a
 	// way to alleviate this.
-	input, inputCols, err = b.ensureColumns(input, inputCols, w, desiredCols, opt.Ordering{})
+	input, inputCols, err = b.ensureColumns(
+		input, inputCols, w, desiredCols, opt.Ordering{}, true, /* reuseInputCols */
+	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -3642,13 +3751,16 @@ func (b *Builder) needProjection(
 }
 
 // ensureColumns applies a projection as necessary to make the output match the
-// given list of columns; colNames is optional.
+// given list of columns; colNames is optional. If reuseInputCols is true, then
+// inputCols will be reused to build outputCols, and the caller must no longer
+// use inputCols.
 func (b *Builder) ensureColumns(
 	input execPlan,
 	inputCols colOrdMap,
 	inputExpr memo.RelExpr,
 	colList opt.ColList,
 	provided opt.Ordering,
+	reuseInputCols bool,
 ) (_ execPlan, outputCols colOrdMap, err error) {
 	cols, needProj, err := b.needProjection(inputCols, colList)
 	if err != nil {
@@ -3661,7 +3773,12 @@ func (b *Builder) ensureColumns(
 	// we need to explicitly annotate the latter with estimates since the code
 	// in buildRelational() will attach them to the project.
 	b.maybeAnnotateWithEstimates(input.root, inputExpr)
-	outputCols = b.colOrdsAlloc.Alloc()
+	if reuseInputCols {
+		outputCols = inputCols
+		outputCols.Clear()
+	} else {
+		outputCols = b.colOrdsAlloc.Alloc()
+	}
 	for i, col := range colList {
 		outputCols.Set(col, i)
 	}

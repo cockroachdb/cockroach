@@ -46,7 +46,7 @@ func TestColOrdMap(t *testing.T) {
 		switch {
 		case n < 5:
 			oracle = make(map[opt.ColumnID]int)
-			m.clear()
+			m.Clear()
 			validate(t, m, oracle)
 		case n < 15:
 			cpy := newColOrdMap(maxCol)
