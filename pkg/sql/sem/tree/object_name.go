@@ -10,6 +10,8 @@
 
 package tree
 
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+
 // ObjectName is a common interface for qualified object names.
 type ObjectName interface {
 	NodeFormatter
@@ -23,6 +25,7 @@ type ObjectName interface {
 var _ ObjectName = &TableName{}
 var _ ObjectName = &TypeName{}
 var _ ObjectName = &FunctionName{}
+var _ ObjectName = &UnspecifiedObjectName{}
 
 // objName is the internal type for a qualified object.
 type objName struct {
@@ -33,6 +36,22 @@ type objName struct {
 	// ObjectNamePrefix is the path to the object.  This can be modified
 	// further by name resolution, see name_resolution.go.
 	ObjectNamePrefix
+}
+
+func makeQualifiedObjName(db, schema, object Name) objName {
+	return makeObjNameWithPrefix(ObjectNamePrefix{
+		CatalogName:     db,
+		SchemaName:      schema,
+		ExplicitSchema:  true,
+		ExplicitCatalog: true,
+	}, object)
+}
+
+func makeObjNameWithPrefix(prefix ObjectNamePrefix, object Name) objName {
+	return objName{
+		ObjectName:       object,
+		ObjectNamePrefix: prefix,
+	}
 }
 
 func (o *objName) Object() string {
@@ -57,6 +76,41 @@ func (o *objName) ToUnresolvedObjectName() *UnresolvedObjectName {
 	}
 	return u
 }
+
+func (o *objName) String() string { return AsString(o) }
+
+// FQString renders the table name in full, not omitting the prefix
+// schema and catalog names. Suitable for logging, etc.
+func (o *objName) FQString() string {
+	ctx := NewFmtCtx(FmtSimple)
+	schemaName := o.SchemaName.String()
+	// The pg_catalog and pg_extension schemas cannot be referenced from inside
+	// an anonymous ("") database. This makes their FQ string always relative.
+	if schemaName != catconstants.PgCatalogName && schemaName != catconstants.PgExtensionSchemaName {
+		ctx.FormatNode(&o.CatalogName)
+		ctx.WriteByte('.')
+	}
+	ctx.FormatNode(&o.SchemaName)
+	ctx.WriteByte('.')
+	ctx.FormatNode(&o.ObjectName)
+	return ctx.CloseAndGetString()
+}
+
+// Format implements the NodeFormatter interface.
+func (o *objName) Format(ctx *FmtCtx) {
+	ctx.FormatNode(&o.ObjectNamePrefix)
+	if o.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
+		ctx.WriteByte('.')
+	}
+	ctx.FormatNode(&o.ObjectName)
+}
+
+// UnspecifiedObjectName is an object name correspond to any object type.
+type UnspecifiedObjectName struct {
+	objName
+}
+
+func (u UnspecifiedObjectName) objectName() {}
 
 // ObjectNamePrefix corresponds to the path prefix of an object name.
 type ObjectNamePrefix struct {

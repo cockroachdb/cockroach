@@ -10,8 +10,6 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-
 // TableName corresponds to the name of a table in a FROM clause,
 // INSERT or UPDATE statement, etc.
 //
@@ -34,32 +32,10 @@ func (t *TableName) Format(ctx *FmtCtx) {
 		ctx.tableNameFormatter(ctx, t)
 		return
 	}
-	t.ObjectNamePrefix.Format(ctx)
-	if t.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
-		ctx.WriteByte('.')
-	}
-	ctx.FormatNode(&t.ObjectName)
+	t.objName.Format(ctx)
 }
-func (t *TableName) String() string { return AsString(t) }
 
 func (t *TableName) objectName() {}
-
-// FQString renders the table name in full, not omitting the prefix
-// schema and catalog names. Suitable for logging, etc.
-func (t *TableName) FQString() string {
-	ctx := NewFmtCtx(FmtSimple)
-	schemaName := t.SchemaName.String()
-	// The pg_catalog and pg_extension schemas cannot be referenced from inside
-	// an anonymous ("") database. This makes their FQ string always relative.
-	if schemaName != catconstants.PgCatalogName && schemaName != catconstants.PgExtensionSchemaName {
-		ctx.FormatNode(&t.CatalogName)
-		ctx.WriteByte('.')
-	}
-	ctx.FormatNode(&t.SchemaName)
-	ctx.WriteByte('.')
-	ctx.FormatNode(&t.ObjectName)
-	return ctx.CloseAndGetString()
-}
 
 // Table retrieves the unqualified table name.
 func (t *TableName) Table() string {
@@ -84,31 +60,22 @@ func NewTableNameWithSchema(db, sc, tbl Name) *TableName {
 
 // MakeTableNameWithSchema creates a new fully qualified table name.
 func MakeTableNameWithSchema(db, schema, tbl Name) TableName {
-	return TableName{objName{
-		ObjectName: tbl,
-		ObjectNamePrefix: ObjectNamePrefix{
-			CatalogName:     db,
-			SchemaName:      schema,
-			ExplicitSchema:  true,
-			ExplicitCatalog: true,
-		},
-	}}
+	return TableName{
+		objName: makeQualifiedObjName(db, schema, tbl),
+	}
 }
 
 // MakeTableNameFromPrefix creates a table name from an unqualified name
 // and a resolved prefix.
 func MakeTableNameFromPrefix(prefix ObjectNamePrefix, object Name) TableName {
-	return TableName{objName{
-		ObjectName:       object,
-		ObjectNamePrefix: prefix,
-	}}
+	return TableName{
+		objName: makeObjNameWithPrefix(prefix, object),
+	}
 }
 
 // MakeUnqualifiedTableName creates a new base table name.
 func MakeUnqualifiedTableName(tbl Name) TableName {
-	return TableName{objName{
-		ObjectName: tbl,
-	}}
+	return MakeTableNameFromPrefix(ObjectNamePrefix{}, tbl)
 }
 
 // NewUnqualifiedTableName creates a new base table name.
@@ -118,10 +85,10 @@ func NewUnqualifiedTableName(tbl Name) *TableName {
 }
 
 func makeTableNameFromUnresolvedName(n *UnresolvedName) TableName {
-	return TableName{objName{
-		ObjectName:       Name(n.Parts[0]),
-		ObjectNamePrefix: makeObjectNamePrefixFromUnresolvedName(n),
-	}}
+	return MakeTableNameFromPrefix(
+		makeObjectNamePrefixFromUnresolvedName(n),
+		Name(n.Parts[0]),
+	)
 }
 
 func makeObjectNamePrefixFromUnresolvedName(n *UnresolvedName) ObjectNamePrefix {

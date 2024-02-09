@@ -135,6 +135,9 @@ COMMENT ON COLUMN public.t.b IS 'column b'
 statement ok
 COMMENT ON COLUMN t.b IS 'column b AGAIN';
 
+statement error column name must be qualified
+COMMENT ON COLUMN b IS 'unqualified column b';
+
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
