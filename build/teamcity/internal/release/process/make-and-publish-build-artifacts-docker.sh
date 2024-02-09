@@ -10,7 +10,7 @@ tc_start_block "Variable Setup"
 build_name=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
 
 # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
-is_release_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^(release-[0-9][0-9]\.[0-9](\.0)?)$|master$" || echo "")"
+is_release_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^(release-[0-9][0-9]\.[0-9](\.0)?(-rc)?)$|master$" || echo "")"
 
 if [[ -z "${DRY_RUN}" ]] ; then
   if [[ -z "${is_release_build}" ]] ; then
