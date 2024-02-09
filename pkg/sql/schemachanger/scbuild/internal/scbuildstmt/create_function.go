@@ -11,6 +11,8 @@
 package scbuildstmt
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
@@ -78,7 +80,11 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 				if param.IsOutParam() {
 					paramType := b.ResolveTypeRef(param.Type)
 					outParamTypes = append(outParamTypes, paramType.Type)
-					outParamNames = append(outParamNames, string(param.Name))
+					paramName := string(param.Name)
+					if paramName == "" {
+						paramName = fmt.Sprintf("column%d", len(outParamTypes))
+					}
+					outParamNames = append(outParamNames, paramName)
 				}
 			}
 			if len(outParamTypes) == 1 {
