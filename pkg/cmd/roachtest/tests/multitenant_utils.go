@@ -188,6 +188,8 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 		extraArgs...,
 	)
 
+	// The old multitenant API does not create a default admin user for virtual clusters, so root
+	// authentication is used instead.
 	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), roachprod.PGURLOptions{Auth: install.AuthRootCert})
 	require.NoError(t, err)
 	u, err := url.Parse(externalUrls[0])
@@ -201,6 +203,9 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	// pgURL has full paths to local certs embedded, i.e.
 	// /tmp/roachtest-certs3630333874/certs, on the cluster we want just certs
 	// (i.e. to run workload on the tenant).
+	//
+	// The old multitenant API does not create a default admin user for virtual clusters, so root
+	// authentication is used instead.
 	secureUrls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(tn.node)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
 		External: false,
 		Secure:   true,
@@ -362,7 +367,9 @@ func startInMemoryTenant(
 	var tenantConn *gosql.DB
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName))
+		// The old multitenant API does not create a default admin user for virtual clusters, so root
+		// authentication is used instead.
+		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName), option.AuthMode(install.AuthRootCert))
 		if err != nil {
 			return err
 		}
