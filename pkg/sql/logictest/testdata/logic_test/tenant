@@ -407,6 +407,9 @@ INSERT INTO system.tenant_usage(
         ru_burst_limit, ru_refill_rate, ru_current, current_share_sum, total_consumption)
 VALUES ($tmplid, 0, 0, now(),
         11, 22, 33, 44, ''::BYTES);
+
+
+statement ok
 ALTER TENANT tmpl START SERVICE SHARED; -- will not be copied.
 
 # Use it to create a new tenant.
@@ -495,8 +498,12 @@ FROM system.tenant_usage WHERE tenant_id = $otherid
 
 # Clean up.
 statement ok
-DROP TENANT othertenant;
-ALTER TENANT tmpl STOP SERVICE;
+DROP TENANT othertenant
+
+statement ok
+ALTER TENANT tmpl STOP SERVICE
+
+statement ok
 DROP TENANT tmpl
 
 statement ok
@@ -542,6 +549,8 @@ RESET CLUSTER SETTING server.controller.default_target_cluster
 statement ok
 DROP TENANT noservice;
 CREATE TENANT withservice;
+
+statement ok
 ALTER TENANT withservice START SERVICE SHARED
 
 statement ok

@@ -567,17 +567,25 @@ func smithcmpTestRun(
 ) {
 	runConfig := tc.getRunConfig()
 	smithcmpPreTestRunHook(ctx, t, c, conn, runConfig.clusterSetups[0])
-	const (
-		configFile = `tpchvec_smithcmp.toml`
-		configURL  = `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/cmd/roachtest/tests/` + configFile
-	)
+	const configFile = `tpchvec_smithcmp.toml`
+
 	firstNode := c.Node(1)
-	if err := c.RunE(ctx, option.WithNodes(firstNode), fmt.Sprintf("curl %s > %s", configURL, configFile)); err != nil {
+	if err := c.PutE(ctx, t.L(), "./pkg/cmd/roachtest/tests/"+configFile, configFile); err != nil {
 		t.Fatal(err)
 	}
-	// smithcmp cannot access the pgport env variable, so we must edit the config file here
-	// to tell it the port to use.
-	if err := c.RunE(ctx, option.WithNodes(firstNode), fmt.Sprintf(`port=$(echo -n {pgport:1}) && sed -i "s|26257|$port|g" %s`, configFile)); err != nil {
+	port, err := c.SQLPorts(ctx, t.L(), c.Node(1), "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// We don't know the pgurl ahead of time, so we must edit it into the config file.
+	// We create the URL manually, opposed to using DefaultPgUrl(), as we need to:
+	//		Escape & as it's a special character in sed.
+	//		Use postgresql instead of postgres.
+	// 		Use tpch and localhost.
+	pgurl := fmt.Sprintf(
+		"postgresql://%[1]s:%[2]s@localhost:%[3]d/tpch?sslcert=certs%%2Fclient.%[1]s.crt\\&sslkey=certs%%2Fclient.%[1]s.key\\&sslmode=verify-full\\&sslrootcert=certs%%2Fca.crt",
+		install.DefaultUser, install.DefaultPassword, port[0])
+	if err := c.RunE(ctx, option.WithNodes(firstNode), fmt.Sprintf(`sed -i "s|PG_Connection_String|%s|g" %s`, pgurl, configFile)); err != nil {
 		t.Fatal(err)
 	}
 	cmd := fmt.Sprintf("./%s %s", tpchVecSmithcmp, configFile)
@@ -605,7 +613,7 @@ func runTPCHVec(
 		if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
 			t.Fatal(err)
 		}
-		conn = createInMemoryTenantWithConn(ctx, t, c, appTenantName, c.All(), false /* secure */)
+		conn = createInMemoryTenantWithConn(ctx, t, c, appTenantName, c.All(), c.IsSecure() /* secure */)
 	} else {
 		conn = c.Conn(ctx, t.L(), 1)
 		disableMergeQueue = true
@@ -613,7 +621,7 @@ func runTPCHVec(
 
 	t.Status("restoring TPCH dataset for Scale Factor 1")
 	if err := loadTPCHDataset(
-		ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), disableMergeQueue, false, /* secure */
+		ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), disableMergeQueue, c.IsSecure(), /* secure */
 	); err != nil {
 		t.Fatal(err)
 	}

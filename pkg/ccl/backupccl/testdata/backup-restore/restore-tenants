@@ -15,7 +15,11 @@ SELECT crdb_internal.create_tenant(6);
 
 # Drop one of them.
 exec-sql
-ALTER TENANT [5] STOP SERVICE; DROP TENANT [5]
+ALTER TENANT [5] STOP SERVICE;
+----
+
+exec-sql
+DROP TENANT [5]
 ----
 
 exec-sql
@@ -139,7 +143,11 @@ SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_intern
 
 # Check that another service mode is also preserved.
 exec-sql
-ALTER TENANT newname STOP SERVICE; ALTER TENANT newname START SERVICE SHARED
+ALTER TENANT newname STOP SERVICE;
+----
+
+exec-sql
+ALTER TENANT newname START SERVICE SHARED;
 ----
 
 query-sql

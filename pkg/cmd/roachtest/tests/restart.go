@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -37,13 +36,8 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	// We don't really need tpcc, we just need a good amount of traffic and a good
 	// amount of data.
 	t.Status("importing tpcc fixture")
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
-	if err != nil {
-		t.Fatal(err)
-	}
 	c.Run(ctx, option.WithNodes(workloadNode),
-		"./cockroach workload fixtures import tpcc --warehouses=100 --fks=false --checks=false",
-		pgurl,
+		"./cockroach workload fixtures import tpcc --warehouses=100 --fks=false --checks=false {pgurl:1}",
 	)
 
 	// Wait a full scanner cycle (10m) for the raft log queue to truncate the
@@ -90,11 +84,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	                 SELECT count(*) FROM tpcc.order_line;
 	                 SET TRACING = OFF;
 	                 SHOW TRACE FOR SESSION;`
-	pgurl, err = roachtestutil.DefaultPGUrl(ctx, c, t.L(), restartNode)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.Run(ctx, option.WithNodes(restartNode), fmt.Sprintf(`./cockroach sql --insecure --url=%s -e "%s"`, pgurl, tracedQ))
+	c.Run(ctx, option.WithNodes(restartNode), fmt.Sprintf(`./cockroach sql --url={pgurl:1} -e "%s"`, tracedQ))
 	if took := timeutil.Since(start); took > downDuration {
 		t.Fatalf(`expected to recover within %s took %s`, downDuration, took)
 	} else {

@@ -132,13 +132,14 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 var virtClusterWithAppServiceInitTasks = append(
 	virtClusterInitTasks[:len(virtClusterInitTasks):len(virtClusterInitTasks)],
 	makeTask("create an application virtual cluster",
-		nil, /* nonTxnSQL */
-		/* txnSQL */ []string{
+		/* noTxnSQL */ []string{
 			// Create the app tenant record.
-			"CREATE VIRTUAL CLUSTER application",
+			"CREATE VIRTUAL CLUSTER IF NOT EXISTS application",
 			// Run the service for the application tenant.
 			"ALTER VIRTUAL CLUSTER application START SERVICE SHARED",
 		},
+		nil, /* txnSQL */
+
 	),
 	makeTask("activate application virtual cluster",
 		/* nonTxnSQL */ []string{

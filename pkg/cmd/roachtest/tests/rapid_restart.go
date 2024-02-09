@@ -76,7 +76,7 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			base := `http://` + adminUIAddrs[0]
+			base := `https://` + adminUIAddrs[0]
 			// Torture the prometheus endpoint to prevent regression of #19559.
 			url := base + `/_status/vars`
 			resp, err := httpClient.Get(ctx, url)

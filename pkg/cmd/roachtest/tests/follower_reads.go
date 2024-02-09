@@ -16,7 +16,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"net/http"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -685,7 +684,7 @@ func verifySQLLatency(
 	if err != nil {
 		t.Fatal(err)
 	}
-	url := "http://" + adminURLs[0] + "/ts/query"
+	url := "https://" + adminURLs[0] + "/ts/query"
 	var sources []string
 	for i := range liveNodes {
 		sources = append(sources, strconv.Itoa(i))
@@ -701,8 +700,9 @@ func verifySQLLatency(
 			SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
 		}},
 	}
+	client := roachtestutil.DefaultHTTPClient(c, t.L())
 	var response tspb.TimeSeriesQueryResponse
-	if err := httputil.PostProtobuf(ctx, http.Client{}, url, &request, &response); err != nil {
+	if err := client.PostProtobuf(ctx, url, &request, &response); err != nil {
 		t.Fatal(err)
 	}
 	perTenSeconds := response.Results[0].Datapoints
@@ -751,7 +751,7 @@ func verifyHighFollowerReadRatios(
 	}
 	adminURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(adminNode))
 	require.NoError(t, err)
-	url := "http://" + adminURLs[0] + "/ts/query"
+	url := "https://" + adminURLs[0] + "/ts/query"
 	request := tspb.TimeSeriesQueryRequest{
 		StartNanos: start.UnixNano(),
 		EndNanos:   end.UnixNano(),
@@ -771,9 +771,9 @@ func verifyHighFollowerReadRatios(
 			Derivative: tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
 		})
 	}
-
+	client := roachtestutil.DefaultHTTPClient(c, t.L())
 	var response tspb.TimeSeriesQueryResponse
-	if err := httputil.PostProtobuf(ctx, http.Client{}, url, &request, &response); err != nil {
+	if err := client.PostProtobuf(ctx, url, &request, &response); err != nil {
 		t.Fatal(err)
 	}
 
@@ -860,7 +860,8 @@ func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) 
 				return err
 			}
 			url := "http://" + adminUIAddrs[0] + "/_status/vars"
-			resp, err := httputil.Get(ctx, url)
+			client := roachtestutil.DefaultHTTPClient(c, t.L())
+			resp, err := client.Get(ctx, url)
 			if err != nil {
 				return err
 			}
@@ -927,6 +928,7 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 func runFollowerReadsMixedVersionSingleRegionTest(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
+
 	topology := topologySpec{multiRegion: false}
 	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness)
 }
@@ -961,14 +963,6 @@ func runFollowerReadsMixedVersionTest(
 	rc readConsistency,
 	opts ...mixedversion.CustomOption,
 ) {
-	// The http requests to the admin UI performed by the test don't play
-	// well with secure clusters. As of the time of writing, they return
-	// either of the following errors:
-	//  tls: failed to verify certificate: x509: “node” certificate is not standards compliant
-	//  tls: failed to verify certificate: x509: certificate signed by unknown authority
-	//
-	// Disable secure mode for simplicity.
-	opts = append(opts, mixedversion.ClusterSettingOption(install.SecureOption(false)))
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), opts...)
 
 	var data map[int]int64

@@ -12,15 +12,14 @@ package tests
 
 import (
 	"context"
-	"net/http"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
 // RunBuildInfo is a test that sanity checks the build info.
@@ -32,8 +31,9 @@ func RunBuildInfo(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	url := `http://` + adminUIAddrs[0] + `/_status/details/local`
-	err = httputil.GetJSON(http.Client{}, url, &details)
+	url := `https://` + adminUIAddrs[0] + `/_status/details/local`
+	client := roachtestutil.DefaultHTTPClient(c, t.L())
+	err = client.GetJSON(ctx, url, &details)
 	if err != nil {
 		t.Fatal(err)
 	}
