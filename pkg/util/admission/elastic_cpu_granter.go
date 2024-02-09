@@ -325,7 +325,6 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
-	// TODO(irfansharif): Surface this metric in the "Overload" dashboard.
 	elasticCPUGranterUtilization = metric.Metadata{
 		Name:        "admission.elastic_cpu.utilization",
 		Help:        "CPU utilization by elastic work",
