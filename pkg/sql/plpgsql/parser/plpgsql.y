@@ -722,7 +722,9 @@ proc_stmt:pl_block ';'
     $$.val = $1.statement()
   }
 | stmt_null
-  { }
+  {
+    $$.val = $1.statement()
+  }
 | stmt_commit
   { }
 | stmt_rollback
@@ -1352,7 +1354,7 @@ stmt_close: CLOSE IDENT ';'
 
 stmt_null: NULL ';'
   {
-  $$.val = &plpgsqltree.Null{};
+    $$.val = &plpgsqltree.Null{};
   }
 ;
 
