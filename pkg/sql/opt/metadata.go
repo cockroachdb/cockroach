@@ -779,6 +779,11 @@ func (md *Metadata) NumColumns() int {
 	return len(md.cols)
 }
 
+// MaxColumn returns the maximum column ID tracked by this Metadata instance.
+func (md *Metadata) MaxColumn() ColumnID {
+	return ColumnID(len(md.cols))
+}
+
 // ColumnMeta looks up the metadata for the column associated with the given
 // column id. The same column can be added multiple times to the query metadata
 // and associated with multiple column ids.
