@@ -262,10 +262,10 @@ var opWeights = []int{
 	alterDatabaseDropSuperRegion:      0, // Disabled and tracked with #111299
 	alterDatabasePrimaryRegion:        0, // Disabled and tracked with #83831
 	alterDatabaseSurvivalGoal:         0, // Disabled and tracked with #83831
-	alterFunctionRename:               0, // Disabled and tracked with #116794.
-	alterFunctionSetSchema:            0, // Disabled and tracked with #116794.
+	alterFunctionRename:               1,
+	alterFunctionSetSchema:            1,
 	alterTableAddColumn:               1,
-	alterTableAddConstraintForeignKey: 1, // Tentatively re-enabled, see #91195.
+	alterTableAddConstraintForeignKey: 1,
 	alterTableAddConstraintUnique:     0,
 	alterTableAlterColumnType:         0, // Disabled and tracked with #66662.
 	alterTableAlterPrimaryKey:         1,
@@ -288,7 +288,7 @@ var opWeights = []int{
 	createTableAs:                     1,
 	createTypeEnum:                    1,
 	createView:                        1,
-	dropFunction:                      0, // Disabled and tracked with #116794.
+	dropFunction:                      1,
 	dropIndex:                         1,
 	dropSchema:                        0, // Disabled and tracked with 116792.
 	dropSequence:                      1,
