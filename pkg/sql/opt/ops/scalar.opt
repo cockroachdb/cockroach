@@ -49,11 +49,6 @@ define SubqueryPrivate {
 
     # Cmp is only used for AnyOp.
     Cmp Operator
-
-    # WasLimited indicates a limit was applied "under" the subquery to
-    # restrict how many rows are fetched to determine the result.  See
-    # e.g. the rule IntroduceExistsLimit.
-    WasLimited bool
 }
 
 # Any is a SQL operator that applies a comparison to every row of an input
@@ -100,6 +95,11 @@ define ExistsPrivate {
     # execbuilder-time, so all Exists expressions are assigned a column during
     # optimization.
     LazyEvalProjectionCol ColumnID
+
+    # WasLimited indicates a limit was applied "under" the subquery to
+    # restrict how many rows are fetched to determine the result.  See
+    # e.g. the rule IntroduceExistsLimit.
+    WasLimited bool
     _ SubqueryPrivate
 }
 
