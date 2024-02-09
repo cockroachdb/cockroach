@@ -615,16 +615,16 @@ func (s *Container) PopAllStats(
 		s.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
 		s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
 		s.freeLocked(ctx)
-		if s.knobs.OnBeforeReset != nil {
+		if s.knobs != nil && s.knobs.OnBeforeReset != nil {
 			s.knobs.OnBeforeReset()
 		}
 	}()
 
-	for key, stmt := range stmts {
-		var data appstatspb.StatementStatistics
-		var distSQLUsed, vectorized, fullScan bool
-		var database, querySummary string
+	var data appstatspb.StatementStatistics
+	var distSQLUsed, vectorized, fullScan bool
+	var database, querySummary string
 
+	for key, stmt := range stmts {
 		func() {
 			stmt.mu.Lock()
 			defer stmt.mu.Unlock()
