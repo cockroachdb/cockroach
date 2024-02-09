@@ -13,7 +13,6 @@ import (
 	"context"
 	"math"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -33,21 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-)
-
-var replanRestoreThreshold = settings.RegisterFloatSetting(
-	settings.ApplicationLevel,
-	"bulkio.restore.replan_flow_threshold",
-	"fraction of initial flow instances that would be added or updated above which a RESTORE execution plan is restarted from the last checkpoint (0=disabled)",
-	0.0,
-)
-
-var replanRestoreFrequency = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"bulkio.restore.replan_flow_frequency",
-	"frequency at which RESTORE checks to see if restarting would change its updates its physical execution plan",
-	time.Minute*2,
-	settings.PositiveDuration,
 )
 
 var memoryMonitorSSTs = settings.RegisterBoolSetting(
@@ -279,18 +263,8 @@ func distRestore(
 		return errors.Wrap(err, "making distSQL plan")
 	}
 
-	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
-		p,
-		makePlan,
-		execCtx,
-		sql.ReplanOnChangedFraction(func() float64 { return replanRestoreThreshold.Get(execCtx.ExecCfg().SV()) }),
-		func() time.Duration { return replanRestoreFrequency.Get(execCtx.ExecCfg().SV()) },
-	)
-
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		defer stopReplanner()
-
 		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 			if meta.BulkProcessorProgress != nil {
 				// Send the progress up a level to be written to the manifest.
@@ -324,8 +298,6 @@ func distRestore(
 		dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 		return errors.Wrap(rowResultWriter.Err(), "running distSQL flow")
 	})
-
-	g.GoCtx(replanner)
 
 	return g.Wait()
 }
