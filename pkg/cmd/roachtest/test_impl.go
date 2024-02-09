@@ -469,13 +469,10 @@ func (t *testImpl) failedRLocked() bool {
 	return t.mu.numFailures > 0
 }
 
-func (t *testImpl) firstFailure() failure {
+func (t *testImpl) failures() []failure {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	if len(t.mu.failures) == 0 {
-		return failure{}
-	}
-	return t.mu.failures[0]
+	return t.mu.failures
 }
 
 func (t *testImpl) failureMsg() string {
@@ -486,15 +483,42 @@ func (t *testImpl) failureMsg() string {
 	return b.String()
 }
 
-// failureContainsError returns true if any of the errors in a given failure
-// matches the reference error
-func failureContainsError(f failure, refError error) bool {
-	for _, err := range f.errors {
-		if errors.Is(err, refError) {
+// failuresContainError returns true if any of the errors in any of
+// the given failures matches the reference error.
+func failuresContainsError(failures []failure, refError error) bool {
+	for _, f := range failures {
+		for _, err := range f.errors {
+			if errors.Is(err, refError) {
+				return true
+			}
+		}
+
+		if errors.Is(f.squashedErr, refError) {
 			return true
 		}
 	}
-	return errors.Is(f.squashedErr, refError)
+
+	return false
+}
+
+// failuresSpecifyOwner checks if any of the errors in any of the
+// given failures is a failure that is associated with an owner. If
+// such an error is found, it is returned; otherwise, nil is returned.
+func failuresSpecifyOwner(failures []failure) *registry.ErrorWithOwnership {
+	var ref registry.ErrorWithOwnership
+	for _, f := range failures {
+		for _, err := range f.errors {
+			if errors.As(err, &ref) {
+				return &ref
+			}
+		}
+
+		if errors.As(f.squashedErr, &ref) {
+			return &ref
+		}
+	}
+
+	return nil
 }
 
 func (t *testImpl) ArtifactsDir() string {
