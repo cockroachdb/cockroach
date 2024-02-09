@@ -344,6 +344,14 @@ func restore(
 		return roachpb.RowCount{}, err
 	}
 
+	var fsc fileSpanComparator = &inclusiveEndKeyComparator{}
+	// We know we can use exclusive comparison for
+	// ExperimentalOnline since we don't support revision history
+	// backups for ExperimentalOnline.
+	if details.ExperimentalOnline {
+		fsc = &exclusiveEndKeyComparator{}
+	}
+
 	countSpansCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
 		defer close(spanCh)
@@ -354,6 +362,7 @@ func restore(
 			layerToIterFactory,
 			backupLocalityMap,
 			filter,
+			fsc,
 			spanCh,
 		), "generate and send import spans")
 	}
