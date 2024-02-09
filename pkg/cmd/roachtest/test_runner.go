@@ -58,16 +58,20 @@ var (
 	// reference error used by main.go at the end of a run of tests
 	errSomeClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
 
-	// reference error used when cluster creation fails for a test
-	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
-
-	// reference error for any failures during post test assertions
-	errDuringPostAssertions = fmt.Errorf("error during post test assertions")
-
 	prometheusNameSpace = "roachtest"
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
 	// https://grafana.testeng.crdb.io/prometheus/config
 	prometheusScrapeInterval = time.Second * 15
+
+	// errClusterProvisioningFailed wraps the error given in an error
+	// that is properly sent to Test Eng and marked as an infra flake.
+	errClusterProvisioningFailed = func(err error) error {
+		return registry.ErrorWithOwner(
+			registry.OwnerTestEng, err,
+			registry.WithTitleOverride("cluster_creation"),
+			registry.InfraFlake,
+		)
+	}
 
 	prng, _ = randutil.NewLockedPseudoRand()
 
@@ -722,13 +726,8 @@ func (r *testRunner) runWorker(
 		// occurred for reasons related to creating or setting up a
 		// cluster for a test.
 		handleClusterCreationFailure := func(err error) {
-			// Marking the error with this sentinel error allows the GitHub
-			// issue poster to detect this is an infrastructure flake and
-			// post the issue accordingly.
-			clusterError := errors.Mark(err, errClusterProvisioningFailed)
-			t.Error(clusterError)
+			t.Error(errClusterProvisioningFailed(err))
 
-			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
 			if err := github.MaybePost(t, l, t.failureMsg()); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
@@ -1058,7 +1057,7 @@ func (r *testRunner) runTest(
 
 	// Extend the lifetime of the cluster if needed.
 	if err := c.MaybeExtendCluster(ctx, l, t.spec); err != nil {
-		t.Error(errors.Mark(err, errClusterProvisioningFailed))
+		t.Error(errClusterProvisioningFailed(err))
 		return
 	}
 
@@ -1164,7 +1163,9 @@ func (r *testRunner) postTestAssertions(
 	assertionFailed := false
 	postAssertionErr := func(err error) {
 		assertionFailed = true
-		t.Error(errors.Mark(err, errDuringPostAssertions))
+		t.Error(fmt.Errorf(
+			"failed during post test assertions (see test-post-assertions.log): %w", err,
+		))
 	}
 
 	postAssertCh := make(chan struct{})

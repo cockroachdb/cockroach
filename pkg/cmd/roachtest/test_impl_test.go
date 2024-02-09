@@ -13,6 +13,8 @@ package main
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,4 +41,15 @@ func TestTeamCityEscape(t *testing.T) {
 	require.Equal(t, "|0x00bf", TeamCityEscape("\u00bf"))
 	require.Equal(t, "|0x00bfaaa", TeamCityEscape("\u00bfaaa"))
 	require.Equal(t, "bb|0x00bfaaa", TeamCityEscape("bb\u00bfaaa"))
+}
+
+func Test_failureSpecifyOwnerAndAddFailureCombination(t *testing.T) {
+	ti := testImpl{
+		l: nilLogger(),
+	}
+	ti.addFailure(0, "", errClusterProvisioningFailed(errors.New("oops")))
+	errWithOwnership := failuresSpecifyOwner(ti.failures())
+
+	require.NotNil(t, errWithOwnership)
+	require.Equal(t, registry.OwnerTestEng, errWithOwnership.Owner)
 }
