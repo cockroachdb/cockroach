@@ -17,6 +17,31 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// colOrdMapAllocator is used to allocate colOrdMaps.
+//
+type colOrdMapAllocator struct {
+	maxCol opt.ColumnID
+}
+
+// Init initialized the allocator that can allocate maps that support column IDs
+// up to maxCol.
+func (a *colOrdMapAllocator) Init(maxCol opt.ColumnID) {
+	a.maxCol = maxCol
+}
+
+// Alloc returns an empty colOrdMap. It will return a previously Free'd
+// colOrdMap, if one is available.
+func (a *colOrdMapAllocator) Alloc() colOrdMap {
+	return newColOrdMap(a.maxCol)
+}
+
+// Copy returns a copy of the given colOrdMap.
+func (a *colOrdMapAllocator) Copy(from colOrdMap) colOrdMap {
+	m := a.Alloc()
+	m.CopyFrom(from)
+	return m
+}
+
 // colOrdMap is a map from column IDs to ordinals.
 //
 // The map is implemented as a slice of integers, with the slice's indexes
