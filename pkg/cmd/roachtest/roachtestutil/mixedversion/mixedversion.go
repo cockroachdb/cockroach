@@ -892,7 +892,11 @@ func (s waitStep) Description() string {
 
 func (s waitStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper) error {
 	l.Printf("waiting for %s", s.dur)
-	time.Sleep(s.dur)
+	select {
+	case <-time.After(s.dur):
+	case <-ctx.Done():
+	}
+
 	return nil
 }
 
