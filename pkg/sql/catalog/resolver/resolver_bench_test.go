@@ -71,6 +71,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 		},
 	} {
 		b.Run(tc.testName, func(b *testing.B) {
+			tc.flags.DesiredObjectKind = tree.TableObject
 			ctx := context.Background()
 			s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
 			defer s.Stopper().Stop(ctx)
