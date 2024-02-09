@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"go/constant"
 	"go/token"
+	"strconv"
+	"unicode/utf8"
 
 	sqllex "github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/lexbase"
@@ -142,6 +144,186 @@ func (s *PLpgSQLScanner) Scan(lval ScanSymType) {
 	// lval for above.
 }
 
+// scanString is similar to Scanner.scanString, but uses PL/pgSQL tokens.
+func (s *PLpgSQLScanner) scanString(lval ScanSymType, ch int, allowEscapes, requireUTF8 bool) bool {
+	buf := s.buffer()
+	var runeTmp [utf8.UTFMax]byte
+	start := s.pos
+outer:
+	for {
+		switch s.next() {
+		case ch:
+			buf = append(buf, s.in[start:s.pos-1]...)
+			if s.peek() == ch {
+				// Double quote is translated into a single quote that is part of the
+				// string.
+				start = s.pos
+				s.pos++
+				continue
+			}
+
+			newline, ok := s.skipWhitespace(lval, false)
+			if !ok {
+				return false
+			}
+
+			// SQL allows joining adjacent single-quoted strings separated by
+			// whitespace as long as that whitespace contains at least one
+			// newline. Kind of strange to require the newline, but that is the
+			// standard.
+			if ch == singleQuote && s.peek() == singleQuote && newline {
+				s.pos++
+				start = s.pos
+				continue
+			}
+			break outer
+
+		case '\\':
+			t := s.peek()
+
+			if allowEscapes {
+				buf = append(buf, s.in[start:s.pos-1]...)
+				if t == ch {
+					start = s.pos
+					s.pos++
+					continue
+				}
+
+				switch t {
+				case 'a', 'b', 'f', 'n', 'r', 't', 'v', 'x', 'X', 'u', 'U', '\\',
+					'0', '1', '2', '3', '4', '5', '6', '7':
+					var tmp string
+					if t == 'X' && len(s.in[s.pos:]) >= 3 {
+						// UnquoteChar doesn't handle 'X' so we create a temporary string
+						// for it to parse.
+						tmp = "\\x" + s.in[s.pos+1:s.pos+3]
+					} else {
+						tmp = s.in[s.pos-1:]
+					}
+					v, multibyte, tail, err := strconv.UnquoteChar(tmp, byte(ch))
+					if err != nil {
+						lval.SetID(lexbase.ERROR)
+						lval.SetStr(err.Error())
+						return false
+					}
+					if v < utf8.RuneSelf || !multibyte {
+						buf = append(buf, byte(v))
+					} else {
+						n := utf8.EncodeRune(runeTmp[:], v)
+						buf = append(buf, runeTmp[:n]...)
+					}
+					s.pos += len(tmp) - len(tail) - 1
+					start = s.pos
+					continue
+				}
+
+				// If we end up here, it's a redundant escape - simply drop the
+				// backslash. For example, e'\"' is equivalent to e'"', and
+				// e'\d\b' to e'd\b'. This is what Postgres does:
+				// http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html#SQL-SYNTAX-STRINGS-ESCAPE
+				start = s.pos
+			}
+
+		case eof:
+			lval.SetID(lexbase.ERROR)
+			lval.SetStr(errUnterminated)
+			return false
+		}
+	}
+
+	if requireUTF8 && !utf8.Valid(buf) {
+		lval.SetID(lexbase.ERROR)
+		lval.SetStr(errInvalidUTF8)
+		return false
+	}
+
+	if ch == identQuote {
+		lval.SetStr(sqllex.NormalizeString(s.finishString(buf)))
+	} else {
+		lval.SetStr(s.finishString(buf))
+	}
+	return true
+}
+
+// scanDollarQuotedString is similar to Scanner.scanDollarQuotedString, but uses
+// PL/pgSQL tokens.
+func (s *PLpgSQLScanner) scanDollarQuotedString(lval ScanSymType) bool {
+	s.lastAttemptedID = int32(lexbase.SCONST)
+	buf := s.buffer()
+	start := s.pos
+
+	foundStartTag := false
+	possibleEndTag := false
+	startTagIndex := -1
+	var startTag string
+
+outer:
+	for {
+		ch := s.peek()
+		switch ch {
+		case '$':
+			s.pos++
+			if foundStartTag {
+				if possibleEndTag {
+					if len(startTag) == startTagIndex {
+						// Found end tag.
+						buf = append(buf, s.in[start+len(startTag)+1:s.pos-len(startTag)-2]...)
+						break outer
+					} else {
+						// Was not the end tag but the current $ might be the start of the end tag we are looking for, so
+						// just reset the startTagIndex.
+						startTagIndex = 0
+					}
+				} else {
+					possibleEndTag = true
+					startTagIndex = 0
+				}
+			} else {
+				startTag = s.in[start : s.pos-1]
+				foundStartTag = true
+			}
+
+		case eof:
+			if foundStartTag {
+				// A start tag was found, therefore we expect an end tag before the eof, otherwise it is an error.
+				lval.SetID(lexbase.ERROR)
+				lval.SetStr(errUnterminated)
+			} else {
+				// This is not a dollar-quoted string, reset the pos back to the start.
+				s.pos = start
+			}
+			return false
+
+		default:
+			// If we haven't found a start tag yet, check whether the current characters is a valid for a tag.
+			if !foundStartTag && !sqllex.IsIdentStart(ch) && !sqllex.IsDigit(ch) {
+				return false
+			}
+			s.pos++
+			if possibleEndTag {
+				// Check whether this could be the end tag.
+				if startTagIndex >= len(startTag) || ch != int(startTag[startTagIndex]) {
+					// This is not the end tag we are looking for.
+					possibleEndTag = false
+					startTagIndex = -1
+				} else {
+					startTagIndex++
+				}
+			}
+		}
+	}
+
+	if !utf8.Valid(buf) {
+		lval.SetID(lexbase.ERROR)
+		lval.SetStr(errInvalidUTF8)
+		return false
+	}
+
+	lval.SetStr(s.finishString(buf))
+	return true
+}
+
+// scanNumber is similar to Scanner.scanNumber, but uses PL/pgSQL tokens.
 func (s *PLpgSQLScanner) scanNumber(lval ScanSymType, ch int) {
 	start := s.pos - 1
 	isHex := false
@@ -240,6 +422,7 @@ func (s *PLpgSQLScanner) scanNumber(lval ScanSymType, ch int) {
 	}
 }
 
+// scanIdent is similar to Scanner.scanIdent, but uses PL/pgSQL tokens.
 func (s *PLpgSQLScanner) scanIdent(lval ScanSymType) {
 	s.lowerCaseAndNormalizeIdent(lval)
 	lval.SetID(lexbase.GetKeywordID(lval.Str()))

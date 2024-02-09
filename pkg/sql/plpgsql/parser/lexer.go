@@ -268,6 +268,11 @@ func (l *lexer) readSQLConstruct(
 	startPos = l.lastPos + 1
 	for l.lastPos < len(l.tokens) {
 		tok := l.Peek()
+		if tok.id == ERROR {
+			// This is a tokenizer (lexical) error: the scanner
+			// will have stored the error message in the string field.
+			return 0, 0, 0, errors.Newf("%s", tok.str)
+		}
 		if int(tok.id) == terminator1 && parenLevel == 0 {
 			terminatorMet = terminator1
 			break
