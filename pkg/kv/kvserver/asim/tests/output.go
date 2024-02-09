@@ -55,9 +55,9 @@ func (o OutputFlags) set(f OutputFlags) OutputFlags {
 	return o | f
 }
 
-// Has returns true if this flag has the given f OutputFlags on.
+// Has returns true if this flag has all of the given f OutputFlags on.
 func (o OutputFlags) Has(f OutputFlags) bool {
-	return o&f != 0
+	return o&f == f
 }
 
 type testResult struct {

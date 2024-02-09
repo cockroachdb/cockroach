@@ -405,25 +405,25 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 	panic(fmt.Sprintf("unreachable. Batch requests: %s", TruncatedRequestsString(ba.Requests, 1024)))
 }
 
-// hasFlag returns true iff one of the requests within the batch contains the
-// specified flag.
-func (ba *BatchRequest) hasFlag(flag flag) bool {
+// hasFlag returns true iff at least one of the requests within the batch
+// contains at least one of the specified flags.
+func (ba *BatchRequest) hasFlag(flags flag) bool {
 	for _, union := range ba.Requests {
-		if (union.GetInner().flags() & flag) != 0 {
+		if (union.GetInner().flags() & flags) != 0 {
 			return true
 		}
 	}
 	return false
 }
 
-// hasFlagForAll returns true iff all of the requests within the batch contains
-// the specified flag.
-func (ba *BatchRequest) hasFlagForAll(flag flag) bool {
+// hasFlagForAll returns true iff all of the requests within the batch contain
+// all of the specified flags.
+func (ba *BatchRequest) hasFlagForAll(flags flag) bool {
 	if len(ba.Requests) == 0 {
 		return false
 	}
 	for _, union := range ba.Requests {
-		if (union.GetInner().flags() & flag) == 0 {
+		if (union.GetInner().flags() & flags) != flags {
 			return false
 		}
 	}
