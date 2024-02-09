@@ -173,14 +173,16 @@ func sendAddRemoteSSTWorker(
 			firstSplitDone := false
 			for _, file := range entry.Files {
 				restoringSubspan := file.BackupFileEntrySpan.Intersect(entry.Span)
-				log.Infof(ctx, "Experimental restore: sending span %s of file (path: %s, span: %s), with intersecting subspan %s",
-					file.BackupFileEntrySpan, file.Path, file.BackupFileEntrySpan, restoringSubspan)
-
 				if !restoringSubspan.Valid() {
-					log.Warningf(ctx, "backup file does not intersect with the restoring span")
-					continue
+					return errors.AssertionFailedf("file %s with span %s has no overlap with restore span %s",
+						file.Path,
+						file.BackupFileEntrySpan,
+						entry.Span,
+					)
 				}
 
+				log.Infof(ctx, "experimental restore: sending span %s of file %s (file span: %s) as part of restore span %s",
+					restoringSubspan, file.Path, file.BackupFileEntrySpan, entry.Span)
 				file.BackupFileEntrySpan = restoringSubspan
 				if !firstSplitDone {
 					expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)

@@ -323,7 +323,7 @@ message RestoreFileSpec {
   optional roachpb.RowCount backup_file_entry_counts = 6 [(gogoproto.nullable) = false];
   optional uint64 backing_file_size = 7 [(gogoproto.nullable) = false];
   optional uint64 approximate_physical_size = 8 [(gogoproto.nullable) = false];
-  
+
   // NEXT ID: 9.
 }
 
@@ -447,6 +447,9 @@ message GenerativeSplitAndScatterSpec {
   optional int64 job_id = 18 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   optional bool use_frontier_checkpointing = 20 [(gogoproto.nullable) = false];
   repeated jobs.jobspb.RestoreProgress.FrontierEntry checkpointed_spans = 21 [(gogoproto.nullable) = false];
+  // ExclusiveFileSpanComparison is true if the backup can safely use
+  // exclusive file span comparison.
+  optional bool exclusive_file_span_comparison = 22 [(gogoproto.nullable) = false];
 
   reserved 19;
 }
