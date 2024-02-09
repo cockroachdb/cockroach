@@ -204,8 +204,8 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 	}
 
 	// If the lease is valid, check to see if we should transfer it.
-	if canTransferLeaseFrom(ctx, repl, conf) &&
-		rp.allocator.ShouldTransferLease(
+	if canTransferLeaseFrom(ctx, repl, conf) {
+		decision := rp.allocator.ShouldTransferLease(
 			ctx,
 			rp.storePool,
 			desc,
@@ -213,9 +213,12 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 			voterReplicas,
 			repl,
 			repl.RangeUsageInfo(),
-		) {
-		log.KvDistribution.VEventf(ctx, 2, "lease transfer needed, enqueuing")
-		return true, 0
+		)
+		if decision.ShouldTransfer() {
+			log.KvDistribution.VEventf(ctx,
+				2, "lease transfer needed %v, enqueuing", decision)
+			return true, 0
+		}
 	}
 
 	leaseStatus := repl.LeaseStatusAt(ctx, now)
