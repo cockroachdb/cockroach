@@ -542,9 +542,9 @@ func (jf JoinFlags) Empty() bool {
 	return jf == 0
 }
 
-// Has returns true if the given flag is set.
-func (jf JoinFlags) Has(flag JoinFlags) bool {
-	return jf&flag != 0
+// Has returns true if all of the given flags are set in the receiver.
+func (jf JoinFlags) Has(flags JoinFlags) bool {
+	return jf&flags == flags
 }
 
 func (jf JoinFlags) String() string {
