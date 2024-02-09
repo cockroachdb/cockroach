@@ -42,7 +42,7 @@ type buildScalarCtx struct {
 
 	// ivarMap is a map from opt.ColumnID to the index of an IndexedVar.
 	// If a ColumnID is not in the map, it cannot appear in the expression.
-	ivarMap opt.ColMap
+	ivarMap colOrdMap
 }
 
 type buildFunc func(b *Builder, ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error)
@@ -115,10 +115,10 @@ func (b *Builder) buildScalar(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.
 }
 
 func (b *Builder) buildScalarWithMap(
-	colMap opt.ColMap, scalar opt.ScalarExpr,
+	colMap colOrdMap, scalar opt.ScalarExpr,
 ) (tree.TypedExpr, error) {
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numOutputColsInMap(colMap)),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, colMap.MaxOrd()+1),
 		ivarMap: colMap,
 	}
 	return b.buildScalar(&ctx, scalar)
@@ -147,7 +147,7 @@ func (b *Builder) buildVariable(
 func (b *Builder) indexedVar(
 	ctx *buildScalarCtx, md *opt.Metadata, colID opt.ColumnID,
 ) (tree.TypedExpr, error) {
-	idx, ok := ctx.ivarMap.Get(int(colID))
+	idx, ok := ctx.ivarMap.Get(colID)
 	if !ok {
 		return nil, errors.AssertionFailedf("cannot map variable %d to an indexed var", redact.Safe(colID))
 	}
@@ -583,9 +583,9 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Construct tuple type of columns in the row.
-	contents := make([]*types.T, numOutputColsInMap(planCols))
-	planCols.ForEach(func(key, val int) {
-		contents[val] = b.mem.Metadata().ColumnMeta(opt.ColumnID(key)).Type
+	contents := make([]*types.T, planCols.MaxOrd()+1)
+	planCols.ForEach(func(col opt.ColumnID, ord int) {
+		contents[ord] = b.mem.Metadata().ColumnMeta(col).Type
 	})
 	typs := types.MakeTuple(contents)
 	subqueryExpr := b.addSubquery(
