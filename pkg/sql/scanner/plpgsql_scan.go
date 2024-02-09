@@ -70,6 +70,20 @@ func (s *PLpgSQLScanner) Scan(lval ScanSymType) {
 		s.scanIdent(lval)
 		return
 
+	case 'e', 'E':
+		// Escaped string?
+		if s.peek() == singleQuote {
+			// [eE]'[^']'
+			s.lastAttemptedID = int32(lexbase.SCONST)
+			s.pos++
+			if s.scanString(lval, singleQuote, true /* allowEscapes */, true /* requireUTF8 */) {
+				lval.SetID(lexbase.SCONST)
+			}
+			return
+		}
+		s.scanIdent(lval)
+		return
+
 	case '.':
 		switch t := s.peek(); {
 		case t == '.': // ..
