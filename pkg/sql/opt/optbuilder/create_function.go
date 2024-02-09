@@ -169,7 +169,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 		if param.IsOutParam() {
 			outParamTypes = append(outParamTypes, typ)
-			outParamNames = append(outParamNames, string(param.Name))
+			paramName := string(param.Name)
+			if paramName == "" {
+				paramName = fmt.Sprintf("column%d", len(outParamTypes))
+			}
+			outParamNames = append(outParamNames, paramName)
 		}
 		// The parameter type must be supported by the current cluster version.
 		checkUnsupportedType(b.ctx, b.semaCtx, typ)

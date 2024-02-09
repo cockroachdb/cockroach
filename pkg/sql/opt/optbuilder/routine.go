@@ -73,6 +73,8 @@ func (b *Builder) buildUDF(
 		if outScope != nil {
 			outCol = b.synthesizeColumn(outScope, scopeColName(""), f.ResolvedType(), nil /* expr */, routine)
 		}
+	} else if o.NamedReturnColumn != "" && b.insideDataSource {
+		outCol.name = scopeColName(tree.Name(o.NamedReturnColumn))
 	}
 
 	return b.finishBuildScalar(f, routine, inScope, outScope, outCol)
@@ -167,7 +169,7 @@ func (b *Builder) buildRoutine(
 	// be concrete in order to decode them correctly. We can determine the types
 	// from the result columns or tuple of the last statement.
 	finishResolveType := func(lastStmtScope *scope) {
-		if types.IsRecordType(rtyp) {
+		if types.IsWildcardTupleType(rtyp) {
 			if len(lastStmtScope.cols) == 1 &&
 				lastStmtScope.cols[0].typ.Family() == types.TupleFamily {
 				// When the final statement returns a single tuple, we can use

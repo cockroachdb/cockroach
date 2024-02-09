@@ -584,7 +584,9 @@ func (n *createFunctionNode) validateParameters(udfDesc *funcdesc.Mutable) error
 	}
 	// Verify that the names of IN parameters are not changed.
 	for i := range origInParams {
-		if origInParams[i].Name != string(newInParams[i].Name) {
+		if origInParams[i].Name != string(newInParams[i].Name) && origInParams[i].Name != "" {
+			// The only allowed change is if the original parameter name was
+			// omitted.
 			return pgerror.Newf(
 				pgcode.InvalidFunctionDefinition, "cannot change name of input parameter %q", origInParams[i].Name,
 			)
@@ -616,8 +618,16 @@ func (n *createFunctionNode) validateParameters(udfDesc *funcdesc.Mutable) error
 		if !mismatch {
 			for i := range origOutParams {
 				if origOutParams[i].Name != string(newOutParams[i].Name) {
-					mismatch = true
-					break
+					// There are a couple of allowed exceptions:
+					// - originally the OUT name was omitted, or
+					// - it becomes omitted now.
+					// Note that the non-empty name must match the default name
+					// ("column" || i) and it was already checked when verifying
+					// the return type.
+					if origOutParams[i].Name != "" && newOutParams[i].Name != "" {
+						mismatch = true
+						break
+					}
 				}
 			}
 		}
