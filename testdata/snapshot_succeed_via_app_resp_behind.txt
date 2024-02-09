@@ -60,7 +60,8 @@ log is empty: first index=6, last index=5
 # does not move 3 to StateSnapshot.
 send-snapshot 1 3
 ----
-1->3 MsgSnap Term:1 Log:0/0 Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+1->3 MsgSnap Term:1 Log:0/0
+  Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 
 # Propose and commit an additional entry, which makes the leader's
 # last index 12, beyond the snapshot it sent at index 11.
@@ -106,7 +107,8 @@ Messages:
 # 3 receives and applies the snapshot, but doesn't respond with MsgAppResp yet.
 deliver-msgs 3
 ----
-1->3 MsgSnap Term:1 Log:0/0 Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+1->3 MsgSnap Term:1 Log:0/0
+  Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 INFO log [committed=5, applied=5, applying=5, unstable.offset=6, unstable.offsetInProgress=6, len(unstable.Entries)=0] starts to restore snapshot [index: 11, term: 1]
 INFO 3 switched to configuration voters=(1 2 3)
 INFO 3 [commit: 11, lastindex: 11, lastterm: 1] restored snapshot [index: 11, term: 1]
@@ -126,12 +128,14 @@ stabilize 1
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
-  1->3 MsgSnap Term:1 Log:0/0 Snapshot: Index:12 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  1->3 MsgSnap Term:1 Log:0/0
+    Snapshot: Index:12 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 
 # Drop the extra MsgSnap(index=12) that 1 just sent, to keep the test tidy.
 deliver-msgs drop=(3)
 ----
-dropped: 1->3 MsgSnap Term:1 Log:0/0 Snapshot: Index:12 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+dropped: 1->3 MsgSnap Term:1 Log:0/0
+  Snapshot: Index:12 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 
 # 3 sends the affirmative MsgAppResp that resulted from applying the snapshot
 # at index 11.
