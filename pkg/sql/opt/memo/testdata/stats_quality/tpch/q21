@@ -59,21 +59,21 @@ LIMIT 100;
 ----
 top-k
  ├── save-table-name: q21_top_k_1
- ├── columns: s_name:2(char!null) numwait:81(int!null)
- ├── internal-ordering: -81,+2
+ ├── columns: s_name:2(char!null) numwait:83(int!null)
+ ├── internal-ordering: -83,+2
  ├── k: 100
  ├── cardinality: [0 - 100]
- ├── stats: [rows=100, distinct(2)=100, null(2)=0, distinct(81)=100, null(81)=0]
+ ├── stats: [rows=100, distinct(2)=100, null(2)=0, distinct(83)=100, null(83)=0]
  ├── key: (2)
- ├── fd: (2)-->(81)
- ├── ordering: -81,+2
+ ├── fd: (2)-->(83)
+ ├── ordering: -83,+2
  └── group-by (hash)
       ├── save-table-name: q21_group_by_2
-      ├── columns: s_name:2(char!null) count_rows:81(int!null)
+      ├── columns: s_name:2(char!null) count_rows:83(int!null)
       ├── grouping columns: s_name:2(char!null)
-      ├── stats: [rows=8389.301, distinct(2)=8389.3, null(2)=0, distinct(81)=8389.3, null(81)=0]
+      ├── stats: [rows=8389.301, distinct(2)=8389.3, null(2)=0, distinct(83)=8389.3, null(83)=0]
       ├── key: (2)
-      ├── fd: (2)-->(81)
+      ├── fd: (2)-->(83)
       ├── inner-join (lookup orders)
       │    ├── save-table-name: q21_lookup_join_3
       │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:10(int!null) l1.l_suppkey:12(int!null) l1.l_commitdate:21(date!null) l1.l_receiptdate:22(date!null) o_orderkey:28(int!null) o_orderstatus:30(char!null) n_nationkey:39(int!null) n_name:40(char!null)
@@ -155,7 +155,7 @@ top-k
       │    └── filters
       │         └── o_orderstatus:30 = 'F' [type=bool, outer=(30), constraints=(/30: [/'F' - /'F']; tight), fd=()-->(30)]
       └── aggregations
-           └── count-rows [as=count_rows:81, type=int]
+           └── count-rows [as=count_rows:83, type=int]
 
 ----Stats for q21_top_k_1----
 column_names  row_count  distinct_count  null_count

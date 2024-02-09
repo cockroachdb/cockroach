@@ -56,25 +56,25 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q22_sort_1
- ├── columns: cntrycode:33(string) numcust:34(int!null) totacctbal:35(float!null)
+ ├── columns: cntrycode:34(string) numcust:35(int!null) totacctbal:36(float!null)
  ├── immutable
- ├── stats: [rows=1e-10, distinct(33)=1e-10, null(33)=0, distinct(34)=1e-10, null(34)=0, distinct(35)=1e-10, null(35)=0]
- ├── key: (33)
- ├── fd: (33)-->(34,35)
- ├── ordering: +33
+ ├── stats: [rows=1e-10, distinct(34)=1e-10, null(34)=0, distinct(35)=1e-10, null(35)=0, distinct(36)=1e-10, null(36)=0]
+ ├── key: (34)
+ ├── fd: (34)-->(35,36)
+ ├── ordering: +34
  └── group-by (hash)
       ├── save-table-name: q22_group_by_2
-      ├── columns: cntrycode:33(string) count_rows:34(int!null) sum:35(float!null)
-      ├── grouping columns: cntrycode:33(string)
+      ├── columns: cntrycode:34(string) count_rows:35(int!null) sum:36(float!null)
+      ├── grouping columns: cntrycode:34(string)
       ├── immutable
-      ├── stats: [rows=1e-10, distinct(33)=1e-10, null(33)=0, distinct(34)=1e-10, null(34)=0, distinct(35)=1e-10, null(35)=0]
-      ├── key: (33)
-      ├── fd: (33)-->(34,35)
+      ├── stats: [rows=1e-10, distinct(34)=1e-10, null(34)=0, distinct(35)=1e-10, null(35)=0, distinct(36)=1e-10, null(36)=0]
+      ├── key: (34)
+      ├── fd: (34)-->(35,36)
       ├── project
       │    ├── save-table-name: q22_project_3
-      │    ├── columns: cntrycode:33(string) c_acctbal:6(float!null)
+      │    ├── columns: cntrycode:34(string) c_acctbal:6(float!null)
       │    ├── immutable
-      │    ├── stats: [rows=1e-10, distinct(6)=1e-10, null(6)=0, distinct(33)=1e-10, null(33)=0]
+      │    ├── stats: [rows=1e-10, distinct(6)=1e-10, null(6)=0, distinct(34)=1e-10, null(34)=0]
       │    ├── anti-join (lookup orders@o_ck)
       │    │    ├── save-table-name: q22_lookup_join_4
       │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
@@ -138,10 +138,10 @@ sort
       │    │    │                                  └── c_acctbal:16 [type=float]
       │    │    └── filters (true)
       │    └── projections
-      │         └── substring(c_phone:5, 1, 2) [as=cntrycode:33, type=string, outer=(5), immutable]
+      │         └── substring(c_phone:5, 1, 2) [as=cntrycode:34, type=string, outer=(5), immutable]
       └── aggregations
-           ├── count-rows [as=count_rows:34, type=int]
-           └── sum [as=sum:35, type=float, outer=(6)]
+           ├── count-rows [as=count_rows:35, type=int]
+           └── sum [as=sum:36, type=float, outer=(6)]
                 └── c_acctbal:6 [type=float]
 
 ----Stats for q22_sort_1----

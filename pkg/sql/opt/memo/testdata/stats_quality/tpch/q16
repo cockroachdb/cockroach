@@ -53,18 +53,18 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q16_sort_1
- ├── columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null) supplier_cnt:28(int!null)
- ├── stats: [rows=9929.297, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(28)=9929.3, null(28)=0, distinct(11-13)=9929.3, null(11-13)=0]
+ ├── columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null) supplier_cnt:29(int!null)
+ ├── stats: [rows=9929.297, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(29)=9929.3, null(29)=0, distinct(11-13)=9929.3, null(11-13)=0]
  ├── key: (11-13)
- ├── fd: (11-13)-->(28)
- ├── ordering: -28,+11,+12,+13
+ ├── fd: (11-13)-->(29)
+ ├── ordering: -29,+11,+12,+13
  └── group-by (hash)
       ├── save-table-name: q16_group_by_2
-      ├── columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null) count:28(int!null)
+      ├── columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null) count:29(int!null)
       ├── grouping columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
-      ├── stats: [rows=9929.297, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(28)=9929.3, null(28)=0, distinct(11-13)=9929.3, null(11-13)=0]
+      ├── stats: [rows=9929.297, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(29)=9929.3, null(29)=0, distinct(11-13)=9929.3, null(11-13)=0]
       ├── key: (11-13)
-      ├── fd: (11-13)-->(28)
+      ├── fd: (11-13)-->(29)
       ├── distinct-on
       │    ├── save-table-name: q16_distinct_on_3
       │    ├── columns: ps_suppkey:2(int!null) p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
@@ -134,7 +134,7 @@ sort
       │         └── filters
       │              └── ps_suppkey:2 = s_suppkey:19 [type=bool, outer=(2,19), constraints=(/2: (/NULL - ]; /19: (/NULL - ]), fd=(2)==(19), (19)==(2)]
       └── aggregations
-           └── count-rows [as=count:28, type=int]
+           └── count-rows [as=count:29, type=int]
 
 ----Stats for q16_sort_1----
 column_names    row_count  distinct_count  null_count

@@ -31,8 +31,8 @@ define Subquery {
 }
 
 # SubqueryPrivate contains information related to a subquery (Subquery, Any,
-# Exists). It is shared between the operators so that the same rules can be used
-# across all the subquery operators.
+# Exists). It is shared between the Subquery and Any operators so that the same
+# rules can be used across both expressions.
 [Private]
 define SubqueryPrivate {
     OriginalExpr Subquery
@@ -88,6 +88,18 @@ define Any {
 [Scalar, Bool]
 define Exists {
     Input RelExpr
+    _ ExistsPrivate
+}
+
+# ExistsPrivate contains information related to an Exists subquery.
+[Private]
+define ExistsPrivate {
+    # LazyEvalProjectionCol is used when the Exists is planned as a
+    # lazily-evaluated routine (see execbuilder.Builder.buildExistsSubquery).
+    # The decision to execute the Exists lazily is not made until
+    # execbuilder-time, so all Exists expressions are assigned a column during
+    # optimization.
+    LazyEvalProjectionCol ColumnID
     _ SubqueryPrivate
 }
 

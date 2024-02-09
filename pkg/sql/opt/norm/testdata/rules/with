@@ -2155,14 +2155,14 @@ WITH RECURSIVE cte (i) AS (
 SELECT i FROM cte;
 ----
 project
- ├── columns: i:9
+ ├── columns: i:10
  ├── cardinality: [1 - ]
  ├── immutable
  ├── recursive-c-t-e
  │    ├── columns: i:2
  │    ├── working table binding: &2
  │    ├── initial columns: "?column?":1
- │    ├── recursive columns: "?column?":8
+ │    ├── recursive columns: "?column?":9
  │    ├── cardinality: [1 - ]
  │    ├── immutable
  │    ├── fake-rel
@@ -2177,11 +2177,11 @@ project
  │    │    ├── fd: ()-->(1)
  │    │    └── (1,)
  │    └── project
- │         ├── columns: "?column?":8!null
+ │         ├── columns: "?column?":9!null
  │         ├── cardinality: [0 - 1]
  │         ├── immutable
  │         ├── key: ()
- │         ├── fd: ()-->(8)
+ │         ├── fd: ()-->(9)
  │         ├── semi-join (hash)
  │         │    ├── columns: i:3!null
  │         │    ├── cardinality: [0 - 1]
@@ -2212,9 +2212,9 @@ project
  │         │    └── filters
  │         │         └── i:3 = x:4 [outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
  │         └── projections
- │              └── i:3 + 1 [as="?column?":8, outer=(3), immutable]
+ │              └── i:3 + 1 [as="?column?":9, outer=(3), immutable]
  └── projections
-      └── i:2 [as=i:9, outer=(2)]
+      └── i:2 [as=i:10, outer=(2)]
 
 # Case with AntiJoin.
 norm expect=TryAddLimitToRecursiveBranch
@@ -2226,14 +2226,14 @@ WITH RECURSIVE cte (i) AS (
 SELECT i FROM cte;
 ----
 project
- ├── columns: i:9
+ ├── columns: i:10
  ├── cardinality: [1 - ]
  ├── immutable
  ├── recursive-c-t-e
  │    ├── columns: i:2
  │    ├── working table binding: &2
  │    ├── initial columns: "?column?":1
- │    ├── recursive columns: "?column?":8
+ │    ├── recursive columns: "?column?":9
  │    ├── cardinality: [1 - ]
  │    ├── immutable
  │    ├── fake-rel
@@ -2248,11 +2248,11 @@ project
  │    │    ├── fd: ()-->(1)
  │    │    └── (1,)
  │    └── project
- │         ├── columns: "?column?":8!null
+ │         ├── columns: "?column?":9!null
  │         ├── cardinality: [0 - 1]
  │         ├── immutable
  │         ├── key: ()
- │         ├── fd: ()-->(8)
+ │         ├── fd: ()-->(9)
  │         ├── anti-join (hash)
  │         │    ├── columns: i:3!null
  │         │    ├── cardinality: [0 - 1]
@@ -2283,9 +2283,9 @@ project
  │         │    └── filters
  │         │         └── i:3 = x:4 [outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
  │         └── projections
- │              └── i:3 + 1 [as="?column?":8, outer=(3), immutable]
+ │              └── i:3 + 1 [as="?column?":9, outer=(3), immutable]
  └── projections
-      └── i:2 [as=i:9, outer=(2)]
+      └── i:2 [as=i:10, outer=(2)]
 
 # Case with child CTE.
 norm expect=TryAddLimitToRecursiveBranch disable=InlineWith
