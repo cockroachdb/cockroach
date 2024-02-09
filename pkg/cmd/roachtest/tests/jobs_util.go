@@ -174,7 +174,7 @@ func WaitForRunning(
 ) error {
 	return testutils.SucceedsWithinError(func() error {
 		var status jobs.Status
-		if err := db.QueryRowContext(ctx, "SELECT status FROM crdb_internal.system_jobs WHERE id = $1", jobID).Scan(&status); err != nil {
+		if err := db.QueryRowContext(ctx, "SELECT status FROM [SHOW JOB $1]", jobID).Scan(&status); err != nil {
 			return err
 		}
 		switch status {
