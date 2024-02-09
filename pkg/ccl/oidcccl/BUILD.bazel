@@ -58,6 +58,7 @@ go_test(
         "//pkg/server",
         "//pkg/server/authserver",
         "//pkg/server/serverpb",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
