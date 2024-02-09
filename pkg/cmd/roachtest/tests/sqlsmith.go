@@ -155,6 +155,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		}
 		logStmt(setStmtTimeout)
 
+		setting.Options = append(setting.Options, sqlsmith.SimpleNames())
 		smither, err := sqlsmith.NewSmither(conn, rng, setting.Options...)
 		if err != nil {
 			t.Fatal(err)

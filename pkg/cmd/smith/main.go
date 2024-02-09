@@ -77,6 +77,7 @@ var (
 		"OutputSort":                              sqlsmith.OutputSort(),
 		"PostgresMode":                            sqlsmith.PostgresMode(),
 		"SimpleDatums":                            sqlsmith.SimpleDatums(),
+		"SimpleNames":                             sqlsmith.SimpleNames(),
 		"UnlikelyConstantPredicate":               sqlsmith.UnlikelyConstantPredicate(),
 		"UnlikelyRandomNulls":                     sqlsmith.UnlikelyRandomNulls(),
 	}
