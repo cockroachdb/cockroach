@@ -120,7 +120,7 @@ func Scan(
 		}
 	}
 
-	if args.KeyLockingStrength != lock.None && h.Txn != nil {
+	if args.KeyLockingStrength != lock.None {
 		acquiredLocks, err := acquireLocksOnKeys(
 			ctx, readWriter, h.Txn, args.KeyLockingStrength, args.KeyLockingDurability,
 			args.ScanFormat, &scanRes, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
