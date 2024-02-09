@@ -57,6 +57,38 @@ _ := NULL;
 END;
  -- identifiers removed
 
+parse
+DECLARE
+  "%_2jd9$f foo" integer := 30;
+BEGIN
+  "%_2jd9$f foo" := 100;
+END
+----
+DECLARE
+"%_2jd9$f foo" INT8 := 30;
+BEGIN
+"%_2jd9$f foo" := 100;
+END;
+ -- normalized!
+DECLARE
+"%_2jd9$f foo" INT8 := (30);
+BEGIN
+"%_2jd9$f foo" := (100);
+END;
+ -- fully parenthesized
+DECLARE
+"%_2jd9$f foo" INT8 := _;
+BEGIN
+"%_2jd9$f foo" := _;
+END;
+ -- literals removed
+DECLARE
+_ INT8 := 30;
+BEGIN
+_ := 100;
+END;
+ -- identifiers removed
+
 error
 DECLARE
 BEGIN
