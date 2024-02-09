@@ -3349,7 +3349,7 @@ func (r *Replica) followerSendSnapshot(
 			// it is used for rebalance.
 			// See AllocatorAction.Priority
 			if header.SenderQueuePriority > 0 {
-				r.store.metrics.RangeSnapshotRecoverySentBytes.Inc(inc)
+				r.store.metrics.RangeSnapshotUpreplicationSentBytes.Inc(inc)
 			} else {
 				r.store.metrics.RangeSnapshotRebalancingSentBytes.Inc(inc)
 			}
