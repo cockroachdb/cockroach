@@ -332,6 +332,7 @@ func runOneRoundQueryComparison(
 			sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
 			sqlsmith.SetComplexity(.3),
 			sqlsmith.SetScalarComplexity(.1),
+			sqlsmith.SimpleNames(),
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -399,7 +400,9 @@ func newMutatingSmither(
 		sqlsmith.FavorCommonData(), sqlsmith.UnlikelyRandomNulls(),
 		sqlsmith.DisableInsertSelect(), sqlsmith.DisableCrossJoins(),
 		sqlsmith.SetComplexity(.05),
-		sqlsmith.SetScalarComplexity(.01))
+		sqlsmith.SetScalarComplexity(.01),
+		sqlsmith.SimpleNames(),
+	)
 	if disableDelete {
 		smitherOpts = append(smitherOpts, sqlsmith.InsUpdOnly())
 	} else {
