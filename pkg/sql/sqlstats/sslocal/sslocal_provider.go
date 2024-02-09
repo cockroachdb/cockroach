@@ -183,6 +183,7 @@ func (s *SQLStats) ConsumeStats(
 			}
 		})
 		if err != nil {
+			log.Warningf(ctx, "failed to execute sql-stmt-stats-flush task, %s", err.Error())
 			wg.Done()
 			return
 		}
@@ -197,6 +198,7 @@ func (s *SQLStats) ConsumeStats(
 			}
 		})
 		if err != nil {
+			log.Warningf(ctx, "failed to execute sql-txn-stats-flush task, %s", err.Error())
 			wg.Done()
 			return
 		}

@@ -444,7 +444,7 @@ func (s *drainServer) drainClients(
 	statsProvider := s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 	// If the SQL server is disabled there is nothing to drain here.
 	if !s.sqlServer.cfg.DisableSQLServer {
-		statsProvider.Flush(ctx)
+		statsProvider.Flush(ctx, s.stopper)
 	}
 	statsProvider.Stop(ctx)
 

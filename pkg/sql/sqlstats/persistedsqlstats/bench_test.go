@@ -97,7 +97,7 @@ func runBenchmarkPersistedSqlStatsFlush(
 			db.Exec(b, "SELECT id FROM bench.t1 LIMIT 5")
 		}
 		b.StartTimer()
-		tc.Server(0).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		tc.Server(0).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, tc.ApplicationLayer(0).AppStopper())
 		b.StopTimer()
 	}
 }

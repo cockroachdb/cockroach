@@ -24,13 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 // Flush flushes in-memory sql stats into a system table. Any errors encountered
 // during the flush will be logged as warning.
-func (s *PersistedSQLStats) Flush(ctx context.Context) {
+func (s *PersistedSQLStats) Flush(ctx context.Context, stopper *stop.Stopper) {
 	now := s.getTimeNow()
 
 	allowDiscardWhenDisabled := DiscardInMemoryStatsWhenFlushDisabled.Get(&s.cfg.Settings.SV)
@@ -81,7 +82,7 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 	if limitReached {
 		log.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
 	} else {
-		s.SQLStats.ConsumeStats(ctx,
+		s.SQLStats.ConsumeStats(ctx, stopper,
 			func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 				s.doFlush(ctx, func() error {
 					return s.doFlushSingleStmtStats(ctx, statistics, aggregatedTs)
