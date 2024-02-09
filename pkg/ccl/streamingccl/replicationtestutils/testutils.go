@@ -263,6 +263,7 @@ ORDER BY created DESC LIMIT 1`, c.Args.DestTenantName)
 			payload := jobutils.GetJobPayload(c.T, c.DestSysSQL, retentionJobID)
 			require.Contains(c.T, payload.Error, "replication stream")
 			require.Contains(c.T, payload.Error, "timed out")
+			return nil
 		}
 		return errors.Newf("Unexpected status %s", status)
 	})
