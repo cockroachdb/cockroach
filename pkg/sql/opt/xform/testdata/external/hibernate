@@ -1853,27 +1853,27 @@ where
     bids0_.auctionId=$1
 ----
 project
- ├── columns: auctioni4_1_0_:4!null id1_1_0_:1!null id1_1_1_:1!null amount2_1_1_:2 createdd3_1_1_:3 auctioni4_1_1_:4!null formula41_1_:13!null
+ ├── columns: auctioni4_1_0_:4!null id1_1_0_:1!null id1_1_1_:1!null amount2_1_1_:2 createdd3_1_1_:3 auctioni4_1_1_:4!null formula41_1_:14!null
  ├── has-placeholder
  ├── key: (1)
- ├── fd: ()-->(4), (1)-->(2,3,13)
+ ├── fd: ()-->(4), (1)-->(2,3,14)
  ├── group-by (hash)
- │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null true_agg:15
+ │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null true_agg:16
  │    ├── grouping columns: bids0_.id:1!null
  │    ├── has-placeholder
  │    ├── key: (1)
- │    ├── fd: ()-->(4), (1)-->(2-4,15)
+ │    ├── fd: ()-->(4), (1)-->(2-4,16)
  │    ├── right-join (hash)
- │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null successfulbid:10 true:14
+ │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null successfulbid:10 true:15
  │    │    ├── has-placeholder
  │    │    ├── fd: ()-->(4), (1)-->(2,3)
  │    │    ├── project
- │    │    │    ├── columns: true:14!null successfulbid:10
- │    │    │    ├── fd: ()-->(14)
+ │    │    │    ├── columns: true:15!null successfulbid:10
+ │    │    │    ├── fd: ()-->(15)
  │    │    │    ├── scan tauction2 [as=a]
  │    │    │    │    └── columns: successfulbid:10
  │    │    │    └── projections
- │    │    │         └── true [as=true:14]
+ │    │    │         └── true [as=true:15]
  │    │    ├── select
  │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null
  │    │    │    ├── has-placeholder
@@ -1888,8 +1888,8 @@ project
  │    │    └── filters
  │    │         └── successfulbid:10 = bids0_.id:1 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
  │    └── aggregations
- │         ├── const-not-null-agg [as=true_agg:15, outer=(14)]
- │         │    └── true:14
+ │         ├── const-not-null-agg [as=true_agg:16, outer=(15)]
+ │         │    └── true:15
  │         ├── const-agg [as=amount:2, outer=(2)]
  │         │    └── amount:2
  │         ├── const-agg [as=createddatetime:3, outer=(3)]
@@ -1897,7 +1897,7 @@ project
  │         └── const-agg [as=auctionid:4, outer=(4)]
  │              └── auctionid:4
  └── projections
-      └── true_agg:15 IS NOT NULL [as=formula41_1_:13, outer=(15)]
+      └── true_agg:16 IS NOT NULL [as=formula41_1_:14, outer=(16)]
 
 exec-ddl
 drop table TAuction2, TBid2;

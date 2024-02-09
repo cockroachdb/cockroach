@@ -1133,12 +1133,12 @@ FROM xy
 WHERE y = 2
 ----
 project
- ├── columns: case:13!null
+ ├── columns: case:14!null
  ├── left-join (hash)
- │    ├── columns: x:1!null y:2!null k:5 true:14
+ │    ├── columns: x:1!null y:2!null k:5 true:15
  │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    ├── key: (1)
- │    ├── fd: ()-->(2), (1)-->(5,14)
+ │    ├── fd: ()-->(2), (1)-->(5,15)
  │    ├── select
  │    │    ├── columns: x:1!null y:2!null
  │    │    ├── key: (1)
@@ -1150,9 +1150,9 @@ project
  │    │    └── filters
  │    │         └── y:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
  │    ├── project
- │    │    ├── columns: true:14!null k:5!null
+ │    │    ├── columns: true:15!null k:5!null
  │    │    ├── key: (5)
- │    │    ├── fd: ()-->(14)
+ │    │    ├── fd: ()-->(15)
  │    │    ├── select
  │    │    │    ├── columns: k:5!null i:6!null
  │    │    │    ├── key: (5)
@@ -1164,11 +1164,11 @@ project
  │    │    │    └── filters
  │    │    │         └── i:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
  │    │    └── projections
- │    │         └── true [as=true:14]
+ │    │         └── true [as=true:15]
  │    └── filters
  │         └── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── projections
-      └── CASE WHEN true:14 IS NOT NULL THEN 'Y' ELSE 'N' END [as=case:13, outer=(14)]
+      └── CASE WHEN true:15 IS NOT NULL THEN 'Y' ELSE 'N' END [as=case:14, outer=(15)]
 
 # Don't eliminate the GroupBy if there is an aggregate function other than
 # ConstAgg, ConstNotNullAgg, or AnyNotNullAgg.
@@ -1384,26 +1384,26 @@ ON CONFLICT (c1) DO UPDATE SET c3=1
 upsert nullablecols
  ├── arbiter indexes: nullablecols_c1_key
  ├── columns: <none>
- ├── canary column: rowid:25
- ├── fetch columns: c1:22 c2:23 c3:24 rowid:25
+ ├── canary column: rowid:26
+ ├── fetch columns: c1:23 c2:24 c3:25 rowid:26
  ├── insert-mapping:
  │    ├── i:8 => c1:1
  │    ├── i:8 => c2:2
  │    ├── i:8 => c3:3
  │    └── i:8 => rowid:4
  ├── update-mapping:
- │    └── upsert_c3:31 => c3:3
+ │    └── upsert_c3:32 => c3:3
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: upsert_c3:31!null i:8!null c1:22 c2:23 c3:24 rowid:25
-      ├── key: (8,25)
-      ├── fd: (25)-->(22-24), (22)~~>(23-25), (23,24)~~>(22,25), (8,25)-->(31)
+      ├── columns: upsert_c3:32!null i:8!null c1:23 c2:24 c3:25 rowid:26
+      ├── key: (8,26)
+      ├── fd: (26)-->(23-25), (23)~~>(24-26), (24,25)~~>(23,26), (8,26)-->(32)
       ├── left-join (hash)
-      │    ├── columns: i:8!null c1:22 c2:23 c3:24 rowid:25
+      │    ├── columns: i:8!null c1:23 c2:24 c3:25 rowid:26
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
-      │    ├── key: (8,25)
-      │    ├── fd: (25)-->(22-24), (22)~~>(23-25), (23,24)~~>(22,25)
+      │    ├── key: (8,26)
+      │    ├── fd: (26)-->(23-25), (23)~~>(24-26), (24,25)~~>(23,26)
       │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: i:8!null
       │    │    ├── grouping columns: i:8!null
@@ -1421,10 +1421,10 @@ upsert nullablecols
       │    │              ├── coalesce [subquery]
       │    │              │    ├── subquery
       │    │              │    │    └── project
-      │    │              │    │         ├── columns: column21:21!null
+      │    │              │    │         ├── columns: column22:22!null
       │    │              │    │         ├── cardinality: [0 - 1]
       │    │              │    │         ├── key: ()
-      │    │              │    │         ├── fd: ()-->(21)
+      │    │              │    │         ├── fd: ()-->(22)
       │    │              │    │         ├── limit
       │    │              │    │         │    ├── cardinality: [0 - 1]
       │    │              │    │         │    ├── key: ()
@@ -1432,17 +1432,17 @@ upsert nullablecols
       │    │              │    │         │    │    └── limit hint: 1.00
       │    │              │    │         │    └── 1
       │    │              │    │         └── projections
-      │    │              │    │              └── true [as=column21:21]
+      │    │              │    │              └── true [as=column22:22]
       │    │              │    └── false
       │    │              └── k:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
       │    ├── scan nullablecols
-      │    │    ├── columns: c1:22 c2:23 c3:24 rowid:25!null
-      │    │    ├── key: (25)
-      │    │    └── fd: (25)-->(22-24), (22)~~>(23-25), (23,24)~~>(22,25)
+      │    │    ├── columns: c1:23 c2:24 c3:25 rowid:26!null
+      │    │    ├── key: (26)
+      │    │    └── fd: (26)-->(23-25), (23)~~>(24-26), (24,25)~~>(23,26)
       │    └── filters
-      │         └── i:8 = c1:22 [outer=(8,22), constraints=(/8: (/NULL - ]; /22: (/NULL - ]), fd=(8)==(22), (22)==(8)]
+      │         └── i:8 = c1:23 [outer=(8,23), constraints=(/8: (/NULL - ]; /23: (/NULL - ]), fd=(8)==(23), (23)==(8)]
       └── projections
-           └── CASE WHEN rowid:25 IS NULL THEN i:8 ELSE 1 END [as=upsert_c3:31, outer=(8,25)]
+           └── CASE WHEN rowid:26 IS NULL THEN i:8 ELSE 1 END [as=upsert_c3:32, outer=(8,26)]
 
 # Don't eliminate project if it computes extra column(s).
 norm expect-not=EliminateGroupByProject

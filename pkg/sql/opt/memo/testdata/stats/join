@@ -440,16 +440,16 @@ FROM (SELECT * FROM xysd WHERE EXISTS (SELECT * FROM uv WHERE x=u AND y+v=5)) AS
 GROUP BY y
 ----
 project
- ├── columns: count:12(int!null)
+ ├── columns: count:13(int!null)
  ├── immutable
  ├── stats: [rows=138.1701]
  └── group-by (hash)
-      ├── columns: y:2(int) count_rows:12(int!null)
+      ├── columns: y:2(int) count_rows:13(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
       ├── stats: [rows=138.1701, distinct(2)=138.17, null(2)=0]
       ├── key: (2)
-      ├── fd: (2)-->(12)
+      ├── fd: (2)-->(13)
       ├── semi-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── immutable
@@ -468,7 +468,7 @@ project
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
       └── aggregations
-           └── count-rows [as=count_rows:12, type=int]
+           └── count-rows [as=count_rows:13, type=int]
 
 # Force column statistics calculation for anti-join.
 norm
@@ -477,16 +477,16 @@ FROM (SELECT * FROM xysd WHERE NOT EXISTS (SELECT * FROM uv WHERE x=u AND y+v=5)
 GROUP BY y
 ----
 project
- ├── columns: count:12(int!null)
+ ├── columns: count:13(int!null)
  ├── immutable
  ├── stats: [rows=400]
  └── group-by (hash)
-      ├── columns: y:2(int) count_rows:12(int!null)
+      ├── columns: y:2(int) count_rows:13(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
       ├── stats: [rows=400, distinct(2)=400, null(2)=0]
       ├── key: (2)
-      ├── fd: (2)-->(12)
+      ├── fd: (2)-->(13)
       ├── anti-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── immutable
@@ -505,7 +505,7 @@ project
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
       └── aggregations
-           └── count-rows [as=count_rows:12, type=int]
+           └── count-rows [as=count_rows:13, type=int]
 
 # Force column statistics calculation for left join.
 norm
