@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx/v4"
@@ -336,7 +337,7 @@ WHERE
 `, [][]string{{"SELECT _ WHERE _", "1"}})
 
 	server.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, cluster.ApplicationLayer(0).AppStopper())
 
 	sqlDB.CheckQueryResults(t, `
 SELECT
@@ -1568,6 +1569,9 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
 	// Generate dummy stats to populate in-memory stats container.
 	var testStmtData []serverpb.StatementsResponse_CollectedStatementStatistics
 	var testTxnData []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
@@ -1615,13 +1619,18 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 	// Validate that ConsumeStats calls functions for every stmt and txn stats respectively.
 	consumedStmtsCount := 0
 	consumedTxnCount := 0
-	sqlStats.ConsumeStats(context.Background(), func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-		consumedStmtsCount++
-		return nil
-	}, func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
-		consumedTxnCount++
-		return nil
-	})
+	sqlStats.ConsumeStats(
+		context.Background(),
+		stopper,
+		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+			consumedStmtsCount++
+			return nil
+		},
+		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
+			consumedTxnCount++
+			return nil
+		},
+	)
 	require.Equal(t, expectedCountStats, consumedStmtsCount)
 	require.Equal(t, expectedCountStats, consumedTxnCount)
 

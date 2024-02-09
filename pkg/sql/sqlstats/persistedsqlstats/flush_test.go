@@ -121,8 +121,8 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
-		firstServerSQLStats.Flush(ctx)
-		secondServerSQLStats.Flush(ctx)
+		firstServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(0).AppStopper())
+		secondServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(1).AppStopper())
 
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
@@ -152,8 +152,8 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
-		firstServerSQLStats.Flush(ctx)
-		secondServerSQLStats.Flush(ctx)
+		firstServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(0).AppStopper())
+		secondServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(1).AppStopper())
 
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
@@ -183,8 +183,8 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
-		firstServerSQLStats.Flush(ctx)
-		secondServerSQLStats.Flush(ctx)
+		firstServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(0).AppStopper())
+		secondServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(1).AppStopper())
 
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
@@ -211,8 +211,8 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsCorrectness(t, testQueries, secondServerSQLStats)
 
-		firstServerSQLStats.Flush(ctx)
-		secondServerSQLStats.Flush(ctx)
+		firstServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(0).AppStopper())
+		secondServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(1).AppStopper())
 
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
@@ -346,7 +346,7 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	sqlConn.Exec(t, "SELECT 1")
 
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, s.AppStopper())
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -363,7 +363,7 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	// Since by default, the minimum flush interval is 10 minutes, a subsequent
 	// flush should be no-op.
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, s.AppStopper())
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -382,7 +382,7 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	fakeTime.setTime(fakeTime.Now().Add(time.Hour))
 
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, s.AppStopper())
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*) > 1
@@ -424,7 +424,7 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 		`, [][]string{{"1"}})
 
 		s.SQLServer().(*sql.Server).
-			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, s.AppStopper())
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -456,7 +456,7 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 
 		// First flush should flush everything into the system tables.
 		s.SQLServer().(*sql.Server).
-			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, s.AppStopper())
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -475,7 +475,7 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 		// Second flush should be aborted due to violating the minimum flush
 		// interval requirement. Though the data should still remain in-memory.
 		s.SQLServer().(*sql.Server).
-			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, s.AppStopper())
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -519,7 +519,7 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 	sqlConn.Exec(t, "SET application_name = 'gateway_enabled'")
 	sqlConn.Exec(t, "SELECT 1")
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, s.AppStopper())
 
 	verifyNodeID(t, sqlConn, "SELECT _", true, "gateway_enabled")
 
@@ -529,7 +529,7 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 	sqlConn.Exec(t, "SET application_name = 'gateway_disabled'")
 	sqlConn.Exec(t, "SELECT 1")
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, s.AppStopper())
 
 	verifyNodeID(t, sqlConn, "SELECT _", false, "gateway_disabled")
 }
@@ -561,7 +561,7 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
 	// 1. Flush then count to get the initial number of rows.
-	pss.Flush(ctx)
+	pss.Flush(ctx, s.AppStopper())
 	stmtStatsCount, txnStatsCount := countStats(t, sqlConn)
 
 	// The size check is done at the shard level. Execute enough so all the shards
@@ -573,7 +573,7 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 		sqlConn.Exec(t, `SET application_name = $1`, appName)
 		sqlConn.Exec(t, "SELECT 1")
 		additionalStatements += 2
-		pss.Flush(ctx)
+		pss.Flush(ctx, s.AppStopper())
 	}
 
 	stmtStatsCountFlush2, txnStatsCountFlush2 := countStats(t, sqlConn)
@@ -630,7 +630,7 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 		t.Run("enforce-limit-"+boolStr, func(t *testing.T) {
 			sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.limit_table_size.enabled = "+boolStr)
 
-			pss.Flush(ctx)
+			pss.Flush(ctx, s.AppStopper())
 
 			stmtStatsCountFlush3, txnStatsCountFlush3 := countStats(t, sqlConn)
 
@@ -676,7 +676,7 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 		sqlConn.Exec(t, "SELECT 1")
 	}
 
-	pss.Flush(ctx)
+	pss.Flush(ctx, s.AppStopper())
 	stmtStatsCountFlush, _ := countStats(t, sqlConn)
 
 	// Ensure we have some rows in system.statement_statistics
@@ -855,10 +855,10 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 	// collected between recent flush and before next reset of in-memory stats.
 	//
 	// ------X--------------X-------------X---------------X-----------X----> t
-	//  Add stats (1)			Flush				Add stats (2)			Reset				Flush
-	//																																^
-	//														should be flushed with							|
-	// 																	next Flush      --------------|
+	//  Add stats (1)     Flush      Add stats (2)      Reset       Flush
+	//                                                                ^
+	//                            should be flushed with              |
+	//                                  next Flush      --------------|
 	t.Run("add stats before reset", func(t *testing.T) {
 		defer leaktest.AfterTest(t)()
 		defer log.Scope(t).Close(t)
@@ -891,7 +891,7 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 						}
 						return nil
 					},
-					OnBeforeReset: func() {
+					OnAfterClear: func() {
 						if init.Load() {
 							init.Store(false)
 							go func() {
@@ -931,7 +931,10 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 
 		init.Store(true)
 		// Flush all available stats.
-		sqlStats.Flush(ctx)
+		sqlStats.Flush(ctx, srv.AppStopper())
+
+		require.Equal(t, 1, flushedStmtStats)
+		require.Equal(t, 1, flushedTxnStats)
 
 		// At this moment, Sql Stats is going to be reset and new stmt and txn stats is added to in-memory Sql stats.
 		<-ch
@@ -957,7 +960,7 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 
 		// Flush all stats again. This time it should flush all of the stats that happen to be collected right
 		// before SQLStats.
-		sqlStats.Flush(ctx)
+		sqlStats.Flush(ctx, srv.AppStopper())
 
 		require.Equal(t, 2, flushedStmtStats)
 		require.Equal(t, 2, flushedTxnStats)
