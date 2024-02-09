@@ -16,10 +16,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// colOrdMapAllocator is used to allocate colOrdMaps.
+// colOrdMapAllocator is used to allocate colOrdMaps. It must be initialized
+// with Init before use.
 //
+// Allocated maps can be returned to the allocator via the Free method. Freed
+// maps will be returned in future calls to Alloc.
+//
+// WARNING: Do not mix-and-match maps allocated by separate allocators.
 type colOrdMapAllocator struct {
 	maxCol opt.ColumnID
+	freed  []colOrdMap
 }
 
 // Init initialized the allocator that can allocate maps that support column IDs
@@ -28,10 +34,16 @@ func (a *colOrdMapAllocator) Init(maxCol opt.ColumnID) {
 	a.maxCol = maxCol
 }
 
-// Alloc returns an empty colOrdMap. It will return a previously Free'd
+// Alloc returns an empty colOrdMap. It will return a previously freed
 // colOrdMap, if one is available.
 func (a *colOrdMapAllocator) Alloc() colOrdMap {
-	return newColOrdMap(a.maxCol)
+	if len(a.freed) == 0 {
+		// There are no freed maps, so allocate a new one.
+		return newColOrdMap(a.maxCol)
+	}
+	m := a.freed[len(a.freed)-1]
+	a.freed = a.freed[:len(a.freed)-1]
+	return m
 }
 
 // Copy returns a copy of the given colOrdMap.
@@ -39,6 +51,17 @@ func (a *colOrdMapAllocator) Copy(from colOrdMap) colOrdMap {
 	m := a.Alloc()
 	m.CopyFrom(from)
 	return m
+}
+
+// Free returns the given map to the allocator for future reuse.
+//
+// WARNING: Do not use a map once it has been freed.
+// WARNING: Do not free a map more than once.
+// WARNING: Do not free a map that was allocated by a different allocator.
+func (a *colOrdMapAllocator) Free(m colOrdMap) {
+	// Check that the map has not already been freed.
+	m.Clear()
+	a.freed = append(a.freed, m)
 }
 
 // colOrdMap is a map from column IDs to ordinals.
@@ -81,7 +104,7 @@ func newColOrdMap(maxCol opt.ColumnID) colOrdMap {
 }
 
 // Set maps a column to the given ordinal.
-func (m *colOrdMap) Set(col opt.ColumnID, ord int) {
+func (m colOrdMap) Set(col opt.ColumnID, ord int) {
 	if buildutil.CrdbTestBuild && int(col) >= len(m.ords) {
 		panic(errors.AssertionFailedf("column %d exceeds max column of map %d", col, len(m.ords)-1))
 	}
@@ -133,7 +156,7 @@ func (m colOrdMap) ForEach(fn func(col opt.ColumnID, ord int)) {
 
 // CopyFrom copies all entries from the given map, and unsets any column IDs not
 // in the given map.
-func (m *colOrdMap) CopyFrom(other colOrdMap) {
+func (m colOrdMap) CopyFrom(other colOrdMap) {
 	if buildutil.CrdbTestBuild && len(m.ords) < len(other.ords) {
 		panic(errors.AssertionFailedf("map of size %d is too small to copy from map of size %d",
 			len(m.ords), len(other.ords)))
@@ -141,8 +164,8 @@ func (m *colOrdMap) CopyFrom(other colOrdMap) {
 	copy(m.ords, other.ords)
 }
 
-// clear clears the map. The allocated memory is retained for future reuse.
-func (m *colOrdMap) clear() {
+// Clear clears the map. The allocated memory is retained for future reuse.
+func (m colOrdMap) Clear() {
 	for i := range m.ords {
 		m.ords[i] = 0
 	}
