@@ -198,7 +198,7 @@ func (og *operationGenerator) randOp(
 			// We can only ignore this error, if no other PgErrors
 			// were set in the clean up process.
 			if errors.Is(err, pgx.ErrNoRows) &&
-				!errors.Is(err, &pgconn.PgError{}) {
+				!errors.HasType(err, &pgconn.PgError{}) {
 				continue
 			}
 			// Table select had a primary key swap, so no statement
@@ -3878,8 +3878,15 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 				COALESCE(member->>'direction' = 'REMOVE', false) AS dropping
 			FROM enum_members
 		`)
+	schemasQuery := With([]CTE{
+		{"descriptors", descJSONQuery},
+	}, `SELECT quote_ident(name) FROM descriptors WHERE descriptor ? 'schema'`)
 
 	enums, err := Collect(ctx, og, tx, pgx.RowToMap, enumQuery)
+	if err != nil {
+		return nil, err
+	}
+	schemas, err := Collect(ctx, og, tx, pgx.RowTo[string], schemasQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -3916,6 +3923,9 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 			name := tree.Name(fmt.Sprintf("udf_%s", og.newUniqueSeqNumSuffix()))
 			return &name
 		},
+		"Schema": func() (string, error) {
+			return PickOne(og.params.rng, schemas)
+		},
 		"DroppingEnum": func() (string, error) {
 			return PickOne(og.params.rng, droppingEnums)
 		},
@@ -3947,9 +3957,9 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	// to the schema workload but may become a nice to have.
 	stmt, expectedCode, err := Generate[*tree.CreateRoutine](og.params.rng, og.produceError(), []GenerationCase{
 		// 1. Nothing special, fully self contained function.
-		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { UniqueName } (i int, j int) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
+		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } (i int, j int) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
 		// 2. 1 or more table or type references spread across parameters, return types, or the function body.
-		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $$ SELECT NULL WHERE { BodyRefs } $$`},
+		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $$ SELECT NULL WHERE { BodyRefs } $$`},
 		// 3. Reference a table that does not exist.
 		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT * FROM "ThisTableDoesNotExist" $$`},
 		// 4. Reference a UDT that does not exist.
@@ -4092,7 +4102,19 @@ func (og *operationGenerator) alterFunctionSetSchema(
 	functionsQuery := With([]CTE{
 		{"descriptors", descJSONQuery},
 		{"functions", functionDescsQuery},
-	}, `SELECT quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) FROM functions`)
+	}, `SELECT
+			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')'
+			FROM functions
+			JOIN LATERAL (
+				SELECT
+					COALESCE(array_agg(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname)), '{}') AS funcargs
+				FROM pg_catalog.pg_type
+				JOIN LATERAL (
+					SELECT unnest(proargtypes) AS oid FROM pg_catalog.pg_proc WHERE oid = (id + 100000)
+				) args ON args.oid = pg_type.oid
+			) funcargs ON TRUE
+			`,
+	)
 
 	schemasQuery := With([]CTE{
 		{"descriptors", descJSONQuery},
