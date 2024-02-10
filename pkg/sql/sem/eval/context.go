@@ -13,6 +13,7 @@ package eval
 import (
 	"context"
 	"math"
+	"math/rand"
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
@@ -288,6 +289,9 @@ type Context struct {
 
 	// ULIDEntropy is the entropy source for ULID generation.
 	ULIDEntropy ulid.MonotonicReader
+
+	// RNG is the random number generator use for the "random" built-in function.
+	RNG *rand.Rand
 }
 
 // JobsProfiler is the interface used to fetch job specific execution details
