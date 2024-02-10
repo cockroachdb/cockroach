@@ -660,15 +660,17 @@ func (desc *Mutable) RemoveReference(id descpb.ID) {
 	desc.DependedOnBy = ret
 }
 
-// ToRoutineObj converts the descriptor to a tree.RoutineObj.
+// ToRoutineObj converts the descriptor to a tree.RoutineObj. Note that not all
+// fields are set.
 func (desc *immutable) ToRoutineObj() *tree.RoutineObj {
 	ret := &tree.RoutineObj{
 		FuncName: tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
 		Params:   make(tree.RoutineParams, len(desc.Params)),
 	}
-	for i := range desc.Params {
+	for i, p := range desc.Params {
 		ret.Params[i] = tree.RoutineParam{
-			Type: desc.Params[i].Type,
+			Type:  p.Type,
+			Class: ToTreeRoutineParamClass(p.Class),
 		}
 	}
 	return ret
@@ -712,14 +714,16 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	}
 	ret.ReturnsRecordType = types.IsRecordType(desc.ReturnType.Type)
 
-	argTypes := make(tree.ParamTypes, 0, len(desc.Params))
+	signatureTypes := make(tree.ParamTypes, 0, len(desc.Params))
 	for _, param := range desc.Params {
-		argTypes = append(
-			argTypes,
-			tree.ParamType{Name: param.Name, Typ: param.Type},
-		)
+		if !tree.IsInParamClass(ToTreeRoutineParamClass(param.Class)) {
+			// Only IN parameters should be included into the signature of this
+			// function overload.
+			continue
+		}
+		signatureTypes = append(signatureTypes, tree.ParamType{Name: param.Name, Typ: param.Type})
 	}
-	ret.Types = argTypes
+	ret.Types = signatureTypes
 	ret.Volatility, err = desc.getOverloadVolatility()
 	if err != nil {
 		return nil, err
@@ -785,7 +789,7 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 		ret.Params[i] = tree.RoutineParam{
 			Name:  tree.Name(desc.Params[i].Name),
 			Type:  desc.Params[i].Type,
-			Class: toTreeNodeParamClass(desc.Params[i].Class),
+			Class: ToTreeRoutineParamClass(desc.Params[i].Class),
 		}
 		if desc.Params[i].DefaultExpr != nil {
 			ret.Params[i].DefaultVal, err = parser.ParseExpr(*desc.Params[i].DefaultExpr)
@@ -844,7 +848,9 @@ func (desc *immutable) getCreateExprNullInputBehavior() tree.RoutineNullInputBeh
 	return 0
 }
 
-func toTreeNodeParamClass(class catpb.Function_Param_Class) tree.RoutineParamClass {
+// ToTreeRoutineParamClass converts the proto enum value to the correspoding
+// tree.RoutineParamClass.
+func ToTreeRoutineParamClass(class catpb.Function_Param_Class) tree.RoutineParamClass {
 	switch class {
 	case catpb.Function_Param_IN:
 		return tree.RoutineParamIn

@@ -58,6 +58,41 @@ CREATE PROCEDURE p(INOUT param1 INT, OUT param2 INT) AS $$ SELECT 1, 2, 3; $$ LA
 statement error pgcode 42P13 pq: return type mismatch in function declared to return int
 CREATE PROCEDURE p(INOUT param INT) AS $$ SELECT 'hello'; $$ LANGUAGE SQL;
 
+# Verify that function resolution works correctly when dropping functions (OUT
+# arguments are ignored).
+statement ok
+CREATE FUNCTION f(OUT param INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f(OUT param INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement ok
+DROP FUNCTION f(OUT INT);
+
+statement ok
+CREATE FUNCTION f(OUT param1 INT, OUT param2 INT) AS $$ SELECT 1, 2; $$ LANGUAGE SQL;
+
+statement ok
+DROP FUNCTION f(OUT INT);
+
+statement ok
+CREATE FUNCTION f(OUT param1 INT, OUT param2 INT) AS $$ SELECT 1, 2; $$ LANGUAGE SQL;
+
+statement error pq: function f\(int\) does not exist
+DROP FUNCTION f(INT);
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement ok
+DROP FUNCTION f(OUT INT, OUT text, OUT INT);
+
 subtest end
 
 subtest show_create

@@ -265,12 +265,13 @@ SELECT database_name,
 			if err != nil {
 				return nil, err
 			}
-			paramTypes, err := fn.ParamTypes(d.ctx, d.catalog)
+			signatureTypes, err := fn.SignatureTypes(d.ctx, d.catalog)
 			if err != nil {
 				return nil, err
 			}
-			ol, err := fd.MatchOverload(paramTypes, fn.FuncName.Schema(),
-				&d.evalCtx.SessionData().SearchPath, routineType)
+			ol, err := fd.MatchOverload(
+				signatureTypes, fn.FuncName.Schema(), &d.evalCtx.SessionData().SearchPath, routineType,
+			)
 			if err != nil {
 				return nil, err
 			}

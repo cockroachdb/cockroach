@@ -139,15 +139,17 @@ func (n *createFunctionNode) createNewFunction(
 	if err != nil {
 		return err
 	}
-	paramTypes := make([]*types.T, len(udfDesc.Params))
-	for i, param := range udfDesc.Params {
-		paramTypes[i] = param.Type
+	signatureTypes := make([]*types.T, 0, len(udfDesc.Params))
+	for _, param := range udfDesc.Params {
+		if tree.IsInParamClass(funcdesc.ToTreeRoutineParamClass(param.Class)) {
+			signatureTypes = append(signatureTypes, param.Type)
+		}
 	}
 	scDesc.AddFunction(
 		udfDesc.GetName(),
 		descpb.SchemaDescriptor_FunctionSignature{
 			ID:          udfDesc.GetID(),
-			ArgTypes:    paramTypes,
+			ArgTypes:    signatureTypes,
 			ReturnType:  returnType,
 			ReturnSet:   udfDesc.ReturnType.ReturnSet,
 			IsProcedure: udfDesc.IsProcedure(),

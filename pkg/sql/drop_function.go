@@ -141,11 +141,11 @@ func (p *planner) matchRoutine(
 		return nil, err
 	}
 
-	paramTypes, err := routineObj.ParamTypes(ctx, p)
+	signatureTypes, err := routineObj.SignatureTypes(ctx, p)
 	if err != nil {
 		return nil, err
 	}
-	ol, err := fnDef.MatchOverload(paramTypes, routineObj.FuncName.Schema(), &path, routineType)
+	ol, err := fnDef.MatchOverload(signatureTypes, routineObj.FuncName.Schema(), &path, routineType)
 	if err != nil {
 		if !required && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil, nil
