@@ -84,6 +84,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	// Resolve the parameter names and types.
 	paramTypes := make(tree.ParamTypes, len(c.Params))
 	var outParamTypes []*types.T
+	var outParamNames []string
 	for i := range c.Params {
 		param := &c.Params[i]
 		typ, err := tree.ResolveType(context.Background(), param.Type, tc)
@@ -93,6 +94,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		paramTypes.SetAt(i, string(param.Name), typ)
 		if param.IsOutParam() {
 			outParamTypes = append(outParamTypes, typ)
+			outParamNames = append(outParamNames, string(param.Name))
 		}
 	}
 
@@ -101,7 +103,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	if len(outParamTypes) == 1 {
 		outParamType = outParamTypes[0]
 	} else if len(outParamTypes) > 1 {
-		outParamType = types.MakeTuple(outParamTypes)
+		outParamType = types.MakeLabeledTuple(outParamTypes, outParamNames)
 	}
 	// Resolve the return type.
 	var retType *types.T
