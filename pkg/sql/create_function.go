@@ -182,18 +182,9 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 		)
 	}
 
-	// Make sure parameter names are not changed.
-	for i := range n.cf.Params {
-		if string(n.cf.Params[i].Name) != udfDesc.Params[i].Name {
-			return pgerror.Newf(
-				pgcode.InvalidFunctionDefinition, "cannot change name of input parameter %q", udfDesc.Params[i].Name,
-			)
-		}
-	}
-
-	// Make sure return type is the same. The signature of user-defined types may
-	// change, as long as the same type is referenced. If this is the case, we
-	// must update the return type.
+	// Make sure return type is the same. The signature of user-defined types
+	// may change, as long as the same type is referenced. If this is the case,
+	// we must update the return type.
 	retType, err := tree.ResolveType(params.ctx, n.cf.ReturnType.Type, params.p)
 	if err != nil {
 		return err
@@ -205,6 +196,26 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	}
 	if isSameUDT {
 		udfDesc.ReturnType.Type = retType
+	}
+
+	// Verify whether changes, if any, to the parameter names and classes are
+	// allowed. This needs to happen after the return type has already been
+	// checked.
+	if err = n.validateParameters(udfDesc); err != nil {
+		return err
+	}
+	// All parameter changes, if any, are allowed, so update the descriptor
+	// accordingly.
+	if cap(udfDesc.Params) >= len(n.cf.Params) {
+		udfDesc.Params = udfDesc.Params[:len(n.cf.Params)]
+	} else {
+		udfDesc.Params = make([]descpb.FunctionDescriptor_Parameter, len(n.cf.Params))
+	}
+	for i, p := range n.cf.Params {
+		udfDesc.Params[i], err = makeFunctionParam(params.ctx, p, params.p)
+		if err != nil {
+			return err
+		}
 	}
 
 	resetFuncOption(udfDesc)
@@ -242,29 +253,40 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	return params.p.writeFuncSchemaChange(params.ctx, udfDesc)
 }
 
+func checkDuplicateParamName(param tree.RoutineParam, seen map[tree.Name]struct{}) error {
+	if _, ok := seen[param.Name]; ok {
+		// Argument names cannot be used more than once.
+		return pgerror.Newf(
+			pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", param.Name,
+		)
+	}
+	seen[param.Name] = struct{}{}
+	return nil
+}
+
 func (n *createFunctionNode) getMutableFuncDesc(
 	scDesc catalog.SchemaDescriptor, params runParams,
 ) (fnDesc *funcdesc.Mutable, isNew bool, err error) {
-	// Resolve parameter types.
-	paramTypes := make([]*types.T, len(n.cf.Params))
 	pbParams := make([]descpb.FunctionDescriptor_Parameter, len(n.cf.Params))
-	paramNameSeen := make(map[tree.Name]struct{})
+	paramNameSeenIn, paramNameSeenOut := make(map[tree.Name]struct{}), make(map[tree.Name]struct{})
 	for i, param := range n.cf.Params {
 		if param.Name != "" {
-			if _, ok := paramNameSeen[param.Name]; ok {
-				// Argument names cannot be used more than once.
-				return nil, false, pgerror.Newf(
-					pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", param.Name,
-				)
+			if param.IsInParam() {
+				if err = checkDuplicateParamName(param, paramNameSeenIn); err != nil {
+					return nil, false, err
+				}
 			}
-			paramNameSeen[param.Name] = struct{}{}
+			if param.IsOutParam() {
+				if err = checkDuplicateParamName(param, paramNameSeenOut); err != nil {
+					return nil, false, err
+				}
+			}
 		}
 		pbParam, err := makeFunctionParam(params.ctx, param, params.p)
 		if err != nil {
 			return nil, false, err
 		}
 		pbParams[i] = pbParam
-		paramTypes[i] = pbParam.Type
 	}
 
 	// Try to look up an existing function.
@@ -523,6 +545,88 @@ func validateVolatilityInOptions(
 	}
 	if err := vp.Validate(); err != nil {
 		return sqlerrors.NewInvalidVolatilityError(err)
+	}
+	return nil
+}
+
+// validateParameters checks that changes to the parameters, if any, are
+// allowed. This method expects that the return type equality has already been
+// checked.
+func (n *createFunctionNode) validateParameters(udfDesc *funcdesc.Mutable) error {
+	// Note that parameter ordering between different "namespaces" (i.e. IN vs
+	// OUT) can change (i.e. going from (IN INT, OUT INT) to (OUT INT, IN INT)
+	// is allowed), so we need to process each "namespace" separately.
+	var origInParams, origOutParams []descpb.FunctionDescriptor_Parameter
+	for _, p := range udfDesc.Params {
+		class := funcdesc.ToTreeRoutineParamClass(p.Class)
+		if tree.IsInParamClass(class) {
+			origInParams = append(origInParams, p)
+		}
+		if tree.IsOutParamClass(class) {
+			origOutParams = append(origOutParams, p)
+		}
+	}
+	var newInParams, newOutParams tree.RoutineParams
+	for _, p := range n.cf.Params {
+		if p.IsInParam() {
+			newInParams = append(newInParams, p)
+		}
+		if p.IsOutParam() {
+			newOutParams = append(newOutParams, p)
+		}
+	}
+	// We expect that the number of IN parameters didn't change (this would be
+	// a bug in function resolution).
+	if len(origInParams) != len(newInParams) {
+		return errors.AssertionFailedf(
+			"different number of IN parameters: old %d, new %d", len(origInParams), len(newInParams),
+		)
+	}
+	// Verify that the names of IN parameters are not changed.
+	for i := range origInParams {
+		if origInParams[i].Name != string(newInParams[i].Name) {
+			return pgerror.Newf(
+				pgcode.InvalidFunctionDefinition, "cannot change name of input parameter %q", origInParams[i].Name,
+			)
+		}
+	}
+	// The number of OUT parameters can only differ if a single OUT parameter is
+	// added or omitted (if we have multiple OUT parameters, then the return
+	// type is a RECORD, so parameter names become contents of the return type,
+	// which isn't allowed to change - this should have been caught via the
+	// equality check of the return types).
+	if len(origOutParams) > 1 || len(newOutParams) > 1 {
+		// When we have at most one OUT parameter on each side, we don't need to
+		// check anything. Consider each possible case:
+		// - len(origOutParams) == 0 && len(newOutParams) == 0:
+		//     Nothing to check / rename.
+		// - len(origOutParams) == 0 && len(newOutParams) == 1:
+		//     Introducing a single OUT parameter effectively gives the name to
+		//     the RETURNS-based output.
+		// - len(origOutParams) == 1 && len(newOutParams) == 0:
+		//     Removing the single OUT parameter effectively gives
+		//     function-based name to the output column.
+		// - len(origOutParams) == 1 && len(newOutParams) == 1:
+		//     This is a special case - renaming single OUT parameter is allowed
+		//     without restrictions.
+		//
+		// With multiple OUT parameters on at least one side we expect that
+		// there are no differences.
+		mismatch := len(origOutParams) != len(newOutParams)
+		if !mismatch {
+			for i := range origOutParams {
+				if origOutParams[i].Name != string(newOutParams[i].Name) {
+					mismatch = true
+					break
+				}
+			}
+		}
+		if mismatch {
+			return errors.AssertionFailedf(
+				"different return types should've been caught earlier: old %v, new %v",
+				origOutParams, newOutParams,
+			)
+		}
 	}
 	return nil
 }
