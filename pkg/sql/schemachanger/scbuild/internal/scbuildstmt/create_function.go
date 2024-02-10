@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
@@ -61,16 +62,34 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 		))
 	}
 
-	// TODO(#100405): n.ReturnType may be nil because the AST was re-parsed and
-	// the new AST may not have the optbuilder's new return type it determined
-	// from out parameters. Before implementing n.ReturnType as a pointer with a
-	// default nil value, it was a default void, so we use that here. However, we
-	// should investigate whether this has any potential problems in the schema
-	// changer.
 	typ := tree.ResolvableTypeReference(types.Void)
 	setof := false
 	if n.ReturnType != nil {
 		typ = n.ReturnType.Type
+		if returnType := b.ResolveTypeRef(typ); types.IsRecordType(returnType.Type) {
+			// If the function returns a RECORD type, then we need to check
+			// whether its OUT parameters specify labels for the return type.
+			// TODO(yuzefovich): why do we need to do this? Why doing this in
+			// the optbuilder is insufficient? Has the schemachanger reparsed
+			// the original statement?
+			var outParamTypes []*types.T
+			var outParamNames []string
+			for _, param := range n.Params {
+				if param.IsOutParam() {
+					paramType := b.ResolveTypeRef(param.Type)
+					outParamTypes = append(outParamTypes, paramType.Type)
+					outParamNames = append(outParamNames, string(param.Name))
+				}
+			}
+			if len(outParamTypes) == 1 {
+				panic(errors.AssertionFailedf(
+					"we shouldn't get the RECORD return type with a single OUT parameter, expected %s",
+					outParamTypes[0].SQLStringForError(),
+				))
+			} else if len(outParamTypes) > 1 {
+				typ = types.MakeLabeledTuple(outParamTypes, outParamNames)
+			}
+		}
 		setof = n.ReturnType.SetOf
 	}
 	fnID := b.GenerateUniqueDescID()
@@ -165,17 +184,26 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	b.LogEventForExistingTarget(&fn)
 }
 
+func checkDuplicateParamName(param tree.RoutineParam, seen map[tree.Name]struct{}) {
+	if _, ok := seen[param.Name]; ok {
+		// Argument names cannot be used more than once.
+		panic(pgerror.Newf(
+			pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", param.Name,
+		))
+	}
+	seen[param.Name] = struct{}{}
+}
+
 func validateParameters(n *tree.CreateRoutine) {
-	seen := make(map[tree.Name]struct{})
+	seenIn, seenOut := make(map[tree.Name]struct{}), make(map[tree.Name]struct{})
 	for _, param := range n.Params {
 		if param.Name != "" {
-			if _, ok := seen[param.Name]; ok {
-				// Argument names cannot be used more than once.
-				panic(pgerror.Newf(
-					pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", param.Name,
-				))
+			if param.IsInParam() {
+				checkDuplicateParamName(param, seenIn)
 			}
-			seen[param.Name] = struct{}{}
+			if param.IsOutParam() {
+				checkDuplicateParamName(param, seenOut)
+			}
 		}
 	}
 }

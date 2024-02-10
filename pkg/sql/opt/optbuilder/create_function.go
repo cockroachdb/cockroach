@@ -157,6 +157,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	bodyScope := b.allocScope()
 	var paramTypes tree.ParamTypes
 	var outParamTypes []*types.T
+	// When multiple OUT parameters are present, parameter names become the
+	// labels in the output RECORD type.
+	// TODO(#100405): this needs to be checked for PLpgSQL routines.
+	var outParamNames []string
 	for i := range cf.Params {
 		param := &cf.Params[i]
 		typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
@@ -165,6 +169,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 		if param.IsOutParam() {
 			outParamTypes = append(outParamTypes, typ)
+			outParamNames = append(outParamNames, string(param.Name))
 		}
 		// The parameter type must be supported by the current cluster version.
 		checkUnsupportedType(b.ctx, b.semaCtx, typ)
@@ -204,7 +209,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	if len(outParamTypes) == 1 {
 		outParamType = outParamTypes[0]
 	} else if len(outParamTypes) > 1 {
-		outParamType = types.MakeTuple(outParamTypes)
+		outParamType = types.MakeLabeledTuple(outParamTypes, outParamNames)
 	}
 
 	var funcReturnType *types.T

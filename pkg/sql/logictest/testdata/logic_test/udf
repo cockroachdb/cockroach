@@ -224,9 +224,6 @@ subtest end
 
 subtest create_or_replace_function
 
-statement error pgcode 42P13 pq: parameter name "a" used more than once
-CREATE FUNCTION f_test_cor(a INT, a INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
-
 statement ok
 CREATE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF STRICT LANGUAGE SQL AS $$ SELECT 1 $$;
 
