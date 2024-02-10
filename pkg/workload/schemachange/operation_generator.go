@@ -3841,18 +3841,10 @@ func (og *operationGenerator) dropSchema(ctx context.Context, tx pgx.Tx) (*opStm
 	if err != nil {
 		return nil, err
 	}
-	crossReferences := false
-	if schemaExists {
-		crossReferences, err = og.schemaContainsTypesWithCrossSchemaReferences(ctx, tx, schemaName)
-		if err != nil {
-			return nil, err
-		}
-	}
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedSchema, !schemaExists},
 		{pgcode.InvalidSchemaName, schemaName == catconstants.PublicSchemaName},
-		{pgcode.FeatureNotSupported, crossReferences},
 	})
 
 	stmt.sql = fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName)
