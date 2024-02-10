@@ -127,6 +127,7 @@ func backupSuccess(t *testing.T, factory TestServerFactory, cs CumulativeTestCas
 		"CREATE TYPE":     {},
 		"CREATE SCHEMA":   {},
 		"CREATE DATABASE": {},
+		"CREATE FUNCTION": {},
 	}
 	for _, stmt := range cs.Stmts {
 		if _, found := skipTags[stmt.AST.StatementTag()]; found && len(cs.Stmts) > 1 {
@@ -470,14 +471,19 @@ func exerciseBackupRestore(
 			if rc.restoreFlavor == restoreAllTablesInDatabase {
 				// Expected table schema state must be stripped of UDF references.
 				expected = parserRoundTrip(t, expected) // deep copy
+				tmpExpected := make([][]string, 0, len(expected))
 				for i := range expected {
 					stmt, err := parser.ParseOne(expected[i][0])
 					require.NoError(t, err)
+					if _, ok := stmt.AST.(*tree.CreateRoutine); ok {
+						continue
+					}
 					if c, ok := stmt.AST.(*tree.CreateTable); ok {
 						require.NoError(t, removeDefsDependOnUDFs(c))
 					}
-					expected[i][0] = tree.AsString(stmt.AST)
+					tmpExpected = append(tmpExpected, []string{tree.AsString(stmt.AST)})
 				}
+				expected = tmpExpected
 			}
 
 			// Check expectations.
