@@ -187,6 +187,10 @@ func Generate[T tree.Statement](
 		aIsSuccess := a.Code == pgcode.SuccessfulCompletion
 		bIsSuccess := b.Code == pgcode.SuccessfulCompletion
 
+		if aIsSuccess && bIsSuccess {
+			// If both are valid, choose randomly.
+			return rng.Float64() < 0.5
+		}
 		return aIsSuccess && !bIsSuccess
 	})
 
