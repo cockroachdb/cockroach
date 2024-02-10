@@ -978,6 +978,8 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="round"></a><code>round(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Rounds <code>val</code> to the nearest integer using half to even (banker’s) rounding.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="setseed"></a><code>setseed(seed: <a href="float.html">float</a>) &rarr; void</code></td><td><span class="funcdesc"><p>Sets the seed for subsequent random() calls in this session (value between -1.0 and 1.0, inclusive). There are no guarantees as to how this affects the seed of random() calls that appear in the same query as setseed().</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="sign"></a><code>sign(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Determines the sign of <code>val</code>: <strong>1</strong> for positive; <strong>0</strong> for 0 values; <strong>-1</strong> for negative.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="sign"></a><code>sign(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Determines the sign of <code>val</code>: <strong>1</strong> for positive; <strong>0</strong> for 0 values; <strong>-1</strong> for negative.</p>
