@@ -396,8 +396,38 @@ const (
 	RoutineParamVariadic
 )
 
+// IsInParamClass returns true if the given parameter class specifies an input
+// parameter (i.e. either IN or INOUT).
+func IsInParamClass(class RoutineParamClass) bool {
+	switch class {
+	case RoutineParamIn, RoutineParamInOut:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsOutParamClass returns true if the given parameter class specifies an output
+// parameter (i.e. either OUT or INOUT).
+func IsOutParamClass(class RoutineParamClass) bool {
+	switch class {
+	case RoutineParamOut, RoutineParamInOut:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsInParam returns true if the parameter is an input parameter (i.e. either IN
+// or INOUT).
+func (node *RoutineParam) IsInParam() bool {
+	return IsInParamClass(node.Class)
+}
+
+// IsOutParam returns true if the parameter is an output parameter (i.e. either
+// OUT or INOUT).
 func (node *RoutineParam) IsOutParam() bool {
-	return node.Class == RoutineParamOut || node.Class == RoutineParamInOut
+	return IsOutParamClass(node.Class)
 }
 
 // RoutineReturnType represent the return type of UDF.
@@ -461,25 +491,26 @@ func (node *RoutineObj) Format(ctx *FmtCtx) {
 	}
 }
 
-// ParamTypes returns a slice of parameter types of the routine.
-func (node RoutineObj) ParamTypes(
+// SignatureTypes returns a slice of IN parameter types of the routine. These
+// types should be used for function resolution (i.e. they define the
+// "signature" of the function overload).
+func (node RoutineObj) SignatureTypes(
 	ctx context.Context, res TypeReferenceResolver,
 ) ([]*types.T, error) {
-	// TODO(#100405): handle INOUT, OUT and VARIADIC argument classes when we
-	// support them. This is because only IN and INOUT arg types need to be
-	// considered to match a overload.
-	var argTypes []*types.T
+	var typs []*types.T
 	if node.Params != nil {
-		argTypes = make([]*types.T, len(node.Params))
-		for i, arg := range node.Params {
-			typ, err := ResolveType(ctx, arg.Type, res)
-			if err != nil {
-				return nil, err
+		typs = make([]*types.T, 0, len(node.Params))
+		for _, arg := range node.Params {
+			if arg.IsInParam() {
+				typ, err := ResolveType(ctx, arg.Type, res)
+				if err != nil {
+					return nil, err
+				}
+				typs = append(typs, typ)
 			}
-			argTypes[i] = typ
 		}
 	}
-	return argTypes, nil
+	return typs, nil
 }
 
 // AlterFunctionOptions represents a ALTER FUNCTION...action statement.

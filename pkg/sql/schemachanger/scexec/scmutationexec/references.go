@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
@@ -565,13 +566,17 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 
 		ol := descpb.SchemaDescriptor_FunctionSignature{
 			ID:          obj.GetID(),
-			ArgTypes:    make([]*types.T, len(t.GetParams())),
+			ArgTypes:    make([]*types.T, 0, len(t.GetParams())),
 			ReturnType:  t.GetReturnType().Type,
 			ReturnSet:   t.GetReturnType().ReturnSet,
 			IsProcedure: t.IsProcedure(),
 		}
-		for i := range t.Params {
-			ol.ArgTypes[i] = t.Params[i].Type
+		for _, p := range t.Params {
+			if !tree.IsInParamClass(funcdesc.ToTreeRoutineParamClass(p.Class)) {
+				// Only IN parameters are included into the signature.
+				continue
+			}
+			ol.ArgTypes = append(ol.ArgTypes, p.Type)
 		}
 		sc.AddFunction(obj.GetName(), ol)
 	}

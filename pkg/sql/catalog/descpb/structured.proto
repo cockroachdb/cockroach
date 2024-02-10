@@ -1551,7 +1551,7 @@ message SchemaDescriptor {
     optional uint32 id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
 
-
+    // ArgTypes contains only IN / INOUT parameters.
     repeated sql.sem.types.T arg_types = 2;
 
     optional sql.sem.types.T return_type = 3;
