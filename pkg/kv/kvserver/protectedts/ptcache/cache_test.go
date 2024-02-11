@@ -44,6 +44,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Changed
 func withDatabase(ptm protectedts.Manager, idb isql.DB) *storageWithLastCommit {
 	var m storageWithLastCommit
 	m.internalDBWithLastCommit.DB = idb

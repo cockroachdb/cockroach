@@ -6,7 +6,7 @@ on:
 
 jobs:
   code-cover-gen:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-staging
     env:
       PR: ${{ github.event.pull_request.number }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -59,7 +59,7 @@ jobs:
           # that is the tip of master and not necessarily the PR fork point.
           NUM_COMMITS=$(gh pr view $PR --json commits --jq '.commits | length')
           
-          # The number of commits bust be below the checkout fetch-depth.
+          # The number of commits must be below the checkout fetch-depth.
           if [ ${NUM_COMMITS} -ge ${FETCH_DEPTH} ]; then
             echo "ERROR=too many commits (${NUM_COMMITS})" >> ${GITHUB_ENV}
             exit 1

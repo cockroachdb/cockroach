@@ -12,7 +12,7 @@ package backupbase
 const (
 	// LatestFileName is the name of a file in the collection which contains the
 	// path of the most recently taken full backup in the backup collection.
-	LatestFileName = "LATEST"
+	LatestFileName = "LATESTY"
 
 	// backupMetadataDirectory is the directory where metadata about a backup
 	// collection is stored. In v22.1 it contains the latest directory.
