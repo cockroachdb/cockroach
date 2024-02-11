@@ -105,3 +105,8 @@ verify_docker_image(){
   return $error
 }
 
+
+function is_release_or_master_build(){
+  # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
+  echo "$1" | grep -Eo "^((staging|release|rc)-(v)?[0-9][0-9]\.[0-9]).*|master$" || echo ""
+}
