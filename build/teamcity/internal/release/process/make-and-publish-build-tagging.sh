@@ -12,7 +12,7 @@ build_name=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev
 
 # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
 release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
-is_release_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^((staging|release|rc)-(v)?[0-9][0-9]\.[0-9](\.0)?).*" || echo "")"
+release_build_match="$(is_release_or_master_build "$TC_BUILD_BRANCH")"
 is_customized_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo "")"
 github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
 
@@ -60,7 +60,7 @@ if [[ -z "${is_customized_build}" ]] ; then
   tc_start_block "Tag docker image as latest-build"
   # Only tag the image as "latest-vX.Y-build" if the tag is on a release branch
   # (or master for the alphas for the next major release).
-  if [[ -n "${is_release_build}" ]] ; then
+  if [[ -n "${release_build_match}" ]] ; then
     log_into_gcloud
     gcloud container images add-tag "${gcr_repository}:${build_name}" "${gcr_repository}:latest-${release_branch}-build"
   fi

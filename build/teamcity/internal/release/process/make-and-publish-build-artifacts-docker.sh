@@ -10,10 +10,10 @@ tc_start_block "Variable Setup"
 build_name=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
 
 # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
-is_release_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^(release-[0-9][0-9]\.[0-9](\.0)?(-rc)?)$|master$" || echo "")"
+release_build_match="$(is_release_or_master_build "$TC_BUILD_BRANCH")"
 
 if [[ -z "${DRY_RUN}" ]] ; then
-  if [[ -z "${is_release_build}" ]] ; then
+  if [[ -z "${release_build_match}" ]] ; then
     google_credentials=$GOOGLE_CREDENTIALS_CUSTOMIZED
     gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb-customized/cockroach-customized"
     gcr_hostname="us-docker.pkg.dev"
@@ -32,9 +32,9 @@ fi
 
 cat << EOF
 
-  build_name:          $build_name
-  gcr_repository:      $gcr_repository
-  is_release_build:    $is_release_build
+  build_name:             $build_name
+  gcr_repository:         $gcr_repository
+  release_build_match:    $release_build_match
 
 EOF
 tc_end_block "Variable Setup"
