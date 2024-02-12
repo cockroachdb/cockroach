@@ -13,11 +13,17 @@ package kvcoord
 
 import (
 	"context"
+	"github.com/cockroachdb/errors"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+// NB: This code is only used by the legacy rangefeed.
+
+// sentinel error returned when cancelling rangefeed when it is stuck.
+var errRestartStuckRange = errors.New("rangefeed restarting due to inactivity")
 
 // stuckRangeFeedCanceler are a defense-in-depth mechanism to restart rangefeeds that have
 // not received events from the KV layer in some time. Rangefeeds are supposed to receive

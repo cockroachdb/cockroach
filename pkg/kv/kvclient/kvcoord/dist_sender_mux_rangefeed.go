@@ -70,9 +70,9 @@ func muxRangeFeed(
 	spans []SpanTimePair,
 	ds *DistSender,
 	rr *rangeFeedRegistry,
-	catchupRateLimiter *catchupScanRateLimiter,
 	eventCh chan<- RangeFeedMessage,
 ) (retErr error) {
+	catchupRateLimiter := newCatchupScanRateLimiter(&ds.st.SV)
 	if log.V(1) {
 		log.Infof(ctx, "Establishing MuxRangeFeed (%s...; %d spans)", spans[0], len(spans))
 		start := timeutil.Now()
@@ -215,7 +215,7 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 
 	// Register active mux range feed.
 	stream := &activeMuxRangeFeed{
-		activeRangeFeed: newActiveRangeFeed(span, startAfter, m.registry, m.metrics),
+		activeRangeFeed: m.registry.newActiveRangeFeed(span, startAfter, m.metrics),
 		rSpan:           rs,
 		startAfter:      startAfter,
 		token:           token,

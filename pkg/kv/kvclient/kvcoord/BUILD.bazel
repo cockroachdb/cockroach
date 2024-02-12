@@ -9,6 +9,7 @@ go_library(
         "batch.go",
         "condensable_span_set.go",
         "dist_sender.go",
+        "dist_sender_legacy_rangefeed.go",
         "dist_sender_mux_rangefeed.go",
         "dist_sender_rangefeed.go",
         "dist_sender_rangefeed_canceler.go",
