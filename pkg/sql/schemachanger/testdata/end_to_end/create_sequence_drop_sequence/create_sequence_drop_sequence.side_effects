@@ -76,6 +76,7 @@ upsert descriptor #104
   +    increment: "1"
   +    maxValue: "9223372036854775807"
   +    minValue: "1"
+  +    nodeCacheSize: "1"
   +    sequenceOwner: {}
   +    start: "32"
   +  unexposedParentSchemaId: 101

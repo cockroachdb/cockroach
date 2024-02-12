@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -27,8 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -741,6 +744,333 @@ func TestCachedSequences(t *testing.T) {
 		},
 	}
 
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.test(t)
+		})
+	}
+}
+
+func TestCachedNodeSequence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	sqlSessions := []*sqlutils.SQLRunner{}
+	for i := 0; i < 3; i++ {
+		newConn, err := tc.ServerConn(0).Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlSessions = append(sqlSessions, sqlutils.MakeSQLRunner(newConn))
+	}
+
+	anySession := func() int {
+		return rand.Intn(3)
+	}
+
+	execStmt := func(t *testing.T, statement string) {
+		sqlSessions[anySession()].Exec(t, statement)
+	}
+
+	checkIntValue := func(t *testing.T, session int, statement string, value int) {
+		sqlSessions[session].CheckQueryResults(t, statement, [][]string{
+			{fmt.Sprintf("%d", value)},
+		})
+	}
+
+	testCases := []struct {
+		name string
+		test func(*testing.T)
+	}{
+		// Test a cached node sequence in a single session.
+		{
+			name: "Single Session Cached Node Test",
+			test: func(t *testing.T) {
+				execStmt(t, `
+				CREATE SEQUENCE s
+				 PER NODE CACHE 5
+				   INCREMENT BY 2
+					   START WITH 2
+			  `)
+
+				// Session 0 caches 5 values (2,4,6,8,10) and uses the first value (2).
+				//
+				// caches:
+				//  session 0: 4,6,8,10
+				// db:
+				//  s: 10
+				checkIntValue(t, 0, "SELECT nextval('s')", 2)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s", 10)
+
+				// caches:
+				//  session 0: -
+				// db:
+				//  s: 10
+				for sequenceNumber := 4; sequenceNumber <= 10; sequenceNumber += 2 {
+					checkIntValue(t, 0, "SELECT nextval('s')", sequenceNumber)
+				}
+				checkIntValue(t, anySession(), "SELECT last_value FROM s", 10)
+
+				// Session 0 caches 5 values (12,14,16,18,20) and uses the first value (12).
+				// caches:
+				//  session 0: 14,16,18,20
+				// db:
+				//  s: 20
+				checkIntValue(t, 0, "SELECT nextval('s')", 12)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s", 20)
+
+				// caches:
+				//  node 0: -
+				// db:
+				//  s: 20
+				for sequenceNumber := 14; sequenceNumber <= 20; sequenceNumber += 2 {
+					checkIntValue(t, 0, "SELECT nextval('s')", sequenceNumber)
+				}
+				checkIntValue(t, anySession(), "SELECT last_value FROM s", 20)
+
+				execStmt(t, "DROP SEQUENCE s")
+			},
+		}, // Test multiple cached sequences using multiple sessions.
+		{
+			name: "Multi-Session, Multi-Sequence Cached Node Test",
+			test: func(t *testing.T) {
+				execStmt(t, `
+				CREATE SEQUENCE s1
+         PER NODE CACHE 5
+				   INCREMENT BY 2
+					   START WITH 2
+			  `)
+
+				execStmt(t, `
+				CREATE SEQUENCE s2
+         PER NODE CACHE 4
+				   INCREMENT BY 3
+					   START WITH 3
+			  `)
+
+				// The caches all start out empty. When a cache is empty, the underlying sequence in the database
+				// should be incremented by the cache size * increment amount.
+				//
+				// s1 increases by 10 each time, and s2 increases by 12 each time.
+
+				// caches:
+				//  session 0:
+				//   s1: 4,6,8,10
+				//  session 1:
+				//   s1: 4,6,8,10
+				//  session 2:
+				//   s1: 4,6,8,10
+				// db:
+				//  s1: 10
+				checkIntValue(t, 0, "SELECT nextval('s1')", 2)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s1", 10)
+
+				// caches:
+				//  session 0:
+				//   s1: 4,6,8,10
+				//   s2: 6,9,12
+				//  session 1:
+				//   s1: 4,6,8,10
+				//   s2: 6,9,12
+				//  session 2:
+				//   s1: 4,6,8,10
+				//   s2: 6,9,12
+				// db:
+				//  s1: 10
+				//  s2: 12
+				checkIntValue(t, 0, "SELECT nextval('s2')", 3)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s2", 12)
+
+				// caches:
+				//  session 0:
+				//   s1: 6,8,10
+				//   s2: 6,9,12
+				//  session 1:
+				//   s1: 6,8,10
+				//   s2: 9,12
+				//  session 2:
+				//   s1: 6,8,10
+				//   s2: 9,12
+				// db:
+				//  s1: 10
+				//  s2: 12
+				checkIntValue(t, 1, "SELECT nextval('s1')", 4)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s1", 10)
+
+				// caches:
+				//  session 0:
+				//   s1: 6,8,10
+				//   s2: 9,12
+				//  session 1:
+				//   s1: 6,8,10
+				//   s2: 9,12
+				//  session 2:
+				//   s1: 6,8,10
+				//   s2: 9,12
+				// db:
+				//  s1: 10
+				//  s2: 12
+				checkIntValue(t, 1, "SELECT nextval('s2')", 6)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s2", 12)
+
+				// caches:
+				//  session 0:
+				//   s1: 8,10
+				//   s2: 9,12
+				//  session 1:
+				//   s1: 8,10
+				//   s2: 9,12
+				//  session 2:
+				//   s1: 8,10
+				//   s2: 9,12
+				//db:
+				//  s1: 10
+				//  s2: 12
+				checkIntValue(t, 2, "SELECT nextval('s1')", 6)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s1", 10)
+
+				// caches:
+				//  session 0:
+				//   s1: 8,10
+				//   s2: 12
+				//  session 1:
+				//   s1: 8,10
+				//   s2: 12
+				//  session 2:
+				//   s1: 8,10
+				//   s2: 12
+				// db:
+				//  s1: 10
+				//  s2: 12
+				checkIntValue(t, 2, "SELECT nextval('s2')", 9)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s2", 12)
+
+				// caches:
+				//  session 0:
+				//   s1: 8,10
+				//   s2:
+				//  session 1:
+				//   s1: 8,10
+				//   s2:
+				//  session 2:
+				//   s1: 8,10
+				//   s2:
+				// db:
+				//  s1: 10
+				//  s2: 12
+				checkIntValue(t, 2, "SELECT nextval('s2')", 12)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s2", 12)
+
+				// caches:
+				//  session 0:
+				//   s1: 8,10
+				//   s2: 18,21,24
+				//  session 1:
+				//   s1: 8,10
+				//   s2: 18,21,24
+				//  session 2:
+				//   s1: 8,10
+				//   s2: 18,21,24
+				// db:
+				//  s1: 10
+				//  s2: 24
+				checkIntValue(t, 2, "SELECT nextval('s2')", 15)
+				checkIntValue(t, anySession(), "SELECT last_value FROM s2", 24)
+
+				execStmt(t, "DROP SEQUENCE s1")
+				execStmt(t, "DROP SEQUENCE s2")
+			},
+		},
+		{
+			name: "Multi-Thread Cached Node Test",
+			test: func(t *testing.T) {
+				ctx := context.Background()
+				s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+				defer s.Stopper().Stop(ctx)
+				cg := ctxgroup.WithContext(ctx)
+				_, err := db.Exec("CREATE SEQUENCE s1 PER NODE CACHE 5")
+				require.NoError(t, err)
+				txn1, err := db.Begin()
+				require.NoError(t, err)
+
+				sequenceValues := map[int]bool{}
+				mu := syncutil.Mutex{}
+				for i := 0; i < 10; i++ {
+					startChannel := make(chan struct{})
+					cg.GoCtx(func(ctx context.Context) error {
+						<-startChannel
+						var sequenceValue int
+						err := db.QueryRow("SELECT nextval('s1')").Scan(&sequenceValue)
+						if err != nil {
+							return err
+						}
+						mu.Lock()
+						sequenceValues[sequenceValue] = true
+						mu.Unlock()
+						return err
+					})
+
+					cg.GoCtx(func(ctx context.Context) error {
+						<-startChannel
+						var sequenceValue int
+						err := txn1.QueryRow("SELECT nextval('s1')").Scan(&sequenceValue)
+						if err != nil {
+							return err
+						}
+						mu.Lock()
+						sequenceValues[sequenceValue] = true
+						mu.Unlock()
+						return err
+					})
+					close(startChannel)
+				}
+				require.NoError(t, cg.Wait())
+
+				// Ensure all 20 sequence values were used
+				for i := 1; i <= 20; i++ {
+					require.Equal(t, true, sequenceValues[i])
+				}
+
+				time.Sleep(500 * time.Millisecond)
+				err = txn1.Commit()
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "Multi-Thread, Sequences With Same Name and Rollback Cached Node Test",
+			test: func(t *testing.T) {
+				ctx := context.Background()
+				s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+				defer s.Stopper().Stop(ctx)
+
+				// Start two transactions, on tx1 create sequence, increase it, and then rollback
+				txn1, err := db.Begin()
+				require.NoError(t, err)
+				_, err = txn1.Exec("CREATE SEQUENCE s1 PER NODE CACHE 5")
+				require.NoError(t, err)
+				_, err = txn1.Exec("SELECT nextval('s1')")
+				require.NoError(t, err)
+				err = txn1.Rollback()
+				if err != nil {
+					return
+				}
+
+				// On tx2, create sequence with same name as the one created in tx1, increase it, and commit
+				txn2, err := db.Begin()
+				require.NoError(t, err)
+				_, err = txn2.Exec("CREATE SEQUENCE s1 PER NODE CACHE 5")
+				require.NoError(t, err)
+				_, err = txn2.Exec("SELECT nextval('s1')")
+				require.NoError(t, err)
+				err = txn2.Commit()
+				require.NoError(t, err)
+			},
+		},
+	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.test(t)

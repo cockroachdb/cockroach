@@ -1503,9 +1503,6 @@ CREATE SEQUENCE cache_test CACHE 0
 statement ok
 CREATE SEQUENCE cache_test CACHE 10 INCREMENT 1
 
-statement ok
-CREATE SEQUENCE cache_node_test PER NODE CACHE 10
-
 query TT
 SHOW CREATE SEQUENCE cache_test
 ----

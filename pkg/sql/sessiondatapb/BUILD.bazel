@@ -7,6 +7,7 @@ go_library(
     srcs = [
         "local_only_session_data.go",
         "sequence_cache.go",
+        "sequence_cache_node.go",
         "session_data.go",
     ],
     embed = [":sessiondatapb_go_proto"],
@@ -16,6 +17,7 @@ go_library(
         "//pkg/security/username",
         "//pkg/sql/types",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",  # keep
     ],
