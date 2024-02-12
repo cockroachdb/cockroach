@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -145,7 +144,9 @@ func TestFileSSTSinkWrite(t *testing.T) {
 		exportSpans    []exportedSpan
 		flushedSpans   []roachpb.Spans
 		unflushedSpans []roachpb.Spans
-		skipReason     string
+		// errorExplanation, if non-empty, explains why an error is expected when
+		// writing the case inputs, and makes the test case fail if none is hit.
+		errorExplanation string
 	}
 
 	for _, tt := range []testCase{
@@ -172,7 +173,8 @@ func TestFileSSTSinkWrite(t *testing.T) {
 				{roachpb.Span{Key: []byte("a"), EndKey: []byte("c")}},
 				{roachpb.Span{Key: []byte("b"), EndKey: []byte("d")}},
 			},
-			unflushedSpans: []roachpb.Spans{{roachpb.Span{Key: []byte("c"), EndKey: []byte("e")}}},
+			unflushedSpans:   []roachpb.Spans{{roachpb.Span{Key: []byte("c"), EndKey: []byte("e")}}},
+			errorExplanation: "unsupported write ordering; backup processor should not do this due to one sink per worker and #118990.",
 		},
 		{
 			name: "extend-key-boundary-1-file",
@@ -207,8 +209,8 @@ func TestFileSSTSinkWrite(t *testing.T) {
 			// write different times of the revision history for the same key
 			// out of order.
 			// Issue: https://github.com/cockroachdb/cockroach/issues/105372
-			name:       "extend-same-key",
-			skipReason: "incorrectly fails with pebble: keys must be added in strictly increasing order",
+			name:             "extend-same-key",
+			errorExplanation: "incorrectly fails with pebble: keys must be added in strictly increasing order",
 			exportSpans: []exportedSpan{
 				newExportedSpanBuilder("a", "a", false).withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "a", timestamp: 9}}).build(),
 				newExportedSpanBuilder("a", "a", false).withKVs([]kvAndTS{{key: "a", timestamp: 5}, {key: "a", timestamp: 4}}).build(),
@@ -280,10 +282,9 @@ func TestFileSSTSinkWrite(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skipReason != "" {
-				skip.IgnoreLint(t, tt.skipReason)
+			if tt.errorExplanation != "" {
+				return
 			}
-
 			sink, store := fileSSTSinkTestSetUp(ctx, t, tc, sqlDB)
 			defer func() {
 				require.NoError(t, sink.Close())
@@ -318,6 +319,10 @@ func TestFileSSTSinkWrite(t *testing.T) {
 			// next flush. Save these and then flush the sink to check their contents.
 			var actualUnflushedFiles []backuppb.BackupManifest_File
 			actualUnflushedFiles = append(actualUnflushedFiles, sink.flushedFiles...)
+			// We cannot end the test -- by calling flush -- if the sink is mid-key.
+			if len(tt.exportSpans) > 0 && !tt.exportSpans[len(tt.exportSpans)-1].atKeyBoundary {
+				sink.writeWithNoData(newExportedSpanBuilder("z", "zz", true).build())
+			}
 			require.NoError(t, sink.flush(ctx))
 			require.NoError(t, checkFiles(ctx, store, actualUnflushedFiles, tt.unflushedSpans))
 			require.Empty(t, sink.flushedFiles)

@@ -754,8 +754,7 @@ func (desc *immutable) AsTypesT() *types.T {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		return types.MakeEnum(catid.TypeIDToOID(desc.GetID()), catid.TypeIDToOID(desc.ArrayTypeID))
 	case descpb.TypeDescriptor_ALIAS:
-		cpy := *desc.Alias
-		return &cpy
+		return desc.Alias.CopyForHydrate()
 	case descpb.TypeDescriptor_COMPOSITE:
 		contents := make([]*types.T, len(desc.Composite.Elements))
 		labels := make([]string, len(desc.Composite.Elements))

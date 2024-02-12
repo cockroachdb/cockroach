@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -49,6 +50,8 @@ type fileSSTSink struct {
 
 	flushedFiles []backuppb.BackupManifest_File
 	flushedSize  int64
+
+	midKey bool
 
 	// flushedRevStart is the earliest start time of the export responses
 	// written to this sink since the last flush. Resets on each flush.
@@ -116,6 +119,15 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 		}
 		return nil
 	}
+
+	if s.midKey {
+		var lastKey roachpb.Key
+		if len(s.flushedFiles) > 0 {
+			lastKey = s.flushedFiles[len(s.flushedFiles)-1].Span.EndKey
+		}
+		return errors.AssertionFailedf("backup closed file ending mid-key in %q", lastKey)
+	}
+
 	s.stats.flushes++
 
 	if err := s.sst.Finish(); err != nil {
@@ -188,6 +200,7 @@ func (s *fileSSTSink) open(ctx context.Context) error {
 
 func (s *fileSSTSink) writeWithNoData(resp exportedSpan) {
 	s.completedSpans += resp.completedSpans
+	s.midKey = false
 }
 
 func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
@@ -249,6 +262,8 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	s.flushedRevStart.Forward(resp.revStart)
 	s.completedSpans += resp.completedSpans
 	s.flushedSize += int64(len(resp.dataSST))
+
+	s.midKey = !resp.atKeyBoundary
 
 	// If our accumulated SST is now big enough, and we are positioned at the end
 	// of a range flush it.
