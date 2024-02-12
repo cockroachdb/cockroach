@@ -25,8 +25,8 @@ func TestColOrdMap(t *testing.T) {
 	m := newColOrdMap(maxCol)
 	oracle := make(map[opt.ColumnID]int)
 
-	if m.MaxOrd() != -1 {
-		t.Errorf("expected empty map to have MaxOrd of -1, got %d", m.MaxOrd())
+	if m.OrdUpperBound() != -1 {
+		t.Errorf("expected empty map to have OrdUpperBound of -1, got %d", m.OrdUpperBound())
 	}
 
 	rng, _ := randutil.NewTestRand()
@@ -66,8 +66,8 @@ func validate(t *testing.T, m colOrdMap, oracle map[opt.ColumnID]int) {
 		maxOracleOrd = max(maxOracleOrd, oracleOrd)
 	}
 
-	if m.MaxOrd() != maxOracleOrd {
-		t.Errorf("expected max ordinal of %d, found %d", maxOracleOrd, m.MaxOrd())
+	if m.OrdUpperBound() != maxOracleOrd {
+		t.Errorf("expected max ordinal of %d, found %d", maxOracleOrd, m.OrdUpperBound())
 	}
 
 	m.ForEach(func(col opt.ColumnID, ord int) {

@@ -93,6 +93,8 @@ type colOrdMap struct {
 	// TODO(mgartner): It is probably unreasonable to have more than 2^31
 	// ordinals in an execution node, so this could be []int32.
 	ords []int
+	// TODO(mgartner): Explain that this is an approximate.
+	ordUpperBound int
 }
 
 // newColOrdMap returns a new column mapping that can store column IDs less than
@@ -104,13 +106,14 @@ func newColOrdMap(maxCol opt.ColumnID) colOrdMap {
 }
 
 // Set maps a column to the given ordinal.
-func (m colOrdMap) Set(col opt.ColumnID, ord int) {
+func (m *colOrdMap) Set(col opt.ColumnID, ord int) {
 	if buildutil.CrdbTestBuild && int(col) >= len(m.ords) {
 		panic(errors.AssertionFailedf("column %d exceeds max column of map %d", col, len(m.ords)-1))
 	}
 	// Bias the ordinal by 1 when adding it to the map.
 	ord++
 	m.ords[col] = ord
+	m.ordUpperBound = max(m.ordUpperBound, ord)
 }
 
 // Get returns the current value mapped to key, or (-1, false) if the
@@ -127,19 +130,24 @@ func (m colOrdMap) Get(col opt.ColumnID) (ord int, ok bool) {
 	return ord - 1, true
 }
 
-// MaxOrd returns the maximum ordinal stored in the map, or -1 if the map is
-// empty.
-func (m colOrdMap) MaxOrd() int {
-	maxOrd := -1
-	for _, ord := range m.ords {
-		if ord == 0 {
-			continue
-		}
-		// Reverse the bias when fetching the max ordinal from the map.
-		ord--
-		maxOrd = max(maxOrd, ord)
-	}
-	return maxOrd
+// OrdUpperBound returns the maximum ordinal Set since the map was initialized
+// or cleared, or -1 if the map is empty. The returned value is greater than or
+// equal to the maximum ordinal currently in the map. This method does not
+// return the current maximum ordinal when a larger ordinal previously existed
+// in the map. For example:
+//
+//	var m colOrdMap
+//	m.Set(opt.ColumnID(1), 10)
+//	m.OrdUpperBound()           // returns 10
+//	m.Set(opt.ColumnID(1), 5)
+//	m.OrdUpperBound()           // returns 10
+//
+// By returning the maximum ordinal ever Set, rather than the current maximum
+// ordinal, the method neither needs to scan through each key/value pair to find
+// the current maximum ordinal, nor keep complex data structures to track it.
+func (m colOrdMap) OrdUpperBound() int {
+	// Reverse the bias when fetching the max ordinal from the map.
+	return m.ordUpperBound - 1
 }
 
 // ForEach calls the given function for each column ID and ordinal pair in the
@@ -156,17 +164,19 @@ func (m colOrdMap) ForEach(fn func(col opt.ColumnID, ord int)) {
 
 // CopyFrom copies all entries from the given map, and unsets any column IDs not
 // in the given map.
-func (m colOrdMap) CopyFrom(other colOrdMap) {
+func (m *colOrdMap) CopyFrom(other colOrdMap) {
 	if buildutil.CrdbTestBuild && len(m.ords) < len(other.ords) {
 		panic(errors.AssertionFailedf("map of size %d is too small to copy from map of size %d",
 			len(m.ords), len(other.ords)))
 	}
 	copy(m.ords, other.ords)
+	m.ordUpperBound = other.ordUpperBound
 }
 
 // Clear clears the map. The allocated memory is retained for future reuse.
-func (m colOrdMap) Clear() {
+func (m *colOrdMap) Clear() {
 	for i := range m.ords {
 		m.ords[i] = 0
 	}
+	m.ordUpperBound = 0
 }
