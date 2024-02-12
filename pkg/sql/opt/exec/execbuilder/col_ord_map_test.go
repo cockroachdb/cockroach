@@ -11,6 +11,7 @@
 package execbuilder
 
 import (
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -29,12 +30,35 @@ func TestColOrdMap(t *testing.T) {
 		t.Errorf("expected empty map to have MaxOrd of -1, got %d", m.MaxOrd())
 	}
 
+	m.Set(1, 2)
+	if m.MaxOrd() != 2 {
+		t.Errorf("expected map to have MaxOrd of 2, got %d", m.MaxOrd())
+	}
+
+	m.Set(1, 3)
+	m.Set(2, 3)
+	if m.MaxOrd() != 3 {
+		t.Errorf("expected map to have MaxOrd of 3, got %d", m.MaxOrd())
+	}
+
+	m.Set(1, 1)
+	if m.MaxOrd() != 3 {
+		t.Errorf("expected map to have MaxOrd of 3, got %d", m.MaxOrd())
+	}
+
+	m.Set(2, 1)
+	if m.MaxOrd() != 1 {
+		t.Errorf("expected map to have MaxOrd of 1, got %d", m.MaxOrd())
+	}
+
+	m.Clear()
+
 	rng, _ := randutil.NewTestRand()
 
 	const numOps = 1000
 	for i := 0; i < numOps; i++ {
 		col := opt.ColumnID(rng.Intn(maxCol + 1))
-		ord := int(rng.Int31())
+		ord := rng.Intn(math.MaxInt32)
 
 		oracle[col] = ord
 		m.Set(col, ord)
