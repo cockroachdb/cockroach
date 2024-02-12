@@ -2513,7 +2513,7 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 
 	// Retrieve the system database descriptor and ensure it supports
 	// multi-region
-	systemDB, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Database(ctx, keys.SystemDatabaseID)
+	systemDB, err := p.Descriptors().MutableByID(p.txn).Database(ctx, keys.SystemDatabaseID)
 	if err != nil {
 		return err
 	}
@@ -2523,6 +2523,12 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 	}
 	enumTypeDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, regionEnumID)
 	if err != nil {
+		return err
+	}
+
+	// Alter the survivability goal on the system database.
+	if err := p.alterDatabaseSurvivalGoal(ctx,
+		systemDB, tree.SurvivalGoalZoneFailure, "alter system database to survive zone failure only"); err != nil {
 		return err
 	}
 
