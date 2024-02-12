@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -1125,8 +1126,8 @@ func TestPartitionSpans(t *testing.T) {
 		if err := mockGossip.AddInfoProto(
 			gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
 			&execinfrapb.DistSQLVersionGossipInfo{
-				MinAcceptedVersion: execinfra.MinAcceptedVersion,
-				Version:            execinfra.Version,
+				MinAcceptedVersion: execversion.MinAcceptedVersion,
+				Version:            execversion.Version,
 			},
 			0, // ttl - no expiration
 		); err != nil {
@@ -1477,8 +1478,8 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		if err := mockGossip.AddInfoProto(
 			gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
 			&execinfrapb.DistSQLVersionGossipInfo{
-				MinAcceptedVersion: execinfra.MinAcceptedVersion,
-				Version:            execinfra.Version,
+				MinAcceptedVersion: execversion.MinAcceptedVersion,
+				Version:            execversion.Version,
 			},
 			0, // ttl - no expiration
 		); err != nil {
@@ -1563,8 +1564,8 @@ func TestCheckNodeHealth(t *testing.T) {
 	if err := mockGossip.AddInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
 		&execinfrapb.DistSQLVersionGossipInfo{
-			MinAcceptedVersion: execinfra.MinAcceptedVersion,
-			Version:            execinfra.Version,
+			MinAcceptedVersion: execversion.MinAcceptedVersion,
+			Version:            execversion.Version,
 		},
 		0, // ttl - no expiration
 	); err != nil {
