@@ -981,17 +981,8 @@ func (p *Provider) CleanSSH(l *logger.Logger) error {
 
 // ConfigSSH is part of the vm.Provider interface
 func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
-	// Populate SSH config files with Host entries from each instance in active projects.
-	for _, prj := range p.GetProjects() {
-		args := []string{"compute", "config-ssh", "--project", prj, "--quiet"}
-		cmd := exec.Command("gcloud", args...)
-
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
-		}
-	}
-	return nil
+	_, err := config.SSHPublicKey()
+	return err
 }
 
 func (p *Provider) editLabels(

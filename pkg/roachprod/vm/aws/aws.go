@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
@@ -433,7 +434,7 @@ func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 				if err != nil {
 					return err
 				}
-				l.Printf("imported %s as %s in region %s", sshPublicKeyFile, keyName, region)
+				l.Printf("imported %s as %s in region %s", config.SSHPublicKeyPath, keyName, region)
 			}
 			return nil
 		})
