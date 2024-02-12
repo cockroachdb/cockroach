@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	_ "embed"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -37,6 +38,13 @@ var testSummaryRegexp = regexp.MustCompile("^([0-9]+) examples, [0-9]+ failures"
 // WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
 // This is used by docs automation to produce a list of supported versions for ORM's.
 var rubyPGVersion = "v1.4.6"
+
+// Embed the helper file, so we don't need to know where it is
+// relative to the roachtest runner, just relative to this test.
+// This way we can still find it if roachtest changes paths.
+//
+//go:embed ruby_pg_helpers.rb
+var rubyPGHelpersFile string
 
 // This test runs Ruby PG's full test suite against a single cockroach node.
 func registerRubyPG(r registry.Registry) {
@@ -151,8 +159,7 @@ func registerRubyPG(r registry.Registry) {
 		}
 
 		// Write the cockroach config into the test suite to use.
-		rubyPGHelpersFile := "./pkg/cmd/roachtest/tests/ruby_pg_helpers.rb"
-		err = c.PutE(ctx, t.L(), rubyPGHelpersFile, "/mnt/data1/ruby-pg/spec/helpers.rb", c.All())
+		err = c.PutString(ctx, rubyPGHelpersFile, "/mnt/data1/ruby-pg/spec/helpers.rb", 0755, c.All())
 		require.NoError(t, err)
 
 		t.Status("running ruby-pg test suite")

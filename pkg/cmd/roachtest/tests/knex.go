@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"strings"
 
@@ -26,6 +27,13 @@ import (
 // WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
 // This is used by docs automation to produce a list of supported versions for ORM's.
 const supportedKnexTag = "2.5.1"
+
+// Embed the config file, so we don't need to know where it is
+// relative to the roachtest runner, just relative to this test.
+// This way we can still find it if roachtest changes paths.
+//
+//go:embed knexfile.js
+var knexfile string
 
 // This test runs one of knex's test suite against a single cockroach
 // node.
@@ -161,41 +169,3 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 		},
 	})
 }
-
-const knexfile = `
-'use strict';
-/* eslint no-var: 0 */
-
-const _ = require('lodash');
-
-console.log('Using custom cockroachdb test config');
-
-const testIntegrationDialects = (
-  process.env.DB ||
-  'cockroachdb'
-).match(/[\w-]+/g);
-
-const testConfigs = {
-  cockroachdb: {
-      adapter: 'cockroachdb',
-      port: process.env.PGPORT,
-      host: 'localhost',
-      database: 'test',
-      user: process.env.PGUSER,
-      password: process.env.PGPASSWORD,
-      ssl: {
-        rejectUnauthorized: false,
-        ca: process.env.PGSSLROOTCERT
-      }
-  },
-};
-
-module.exports = _.reduce(
-  testIntegrationDialects,
-  function (res, dialectName) {
-    res[dialectName] = testConfigs[dialectName];
-    return res;
-  },
-  {}
-);
-`

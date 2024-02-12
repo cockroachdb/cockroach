@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	_ "embed"
 	"fmt"
 	"math"
 	"regexp"
@@ -38,6 +39,13 @@ var tpchTables = []string{
 	"nation", "region", "part", "supplier",
 	"partsupp", "customer", "orders", "lineitem",
 }
+
+// Embed the config file, so we don't need to know where it is
+// relative to the roachtest runner, just relative to this test.
+// This way we can still find it if roachtest changes paths.
+//
+//go:embed tpchvec_smithcmp.toml
+var smithcmpConfigFile string
 
 // tpchVecTestRunConfig specifies the configuration of a tpchvec test run.
 type tpchVecTestRunConfig struct {
@@ -565,27 +573,24 @@ func smithcmpPreTestRunHook(
 func smithcmpTestRun(
 	ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, tc tpchVecTestCase,
 ) {
+	const configFile = "tpchvec_smithcmp.toml"
 	runConfig := tc.getRunConfig()
 	smithcmpPreTestRunHook(ctx, t, c, conn, runConfig.clusterSetups[0])
-	const configFile = `tpchvec_smithcmp.toml`
 
 	firstNode := c.Node(1)
-	if err := c.PutE(ctx, t.L(), "./pkg/cmd/roachtest/tests/"+configFile, configFile); err != nil {
-		t.Fatal(err)
-	}
+
+	// We don't know the pgurl ahead of time, so we must edit it into the config file.
+	// We create the URL manually, opposed to using DefaultPgUrl(), as we need to:
+	//		Use postgresql instead of postgres.
+	// 		Use tpch and localhost.
 	port, err := c.SQLPorts(ctx, t.L(), c.Node(1), "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// We don't know the pgurl ahead of time, so we must edit it into the config file.
-	// We create the URL manually, opposed to using DefaultPgUrl(), as we need to:
-	//		Escape & as it's a special character in sed.
-	//		Use postgresql instead of postgres.
-	// 		Use tpch and localhost.
 	pgurl := fmt.Sprintf(
-		"postgresql://%[1]s:%[2]s@localhost:%[3]d/tpch?sslcert=certs%%2Fclient.%[1]s.crt\\&sslkey=certs%%2Fclient.%[1]s.key\\&sslmode=verify-full\\&sslrootcert=certs%%2Fca.crt",
+		"postgresql://%[1]s:%[2]s@localhost:%[3]d/tpch?sslcert=certs%%2Fclient.%[1]s.crt&sslkey=certs%%2Fclient.%[1]s.key&sslmode=verify-full&sslrootcert=certs%%2Fca.crt",
 		install.DefaultUser, install.DefaultPassword, port[0])
-	if err := c.RunE(ctx, option.WithNodes(firstNode), fmt.Sprintf(`sed -i "s|PG_Connection_String|%s|g" %s`, pgurl, configFile)); err != nil {
+	if err := c.PutString(ctx, fmt.Sprintf(smithcmpConfigFile, pgurl), configFile, 0755); err != nil {
 		t.Fatal(err)
 	}
 	cmd := fmt.Sprintf("./%s %s", tpchVecSmithcmp, configFile)

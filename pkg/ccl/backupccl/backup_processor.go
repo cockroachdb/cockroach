@@ -574,14 +574,22 @@ func runBackupProcessor(
 								return nil
 							})
 						if exportRequestErr != nil {
-							if lockErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok {
-								span.lastTried = timeutil.Now()
-								span.attempts++
-								todo <- []spanAndTime{span}
+							// If we got a write intent error because we requested it rather
+							// than blocking, either put the request on the back of the queue
+							// to revisit later or, if the request was resuming in the middle
+							// of a key, reattempt it immediately.
+							if lockErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok && header.WaitPolicy == lock.WaitPolicy_Error {
 								// TODO(dt): send a progress update to update job progress to note
 								// the intents being hit.
+								span.lastTried = timeutil.Now()
+								span.attempts++
 								log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered WriteIntentError: %s", span.span, lockErr.Error())
-								span = spanAndTime{}
+								// If we're not mid-key we can put this on the the queue to give
+								// it time to resolve on its own while we work on other spans.
+								if span.firstKeyTS.IsEmpty() {
+									todo <- []spanAndTime{span}
+									span = spanAndTime{}
+								}
 								continue
 							}
 							// TimeoutError improves the opaque `context deadline exceeded` error

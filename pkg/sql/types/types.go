@@ -186,6 +186,26 @@ type T struct {
 	TypeMeta UserDefinedTypeMetadata
 }
 
+// CopyForHydrate returns a copy of the type that can be safely hydrated.
+// Recursive type references (as for tuples or arrays) are copied, but other
+// pointer fields are not deeply copied.
+//
+// Copy should be kept in alignment with the struct fields.
+func (t *T) CopyForHydrate() *T {
+	newT := *t
+	if t.InternalType.TupleContents != nil {
+		newTupleContents := make([]*T, len(t.InternalType.TupleContents))
+		for i := range t.InternalType.TupleContents {
+			newTupleContents[i] = t.InternalType.TupleContents[i].CopyForHydrate()
+		}
+		newT.InternalType.TupleContents = newTupleContents
+	}
+	if t.InternalType.ArrayContents != nil {
+		newT.InternalType.ArrayContents = t.InternalType.ArrayContents.CopyForHydrate()
+	}
+	return &newT
+}
+
 // UserDefinedTypeMetadata contains metadata needed for runtime
 // operations on user defined types. The metadata must be read only.
 type UserDefinedTypeMetadata struct {
