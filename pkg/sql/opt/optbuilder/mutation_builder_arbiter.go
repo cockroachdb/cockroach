@@ -273,12 +273,18 @@ func (mb *mutationBuilder) inferArbitersFromConflictOrds(
 // anti-join wraps the current mb.outScope.expr (which produces the insert rows)
 // and removes rows that would conflict with existing rows.
 //
+//   - texpr is the target table for the insert.
 //   - conflictOrds is the set of table column ordinals that the arbiter
 //     guarantees uniqueness of.
 //   - pred is the partial index or constraint predicate. If the arbiter is
 //     not a partial index or constraint, pred is nil.
 func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
-	inScope *scope, conflictOrds intsets.Fast, pred tree.Expr, uniqueWithoutIndex bool, uniqueOrd int,
+	inScope *scope,
+	texpr tree.TableExpr,
+	conflictOrds intsets.Fast,
+	pred tree.Expr,
+	uniqueWithoutIndex bool,
+	uniqueOrd int,
 ) {
 	locking := noRowLocking
 	// If we're using a weaker isolation level, we must lock the right side of the
@@ -313,6 +319,12 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 			}
 		}
 	}
+
+	var indexFlags *tree.IndexFlags
+	if source, ok := texpr.(*tree.AliasedTableExpr); ok {
+		indexFlags = source.IndexFlags
+	}
+
 	// Build the right side of the anti-join. Use a new metadata instance
 	// of the mutation table so that a different set of column IDs are used for
 	// the two tables in the self-join.
@@ -323,7 +335,7 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 			includeSystem:    false,
 			includeInverted:  false,
 		}),
-		nil, /* indexFlags */
+		indexFlags,
 		locking,
 		inScope,
 		true, /* disableNotVisibleIndex */
@@ -395,6 +407,7 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 // left-joins each insert row to the target table, using the given conflict
 // columns as the join condition.
 //
+//   - texpr is the target table for the upsert.
 //   - conflictOrds is the set of table column ordinals that the arbiter
 //     guarantees uniqueness of.
 //   - pred is the partial index predicate. If the arbiter is not a partial
@@ -405,7 +418,12 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 //   - uniqueWithoutIndex is true if the arbiter is a unique constraint without
 //     an enforcing index.
 func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
-	inScope *scope, conflictOrds intsets.Fast, pred tree.Expr, uniqueWithoutIndex bool, uniqueOrd int,
+	inScope *scope,
+	texpr tree.TableExpr,
+	conflictOrds intsets.Fast,
+	pred tree.Expr,
+	uniqueWithoutIndex bool,
+	uniqueOrd int,
 ) {
 	locking := noRowLocking
 	// If we're using a weaker isolation level, we must lock the right side of the
@@ -436,6 +454,12 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 			}
 		}
 	}
+
+	var indexFlags *tree.IndexFlags
+	if source, ok := texpr.(*tree.AliasedTableExpr); ok {
+		indexFlags = source.IndexFlags
+	}
+
 	// Build the right side of the left outer join. Use a different instance of
 	// table metadata so that col IDs do not overlap.
 	//
@@ -449,7 +473,7 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 			includeSystem:    true,
 			includeInverted:  false,
 		}),
-		nil, /* indexFlags */
+		indexFlags,
 		locking,
 		inScope,
 		true, /* disableNotVisibleIndex */

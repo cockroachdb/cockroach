@@ -302,6 +302,234 @@ vectorized: true
                       spans: /1/0
                       locking strength: for update
 
+# Use index hints.
+query T
+EXPLAIN (VERBOSE) UPSERT INTO indexed@secondary VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
+        │ render check1: c_default > 0
+        │ render column1: column1
+        │ render b_default: b_default
+        │ render c_default: c_default
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, b_default, c_default, d_comp, a, b, c, d)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, b_default, c_default, d_comp)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: CAST(NULL AS INT8)
+            │     row 0, expr 2: 10
+            │     row 0, expr 3: 11
+            │
+            └── • filter
+                │ columns: (a, b, c, d)
+                │ estimated row count: 1 (missing stats)
+                │ filter: a = 1
+                │
+                └── • index join
+                    │ columns: (a, b, c, d)
+                    │ estimated row count: 1,000 (missing stats)
+                    │ table: indexed@indexed_pkey
+                    │ key columns: a
+                    │
+                    └── • scan
+                          columns: (a, b, d)
+                          estimated row count: 1,000 (missing stats)
+                          table: indexed@secondary
+                          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO indexed@{NO_FULL_SCAN} VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
+        │ render check1: c_default > 0
+        │ render column1: column1
+        │ render b_default: b_default
+        │ render c_default: c_default
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, b_default, c_default, d_comp, a, b, c, d)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, b_default, c_default, d_comp)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: CAST(NULL AS INT8)
+            │     row 0, expr 2: 10
+            │     row 0, expr 3: 11
+            │
+            └── • scan
+                  columns: (a, b, c, d)
+                  estimated row count: 1 (missing stats)
+                  table: indexed@indexed_pkey
+                  spans: /1/0
+                  locking strength: for update
+
+query error could not produce a query plan conforming to the NO_FULL_SCAN hint
+EXPLAIN (VERBOSE) UPSERT INTO indexed@{FORCE_INDEX=secondary,NO_FULL_SCAN} VALUES (1)
+
+query T
+EXPLAIN (VERBOSE)
+INSERT INTO indexed@indexed_pkey AS indexed_pk
+VALUES (1, 2, 3)
+ON CONFLICT (a)
+DO UPDATE SET b = 2, c = 3
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, column2, column3, d_comp, a, b, c, d, upsert_b, upsert_c, upsert_d, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, column2, column3, d_comp, a, b, c, d, upsert_b, upsert_c, upsert_d)
+        │ render check1: upsert_c > 0
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │ render upsert_b: upsert_b
+        │ render upsert_c: upsert_c
+        │ render upsert_d: upsert_d
+        │
+        └── • render
+            │ columns: (upsert_b, upsert_c, upsert_d, column1, column2, column3, d_comp, a, b, c, d)
+            │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE 2 END
+            │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE 3 END
+            │ render upsert_d: CASE WHEN a IS NULL THEN d_comp ELSE a + 3 END
+            │ render column1: column1
+            │ render column2: column2
+            │ render column3: column3
+            │ render d_comp: d_comp
+            │ render a: a
+            │ render b: b
+            │ render c: c
+            │ render d: d
+            │
+            └── • cross join (left outer)
+                │ columns: (column1, column2, column3, d_comp, a, b, c, d)
+                │ estimated row count: 1 (missing stats)
+                │
+                ├── • values
+                │     columns: (column1, column2, column3, d_comp)
+                │     size: 4 columns, 1 row
+                │     row 0, expr 0: 1
+                │     row 0, expr 1: 2
+                │     row 0, expr 2: 3
+                │     row 0, expr 3: 4
+                │
+                └── • scan
+                      columns: (a, b, c, d)
+                      estimated row count: 1 (missing stats)
+                      table: indexed@indexed_pkey
+                      spans: /1/0
+                      locking strength: for update
+
+let $t_id
+SELECT id FROM system.namespace WHERE name='indexed'
+
+query T
+EXPLAIN (VERBOSE)
+INSERT INTO [$t_id AS t]@{NO_FULL_SCAN}
+VALUES (1, 2, 3)
+ON CONFLICT DO NOTHING
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey, secondary
+│
+└── • render
+    │ columns: (column1, column2, column3, d_comp, check1)
+    │ render check1: column3 > 0
+    │ render column1: column1
+    │ render column2: column2
+    │ render column3: column3
+    │ render d_comp: d_comp
+    │
+    └── • lookup join (anti)
+        │ columns: (column1, column2, column3, d_comp)
+        │ estimated row count: 0 (missing stats)
+        │ table: indexed@secondary
+        │ equality: (d_comp, column2) = (d, b)
+        │ equality cols are key
+        │
+        └── • cross join (anti)
+            │ columns: (column1, column2, column3, d_comp)
+            │ estimated row count: 0 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, column2, column3, d_comp)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: 2
+            │     row 0, expr 2: 3
+            │     row 0, expr 3: 4
+            │
+            └── • scan
+                  columns: (a)
+                  estimated row count: 1 (missing stats)
+                  table: indexed@indexed_pkey
+                  spans: /1/0
+
 # Drop index and verify that existing values no longer need to be fetched.
 statement ok
 DROP INDEX indexed@secondary CASCADE

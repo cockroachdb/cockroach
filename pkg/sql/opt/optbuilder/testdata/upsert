@@ -803,6 +803,226 @@ insert uniq
            └── first-agg [as=column2:7]
                 └── column2:7
 
+# DO NOTHING with index hints.
+
+build
+INSERT INTO xyz@xyz_pkey
+VALUES (1, 2, 3), (4, 5, 6)
+ON CONFLICT DO NOTHING
+----
+insert xyz
+ ├── arbiter indexes: xyz_pkey xyz_y_z_key xyz_z_y_key
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
+ └── upsert-distinct-on
+      ├── columns: column1:6!null column2:7!null column3:8!null
+      ├── grouping columns: column2:7!null column3:8!null
+      ├── upsert-distinct-on
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    ├── grouping columns: column2:7!null column3:8!null
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── grouping columns: column1:6!null
+      │    │    ├── anti-join (hash)
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    ├── anti-join (hash)
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    ├── anti-join (hash)
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    │    ├── (1, 2, 3)
+      │    │    │    │    │    │    └── (4, 5, 6)
+      │    │    │    │    │    ├── scan xyz
+      │    │    │    │    │    │    ├── columns: x:9!null y:10 z:11
+      │    │    │    │    │    │    └── flags: force-index=xyz_pkey disabled not visible index feature
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── column1:6 = x:9
+      │    │    │    │    ├── scan xyz
+      │    │    │    │    │    ├── columns: x:14!null y:15 z:16
+      │    │    │    │    │    └── flags: force-index=xyz_pkey disabled not visible index feature
+      │    │    │    │    └── filters
+      │    │    │    │         ├── column2:7 = y:15
+      │    │    │    │         └── column3:8 = z:16
+      │    │    │    ├── scan xyz
+      │    │    │    │    ├── columns: x:19!null y:20 z:21
+      │    │    │    │    └── flags: force-index=xyz_pkey disabled not visible index feature
+      │    │    │    └── filters
+      │    │    │         ├── column2:7 = y:20
+      │    │    │         └── column3:8 = z:21
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column2:7]
+      │    │         │    └── column2:7
+      │    │         └── first-agg [as=column3:8]
+      │    │              └── column3:8
+      │    └── aggregations
+      │         └── first-agg [as=column1:6]
+      │              └── column1:6
+      └── aggregations
+           └── first-agg [as=column1:6]
+                └── column1:6
+
+build
+INSERT INTO xyz@xyz_y_z_key
+VALUES (1, 2, 3), (4, 5, 6)
+ON CONFLICT (y, z) DO NOTHING
+----
+insert xyz
+ ├── arbiter indexes: xyz_y_z_key
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
+ └── upsert-distinct-on
+      ├── columns: column1:6!null column2:7!null column3:8!null
+      ├── grouping columns: column2:7!null column3:8!null
+      ├── anti-join (hash)
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── (1, 2, 3)
+      │    │    └── (4, 5, 6)
+      │    ├── scan xyz
+      │    │    ├── columns: x:9!null y:10 z:11
+      │    │    └── flags: force-index=xyz_y_z_key disabled not visible index feature
+      │    └── filters
+      │         ├── column2:7 = y:10
+      │         └── column3:8 = z:11
+      └── aggregations
+           └── first-agg [as=column1:6]
+                └── column1:6
+
+build
+INSERT INTO xyz@{FORCE_INDEX=xyz_y_idx,ASC}
+VALUES (1, 2, 3), (4, 5, 6)
+ON CONFLICT DO NOTHING
+----
+insert xyz
+ ├── arbiter indexes: xyz_pkey xyz_y_z_key xyz_z_y_key
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
+ └── upsert-distinct-on
+      ├── columns: column1:6!null column2:7!null column3:8!null
+      ├── grouping columns: column2:7!null column3:8!null
+      ├── upsert-distinct-on
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    ├── grouping columns: column2:7!null column3:8!null
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── grouping columns: column1:6!null
+      │    │    ├── anti-join (hash)
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    ├── anti-join (hash)
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    ├── anti-join (hash)
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    │    ├── (1, 2, 3)
+      │    │    │    │    │    │    └── (4, 5, 6)
+      │    │    │    │    │    ├── scan xyz
+      │    │    │    │    │    │    ├── columns: x:9!null y:10 z:11
+      │    │    │    │    │    │    └── flags: force-index=xyz_y_idx,fwd disabled not visible index feature
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── column1:6 = x:9
+      │    │    │    │    ├── scan xyz
+      │    │    │    │    │    ├── columns: x:14!null y:15 z:16
+      │    │    │    │    │    └── flags: force-index=xyz_y_idx,fwd disabled not visible index feature
+      │    │    │    │    └── filters
+      │    │    │    │         ├── column2:7 = y:15
+      │    │    │    │         └── column3:8 = z:16
+      │    │    │    ├── scan xyz
+      │    │    │    │    ├── columns: x:19!null y:20 z:21
+      │    │    │    │    └── flags: force-index=xyz_y_idx,fwd disabled not visible index feature
+      │    │    │    └── filters
+      │    │    │         ├── column2:7 = y:20
+      │    │    │         └── column3:8 = z:21
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column2:7]
+      │    │         │    └── column2:7
+      │    │         └── first-agg [as=column3:8]
+      │    │              └── column3:8
+      │    └── aggregations
+      │         └── first-agg [as=column1:6]
+      │              └── column1:6
+      └── aggregations
+           └── first-agg [as=column1:6]
+                └── column1:6
+
+build
+INSERT INTO xyz@{NO_FULL_SCAN}
+VALUES (1, 2, 3), (4, 5, 6)
+ON CONFLICT DO NOTHING
+----
+insert xyz
+ ├── arbiter indexes: xyz_pkey xyz_y_z_key xyz_z_y_key
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
+ └── upsert-distinct-on
+      ├── columns: column1:6!null column2:7!null column3:8!null
+      ├── grouping columns: column2:7!null column3:8!null
+      ├── upsert-distinct-on
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    ├── grouping columns: column2:7!null column3:8!null
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── grouping columns: column1:6!null
+      │    │    ├── anti-join (hash)
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    ├── anti-join (hash)
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    ├── anti-join (hash)
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    │    ├── (1, 2, 3)
+      │    │    │    │    │    │    └── (4, 5, 6)
+      │    │    │    │    │    ├── scan xyz
+      │    │    │    │    │    │    ├── columns: x:9!null y:10 z:11
+      │    │    │    │    │    │    └── flags: no-full-scan disabled not visible index feature
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── column1:6 = x:9
+      │    │    │    │    ├── scan xyz
+      │    │    │    │    │    ├── columns: x:14!null y:15 z:16
+      │    │    │    │    │    └── flags: no-full-scan disabled not visible index feature
+      │    │    │    │    └── filters
+      │    │    │    │         ├── column2:7 = y:15
+      │    │    │    │         └── column3:8 = z:16
+      │    │    │    ├── scan xyz
+      │    │    │    │    ├── columns: x:19!null y:20 z:21
+      │    │    │    │    └── flags: no-full-scan disabled not visible index feature
+      │    │    │    └── filters
+      │    │    │         ├── column2:7 = y:20
+      │    │    │         └── column3:8 = z:21
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column2:7]
+      │    │         │    └── column2:7
+      │    │         └── first-agg [as=column3:8]
+      │    │              └── column3:8
+      │    └── aggregations
+      │         └── first-agg [as=column1:6]
+      │              └── column1:6
+      └── aggregations
+           └── first-agg [as=column1:6]
+                └── column1:6
+
+build
+INSERT INTO xyz@bad_idx
+VALUES (1, 2, 3), (4, 5, 6)
+ON CONFLICT DO NOTHING
+----
+error (42704): index "bad_idx" not found
+
 # ------------------------------------------------------------------------------
 # Test excluded columns.
 # ------------------------------------------------------------------------------
@@ -1042,6 +1262,182 @@ upsert abc
            ├── CASE WHEN a:11 IS NULL THEN column2:8 ELSE b_new:18 END [as=upsert_b:21]
            ├── CASE WHEN a:11 IS NULL THEN c_comp:10 ELSE c_comp:19 END [as=upsert_c:22]
            └── CASE WHEN a:11 IS NULL THEN rowid_default:9 ELSE rowid:14 END [as=upsert_rowid:23]
+
+# UPDATE SET with index hints.
+
+build
+INSERT INTO xyz@xyz_pkey
+VALUES (1, 2, 3), (4, 5, 6)
+ON CONFLICT (x) DO UPDATE SET x=DEFAULT
+----
+upsert xyz
+ ├── arbiter indexes: xyz_pkey
+ ├── columns: <none>
+ ├── canary column: x:9
+ ├── fetch columns: x:9 y:10 z:11
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
+ ├── update-mapping:
+ │    └── upsert_x:15 => x:1
+ └── project
+      ├── columns: upsert_x:15 upsert_y:16 upsert_z:17 column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13 x_new:14
+      ├── project
+      │    ├── columns: x_new:14 column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    ├── (1, 2, 3)
+      │    │    │    │    └── (4, 5, 6)
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         └── first-agg [as=column3:8]
+      │    │    │              └── column3:8
+      │    │    ├── scan xyz
+      │    │    │    ├── columns: x:9!null y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    └── flags: force-index=xyz_pkey disabled not visible index feature
+      │    │    └── filters
+      │    │         └── column1:6 = x:9
+      │    └── projections
+      │         └── NULL::INT8 [as=x_new:14]
+      └── projections
+           ├── CASE WHEN x:9 IS NULL THEN column1:6 ELSE x_new:14 END [as=upsert_x:15]
+           ├── CASE WHEN x:9 IS NULL THEN column2:7 ELSE y:10 END [as=upsert_y:16]
+           └── CASE WHEN x:9 IS NULL THEN column3:8 ELSE z:11 END [as=upsert_z:17]
+
+build
+INSERT INTO xyz@xyz_y_idx
+VALUES (1, 2, 3), (4, 5, 6)
+ON CONFLICT (y, z) DO UPDATE SET x=xyz.x+1
+----
+upsert xyz
+ ├── arbiter indexes: xyz_y_z_key
+ ├── columns: <none>
+ ├── canary column: x:9
+ ├── fetch columns: x:9 y:10 z:11
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
+ ├── update-mapping:
+ │    └── upsert_x:15 => x:1
+ └── project
+      ├── columns: upsert_x:15 upsert_y:16 upsert_z:17 column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13 x_new:14
+      ├── project
+      │    ├── columns: x_new:14 column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    ├── grouping columns: column2:7!null column3:8!null
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    ├── (1, 2, 3)
+      │    │    │    │    └── (4, 5, 6)
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [as=column1:6]
+      │    │    │              └── column1:6
+      │    │    ├── scan xyz
+      │    │    │    ├── columns: x:9!null y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    └── flags: force-index=xyz_y_idx disabled not visible index feature
+      │    │    └── filters
+      │    │         ├── column2:7 = y:10
+      │    │         └── column3:8 = z:11
+      │    └── projections
+      │         └── x:9 + 1 [as=x_new:14]
+      └── projections
+           ├── CASE WHEN x:9 IS NULL THEN column1:6 ELSE x_new:14 END [as=upsert_x:15]
+           ├── CASE WHEN x:9 IS NULL THEN column2:7 ELSE y:10 END [as=upsert_y:16]
+           └── CASE WHEN x:9 IS NULL THEN column3:8 ELSE z:11 END [as=upsert_z:17]
+
+build
+INSERT INTO xyz@{FORCE_INDEX=xyz_z_y_key,ASC}
+VALUES (1, 2, 3), (4, 5, 6)
+ON CONFLICT (x) DO UPDATE SET x=excluded.y
+----
+upsert xyz
+ ├── arbiter indexes: xyz_pkey
+ ├── columns: <none>
+ ├── canary column: x:9
+ ├── fetch columns: x:9 y:10 z:11
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
+ ├── update-mapping:
+ │    └── upsert_x:14 => x:1
+ └── project
+      ├── columns: upsert_x:14!null upsert_y:15 upsert_z:16 column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      ├── left-join (hash)
+      │    ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── ensure-upsert-distinct-on
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── grouping columns: column1:6!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    ├── (1, 2, 3)
+      │    │    │    └── (4, 5, 6)
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column2:7]
+      │    │         │    └── column2:7
+      │    │         └── first-agg [as=column3:8]
+      │    │              └── column3:8
+      │    ├── scan xyz
+      │    │    ├── columns: x:9!null y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    └── flags: force-index=xyz_z_y_key,fwd disabled not visible index feature
+      │    └── filters
+      │         └── column1:6 = x:9
+      └── projections
+           ├── CASE WHEN x:9 IS NULL THEN column1:6 ELSE column2:7 END [as=upsert_x:14]
+           ├── CASE WHEN x:9 IS NULL THEN column2:7 ELSE y:10 END [as=upsert_y:15]
+           └── CASE WHEN x:9 IS NULL THEN column3:8 ELSE z:11 END [as=upsert_z:16]
+
+build
+INSERT INTO xyz@{NO_FULL_SCAN}
+VALUES (1, 2, 3), (4, 5, 6)
+ON CONFLICT (z, y) DO UPDATE SET y=excluded.x
+----
+upsert xyz
+ ├── arbiter indexes: xyz_y_z_key
+ ├── columns: <none>
+ ├── canary column: x:9
+ ├── fetch columns: x:9 y:10 z:11
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
+ ├── update-mapping:
+ │    └── upsert_y:15 => y:2
+ └── project
+      ├── columns: upsert_x:14 upsert_y:15!null upsert_z:16 column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      ├── left-join (hash)
+      │    ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── ensure-upsert-distinct-on
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── grouping columns: column2:7!null column3:8!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    ├── (1, 2, 3)
+      │    │    │    └── (4, 5, 6)
+      │    │    └── aggregations
+      │    │         └── first-agg [as=column1:6]
+      │    │              └── column1:6
+      │    ├── scan xyz
+      │    │    ├── columns: x:9!null y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    └── flags: no-full-scan disabled not visible index feature
+      │    └── filters
+      │         ├── column2:7 = y:10
+      │         └── column3:8 = z:11
+      └── projections
+           ├── CASE WHEN x:9 IS NULL THEN column1:6 ELSE x:9 END [as=upsert_x:14]
+           ├── CASE WHEN x:9 IS NULL THEN column2:7 ELSE column1:6 END [as=upsert_y:15]
+           └── CASE WHEN x:9 IS NULL THEN column3:8 ELSE z:11 END [as=upsert_z:16]
 
 # ------------------------------------------------------------------------------
 # Test mutation columns.
@@ -1482,6 +1878,128 @@ build
 UPSERT INTO xyz (x, unknown) VALUES (1)
 ----
 error (42703): column "unknown" does not exist
+
+# UPSERT with index hints.
+
+build
+UPSERT INTO xyz@xyz_pkey (z, x, y) VALUES (1, 2, 3)
+----
+upsert xyz
+ ├── arbiter indexes: xyz_pkey
+ ├── columns: <none>
+ ├── canary column: x:9
+ ├── fetch columns: x:9 y:10 z:11
+ ├── insert-mapping:
+ │    ├── column2:7 => x:1
+ │    ├── column3:8 => y:2
+ │    └── column1:6 => z:3
+ ├── update-mapping:
+ │    ├── column3:8 => y:2
+ │    └── column1:6 => z:3
+ └── project
+      ├── columns: upsert_x:14 column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      ├── left-join (hash)
+      │    ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── ensure-upsert-distinct-on
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── grouping columns: column2:7!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    └── (1, 2, 3)
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column1:6]
+      │    │         │    └── column1:6
+      │    │         └── first-agg [as=column3:8]
+      │    │              └── column3:8
+      │    ├── scan xyz
+      │    │    ├── columns: x:9!null y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    └── flags: force-index=xyz_pkey disabled not visible index feature
+      │    └── filters
+      │         └── column2:7 = x:9
+      └── projections
+           └── CASE WHEN x:9 IS NULL THEN column2:7 ELSE x:9 END [as=upsert_x:14]
+
+build
+UPSERT INTO xyz@xyz_y_z_key (z, x, y) VALUES (1, 2, 3)
+----
+upsert xyz
+ ├── arbiter indexes: xyz_pkey
+ ├── columns: <none>
+ ├── canary column: x:9
+ ├── fetch columns: x:9 y:10 z:11
+ ├── insert-mapping:
+ │    ├── column2:7 => x:1
+ │    ├── column3:8 => y:2
+ │    └── column1:6 => z:3
+ ├── update-mapping:
+ │    ├── column3:8 => y:2
+ │    └── column1:6 => z:3
+ └── project
+      ├── columns: upsert_x:14 column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      ├── left-join (hash)
+      │    ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── ensure-upsert-distinct-on
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── grouping columns: column2:7!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    └── (1, 2, 3)
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column1:6]
+      │    │         │    └── column1:6
+      │    │         └── first-agg [as=column3:8]
+      │    │              └── column3:8
+      │    ├── scan xyz
+      │    │    ├── columns: x:9!null y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    └── flags: force-index=xyz_y_z_key disabled not visible index feature
+      │    └── filters
+      │         └── column2:7 = x:9
+      └── projections
+           └── CASE WHEN x:9 IS NULL THEN column2:7 ELSE x:9 END [as=upsert_x:14]
+
+build
+UPSERT INTO xyz@{NO_FULL_SCAN} (z, x, y) VALUES (1, 2, 3)
+----
+upsert xyz
+ ├── arbiter indexes: xyz_pkey
+ ├── columns: <none>
+ ├── canary column: x:9
+ ├── fetch columns: x:9 y:10 z:11
+ ├── insert-mapping:
+ │    ├── column2:7 => x:1
+ │    ├── column3:8 => y:2
+ │    └── column1:6 => z:3
+ ├── update-mapping:
+ │    ├── column3:8 => y:2
+ │    └── column1:6 => z:3
+ └── project
+      ├── columns: upsert_x:14 column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      ├── left-join (hash)
+      │    ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── ensure-upsert-distinct-on
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── grouping columns: column2:7!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    └── (1, 2, 3)
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column1:6]
+      │    │         │    └── column1:6
+      │    │         └── first-agg [as=column3:8]
+      │    │              └── column3:8
+      │    ├── scan xyz
+      │    │    ├── columns: x:9!null y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    └── flags: no-full-scan disabled not visible index feature
+      │    └── filters
+      │         └── column2:7 = x:9
+      └── projections
+           └── CASE WHEN x:9 IS NULL THEN column2:7 ELSE x:9 END [as=upsert_x:14]
+
+build
+UPSERT INTO xyz@bax_idx (z, x, y) VALUES (1, 2, 3)
+----
+error (42704): index "bax_idx" not found
+
 
 # ------------------------------------------------------------------------------
 # Test check constraints.
