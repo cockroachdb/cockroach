@@ -118,7 +118,7 @@ func (b *Builder) buildScalarWithMap(
 	colMap colOrdMap, scalar opt.ScalarExpr,
 ) (tree.TypedExpr, error) {
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, colMap.MaxOrd()+1),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, colMap.OrdUpperBound()+1),
 		ivarMap: colMap,
 	}
 	return b.buildScalar(&ctx, scalar)
@@ -583,7 +583,7 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Construct tuple type of columns in the row.
-	contents := make([]*types.T, planCols.MaxOrd()+1)
+	contents := make([]*types.T, planCols.OrdUpperBound()+1)
 	planCols.ForEach(func(col opt.ColumnID, ord int) {
 		contents[ord] = b.mem.Metadata().ColumnMeta(col).Type
 	})

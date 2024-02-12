@@ -142,7 +142,7 @@ func makeCascadeBuilder(b *Builder, mutationWithID opt.WithID) (*cascadeBuilder,
 	// Remember the column metadata, as we will need to recreate it in the new
 	// memo.
 	md := b.mem.Metadata()
-	cb.colMeta = make([]opt.ColumnMeta, 0, cb.mutationBufferCols.MaxOrd())
+	cb.colMeta = make([]opt.ColumnMeta, 0, cb.mutationBufferCols.OrdUpperBound())
 	cb.mutationBufferCols.ForEach(func(col opt.ColumnID, ord int) {
 		cb.colMeta = append(cb.colMeta, *md.ColumnMeta(col))
 	})

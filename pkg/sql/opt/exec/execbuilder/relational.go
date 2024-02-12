@@ -63,7 +63,7 @@ type execPlan struct {
 // that refer the output columns of this plan.
 func makeBuildScalarCtx(cols colOrdMap) buildScalarCtx {
 	return buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, cols.MaxOrd()+1),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, cols.OrdUpperBound()+1),
 		ivarMap: cols,
 	}
 }
@@ -1256,7 +1256,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 	var onExpr tree.TypedExpr
 	if len(*filters) != 0 {
 		scalarCtx := buildScalarCtx{
-			ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.MaxOrd()+1),
+			ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.OrdUpperBound()+1),
 			ivarMap: allCols,
 		}
 		onExpr, err = b.buildScalar(&scalarCtx, filters)
@@ -1573,7 +1573,10 @@ func (b *Builder) initJoinBuild(
 // joinOutputMap determines the outputCols map for a (non-semi/anti) join, given
 // the outputCols maps for its inputs.
 func (b *Builder) joinOutputMap(left, right colOrdMap) colOrdMap {
-	numLeftCols := left.MaxOrd() + 1
+	// TODO(mgartner): It's currently safe to use OrdUpperBound like this, but
+	// it is not robust because it's not guaranteed to be the max ordinal, only
+	// an approximate upper-bound.
+	numLeftCols := left.OrdUpperBound() + 1
 
 	res := b.colOrdsAlloc.Copy(left)
 	right.ForEach(func(col opt.ColumnID, rightIdx int) {
@@ -1768,7 +1771,7 @@ func (b *Builder) buildDistinct(
 	// buildGroupByInput can add extra sort column(s), so discard those if they
 	// are present by using an additional projection.
 	outCols := distinct.Relational().OutputCols
-	if inputCols.MaxOrd()+1 == outCols.Len() {
+	if inputCols.OrdUpperBound()+1 == outCols.Len() {
 		return ep, inputCols, nil
 	}
 	return b.ensureColumns(
@@ -2261,7 +2264,7 @@ func (b *Builder) buildOrdinality(
 
 	// We have one additional ordinality column, which is ordered at the end of
 	// the list.
-	inputCols.Set(ord.ColID, outputCols.MaxOrd()+1)
+	inputCols.Set(ord.ColID, outputCols.OrdUpperBound()+1)
 
 	return ep, inputCols, nil
 }
@@ -2601,11 +2604,14 @@ func (b *Builder) buildLookupJoin(
 		}
 		outputCols = b.colOrdsAlloc.Copy(leftAndRightCols)
 
-		maxOrd := outputCols.MaxOrd()
+		maxOrd := outputCols.OrdUpperBound()
 		if maxOrd == -1 {
 			return execPlan{}, colOrdMap{}, errors.AssertionFailedf("outputCols should not be empty")
 		}
 		// Assign the continuation column the next unused value in the map.
+		// TODO(mgartner): It's currently safe to use maxOrd like this, but it
+		// is not robust because it's not guaranteed to be the max ordinal, only
+		// an approximate upper-bound.
 		outputCols.Set(join.ContinuationCol, maxOrd+1)
 
 		// allExprCols is only needed for the lifetime of the function, so free
@@ -2880,7 +2886,7 @@ func (b *Builder) buildInvertedJoin(
 		}
 		outputCols = b.colOrdsAlloc.Copy(leftAndRightCols)
 
-		maxOrd := outputCols.MaxOrd()
+		maxOrd := outputCols.OrdUpperBound()
 		if maxOrd == -1 {
 			return execPlan{}, colOrdMap{}, errors.AssertionFailedf("outputCols should not be empty")
 		}
@@ -2914,7 +2920,7 @@ func (b *Builder) buildInvertedJoin(
 	}
 
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, leftAndRightCols.MaxOrd()+1),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, leftAndRightCols.OrdUpperBound()+1),
 		ivarMap: b.colOrdsAlloc.Copy(leftAndRightCols),
 	}
 	onExpr, err := b.buildScalar(&ctx, &join.On)
@@ -3034,7 +3040,7 @@ func (b *Builder) buildZigzagJoin(
 	outputCols = allCols
 
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, leftColMap.MaxOrd()+rightColMap.MaxOrd()+2),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, leftColMap.OrdUpperBound()+rightColMap.OrdUpperBound()+2),
 		ivarMap: allCols,
 	}
 	onExpr, err := b.buildScalar(&ctx, &join.On)
@@ -3319,7 +3325,7 @@ func (b *Builder) buildProjectSet(
 	zipCols := make(colinfo.ResultColumns, 0, len(zip))
 	numColsPerGen := make([]int, len(zip))
 
-	n := inputCols.MaxOrd() + 1
+	n := inputCols.OrdUpperBound() + 1
 	outputCols = b.colOrdsAlloc.Alloc()
 	for i := range zip {
 		item := &zip[i]
@@ -3761,7 +3767,7 @@ func (b *Builder) buildBarrier(
 func (b *Builder) needProjection(
 	inputCols colOrdMap, colList opt.ColList,
 ) (_ []exec.NodeColumnOrdinal, needProj bool, err error) {
-	if inputCols.MaxOrd()+1 == len(colList) {
+	if inputCols.OrdUpperBound()+1 == len(colList) {
 		identity := true
 		for i, col := range colList {
 			if ord, ok := inputCols.Get(col); !ok || ord != i {
