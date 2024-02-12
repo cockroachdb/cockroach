@@ -29,21 +29,13 @@ upsert descriptor #104
   +      family: IntFamily
   +      oid: 20
   +      width: 64
-  +  - defaultExpr: unique_rowid()
-  +    hidden: true
-  +    id: 2
-  +    name: rowid
-  +    type:
-  +      family: IntFamily
-  +      oid: 20
-  +      width: 64
   +  createAsOfTime: {}
   +  formatVersion: 3
   +  id: 104
   +  modificationTime: {}
   +  mutations: []
   +  name: sq1
-  +  nextColumnId: 3
+  +  nextColumnId: 2
   +  nextConstraintId: 1
   +  nextIndexId: 2
   +  parentId: 100
@@ -112,21 +104,13 @@ upsert descriptor #104
   +      family: IntFamily
   +      oid: 20
   +      width: 64
-  +  - defaultExpr: unique_rowid()
-  +    hidden: true
-  +    id: 2
-  +    name: rowid
-  +    type:
-  +      family: IntFamily
-  +      oid: 20
-  +      width: 64
   +  createAsOfTime: {}
   +  formatVersion: 3
   +  id: 104
   +  modificationTime: {}
   +  mutations: []
   +  name: sq1
-  +  nextColumnId: 3
+  +  nextColumnId: 2
   +  nextConstraintId: 1
   +  nextIndexId: 2
   +  parentId: 100

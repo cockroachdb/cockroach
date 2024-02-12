@@ -2449,3 +2449,17 @@ RESET serial_normalization;
 RESET default_int_size;
 
 subtest end
+
+# The following subtest ensures sequences do not have any unexpected columns
+# on creation. Previously, we were incorrectly creating a rowid column.
+subtest regression_119108
+
+statement ok
+CREATE SEQUENCE sq_119108;
+
+query T
+SELECT column_name from [SHOW COLUMNS FROM sq_119108]
+----
+value
+
+subtest end

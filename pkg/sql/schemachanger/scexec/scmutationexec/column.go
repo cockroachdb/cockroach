@@ -85,7 +85,7 @@ func (i *immediateVisitor) SetAddedColumnType(
 	}
 	// Empty names are allowed for families, in which case AllocateIDs will assign
 	// one.
-	return tbl.AllocateIDsWithoutValidation(ctx)
+	return tbl.AllocateIDsWithoutValidation(ctx, false /* createMissingPrimaryKey */)
 }
 
 func (i *immediateVisitor) MakeDeleteOnlyColumnWriteOnly(

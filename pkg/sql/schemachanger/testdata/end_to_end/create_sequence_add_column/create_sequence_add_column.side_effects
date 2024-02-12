@@ -32,21 +32,13 @@ upsert descriptor #105
   +      family: IntFamily
   +      oid: 20
   +      width: 64
-  +  - defaultExpr: unique_rowid()
-  +    hidden: true
-  +    id: 2
-  +    name: rowid
-  +    type:
-  +      family: IntFamily
-  +      oid: 20
-  +      width: 64
   +  createAsOfTime: {}
   +  formatVersion: 3
   +  id: 105
   +  modificationTime: {}
   +  mutations: []
   +  name: sq1
-  +  nextColumnId: 3
+  +  nextColumnId: 2
   +  nextConstraintId: 1
   +  nextIndexId: 2
   +  parentId: 100
@@ -229,15 +221,6 @@ upsert descriptor #105
   -
   +table:
   +  checks: []
-  +  columns:
-  +  - defaultExpr: unique_rowid()
-  +    hidden: true
-  +    id: 2
-  +    name: rowid
-  +    type:
-  +      family: IntFamily
-  +      oid: 20
-  +      width: 64
   +  createAsOfTime: {}
   +  declarativeSchemaChangerState:
   +    authorization:
@@ -278,7 +261,7 @@ upsert descriptor #105
   +    direction: ADD
   +    state: WRITE_ONLY
   +  name: sq1
-  +  nextColumnId: 3
+  +  nextColumnId: 2
   +  nextConstraintId: 1
   +  nextIndexId: 2
   +  parentId: 100
@@ -720,17 +703,17 @@ upsert descriptor #104
   -  version: "6"
   +  version: "7"
 upsert descriptor #105
-  ...
+   table:
      checks: []
-     columns:
+  +  columns:
   +  - id: 1
   +    name: value
   +    type:
   +      family: IntFamily
   +      oid: 20
   +      width: 64
-     - defaultExpr: unique_rowid()
-       hidden: true
+     createAsOfTime: {}
+     declarativeSchemaChangerState:
   ...
            statement: CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
            statementTag: CREATE SEQUENCE
@@ -752,7 +735,7 @@ upsert descriptor #105
   -    state: WRITE_ONLY
   +  mutations: []
      name: sq1
-     nextColumnId: 3
+     nextColumnId: 2
   ...
        sequenceOwner: {}
        start: "32"
