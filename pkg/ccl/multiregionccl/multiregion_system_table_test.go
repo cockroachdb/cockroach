@@ -71,6 +71,10 @@ func TestMrSystemDatabase(t *testing.T) {
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
 
+	tDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE DATABASE system]", [][]string{
+		{"CREATE DATABASE system PRIMARY REGION \"us-east1\" REGIONS = \"us-east1\", \"us-east2\", \"us-east3\" SURVIVE ZONE FAILURE"},
+	})
+
 	// Run schema validations to ensure the manual descriptor modifications are
 	// okay.
 	tDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.invalid_objects`, [][]string{})
