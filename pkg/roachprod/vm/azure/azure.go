@@ -15,7 +15,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -28,6 +27,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/resources/mgmt/subscriptions"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/to"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
@@ -159,16 +159,9 @@ func (p *Provider) Create(
 ) error {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
 	// Load the user's SSH public key to configure the resulting VMs.
-	var sshKey string
-	sshFile := os.ExpandEnv("${HOME}/.ssh/id_rsa.pub")
-	if _, err := os.Stat(sshFile); err == nil {
-		if bytes, err := os.ReadFile(sshFile); err == nil {
-			sshKey = string(bytes)
-		} else {
-			return errors.Wrapf(err, "could not read SSH public key file")
-		}
-	} else {
-		return errors.Wrapf(err, "could not find SSH public key file")
+	sshKey, err := config.SSHPublicKey()
+	if err != nil {
+		return err
 	}
 
 	m := getAzureDefaultLabelMap(opts)
