@@ -20,6 +20,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
@@ -74,7 +75,7 @@ for d in $(ls /dev/nvme?n? /dev/disk/by-id/google-persistent-disk-[1-9]); do
 # if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
 # then the disks will be selected for RAID'ing. If there are both Local SSDs and Persistent disks,
 # RAID'ing in this case can cause performance differences. So, to avoid this, local SSDs are ignored.
-# Scenarios: 
+# Scenarios:
 #   (local SSD = 0, Persistent Disk - 1) - no RAID'ing and Persistent Disk mounted
 #   (local SSD = 1, Persistent Disk - 0) - no RAID'ing and local SSD mounted
 #   (local SSD >= 1, Persistent Disk = 1) - no RAID'ing and Persistent Disk mounted
@@ -254,6 +255,9 @@ sysctl --system  # reload sysctl settings
 sudo ua enable fips --assume-yes
 {{ end }}
 
+sudo -u {{ .SharedUser }} bash -c "mkdir ~/.ssh && chmod 700 ~/.ssh"
+sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
@@ -274,6 +278,13 @@ func writeStartupScript(
 		// TODO(DarrylWong): In the future, when all tests are run on Ubuntu 22.04, we can remove this check and default true.
 		// See: https://github.com/cockroachdb/cockroach/issues/112112
 		EnableRSAForSSH bool
+		SharedUser      string
+		PublicKey       string
+	}
+
+	publicKey, err := config.SSHPublicKey()
+	if err != nil {
+		return "", err
 	}
 
 	args := tmplParams{
@@ -282,6 +293,8 @@ func writeStartupScript(
 		Zfs:              fileSystem == vm.Zfs,
 		EnableFIPS:       enableFIPS,
 		EnableRSAForSSH:  enableRSAForSSH,
+		SharedUser:       config.SharedUser,
+		PublicKey:        publicKey,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")
