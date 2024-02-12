@@ -108,7 +108,8 @@ func failurePoster(res *testResultWithXml, opts *issues.Options) githubpost.Fail
 	}
 	return func(ctx context.Context, failure githubpost.Failure) error {
 		fmter, req := formatter(ctx, failure)
-		return issues.Post(ctx, log.Default(), fmter, req, opts)
+		_, err := issues.Post(ctx, log.Default(), fmter, req, opts)
+		return err
 	}
 }
 

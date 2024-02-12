@@ -105,7 +105,8 @@ func DefaultIssueFilerFromFormatter(
 			}
 			req.ExtraParams["stress"] = "true"
 		}
-		return issues.Post(ctx, log.Default(), fmter, req, opts)
+		_, err := issues.Post(ctx, log.Default(), fmter, req, opts)
+		return err
 	}
 
 }
