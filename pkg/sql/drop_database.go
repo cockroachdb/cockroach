@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -218,9 +219,10 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	// TODO(jeffswenson): delete once region_livess is implemented (#107966)
-	if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
-		return err
+	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V24_1_SystemDatabaseSurvivability) {
+		if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
+			return err
+		}
 	}
 
 	// Log Drop Database event. This is an auditable log event and is recorded

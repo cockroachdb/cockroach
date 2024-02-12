@@ -300,6 +300,10 @@ const (
 	// progress columns from system.jobs table.
 	V24_1_DropPayloadAndProgressFromSystemJobsTable
 
+	// V24_1_SystemDatabaseSurvivability sets the survival goal for the system
+	// database to be SURVIVE ZONE.
+	V24_1_SystemDatabaseSurvivability
+
 	numKeys
 )
 
@@ -368,6 +372,7 @@ var versionTable = [numKeys]roachpb.Version{
 	// *************************************************
 
 	V24_1_DropPayloadAndProgressFromSystemJobsTable: {Major: 23, Minor: 2, Internal: 4},
+	V24_1_SystemDatabaseSurvivability:               {Major: 23, Minor: 2, Internal: 6},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster

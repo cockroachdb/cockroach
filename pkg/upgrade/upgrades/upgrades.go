@@ -178,6 +178,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.jobs table"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"set survivability goal on MR system database.",
+		clusterversion.V24_1_SystemDatabaseSurvivability.Version(),
+		upgrade.NoPrecondition,
+		alterSystemDatabaseSurvivalGoal,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system database"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

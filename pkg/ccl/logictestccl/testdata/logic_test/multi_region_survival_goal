@@ -68,7 +68,7 @@ SELECT get_db_survival_goal()
 ----
 (alter_survive_db,region)
 (survive_zone_db,zone)
-(system,region)
+(system,zone)
 
 # Make sure system db survival goal is downgraded.
 statement ok
@@ -91,7 +91,7 @@ SELECT get_db_survival_goal()
 (alter_survive_db,zone)
 (create_survive_db,region)
 (survive_zone_db,zone)
-(system,region)
+(system,zone)
 
 # Make sure dropping the database downgrades the survival goal.
 statement ok

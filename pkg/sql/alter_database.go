@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1211,7 +1212,10 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 	if n.desc.GetID() == keys.SystemDatabaseID {
 		return nil
 	}
-	return params.p.maybeUpdateSystemDBSurvivalGoal(params.ctx)
+	if !params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V24_1_SystemDatabaseSurvivability) {
+		return params.p.maybeUpdateSystemDBSurvivalGoal(params.ctx)
+	}
+	return nil
 }
 
 // alterDatabaseSurvivalGoal modifies a multi-region database's survival goal,

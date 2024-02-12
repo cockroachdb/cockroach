@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -193,9 +194,10 @@ func (p *planner) createDatabase(
 
 	}
 
-	// TODO(jeffswenson): delete once region_livess is implemented (#107966)
-	if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
-		return nil, false, err
+	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V24_1_SystemDatabaseSurvivability) {
+		if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
+			return nil, false, err
+		}
 	}
 
 	return db, true, nil
