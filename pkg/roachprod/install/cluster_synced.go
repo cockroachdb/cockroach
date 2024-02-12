@@ -1592,11 +1592,10 @@ fi
 	}
 
 	if len(c.AuthorizedKeys) > 0 {
-		// When clusters are created using cloud APIs they only have a subset of
-		// desired keys installed on a subset of users. This code distributes
-		// additional authorized_keys to both the current user (your username on
-		// gce and the shared user on aws) as well as to the shared user on both
-		// platforms.
+		// When clusters are created using cloud APIs they only have a
+		// subset of desired keys installed on a subset of users. This
+		// code distributes additional authorized_keys the current user
+		// (i.e., the shared user).
 		if err := c.Parallel(ctx, l, OnNodes(c.Nodes).WithDisplay("adding additional authorized keys"),
 			func(ctx context.Context, node Node) (*RunResultDetails, error) {
 				const cmd = `
@@ -1608,20 +1607,11 @@ on_exit() {
     rm -f "${tmp1}" "${tmp2}"
 }
 trap on_exit EXIT
-if [[ -f ~/.ssh/authorized_keys ]]; then
-    cat ~/.ssh/authorized_keys > "${tmp1}"
-fi
+cat ~/.ssh/authorized_keys > "${tmp1}"
 echo "${keys_data}" >> "${tmp1}"
 sort -u < "${tmp1}" > "${tmp2}"
 install --mode 0600 "${tmp2}" ~/.ssh/authorized_keys
-if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
-    sudo install --mode 0600 \
-        --owner ` + config.SharedUser + `\
-        --group ` + config.SharedUser + `\
-        "${tmp2}" ~` + config.SharedUser + `/.ssh/authorized_keys
-fi
 `
-
 				runOpts := defaultCmdOpts("ssh-add-extra-keys")
 				runOpts.stdin = bytes.NewReader(c.AuthorizedKeys)
 				return c.runCmdOnSingleNode(ctx, l, node, cmd, runOpts)
