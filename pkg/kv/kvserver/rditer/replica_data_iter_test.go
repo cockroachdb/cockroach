@@ -336,8 +336,8 @@ func TestIterateMVCCReplicaKeySpansSpansSet(t *testing.T) {
 	// fragmented.
 	//
 	get := func(t *testing.T, useSpanSet, reverse bool) ([]storage.MVCCKey, []storage.MVCCRangeKey) {
-		readWriter := eng.NewReadOnly(storage.StandardDurability)
-		defer readWriter.Close()
+		reader := eng.NewReader(storage.StandardDurability)
+		defer reader.Close()
 		if useSpanSet {
 			var spans spanset.SpanSet
 			spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
@@ -352,12 +352,12 @@ func TestIterateMVCCReplicaKeySpansSpansSet(t *testing.T) {
 				Key:    desc.StartKey.AsRawKey(),
 				EndKey: desc.EndKey.AsRawKey(),
 			}, hlc.Timestamp{WallTime: 42})
-			readWriter = spanset.NewReadWriterAt(readWriter, &spans, hlc.Timestamp{WallTime: 42})
+			reader = spanset.NewReader(reader, &spans, hlc.Timestamp{WallTime: 42})
 		}
 		var rangeStart roachpb.Key
 		var actualKeys []storage.MVCCKey
 		var actualRanges []storage.MVCCRangeKey
-		err := IterateMVCCReplicaKeySpans(context.Background(), &desc, readWriter, IterateOptions{
+		err := IterateMVCCReplicaKeySpans(context.Background(), &desc, reader, IterateOptions{
 			CombineRangesAndPoints: false,
 			Reverse:                reverse,
 		}, func(iter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {

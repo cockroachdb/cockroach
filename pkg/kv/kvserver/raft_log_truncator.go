@@ -451,7 +451,7 @@ func (t *raftLogTruncator) durabilityAdvanced(ctx context.Context) {
 	// Sort it for deterministic testing output.
 	sort.Sort(rangesByRangeID(ranges))
 	// Create an engine Reader to provide a safe lower bound on what is durable.
-	reader := t.store.getEngine().NewReadOnly(storage.GuaranteedDurability)
+	reader := t.store.getEngine().NewReader(storage.GuaranteedDurability)
 	defer reader.Close()
 	shouldQuiesce := t.stopper.ShouldQuiesce()
 	quiesced := false
