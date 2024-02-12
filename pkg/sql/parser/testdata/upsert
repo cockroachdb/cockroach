@@ -23,6 +23,14 @@ UPSERT INTO a.b VALUES (_) -- literals removed
 UPSERT INTO _._ VALUES (1) -- identifiers removed
 
 parse
+UPSERT INTO a.b@c VALUES (1)
+----
+UPSERT INTO a.b@c VALUES (1)
+UPSERT INTO a.b@c VALUES ((1)) -- fully parenthesized
+UPSERT INTO a.b@c VALUES (_) -- literals removed
+UPSERT INTO _._@_ VALUES (1) -- identifiers removed
+
+parse
 UPSERT INTO a VALUES (1, 2)
 ----
 UPSERT INTO a VALUES (1, 2)
