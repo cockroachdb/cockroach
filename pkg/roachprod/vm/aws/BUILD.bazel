@@ -23,7 +23,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_errors//oserror",
         "@com_github_spf13_pflag//:pflag",
         "@org_golang_x_sync//errgroup",
         "@org_golang_x_time//rate",

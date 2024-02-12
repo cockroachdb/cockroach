@@ -14,16 +14,12 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/oserror"
 )
-
-const sshPublicKeyFile = "${HOME}/.ssh/id_rsa.pub"
 
 // sshKeyExists checks to see if there is a an SSH key with the given name in the given region.
 func (p *Provider) sshKeyExists(keyName, region string) (bool, error) {
@@ -51,11 +47,7 @@ func (p *Provider) sshKeyExists(keyName, region string) (bool, error) {
 // sshKeyImport takes the user's local, public SSH key and imports it into the ec2 region so that
 // we can create new hosts with it.
 func (p *Provider) sshKeyImport(keyName, region string) error {
-	_, err := os.Stat(os.ExpandEnv(sshPublicKeyFile))
-	if err != nil {
-		if oserror.IsNotExist(err) {
-			return errors.Wrapf(err, "please run ssh-keygen externally to create your %s file", sshPublicKeyFile)
-		}
+	if _, err := config.SSHPublicKey(); err != nil {
 		return err
 	}
 
@@ -80,7 +72,7 @@ func (p *Provider) sshKeyImport(keyName, region string) error {
 		"ec2", "import-key-pair",
 		"--region", region,
 		"--key-name", keyName,
-		"--public-key-material", fmt.Sprintf("fileb://%s", sshPublicKeyFile),
+		"--public-key-material", fmt.Sprintf("fileb://%s", config.SSHPublicKeyPath),
 		"--tag-specifications", tagSpecs,
 	}
 	err = p.runJSONCommand(args, &data)
@@ -99,16 +91,13 @@ func (p *Provider) sshKeyName() (string, error) {
 		return "", err
 	}
 
-	keyBytes, err := os.ReadFile(os.ExpandEnv(sshPublicKeyFile))
+	sshKey, err := config.SSHPublicKey()
 	if err != nil {
-		if oserror.IsNotExist(err) {
-			return "", errors.Wrapf(err, "please run ssh-keygen externally to create your %s file", sshPublicKeyFile)
-		}
 		return "", err
 	}
 
 	hash := sha1.New()
-	if _, err := hash.Write(keyBytes); err != nil {
+	if _, err := hash.Write([]byte(sshKey)); err != nil {
 		return "", err
 	}
 	hashBytes := hash.Sum(nil)

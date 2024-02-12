@@ -390,7 +390,7 @@ func (p *Provider) ConfigSSH(zones []string) error {
 					return err
 				}
 				log.Infof(context.Background(), "imported %s as %s in region %s",
-					sshPublicKeyFile, keyName, region)
+					config.SSHPublicKeyPath, keyName, region)
 			}
 			return nil
 		})
