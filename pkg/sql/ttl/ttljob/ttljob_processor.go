@@ -63,50 +63,19 @@ func (t *ttlProcessor) Start(ctx context.Context) {
 	t.MoveToDraining(err)
 }
 
-func (t *ttlProcessor) work(ctx context.Context) error {
-
-	ttlSpec := t.ttlSpec
-	flowCtx := t.FlowCtx
-	serverCfg := flowCtx.Cfg
-	db := serverCfg.DB
-	descsCol := flowCtx.Descriptors
-	codec := serverCfg.Codec
-	details := ttlSpec.RowLevelTTLDetails
-	tableID := details.TableID
-	cutoff := details.Cutoff
-	ttlExpr := ttlSpec.TTLExpr
-
-	selectRateLimit := ttlSpec.SelectRateLimit
-	// Default 0 value to "unlimited" in case job started on node <= v23.2.
-	// todo(sql-foundations): Remove this in 25.1 for consistency with
-	//  deleteRateLimit.
-	if selectRateLimit == 0 {
-		selectRateLimit = math.MaxInt64
-	}
-	selectRateLimiter := quotapool.NewRateLimiter(
-		"ttl-select",
-		quotapool.Limit(selectRateLimit),
-		selectRateLimit,
-	)
-
-	deleteRateLimit := ttlSpec.DeleteRateLimit
-	deleteRateLimiter := quotapool.NewRateLimiter(
-		"ttl-delete",
-		quotapool.Limit(deleteRateLimit),
-		deleteRateLimit,
-	)
-
-	var (
-		relationName      string
-		pkColIDs          catalog.TableColMap
-		pkColNames        []string
-		pkColTypes        []*types.T
-		pkColDirs         []catenumpb.IndexColumn_Direction
-		numFamilies       int
-		labelMetrics      bool
-		processorRowCount int64
-	)
-	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+func getTableInfo(
+	ctx context.Context, db descs.DB, descsCol *descs.Collection, tableID descpb.ID,
+) (
+	relationName string,
+	pkColIDs catalog.TableColMap,
+	pkColNames []string,
+	pkColTypes []*types.T,
+	pkColDirs []catenumpb.IndexColumn_Direction,
+	numFamilies int,
+	labelMetrics bool,
+	err error,
+) {
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		desc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 		if err != nil {
 			return err
@@ -145,7 +114,47 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 
 		relationName = tn.FQString() + "@" + lexbase.EscapeSQLIdent(primaryIndexDesc.Name)
 		return nil
-	}); err != nil {
+	})
+	return relationName, pkColIDs, pkColNames, pkColTypes, pkColDirs, numFamilies, labelMetrics, err
+}
+
+func (t *ttlProcessor) work(ctx context.Context) error {
+
+	ttlSpec := t.ttlSpec
+	flowCtx := t.FlowCtx
+	serverCfg := flowCtx.Cfg
+	db := serverCfg.DB
+	descsCol := flowCtx.Descriptors
+	codec := serverCfg.Codec
+	details := ttlSpec.RowLevelTTLDetails
+	tableID := details.TableID
+	cutoff := details.Cutoff
+	ttlExpr := ttlSpec.TTLExpr
+
+	selectRateLimit := ttlSpec.SelectRateLimit
+	// Default 0 value to "unlimited" in case job started on node <= v23.2.
+	// todo(sql-foundations): Remove this in 25.1 for consistency with
+	//  deleteRateLimit.
+	if selectRateLimit == 0 {
+		selectRateLimit = math.MaxInt64
+	}
+	selectRateLimiter := quotapool.NewRateLimiter(
+		"ttl-select",
+		quotapool.Limit(selectRateLimit),
+		selectRateLimit,
+	)
+
+	deleteRateLimit := ttlSpec.DeleteRateLimit
+	deleteRateLimiter := quotapool.NewRateLimiter(
+		"ttl-delete",
+		quotapool.Limit(deleteRateLimit),
+		deleteRateLimit,
+	)
+
+	relationName, pkColIDs, pkColNames, pkColTypes, pkColDirs, numFamilies, labelMetrics, err := getTableInfo(
+		ctx, db, descsCol, tableID,
+	)
+	if err != nil {
 		return err
 	}
 
@@ -161,7 +170,8 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	if processorSpanCount < processorConcurrency {
 		processorConcurrency = processorSpanCount
 	}
-	err := func() error {
+	var processorRowCount int64
+	err = func() error {
 		boundsChan := make(chan QueryBounds, processorConcurrency)
 		defer close(boundsChan)
 		for i := int64(0); i < processorConcurrency; i++ {
