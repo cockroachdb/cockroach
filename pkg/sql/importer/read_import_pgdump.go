@@ -1083,9 +1083,17 @@ func (m *pgDumpReader) readFile(
 		}
 		switch i := stmt.(type) {
 		case *tree.Insert:
-			n, ok := i.Table.(*tree.TableName)
-			if !ok {
-				return errors.Errorf("unexpected: %T", i.Table)
+			n, isTableName := i.Table.(*tree.TableName)
+			if !isTableName {
+				// We might have the table name wrapped in an AliasedTableExpr.
+				a, isAliasedTableExpr := i.Table.(*tree.AliasedTableExpr)
+				if !isAliasedTableExpr {
+					return errors.Errorf("unexpected: %T", i.Table)
+				}
+				n, isTableName = a.Expr.(*tree.TableName)
+				if !isTableName {
+					return errors.Errorf("unexpected: %T", a.Expr)
+				}
 			}
 			name, err := getSchemaAndTableName(n)
 			if err != nil {
