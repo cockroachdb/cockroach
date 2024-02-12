@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -104,6 +105,77 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 		}
 
 		s.Stopper().Stop(context.Background())
+	}
+}
+
+func TestSyncAllEngines(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	vfsRegistry := NewStickyVFSRegistry(UseStrictMemFS)
+	storeSpec := base.DefaultTestStoreSpec
+	storeSpec.StickyVFSID = "sync-all-engines"
+	testServerArgs := base.TestServerArgs{
+		Settings: cluster.MakeTestingClusterSettingsWithVersions(
+			roachpb.Version{Major: 24, Minor: 1},
+			roachpb.Version{Major: 23, Minor: 1},
+			false, /* initializeVersion */
+		),
+		StoreSpecs: []base.StoreSpec{storeSpec},
+		Knobs: base.TestingKnobs{
+			Server: &TestingKnobs{
+				BinaryVersionOverride: roachpb.Version{Major: 24, Minor: 1},
+				StickyVFSRegistry:     vfsRegistry,
+			},
+		},
+	}
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, testServerArgs)
+	storeID := s.StorageLayer().GetFirstStoreID()
+	store, err := s.StorageLayer().GetStores().(*kvserver.Stores).GetStore(storeID)
+	require.NoError(t, err)
+	key := storage.EngineKey{Key: roachpb.Key("a")}
+	{
+		// Write a key to an engine unsynced.
+		wb := store.StateEngine().NewWriteBatch()
+		require.NoError(t, wb.PutEngineKey(key, []byte("a")))
+		require.NoError(t, wb.Commit(false /* sync */))
+	}
+	// Ask the migration server to sync all engines.
+	migrationServer := s.MigrationServer().(*migrationServer)
+	_, err = migrationServer.SyncAllEngines(ctx, &serverpb.SyncAllEnginesRequest{})
+	require.NoError(t, err)
+
+	// Simulate a power failure immediately after SyncAllEngines completes. If
+	// SyncAllEngines did not sync the engines, the previous write key "a"
+	// will have been lost.
+	{
+		memFS := vfsRegistry.Get(storeSpec.StickyVFSID)
+		memFS.SetIgnoreSyncs(true)
+		s.Stopper().Stop(ctx)
+		memFS.ResetToSyncedState()
+	}
+
+	// Restart the server.
+	s = serverutils.StartServerOnly(t, testServerArgs)
+	defer s.Stopper().Stop(ctx)
+	store, err = s.StorageLayer().GetStores().(*kvserver.Stores).GetStore(storeID)
+	require.NoError(t, err)
+	// Verify that the restarted engine has the key "a".
+	{
+		engIter, err := store.StateEngine().NewEngineIterator(ctx, storage.IterOptions{
+			LowerBound: roachpb.Key([]byte("a")),
+			UpperBound: roachpb.Key([]byte("b")),
+		})
+		require.NoError(t, err)
+		valid, err := engIter.SeekEngineKeyGE(key)
+		require.NoError(t, err)
+		require.True(t, valid)
+		got, err := engIter.UnsafeEngineKey()
+		require.NoError(t, err)
+		require.Equal(t, key, got)
+		defer engIter.Close()
 	}
 }
 
