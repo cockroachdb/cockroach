@@ -94,7 +94,9 @@ func process() error {
 
 func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
 	var title string
-	if invocation.ExitCode == 0 {
+	if !invocation.Finished {
+		title = "# Build did not succeed"
+	} else if invocation.ExitCode == 0 {
 		title = "# Build Succeeded"
 	} else {
 		title = fmt.Sprintf("# Build Failed (code: %s)", invocation.ExitCodeName)
