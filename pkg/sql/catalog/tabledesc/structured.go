@@ -526,7 +526,7 @@ func (desc *Mutable) MaybeFillColumnID(
 // or index which has an ID of 0. It's the same as AllocateIDsWithoutValidation,
 // but does validation on the table elements.
 func (desc *Mutable) AllocateIDs(ctx context.Context, version clusterversion.ClusterVersion) error {
-	if err := desc.AllocateIDsWithoutValidation(ctx); err != nil {
+	if err := desc.AllocateIDsWithoutValidation(ctx, true /*createMissingPrimaryKey*/); err != nil {
 		return err
 	}
 
@@ -545,9 +545,11 @@ func (desc *Mutable) AllocateIDs(ctx context.Context, version clusterversion.Clu
 
 // AllocateIDsWithoutValidation allocates column, family, and index ids for any
 // column, family, or index which has an ID of 0.
-func (desc *Mutable) AllocateIDsWithoutValidation(ctx context.Context) error {
+func (desc *Mutable) AllocateIDsWithoutValidation(
+	ctx context.Context, createMissingPrimaryKey bool,
+) error {
 	// Only tables with physical data can have / need a primary key.
-	if desc.IsPhysicalTable() {
+	if desc.IsPhysicalTable() && createMissingPrimaryKey {
 		if err := desc.ensurePrimaryKey(); err != nil {
 			return err
 		}
