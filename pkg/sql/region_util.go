@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -2526,10 +2527,13 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		return err
 	}
 
-	// Alter the survivability goal on the system database.
-	if err := p.alterDatabaseSurvivalGoal(ctx,
-		systemDB, tree.SurvivalGoalZoneFailure, "alter system database to survive zone failure only"); err != nil {
-		return err
+	// Alter the survivability goal on the system database, if we are on
+	// a new enough version.
+	if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V24_1_SystemDatabaseSurvivability) {
+		if err := p.alterDatabaseSurvivalGoal(ctx,
+			systemDB, tree.SurvivalGoalZoneFailure, "alter system database to survive zone failure only"); err != nil {
+			return err
+		}
 	}
 
 	// Convert the enum descriptor into a type

@@ -288,6 +288,10 @@ const (
 	// to be only session based.
 	V24_1_SessionBasedLeasingUpgradeDescriptor
 
+	// V24_1_SystemDatabaseSurvivability sets the survival goal for the system
+	// database to be SURVIVE ZONE.
+	V24_1_SystemDatabaseSurvivability
+
 	numKeys
 )
 
@@ -351,6 +355,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1_SessionBasedLeasingDrain:             {Major: 23, Minor: 2, Internal: 10},
 	V24_1_SessionBasedLeasingOnly:              {Major: 23, Minor: 2, Internal: 12},
 	V24_1_SessionBasedLeasingUpgradeDescriptor: {Major: 23, Minor: 2, Internal: 14},
+	V24_1_SystemDatabaseSurvivability:          {Major: 23, Minor: 2, Internal: 16},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster
