@@ -2885,9 +2885,6 @@ func (b *Builder) buildInvertedJoin(
 			return execPlan{}, colOrdMap{}, errors.AssertionFailedf("outputCols should not be empty")
 		}
 		// Assign the continuation column the next unused value in the map.
-		// TODO(mgartner): It's currently safe to use maxOrd like this, but it
-		// is not robust because it's not guaranteed to be the max ordinal, only
-		// an approximate upper-bound.
 		outputCols.Set(join.ContinuationCol, maxOrd+1)
 
 		// leftAndRightCols is only needed for the lifetime of the function, so free
