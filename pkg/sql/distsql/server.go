@@ -188,14 +188,6 @@ func (ds *ServerImpl) setDraining(drain bool) error {
 	return nil
 }
 
-// FlowVerIsCompatible checks a flow's version is compatible with this node's
-// DistSQL version.
-func FlowVerIsCompatible(
-	flowVer, minAcceptedVersion, serverVersion execinfrapb.DistSQLVersion,
-) bool {
-	return flowVer >= minAcceptedVersion && flowVer <= serverVersion
-}
-
 // setupFlow creates a Flow.
 //
 // Args:
@@ -244,7 +236,7 @@ func (ds *ServerImpl) setupFlow(
 		}
 	}()
 
-	if !FlowVerIsCompatible(req.Version, execinfra.MinAcceptedVersion, execinfra.Version) {
+	if req.Version < execinfra.MinAcceptedVersion || req.Version > execinfra.Version {
 		err := errors.Errorf(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
 			req.Version, execinfra.MinAcceptedVersion, execinfra.Version,
