@@ -3256,6 +3256,9 @@ func (og *operationGenerator) getTableColumns(
 func (og *operationGenerator) randColumn(
 	ctx context.Context, tx pgx.Tx, tableName tree.TableName, pctExisting int,
 ) (string, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return "", err
+	}
 	if og.randIntn(100) >= pctExisting {
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
@@ -3282,6 +3285,9 @@ ORDER BY random()
 func (og *operationGenerator) randColumnWithMeta(
 	ctx context.Context, tx pgx.Tx, tableName tree.TableName, pctExisting int,
 ) (column, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return column{}, err
+	}
 	if og.randIntn(100) >= pctExisting {
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
@@ -3371,7 +3377,9 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 func (og *operationGenerator) randParentColumnForFkRelation(
 	ctx context.Context, tx pgx.Tx, unique bool,
 ) (*tree.TableName, *column, error) {
-
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return nil, nil, err
+	}
 	subQuery := strings.Builder{}
 	subQuery.WriteString(`
 		SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable, contype, conkey
@@ -3444,6 +3452,9 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 func (og *operationGenerator) randConstraint(
 	ctx context.Context, tx pgx.Tx, tableName string,
 ) (string, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return "", err
+	}
 	q := fmt.Sprintf(`
   SELECT constraint_name
     FROM [SHOW CONSTRAINTS FROM %s]
@@ -3461,6 +3472,9 @@ ORDER BY random()
 func (og *operationGenerator) randIndex(
 	ctx context.Context, tx pgx.Tx, tableName tree.TableName, pctExisting int,
 ) (string, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return "", err
+	}
 	if og.randIntn(100) >= pctExisting {
 		// We make a unique name for all indices by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
@@ -3485,7 +3499,9 @@ ORDER BY random()
 func (og *operationGenerator) randSequence(
 	ctx context.Context, tx pgx.Tx, pctExisting int, desiredSchema string,
 ) (*tree.TableName, error) {
-
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return nil, err
+	}
 	if desiredSchema != "" {
 		if og.randIntn(100) >= pctExisting {
 			treeSeqName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
@@ -3587,7 +3603,9 @@ ORDER BY random()
 func (og *operationGenerator) randTable(
 	ctx context.Context, tx pgx.Tx, pctExisting int, desiredSchema string,
 ) (*tree.TableName, error) {
-
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return nil, err
+	}
 	if desiredSchema != "" {
 		if og.randIntn(100) >= pctExisting {
 			treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
@@ -3658,6 +3676,9 @@ ORDER BY random()
 func (og *operationGenerator) randView(
 	ctx context.Context, tx pgx.Tx, pctExisting int, desiredSchema string,
 ) (*tree.TableName, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return nil, err
+	}
 	if desiredSchema != "" {
 		if og.randIntn(100) >= pctExisting {
 			treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
@@ -3701,6 +3722,9 @@ func (og *operationGenerator) randView(
 			ExplicitSchema: true,
 		}, tree.Name(fmt.Sprintf("view_%s", og.newUniqueSeqNumSuffix())))
 		return &treeViewName, nil
+	}
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return nil, err
 	}
 	const q = `
   SELECT schema_name, table_name
@@ -3812,6 +3836,9 @@ func (og *operationGenerator) createSchema(ctx context.Context, tx pgx.Tx) (*opS
 func (og *operationGenerator) randSchema(
 	ctx context.Context, tx pgx.Tx, pctExisting int,
 ) (string, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return "", err
+	}
 	if og.randIntn(100) >= pctExisting {
 		return fmt.Sprintf("schema_%s", og.newUniqueSeqNumSuffix()), nil
 	}
@@ -3841,18 +3868,10 @@ func (og *operationGenerator) dropSchema(ctx context.Context, tx pgx.Tx) (*opStm
 	if err != nil {
 		return nil, err
 	}
-	crossReferences := false
-	if schemaExists {
-		crossReferences, err = og.schemaContainsTypesWithCrossSchemaReferences(ctx, tx, schemaName)
-		if err != nil {
-			return nil, err
-		}
-	}
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedSchema, !schemaExists},
 		{pgcode.InvalidSchemaName, schemaName == catconstants.PublicSchemaName},
-		{pgcode.FeatureNotSupported, crossReferences},
 	})
 
 	stmt.sql = fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName)
@@ -4309,6 +4328,11 @@ func (og *operationGenerator) randIntn(topBound int) int {
 	return og.params.rng.Intn(topBound)
 }
 
+// randFloat64 returns an float64 in the range [0,1.0).
+func (og *operationGenerator) randFloat64() float64 {
+	return og.params.rng.Float64()
+}
+
 func (og *operationGenerator) newUniqueSeqNumSuffix() string {
 	og.params.seqNum++
 	return fmt.Sprintf("w%d_%d", og.params.workerID, og.params.seqNum)
@@ -4335,7 +4359,7 @@ func (og *operationGenerator) typeFromTypeName(
 }
 
 // Check if the test is running with a mixed version cluster, with a version
-// less than or equal to the target version number. This can be used to detect
+// less than the target version number. This can be used to detect
 // in mixed version environments if certain errors should be encountered.
 func isClusterVersionLessThan(
 	ctx context.Context, tx pgx.Tx, targetVersion roachpb.Version,
@@ -4349,5 +4373,19 @@ func isClusterVersionLessThan(
 	if err != nil {
 		return false, err
 	}
-	return clusterVersion.LessEq(targetVersion), nil
+	return clusterVersion.Less(targetVersion), nil
+}
+
+func (og *operationGenerator) setSeedInDB(ctx context.Context, tx pgx.Tx) error {
+	if notSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V24_1.Version()); err != nil {
+		return err
+	} else if notSupported {
+		// To allow the schemachange workload to work in a mixed-version state,
+		// this should not be treated as an error.
+		return nil
+	}
+	if _, err := tx.Exec(ctx, "SELECT setseed($1)", og.randFloat64()); err != nil {
+		return err
+	}
+	return nil
 }

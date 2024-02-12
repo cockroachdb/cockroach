@@ -686,7 +686,7 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 // This interface has a method that validates whether a given JWT token is a proper
 // credential for a given user to login.
 type JWTVerifier interface {
-	ValidateJWTLogin(_ *cluster.Settings,
+	ValidateJWTLogin(_ context.Context, _ *cluster.Settings,
 		_ username.SQLUsername,
 		_ []byte,
 		_ *identmap.Conf,
@@ -698,7 +698,7 @@ var jwtVerifier JWTVerifier
 type noJWTConfigured struct{}
 
 func (c *noJWTConfigured) ValidateJWTLogin(
-	_ *cluster.Settings, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
+	_ context.Context, _ *cluster.Settings, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
 ) error {
 	return errors.New("JWT token authentication requires CCL features")
 }
@@ -765,7 +765,7 @@ func authJwtToken(
 		if len(token) == 0 {
 			return security.NewErrPasswordUserAuthFailed(user)
 		}
-		if err = jwtVerifier.ValidateJWTLogin(execCfg.Settings, user, []byte(token), identMap); err != nil {
+		if err = jwtVerifier.ValidateJWTLogin(ctx, execCfg.Settings, user, []byte(token), identMap); err != nil {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
 			return err
 		}

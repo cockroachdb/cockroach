@@ -245,7 +245,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 	}()
 
 	if err := panicAsError(l, func() error {
-		return ss.impl.Run(ctx, l, tr.cluster, tr.newHelper(ctx, l, ss.context))
+		return ss.impl.Run(ctx, l, ss.rng, tr.newHelper(ctx, l, ss.context))
 	}); err != nil {
 		if isContextCanceled(ctx) {
 			l.Printf("step terminated (context canceled)")

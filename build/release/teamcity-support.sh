@@ -105,3 +105,14 @@ verify_docker_image(){
   return $error
 }
 
+
+function is_release_or_master_build(){
+  # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
+  echo "$1" | grep -Eo "^((staging|release|rc)-(v)?[0-9][0-9]\.[0-9]).*|master$" || echo ""
+  #                        ^ Match branches that start with "staging" (extra-ordinary relases),
+  #                        "release" (regular releases, including baking releases, e.g. release-v23.1.15-rc),
+  #                        "rc" (will be used for baking releases in the furure).
+  #                                             ^ "v" is optional to match main release branches, e.g. release-23.2
+  #                                                ^ calver prefix, e.g. 25.1
+  # We don't strictly match the suffix to allow different ones, e.g. "rc" or have none.
+}

@@ -47,7 +47,6 @@ go_test(
         "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
-        "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",

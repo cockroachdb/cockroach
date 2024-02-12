@@ -1359,34 +1359,6 @@ SELECT EXISTS(
 `, tableName.String(), columnName)
 }
 
-func (og *operationGenerator) schemaContainsTypesWithCrossSchemaReferences(
-	ctx context.Context, tx pgx.Tx, schemaName string,
-) (bool, error) {
-	ctes := []CTE{
-		{"descriptors", descJSONQuery},
-		{"functions", functionDescsQuery},
-		{"types", enumDescsQuery},
-		{"referenced_descriptor_ids", `
-				SELECT json_array_elements(descriptor->'referencingDescriptorIds')::INT8 AS id FROM types WHERE schema_id = $1::REGNAMESPACE::INT8
-			UNION ALL
-				SELECT (ref->'id')::INT8 AS id FROM (SELECT json_array_elements(descriptor->'dependedOnBy') AS ref from functions WHERE schema_id = $1::REGNAMESPACE::INT8)
-		`},
-	}
-
-	_, err := Collect(ctx, og, tx, pgx.RowToMap, With(ctes, `SELECT * FROM types WHERE schema_id = $1::REGNAMESPACE::INT8`), schemaName)
-	if err != nil {
-		return false, err
-	}
-
-	result, err := Collect(ctx, og, tx, pgx.RowToMap, With(ctes, `
-		SELECT $1::REGNAMESPACE::INT8 AS this_schema_id, * FROM descriptors d
-		WHERE schema_id != $1::REGNAMESPACE::INT8
-		AND EXISTS(SELECT * FROM referenced_descriptor_ids WHERE id = d.id)
-		AND (NOT descriptor ? 'table')
-	`), schemaName)
-	return len(result) > 0, err
-}
-
 // enumMemberPresent determines whether val is a member of the enum.
 // This includes non-public members.
 func (og *operationGenerator) enumMemberPresent(

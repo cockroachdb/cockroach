@@ -115,11 +115,11 @@ func (s *stageKey) AsInt() int {
 // String implements fmt.Stringer
 func (s *stageKey) String() string {
 	if s.minOrdinal == s.maxOrdinal {
-		return fmt.Sprintf("(phase = %s stageOrdinal=%d)",
-			s.phase, s.minOrdinal)
+		return fmt.Sprintf("(phase = %s stageOrdinal=%d rollback=%t)",
+			s.phase, s.minOrdinal, s.rollback)
 	}
-	return fmt.Sprintf("(phase = %s stageMinOrdinal=%d stageMaxOrdinal=%d),",
-		s.phase, s.minOrdinal, s.maxOrdinal)
+	return fmt.Sprintf("(phase = %s stageMinOrdinal=%d stageMaxOrdinal=%d rollback=%t),",
+		s.phase, s.minOrdinal, s.maxOrdinal, s.rollback)
 }
 
 // IsEmpty detects if a stage key is empty.
@@ -152,7 +152,7 @@ func makeStageExecStmtMap() *stageExecStmtMap {
 func (m *stageExecStmtMap) getExecStmts(targetKey stageKey) []*stageExecStmt {
 	var stmts []*stageExecStmt
 	if targetKey.minOrdinal != targetKey.maxOrdinal {
-		panic(fmt.Sprintf("only a single ordinal key can be looked up %v ", targetKey))
+		panic(fmt.Sprintf("only a single ordinal key can be looked up %s ", &targetKey))
 	}
 	for _, key := range m.entries {
 		if key.stageKey.phase == targetKey.phase &&
@@ -485,9 +485,9 @@ func (e *stageExecStmt) Exec(
 			if e.expectedOutput != actualOutput {
 				if !rewrite {
 					t.Fatalf(
-						"query '%s' ($stageKey=%d,$successfulStageCount=%d): expected:\n%v\ngot:\n%v\n",
+						"query '%s' ($stageKey=%s,$successfulStageCount=%d): expected:\n%v\ngot:\n%v\n",
 						stmt,
-						stageVariables.stage.AsInt()*1000,
+						stageVariables.stage.String(),
 						stageVariables.successfulStageCount,
 						e.expectedOutput,
 						actualOutput,

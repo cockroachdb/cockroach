@@ -290,7 +290,7 @@ var opWeights = []int{
 	createView:                        1,
 	dropFunction:                      1,
 	dropIndex:                         1,
-	dropSchema:                        0, // Disabled and tracked with 116792.
+	dropSchema:                        1,
 	dropSequence:                      1,
 	dropTable:                         1,
 	dropView:                          1,
