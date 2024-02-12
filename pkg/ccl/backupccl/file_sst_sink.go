@@ -50,7 +50,7 @@ type fileSSTSink struct {
 	flushedFiles []backuppb.BackupManifest_File
 	flushedSize  int64
 
-	// flushedRevStart is the earliest start time of the export responses
+	// flushedRevStart is the latest start time of the export responses
 	// written to this sink since the last flush. Resets on each flush.
 	flushedRevStart hlc.Timestamp
 

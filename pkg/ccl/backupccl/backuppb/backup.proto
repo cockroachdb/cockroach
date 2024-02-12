@@ -72,8 +72,11 @@ message BackupManifest {
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
   MVCCFilter mvcc_filter = 13 [(gogoproto.customname) = "MVCCFilter"];
-  // Even if StartTime is zero, we only get revisions since gc threshold, so
-  // do not allow AS OF SYSTEM TIME before revision_start_time.
+
+  // RevisionStartTime records the maximum GC threshold observed over all export
+  // requests taken during a revision history backup. Even if StartTime is zero,
+  // we only get revisions since gc threshold, so do not allow AS OF SYSTEM TIME
+  // before revision_start_time.
   util.hlc.Timestamp revision_start_time = 17 [(gogoproto.nullable) = false];
 
   // Spans contains the spans requested for backup. The keyranges covered by
