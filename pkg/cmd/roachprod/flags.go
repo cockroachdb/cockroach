@@ -339,6 +339,10 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd} {
 		cmd.Flags().Int64Var(&startOpts.NumFilesLimit, "num-files-limit", startOpts.NumFilesLimit,
 			"limit the number of files that can be created by the cockroach process")
+		cmd.Flags().IntVar(&startOpts.SQLPort,
+			"sql-port", startOpts.SQLPort, "port on which to listen for SQL clients")
+		cmd.Flags().IntVar(&startOpts.AdminUIPort,
+			"admin-ui-port", startOpts.AdminUIPort, "port to serve the admin UI on")
 	}
 
 	for _, cmd := range []*cobra.Command{
