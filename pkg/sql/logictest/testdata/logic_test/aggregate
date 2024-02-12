@@ -987,22 +987,22 @@ statement ok
 UPDATE mnop SET o = n::decimal, p = (n * 10)::bigint
 
 query RRR
-SELECT round(variance(n), 2), round(variance(n), 2), round(variance(p)) FROM mnop
+SELECT round(variance(n), 2), round(variance(o), 2), round(variance(p)) FROM mnop
 ----
 0.08 0.08 9
 
 query RRR
-SELECT round(var_pop(n), 2), round(var_pop(n), 2), round(var_pop(p)) FROM mnop
+SELECT round(var_pop(n), 2), round(var_pop(o), 2), round(var_pop(p)) FROM mnop
 ----
 0.08 0.08 9
 
 query RRR
-SELECT round(stddev_samp(n), 2), round(stddev(n), 2), round(stddev_samp(p)) FROM mnop
+SELECT round(stddev_samp(n), 2), round(stddev_samp(o), 2), round(stddev_samp(p)) FROM mnop
 ----
 0.29 0.29 3
 
 query RRR
-SELECT round(stddev_pop(n), 2), round(stddev_pop(n), 2), round(stddev_pop(p)) FROM mnop
+SELECT round(stddev_pop(n), 2), round(stddev_pop(o), 2), round(stddev_pop(p)) FROM mnop
 ----
 0.29 0.29 3
 
