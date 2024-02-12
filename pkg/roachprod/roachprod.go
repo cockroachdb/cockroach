@@ -608,13 +608,6 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 	if err != nil {
 		return err
 	}
-	// For GCP clusters we need to use the config.OSUser even if the client
-	// requested the shared user.
-	for i := range installCluster.VMs {
-		if cloudCluster.VMs[i].Provider == gce.ProviderName {
-			installCluster.VMs[i].RemoteUser = config.OSUser.Username
-		}
-	}
 	if err := installCluster.Wait(ctx, l); err != nil {
 		return err
 	}
@@ -1385,11 +1378,11 @@ func Create(
 			if retErr == nil {
 				return
 			}
-			l.Errorf("Cleaning up partially-created cluster (prev err: %s)\n", retErr)
+			l.Errorf("Cleaning up partially-created cluster (prev err: %s)", retErr)
 			if err := cleanupFailedCreate(l, clusterName); err != nil {
-				l.Errorf("Error while cleaning up partially-created cluster: %s\n", err)
+				l.Errorf("Error while cleaning up partially-created cluster: %s", err)
 			} else {
-				l.Errorf("Cleaning up OK\n")
+				l.Errorf("Cleaning up OK")
 			}
 		}()
 	} else {
