@@ -10,6 +10,12 @@
 
 package execversion
 
+import (
+	"context"
+
+	"github.com/cockroachdb/errors"
+)
+
 // DistSQLVersion identifies DistSQL engine versions.
 type DistSQLVersion uint32
 
@@ -63,11 +69,27 @@ type DistSQLVersion uint32
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
+// TODO: update comment.
 const Version DistSQLVersion = 71
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
 const MinAcceptedVersion DistSQLVersion = 71
+
+type versionKey struct{}
+
+func WithVersion(ctx context.Context, version DistSQLVersion) context.Context {
+	return context.WithValue(ctx, versionKey{}, version)
+}
+
+func VersionFromContext(ctx context.Context) DistSQLVersion {
+	val := ctx.Value(versionKey{})
+	if v, ok := val.(DistSQLVersion); !ok {
+		panic(errors.AssertionFailedf("didn't find execversion in context.Context"))
+	} else {
+		return v
+	}
+}
 
 /*
 
