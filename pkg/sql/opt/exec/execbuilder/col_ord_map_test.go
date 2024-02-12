@@ -11,6 +11,7 @@
 package execbuilder
 
 import (
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -24,17 +25,12 @@ func TestColOrdMap(t *testing.T) {
 	const maxCol = 100
 	m := newColOrdMap(maxCol)
 	oracle := make(map[opt.ColumnID]int)
-
-	if m.MaxOrd() != -1 {
-		t.Errorf("expected empty map to have MaxOrd of -1, got %d", m.MaxOrd())
-	}
-
 	rng, _ := randutil.NewTestRand()
 
 	const numOps = 1000
 	for i := 0; i < numOps; i++ {
 		col := opt.ColumnID(rng.Intn(maxCol + 1))
-		ord := int(rng.Int31())
+		ord := rng.Intn(math.MaxInt32)
 
 		oracle[col] = ord
 		m.Set(col, ord)
@@ -76,4 +72,37 @@ func validate(t *testing.T, m colOrdMap, oracle map[opt.ColumnID]int) {
 			t.Errorf("unexpected col:ord in map %d:%d, oracle: %v", col, ord, oracle)
 		}
 	})
+}
+
+func TestMaxOrd(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const maxCol = 100
+	m := newColOrdMap(maxCol)
+
+	assertMax := func(expectedMax int) {
+		maxOrd := m.MaxOrd()
+		if maxOrd != expectedMax {
+			t.Errorf("expected empty map to have MaxOrd of %d, got %d", expectedMax, maxOrd)
+		}
+	}
+
+	// An empty map has a max ordinal of -1.
+	assertMax(-1)
+
+	m.Set(1, 2)
+	assertMax(2)
+
+	m.Set(1, 3)
+	m.Set(2, 3)
+	assertMax(3)
+
+	m.Set(1, 1)
+	assertMax(3)
+
+	m.Set(2, 1)
+	assertMax(1)
+
+	m.Set(1, 0)
+	assertMax(1)
 }
