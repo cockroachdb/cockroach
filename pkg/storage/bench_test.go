@@ -2106,12 +2106,12 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		require.NoError(b, eng.IngestLocalFiles(ctx, []string{sstFileName}))
 	}
 	for i := 0; i < b.N; i++ {
-		rw := eng.NewReadOnly(StandardDurability)
+		ro := eng.NewReader(StandardDurability)
 		ts := hlc.Timestamp{WallTime: int64(numVersions) + 5}
 		startKey := makeKey(nil, 0)
 		endKey := makeKey(nil, totalNumKeys+1)
 		iter, err := newMVCCIterator(
-			ctx, rw, ts, false, false, IterOptions{
+			ctx, ro, ts, false, false, IterOptions{
 				KeyTypes:   IterKeyTypePointsAndRanges,
 				LowerBound: startKey,
 				UpperBound: endKey,
@@ -2134,6 +2134,6 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 			fmt.Printf("stats: %s\n", stats.Stats.String())
 		}
 		iter.Close()
-		rw.Close()
+		ro.Close()
 	}
 }

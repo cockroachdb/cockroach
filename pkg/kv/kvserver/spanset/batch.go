@@ -749,6 +749,14 @@ func makeSpanSetReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Times
 	}
 }
 
+// NewReader returns a storage.Reader that asserts access of the underlying
+// Reader against the given SpanSet at a given timestamp. If zero timestamp is
+// provided, accesses are considered non-MVCC.
+func NewReader(r storage.Reader, spans *SpanSet, ts hlc.Timestamp) storage.Reader {
+	spans = addLockTableSpans(spans)
+	return spanSetReader{r: r, spans: spans, ts: ts}
+}
+
 // NewReadWriterAt returns a storage.ReadWriter that asserts access of the
 // underlying ReadWriter against the given SpanSet at a given timestamp.
 // If zero timestamp is provided, accesses are considered non-MVCC.

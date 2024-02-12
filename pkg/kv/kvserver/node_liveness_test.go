@@ -1384,7 +1384,7 @@ func BenchmarkNodeLivenessScanStorage(b *testing.B) {
 			ScanStats: ss,
 		}
 		scanRes, err := storage.MVCCScan(
-			ctx, eng.NewReadOnly(storage.StandardDurability), keys.NodeLivenessPrefix,
+			ctx, eng.NewReader(storage.StandardDurability), keys.NodeLivenessPrefix,
 			keys.NodeLivenessKeyMax, hlc.MaxTimestamp, opts)
 		if err != nil {
 			b.Fatal(err.Error())

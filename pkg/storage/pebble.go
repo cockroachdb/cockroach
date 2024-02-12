@@ -2233,6 +2233,11 @@ func (p *Pebble) NewBatch() Batch {
 	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), p.settings, p, p)
 }
 
+// NewReader implements the Engine interface.
+func (p *Pebble) NewReader(durability DurabilityRequirement) Reader {
+	return newPebbleReadOnly(p, durability)
+}
+
 // NewReadOnly implements the Engine interface.
 func (p *Pebble) NewReadOnly(durability DurabilityRequirement) ReadWriter {
 	return newPebbleReadOnly(p, durability)

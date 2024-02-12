@@ -459,7 +459,7 @@ func LoadTerm(
 		return kvpb.RaftTerm(entry.Term), nil
 	}
 
-	reader := eng.NewReadOnly(storage.StandardDurability)
+	reader := eng.NewReader(storage.StandardDurability)
 	defer reader.Close()
 
 	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
@@ -592,7 +592,7 @@ func LoadEntries(
 		return nil
 	}
 
-	reader := eng.NewReadOnly(storage.StandardDurability)
+	reader := eng.NewReader(storage.StandardDurability)
 	defer reader.Close()
 	if err := raftlog.Visit(ctx, reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, 0, 0, err
