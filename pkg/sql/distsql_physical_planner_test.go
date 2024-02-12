@@ -1154,7 +1154,6 @@ func TestPartitionSpans(t *testing.T) {
 
 			gw := gossip.MakeOptionalGossip(mockGossip)
 			dsp := DistSQLPlanner{
-				planVersion:          execinfra.Version,
 				st:                   cluster.MakeTestingClusterSettings(),
 				gatewaySQLInstanceID: base.SQLInstanceID(tsp.nodes[tc.gatewayNode-1].NodeID),
 				stopper:              stopper,
@@ -1442,186 +1441,6 @@ func TestShouldPickGatewayNode(t *testing.T) {
 	}
 }
 
-// Test that span partitioning takes into account the advertised acceptable
-// versions of each node. Spans for which the owner node doesn't support our
-// plan's version will be planned on the gateway.
-func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// The spans that we're going to plan for.
-	span := roachpb.Span{Key: roachpb.Key("A"), EndKey: roachpb.Key("Z")}
-	gatewayNode := roachpb.NodeID(2)
-	ranges := []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}}
-
-	testCases := []struct {
-		// the test's name
-		name string
-
-		// planVersion is the DistSQL version that this plan is targeting.
-		// We'll play with this version and expect nodes to be skipped because of
-		// this.
-		planVersion execinfrapb.DistSQLVersion
-
-		// The versions accepted by each node.
-		nodeVersions map[base.SQLInstanceID]execinfrapb.DistSQLVersionGossipInfo
-
-		// nodesNotAdvertisingDistSQLVersion is the set of nodes for which gossip is
-		// not going to have information about the supported DistSQL version. This
-		// is to simulate CRDB 1.0 nodes which don't advertise this information.
-		nodesNotAdvertisingDistSQLVersion map[base.SQLInstanceID]struct{}
-
-		// expected result: a map of node to list of spans.
-		partitions map[base.SQLInstanceID][][2]string
-	}{
-		{
-			// In the first test, all nodes are compatible.
-			name:        "current_version",
-			planVersion: 2,
-			nodeVersions: map[base.SQLInstanceID]execinfrapb.DistSQLVersionGossipInfo{
-				1: {
-					MinAcceptedVersion: 1,
-					Version:            2,
-				},
-				2: {
-					MinAcceptedVersion: 1,
-					Version:            2,
-				},
-			},
-			partitions: map[base.SQLInstanceID][][2]string{
-				1: {{"A", "B"}, {"C", "Z"}},
-				2: {{"B", "C"}},
-			},
-		},
-		{
-			// Plan version is incompatible with node 1. We expect everything to be
-			// assigned to the gateway.
-			// Remember that the gateway is node 2.
-			name:        "next_version",
-			planVersion: 3,
-			nodeVersions: map[base.SQLInstanceID]execinfrapb.DistSQLVersionGossipInfo{
-				1: {
-					MinAcceptedVersion: 1,
-					Version:            2,
-				},
-				2: {
-					MinAcceptedVersion: 3,
-					Version:            3,
-				},
-			},
-			partitions: map[base.SQLInstanceID][][2]string{
-				2: {{"A", "Z"}},
-			},
-		},
-		{
-			// Like the above, except node 1 is not gossiping its version (simulating
-			// a crdb 1.0 node).
-			name:        "crdb_1.0",
-			planVersion: 3,
-			nodeVersions: map[base.SQLInstanceID]execinfrapb.DistSQLVersionGossipInfo{
-				2: {
-					MinAcceptedVersion: 3,
-					Version:            3,
-				},
-			},
-			nodesNotAdvertisingDistSQLVersion: map[base.SQLInstanceID]struct{}{
-				1: {},
-			},
-			partitions: map[base.SQLInstanceID][][2]string{
-				2: {{"A", "Z"}},
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-
-			stopper := stop.NewStopper()
-			defer stopper.Stop(context.Background())
-
-			// We need a mock Gossip to contain addresses for the nodes. Otherwise the
-			// DistSQLPlanner will not plan flows on them. This Gossip will also
-			// reflect tc.nodesNotAdvertisingDistSQLVersion.
-			testStopper := stop.NewStopper()
-			defer testStopper.Stop(context.Background())
-			mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry())
-			var nodeDescs []*roachpb.NodeDescriptor
-			for i := 1; i <= 2; i++ {
-				sqlInstanceID := base.SQLInstanceID(i)
-				desc := &roachpb.NodeDescriptor{
-					NodeID:  roachpb.NodeID(sqlInstanceID),
-					Address: util.UnresolvedAddr{AddressField: fmt.Sprintf("addr%d", i)},
-				}
-				if err := mockGossip.SetNodeDescriptor(desc); err != nil {
-					t.Fatal(err)
-				}
-				if _, ok := tc.nodesNotAdvertisingDistSQLVersion[sqlInstanceID]; !ok {
-					verInfo := tc.nodeVersions[sqlInstanceID]
-					if err := mockGossip.AddInfoProto(
-						gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
-						&verInfo,
-						0, // ttl - no expiration
-					); err != nil {
-						t.Fatal(err)
-					}
-				}
-
-				nodeDescs = append(nodeDescs, desc)
-			}
-			tsp := &testSpanResolver{
-				nodes:  nodeDescs,
-				ranges: ranges,
-			}
-
-			gw := gossip.MakeOptionalGossip(mockGossip)
-			dsp := DistSQLPlanner{
-				planVersion:          tc.planVersion,
-				st:                   cluster.MakeTestingClusterSettings(),
-				gatewaySQLInstanceID: base.SQLInstanceID(tsp.nodes[gatewayNode-1].NodeID),
-				stopper:              stopper,
-				spanResolver:         tsp,
-				gossip:               gw,
-				nodeHealth: distSQLNodeHealth{
-					gossip: gw,
-					connHealth: func(roachpb.NodeID, rpc.ConnectionClass) error {
-						// All the nodes are healthy.
-						return nil
-					},
-					isAvailable: func(base.SQLInstanceID) bool {
-						return true
-					},
-				},
-				codec: keys.SystemSQLCodec,
-			}
-
-			ctx := context.Background()
-			planCtx := dsp.NewPlanningCtx(ctx, &extendedEvalContext{
-				Context: eval.Context{Codec: keys.SystemSQLCodec},
-			}, nil, nil, DistributionTypeSystemTenantOnly)
-			partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span})
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			resMap := make(map[base.SQLInstanceID][][2]string)
-			for _, p := range partitions {
-				if _, ok := resMap[p.SQLInstanceID]; ok {
-					t.Fatalf("node %d shows up in multiple partitions", p)
-				}
-				var spans [][2]string
-				for _, s := range p.Spans {
-					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
-				}
-				resMap[p.SQLInstanceID] = spans
-			}
-
-			if !reflect.DeepEqual(resMap, tc.partitions) {
-				t.Errorf("expected partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
-			}
-		})
-	}
-}
-
 // Test that a node whose descriptor info is not accessible through gossip is
 // not used. This is to simulate nodes that have been decomisioned and also
 // nodes that have been "replaced" by another node at the same address (which, I
@@ -1675,7 +1494,6 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 
 	gw := gossip.MakeOptionalGossip(mockGossip)
 	dsp := DistSQLPlanner{
-		planVersion:          execinfra.Version,
 		st:                   cluster.MakeTestingClusterSettings(),
 		gatewaySQLInstanceID: base.SQLInstanceID(tsp.nodes[gatewayNode-1].NodeID),
 		stopper:              stopper,
