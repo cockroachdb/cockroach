@@ -8,11 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// This file lives here instead of sql/distsql to avoid an import cycle.
+package execversion
 
-package execinfra
-
-import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+// DistSQLVersion identifies DistSQL engine versions.
+type DistSQLVersion uint32
 
 // Version identifies the distsql protocol version.
 //
@@ -64,11 +63,11 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 71
+const Version DistSQLVersion = 71
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 71
+const MinAcceptedVersion DistSQLVersion = 71
 
 /*
 
