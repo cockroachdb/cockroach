@@ -374,7 +374,7 @@ func CanSatisfySurvivalGoal(survivalGoal descpb.SurvivalGoal, numRegions int) er
 }
 
 // ValidateRegionConfig validates that the given RegionConfig is valid.
-func ValidateRegionConfig(config RegionConfig) error {
+func ValidateRegionConfig(config RegionConfig, isSystemDatabase bool) error {
 	if config.regionEnumID == descpb.InvalidID {
 		return errors.AssertionFailedf("expected a valid multi-region enum ID to be initialized")
 	}
@@ -406,7 +406,13 @@ func ValidateRegionConfig(config RegionConfig) error {
 		return err
 	}
 
-	return CanSatisfySurvivalGoal(config.survivalGoal, len(config.regions))
+	// The system database can be configured to be SURVIVE REGION without enough
+	// regions. This would just mean that it will behave as SURVIVE ZONE until
+	// enough regions are added by the user.
+	if !isSystemDatabase {
+		return CanSatisfySurvivalGoal(config.survivalGoal, len(config.regions))
+	}
+	return nil
 }
 
 // ValidateSuperRegions validates that:
@@ -532,7 +538,7 @@ func IsMemberOfSuperRegion(name catpb.RegionName, config RegionConfig) (bool, st
 
 // CanDropRegion returns an error if the survival goal doesn't allow for
 // removing regions or if the region is part of a super region.
-func CanDropRegion(name catpb.RegionName, config RegionConfig) error {
+func CanDropRegion(name catpb.RegionName, config RegionConfig, isSystemDatabase bool) error {
 	isMember, superRegion := IsMemberOfSuperRegion(name, config)
 	if isMember {
 		return errors.WithHintf(
@@ -540,7 +546,10 @@ func CanDropRegion(name catpb.RegionName, config RegionConfig) error {
 			"you must first drop super region %s before you can drop the region %s", superRegion, name,
 		)
 	}
-	return CanSatisfySurvivalGoal(config.survivalGoal, len(config.regions)-1)
+	if !isSystemDatabase {
+		return CanSatisfySurvivalGoal(config.survivalGoal, len(config.regions)-1)
+	}
+	return nil
 }
 
 // getHomeRegionConstraintConjunction returns the ConstraintsConjunction from

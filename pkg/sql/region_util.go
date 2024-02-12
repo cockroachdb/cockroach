@@ -1053,18 +1053,34 @@ func (p *planner) refreshZoneConfigsForTables(
 	if err != nil {
 		return err
 	}
+	// System databases will have regional by row tables configured
+	// as survive zone.
+	var surviveZoneCfg *multiregion.RegionConfig
+	if desc.GetID() == keys.SystemDatabaseID {
+		tempCfg, err := SynthesizeRegionConfig(ctx, p.txn, desc.GetID(), p.Descriptors(), SynthesizeRegionConfigOptionForceSurvivalZone)
+		if err != nil {
+			return err
+		}
+		surviveZoneCfg = &tempCfg
+	}
 
 	return p.forEachMutableTableInDatabase(
 		ctx,
 		desc,
 		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			if opts.filterFunc(tbDesc) {
+				targetRegionCfg := &regionConfig
+				// On system databases we will force a survive zone config
+				// for regional by row tables.
+				if surviveZoneCfg != nil && tbDesc.IsLocalityRegionalByRow() {
+					targetRegionCfg = surviveZoneCfg
+				}
 				return ApplyZoneConfigForMultiRegionTable(
 					ctx,
 					p.InternalSQLTxn(),
 					p.ExecCfg(),
 					p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-					regionConfig,
+					*targetRegionCfg,
 					tbDesc,
 					ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 				)
@@ -1238,7 +1254,9 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 // ResetMultiRegionZoneConfigsForTable takes a table ID and resets that table's
 // zone configurations to match what would have originally been set by the
 // multi-region syntax.
-func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64) error {
+func (p *planner) ResetMultiRegionZoneConfigsForTable(
+	ctx context.Context, id int64, forceZoneSurvival bool,
+) error {
 	desc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, descpb.ID(id))
 	if err != nil {
 		return errors.Wrapf(err, "error resolving referenced table ID %d", id)
@@ -1253,7 +1271,13 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id in
 	if desc.LocalityConfig == nil {
 		return nil
 	}
-	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, desc.GetParentID(), p.Descriptors())
+	var opts []SynthesizeRegionConfigOption
+	// System databases will have regional by row tables configured
+	// as survive zone.
+	if forceZoneSurvival {
+		opts = []SynthesizeRegionConfigOption{SynthesizeRegionConfigOptionForceSurvivalZone}
+	}
+	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, desc.GetParentID(), p.Descriptors(), opts...)
 	if err != nil {
 		return err
 	}
@@ -1386,9 +1410,10 @@ func (p *planner) CurrentDatabaseRegionConfig(
 }
 
 type synthesizeRegionConfigOptions struct {
-	includeOffline bool
-	forValidation  bool
-	useCache       bool
+	includeOffline    bool
+	forValidation     bool
+	useCache          bool
+	forceSurvivalGoal *descpb.SurvivalGoal
 }
 
 // SynthesizeRegionConfigOption is an option to pass into SynthesizeRegionConfig.
@@ -1411,6 +1436,13 @@ var SynthesizeRegionConfigOptionForValidation SynthesizeRegionConfigOption = fun
 // config.
 var SynthesizeRegionConfigOptionUseCache SynthesizeRegionConfigOption = func(o *synthesizeRegionConfigOptions) {
 	o.useCache = true
+}
+
+// SynthesizeRegionConfigOptionForceSurvivalZone forces the zone survival goal
+// instead of inheriting from the system database.
+var SynthesizeRegionConfigOptionForceSurvivalZone SynthesizeRegionConfigOption = func(o *synthesizeRegionConfigOptions) {
+	z := descpb.SurvivalGoal_ZONE_FAILURE
+	o.forceSurvivalGoal = &z
 }
 
 // ErrNotMultiRegionDatabase is returned from SynthesizeRegionConfig when the
@@ -1467,10 +1499,14 @@ func SynthesizeRegionConfig(
 		}
 		return nil
 	})
+	survivalGoal := dbDesc.GetRegionConfig().SurvivalGoal
+	if o.forceSurvivalGoal != nil {
+		survivalGoal = *o.forceSurvivalGoal
+	}
 	regionConfig := multiregion.MakeRegionConfig(
 		regionNames,
 		dbDesc.GetRegionConfig().PrimaryRegion,
-		dbDesc.GetRegionConfig().SurvivalGoal,
+		survivalGoal,
 		regionEnumDesc.GetID(),
 		dbDesc.GetRegionConfig().Placement,
 		regionEnumDesc.TypeDesc().RegionConfig.SuperRegions,
@@ -1480,7 +1516,7 @@ func SynthesizeRegionConfig(
 		multiregion.WithSecondaryRegion(dbDesc.GetRegionConfig().SecondaryRegion),
 	)
 
-	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
+	if err := multiregion.ValidateRegionConfig(regionConfig, dbDesc.GetID() == keys.SystemDatabaseID); err != nil {
 		return multiregion.RegionConfig{}, err
 	}
 
@@ -2467,6 +2503,24 @@ func (p *planner) GetRangeDescByID(
 	return rangeDesc, nil
 }
 
+func (p *planner) setSystemDatabaseSurvival(ctx context.Context) error {
+	// Retrieve the system database descriptor and ensure it supports
+	// multi-region
+	systemDB, err := p.Descriptors().MutableByID(p.txn).Database(ctx, keys.SystemDatabaseID)
+	if err != nil {
+		return err
+	}
+
+	// Alter the survivability goal on the system database, if we are on
+	// a new enough version.
+	if err := p.alterDatabaseSurvivalGoal(ctx,
+		systemDB, tree.SurvivalGoalRegionFailure, "alter system database to survive region failure only"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // optimizeSystemDatabase configures some tables in the system data as
 // global and regional by row. The locality changes reduce how long it
 // takes a server to start up in a multi-region deployment.
@@ -2513,7 +2567,7 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 
 	// Retrieve the system database descriptor and ensure it supports
 	// multi-region
-	systemDB, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Database(ctx, keys.SystemDatabaseID)
+	systemDB, err := p.Descriptors().MutableByID(p.txn).Database(ctx, keys.SystemDatabaseID)
 	if err != nil {
 		return err
 	}
@@ -2546,7 +2600,7 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 	}
 
 	applyLocalityChange := func(desc *tabledesc.Mutable, locality string) error {
-		if err := p.ResetMultiRegionZoneConfigsForTable(ctx, int64(desc.GetID())); err != nil {
+		if err := p.ResetMultiRegionZoneConfigsForTable(ctx, int64(desc.GetID()), locality == "regional by row"); err != nil {
 			return err
 		}
 
@@ -2564,8 +2618,10 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 	}
 
 	partitionByRegion := func(table *tabledesc.Mutable) error {
+		// System databases will have regional by row tables configured
+		// as survive zone.
 		regionConfig, err := SynthesizeRegionConfig(
-			ctx, p.txn, table.GetParentID(), p.Descriptors(),
+			ctx, p.txn, table.GetParentID(), p.Descriptors(), SynthesizeRegionConfigOptionForceSurvivalZone,
 		)
 		if err != nil {
 			return err

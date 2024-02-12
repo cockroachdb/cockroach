@@ -261,7 +261,7 @@ func (so *importRegionOperator) ValidateAllMultiRegionZoneConfigsInCurrentDataba
 // ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
 // interface.
 func (so *importRegionOperator) ResetMultiRegionZoneConfigsForTable(
-	_ context.Context, _ int64,
+	_ context.Context, _ int64, _ bool,
 ) error {
 	return errors.WithStack(errRegionOperator)
 }

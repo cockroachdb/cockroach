@@ -2503,7 +2503,7 @@ func planDatabaseModifiersForRestore(
 			nil,
 			descpb.ZoneConfigExtensions{},
 		)
-		if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
+		if err := multiregion.ValidateRegionConfig(regionConfig, db.ID == keys.SystemDatabaseID); err != nil {
 			return nil, nil, err
 		}
 		if err := db.SetInitialMultiRegionConfig(&regionConfig); err != nil {

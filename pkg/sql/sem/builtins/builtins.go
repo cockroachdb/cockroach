@@ -7154,6 +7154,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 				if err := evalCtx.Regions.ResetMultiRegionZoneConfigsForTable(
 					ctx,
 					id,
+					false,
 				); err != nil {
 					return nil, err
 				}
