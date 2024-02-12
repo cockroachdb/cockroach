@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -169,8 +170,7 @@ func (m *migrationServer) SyncAllEngines(
 		m.server.node.waitForAdditionalStoreInit()
 
 		for _, eng := range m.server.engines {
-			batch := eng.NewBatch()
-			if err := batch.LogData(nil); err != nil {
+			if err := storage.WriteSyncNoop(eng); err != nil {
 				return err
 			}
 		}

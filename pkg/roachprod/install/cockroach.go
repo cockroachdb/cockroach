@@ -1296,20 +1296,15 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 		serviceMode = "EXTERNAL"
 	}
 
-	var virtualClusterStmts []string
 	if virtualClusterID <= 0 {
 		// If the virtual cluster metadata does not exist yet, create it.
-		virtualClusterStmts = append(virtualClusterStmts,
-			fmt.Sprintf("CREATE TENANT '%s'", startOpts.VirtualClusterName),
-		)
+		_, err = runSQL(fmt.Sprintf("CREATE TENANT '%s'", startOpts.VirtualClusterName))
+		if err != nil {
+			return -1, err
+		}
 	}
 
-	virtualClusterStmts = append(virtualClusterStmts, fmt.Sprintf(
-		"ALTER TENANT '%s' START SERVICE %s",
-		startOpts.VirtualClusterName, serviceMode),
-	)
-
-	_, err = runSQL(strings.Join(virtualClusterStmts, "; "))
+	_, err = runSQL(fmt.Sprintf("ALTER TENANT '%s' START SERVICE %s", startOpts.VirtualClusterName, serviceMode))
 	if err != nil {
 		return -1, err
 	}

@@ -73,10 +73,10 @@ func plan(ot *opttester.OptTester, t *testing.T) string {
 	}
 	explainPlan, err := ot.ExecBuild(f, mem, expr)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if explainPlan == nil {
-		t.Error("Couldn't ExecBuild memo, use a logictest instead?")
+		t.Fatal("Couldn't ExecBuild memo, use a logictest instead?")
 	}
 	flags := explain.Flags{HideValues: true, Deflake: explain.DeflakeAll, OnlyShape: true}
 	ob := explain.NewOutputBuilder(flags)
