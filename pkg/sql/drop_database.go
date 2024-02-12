@@ -218,7 +218,6 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	// TODO(jeffswenson): delete once region_livess is implemented (#107966)
 	if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
 		return err
 	}
