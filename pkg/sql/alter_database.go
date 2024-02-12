@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1327,6 +1328,14 @@ func (p *planner) alterDatabaseSurvivalGoal(
 // to the max survival goal of all non-system databases, which means that the
 // survival goal could be either upgraded or downgraded.
 func (p *planner) maybeUpdateSystemDBSurvivalGoal(ctx context.Context) error {
+	// Now that the zone survival goal is properly supported on the system database,
+	// with region liveness support we no longer to inherit the stronger guarantees
+	// assigned to other databases. i.e. Previously if any database had survive region,
+	// the system database would be forced to inherit those stronger guarantees.
+	if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V24_1_SystemDatabaseSurvivability) {
+		return nil
+	}
+
 	sysDB, err := p.Descriptors().MutableByID(p.Txn()).Database(ctx, keys.SystemDatabaseID)
 	if err != nil {
 		return err
