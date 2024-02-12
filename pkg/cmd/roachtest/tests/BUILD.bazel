@@ -249,7 +249,6 @@ go_library(
         "//pkg/testutils/sqlutils",
         "//pkg/ts/tspb",
         "//pkg/util",
-        "//pkg/util/binfetcher",
         "//pkg/util/cancelchecker",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
