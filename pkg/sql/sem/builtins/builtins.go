@@ -8108,6 +8108,70 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Volatility: volatility.Immutable,
 		},
 	),
+	"crdb_internal.statement_fingerprint": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
+	},
+		stringOverload1(
+			func(_ context.Context, _ *eval.Context, sql string) (tree.Datum, error) {
+				if len(sql) == 0 {
+					return tree.NewDString(""), nil
+				}
+
+				parsed, err := parser.ParseOne(sql)
+				if err != nil {
+					// If parsing is unsuccessful, we shouldn't return an error, however
+					// we can't return the original stmt since this function is used to
+					// hide sensitive information.
+					return tree.NewDString(""), nil //nolint:returnerrcheck
+				}
+				sqlFingerprint := tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants|tree.FmtForFingerprint)
+				return tree.NewDString(sqlFingerprint), nil
+			},
+			types.String,
+			"Generates normalized statement fingerprint for a  SQL statement. String provided must contain at most "+
+				"1 statement. (Hint: one way to easily quote arbitrary SQL is to use dollar-quotes.)",
+			volatility.Immutable,
+		),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.StringArray}},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				result := tree.NewDArray(types.String)
+
+				for _, sqlDatum := range arr.Array {
+					if sqlDatum == tree.DNull {
+						if err := result.Append(tree.DNull); err != nil {
+							return nil, err
+						}
+						continue
+					}
+
+					sql := string(tree.MustBeDString(sqlDatum))
+					sqlFingerprint := ""
+
+					if len(sql) != 0 {
+						parsed, err := parser.ParseOne(sql)
+						// Leave result as empty string on parsing error.
+						if err == nil {
+							sqlFingerprint = tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants|tree.FmtForFingerprint)
+						}
+					}
+
+					if err := result.Append(tree.NewDString(sqlFingerprint)); err != nil {
+						return nil, err
+					}
+				}
+
+				return result, nil
+			},
+			Info: "Create normalized statement fingerprint string for each element in an array of SQL statements. " +
+				"Note that maximum 1 statement is permitted per string element. (Hint: one way to easily " +
+				"quote arbitrary SQL is to use dollar-quotes.)",
+			Volatility: volatility.Immutable,
+		},
+	),
 	"crdb_internal.humanize_bytes": makeBuiltin(tree.FunctionProperties{
 		Category:     builtinconstants.CategoryString,
 		Undocumented: true,
