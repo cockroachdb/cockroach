@@ -180,6 +180,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		extraRewritablePaths = []struct{ pkg, path string }{
 			{"pkg/ccl/logictestccl", "pkg/sql/logictest"},
 			{"pkg/ccl/logictestccl", "pkg/sql/opt/exec/execbuilder"},
+			{"pkg/ccl/schemachangerccl", "pkg/sql/schemachanger/testdata"},
 			{"pkg/sql/opt/memo", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/norm", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/xform", "pkg/sql/opt/testutils/opttester/testfixtures"},
