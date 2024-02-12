@@ -1698,7 +1698,7 @@ func (t *testCerts) CACertBase64() string {
 	return base64.StdEncoding.EncodeToString([]byte(t.CACert))
 }
 
-func makeTestCerts(sinkNodeIP string) (*testCerts, error) {
+func makeTestCerts(sinkNodeIP string, dnsNames ...string) (*testCerts, error) {
 	CAKey, err := rsa.GenerateKey(cryptorand.Reader, keyLength)
 	if err != nil {
 		return nil, errors.Wrap(err, "CA private key")
@@ -1714,7 +1714,7 @@ func makeTestCerts(sinkNodeIP string) (*testCerts, error) {
 		return nil, errors.Wrap(err, "CA cert gen")
 	}
 
-	SinkCert, err := generateSinkCert(sinkNodeIP, SinkKey, CACertSpec, CAKey)
+	SinkCert, err := generateSinkCert(sinkNodeIP, SinkKey, CACertSpec, CAKey, dnsNames...)
 	if err != nil {
 		return nil, errors.Wrap(err, "kafka cert gen")
 	}
@@ -1748,7 +1748,11 @@ func makeTestCerts(sinkNodeIP string) (*testCerts, error) {
 }
 
 func generateSinkCert(
-	sinkIP string, priv *rsa.PrivateKey, CACert *x509.Certificate, CAKey *rsa.PrivateKey,
+	sinkIP string,
+	priv *rsa.PrivateKey,
+	CACert *x509.Certificate,
+	CAKey *rsa.PrivateKey,
+	dnsNames ...string,
 ) ([]byte, error) {
 	ip := net.ParseIP(sinkIP)
 	if ip == nil {
@@ -1772,10 +1776,9 @@ func generateSinkCert(
 		NotAfter:    timeutil.Now().Add(certLifetime),
 		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDataEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
-		DNSNames:    []string{"localhost"},
+		DNSNames:    append([]string{"localhost"}, dnsNames...),
 		IPAddresses: []net.IP{ip},
 	}
-
 	return x509.CreateCertificate(cryptorand.Reader, certSpec, CACert, &priv.PublicKey, CAKey)
 }
 
@@ -2347,7 +2350,13 @@ func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 	}
 	kafkaIP := ips[0]
 
-	testCerts, err := makeTestCerts(kafkaIP)
+	details, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), option.WithNodes(k.kafkaSinkNode), "hostname", "-f")
+	if err != nil {
+		k.t.Fatal(err)
+	}
+	hostname := strings.TrimSpace(details.Stdout)
+	k.t.L().Printf("hostname included in TLS certificates: %s", hostname)
+	testCerts, err := makeTestCerts(kafkaIP, hostname)
 	if err != nil {
 		k.t.Fatal(err)
 	}
