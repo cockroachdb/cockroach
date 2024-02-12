@@ -137,7 +137,6 @@ func NewCapacityOverride() CapacityOverride {
 		QueriesPerSecond: capacityOverrideSentinel,
 		WritesPerSecond:  capacityOverrideSentinel,
 		CPUPerSecond:     capacityOverrideSentinel,
-		L0Sublevels:      capacityOverrideSentinel,
 		IOThreshold: admissionpb.IOThreshold{
 			L0NumSubLevels:           capacityOverrideSentinel,
 			L0NumSubLevelsThreshold:  capacityOverrideSentinel,
@@ -152,7 +151,7 @@ func NewCapacityOverride() CapacityOverride {
 func (co CapacityOverride) String() string {
 	return fmt.Sprintf(
 		"capacity=%d, available=%d, used=%d, logical_bytes=%d, range_count=%d, lease_count=%d, "+
-			"queries_per_sec=%.2f, writes_per_sec=%.2f, cpu_per_sec=%.2f, l0_sublevels=%d, io_threhold=%v",
+			"queries_per_sec=%.2f, writes_per_sec=%.2f, cpu_per_sec=%.2f, io_threhold=%v",
 		co.Capacity,
 		co.Available,
 		co.Used,
@@ -162,7 +161,6 @@ func (co CapacityOverride) String() string {
 		co.QueriesPerSecond,
 		co.WritesPerSecond,
 		co.CPUPerSecond,
-		co.L0Sublevels,
 		co.IOThreshold,
 	)
 }
@@ -197,9 +195,6 @@ func mergeOverride(
 	}
 	if override.CPUPerSecond != capacityOverrideSentinel {
 		ret.CPUPerSecond = override.CPUPerSecond
-	}
-	if override.L0Sublevels != capacityOverrideSentinel {
-		ret.L0Sublevels = override.L0Sublevels
 	}
 	if override.IOThreshold.L0NumFiles != capacityOverrideSentinel {
 		ret.IOThreshold.L0NumFiles = override.IOThreshold.L0NumFiles
