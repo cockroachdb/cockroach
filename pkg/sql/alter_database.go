@@ -262,6 +262,14 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Once more than one region exists on the system database, we will
+	// force it into region survival mode.
+	if n.desc.GetID() == keys.SystemDatabaseID {
+		if err := params.p.setSystemDatabaseSurvival(params.ctx); err != nil {
+			return err
+		}
+	}
+
 	// Validate the type descriptor after the changes. We have to do this explicitly here, because
 	// we're using an internal call to addEnumValue above which doesn't perform validation.
 	if err := validateDescriptor(params.ctx, params.p, typeDesc); err != nil {
@@ -462,7 +470,7 @@ func (p *planner) AlterDatabaseDropRegion(
 	if err != nil {
 		return nil, err
 	}
-	if err := multiregion.CanDropRegion(catpb.RegionName(n.Region), regionConfig); err != nil {
+	if err := multiregion.CanDropRegion(catpb.RegionName(n.Region), regionConfig, dbDesc.GetID() == keys.SystemDatabaseID); err != nil {
 		return nil, err
 	}
 

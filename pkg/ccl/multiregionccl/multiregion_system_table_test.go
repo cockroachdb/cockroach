@@ -71,6 +71,10 @@ func TestMrSystemDatabase(t *testing.T) {
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
 
+	tDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE DATABASE system]", [][]string{
+		{"CREATE DATABASE system PRIMARY REGION \"us-east1\" REGIONS = \"us-east1\", \"us-east2\", \"us-east3\" SURVIVE REGION FAILURE"},
+	})
+
 	// Run schema validations to ensure the manual descriptor modifications are
 	// okay.
 	tDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.invalid_objects`, [][]string{})
@@ -450,4 +454,11 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, r, "us-east1")
 	}
+
+	// Validate that the zone configuration contains the appropriate constraints.q
+	tenSQLDB.CheckQueryResults(t, "SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATIONS] WHERE target LIKE 'PARTITION %lease%' ORDER BY target;", [][]string{
+		{"ALTER PARTITION \"us-east1\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east1]',\n\tlease_preferences = '[[+region=us-east1]]'"},
+		{"ALTER PARTITION \"us-east2\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east2]',\n\tlease_preferences = '[[+region=us-east2]]'"},
+		{"ALTER PARTITION \"us-east3\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east3]',\n\tlease_preferences = '[[+region=us-east3]]'"},
+	})
 }

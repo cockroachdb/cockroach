@@ -591,7 +591,7 @@ type RegionOperator interface {
 
 	// ResetMultiRegionZoneConfigsForTable resets the given table's zone
 	// configuration to its multi-region default.
-	ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64) error
+	ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64, forceZoneSurvival bool) error
 
 	// ResetMultiRegionZoneConfigsForDatabase resets the given database's zone
 	// configuration to its multi-region default.
