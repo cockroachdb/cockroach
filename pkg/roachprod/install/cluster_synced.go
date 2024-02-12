@@ -1588,6 +1588,7 @@ if [[ -f ~/.ssh/authorized_keys ]]; then
     cat ~/.ssh/authorized_keys > "${tmp1}"
 fi
 echo "${keys_data}" >> "${tmp1}"
+sudo cat ~` + config.SharedUser + `/.ssh/authorized_keys >> "${tmp1}"
 sort -u < "${tmp1}" > "${tmp2}"
 install --mode 0600 "${tmp2}" ~/.ssh/authorized_keys
 if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
