@@ -57,6 +57,7 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/mon",
+        "//pkg/util/randutil",
         "//pkg/util/ulid",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",

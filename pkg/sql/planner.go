@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -557,6 +558,8 @@ func internalExtendedEvalCtx(
 		statsProvider:   sqlStatsProvider,
 		jobs:            newTxnJobsCollection(),
 	}
+	rng, _ := randutil.NewPseudoRand()
+	ret.RNG = rng
 	ret.SetDeprecatedContext(ctx)
 	ret.copyFromExecCfg(execCfg)
 	return ret

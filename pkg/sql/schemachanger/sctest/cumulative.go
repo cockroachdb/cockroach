@@ -216,9 +216,9 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 							}
 						}
 						usedStages[key.AsInt()] = struct{}{}
-						t.Logf("Completed stage: %+v", key)
+						t.Logf("Completed stage: %s", &key)
 					} else {
-						t.Logf("Retrying stage: %+v", key)
+						t.Logf("Retrying stage: %s", &key)
 					}
 				}
 				return nil

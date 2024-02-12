@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 )
 
@@ -64,6 +65,8 @@ func newEvalCtx(ctx context.Context, d Dependencies) *eval.Context {
 		DescIDGenerator:      d.DescIDGenerator(),
 		ULIDEntropy:          ulid.Monotonic(crypto_rand.Reader, 0),
 	}
+	rng, _ := randutil.NewPseudoRand()
+	evalCtx.RNG = rng
 	evalCtx.SetDeprecatedContext(ctx)
 	return evalCtx
 }

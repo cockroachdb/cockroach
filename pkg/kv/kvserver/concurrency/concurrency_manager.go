@@ -142,8 +142,9 @@ type Config struct {
 	Stopper        *stop.Stopper
 	IntentResolver IntentResolver
 	// Metrics.
-	TxnWaitMetrics *txnwait.Metrics
-	SlowLatchGauge *metric.Gauge
+	TxnWaitMetrics     *txnwait.Metrics
+	SlowLatchGauge     *metric.Gauge
+	LatchWaitDurations metric.IHistogram
 	// Configs + Knobs.
 	MaxLockTableSize  int64
 	DisableTxnPushing bool
@@ -173,6 +174,7 @@ func NewManager(cfg Config) Manager {
 				cfg.Stopper,
 				cfg.SlowLatchGauge,
 				cfg.Settings,
+				cfg.LatchWaitDurations,
 			),
 		},
 		lt: lt,

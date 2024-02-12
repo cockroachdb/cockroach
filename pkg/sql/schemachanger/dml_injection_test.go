@@ -186,6 +186,11 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			skipIssue:    87699,
 		},
 		{
+			desc:         "add column unique not null",
+			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col TEXT NOT NULL UNIQUE",
+			expectedErr:  "null value in column \"new_col\" violates not-null constraint",
+		},
+		{
 			desc:         "add column default unique",
 			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col TEXT NOT NULL UNIQUE DEFAULT insert_phase_ordinal || operation_phase_ordinal || operation",
 			expectedErr:  "variable sub-expressions are not allowed in DEFAULT",
@@ -207,6 +212,11 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			desc:         "drop column stored family",
 			setup:        []string{"ALTER TABLE tbl ADD COLUMN new_col TEXT NOT NULL AS (insert_phase_ordinal) STORED CREATE FAMILY fam"},
 			schemaChange: "ALTER TABLE tbl DROP COLUMN new_col",
+		},
+		{
+			desc:         "add column virtual NOT NULL",
+			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col TEXT NOT NULL AS (NULL::TEXT) VIRTUAL",
+			expectedErr:  "validation of column \"new_col\" NOT NULL failed on row: insert_phase_ordinal='pre-schema-change', operation_phase_ordinal='n/a', operation='n/a', val=1, new_col=NULL",
 		},
 		{
 			desc:         "add column virtual",

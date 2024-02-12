@@ -201,19 +201,17 @@ func (s *schemaChange) Ops(
 		return workload.QueryLoad{}, err
 	}
 	stdoutLog := makeAtomicLog(os.Stdout)
-	rng, seed := randutil.NewTestRand()
+	_, seed := randutil.NewTestRand()
 	stdoutLog.printLn(fmt.Sprintf("using random seed: %d", seed))
-	ops := newDeck(rng, opWeights...)
-	// A separate deck is constructed of only schema changes supported
-	// by the declarative schema changer. This deck has equal weights,
-	// only for supported schema changes.
+	// A separate weighting is constructed of only schema changes supported by the
+	// declarative schema changer. This will be used to make a per-worker deck
+	// that has equal weights, only for supported schema changes.
 	declarativeOpWeights := make([]int, len(opWeights))
 	for idx, weight := range opWeights {
 		if _, ok := opDeclarativeVersion[opType(idx)]; ok {
 			declarativeOpWeights[idx] = weight
 		}
 	}
-	declarativeOps := newDeck(rng, declarativeOpWeights...)
 
 	ql := workload.QueryLoad{
 		SQLDatabase: sqlDatabase,
@@ -251,12 +249,15 @@ func (s *schemaChange) Ops(
 		// operations.
 		workerRng := randutil.NewTestRandWithSeed(seed + int64(i))
 
-		// Each worker needs its own sequence number generator so that the names of
-		// generated objects are deterministic across runs.
+		// Each worker needs its own sequence number generator and operation deck so
+		// that the names of generated objects and operations are deterministic
+		// across runs.
 		seqNum, err := s.initSeqNum(ctx, pool, i)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
+		ops := newDeck(workerRng, opWeights...)
+		declarativeOps := newDeck(workerRng, declarativeOpWeights...)
 
 		opGeneratorParams := operationGeneratorParams{
 			workerID:           i,

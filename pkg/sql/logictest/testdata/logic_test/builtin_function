@@ -150,6 +150,31 @@ SELECT random() * 0.0
 ----
 0
 
+statement ok
+SELECT setseed(0.1)
+
+# The previous call to setseed() should affect the next query.
+query IR
+SELECT i, random() FROM ROWS FROM (generate_series(1, 5)) AS i ORDER by i
+----
+1  0.8090535001228529
+2  0.33363615433097443
+3  0.10208231032120892
+4  0.43716650508717286
+5  0.16686635296305902
+
+statement ok
+SELECT setseed(0.1)
+
+query IR
+SELECT i, random() FROM ROWS FROM (generate_series(1, 5)) AS i ORDER by i
+----
+1  0.8090535001228529
+2  0.33363615433097443
+3  0.10208231032120892
+4  0.43716650508717286
+5  0.16686635296305902
+
 # Concatenating 'empty' because the empty string doesn't work in these tests.
 query T
 SELECT concat() || 'empty'
