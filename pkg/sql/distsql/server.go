@@ -245,6 +245,7 @@ func (ds *ServerImpl) setupFlow(
 		log.Warningf(ctx, "%v", err)
 		return ctx, nil, nil, err
 	}
+	ctx = execversion.WithVersion(ctx, req.Version)
 
 	const opName = "flow"
 	if parentSpan == nil {

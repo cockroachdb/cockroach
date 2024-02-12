@@ -5,4 +5,5 @@ go_library(
     srcs = ["version.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/execversion",
     visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )
