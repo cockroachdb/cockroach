@@ -886,6 +886,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/ts",
         "//pkg/upgrade/upgradebase",
         "//pkg/util",
         "//pkg/util/admission",

@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"regexp"
 	"strconv"
@@ -31,8 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -47,12 +50,21 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 
 	ctx := context.Background()
 	jobID := jobs.MVCCStatisticsJobID
-	settings := cluster.MakeTestingClusterSettings()
-	status.ChildMetricsEnabled.Override(ctx, &settings.SV, true)
-	sql.TenantGlobalMetricsExporterInterval.Override(ctx, &settings.SV, 50*time.Millisecond)
 	testingKnobs := base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
+
+	settings := cluster.MakeTestingClusterSettings()
+	// Ensure that KV metrics are broken down by the tenant_id label.
+	status.ChildMetricsEnabled.Override(ctx, &settings.SV, true)
+	// Disable time series poller to avoid a data race between a read from the
+	// test instrumentation and a write from the poller. We can avoid this if
+	// we scraped from the recorder in the tests instead of using the metric
+	// registry directly, but the application layer doesn't currently expose a
+	// way to obtain the recorder instance.
+	ts.TimeseriesStorageEnabled.Override(ctx, &settings.SV, false)
+	// Speed up the interval in which livebytes metrics are updated.
+	sql.TenantGlobalMetricsExporterInterval.Override(ctx, &settings.SV, 50*time.Millisecond)
 
 	// Start a cluster with 5 nodes, and 2 stores each.
 	tc := testcluster.NewTestCluster(t, 5, base.TestClusterArgs{
@@ -144,27 +156,38 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 	scrapeLivebytes := func(t *testing.T, tenantID int) int64 {
 		var val int64
 		for i := 0; i < tc.NumServers(); i++ {
-			s := tc.StorageLayer(i)
-			// We only have one store per node.
-			store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
-			require.NoError(t, err)
-			v, _ := scrapeMetric(t, store.Registry(), "livebytes", fmt.Sprintf("%d", tenantID))
-			val += v
+			sl := tc.StorageLayer(i)
+			require.NoError(t, sl.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+				v, _ := scrapeMetric(t, s.Registry(), "livebytes", fmt.Sprintf("%d", tenantID))
+				val += v
+				return nil
+			}))
 		}
 		return val
 	}
 
+	// HACK: to check for accuracy.
+	const getTotalLiveBytesQuery = `
+SELECT sum(
+	(crdb_internal.range_stats(start_key)->>'live_bytes')::INT8 *
+	array_length(replicas, 1)
+)::INT8 FROM crdb_internal.ranges_no_leases`
+
 	// validateAggregatedLivebytes returns an error if the aggregated livebytes
 	// metric in the app layer does not match the sum of livebytes metrics in
 	// the storage layer, or is 0. Otherwise, this returns nil.
-	validateAggregatedLivebytes := func(t *testing.T, tenant *testTenant) error {
+	validateAggregatedLivebytes := func(t *testing.T, tenant *testTenant, confidenceLevel float64) error {
 		// livebytes from KV are tagged with `tenant_id`, whereas aggregated
 		// livebytes from SQL are tagged with `tenant` (i.e. name).
 		exp := scrapeLivebytes(t, tenant.id)
 		r := tenant.app.JobRegistry().(*jobs.Registry).MetricsRegistry()
 		val, _ := scrapeMetric(t, r, "sql_aggregated_livebytes", tenant.name)
-		if exp != val {
-			return errors.Newf("expected %d, but got %d", exp, val)
+
+		var testVal int64
+		tenant.db.QueryRow(t, getTotalLiveBytesQuery).Scan(&testVal)
+
+		if math.Abs(float64(exp-val))/float64(exp) > confidenceLevel {
+			return errors.Newf("expected within +/-%.2f of %d, but got %d, testVal=%d", exp, val, testVal)
 		}
 		if val <= 0 {
 			return errors.New("livebytes must be greater than 0")
@@ -187,11 +210,17 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 	// Metrics should be exported for out-of-process secondary tenants, and are
 	// correct, i.e. sql_aggregated_livebytes in SQL = sum(livebytes in KV).
 	t.Run("external secondary tenants", func(t *testing.T) {
+		// Exact match for non stress tests, and allow values to differ by up to
+		// 5% in stress situations.
+		confidenceLevel := 0.0
+		if skip.Stress() {
+			confidenceLevel = 0.05
+		}
 		testutils.SucceedsSoon(t, func() error {
-			return validateAggregatedLivebytes(t, tenantFoo)
+			return validateAggregatedLivebytes(t, tenantFoo, confidenceLevel)
 		})
 		testutils.SucceedsSoon(t, func() error {
-			return validateAggregatedLivebytes(t, tenantBar)
+			return validateAggregatedLivebytes(t, tenantBar, confidenceLevel)
 		})
 	})
 
