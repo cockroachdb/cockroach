@@ -23,6 +23,14 @@ INSERT INTO a.b VALUES (_) -- literals removed
 INSERT INTO _._ VALUES (1) -- identifiers removed
 
 parse
+INSERT INTO a.b@c VALUES (1)
+----
+INSERT INTO a.b@c VALUES (1)
+INSERT INTO a.b@c VALUES ((1)) -- fully parenthesized
+INSERT INTO a.b@c VALUES (_) -- literals removed
+INSERT INTO _._@_ VALUES (1) -- identifiers removed
+
+parse
 INSERT INTO a VALUES (1, 2)
 ----
 INSERT INTO a VALUES (1, 2)
@@ -159,15 +167,6 @@ INSERT INTO a VALUES (1, 2) RETURNING NOTHING
 INSERT INTO a VALUES ((1), (2)) RETURNING NOTHING -- fully parenthesized
 INSERT INTO a VALUES (_, _) RETURNING NOTHING -- literals removed
 INSERT INTO _ VALUES (1, 2) RETURNING NOTHING -- identifiers removed
-
-error
-INSERT INTO a@b VALUES (1, 2)
-----
-at or near "@": syntax error
-DETAIL: source SQL:
-INSERT INTO a@b VALUES (1, 2)
-             ^
-HINT: try \h INSERT
 
 error
 INSERT INTO kv (k[0]) VALUES ('hello')

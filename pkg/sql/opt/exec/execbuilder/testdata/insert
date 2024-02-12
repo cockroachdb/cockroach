@@ -478,6 +478,18 @@ vectorized: true
                       table: kv@kv_pkey
                       spans: FULL SCAN
 
+# Index hints should be a no-op for normal inserts without ON CONFLICT.
+query T
+EXPLAIN (PLAN) INSERT INTO kv@a VALUES (1,1), (2,2)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: kv(k, v)
+  auto commit
+  size: 2 columns, 2 rows
+
 # ------------------------------------------------------------------------------
 # Insert rows into table during schema changes.
 # ------------------------------------------------------------------------------
