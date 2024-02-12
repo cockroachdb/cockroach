@@ -855,28 +855,10 @@ func (rp ReplicaPlanner) considerRebalance(
 		rebalanceTargetType = allocatorimpl.NonVoterTarget
 	}
 
-	// Determine whether we can remove the leaseholder without first
-	// transferring the lease away.
-	lhRemovalAllowed := addTarget != (roachpb.ReplicationTarget{})
-
-	if !ok {
-		log.KvDistribution.VInfof(ctx, 2, "no suitable rebalance target for non-voters")
-	} else if !lhRemovalAllowed {
-		if transferOp, err := rp.maybeTransferLeaseAwayTarget(
-			ctx, repl, desc, conf, removeTarget.StoreID, canTransferLeaseFrom,
-		); err != nil {
-			// No transfer possible.
-			ok = false
-			log.KvDistribution.Infof(ctx, "want to remove self, but failed to find lease transfer target: %s", err)
-		} else if transferOp != nil {
-			// We found a lease transfer opportunity, exit early.
-			return transferOp, stats, nil
-		}
-	}
-
 	// No rebalance target was found, check whether we are able and should
 	// transfer the lease away to another store.
 	if !ok {
+		log.KvDistribution.VInfof(ctx, 2, "no suitable rebalance target for non-voters")
 		if !canTransferLeaseFrom(ctx, repl, conf) {
 			return nil, stats, nil
 		}
