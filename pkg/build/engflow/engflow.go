@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -61,6 +62,7 @@ type InvocationInfo struct {
 	InvocationId       string
 	StartedTimeMillis  int64
 	FinishTimeMillis   int64
+	Finished           bool
 	ExitCode           int32
 	ExitCodeName       string
 	TestResults        map[string][]*TestResultWithXml
@@ -238,6 +240,7 @@ func LoadInvocationInfo(
 		case *bes.BuildEventId_BuildFinished:
 			finished := event.GetFinished()
 			ret.FinishTimeMillis = finished.FinishTimeMillis
+			ret.Finished = true
 			exitCode := finished.ExitCode
 			ret.ExitCode = exitCode.Code
 			ret.ExitCodeName = exitCode.Name
@@ -246,7 +249,8 @@ func LoadInvocationInfo(
 
 	unread := buf.Unread()
 	if len(unread) != 0 {
-		return nil, fmt.Errorf("didn't read entire file: %d bytes remaining", len(unread))
+		fmt.Fprintf(os.Stderr, "did not read entire BES file: %d bytes remaining (was the bazel invocation interrupted?)", len(unread))
+		// We should be fine to proceed though we may be missing data.
 	}
 
 	// Download test xml's and build action output.
