@@ -23,7 +23,7 @@ fi
 # Extra targets to build on Unix only.
 if [ "$CONFIG" != "crosswindows" ]
 then
-    EXTRA_TARGETS="$EXTRA_TARGETS //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev"
+    EXTRA_TARGETS="$EXTRA_TARGETS //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev //pkg/cmd/bazci //pkg/cmd/bazci/process-bep-file //pkg/cmd/bazci/bazel-github-helper"
 fi
 
 EXTRA_ARGS=
