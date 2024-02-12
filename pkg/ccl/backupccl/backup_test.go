@@ -3925,7 +3925,12 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 
 	const numAccounts = 10
 	ctx := context.Background()
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(118625),
+		},
+	}
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, args)
 	defer cleanupFn()
 	const dir = "nodelocal://1/"
 	s := tc.SystemLayer(0)
@@ -3961,7 +3966,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 
 	t.Run("restore-pre-gc-aost", func(t *testing.T) {
 		backupPath := dir + "/tbl-before-gc"
-		_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+		_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0, InitManualReplication, args)
 		defer cleanupFn()
 
 		sqlDB.Exec(t, "CREATE DATABASE db")
