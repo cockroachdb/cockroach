@@ -24,9 +24,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -705,4 +707,61 @@ SELECT unnest(execution_errors)
 		close(seventhRun.resume)
 		require.Regexp(t, err3, registry.WaitForJobs(ctx, []jobspb.JobID{id}))
 	})
+}
+
+func TestDeleteTerminalJobByIDNoJobInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()
+
+	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, cs *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				return nil
+			},
+			FailOrCancel: func(ctx context.Context) error {
+				return nil
+			},
+		}
+	}, jobs.UsesTenantCostControl)
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey),
+				BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
+			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	var (
+		r   = s.JobRegistry().(*jobs.Registry)
+		idb = s.InternalDB().(isql.DB)
+	)
+
+	createStartableJob := func() *jobs.StartableJob {
+		jobID := r.MakeJobID()
+		var j *jobs.StartableJob
+		err := idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return r.CreateStartableJobWithTxn(ctx, &j, jobID, txn, jobs.Record{
+				JobID:       jobID,
+				Description: "testing",
+				Username:    username.RootUserName(),
+				Details:     jobspb.ImportDetails{},
+				Progress:    jobspb.ImportProgress{},
+			})
+		})
+		require.NoError(t, err)
+		return j
+	}
+
+	j := createStartableJob()
+	require.NoError(t, j.Start(ctx))
+	require.NoError(t, j.AwaitCompletion(ctx))
+	_ = r.WaitForJobs(ctx, []jobspb.JobID{j.ID()})
+	require.NoError(t, r.DeleteTerminalJobByID(ctx, j.ID()))
 }

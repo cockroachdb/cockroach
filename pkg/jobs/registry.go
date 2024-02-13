@@ -1341,10 +1341,13 @@ func (r *Registry) DeleteTerminalJobByID(ctx context.Context, id jobspb.JobID) e
 			if err != nil {
 				return err
 			}
-			_, err = txn.Exec(
-				ctx, "delete-job-info", txn.KV(), "DELETE FROM system.job_info WHERE job_id = $1", id,
-			)
-			return err
+			if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
+				_, err := txn.Exec(
+					ctx, "delete-job-info", txn.KV(), "DELETE FROM system.job_info WHERE job_id = $1", id,
+				)
+				return err
+			}
+			return nil
 		default:
 			return errors.Newf("job %d has non-terminal status: %q", id, status)
 		}
