@@ -103,6 +103,7 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   !c.disableTLSForHTTP,
 			Expires:  timeutil.Unix(0, 0),
 		})
 		http.SetCookie(w, &http.Cookie{
@@ -110,6 +111,7 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 			Value:    "",
 			Path:     "/",
 			HttpOnly: false,
+			Secure:   !c.disableTLSForHTTP,
 			Expires:  timeutil.Unix(0, 0),
 		})
 		// Fall back to serving requests from the default tenant. This helps us serve
@@ -236,6 +238,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 				Value:    sessionsStr,
 				Path:     "/",
 				HttpOnly: true,
+				Secure:   !c.disableTLSForHTTP,
 			}
 			http.SetCookie(w, &cookie)
 			// The tenant cookie needs to be set at some point in order for
@@ -257,6 +260,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 				Value:    tenantSelection,
 				Path:     "/",
 				HttpOnly: false,
+				Secure:   !c.disableTLSForHTTP,
 			}
 			http.SetCookie(w, &cookie)
 			if r.Header.Get(AcceptHeader) == JSONContentType {
@@ -354,6 +358,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   !c.disableTLSForHTTP,
 			Expires:  timeutil.Unix(0, 0),
 		}
 		http.SetCookie(w, &cookie)
@@ -362,6 +367,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			Value:    "",
 			Path:     "/",
 			HttpOnly: false,
+			Secure:   !c.disableTLSForHTTP,
 			Expires:  timeutil.Unix(0, 0),
 		}
 		http.SetCookie(w, &cookie)
