@@ -426,6 +426,9 @@ type Planner interface {
 	// PLpgSQL FETCH statement.
 	PLpgSQLFetchCursor(ctx context.Context, cursor *tree.CursorStmt) (res tree.Datums, err error)
 
+	// HintSetting associates a SET statement with the query with the given ID.
+	HintSetting(ctx context.Context, queryID uint64, settingName, settingValue string) error
+
 	// AutoCommit indicates whether the Planner has flagged the current statement
 	// as eligible for transaction auto-commit.
 	AutoCommit() bool

@@ -451,6 +451,13 @@ func (p *fakePlannerWithMonitor) PLpgSQLFetchCursor(
 	return nil, nil
 }
 
+// HintSetting is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) HintSetting(
+	ctx context.Context, queryID uint64, settingName, settingValue string,
+) error {
+	return nil
+}
+
 // AutoCommit is part of the eval.Planner interface.
 func (p *fakePlannerWithMonitor) AutoCommit() bool {
 	return false

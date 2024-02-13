@@ -1136,12 +1136,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		// the statement's dispatchReadCommittedStmtToExecutionEngine retry loop.
 		// TODO(rafi): The above should be happening already, but find a way to
 		// test it.
-		if err := ex.dispatchReadCommittedStmtToExecutionEngine(stmtCtx, p, res); err != nil {
+		if err := ex.dispatchReadCommittedStmtToExecutionEngine(stmtCtx, p, res, stmt); err != nil {
 			stmtThresholdSpan.Finish()
 			return nil, nil, err
 		}
 	} else {
-		if err := ex.dispatchToExecutionEngine(stmtCtx, p, res); err != nil {
+		if err := ex.dispatchToExecutionEngine(stmtCtx, p, res, stmt); err != nil {
 			stmtThresholdSpan.Finish()
 			return nil, nil, err
 		}
@@ -1645,7 +1645,7 @@ func (ex *connExecutor) rollbackSQLTransaction(
 // implement the retry logic in the state machine, we use the KV savepoint API
 // directly.
 func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
-	ctx context.Context, p *planner, res RestrictedCommandResult,
+	ctx context.Context, p *planner, res RestrictedCommandResult, stmt Statement,
 ) error {
 	readCommittedSavePointToken, err := ex.state.mu.txn.CreateSavepoint(ctx)
 	if err != nil {
@@ -1655,7 +1655,7 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 	maxRetries := int(ex.sessionData().MaxRetriesForReadCommitted)
 	for attemptNum := 0; ; attemptNum++ {
 		bufferPos := res.BufferedResultsLen()
-		if err = ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
+		if err = ex.dispatchToExecutionEngine(ctx, p, res, stmt); err != nil {
 			return err
 		}
 		maybeRetriableErr := res.Err()
@@ -1720,7 +1720,7 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 // expected that the caller will inspect res and react to query errors by
 // producing an appropriate state machine event.
 func (ex *connExecutor) dispatchToExecutionEngine(
-	ctx context.Context, planner *planner, res RestrictedCommandResult,
+	ctx context.Context, planner *planner, res RestrictedCommandResult, stmt2 Statement,
 ) (retErr error) {
 	getPausablePortalInfo := func() *portalPauseInfo {
 		if planner != nil && planner.pausablePortal != nil {
@@ -1739,6 +1739,43 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			}
 		}
 	}()
+
+	// TODO(drewk): fix this up.
+	f := tree.NewFmtCtx(tree.FmtHideConstants)
+	stmt2.AST.Format(f)
+	stmtNoConstants := f.CloseAndGetString()
+	fnv := util.MakeFNV64()
+	for _, c := range stmtNoConstants {
+		fnv.Add(uint64(c))
+	}
+	if hints, ok := planner.execCfg.PlanHintsCache.MaybeGetPlanHints(ctx, int64(fnv.Sum())); ok {
+		if len(hints.Settings) > 0 {
+			for _, setting := range hints.Settings {
+				// TODO(drewk): the setting will persist until the end of the
+				// transaction, rather than just the statement. We'll have to plumb
+				// awareness of statement vs transaction SessionData objects.
+				// TODO(drewk): think about interactions with savepoints.
+				// TODO(drewk): think about interactions with explicit SET statements.
+				// TODO(drewk): this is missing some nil checks.
+				const errorMsg = "failed to apply plan hint SET %s = %s"
+				_, v, err := getSessionVar(setting.SettingName, false /* missingOk */)
+				if err != nil {
+					log.VInfof(ctx, 1, errorMsg, setting.SettingName, setting.SettingValue, err)
+				}
+				if planner.extendedEvalCtx.TxnImplicit {
+					planner.sessionDataStack.PushTopClone()
+				}
+				err = planner.sessionDataMutatorIterator.applyOnTopMutator(
+					func(m sessionDataMutator) error {
+						return v.Set(ctx, m, setting.SettingValue)
+					},
+				)
+				if err != nil {
+					log.VInfof(ctx, 1, errorMsg, setting.SettingName, setting.SettingValue, err)
+				}
+			}
+		}
+	}
 
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())

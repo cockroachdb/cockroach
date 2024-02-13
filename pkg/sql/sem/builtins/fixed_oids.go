@@ -2564,6 +2564,7 @@ var builtinOidsArray = []string{
 	2596: `array_agg(arg1: refcursor[]) -> refcursor[][]`,
 	2597: `array_agg(arg1: tuple[]) -> tuple[][]`,
 	2598: `crdb_internal.query_id_for_hint(query: string) -> int`,
+	2599: `crdb_internal.hint_setting(queryID: int, settingName: string, settingValue: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

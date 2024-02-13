@@ -352,6 +352,12 @@ func (*DummyEvalPlanner) PLpgSQLFetchCursor(
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
+func (*DummyEvalPlanner) HintSetting(
+	ctx context.Context, queryID uint64, settingName, settingValue string,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,

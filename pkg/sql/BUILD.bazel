@@ -165,6 +165,7 @@ go_library(
         "plan.go",
         "plan_batch.go",
         "plan_columns.go",
+        "plan_hint.go",
         "plan_node_to_row_source.go",
         "plan_opt.go",
         "plan_ordering.go",

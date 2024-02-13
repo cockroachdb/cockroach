@@ -8672,6 +8672,33 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			CalledOnNullInput: true,
 		},
 	),
+	"crdb_internal.hint_setting": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryTesting,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "queryID", Typ: types.Int},
+				{Name: "settingName", Typ: types.String},
+				{Name: "settingValue", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull || args[2] == tree.DNull {
+					return nil, pgerror.New(
+						pgcode.NullValueNotAllowed,
+						"query string, setting name, and setting value must be non-null",
+					)
+				}
+				queryID := uint64(tree.MustBeDInt(args[0]))
+				settingName := string(tree.MustBeDString(args[1]))
+				settingValue := string(tree.MustBeDString(args[2]))
+				return tree.DNull, evalCtx.Planner.HintSetting(ctx, queryID, settingName, settingValue)
+			},
+			Volatility:        volatility.Volatile,
+			CalledOnNullInput: true,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {

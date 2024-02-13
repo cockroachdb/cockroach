@@ -16,4 +16,13 @@ import "google/protobuf/timestamp.proto";
 
 // TODO: add a field for each type of plan hint.
 message PlanHints {
+  // Settings is a list of SET statements to run before planning the query.
+  repeated SettingHint settings = 1;
+}
+
+// SettingHint allows a SET statement like "set reorder_joins_limit = 1" to be
+// run before planning and executing a query.
+message SettingHint {
+  string setting_name = 1;
+  string setting_value = 2;
 }
