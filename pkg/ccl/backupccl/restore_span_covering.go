@@ -647,21 +647,26 @@ func getNewIntersectingFilesByLayer(
 
 type fileSpanComparator interface {
 	overlaps(targetSpan, fileSpan roachpb.Span) bool
+	isExclusive() bool
 }
 
 // inclusiveEndKeyComparator assumes that file spans have inclusive
 // end keys.
 type inclusiveEndKeyComparator struct{}
 
-func (*inclusiveEndKeyComparator) overlaps(targetSpan, inclusiveEndKeyFileSpan roachpb.Span) bool {
+func (inclusiveEndKeyComparator) overlaps(targetSpan, inclusiveEndKeyFileSpan roachpb.Span) bool {
 	// TODO(ssd): Could ContainsKey here be replaced with targetSpan.Key.Equal(inclusiveEndKeyFileSpan.EndKey)?
 	return targetSpan.Overlaps(inclusiveEndKeyFileSpan) || targetSpan.ContainsKey(inclusiveEndKeyFileSpan.EndKey)
 }
+
+func (inclusiveEndKeyComparator) isExclusive() bool { return false }
 
 // exclusiveEndKeyComparator assumes that file spans have exclusive
 // end keys.
 type exclusiveEndKeyComparator struct{}
 
-func (*exclusiveEndKeyComparator) overlaps(targetSpan, inclusiveEndKeyFileSpan roachpb.Span) bool {
+func (exclusiveEndKeyComparator) overlaps(targetSpan, inclusiveEndKeyFileSpan roachpb.Span) bool {
 	return targetSpan.Overlaps(inclusiveEndKeyFileSpan)
 }
+
+func (exclusiveEndKeyComparator) isExclusive() bool { return true }
