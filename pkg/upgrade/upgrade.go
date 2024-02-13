@@ -87,7 +87,7 @@ func (m *upgrade) Version() roachpb.Version {
 
 // Permanent is part of the upgradebase.Upgrade interface.
 func (m *upgrade) Permanent() bool {
-	return m.v.LessEq(clusterversion.VPrimordialMax.Version())
+	return m.v.LessEq(clusterversion.VBootstrapMax.Version())
 }
 
 // Name is part of the upgradebase.Upgrade interface.

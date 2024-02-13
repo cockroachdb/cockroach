@@ -168,16 +168,15 @@ type Key int
 // upgrade step is tied to (in the unlikely scenario that we have mixed-version
 // nodes while bootstrapping a cluster).
 const (
-	// VPrimordial versions are associated with permanent upgrades that exist for
-	// historical reasons; no new primordial versions should be added, and no new
-	// upgrades should be tied to existing primordial versions.
+	// VBootstrap versions are associated with bootstrap steps; no new bootstrap
+	// versions should be added, as the two bootstrap functions are extended as
+	// needed in-place.
+	VBootstrapSystem Key = iota
+	VBootstrapTenant
 
-	VPrimordial1 Key = iota
-	VPrimordial2
+	// No new VBootstrap versions should be added.
 
-	// No new VPrimordial versions should be added.
-
-	VPrimordialMax
+	VBootstrapMax
 
 	// Permanent_V22_2SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
 	// telemetry logging jobs.
@@ -319,9 +318,9 @@ const (
 // to ensure that upgrades don't occur between in-development and released
 // versions (see developmentBranch and maybeApplyDevOffset).
 var versionTable = [numKeys]roachpb.Version{
-	VPrimordial1:   {Major: 0, Minor: 0, Internal: 2},
-	VPrimordial2:   {Major: 0, Minor: 0, Internal: 4},
-	VPrimordialMax: {Major: 0, Minor: 0, Internal: 424242},
+	VBootstrapSystem: {Major: 0, Minor: 0, Internal: 2},
+	VBootstrapTenant: {Major: 0, Minor: 0, Internal: 4},
+	VBootstrapMax:    {Major: 0, Minor: 0, Internal: 424242},
 
 	// Permanent upgrades from previous versions.
 	Permanent_V22_2SQLSchemaTelemetryScheduledJobs: {Major: 22, Minor: 1, Internal: 42},

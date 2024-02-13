@@ -54,12 +54,12 @@ var registry = make(map[roachpb.Version]upgradebase.Upgrade)
 
 var upgrades = []upgradebase.Upgrade{
 	upgrade.NewSystemUpgrade("intitialize the system cluster",
-		clusterversion.VPrimordial1.Version(),
+		clusterversion.VBootstrapSystem.Version(),
 		bootstrapSystem,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
 	upgrade.NewTenantUpgrade("intitialize the cluster",
-		clusterversion.VPrimordial2.Version(),
+		clusterversion.VBootstrapTenant.Version(),
 		upgrade.NoPrecondition,
 		bootstrapCluster,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
