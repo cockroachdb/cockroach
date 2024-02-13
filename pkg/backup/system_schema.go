@@ -863,6 +863,10 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.PreparedTransactionsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.PlanHintsTable.GetName(): {
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+		customRestoreFunc:            defaultSystemTableRestoreFunc,
+	},
 }
 
 func rekeySystemTable(
