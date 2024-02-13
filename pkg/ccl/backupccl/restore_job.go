@@ -483,6 +483,7 @@ func restore(
 			spanFilter:         filter,
 			numImportSpans:     numImportSpans,
 			execLocality:       details.ExecutionLocality,
+			exclusiveEndKeys:   fsc.isExclusive(),
 		}
 		return errors.Wrap(distRestore(
 			ctx,
