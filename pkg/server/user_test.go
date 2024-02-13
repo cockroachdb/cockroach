@@ -51,10 +51,10 @@ func TestValidRoles(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, false, hasRole)
 
-		// Skip PASSWORD and DEFAULTSETTINGS options.
-		// Since PASSWORD still resides in system.users and
-		// DEFAULTSETTINGS is stored in system.database_role_settings.
-		if name == "PASSWORD" || name == "DEFAULTSETTINGS" {
+		// Skip PASSWORD and SUBJECT options. Since PASSWORD still resides in
+		// system.users and SUBJECT is an enterprise feature that is tested
+		// separately.
+		if name == "PASSWORD" || name == "SUBJECT" {
 			continue
 		}
 		// Add the role and check if the role was added (or in the cases of roles starting

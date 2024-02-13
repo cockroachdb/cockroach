@@ -1000,7 +1000,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %token <str> SHARE SHARED SHOW SIMILAR SIMPLE SIZE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SKIP_MISSING_UDFS SMALLINT SMALLSERIAL
 %token <str> SNAPSHOT SOME SPLIT SQL SQLLOGIN
-%token <str> STABLE START STATE STATISTICS STATUS STDIN STDOUT STOP STRAIGHT STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
+%token <str> STABLE START STATE STATISTICS STATUS STDIN STDOUT STOP STRAIGHT STREAM STRICT STRING STORAGE STORE STORED STORING SUBJECT SUBSTRING SUPER
 %token <str> SUPPORT SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANT_NAME TENANTS TESTING_RELOCATE TEXT THEN
@@ -1417,7 +1417,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 
 %type <str> name opt_name opt_name_parens
 %type <str> privilege savepoint_name
-%type <tree.KVOption> role_option password_clause valid_until_clause
+%type <tree.KVOption> role_option password_clause valid_until_clause subject_clause
 %type <tree.Operator> subquery_op
 %type <*tree.UnresolvedName> func_name func_name_no_crdb_extra
 %type <tree.ResolvableFunctionReference> func_application_name
@@ -11053,6 +11053,7 @@ role_option:
   }
 | password_clause
 | valid_until_clause
+| subject_clause
 | REPLICATION
   {
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
@@ -11090,6 +11091,16 @@ valid_until_clause:
 | VALID UNTIL NULL
   {
     $$.val = tree.KVOption{Key: tree.Name("valid until"), Value: tree.DNull}
+  }
+
+subject_clause:
+  SUBJECT string_or_placeholder
+  {
+    $$.val = tree.KVOption{Key: tree.Name("subject"), Value: $2.expr()}
+  }
+| SUBJECT NULL
+  {
+    $$.val = tree.KVOption{Key: tree.Name("subject"), Value: tree.DNull}
   }
 
 opt_view_recursive:
@@ -17322,6 +17333,7 @@ unreserved_keyword:
 | STREAM
 | STRICT
 | SUBSCRIPTION
+| SUBJECT
 | SUPER
 | SUPPORT
 | SURVIVE
@@ -17890,6 +17902,7 @@ bare_label_keywords:
 | STRING
 | SUBSCRIPTION
 | SUBSTRING
+| SUBJECT
 | SUPER
 | SUPPORT
 | SURVIVAL

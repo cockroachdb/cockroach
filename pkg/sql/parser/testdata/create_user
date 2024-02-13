@@ -199,3 +199,11 @@ CREATE USER foo WITH NOREPLICATION -- normalized!
 CREATE USER foo WITH NOREPLICATION -- fully parenthesized
 CREATE USER foo WITH NOREPLICATION -- literals removed
 CREATE USER _ WITH NOREPLICATION -- identifiers removed
+
+parse
+CREATE ROLE foo WITH SUBJECT 'bar'
+----
+CREATE ROLE foo WITH SUBJECT 'bar'
+CREATE ROLE foo WITH SUBJECT ('bar') -- fully parenthesized
+CREATE ROLE foo WITH SUBJECT '_' -- literals removed
+CREATE ROLE _ WITH SUBJECT 'bar' -- identifiers removed
