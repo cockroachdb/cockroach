@@ -265,10 +265,10 @@ const (
 	// V23_2_PebbleFormatVirtualSSTables above.
 	V23_2_EnablePebbleFormatVirtualSSTables
 
-	// Permanent_V23_2_MVCCStatisticsTable adds the system.mvcc_statistics
+	// V23_2_MVCCStatisticsTable adds the system.mvcc_statistics
 	// table and update job. The table is used to serve fast reads of historical
 	// mvcc data from observability surfaces.
-	Permanent_V23_2_MVCCStatisticsTable
+	V23_2_MVCCStatisticsTable
 
 	// V23_2_AddSystemExecInsightsTable is the version at which Cockroach creates
 	// {statement|transaction}_execution_insights system tables.
@@ -354,7 +354,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V23_2_ChangefeedLaggingRangesOpts:          {Major: 23, Minor: 1, Internal: 24},
 	V23_2_GrantExecuteToPublic:                 {Major: 23, Minor: 1, Internal: 26},
 	V23_2_EnablePebbleFormatVirtualSSTables:    {Major: 23, Minor: 1, Internal: 28},
-	Permanent_V23_2_MVCCStatisticsTable:        {Major: 23, Minor: 1, Internal: 30},
+	V23_2_MVCCStatisticsTable:                  {Major: 23, Minor: 1, Internal: 30},
 	V23_2_AddSystemExecInsightsTable:           {Major: 23, Minor: 1, Internal: 32},
 
 	V23_2: {Major: 23, Minor: 2, Internal: 0},
