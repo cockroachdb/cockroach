@@ -344,12 +344,16 @@ func restore(
 		return roachpb.RowCount{}, err
 	}
 
-	var fsc fileSpanComparator = &inclusiveEndKeyComparator{}
-	// We know we can use exclusive comparison for
-	// ExperimentalOnline since we don't support revision history
-	// backups for ExperimentalOnline.
-	if details.ExperimentalOnline {
-		fsc = &exclusiveEndKeyComparator{}
+	// If any layer of the backup was produced with revision history before 24.1,
+	// we need to assume inclusive end-keys. If no layers used revision history or
+	// those that did were produced with #118990 in 24.1+, we can assume exclusive
+	// end-keys.
+	var fsc fileSpanComparator = &exclusiveEndKeyComparator{}
+	for _, i := range backupManifests {
+		if i.ClusterVersion.Less(clusterversion.V24_1.Version()) && i.MVCCFilter == backuppb.MVCCFilter_All {
+			fsc = &inclusiveEndKeyComparator{}
+			break
+		}
 	}
 
 	countSpansCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
