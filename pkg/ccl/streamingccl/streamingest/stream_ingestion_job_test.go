@@ -51,7 +51,6 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 
 	sysSQL := sqlutils.MakeSQLRunner(db)
 	sysSQL.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	sysSQL.Exec(t, `SET CLUSTER SETTING physical_replication.enabled = true`)
 
 	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srv.SystemLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
@@ -129,7 +128,6 @@ func TestTenantStreamingFailback(t *testing.T) {
 	defer cleanupURLB()
 
 	for _, s := range []string{
-		"SET CLUSTER SETTING physical_replication.enabled = true",
 		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
 		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'",
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'",
