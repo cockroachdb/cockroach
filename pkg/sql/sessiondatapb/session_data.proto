@@ -132,6 +132,8 @@ message SessionData {
   // head-of-the-line request in case the "eager" memory usage limit has been
   // exceeded.
   double streamer_head_of_line_only_fraction = 30;
+  // StreamerEnabled controls whether the Streamer API can be used.
+  bool streamer_enabled = 32;
 }
 
 // DataConversionConfig contains the parameters that influence the output

@@ -367,8 +367,7 @@ message LocalOnlySessionData {
   // Execution of these deallocated prepared statements will fail until they are
   // prepared again.
   int64 prepared_statements_cache_size = 97;
-  // StreamerEnabled controls whether the Streamer API can be used.
-  bool streamer_enabled = 98;
+  reserved 98;
   // DisableDropVirtualCluster causes errors when the client
   // attempts to drop virtual clusters or tenant records.
   bool disable_drop_virtual_cluster = 99;
