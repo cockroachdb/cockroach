@@ -80,6 +80,7 @@ var (
 		catconstants.JobsProgressHistoryTableName,
 		catconstants.JobsStatusTableName,
 		catconstants.JobsMessageTableName,
+		catconstants.PlanHintsTableName,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{
