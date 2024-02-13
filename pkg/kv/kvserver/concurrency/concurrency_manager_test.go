@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -712,6 +714,9 @@ func newCluster() *cluster {
 }
 
 func newClusterWithSettings(st *clustersettings.Settings) *cluster {
+	// Set the latch manager's long latch threshold to infinity to disable
+	// logging, which could cause a test to erroneously fail.
+	spanlatch.LongLatchHoldThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
 	manual := timeutil.NewManualTime(timeutil.Unix(123, 0))
 	return &cluster{
 		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},

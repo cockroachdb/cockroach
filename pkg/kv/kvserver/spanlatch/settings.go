@@ -20,10 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 )
 
-var longLatchHoldDuration = settings.RegisterDurationSetting(
+// LongLatchHoldThreshold controls when we will log latch holds.
+var LongLatchHoldThreshold = settings.RegisterDurationSetting(
 	settings.SystemOnly,
 	"kv.concurrency.long_latch_hold_duration",
-	"duration threshold for logging long latch holding",
+	"the threshold for logging long latch holds",
 	3*time.Second,
 	settings.NonNegativeDuration,
 )

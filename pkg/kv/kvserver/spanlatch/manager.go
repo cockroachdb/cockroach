@@ -12,6 +12,7 @@ package spanlatch
 
 import (
 	"context"
+	"math"
 	"time"
 	"unsafe"
 
@@ -628,25 +629,27 @@ func (m *Manager) Release(ctx context.Context, lg *Guard) {
 	if lg.snap != nil {
 		lg.snap.close()
 	}
+	m.remove(lg)
 
-	m.mu.Lock()
-	m.removeLocked(lg)
-	m.mu.Unlock()
-	held := timeutil.Now().UnixNano() - lg.acquireTime
-	if lg.acquireTime != 0 && m.settings != nil && held > longLatchHoldDuration.Get(&m.settings.SV).Nanoseconds() {
-		const longLatchHeldMsg = "%s has held latch for %d ns. Some possible causes are " +
+	var held time.Duration
+	if lg.acquireTime != 0 {
+		held = timeutil.Since(timeutil.FromUnixNanos(lg.acquireTime))
+	}
+	if held > m.longLatchHoldThreshold() {
+		const msg = "%s has held latch for %d ns. Some possible causes are " +
 			"slow disk reads, slow raft replication, and expensive request processing."
 		if m.everySecondLogger.ShouldLog() {
-			log.Warningf(ctx, longLatchHeldMsg, lg.baFmt, held)
+			log.Warningf(ctx, msg, lg.baFmt, held)
 		} else {
-			log.VEventf(ctx, 2, longLatchHeldMsg, lg.baFmt, held)
+			log.VEventf(ctx, 2, msg, lg.baFmt, held)
 		}
 	}
 }
 
-// removeLocked removes the latches owned by the provided Guard from the
-// Manager. Must be called with mu held.
-func (m *Manager) removeLocked(lg *Guard) {
+// remove removes the latches owned by the provided Guard from the Manager.
+func (m *Manager) remove(lg *Guard) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
 		sm := &m.scopes[s]
 		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
@@ -661,6 +664,14 @@ func (m *Manager) removeLocked(lg *Guard) {
 			}
 		}
 	}
+}
+
+// longLatchHoldThreshold returns the threshold for logging long latch holds.
+func (m *Manager) longLatchHoldThreshold() time.Duration {
+	if m.settings == nil {
+		return math.MaxInt64 // disable
+	}
+	return LongLatchHoldThreshold.Get(&m.settings.SV)
 }
 
 // Metrics holds information about the state of a Manager.
