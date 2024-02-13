@@ -14,6 +14,11 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,6 +35,7 @@ type RoleOption struct {
 	Option
 	HasValue bool
 	Value    func() (bool, string, error)
+	Validate func(_ *cluster.Settings, _ username.SQLUsername, val string) error
 }
 
 // KindList of role options.
@@ -202,6 +208,22 @@ func MakeListFromKVOptions(
 		} else {
 			roleOptions[i] = RoleOption{
 				Option: option, HasValue: false,
+			}
+		}
+
+		switch option {
+		case SUBJECT:
+			roleOptions[i].Validate = func(settings *cluster.Settings, u username.SQLUsername, s string) error {
+				if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
+					return pgerror.Newf(pgcode.FeatureNotSupported, "SUBJECT role option is only supported after v24.1 upgrade is finalized")
+				}
+				if err := base.CheckEnterpriseEnabled(settings, "SUBJECT role option"); err != nil {
+					return err
+				}
+				if err := distinguishedname.ValidateDN(u, s); err != nil {
+					return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+				}
+				return nil
 			}
 		}
 	}
