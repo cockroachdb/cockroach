@@ -69,9 +69,9 @@ var devOffsetKeyStart = func() Key {
 	if allowUpgradeToDev {
 		return MinSupported + 1
 	}
-	// Apply the dev offset to all versions (except VPrimordial versions, which
+	// Apply the dev offset to all versions (except VBootstrap versions, which
 	// don't matter for offsetting logic).
-	return VPrimordialMax + 1
+	return VBootstrapMax + 1
 }()
 
 // DevOffset is the offset applied to major versions into the future if this is

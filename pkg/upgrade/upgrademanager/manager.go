@@ -249,17 +249,17 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 }
 
 // runPermanentMigrationsWithoutJobsForTests runs all permanent migrations up to
-// VPrimordialMax. They are run without jobs, in order to minimize the side
+// VBootstrapMax. They are run without jobs, in order to minimize the side
 // effects left on cluster.
 //
-// NOTE: VPrimordialMax was chosen arbitrarily, since we don't have a great way
+// NOTE: VBootstrapMax was chosen arbitrarily, since we don't have a great way
 // to tell which migrations are needed and which aren't on the code path leading
 // here.
 func (m *Manager) runPermanentMigrationsWithoutJobsForTests(
 	ctx context.Context, user username.SQLUsername,
 ) error {
 	log.Infof(ctx, "found test configuration that eliminated all upgrades; running permanent upgrades anyway")
-	vers := clusterversion.ListBetween(roachpb.Version{}, clusterversion.VPrimordialMax.Version())
+	vers := clusterversion.ListBetween(roachpb.Version{}, clusterversion.VBootstrapMax.Version())
 	for _, v := range vers {
 		upg, exists := upgrades.GetUpgrade(v)
 		if !exists || !upg.Permanent() {
