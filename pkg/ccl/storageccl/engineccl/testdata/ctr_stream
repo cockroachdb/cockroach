@@ -6,7 +6,7 @@
 # order to minimize maintenance burden we use the datadriven package with
 # its "rewrite" option. To produce random inputs, you can use something like
 #   head -c 16 /dev/random | od -An -tx1 -v
-# (note that macOS `od` uses more whitespacae than linux `od`, so this file
+# (note that macOS `od` uses more whitespace than linux `od`, so this file
 # uses the linux `od` format).
 
 # 128 bytes of random data. In this file we'll verify the entire contents
@@ -80,7 +80,9 @@ e7 f7 3f 8b d8 22 34 d9 fb ef b0 9f d8 e2 7a ad
 0d 0e 42 46 09 29 a2 21 82 42 95 35 1c f7 2a 6e
 
 # And so does the offset. Note that the way this parameter works is to
-# logically shift the static test input data into the given offset.
+# logically shift the static test input data into the given offset,
+# so the output of offset=1 is not the same as the output of
+# offset=0 with the first byte chopped off.
 encrypt offset=1
 ----
 4b 41 65 df 7c 2a 96 0d 07 34 93 4c da fd 88 4a
@@ -138,3 +140,30 @@ e4 dc aa 44 1f f0 a5 e6 b4 53 a3 5d 72 ca 94 b7
 5e 90 a3 4b 85 5e 77 32 62 0c 63 46 5c 63 23 10
 42 bc 8e 63 df ca b4 d7 b7 05 60 96 3d 08 5e 0d
 0f 0e 97 bf 1f 0c 92 3b 87 62 fc 0b f5 c9 bc e4
+
+create-iv name=max
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+----
+ok
+
+encrypt offset=0 iv=max skip-v1=true
+----
+97 f0 99 31 fd a9 6e 96 57 b9 f3 b6 66 41 24 a1
+ed 2f 5b d0 36 7b 42 8b 48 2d 86 ae aa ad 28 65
+d6 34 64 4b f6 b9 ac 9c 5a af 35 be 2d 19 00 21
+61 22 5d 5a 2c 29 84 da 05 66 7c 4f d2 de 89 08
+c1 c8 df 90 01 59 4c 1c b6 fe 01 a0 0e 25 9f 70
+1c fb 8e 2b 46 b1 eb 19 5c 06 1b 2f 47 68 a7 ce
+d5 f4 12 81 cb aa 93 21 30 db 52 9c 6f 99 3d 1b
+64 67 27 a2 f7 2f ad db 5c b7 90 0c 08 1a f8 51
+
+encrypt offset=1 iv=max skip-v1=true
+----
+ef db d5 f1 25 a1 f2 f1 96 c4 70 da c8 7a 4a 0f
+b9 5c 32 c7 2a bf cd f0 8e 3e 5d f2 66 63 fb 3c
+fd 0d 0d 5d e2 da 1a 33 94 09 5e a0 2c ed 2a 50
+f3 6f 21 4b 82 3c a4 d6 7c 96 97 57 51 f7 1f 7f
+98 21 32 54 30 0d 15 9f 05 b9 8b bf c0 8a ed 76
+12 1b 7f e8 1b 96 0d cc 8d 2e 5b c5 51 eb 50 7c
+9e 2e 2e 49 b4 37 b8 79 82 39 50 8b 4e 51 4f f3
+1e 42 40 d0 be a3 5a e2 89 9d b1 26 56 b9 fb 15

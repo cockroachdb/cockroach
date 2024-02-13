@@ -81,9 +81,10 @@ func (c *FileCipherStreamCreator) CreateNew(
 		}
 		return settings, &fileCipherStream{bcs: ctrCS}, nil
 	case 2:
-		var scratch [ctrBlockSize]byte
-		iv := makeIV(0, settings.Nonce, settings.Counter, scratch[:])
-		fcs2, err := newFileCipherStreamV2(key.Key, iv)
+		var iv [ctrBlockSize]byte
+		copy(iv[:ctrNonceSize], settings.Nonce)
+		binary.BigEndian.PutUint32(iv[ctrNonceSize:ctrNonceSize+4], settings.Counter)
+		fcs2, err := newFileCipherStreamV2(key.Key, iv[:])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -208,20 +209,13 @@ func newCTRBlockCipherStream(
 	return stream, nil
 }
 
-// makeIV copies nonce and counter into scratch (which must be backed by an
-// array of size ctrBlockSize), and returns the IV.
-func makeIV(blockIndex uint64, nonce []byte, counter uint32, scratch []byte) []byte {
-	iv := append(scratch[:0], nonce[:]...)
-	var blockCounter = uint32(uint64(counter) + blockIndex)
-	binary.BigEndian.PutUint32(iv[len(iv):len(iv)+4], blockCounter)
-	iv = iv[0 : len(iv)+4]
-	return iv
-}
-
 // For CTR, decryption and encryption are the same. data must have length equal to
 // the block size, and scratch must have length >= block size.
 func (s *cTRBlockCipherStream) transform(blockIndex uint64, data []byte, scratch []byte) {
-	iv := makeIV(blockIndex, s.nonce[:], s.counter, scratch)
+	iv := append(scratch[:0], s.nonce[:]...)
+	var blockCounter = uint32(uint64(s.counter) + blockIndex)
+	binary.BigEndian.PutUint32(iv[len(iv):len(iv)+4], blockCounter)
+	iv = iv[0 : len(iv)+4]
 	s.cBlock.Encrypt(iv, iv)
 	subtle.XORBytes(data, data, iv)
 }
