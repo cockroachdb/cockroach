@@ -97,33 +97,10 @@ func NewTenantUpgrade(
 		upgrade: upgrade{
 			description: description,
 			v:           v,
-			permanent:   false,
 			restore:     restore,
 		},
 		fn:           fn,
 		precondition: precondition,
-	}
-	return m
-}
-
-// NewPermanentTenantUpgrade constructs a TenantUpgrade marked as "permanent":
-// an upgrade that will run regardless of the cluster's bootstrap version.
-// Note however that the upgrade will still run at most once.
-func NewPermanentTenantUpgrade(
-	description string,
-	v roachpb.Version,
-	fn TenantUpgradeFunc,
-	restore RestoreBehavior,
-) *TenantUpgrade {
-	m := &TenantUpgrade{
-		upgrade: upgrade{
-			description: description,
-			v:           v,
-			permanent:   true,
-			restore:     restore,
-		},
-		fn:           fn,
-		precondition: nil,
 	}
 	return m
 }
