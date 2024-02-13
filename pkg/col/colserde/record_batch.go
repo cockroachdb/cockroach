@@ -11,6 +11,7 @@
 package colserde
 
 import (
+	"context"
 	"encoding/binary"
 	"io"
 
@@ -34,12 +35,12 @@ const (
 // the given type.
 //
 //gcassert:inline
-func numBuffersForType(t *types.T) int {
+func numBuffersForType(ctx context.Context, t *types.T) int {
 	// Most types are represented by 3 memory.Buffers (because most types are
 	// serialized into flat bytes representation). One buffer for the null
 	// bitmap, one for the values, and one for the offsets.
 	numBuffers := 3
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 	case types.BoolFamily, types.FloatFamily, types.IntFamily:
 		// This type doesn't have an offsets buffer.
 		numBuffers = 2
@@ -74,13 +75,15 @@ type RecordBatchSerializer struct {
 // NewRecordBatchSerializer creates a new RecordBatchSerializer according to
 // typs. Note that Serializing or Deserializing data that does not follow the
 // passed in schema results in undefined behavior.
-func NewRecordBatchSerializer(typs []*types.T) (*RecordBatchSerializer, error) {
+func NewRecordBatchSerializer(
+	ctx context.Context, typs []*types.T,
+) (*RecordBatchSerializer, error) {
 	s := &RecordBatchSerializer{
 		numBuffers: make([]int, len(typs)),
 		builder:    flatbuffers.NewBuilder(flatbufferBuilderInitialCapacity),
 	}
 	for i, t := range typs {
-		s.numBuffers[i] = numBuffersForType(t)
+		s.numBuffers[i] = numBuffersForType(ctx, t)
 	}
 	return s, nil
 }

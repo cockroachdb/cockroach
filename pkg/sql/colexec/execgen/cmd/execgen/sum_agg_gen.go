@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -179,7 +180,7 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 				Width: inputTypeWidth,
 				Overload: sumAggTmplInfo{
 					aggTmplInfoBase: aggTmplInfoBase{
-						canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(retTypeFamily),
+						canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(execversion.WithLatestVersion(), retTypeFamily),
 					},
 					SumKind:        sumKind,
 					InputVecMethod: toVecMethod(inputTypeFamily, inputTypeWidth),

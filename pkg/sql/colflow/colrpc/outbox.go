@@ -87,6 +87,7 @@ type Outbox struct {
 //   - getStats, when non-nil, returns all of the execution statistics of the
 //     operators that are in the same tree as this Outbox.
 func NewOutbox(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	unlimitedAllocator *colmem.Allocator,
@@ -95,11 +96,11 @@ func NewOutbox(
 	typs []*types.T,
 	getStats func(context.Context) []*execinfrapb.ComponentStats,
 ) (*Outbox, error) {
-	c, err := colserde.NewArrowBatchConverter(typs, colserde.BatchToArrowOnly, converterMemAcc)
+	c, err := colserde.NewArrowBatchConverter(ctx, typs, colserde.BatchToArrowOnly, converterMemAcc)
 	if err != nil {
 		return nil, err
 	}
-	s, err := colserde.NewRecordBatchSerializer(typs)
+	s, err := colserde.NewRecordBatchSerializer(ctx, typs)
 	if err != nil {
 		return nil, err
 	}

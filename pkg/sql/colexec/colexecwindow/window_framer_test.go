@@ -398,7 +398,8 @@ func initWindowFramers(
 		}}
 	}
 	colWindowFramer := newWindowFramer(
-		testCfg.evalCtx, frame, ordering, []*types.T{testCfg.typ, types.Bool}, peersCol)
+		context.Background(), testCfg.evalCtx, frame, ordering, []*types.T{testCfg.typ, types.Bool}, peersCol,
+	)
 	colWindowFramer.startPartition(context.Background(), colBuffer.Length(), colBuffer)
 
 	rowDir := encoding.Ascending

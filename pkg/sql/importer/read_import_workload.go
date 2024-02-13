@@ -252,7 +252,7 @@ func (w *WorkloadKVConverter) Worker(
 	}
 	var alloc tree.DatumAlloc
 	var a bufalloc.ByteAllocator
-	cb := coldata.NewMemBatchWithCapacity(nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
+	cb := coldata.NewMemBatchWithCapacity(ctx, nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
 
 	for {
 		batchIdx := int(atomic.AddInt64(&w.batchIdxAtomic, 1))

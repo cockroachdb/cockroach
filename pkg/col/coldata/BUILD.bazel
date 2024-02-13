@@ -19,6 +19,7 @@ go_library(
     deps = [
         "//pkg/col/typeconv",
         "//pkg/sql/colexecerror",
+        "//pkg/sql/execversion",
         "//pkg/sql/types",
         "//pkg/util/buildutil",
         "//pkg/util/duration",

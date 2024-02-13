@@ -138,7 +138,7 @@ func new_AGG_TITLERemovableAggregator(
 		queue:        newMinMaxQueue(maxQueueLength),
 		omittedIndex: -1,
 	}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(argTyp.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(args.BufferAllocator.Ctx, argTyp.Family()) {
 	// {{range .Overloads}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch argTyp.Width() {

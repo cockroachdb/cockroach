@@ -70,6 +70,7 @@ go_library(
         "//pkg/col/typeconv",
         "//pkg/sql/colexec/execgen",
         "//pkg/sql/colexecerror",
+        "//pkg/sql/execversion",
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sem/tree/treewindow",

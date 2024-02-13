@@ -59,6 +59,7 @@ type rangeOffsetHandler interface {
 }
 
 func newRangeOffsetHandler(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	datumAlloc *tree.DatumAlloc,
 	bound *execinfrapb.WindowerSpec_Frame_Bound,
@@ -76,18 +77,18 @@ func newRangeOffsetHandler(
 					switch ordColType.Width() {
 					case 16:
 						op := &rangeHandlerOffsetPrecedingStartAscInt16{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetPrecedingStartAscInt32{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartAscInt64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
 						return op
 					}
@@ -96,7 +97,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartAscDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
 						return op
 					}
@@ -105,7 +106,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartAscFloat64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
 						return op
 					}
@@ -114,7 +115,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartAscInterval{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -123,7 +124,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartAscDate{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -132,7 +133,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartAscTimestamp{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -141,7 +142,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartAscDatum{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
 						_, binOp, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -155,18 +156,18 @@ func newRangeOffsetHandler(
 					switch ordColType.Width() {
 					case 16:
 						op := &rangeHandlerOffsetPrecedingStartDescInt16{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetPrecedingStartDescInt32{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartDescInt64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
 						return op
 					}
@@ -175,7 +176,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartDescDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
 						return op
 					}
@@ -184,7 +185,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartDescFloat64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
 						return op
 					}
@@ -193,7 +194,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartDescInterval{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -202,7 +203,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartDescDate{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -211,7 +212,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartDescTimestamp{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -220,7 +221,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartDescDatum{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
 						binOp, _, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -237,18 +238,18 @@ func newRangeOffsetHandler(
 					switch ordColType.Width() {
 					case 16:
 						op := &rangeHandlerOffsetPrecedingEndAscInt16{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetPrecedingEndAscInt32{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndAscInt64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
 						return op
 					}
@@ -257,7 +258,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndAscDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
 						return op
 					}
@@ -266,7 +267,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndAscFloat64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
 						return op
 					}
@@ -275,7 +276,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndAscInterval{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -284,7 +285,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndAscDate{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -293,7 +294,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndAscTimestamp{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -302,7 +303,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndAscDatum{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
 						_, binOp, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -316,18 +317,18 @@ func newRangeOffsetHandler(
 					switch ordColType.Width() {
 					case 16:
 						op := &rangeHandlerOffsetPrecedingEndDescInt16{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetPrecedingEndDescInt32{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndDescInt64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
 						return op
 					}
@@ -336,7 +337,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndDescDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
 						return op
 					}
@@ -345,7 +346,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndDescFloat64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
 						return op
 					}
@@ -354,7 +355,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndDescInterval{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -363,7 +364,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndDescDate{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -372,7 +373,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndDescTimestamp{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -381,7 +382,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndDescDatum{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
 						binOp, _, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -401,18 +402,18 @@ func newRangeOffsetHandler(
 					switch ordColType.Width() {
 					case 16:
 						op := &rangeHandlerOffsetFollowingStartAscInt16{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetFollowingStartAscInt32{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartAscInt64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
 						return op
 					}
@@ -421,7 +422,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartAscDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
 						return op
 					}
@@ -430,7 +431,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartAscFloat64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
 						return op
 					}
@@ -439,7 +440,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartAscInterval{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -448,7 +449,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartAscDate{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -457,7 +458,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartAscTimestamp{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -466,7 +467,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartAscDatum{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
 						binOp, _, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -480,18 +481,18 @@ func newRangeOffsetHandler(
 					switch ordColType.Width() {
 					case 16:
 						op := &rangeHandlerOffsetFollowingStartDescInt16{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetFollowingStartDescInt32{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartDescInt64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
 						return op
 					}
@@ -500,7 +501,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartDescDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
 						return op
 					}
@@ -509,7 +510,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartDescFloat64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
 						return op
 					}
@@ -518,7 +519,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartDescInterval{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -527,7 +528,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartDescDate{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -536,7 +537,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartDescTimestamp{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -545,7 +546,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartDescDatum{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
 						_, binOp, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -562,18 +563,18 @@ func newRangeOffsetHandler(
 					switch ordColType.Width() {
 					case 16:
 						op := &rangeHandlerOffsetFollowingEndAscInt16{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetFollowingEndAscInt32{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndAscInt64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
 						return op
 					}
@@ -582,7 +583,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndAscDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
 						return op
 					}
@@ -591,7 +592,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndAscFloat64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
 						return op
 					}
@@ -600,7 +601,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndAscInterval{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -609,7 +610,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndAscDate{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -618,7 +619,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndAscTimestamp{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -627,7 +628,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndAscDatum{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
 						binOp, _, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -641,18 +642,18 @@ func newRangeOffsetHandler(
 					switch ordColType.Width() {
 					case 16:
 						op := &rangeHandlerOffsetFollowingEndDescInt16{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetFollowingEndDescInt32{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndDescInt64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
 						return op
 					}
@@ -661,7 +662,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndDescDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
 						return op
 					}
@@ -670,7 +671,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndDescFloat64{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
 						return op
 					}
@@ -679,7 +680,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndDescInterval{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -688,7 +689,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndDescDate{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -697,7 +698,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndDescTimestamp{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
 						return op
 					}
@@ -706,7 +707,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndDescDatum{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
 						_, binOp, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -10765,14 +10766,14 @@ func (b *rangeOffsetHandlerBase) startPartition(
 
 // decodeOffset decodes the given encoded offset into the given type.
 func decodeOffset(
-	datumAlloc *tree.DatumAlloc, orderColType *types.T, typedOffset []byte,
+	ctx context.Context, datumAlloc *tree.DatumAlloc, orderColType *types.T, typedOffset []byte,
 ) interface{} {
 	offsetType := getOffsetType(orderColType)
 	datum, err := execinfra.DecodeDatum(datumAlloc, offsetType, typedOffset)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(orderColType.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, orderColType.Family()) {
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return datum
 	}

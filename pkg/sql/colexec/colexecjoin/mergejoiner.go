@@ -517,13 +517,13 @@ func newMergeJoinBase(
 		joinType:           joinType,
 		left: mergeJoinInput{
 			sourceTypes:           leftTypes,
-			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(leftTypes),
+			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(unlimitedAllocator.Ctx, leftTypes),
 			eqCols:                lEqCols,
 			directions:            lDirections,
 		},
 		right: mergeJoinInput{
 			sourceTypes:           rightTypes,
-			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(rightTypes),
+			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(unlimitedAllocator.Ctx, rightTypes),
 			eqCols:                rEqCols,
 			directions:            rDirections,
 		},
@@ -533,11 +533,11 @@ func newMergeJoinBase(
 	base.helper.Init(unlimitedAllocator, memoryLimit)
 	base.left.distincterInput = &colexecop.FeedOperator{}
 	base.left.distincter, base.left.distinctOutput = colexecbase.OrderedDistinctColsToOperators(
-		base.left.distincterInput, lEqCols, leftTypes, false, /* nullsAreDistinct */
+		unlimitedAllocator.Ctx, base.left.distincterInput, lEqCols, leftTypes, false, /* nullsAreDistinct */
 	)
 	base.right.distincterInput = &colexecop.FeedOperator{}
 	base.right.distincter, base.right.distinctOutput = colexecbase.OrderedDistinctColsToOperators(
-		base.right.distincterInput, rEqCols, rightTypes, false, /* nullsAreDistinct */
+		unlimitedAllocator.Ctx, base.right.distincterInput, rEqCols, rightTypes, false, /* nullsAreDistinct */
 	)
 	return base
 }

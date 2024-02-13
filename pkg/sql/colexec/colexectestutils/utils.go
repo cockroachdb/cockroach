@@ -54,7 +54,8 @@ import (
 // colexecbase.OrderedDistinctColsToOperators. We inject this at test time so
 // that tests can use OrderedDistinctColsToOperators without invoking an import
 // dependency cycle.
-var OrderedDistinctColsToOperators func(input colexecop.Operator, distinctCols []uint32, typs []*types.T, nullsAreDistinct bool,
+var OrderedDistinctColsToOperators func(
+	ctx context.Context, input colexecop.Operator, distinctCols []uint32, typs []*types.T, nullsAreDistinct bool,
 ) (colexecop.ResettableOperator, []bool)
 
 // Tuple represents a row with any-type columns.
@@ -1344,7 +1345,7 @@ func (r *OpTestOutput) VerifyAnyOrder() error {
 func (r *OpTestOutput) VerifyPartialOrder() error {
 	distincterInput := &colexecop.FeedOperator{}
 	distincter, distinctOutput := OrderedDistinctColsToOperators(
-		distincterInput, r.orderedCols, r.typs, false, /* nullsAreDistinct */
+		context.Background(), distincterInput, r.orderedCols, r.typs, false, /* nullsAreDistinct */
 	)
 	var actual, expected Tuples
 	start := 0

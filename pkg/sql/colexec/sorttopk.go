@@ -64,7 +64,7 @@ func NewTopKSorter(
 		}
 		base.orderState.distincterInput = &colexecop.FeedOperator{}
 		base.orderState.distincter, base.orderState.distinctOutput = colexecbase.OrderedDistinctColsToOperators(
-			base.orderState.distincterInput, partialOrderCols, inputTypes, false, /* nullsAreDistinct */
+			allocator.Ctx, base.orderState.distincterInput, partialOrderCols, inputTypes, false, /* nullsAreDistinct */
 		)
 	} else {
 		base.heaper = &topKHeaper{base}
@@ -146,7 +146,7 @@ func (t *topKSorter) Init(ctx context.Context) {
 	// in orderingCols.
 	t.comparators = make([]vecComparator, len(t.inputTypes))
 	for i, typ := range t.inputTypes {
-		t.comparators[i] = GetVecComparator(typ, 2)
+		t.comparators[i] = GetVecComparator(t.Ctx, typ, 2)
 	}
 	// TODO(yuzefovich): switch to calling this method on allocator. This will
 	// require plumbing unlimited allocator to work correctly in tests with

@@ -82,6 +82,12 @@ func WithVersion(ctx context.Context, version DistSQLVersion) context.Context {
 	return context.WithValue(ctx, versionKey{}, version)
 }
 
+var ctxWithLatestVersion = WithVersion(context.Background(), Version)
+
+func WithLatestVersion() context.Context {
+	return ctxWithLatestVersion
+}
+
 func VersionFromContext(ctx context.Context) DistSQLVersion {
 	val := ctx.Value(versionKey{})
 	if v, ok := val.(DistSQLVersion); !ok {

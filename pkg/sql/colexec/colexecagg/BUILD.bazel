@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra/execagg",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/execversion",  # keep
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",

@@ -17,6 +17,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -129,7 +130,7 @@ func genRowToVec(inputFileContents string, wr io.Writer) error {
 func getRowToVecTmplInfos() []rowToVecTmplInfo {
 	var tmplInfos []rowToVecTmplInfo
 	for typeFamily := types.Family(0); typeFamily < types.AnyFamily; typeFamily++ {
-		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily)
+		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.WithLatestVersion(), typeFamily)
 		if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
 			// Datum-backed type families are handled below.
 			continue
