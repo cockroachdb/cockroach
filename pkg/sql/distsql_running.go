@@ -740,15 +740,14 @@ func (dsp *DistSQLPlanner) Run(
 			// during the flow setup, we need to populate leafInputState below,
 			// so we tell the localState that there is concurrency.
 
-			// At the moment, we disable the usage of the Streamer API for local
-			// plans when non-default key locking modes are requested on some of
-			// the processors. This is the case since the lock spans propagation
-			// doesn't happen for the leaf txns which can result in excessive
-			// contention for future reads (since the acquired locks are not
-			// cleaned up properly when the txn commits).
-			// TODO(yuzefovich): fix the propagation of the lock spans with the
-			// leaf txns and remove this check. See #94290.
-			containsNonDefaultLocking := planCtx.planner != nil && planCtx.planner.curPlan.flags.IsSet(planFlagContainsNonDefaultLocking)
+			// At the moment, we disable the usage of the Streamer API for local plans
+			// when locking is used by any of the processors. This is the case since
+			// the lock spans propagation doesn't happen for the leaf txns which can
+			// result in excessive contention for future reads (since the acquired
+			// locks are not cleaned up properly when the txn commits).
+			// TODO(yuzefovich): fix the propagation of the lock spans with the leaf
+			// txns and remove this check. See #94290.
+			containsLocking := planCtx.planner != nil && planCtx.planner.curPlan.flags.IsSet(planFlagContainsLocking)
 
 			// We also currently disable the usage of the Streamer API whenever
 			// we have a wrapped planNode. This is done to prevent scenarios
@@ -769,7 +768,7 @@ func (dsp *DistSQLPlanner) Run(
 				}
 				return false
 			}()
-			if !containsNonDefaultLocking && !mustUseRootTxn {
+			if !containsLocking && !mustUseRootTxn {
 				if evalCtx.SessionData().StreamerEnabled {
 					for _, proc := range plan.Processors {
 						if jr := proc.Spec.Core.JoinReader; jr != nil {
@@ -2047,6 +2046,8 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		return getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
 	}
 
+	checksContainLocking := planner.curPlan.flags.IsSet(planFlagCheckContainsLocking)
+
 	// We treat plan.cascades as a queue.
 	for i := 0; i < len(plan.cascades); i++ {
 		// The original bufferNode is stored in c.Buffer; we can refer to it
@@ -2113,6 +2114,9 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		// Collect any new checks.
 		if len(cp.checkPlans) > 0 {
 			plan.checkPlans = append(plan.checkPlans, cp.checkPlans...)
+			if cp.flags.IsSet(planFlagCheckContainsLocking) {
+				checksContainLocking = true
+			}
 		}
 
 		// In cyclical reference situations, the number of cascading operations can
@@ -2158,8 +2162,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 	// multiple checks to run, none of the checks have non-default locking, and
 	// we're likely to have quota to do so.
 	runParallelChecks := parallelizeChecks.Get(&dsp.st.SV) &&
-		len(plan.checkPlans) > 1 &&
-		!planner.curPlan.flags.IsSet(planFlagCheckContainsNonDefaultLocking) &&
+		len(plan.checkPlans) > 1 && !checksContainLocking &&
 		dsp.parallelChecksSem.ApproximateQuota() > 0
 	if runParallelChecks {
 		// At the moment, we rely on not using the newer DistSQL spec factory to

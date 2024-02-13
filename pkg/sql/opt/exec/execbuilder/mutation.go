@@ -748,11 +748,15 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 	return colMap
 }
 
-// checkContainsLocking sets CheckContainsNonDefaultKeyLocking based on whether
-// we found non-default locking while building a check query plan.
+// checkContainsLocking sets PlanFlagCheckContainsLocking based on whether we
+// found locking while building a check query plan.
 func (b *Builder) checkContainsLocking(mainContainsLocking bool) {
-	b.CheckContainsNonDefaultKeyLocking = b.CheckContainsNonDefaultKeyLocking || b.ContainsNonDefaultKeyLocking
-	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || mainContainsLocking
+	if b.flags.IsSet(exec.PlanFlagContainsLocking) {
+		b.flags.Set(exec.PlanFlagCheckContainsLocking)
+	}
+	if mainContainsLocking {
+		b.flags.Set(exec.PlanFlagContainsLocking)
+	}
 }
 
 // buildUniqueChecks builds uniqueness check queries. These check queries are
@@ -762,8 +766,8 @@ func (b *Builder) checkContainsLocking(mainContainsLocking bool) {
 // violated. Those queries are each wrapped in an ErrorIfRows operator, which
 // will throw an appropriate error in case the inner query returns any rows.
 func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
-	defer b.checkContainsLocking(b.ContainsNonDefaultKeyLocking)
-	b.ContainsNonDefaultKeyLocking = false
+	defer b.checkContainsLocking(b.flags.IsSet(exec.PlanFlagContainsLocking))
+	b.flags.Unset(exec.PlanFlagContainsLocking)
 	md := b.mem.Metadata()
 	for i := range checks {
 		c := &checks[i]
@@ -794,8 +798,8 @@ func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
 }
 
 func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
-	defer b.checkContainsLocking(b.ContainsNonDefaultKeyLocking)
-	b.ContainsNonDefaultKeyLocking = false
+	defer b.checkContainsLocking(b.flags.IsSet(exec.PlanFlagContainsLocking))
+	b.flags.Unset(exec.PlanFlagContainsLocking)
 	md := b.mem.Metadata()
 	for i := range checks {
 		c := &checks[i]
