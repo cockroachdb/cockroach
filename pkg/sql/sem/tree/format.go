@@ -172,6 +172,10 @@ const (
 	FmtForFingerprint
 )
 
+// StmtFingerprintSubChar is the string that replaces
+// all literals and placeholders in a query when computing its fingerprint.
+const StmtFingerprintSubChar = '_'
+
 // PasswordSubstitution is the string that replaces
 // passwords unless FmtShowPasswords is specified.
 const PasswordSubstitution = "'*****'"
@@ -437,6 +441,8 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 
 			if f.HasFlags(FmtMarkRedactionNode) {
 				ctx.formatNodeMaybeMarkRedaction(n)
+			} else if f.HasFlags(FmtForFingerprint) {
+				ctx.formatNodeForFingerprint(n)
 			} else {
 				ctx.formatNodeOrHideConstants(n)
 			}
@@ -469,6 +475,8 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 
 	if f.HasFlags(FmtMarkRedactionNode) {
 		ctx.formatNodeMaybeMarkRedaction(n)
+	} else if f.HasFlags(FmtForFingerprint) {
+		ctx.formatNodeForFingerprint(n)
 	} else {
 		ctx.formatNodeOrHideConstants(n)
 	}

@@ -55,6 +55,7 @@ go_library(
         "export.go",
         "expr.go",
         "format.go",
+        "format_fingerprint.go",
         "function_definition.go",
         "function_name.go",
         "grant.go",
