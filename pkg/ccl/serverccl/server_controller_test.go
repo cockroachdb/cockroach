@@ -338,6 +338,7 @@ func TestServerControllerDefaultHTTPTenant(t *testing.T) {
 	for _, c := range resp.Cookies() {
 		if c.Name == authserver.TenantSelectCookieName {
 			tenantCookie = c.Value
+			require.True(t, c.Secure)
 		}
 	}
 	require.Equal(t, "hello", tenantCookie)
@@ -558,6 +559,7 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	for i, c := range resp.Cookies() {
 		cookieNames[i] = c.Name
 		cookieValues[i] = c.Value
+		require.True(t, c.Secure)
 		if c.Name == "session" {
 			require.True(t, c.HttpOnly)
 		}
@@ -585,6 +587,7 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	for i, c := range resp.Cookies() {
 		cookieNames[i] = c.Name
 		cookieValues[i] = c.Value
+		require.True(t, c.Secure)
 		if c.Name == "session" {
 			require.True(t, c.HttpOnly)
 		}
@@ -613,6 +616,7 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	for i, c := range resp.Cookies() {
 		cookieNames[i] = c.Name
 		cookieValues[i] = c.Value
+		require.True(t, c.Secure)
 		if c.Name == "session" {
 			require.True(t, c.HttpOnly)
 		}
