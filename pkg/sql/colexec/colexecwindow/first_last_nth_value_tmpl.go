@@ -57,7 +57,8 @@ func New_UPPERCASE_NAMEOperator(
 	ordering *execinfrapb.Ordering,
 	argIdxs []int,
 ) (colexecop.ClosableOperator, error) {
-	framer := newWindowFramer(args.EvalCtx, frame, ordering, args.InputTypes, args.PeersColIdx)
+	ctx := args.BufferAllocator.Ctx
+	framer := newWindowFramer(ctx, args.EvalCtx, frame, ordering, args.InputTypes, args.PeersColIdx)
 	colsToStore := framer.getColsToStore([]int{argIdxs[0]})
 
 	// Allow the direct-access buffer 10% of the available memory. The rest will
@@ -81,7 +82,7 @@ func New_UPPERCASE_NAMEOperator(
 		bufferArgIdx: 0, // The arg column is the first column in the buffer.
 	}
 	argType := args.InputTypes[argIdxs[0]]
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(argType.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, argType.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch argType.Width() {

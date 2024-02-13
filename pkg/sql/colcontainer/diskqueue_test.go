@@ -106,7 +106,7 @@ func TestDiskQueue(t *testing.T) {
 
 					// Run verification. We reuse the same batch to dequeue into
 					// since that is the common pattern.
-					dest := coldata.NewMemBatch(typs, testColumnFactory)
+					dest := coldata.NewMemBatch(ctx, typs, testColumnFactory)
 					for {
 						src := op.Next()
 						require.NoError(t, q.Enqueue(ctx, src))
@@ -189,7 +189,7 @@ func TestDiskQueueCloseOnErr(t *testing.T) {
 	q, err := colcontainer.NewDiskQueue(ctx, typs, queueCfg, &diskAcc, testMemAcc)
 	require.NoError(t, err)
 
-	b := coldata.NewMemBatch(typs, coldata.StandardColumnFactory)
+	b := coldata.NewMemBatch(ctx, typs, coldata.StandardColumnFactory)
 
 	err = q.Enqueue(ctx, b)
 	require.Error(t, err, "expected Enqueue to produce an error given a disk limit of one byte")
@@ -249,7 +249,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 				break
 			}
 		}
-		dequeuedBatch := coldata.NewMemBatch(typs, testColumnFactory)
+		dequeuedBatch := coldata.NewMemBatch(ctx, typs, testColumnFactory)
 		for dequeuedBatch.Length() != 0 {
 			if _, err := q.Dequeue(ctx, dequeuedBatch); err != nil {
 				b.Fatal(err)

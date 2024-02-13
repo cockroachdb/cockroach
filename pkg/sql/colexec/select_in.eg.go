@@ -13,6 +13,7 @@ package colexec
 
 import (
 	"bytes"
+	"context"
 	"math"
 	"time"
 
@@ -67,7 +68,7 @@ func GetInProjectionOperator(
 	negate bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
@@ -219,6 +220,7 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	t *types.T,
 	input colexecop.Operator,
@@ -226,7 +228,7 @@ func GetInOperator(
 	datumTuple *tree.DTuple,
 	negate bool,
 ) (colexecop.Operator, error) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:

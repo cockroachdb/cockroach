@@ -248,6 +248,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					outboxMetadataSources []colexecop.MetadataSource,
 				) {
 					outbox, err := colrpc.NewOutbox(
+						ctx,
 						&execinfra.FlowCtx{Gateway: false},
 						0, /* processorID */
 						colmem.NewAllocator(outboxCtx, outboxMemAcc, testColumnFactory),

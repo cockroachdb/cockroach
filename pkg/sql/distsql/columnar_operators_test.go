@@ -1343,7 +1343,7 @@ func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []*types.T {
 	typs := make([]*types.T, 0, nCols)
 	for len(typs) < nCols {
 		typ := randgen.RandType(rng)
-		family := typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family())
+		family := typeconv.TypeFamilyToCanonicalTypeFamily(context.Background(), typ.Family())
 		if family == typeconv.DatumVecCanonicalTypeFamily {
 			// At the moment, we disallow datum-backed types.
 			// TODO(yuzefovich): remove this.

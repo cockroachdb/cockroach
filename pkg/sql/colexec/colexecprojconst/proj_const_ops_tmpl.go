@@ -331,14 +331,14 @@ func GetProjection_CONST_SIDEConstOperator(
 		switch op.Symbol {
 		// {{range .BinOps}}
 		case treebin._NAME:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			// {{range .LeftFamilies}}
 			// {{$leftFamilyStr := .LeftCanonicalFamilyStr}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:
 				switch leftType.Width() {
 				// {{range .LeftWidths}}
 				case _LEFT_TYPE_WIDTH:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					// {{range .RightFamilies}}
 					// {{$rightFamilyStr := .RightCanonicalFamilyStr}}
 					case _RIGHT_CANONICAL_TYPE_FAMILY:
@@ -389,13 +389,13 @@ func GetProjection_CONST_SIDEConstOperator(
 			switch op.Symbol {
 			// {{range .CmpOps}}
 			case treecmp._NAME:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 				// {{range .LeftFamilies}}
 				case _LEFT_CANONICAL_TYPE_FAMILY:
 					switch leftType.Width() {
 					// {{range .LeftWidths}}
 					case _LEFT_TYPE_WIDTH:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						// {{range .RightFamilies}}
 						case _RIGHT_CANONICAL_TYPE_FAMILY:
 							switch rightType.Width() {

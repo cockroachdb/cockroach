@@ -151,7 +151,7 @@ func NewOrderedAggregator(
 		}
 	}
 	op, groupCol := colexecbase.OrderedDistinctColsToOperators(
-		args.Input, args.Spec.GroupCols, args.InputTypes, false, /* nullsAreDistinct */
+		ctx, args.Input, args.Spec.GroupCols, args.InputTypes, false, /* nullsAreDistinct */
 	)
 
 	// We will be reusing the same aggregate functions, so we use 1 as the

@@ -71,12 +71,14 @@ func _ASSIGN_LT(_, _, _, _, _, _ string) bool {
 
 // {{range .}}
 // {{$nulls := .Nulls}}
-func newSingleSorter_WITH_NULLS(t *types.T, dir execinfrapb.Ordering_Column_Direction) colSorter {
+func newSingleSorter_WITH_NULLS(
+	ctx context.Context, t *types.T, dir execinfrapb.Ordering_Column_Direction,
+) colSorter {
 	switch dir {
 	// {{range .DirOverloads}}
 	// {{$dir := .DirString}}
 	case _DIR_ENUM:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 		// {{range .FamilyOverloads}}
 		case _CANONICAL_TYPE_FAMILY:
 			switch t.Width() {

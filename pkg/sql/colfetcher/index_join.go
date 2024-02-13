@@ -632,7 +632,7 @@ func NewColIndexJoin(
 	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(
 		useStreamer, flowCtx.EvalCtx.TestingKnobs.ForceProductionValues, flowCtx.EvalCtx.SessionData(),
 	)
-	op.prepareMemLimit(inputTypes)
+	op.prepareMemLimit(ctx, inputTypes)
 	if useStreamer && cFetcherMemoryLimit < op.mem.inputBatchSizeLimit {
 		// If we have a low workmem limit, then we want to reduce the input
 		// batch size limit.
@@ -651,18 +651,18 @@ func NewColIndexJoin(
 }
 
 // prepareMemLimit sets up the fields used to limit lookup batch size.
-func (s *ColIndexJoin) prepareMemLimit(inputTypes []*types.T) {
+func (s *ColIndexJoin) prepareMemLimit(ctx context.Context, inputTypes []*types.T) {
 	// Add the EncDatum overhead to ensure parity with row engine size limits.
 	s.mem.constRowSize = int64(rowenc.EncDatumRowOverhead)
 	for i, t := range inputTypes {
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 		case
 			types.BoolFamily,
 			types.IntFamily,
 			types.FloatFamily,
 			types.TimestampTZFamily,
 			types.IntervalFamily:
-			s.mem.constRowSize += adjustMemEstimate(colmem.GetFixedSizeTypeSize(t))
+			s.mem.constRowSize += adjustMemEstimate(colmem.GetFixedSizeTypeSize(ctx, t))
 		case
 			types.DecimalFamily,
 			types.BytesFamily,

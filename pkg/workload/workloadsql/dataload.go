@@ -117,7 +117,7 @@ func (l InsertsDataLoader) InitialDataLoad(
 				_ = flush()
 
 				for batchIdx := startIdx; batchIdx < endIdx; batchIdx++ {
-					for _, row := range table.InitialRows.BatchRows(batchIdx) {
+					for _, row := range table.InitialRows.BatchRows(ctx, batchIdx) {
 						tableRowsAtomic.Add(1)
 						if len(params) != 0 {
 							insertStmtBuf.WriteString(`,`)

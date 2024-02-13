@@ -502,7 +502,7 @@ func (d *diskQueue) rotateFile(ctx context.Context) error {
 
 	if d.serializer == nil {
 		writer := &diskQueueWriter{testingKnobAlwaysCompress: d.cfg.TestingKnobs.AlwaysCompress, wrapped: f}
-		d.serializer, err = colserde.NewFileSerializer(writer, d.typs, d.converterMemAcc)
+		d.serializer, err = colserde.NewFileSerializer(ctx, writer, d.typs, d.converterMemAcc)
 		if err != nil {
 			return err
 		}
@@ -511,7 +511,7 @@ func (d *diskQueue) rotateFile(ctx context.Context) error {
 		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return err
 		}
-		if err := d.resetWriters(f); err != nil {
+		if err := d.resetWriters(ctx, f); err != nil {
 			return err
 		}
 	}
@@ -529,9 +529,9 @@ func (d *diskQueue) rotateFile(ctx context.Context) error {
 	return nil
 }
 
-func (d *diskQueue) resetWriters(f vfs.File) error {
+func (d *diskQueue) resetWriters(ctx context.Context, f vfs.File) error {
 	d.writer.reset(f)
-	return d.serializer.Reset(d.writer)
+	return d.serializer.Reset(ctx, d.writer)
 }
 
 func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
@@ -543,7 +543,7 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
 			d.serializer = nil
 		}
 	}()
-	if err := d.serializer.Finish(); err != nil {
+	if err := d.serializer.Finish(ctx); err != nil {
 		return err
 	}
 	written, err := d.writer.compressAndFlush()
@@ -633,7 +633,7 @@ func (d *diskQueue) Enqueue(ctx context.Context, b coldata.Batch) error {
 		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return err
 		}
-		return d.resetWriters(d.writeFile)
+		return d.resetWriters(ctx, d.writeFile)
 	}
 	return nil
 }
@@ -730,7 +730,7 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 		decompressedBytes = d.scratchDecompressedReadBytes
 	}
 
-	deserializer, err := colserde.NewFileDeserializerFromBytes(d.typs, decompressedBytes)
+	deserializer, err := colserde.NewFileDeserializerFromBytes(ctx, d.typs, decompressedBytes)
 	if err != nil {
 		return false, err
 	}
@@ -758,7 +758,7 @@ func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) 
 		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return false, err
 		}
-		if err := d.resetWriters(d.writeFile); err != nil {
+		if err := d.resetWriters(ctx, d.writeFile); err != nil {
 			return false, err
 		}
 	}
@@ -792,7 +792,7 @@ func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) 
 		// No data will be added.
 		b.SetLength(0)
 	} else {
-		if err := d.deserializerState.GetBatch(d.deserializerState.curBatch, b); err != nil {
+		if err := d.deserializerState.GetBatch(ctx, d.deserializerState.curBatch, b); err != nil {
 			return false, err
 		}
 		d.deserializerState.curBatch++

@@ -42,7 +42,7 @@ func newSpanEncoder(
 	}
 	switch asc {
 	case true:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, typ.Family()) {
 		case types.BoolFamily:
 			switch typ.Width() {
 			case -1:
@@ -103,7 +103,7 @@ func newSpanEncoder(
 			}
 		}
 	case false:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, typ.Family()) {
 		case types.BoolFamily:
 			switch typ.Width() {
 			case -1:

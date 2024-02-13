@@ -11,6 +11,7 @@
 package coldata_test
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"unsafe"
@@ -77,38 +78,38 @@ func TestBatchReset(t *testing.T) {
 	var b coldata.Batch
 
 	// Simple case, reuse
-	b = coldata.NewMemBatch(typsInt, coldata.StandardColumnFactory)
+	b = coldata.NewMemBatch(context.Background(), typsInt, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Types don't match, don't reuse
-	b = coldata.NewMemBatch(typsInt, coldata.StandardColumnFactory)
+	b = coldata.NewMemBatch(context.Background(), typsInt, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsBytes, 1, false)
 
 	// Columns are a prefix, reuse
-	b = coldata.NewMemBatch(typsIntBytes, coldata.StandardColumnFactory)
+	b = coldata.NewMemBatch(context.Background(), typsIntBytes, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Exact length, reuse
-	b = coldata.NewMemBatchWithCapacity(typsInt, 1, coldata.StandardColumnFactory)
+	b = coldata.NewMemBatchWithCapacity(context.Background(), typsInt, 1, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Insufficient capacity, don't reuse
-	b = coldata.NewMemBatchWithCapacity(typsInt, 1, coldata.StandardColumnFactory)
+	b = coldata.NewMemBatchWithCapacity(context.Background(), typsInt, 1, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsInt, 2, false)
 
 	// Selection vector gets reset
-	b = coldata.NewMemBatchWithCapacity(typsInt, 1, coldata.StandardColumnFactory)
+	b = coldata.NewMemBatchWithCapacity(context.Background(), typsInt, 1, coldata.StandardColumnFactory)
 	b.SetSelection(true)
 	b.Selection()[0] = 7
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Nulls gets reset
-	b = coldata.NewMemBatchWithCapacity(typsInt, 1, coldata.StandardColumnFactory)
+	b = coldata.NewMemBatchWithCapacity(context.Background(), typsInt, 1, coldata.StandardColumnFactory)
 	b.ColVec(0).Nulls().SetNull(0)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Bytes columns use a different impl than everything else
-	b = coldata.NewMemBatch(typsBytes, coldata.StandardColumnFactory)
+	b = coldata.NewMemBatch(context.Background(), typsBytes, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsBytes, 1, true)
 }
 
@@ -118,7 +119,7 @@ func TestBatchReset(t *testing.T) {
 func TestBatchWithBytesAndNulls(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	b := coldata.NewMemBatch([]*types.T{types.Bytes}, coldata.StandardColumnFactory)
+	b := coldata.NewMemBatch(context.Background(), []*types.T{types.Bytes}, coldata.StandardColumnFactory)
 	// We will insert some garbage data into the Bytes vector in positions that
 	// are not mentioned in the selection vector. All the values that are
 	// selected are actually NULL values, so we don't set anything on the Bytes
@@ -153,7 +154,7 @@ var _ colconv.VecToDatumConverter
 func TestBatchString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	b := coldata.NewMemBatch([]*types.T{types.String}, coldata.StandardColumnFactory)
+	b := coldata.NewMemBatch(context.Background(), []*types.T{types.String}, coldata.StandardColumnFactory)
 	input := []string{"one", "two", "three"}
 	for i := range input {
 		b.ColVec(0).Bytes().Set(i, []byte(input[i]))

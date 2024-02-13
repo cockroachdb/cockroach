@@ -132,7 +132,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 
 	splitPoints := make([][]interface{}, 0, table.Splits.NumBatches)
 	for splitIdx := 0; splitIdx < table.Splits.NumBatches; splitIdx++ {
-		splitPoints = append(splitPoints, table.Splits.BatchRows(splitIdx)...)
+		splitPoints = append(splitPoints, table.Splits.BatchRows(ctx, splitIdx)...)
 	}
 	sort.Sort(sliceSliceInterface(splitPoints))
 
