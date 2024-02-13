@@ -98,6 +98,9 @@ func (m *upgrade) Permanent() bool {
 
 // Name is part of the upgradebase.Upgrade interface.
 func (m *upgrade) Name() string {
+	if m.Permanent() {
+		return m.description
+	}
 	return fmt.Sprintf("Upgrade to %s: %q", m.v.String(), m.description)
 }
 
