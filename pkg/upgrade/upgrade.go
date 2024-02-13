@@ -24,6 +24,7 @@ package upgrade
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 )
@@ -75,10 +76,7 @@ type upgrade struct {
 	// when the cluster's version is incremented to v or, for permanent upgrades
 	// (see below) when the cluster is bootstrapped at v or above.
 	v roachpb.Version
-	// permanent is set for "permanent" upgrades - i.e. upgrades that are not
-	// baked into the bootstrap image and need to be run on new clusters
-	// regardless of the cluster's bootstrap version.
-	permanent bool
+
 	// v22_2StartupMigrationName, if set, is the name of the corresponding
 	// startupmigration in 22.2. In 23.1, we've turned these startupmigrations
 	// into permanent upgrades. We don't want to run the upgrade if the
@@ -95,7 +93,7 @@ func (m *upgrade) Version() roachpb.Version {
 
 // Permanent is part of the upgradebase.Upgrade interface.
 func (m *upgrade) Permanent() bool {
-	return m.permanent
+	return m.v.LessEq(clusterversion.VPrimordialMax.Version())
 }
 
 // Name is part of the upgradebase.Upgrade interface.
