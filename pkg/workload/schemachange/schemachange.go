@@ -201,8 +201,9 @@ func (s *schemaChange) Ops(
 		return workload.QueryLoad{}, err
 	}
 	stdoutLog := makeAtomicLog(os.Stdout)
-	// Use NewPseudoRand here because we want to print out the global seed used by the workload.
-	// Using NewTestRand() here would only let us see the per-test seed that is derived from the global seed.
+	// Use NewPseudoRand here because we want to print out the global seed used by
+	// the workload. Using NewTestRand() here would only let us see the per-test
+	// seed that is derived from the global seed.
 	_, seed := randutil.NewPseudoRand()
 	stdoutLog.printLn(fmt.Sprintf("using random seed: %d", seed))
 	// A separate weighting is constructed of only schema changes supported by the
