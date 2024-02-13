@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "fingerprintingbench_test",
+    srcs = ["fingerprint_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "@com_github_stretchr_testify//require",
+    ],
+)
