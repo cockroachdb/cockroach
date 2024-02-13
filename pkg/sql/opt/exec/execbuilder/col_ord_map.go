@@ -11,6 +11,8 @@
 package execbuilder
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/errors"
 )
@@ -91,16 +93,16 @@ type colOrdMap struct {
 	//
 	// TODO(mgartner): It is probably unreasonable to have more than 2^31
 	// ordinals in an execution node, so this could be []int32.
-	ords []int
+	ords []int32
 	// TODO(mgartner): Explain that this is an approximate.
-	ordUpperBound int
+	ordUpperBound int32
 }
 
 // newColOrdMap returns a new column mapping that can store column IDs less than
 // or equal to maxCol.
 func newColOrdMap(maxCol opt.ColumnID) colOrdMap {
 	return colOrdMap{
-		ords: make([]int, maxCol+1),
+		ords: make([]int32, maxCol+1),
 	}
 }
 
@@ -111,8 +113,11 @@ func (m *colOrdMap) Set(col opt.ColumnID, ord int) error {
 	}
 	// Bias the ordinal by 1 when adding it to the map.
 	ord++
-	m.ords[col] = ord
-	m.ordUpperBound = max(m.ordUpperBound, ord)
+	if ord > math.MaxInt32 {
+		return errors.AssertionFailedf("ord %d exceeds %d", ord, math.MaxInt32)
+	}
+	m.ords[col] = int32(ord)
+	m.ordUpperBound = max(m.ordUpperBound, int32(ord))
 	return nil
 }
 
@@ -122,7 +127,7 @@ func (m colOrdMap) Get(col opt.ColumnID) (ord int, ok bool) {
 	if int(col) >= len(m.ords) {
 		return -1, false
 	}
-	ord = m.ords[col]
+	ord = int(m.ords[col])
 	if ord == 0 {
 		return -1, false
 	}
@@ -147,7 +152,7 @@ func (m colOrdMap) Get(col opt.ColumnID) (ord int, ok bool) {
 // the current maximum ordinal, nor keep complex data structures to track it.
 func (m colOrdMap) OrdUpperBound() int {
 	// Reverse the bias when fetching the max ordinal from the map.
-	return m.ordUpperBound - 1
+	return int(m.ordUpperBound - 1)
 }
 
 // ForEach calls the given function for each column ID and ordinal pair in the
@@ -159,7 +164,7 @@ func (m colOrdMap) ForEach(fn func(col opt.ColumnID, ord int) error) error {
 			continue
 		}
 		// Reverse the bias when fetching from the map.
-		if err := fn(opt.ColumnID(col), ord-1); err != nil {
+		if err := fn(opt.ColumnID(col), int(ord-1)); err != nil {
 			return err
 		}
 	}
