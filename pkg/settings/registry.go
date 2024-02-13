@@ -239,6 +239,7 @@ var retiredSettings = map[InternalKey]struct{}{
 	"sql.trace.session_eventlog.enabled":                   {},
 	"sql.show_ranges_deprecated_behavior.enabled":          {},
 	"sql.drop_virtual_cluster.enabled":                     {},
+	"cross_cluster_replication.enabled":                    {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults

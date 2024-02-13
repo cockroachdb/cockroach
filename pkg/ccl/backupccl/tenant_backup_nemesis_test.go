@@ -397,9 +397,6 @@ func newBackupNemesis(
 						n.t.Log("already hit replication limit")
 						return nil
 					}
-					if _, err := hostDB.Exec("SET CLUSTER SETTING physical_replication.enabled = true"); err != nil {
-						return err
-					}
 					if _, err := hostDB.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
 						return err
 					}

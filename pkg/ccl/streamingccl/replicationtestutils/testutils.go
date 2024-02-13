@@ -154,8 +154,6 @@ func (c *TenantStreamingClusters) init(ctx context.Context) {
 	if c.Args.DestInitFunc != nil {
 		c.Args.DestInitFunc(c.T, c.DestSysSQL)
 	}
-	c.SrcSysSQL.Exec(c.T, `SET CLUSTER SETTING physical_replication.enabled = true;`)
-	c.DestSysSQL.Exec(c.T, `SET CLUSTER SETTING physical_replication.enabled = true;`)
 }
 
 // StartDestTenant starts the destination tenant and returns a cleanup function

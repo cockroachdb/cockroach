@@ -99,10 +99,6 @@ func ingestionPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	if !streamingccl.CrossClusterReplicationEnabled.Get(&p.ExecCfg().Settings.SV) {
-		return nil, nil, nil, false, physicalReplicationDisabledErr
-	}
-
 	if !p.ExecCfg().Codec.ForSystemTenant() {
 		return nil, nil, nil, false, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only the system tenant can create other tenants")
