@@ -78,6 +78,7 @@ var (
 		catconstants.MVCCStatistics,
 		catconstants.TxnExecInsightsTableName,
 		catconstants.StmtExecInsightsTableName,
+		catconstants.PlanHintsTableName,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{

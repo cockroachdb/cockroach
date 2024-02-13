@@ -473,6 +473,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.TransactionExecInsightsTable)
 	target.AddDescriptor(systemschema.StatementExecInsightsTable)
 
+	// Tables introduced in 24.1.
+	target.AddDescriptor(systemschema.PlanHintsTable)
+
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
 	// If adding a call to AddDescriptor or AddDescriptorForSystemTenant, please
@@ -485,7 +488,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 // NumSystemTablesForSystemTenant is the number of system tables defined on
 // the system tenant. This constant is only defined to avoid having to manually
 // update auto stats tests every time a new system table is added.
-const NumSystemTablesForSystemTenant = 55
+const NumSystemTablesForSystemTenant = 56
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
 // MetadataSchema.

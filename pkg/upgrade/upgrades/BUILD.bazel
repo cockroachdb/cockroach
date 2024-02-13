@@ -19,6 +19,7 @@ go_library(
         "v23_2_plan_gist_stmt_diagnostics_requests.go",
         "v23_2_system_exec_insights.go",
         "v24_1_drop_payload_and_progress_jobs.go",
+        "v24_1_system_plan_hints.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/upgrades",
     visibility = ["//visibility:public"],

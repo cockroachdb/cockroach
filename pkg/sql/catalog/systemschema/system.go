@@ -1156,6 +1156,14 @@ CREATE TABLE system.mvcc_statistics (
 			created
 		)
 	);`
+
+	PlanHintsTableSchema = `
+  CREATE TABLE system.plan_hints (
+    "query_id"   INT8 NOT NULL,
+    "plan_hints" BYTES NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY ("query_id"),
+    FAMILY "primary" ("query_id", "plan_hints")
+  );`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1396,6 +1404,7 @@ func MakeSystemTables() []SystemTable {
 		SystemMVCCStatisticsTable,
 		StatementExecInsightsTable,
 		TransactionExecInsightsTable,
+		PlanHintsTable,
 	}
 }
 
@@ -4677,6 +4686,34 @@ var (
 			}}
 			tbl.NextConstraintID++
 		},
+	)
+
+	PlanHintsTable = makeSystemTable(
+		PlanHintsTableSchema,
+		systemTable(
+			catconstants.PlanHintsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "query_id", ID: 1, Type: types.Int},
+				{Name: "plan_hints", ID: 2, Type: types.Bytes},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"query_id", "plan_hints"},
+					ColumnIDs:   []descpb.ColumnID{1, 2},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"query_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1},
+			},
+		),
 	)
 )
 
