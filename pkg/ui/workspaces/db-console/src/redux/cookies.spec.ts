@@ -10,8 +10,7 @@
 import {
   getAllCookies,
   getCookieValue,
-  selectTenantsFromMultitenantSessionCookie,
-  maybeClearTenantCookie,
+  clearTenantCookie,
   setCookie,
 } from "./cookies";
 
@@ -19,7 +18,7 @@ describe("Cookies", () => {
   beforeEach(() => {
     Object.defineProperty(window.document, "cookie", {
       writable: true,
-      value: "tenant=system;session=abc123,system,def456,demoapp",
+      value: "tenant=system;someother=cookie;another=cookievalue",
     });
   });
   afterEach(() => {
@@ -32,7 +31,8 @@ describe("Cookies", () => {
     const result = getAllCookies();
     const expected = new Map();
     expected.set("tenant", "system");
-    expected.set("session", "abc123,system,def456,demoapp");
+    expected.set("someother", "cookie");
+    expected.set("another", "cookievalue");
     expect(result).toEqual(expected);
   });
   it("should return a cookie value by key or return null", () => {
@@ -42,19 +42,8 @@ describe("Cookies", () => {
     const result2 = getCookieValue("unknown");
     expect(result2).toBeNull();
   });
-  it("should give a string array of tenants from the session cookie or an empty array", () => {
-    const result = selectTenantsFromMultitenantSessionCookie();
-    const expected = ["system", "demoapp"];
-    expect(result).toEqual(expected);
-    Object.defineProperty(window.document, "cookie", {
-      writable: true,
-      value: "",
-    });
-    const result2 = selectTenantsFromMultitenantSessionCookie();
-    expect(result2).toEqual([]);
-  });
-  it("should clear the tenant cookie if in a multitenant cluster", () => {
-    maybeClearTenantCookie();
+  it("should clear the tenant cookie", () => {
+    clearTenantCookie();
     const tenantCookie = getCookieValue("tenant");
     expect(tenantCookie).toBeNull();
   });
