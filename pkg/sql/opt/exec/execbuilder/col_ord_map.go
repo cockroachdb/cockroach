@@ -12,7 +12,6 @@ package execbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,10 +46,10 @@ func (a *colOrdMapAllocator) Alloc() colOrdMap {
 }
 
 // Copy returns a copy of the given colOrdMap.
-func (a *colOrdMapAllocator) Copy(from colOrdMap) colOrdMap {
+func (a *colOrdMapAllocator) Copy(from colOrdMap) (colOrdMap, error) {
 	m := a.Alloc()
-	m.CopyFrom(from)
-	return m
+	err := m.CopyFrom(from)
+	return m, err
 }
 
 // Free returns the given map to the allocator for future reuse.
@@ -169,13 +168,16 @@ func (m colOrdMap) ForEach(fn func(col opt.ColumnID, ord int) error) error {
 
 // CopyFrom copies all entries from the given map, and unsets any column IDs not
 // in the given map.
-func (m *colOrdMap) CopyFrom(other colOrdMap) {
-	if buildutil.CrdbTestBuild && len(m.ords) < len(other.ords) {
-		panic(errors.AssertionFailedf("map of size %d is too small to copy from map of size %d",
-			len(m.ords), len(other.ords)))
+func (m *colOrdMap) CopyFrom(other colOrdMap) error {
+	if len(m.ords) < len(other.ords) {
+		return errors.AssertionFailedf(
+			"map of size %d is too small to copy from map of size %d",
+			len(m.ords), len(other.ords),
+		)
 	}
 	copy(m.ords, other.ords)
 	m.ordUpperBound = other.ordUpperBound
+	return nil
 }
 
 // Clear clears the map. The allocated memory is retained for future reuse.

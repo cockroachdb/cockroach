@@ -1606,8 +1606,11 @@ func (b *Builder) joinOutputMap(left, right colOrdMap) (colOrdMap, error) {
 	// an approximate upper-bound.
 	numLeftCols := left.OrdUpperBound() + 1
 
-	res := b.colOrdsAlloc.Copy(left)
-	err := right.ForEach(func(col opt.ColumnID, rightIdx int) error {
+	res, err := b.colOrdsAlloc.Copy(left)
+	if err != nil {
+		return colOrdMap{}, err
+	}
+	err = right.ForEach(func(col opt.ColumnID, rightIdx int) error {
 		return res.Set(col, rightIdx+numLeftCols)
 	})
 	return res, err
@@ -2642,7 +2645,10 @@ func (b *Builder) buildLookupJoin(
 		// For the first join in a left-join pair, outputCols needs to include
 		// the continuation column since it will be in the result output by this
 		// join.
-		outputCols = b.colOrdsAlloc.Copy(leftAndRightCols)
+		outputCols, err = b.colOrdsAlloc.Copy(leftAndRightCols)
+		if err != nil {
+			return execPlan{}, colOrdMap{}, err
+		}
 
 		maxOrd := outputCols.OrdUpperBound()
 		if maxOrd == -1 {
@@ -2924,7 +2930,10 @@ func (b *Builder) buildInvertedJoin(
 	if join.IsFirstJoinInPairedJoiner {
 		// allCols needs to include the continuation column since it will be
 		// in the result output by this join.
-		allCols = b.colOrdsAlloc.Copy(allExprCols)
+		allCols, err = b.colOrdsAlloc.Copy(allExprCols)
+		if err != nil {
+			return execPlan{}, colOrdMap{}, err
+		}
 		maxOrd := allCols.OrdUpperBound()
 		if maxOrd == -1 {
 			return execPlan{}, colOrdMap{}, errors.AssertionFailedf("allCols should not be empty")
@@ -2940,9 +2949,13 @@ func (b *Builder) buildInvertedJoin(
 		outputCols = inputCols
 	}
 
+	cpy, err := b.colOrdsAlloc.Copy(allExprCols)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
 	ctx := buildScalarCtx{
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allExprCols.OrdUpperBound()+1),
-		ivarMap: b.colOrdsAlloc.Copy(allExprCols),
+		ivarMap: cpy,
 	}
 	onExpr, err := b.buildScalar(&ctx, &join.On)
 	if err != nil {

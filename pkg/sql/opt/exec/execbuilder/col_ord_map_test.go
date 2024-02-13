@@ -52,7 +52,9 @@ func TestColOrdMap(t *testing.T) {
 			validate(t, m, oracle)
 		case n < 15:
 			cpy := newColOrdMap(maxCol)
-			cpy.CopyFrom(m)
+			if err := cpy.CopyFrom(m); err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
 			m = cpy
 			validate(t, m, oracle)
 		}
