@@ -118,7 +118,10 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colO
 	// Construct the output column map.
 	ep := execPlan{root: node}
 	if ins.NeedResults() {
-		outputCols = b.mutationOutputColMap(ins)
+		outputCols, err = b.mutationOutputColMap(ins)
+		if err != nil {
+			return execPlan{}, colOrdMap{}, err
+		}
 	}
 
 	if err := b.buildUniqueChecks(ins.UniqueChecks); err != nil {
@@ -327,7 +330,8 @@ func (b *Builder) tryBuildFastPathInsert(
 	// Construct the output column map.
 	ep := execPlan{root: node}
 	if ins.NeedResults() {
-		outputCols = b.mutationOutputColMap(ins)
+		outputCols, err = b.mutationOutputColMap(ins)
+		return execPlan{}, colOrdMap{}, false, err
 	}
 	return ep, outputCols, true, nil
 }
@@ -442,7 +446,10 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 	// Construct the output column map.
 	ep := execPlan{root: node}
 	if upd.NeedResults() {
-		outputCols = b.mutationOutputColMap(upd)
+		outputCols, err = b.mutationOutputColMap(upd)
+		if err != nil {
+			return execPlan{}, colOrdMap{}, err
+		}
 	}
 	return ep, outputCols, nil
 }
@@ -535,7 +542,10 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 	// result of the UPSERT operation for that row.
 	ep := execPlan{root: node}
 	if ups.NeedResults() {
-		outputCols = b.mutationOutputColMap(ups)
+		outputCols, err = b.mutationOutputColMap(ups)
+		if err != nil {
+			return execPlan{}, colOrdMap{}, err
+		}
 	}
 	return ep, outputCols, nil
 }
@@ -603,7 +613,10 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (_ execPlan, outputCols colO
 	// Construct the output column map.
 	ep := execPlan{root: node}
 	if del.NeedResults() {
-		outputCols = b.mutationOutputColMap(del)
+		outputCols, err = b.mutationOutputColMap(del)
+		if err != nil {
+			return execPlan{}, colOrdMap{}, err
+		}
 	}
 
 	return ep, outputCols, nil
@@ -658,7 +671,10 @@ func (b *Builder) buildDeleteRange(del *memo.DeleteExpr) (execPlan, error) {
 	// tryBuildDeleteRange has already validated that input is a Scan operator.
 	scan := del.Input.(*memo.ScanExpr)
 	tab := b.mem.Metadata().Table(scan.Table)
-	needed, _ := b.getColumns(scan.Cols, scan.Table)
+	needed, _, err := b.getColumns(scan.Cols, scan.Table)
+	if err != nil {
+		return execPlan{}, err
+	}
 
 	autoCommit := false
 	if b.allowAutoCommit {
@@ -725,7 +741,7 @@ func ordinalSetFromColList(colList opt.OptionalColList) intsets.Fast {
 // mutationOutputColMap constructs a ColMap for the execPlan that maps from the
 // opt.ColumnID of each output column to the ordinal position of that column in
 // the result.
-func (b *Builder) mutationOutputColMap(mutation memo.RelExpr) colOrdMap {
+func (b *Builder) mutationOutputColMap(mutation memo.RelExpr) (colOrdMap, error) {
 	private := mutation.Private().(*memo.MutationPrivate)
 	tab := mutation.Memo().Metadata().Table(private.Table)
 	outCols := mutation.Relational().OutputCols
@@ -736,7 +752,9 @@ func (b *Builder) mutationOutputColMap(mutation memo.RelExpr) colOrdMap {
 		colID := private.Table.ColumnID(i)
 		// System columns should not be included in mutations.
 		if outCols.Contains(colID) && tab.Column(i).Kind() != cat.System {
-			colMap.Set(colID, ord)
+			if err := colMap.Set(colID, ord); err != nil {
+				return colOrdMap{}, err
+			}
 			ord++
 		}
 	}
@@ -745,12 +763,14 @@ func (b *Builder) mutationOutputColMap(mutation memo.RelExpr) colOrdMap {
 	// columns it allowed to pass through.
 	for _, colID := range private.PassthroughCols {
 		if colID != 0 {
-			colMap.Set(colID, ord)
+			if err := colMap.Set(colID, ord); err != nil {
+				return colOrdMap{}, err
+			}
 			ord++
 		}
 	}
 
-	return colMap
+	return colMap, nil
 }
 
 // checkContainsLocking sets PlanFlagCheckContainsLocking based on whether we

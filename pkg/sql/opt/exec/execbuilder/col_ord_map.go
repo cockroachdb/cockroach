@@ -106,14 +106,15 @@ func newColOrdMap(maxCol opt.ColumnID) colOrdMap {
 }
 
 // Set maps a column to the given ordinal.
-func (m *colOrdMap) Set(col opt.ColumnID, ord int) {
-	if buildutil.CrdbTestBuild && int(col) >= len(m.ords) {
-		panic(errors.AssertionFailedf("column %d exceeds max column of map %d", col, len(m.ords)-1))
+func (m *colOrdMap) Set(col opt.ColumnID, ord int) error {
+	if int(col) >= len(m.ords) {
+		return errors.AssertionFailedf("column %d exceeds max column of map %d", col, len(m.ords)-1)
 	}
 	// Bias the ordinal by 1 when adding it to the map.
 	ord++
 	m.ords[col] = ord
 	m.ordUpperBound = max(m.ordUpperBound, ord)
+	return nil
 }
 
 // Get returns the current value mapped to key, or (-1, false) if the
@@ -151,15 +152,19 @@ func (m colOrdMap) OrdUpperBound() int {
 }
 
 // ForEach calls the given function for each column ID and ordinal pair in the
-// map.
-func (m colOrdMap) ForEach(fn func(col opt.ColumnID, ord int)) {
+// map. If the given function returns a non-nil error, iteration halts and the
+// error is returned from ForEach.
+func (m colOrdMap) ForEach(fn func(col opt.ColumnID, ord int) error) error {
 	for col, ord := range m.ords {
 		if ord == 0 {
 			continue
 		}
 		// Reverse the bias when fetching from the map.
-		fn(opt.ColumnID(col), ord-1)
+		if err := fn(opt.ColumnID(col), ord-1); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // CopyFrom copies all entries from the given map, and unsets any column IDs not

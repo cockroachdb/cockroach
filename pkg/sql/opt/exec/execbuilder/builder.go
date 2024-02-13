@@ -303,7 +303,9 @@ func (b *Builder) BuildScalar() (tree.TypedExpr, error) {
 	b.colOrdsAlloc.Init(md.MaxColumn())
 	cols := b.colOrdsAlloc.Alloc()
 	for i := 0; i < md.NumColumns(); i++ {
-		cols.Set(opt.ColumnID(i+1), i)
+		if err := cols.Set(opt.ColumnID(i+1), i); err != nil {
+			return nil, err
+		}
 	}
 	ctx := makeBuildScalarCtx(cols)
 	return b.buildScalar(&ctx, scalar)

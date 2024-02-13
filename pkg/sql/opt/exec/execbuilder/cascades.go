@@ -143,8 +143,9 @@ func makeCascadeBuilder(b *Builder, mutationWithID opt.WithID) (*cascadeBuilder,
 	// memo.
 	md := b.mem.Metadata()
 	cb.colMeta = make([]opt.ColumnMeta, 0, cb.mutationBufferCols.OrdUpperBound())
-	cb.mutationBufferCols.ForEach(func(col opt.ColumnID, ord int) {
+	_ = cb.mutationBufferCols.ForEach(func(col opt.ColumnID, ord int) error {
 		cb.colMeta = append(cb.colMeta, *md.ColumnMeta(col))
+		return nil
 	})
 
 	return cb, nil
@@ -230,7 +231,9 @@ func (cb *cascadeBuilder) planCascade(
 			id := md.AddColumn(cb.colMeta[i].Alias, cb.colMeta[i].Type)
 			withCols.Add(id)
 			ordinal, _ := cb.mutationBufferCols.Get(cb.colMeta[i].MetaID)
-			bufferColMap.Set(id, ordinal)
+			if err := bufferColMap.Set(id, ordinal); err != nil {
+				return nil, err
+			}
 			withColRemap.Set(int(cb.colMeta[i].MetaID), int(id))
 		}
 

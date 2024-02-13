@@ -37,7 +37,9 @@ func TestColOrdMap(t *testing.T) {
 		ord := int(rng.Int31())
 
 		oracle[col] = ord
-		m.Set(col, ord)
+		if err := m.Set(col, ord); err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
 
 		validate(t, m, oracle)
 
@@ -70,10 +72,11 @@ func validate(t *testing.T, m colOrdMap, oracle map[opt.ColumnID]int) {
 		t.Errorf("expected max ordinal of %d, found %d", maxOracleOrd, m.OrdUpperBound())
 	}
 
-	m.ForEach(func(col opt.ColumnID, ord int) {
+	_ = m.ForEach(func(col opt.ColumnID, ord int) error {
 		oracleOrd, ok := oracle[col]
 		if !ok || ord != oracleOrd {
 			t.Errorf("unexpected col:ord in map %d:%d, oracle: %v", col, ord, oracle)
 		}
+		return nil
 	})
 }

@@ -154,7 +154,8 @@ func (b *Builder) buildExplainOpt(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	return ep, b.outputColsFromList(explain.ColList), nil
+	outputCols, err = b.outputColsFromList(explain.ColList)
+	return ep, outputCols, err
 }
 
 func (b *Builder) buildExplain(
@@ -194,7 +195,8 @@ func (b *Builder) buildExplain(
 		return execPlan{}, colOrdMap{}, err
 	}
 
-	return ep, b.outputColsFromList(explainExpr.ColList), nil
+	outputCols, err = b.outputColsFromList(explainExpr.ColList)
+	return ep, outputCols, err
 }
 
 func (b *Builder) buildShowTrace(
@@ -205,7 +207,8 @@ func (b *Builder) buildShowTrace(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	return ep, b.outputColsFromList(show.ColList), nil
+	outputCols, err = b.outputColsFromList(show.ColList)
+	return ep, outputCols, err
 }
 
 func (b *Builder) buildAlterTableSplit(
@@ -230,7 +233,8 @@ func (b *Builder) buildAlterTableSplit(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	return ep, b.outputColsFromList(split.Columns), nil
+	outputCols, err = b.outputColsFromList(split.Columns)
+	return ep, outputCols, err
 }
 
 func (b *Builder) buildAlterTableUnsplit(
@@ -249,7 +253,8 @@ func (b *Builder) buildAlterTableUnsplit(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	return ep, b.outputColsFromList(unsplit.Columns), nil
+	outputCols, err = b.outputColsFromList(unsplit.Columns)
+	return ep, outputCols, err
 }
 
 func (b *Builder) buildAlterTableUnsplitAll(
@@ -261,7 +266,8 @@ func (b *Builder) buildAlterTableUnsplitAll(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	return ep, b.outputColsFromList(unsplitAll.Columns), nil
+	outputCols, err = b.outputColsFromList(unsplitAll.Columns)
+	return ep, outputCols, err
 }
 
 func (b *Builder) buildAlterTableRelocate(
@@ -281,7 +287,8 @@ func (b *Builder) buildAlterTableRelocate(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	return ep, b.outputColsFromList(relocate.Columns), nil
+	outputCols, err = b.outputColsFromList(relocate.Columns)
+	return ep, outputCols, err
 }
 
 func (b *Builder) buildAlterRangeRelocate(
@@ -310,7 +317,8 @@ func (b *Builder) buildAlterRangeRelocate(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	return ep, b.outputColsFromList(relocate.Columns), nil
+	outputCols, err = b.outputColsFromList(relocate.Columns)
+	return ep, outputCols, err
 }
 
 func (b *Builder) buildControlJobs(
@@ -369,7 +377,8 @@ func (b *Builder) buildShowCompletions(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	return ep, b.outputColsFromList(ctl.Columns), nil
+	outputCols, err = b.outputColsFromList(ctl.Columns)
+	return ep, outputCols, err
 }
 
 func (b *Builder) buildCancelQueries(
@@ -459,15 +468,18 @@ func (b *Builder) buildExport(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	return ep, b.outputColsFromList(export.Columns), nil
+	outputCols, err = b.outputColsFromList(export.Columns)
+	return ep, outputCols, err
 }
 
 // planWithColumns creates an execPlan for a node which has a fixed output
 // schema.
-func (b *Builder) outputColsFromList(cols opt.ColList) colOrdMap {
+func (b *Builder) outputColsFromList(cols opt.ColList) (colOrdMap, error) {
 	outputCols := b.colOrdsAlloc.Alloc()
 	for i, c := range cols {
-		outputCols.Set(c, i)
+		if err := outputCols.Set(c, i); err != nil {
+			return colOrdMap{}, err
+		}
 	}
-	return outputCols
+	return outputCols, nil
 }
