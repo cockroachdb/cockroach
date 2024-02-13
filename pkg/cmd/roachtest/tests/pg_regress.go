@@ -38,7 +38,8 @@ var testdata = "./pkg/cmd/roachtest/testdata/regression.diffs"
 func initPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	node := c.Node(1)
 	t.Status("setting up cockroach")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+	// pg_regress does not support ssl connections.
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(false)), c.All())
 
 	db, err := c.ConnE(ctx, t.L(), node[0])
 	if err != nil {
