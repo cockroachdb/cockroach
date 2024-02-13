@@ -113,16 +113,14 @@ func NewPermanentTenantUpgrade(
 	description string,
 	v roachpb.Version,
 	fn TenantUpgradeFunc,
-	v22_2StartupMigrationName string,
 	restore RestoreBehavior,
 ) *TenantUpgrade {
 	m := &TenantUpgrade{
 		upgrade: upgrade{
-			description:               description,
-			v:                         v,
-			permanent:                 true,
-			v22_2StartupMigrationName: v22_2StartupMigrationName,
-			restore:                   restore,
+			description: description,
+			v:           v,
+			permanent:   true,
+			restore:     restore,
 		},
 		fn:           fn,
 		precondition: nil,

@@ -241,45 +241,6 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	}
 
 	for _, u := range permanentUpgrades {
-		// Check whether a 22.2 or older node has ran the old startupmigration
-		// corresponding to this upgrade. If it has, we don't want to run this
-		// upgrade, for two reasons:
-		// 1. Creating a job for this upgrade would be dubious. If the respective
-		//    job were to be adopted by a 22.2 node, that node would fail to find an
-		//    upgrade for the respective version, and would declare the job to be
-		//    successful even though the upgrade didn't run. Even though that would
-		//    technically be OK, since the existence of a 22.2 node running the job
-		//    implies that the startupmigration had been run, it's confusing at the
-		//    very least.
-		// 2. The upgrade can fail if the corresponding startupmigration had already
-		//    run. This is because the upgrade is assuming that the cluster has been
-		//    bootstrapped at the current binary version, with the current schema
-		//    for system tables. See a discussion in upgrade/doc.go about why that
-		//    would be.
-		//
-		// TODO(andrei): Get rid of this once compatibility with 22.2 is not necessary.
-		startupMigrationAlreadyRan, err := checkOldStartupMigrationRan(
-			ctx, m.deps.Stopper, u.V22_2StartupMigrationName(), m.deps.DB.KV(), m.codec)
-		if err != nil {
-			return err
-		}
-		if startupMigrationAlreadyRan {
-			log.Infof(ctx,
-				"skipping permanent upgrade for v%s because the corresponding startupmigration "+
-					"was already run by a v22.2 or older node",
-				u.Version())
-			// Mark the upgrade as completed so that we can get rid of this logic when
-			// compatibility with 22.2 is no longer necessary.
-			if err := startup.RunIdempotentWithRetry(ctx,
-				m.deps.Stopper.ShouldQuiesce(),
-				"mark upgrade complete", func(ctx context.Context) (err error) {
-					return migrationstable.MarkMigrationCompletedIdempotent(ctx, m.ie, u.Version())
-				}); err != nil {
-				return err
-			}
-			continue
-		}
-
 		log.Infof(ctx, "running permanent upgrade for version %s", u.Version())
 		if err := m.runMigration(ctx, u, user, u.Version(), !m.knobs.DontUseJobs); err != nil {
 			return err
