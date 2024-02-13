@@ -92,7 +92,7 @@ type schedulePTSStat struct {
 	m *jobs.ExecutorPTSMetrics
 }
 
-const cancelJobTimeout = 10 * time.Second
+const cancelJobTimeout = 60 * time.Second
 
 // manageProtectedTimestamps manages protected timestamp records owned by
 // various jobs or schedules.. This function mostly concerns itself with
