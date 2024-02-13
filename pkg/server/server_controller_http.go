@@ -213,7 +213,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 				Name:     SessionCookieName,
 				Value:    sessionsStr,
 				Path:     "/",
-				HttpOnly: false,
+				HttpOnly: true,
 			}
 			http.SetCookie(w, &cookie)
 			// The tenant cookie needs to be set at some point in order for
@@ -331,7 +331,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			Name:     SessionCookieName,
 			Value:    "",
 			Path:     "/",
-			HttpOnly: false,
+			HttpOnly: true,
 			Expires:  timeutil.Unix(0, 0),
 		}
 		http.SetCookie(w, &cookie)

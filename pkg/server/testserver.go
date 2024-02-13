@@ -938,6 +938,7 @@ func (ts *TestServer) StartSharedProcessTenant(
 	hts := &httpTestServer{}
 	hts.t.authentication = sqlServerWrapper.authentication
 	hts.t.sqlServer = sqlServer
+	hts.t.tenantName = args.TenantName
 	testTenant := &TestTenant{
 		sql:            sqlServer,
 		Cfg:            sqlServer.cfg,
