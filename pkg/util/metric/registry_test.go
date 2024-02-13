@@ -76,7 +76,8 @@ func TestRegistry(t *testing.T) {
 	topGauge := NewGauge(Metadata{Name: "top.gauge"})
 	r.AddMetric(topGauge)
 
-	r.AddMetric(NewGaugeFloat64(Metadata{Name: "top.floatgauge"}))
+	topFloatGauge := NewGaugeFloat64(Metadata{Name: "top.floatgauge"})
+	r.AddMetric(topFloatGauge)
 
 	topCounter := NewCounter(Metadata{Name: "top.counter"})
 	r.AddMetric(topCounter)
@@ -90,7 +91,9 @@ func TestRegistry(t *testing.T) {
 		BucketConfig: Count1KBuckets,
 	}))
 
-	r.AddMetric(NewGauge(Metadata{Name: "bottom.gauge"}))
+	bottomGauge := NewGauge(Metadata{Name: "bottom.gauge"})
+	r.AddMetric(bottomGauge)
+
 	ms := &struct {
 		StructGauge         *Gauge
 		StructGauge64       *GaugeFloat64
@@ -158,6 +161,7 @@ func TestRegistry(t *testing.T) {
 		"array.struct.counter.3":      {},
 		"nested.struct.array.1.gauge": {},
 	}
+	totalMetrics := len(expNames)
 
 	r.Each(func(name string, _ interface{}) {
 		if _, exist := expNames[name]; !exist {
@@ -167,6 +171,23 @@ func TestRegistry(t *testing.T) {
 	})
 	if len(expNames) > 0 {
 		t.Fatalf("missed names: %v", expNames)
+	}
+
+	// Test RemoveMetric.
+	r.RemoveMetric(topFloatGauge)
+	r.RemoveMetric(bottomGauge)
+	if g := r.getGauge("bottom.gauge"); g != nil {
+		t.Errorf("getGauge returned non-nil %v, expected nil", g)
+	}
+	count := 0
+	r.Each(func(name string, _ interface{}) {
+		if name == "top.floatgauge" || name == "bottom.gauge" {
+			t.Errorf("unexpected name: %s", name)
+		}
+		count++
+	})
+	if count != totalMetrics-2 {
+		t.Fatalf("not all metrics are present: returned %d, expected %d", count, totalMetrics-2)
 	}
 
 	// Test Select
