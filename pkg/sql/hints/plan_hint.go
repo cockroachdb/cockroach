@@ -30,5 +30,14 @@ func (hints *PlanHints) ToBytes() ([]byte, error) {
 
 // Equal returns true if the given PlanHints are equivalent.
 func (hints *PlanHints) Equal(other *PlanHints) bool {
+	if len(hints.Settings) != len(other.Settings) {
+		return false
+	}
+	for i := range hints.Settings {
+		if hints.Settings[i].SettingName != other.Settings[i].SettingName ||
+			hints.Settings[i].SettingValue != other.Settings[i].SettingValue {
+			return false
+		}
+	}
 	return true
 }
