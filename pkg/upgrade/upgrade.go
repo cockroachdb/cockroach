@@ -79,11 +79,6 @@ type upgrade struct {
 	// baked into the bootstrap image and need to be run on new clusters
 	// regardless of the cluster's bootstrap version.
 	permanent bool
-	// v22_2StartupMigrationName, if set, is the name of the corresponding
-	// startupmigration in 22.2. In 23.1, we've turned these startupmigrations
-	// into permanent upgrades. We don't want to run the upgrade if the
-	// startupmigration had run.
-	v22_2StartupMigrationName string
 
 	restore RestoreBehavior
 }
@@ -101,14 +96,6 @@ func (m *upgrade) Permanent() bool {
 // Name is part of the upgradebase.Upgrade interface.
 func (m *upgrade) Name() string {
 	return fmt.Sprintf("Upgrade to %s: %q", m.v.String(), m.description)
-}
-
-// V22_2StartupMigrationName is part of the upgradebase.Upgrade interface.
-func (m *upgrade) V22_2StartupMigrationName() string {
-	if !m.permanent {
-		panic("V22_2StartupMigrationName() called on non-permanent upgrade.")
-	}
-	return m.v22_2StartupMigrationName
 }
 
 func (m *upgrade) RestoreBehavior() string {

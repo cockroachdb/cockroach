@@ -157,16 +157,14 @@ func NewPermanentSystemUpgrade(
 	description string,
 	v roachpb.Version,
 	fn SystemUpgradeFunc,
-	v22_2StartupMigrationName string,
 	restore RestoreBehavior,
 ) *SystemUpgrade {
 	return &SystemUpgrade{
 		upgrade: upgrade{
-			description:               description,
-			v:                         v,
-			permanent:                 true,
-			v22_2StartupMigrationName: v22_2StartupMigrationName,
-			restore:                   restore,
+			description: description,
+			v:           v,
+			permanent:   true,
+			restore:     restore,
 		},
 		fn: fn,
 	}
