@@ -90,6 +90,8 @@ type serverController struct {
 
 	watcher *tenantcapabilitieswatcher.Watcher
 
+	disableTLSForHTTP bool
+
 	mu struct {
 		syncutil.RWMutex
 
@@ -124,6 +126,7 @@ func newServerController(
 	systemTenantNameContainer *roachpb.TenantNameContainer,
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName),
 	watcher *tenantcapabilitieswatcher.Watcher,
+	disableTLSForHTTP bool,
 ) *serverController {
 	c := &serverController{
 		AmbientContext:      ambientCtx,
@@ -136,6 +139,7 @@ func newServerController(
 		watcher:             watcher,
 		tenantWaiter:        singleflight.NewGroup("tenant server poller", "poll"),
 		drainCh:             make(chan struct{}),
+		disableTLSForHTTP:   disableTLSForHTTP,
 	}
 	c.orchestrator = newServerOrchestrator(parentStopper, c)
 	c.mu.servers = map[roachpb.TenantName]serverState{

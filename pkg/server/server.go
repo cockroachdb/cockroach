@@ -1233,6 +1233,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		systemTenantNameContainer,
 		pgPreServer.SendRoutingError,
 		tenantCapabilitiesWatcher,
+		cfg.BaseConfig.DisableTLSForHTTP,
 	)
 	drain.serverCtl = sc
 
