@@ -114,8 +114,13 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMet
 func (pm *PrometheusExporter) printAsText(w io.Writer, contentType expfmt.Format) error {
 	enc := expfmt.NewEncoder(w, contentType)
 	for _, family := range pm.families {
-		if err := enc.Encode(family); err != nil {
-			return err
+		// Encode expects that metrics exist in family. Filter them out since
+		// there's a possibility where the metric has been removed from the
+		// registry, but the exporter still keeps track of it.
+		if len(family.Metric) > 0 {
+			if err := enc.Encode(family); err != nil {
+				return err
+			}
 		}
 	}
 	pm.clearMetrics()
@@ -136,16 +141,17 @@ func (pm *PrometheusExporter) ScrapeAndPrintAsText(
 	return pm.printAsText(w, contentType)
 }
 
-// Verify GraphiteExporter implements Gatherer interface.
+// Verify GraphiteExporter implements the prometheus.Gatherer interface.
 var _ prometheus.Gatherer = (*PrometheusExporter)(nil)
 
-// Gather implements prometheus.Gatherer
+// Gather implements the prometheus.Gatherer interface.
 func (pm *PrometheusExporter) Gather() ([]*prometheusgo.MetricFamily, error) {
-	v := make([]*prometheusgo.MetricFamily, len(pm.families))
-	i := 0
+	v := make([]*prometheusgo.MetricFamily, 0, len(pm.families))
 	for _, family := range pm.families {
-		v[i] = family
-		i++
+		// Only return families with metrics.
+		if len(family.Metric) > 0 {
+			v = append(v, family)
+		}
 	}
 	return v, nil
 }
