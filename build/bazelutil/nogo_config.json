@@ -139,6 +139,7 @@
             "pkg/sql/contention/event_store.go": "flagged by linter, should be evaluated",
             "pkg/sql/distsql_running.go": "flagged by linter, should be evaluated",
             "pkg/sql/flowinfra/flow_registry.go": "flagged by linter, should be evaluated",
+            "pkg/sql/hints/hint_cache.go": "flagged by linter, should be evaluated",
             "pkg/sql/idxusage/local_idx_usage_stats.go": "flagged by linter, should be evaluated",
             "pkg/sql/importer/import_processor.go": "flagged by linter, should be evaluated",
             "pkg/sql/importer/import_processor_planning.go": "flagged by linter, should be evaluated",

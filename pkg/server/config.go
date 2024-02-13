@@ -93,6 +93,8 @@ const (
 
 	// This comes out to 1024 cache entries.
 	defaultSQLQueryCacheSize = 8 * 1024 * 1024
+
+	defaultSQLPlanHintsCacheSize = 256
 )
 
 var productionSettingsWebpage = fmt.Sprintf(
@@ -517,6 +519,9 @@ type SQLConfig struct {
 	// QueryCacheSize is the memory size (in bytes) of the query plan cache.
 	QueryCacheSize int64
 
+	// PlanHintsCacheSize is the size (number of queries) of the plan hints cache.
+	PlanHintsCacheSize int
+
 	// TenantKVAddrs are the entry points to the KV layer.
 	//
 	// Only applies when the SQL server is deployed individually.
@@ -574,6 +579,7 @@ func (sqlCfg *SQLConfig) SetDefaults(tempStorageCfg base.TempStorageConfig) {
 	sqlCfg.MemoryPoolSize = defaultSQLMemoryPoolSize
 	sqlCfg.TableStatCacheSize = defaultSQLTableStatCacheSize
 	sqlCfg.QueryCacheSize = defaultSQLQueryCacheSize
+	sqlCfg.PlanHintsCacheSize = defaultSQLPlanHintsCacheSize
 	sqlCfg.TempStorageConfig = tempStorageCfg
 }
 

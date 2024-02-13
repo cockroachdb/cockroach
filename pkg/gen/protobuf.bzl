@@ -67,6 +67,7 @@ PROTOBUF_SRCS = [
     "//pkg/sql/catalog/schematelemetry/schematelemetrycontroller:schematelemetrycontroller_go_proto",
     "//pkg/sql/contentionpb:contentionpb_go_proto",
     "//pkg/sql/execinfrapb:execinfrapb_go_proto",
+    "//pkg/sql/hints:hints_go_proto",
     "//pkg/sql/inverted:inverted_go_proto",
     "//pkg/sql/lex:lex_go_proto",
     "//pkg/sql/pgwire/pgerror:pgerror_go_proto",

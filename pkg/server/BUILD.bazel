@@ -239,6 +239,7 @@ go_library(
         "//pkg/sql/flowinfra",
         "//pkg/sql/gcjob",
         "//pkg/sql/gcjob/gcjobnotifier",
+        "//pkg/sql/hints",
         "//pkg/sql/idxusage",
         "//pkg/sql/importer",
         "//pkg/sql/isql",

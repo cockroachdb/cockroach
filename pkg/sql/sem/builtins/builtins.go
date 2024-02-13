@@ -8644,6 +8644,34 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			CalledOnNullInput: true,
 		},
 	),
+	"crdb_internal.query_id_for_hint": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryTesting,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "query", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return nil, pgerror.New(
+						pgcode.NullValueNotAllowed, "query string must be non-null",
+					)
+				}
+				stmts, err := parser.Parse(string(tree.MustBeDString(args[0])))
+				if err != nil {
+					return tree.DNull, err
+				}
+				stmtNoConstants := stmts.StringWithFlags(tree.FmtHideConstants)
+				fnv := util.MakeFNV64()
+				for _, c := range stmtNoConstants {
+					fnv.Add(uint64(c))
+				}
+				return tree.NewDInt(tree.DInt(fnv.Sum())), nil
+			},
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {

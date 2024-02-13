@@ -2563,6 +2563,7 @@ var builtinOidsArray = []string{
 	2595: `array_agg(arg1: pg_lsn[]) -> pg_lsn[][]`,
 	2596: `array_agg(arg1: refcursor[]) -> refcursor[][]`,
 	2597: `array_agg(arg1: tuple[]) -> tuple[][]`,
+	2598: `crdb_internal.query_id_for_hint(query: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

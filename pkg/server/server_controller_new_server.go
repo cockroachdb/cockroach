@@ -360,6 +360,7 @@ func makeSharedProcessTenantServerConfig(
 	sqlCfg.MemoryPoolSize = kvServerCfg.SQLConfig.MemoryPoolSize
 	sqlCfg.TableStatCacheSize = kvServerCfg.SQLConfig.TableStatCacheSize
 	sqlCfg.QueryCacheSize = kvServerCfg.SQLConfig.QueryCacheSize
+	sqlCfg.PlanHintsCacheSize = kvServerCfg.SQLConfig.PlanHintsCacheSize
 
 	// LocalKVServerInfo tells the rpc.Context of the tenant's server
 	// that it is inside the same process as the KV layer and how to

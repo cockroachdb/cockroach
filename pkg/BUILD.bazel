@@ -1856,6 +1856,7 @@ GO_TARGETS = [
     "//pkg/sql/gcjob:gcjob",
     "//pkg/sql/gcjob:gcjob_test",
     "//pkg/sql/gcjob_test:gcjob_test_test",
+    "//pkg/sql/hints:hints",
     "//pkg/sql/idxrecommendations:idxrecommendations",
     "//pkg/sql/idxrecommendations:idxrecommendations_test",
     "//pkg/sql/idxusage:idxusage",
