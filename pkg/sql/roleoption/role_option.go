@@ -72,6 +72,7 @@ const (
 	NOSQLLOGIN
 	VIEWCLUSTERSETTING
 	NOVIEWCLUSTERSETTING
+	SUBJECT
 )
 
 // ControlChangefeedDeprecationNoticeMsg is a user friendly notice which should be shown when CONTROLCHANGEFEED is used
@@ -111,6 +112,7 @@ var toSQLStmts = map[Option]string{
 	NOVIEWACTIVITYREDACTED: `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWACTIVITYREDACTED'`,
 	VIEWCLUSTERSETTING:     `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'VIEWCLUSTERSETTING', $2) ON CONFLICT DO NOTHING`,
 	NOVIEWCLUSTERSETTING:   `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWCLUSTERSETTING'`,
+	SUBJECT:                `UPSERT INTO system.role_options (username, option, value, user_id) VALUES ($1, 'SUBJECT', $2::string, $3)`,
 }
 
 // Mask returns the bitmask for a given role option.
@@ -148,6 +150,7 @@ var ByName = map[string]Option{
 	"NOSQLLOGIN":             NOSQLLOGIN,
 	"VIEWCLUSTERSETTING":     VIEWCLUSTERSETTING,
 	"NOVIEWCLUSTERSETTING":   NOVIEWCLUSTERSETTING,
+	"SUBJECT":                SUBJECT,
 }
 
 // ToOption takes a string and returns the corresponding Option.
@@ -225,7 +228,7 @@ func (rol List) GetSQLStmts(onRoleOption func(Option)) (map[string]*RoleOption, 
 		if onRoleOption != nil {
 			onRoleOption(ro.Option)
 		}
-		// Skip PASSWORD and DEFAULTSETTINGS options.
+		// Skip PASSWORD option.
 		// Since PASSWORD still resides in system.users, we handle setting PASSWORD
 		// outside of this set stmt.
 		// TODO(richardjcai): migrate password to system.role_options
