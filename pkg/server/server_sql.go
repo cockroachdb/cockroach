@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -1045,6 +1046,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
 		VecIndexManager:            vecindex.NewManager(ctx, cfg.stopper, codec, cfg.internalDB),
+		PlanHintsCache:             hints.NewPlanHintsCache(cfg.PlanHintsCacheSize, cfg.internalDB),
 		RowMetrics:                 &rowMetrics,
 		InternalRowMetrics:         &internalRowMetrics,
 		ProtectedTimestampProvider: cfg.protectedtsProvider,
@@ -1757,6 +1759,12 @@ func (s *SQLServer) preStart(
 	}
 	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
 	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
+		return err
+	}
+	err = s.execCfg.PlanHintsCache.Start(
+		ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory, s.execCfg.SystemTableIDResolver,
+	)
+	if err != nil {
 		return err
 	}
 
