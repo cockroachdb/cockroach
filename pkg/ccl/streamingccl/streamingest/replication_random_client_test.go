@@ -218,13 +218,6 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	streamAddr := getTestRandomClientURI(roachpb.MustMakeTenantID(oldTenantID), oldTenantName)
 	query := fmt.Sprintf(`CREATE TENANT "30" FROM REPLICATION OF "10" ON '%s'`, streamAddr)
 
-	// Attempt to run the ingestion job without enabling the experimental setting.
-	_, err = conn.Exec(query)
-	require.True(t, testutils.IsError(err, "physical replication is disabled"))
-
-	_, err = conn.Exec(`SET CLUSTER SETTING physical_replication.enabled = true;`)
-	require.NoError(t, err)
-
 	_, err = conn.Exec(query)
 	require.NoError(t, err)
 

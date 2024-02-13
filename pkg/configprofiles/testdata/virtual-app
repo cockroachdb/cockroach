@@ -21,13 +21,11 @@ WHERE variable IN (
 'sql.drop_virtual_cluster.enabled',
 'sql.create_virtual_cluster.default_template',
 'server.controller.default_target_cluster',
-'kv.rangefeed.enabled',
-'physical_replication.enabled'
+'kv.rangefeed.enabled'
 )
 ORDER BY variable
 ----
 kv.rangefeed.enabled false
-physical_replication.enabled false
 server.controller.default_target_cluster application
 spanconfig.range_coalescing.application.enabled false
 spanconfig.range_coalescing.system.enabled false

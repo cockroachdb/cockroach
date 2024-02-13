@@ -223,7 +223,6 @@ func NewReplicationHelper(
 	sqlDB.ExecMultiple(t,
 		// Required for replication stremas to work.
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-		`SET CLUSTER SETTING physical_replication.enabled = true`,
 
 		// Speeds up the tests a bit.
 		`SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`,
