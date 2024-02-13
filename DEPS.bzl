@@ -893,6 +893,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_azure_go_ntlmssp",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/Azure/go-ntlmssp",
+        sha256 = "cc6d4e9caf938a71c9217f3aa8bdbb1c072faff3444bb680a2759c947da2085c",
+        strip_prefix = "github.com/Azure/go-ntlmssp@v0.0.0-20221128193559-754e69321358",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Azure/go-ntlmssp/com_github_azure_go_ntlmssp-v0.0.0-20221128193559-754e69321358.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_azuread_microsoft_authentication_library_for_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/AzureAD/microsoft-authentication-library-for-go",
@@ -3041,6 +3051,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_go_asn1_ber_asn1_ber",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/go-asn1-ber/asn1-ber",
+        sha256 = "7fb2b70e9358d6ffff20139d1c0d711f5644a9174c45cefc2419b5f8808e0d0b",
+        strip_prefix = "github.com/go-asn1-ber/asn1-ber@v1.5.5",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/go-asn1-ber/asn1-ber/com_github_go_asn1_ber_asn1_ber-v1.5.5.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_go_check_check",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/go-check/check",
@@ -3178,6 +3198,16 @@ def go_deps():
         strip_prefix = "github.com/go-latex/latex@v0.0.0-20210823091927-c0d11ff05a81",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/go-latex/latex/com_github_go_latex_latex-v0.0.0-20210823091927-c0d11ff05a81.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_go_ldap_ldap_v3",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/go-ldap/ldap/v3",
+        sha256 = "052374653524b2b41879a5d8d5d55062157b542478a497dd12c5d51a7b3a703b",
+        strip_prefix = "github.com/go-ldap/ldap/v3@v3.4.6",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/go-ldap/ldap/v3/com_github_go_ldap_ldap_v3-v3.4.6.zip",
         ],
     )
     go_repository(
@@ -4052,10 +4082,10 @@ def go_deps():
         name = "com_github_google_uuid",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/uuid",
-        sha256 = "0a5fcc05ea492afeaca984a012485f6a15e2259b32f1206d6f36a88c88afc607",
-        strip_prefix = "github.com/google/uuid@v1.3.0",
+        sha256 = "9d9d6cfb28ce6dbe4b518c42c6bccd67bb531a106859808f36e82a5c3fb8c64d",
+        strip_prefix = "github.com/google/uuid@v1.3.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/uuid/com_github_google_uuid-v1.3.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/uuid/com_github_google_uuid-v1.3.1.zip",
         ],
     )
     go_repository(
