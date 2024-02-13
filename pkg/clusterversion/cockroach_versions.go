@@ -121,15 +121,21 @@ type Key int
 // own documentation in ./pkg/upgrade, which you should peruse should you feel
 // that an upgrade is necessary for your use case.
 //
-// ## Permanent upgrades
+// ## Bootstrap upgrades
 //
-// Permanent upgrades are upgrades that double as initialization steps when
-// bootstrapping a new cluster. As such, they cannot be removed even as the
-// version they are tied to becomes unsupported.
+// Bootstrap upgrades are two upgrades that run as initialization steps when
+// bootstrapping a new cluster, regardless of the version (baked-in migrations)
+// at which the cluster bootstrapped. When all clusters -- both those being
+// freshly created and those being upgraded from some older version -- need to
+// run some piece of code, typically that code is called both in an upgrade
+// migration that existing clusters will run during upgrade and in the bootstrap
+// upgrades that only new clusters will run; bootstrap upgrades are not re-run
+// during later upgrades, so any modifications to them also need to be run as
+// separate upgrades.
 //
 // # Phasing out Versions and Upgrades
 //
-// Versions and non-permanent upgrades can be removed once they are no longer
+// Versions can be removed once they are no longer
 // going to be exercised. This is primarily driven by the
 // MinSupported version, which declares the oldest *cluster* (not binary)
 // version of CockroachDB that may interface with the running node. It typically
@@ -160,17 +166,10 @@ type Key int
 // All "is active" checks for the key will always evaluate to true. You'll also
 // want to delete the constant and remove its entry in the `versionsSingleton`
 // block below.
-//
-// Permanent upgrades and their associated version key cannot be removed (even
-// if it is below MinSupported). The version key should start with `Permanent_`
-// to make this more explicit. The version numbers should not be changed - we
-// want all nodes in a mixed-version cluster to agree on what version a certain
-// upgrade step is tied to (in the unlikely scenario that we have mixed-version
-// nodes while bootstrapping a cluster).
 const (
 	// VBootstrap versions are associated with bootstrap steps; no new bootstrap
-	// versions should be added, as the two bootstrap functions are extended as
-	// needed in-place.
+	// versions should be added, as the bootstrap{System,Cluster} functions in the
+	// upgrades package are extended in-place.
 	VBootstrapSystem Key = iota
 	VBootstrapTenant
 
