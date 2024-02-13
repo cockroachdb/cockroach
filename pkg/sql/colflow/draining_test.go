@@ -6,7 +6,6 @@
 package colflow_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -29,7 +28,6 @@ func TestDrainingAfterRemoteError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
 	// Create a disk monitor for the temp storage only with 1 byte of space.

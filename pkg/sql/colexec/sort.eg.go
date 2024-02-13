@@ -32,10 +32,12 @@ var (
 	_ tree.AggType
 )
 
-func newSingleSorterWithNulls(t *types.T, dir execinfrapb.Ordering_Column_Direction) colSorter {
+func newSingleSorterWithNulls(
+	ctx context.Context, t *types.T, dir execinfrapb.Ordering_Column_Direction,
+) colSorter {
 	switch dir {
 	case execinfrapb.Ordering_Column_ASC:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 		case types.BoolFamily:
 			switch t.Width() {
 			case -1:
@@ -96,7 +98,7 @@ func newSingleSorterWithNulls(t *types.T, dir execinfrapb.Ordering_Column_Direct
 			}
 		}
 	case execinfrapb.Ordering_Column_DESC:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 		case types.BoolFamily:
 			switch t.Width() {
 			case -1:
@@ -162,10 +164,12 @@ func newSingleSorterWithNulls(t *types.T, dir execinfrapb.Ordering_Column_Direct
 	return nil
 }
 
-func newSingleSorterWithoutNulls(t *types.T, dir execinfrapb.Ordering_Column_Direction) colSorter {
+func newSingleSorterWithoutNulls(
+	ctx context.Context, t *types.T, dir execinfrapb.Ordering_Column_Direction,
+) colSorter {
 	switch dir {
 	case execinfrapb.Ordering_Column_ASC:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 		case types.BoolFamily:
 			switch t.Width() {
 			case -1:
@@ -226,7 +230,7 @@ func newSingleSorterWithoutNulls(t *types.T, dir execinfrapb.Ordering_Column_Dir
 			}
 		}
 	case execinfrapb.Ordering_Column_DESC:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 		case types.BoolFamily:
 			switch t.Width() {
 			case -1:

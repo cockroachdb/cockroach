@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -155,7 +156,7 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 				Width: inputTypeWidth,
 				Overload: avgTmplInfo{
 					aggTmplInfoBase: aggTmplInfoBase{
-						canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(retTypeFamily),
+						canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, retTypeFamily),
 					},
 					InputVecMethod: toVecMethod(inputTypeFamily, inputTypeWidth),
 					RetGoType:      toPhysicalRepresentation(retTypeFamily, retTypeWidth),

@@ -80,6 +80,7 @@ type windowFramer interface {
 }
 
 func newWindowFramer(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
@@ -104,7 +105,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude{
@@ -114,7 +115,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
@@ -127,7 +128,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsUnboundedPrecedingCurrentRowExclude{
@@ -137,7 +138,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
@@ -150,7 +151,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsUnboundedPrecedingOffsetFollowingExclude{
@@ -160,7 +161,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
@@ -173,7 +174,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude{
@@ -183,7 +184,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			}
@@ -199,7 +200,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsOffsetPrecedingOffsetPrecedingExclude{
@@ -209,7 +210,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
@@ -222,7 +223,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsOffsetPrecedingCurrentRowExclude{
@@ -232,7 +233,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
@@ -245,7 +246,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsOffsetPrecedingOffsetFollowingExclude{
@@ -255,7 +256,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
@@ -268,7 +269,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsOffsetPrecedingUnboundedFollowingExclude{
@@ -278,7 +279,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			}
@@ -294,7 +295,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsCurrentRowCurrentRowExclude{
@@ -304,7 +305,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
@@ -317,7 +318,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsCurrentRowOffsetFollowingExclude{
@@ -327,7 +328,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
@@ -340,7 +341,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsCurrentRowUnboundedFollowingExclude{
@@ -350,7 +351,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			}
@@ -366,7 +367,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsOffsetFollowingOffsetFollowingExclude{
@@ -376,7 +377,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
@@ -389,7 +390,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRowsOffsetFollowingUnboundedFollowingExclude{
@@ -399,7 +400,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			}
@@ -418,7 +419,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude{
@@ -428,7 +429,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
@@ -441,7 +442,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsUnboundedPrecedingCurrentRowExclude{
@@ -451,7 +452,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
@@ -464,7 +465,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude{
@@ -474,7 +475,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
@@ -487,7 +488,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude{
@@ -497,7 +498,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			}
@@ -513,7 +514,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude{
@@ -523,7 +524,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
@@ -536,7 +537,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsOffsetPrecedingCurrentRowExclude{
@@ -546,7 +547,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
@@ -559,7 +560,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsOffsetPrecedingOffsetFollowingExclude{
@@ -569,7 +570,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
@@ -582,7 +583,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude{
@@ -592,7 +593,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			}
@@ -608,7 +609,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsCurrentRowCurrentRowExclude{
@@ -618,7 +619,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
@@ -631,7 +632,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsCurrentRowOffsetFollowingExclude{
@@ -641,7 +642,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
@@ -654,7 +655,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsCurrentRowUnboundedFollowingExclude{
@@ -664,7 +665,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			}
@@ -680,7 +681,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsOffsetFollowingOffsetFollowingExclude{
@@ -690,7 +691,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
@@ -703,7 +704,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerGroupsOffsetFollowingUnboundedFollowingExclude{
@@ -713,7 +714,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			}
@@ -732,7 +733,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude{
@@ -742,7 +743,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
@@ -755,7 +756,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeUnboundedPrecedingCurrentRowExclude{
@@ -765,7 +766,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
@@ -778,7 +779,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeUnboundedPrecedingOffsetFollowingExclude{
@@ -788,7 +789,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
@@ -801,7 +802,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude{
@@ -811,7 +812,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			}
@@ -827,7 +828,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeOffsetPrecedingOffsetPrecedingExclude{
@@ -837,7 +838,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
@@ -850,7 +851,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeOffsetPrecedingCurrentRowExclude{
@@ -860,7 +861,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
@@ -873,7 +874,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeOffsetPrecedingOffsetFollowingExclude{
@@ -883,7 +884,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
@@ -896,7 +897,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeOffsetPrecedingUnboundedFollowingExclude{
@@ -906,7 +907,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			}
@@ -922,7 +923,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeCurrentRowCurrentRowExclude{
@@ -932,7 +933,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
@@ -945,7 +946,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeCurrentRowOffsetFollowingExclude{
@@ -955,7 +956,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
@@ -968,7 +969,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeCurrentRowUnboundedFollowingExclude{
@@ -978,7 +979,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			}
@@ -994,7 +995,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeOffsetFollowingOffsetFollowingExclude{
@@ -1004,7 +1005,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
@@ -1017,7 +1018,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				case true:
 					op := &windowFramerRangeOffsetFollowingUnboundedFollowingExclude{
@@ -1027,7 +1028,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 				}
 			}
@@ -1254,6 +1255,7 @@ func (b *windowFramerBase) isFirstPeer(ctx context.Context, idx int) bool {
 // handleOffsets populates the offset fields of the window framer operator, if
 // one or both bounds are OFFSET PRECEDING or OFFSET FOLLOWING.
 func (b *windowFramerBase) handleOffsets(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
@@ -1294,12 +1296,12 @@ func (b *windowFramerBase) handleOffsets(
 	ordColAsc := ordering.Columns[0].Direction == execinfrapb.Ordering_Column_ASC
 	if startHasOffset {
 		b.startHandler = newRangeOffsetHandler(
-			evalCtx, b.datumAlloc, startBound, ordColType, ordColAsc, true, /* isStart */
+			ctx, evalCtx, b.datumAlloc, startBound, ordColType, ordColAsc, true, /* isStart */
 		)
 	}
 	if endHasOffset {
 		b.endHandler = newRangeOffsetHandler(
-			evalCtx, b.datumAlloc, endBound, ordColType, ordColAsc, false, /* isStart */
+			ctx, evalCtx, b.datumAlloc, endBound, ordColType, ordColAsc, false, /* isStart */
 		)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -132,7 +133,7 @@ func genVecToDatum(inputFileContents string, wr io.Writer) error {
 		types.EnumFamily,
 	}
 	for _, typeFamily := range optimizedTypeFamilies {
-		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily)
+		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, typeFamily)
 		tmplInfo := vecToDatumTmplInfo{TypeFamily: "types." + typeFamily.String()}
 		widths := supportedWidthsByCanonicalTypeFamily[canonicalTypeFamily]
 		if typeFamily != canonicalTypeFamily {

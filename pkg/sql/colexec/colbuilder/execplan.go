@@ -1094,7 +1094,7 @@ func NewColOperator(
 			result.ColumnTypes = spec.Input[0].ColumnTypes
 			if len(core.Distinct.OrderedColumns) == len(core.Distinct.DistinctColumns) {
 				result.Root = colexecbase.NewOrderedDistinct(
-					inputs[0].Root, core.Distinct.OrderedColumns, result.ColumnTypes,
+					ctx, inputs[0].Root, core.Distinct.OrderedColumns, result.ColumnTypes,
 					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
 				)
 			} else {
@@ -1753,7 +1753,7 @@ func NewColOperator(
 		expected, actual := args.Spec.ResultTypes[i], r.ColumnTypes[i]
 		if !actual.Identical(expected) {
 			numMismatchedTypes++
-			if !colexecbase.IsCastSupported(actual, expected) {
+			if !colexecbase.IsCastSupported(ctx, actual, expected) {
 				needWrappedCast = true
 			}
 		}
@@ -2174,7 +2174,7 @@ func planSelectionOperators(
 				// op hasn't been created yet, so let's try the constructor for
 				// all other selection operators.
 				op, err = colexecsel.GetSelectionConstOperator(
-					cmpOp, leftOp, ct, leftIdx, constArg, evalCtx, t,
+					ctx, cmpOp, leftOp, ct, leftIdx, constArg, evalCtx, t,
 				)
 				if r, ok := op.(execreleasable.Releasable); ok {
 					*releasables = append(*releasables, r)
@@ -2189,7 +2189,7 @@ func planSelectionOperators(
 			return nil, resultIdx, ct, err
 		}
 		op, err = colexecsel.GetSelectionOperator(
-			cmpOp, rightOp, ct, leftIdx, rightIdx, evalCtx, t,
+			ctx, cmpOp, rightOp, ct, leftIdx, rightIdx, evalCtx, t,
 		)
 		if r, ok := op.(execreleasable.Releasable); ok {
 			*releasables = append(*releasables, r)
@@ -2318,7 +2318,7 @@ func planProjectionOperators(
 	case *tree.AndExpr:
 		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, allocator, releasables)
 	case *tree.BinaryExpr:
-		if err = checkSupportedBinaryExpr(t.TypedLeft(), t.TypedRight(), t.ResolvedType()); err != nil {
+		if err = checkSupportedBinaryExpr(ctx, t.TypedLeft(), t.TypedRight(), t.ResolvedType()); err != nil {
 			return op, resultIdx, typs, err
 		}
 		leftExpr, rightExpr := t.TypedLeft(), t.TypedRight()
@@ -2647,13 +2647,15 @@ func safeTypesForBinOrCmpExpr(leftTyp, rightTyp *types.T) bool {
 	return false
 }
 
-func checkSupportedBinaryExpr(left, right tree.TypedExpr, outputType *types.T) error {
+func checkSupportedBinaryExpr(
+	ctx context.Context, left, right tree.TypedExpr, outputType *types.T,
+) error {
 	leftTyp := left.ResolvedType()
 	rightTyp := right.ResolvedType()
 
-	leftDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(leftTyp.Family()) == typeconv.DatumVecCanonicalTypeFamily
-	rightDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(rightTyp.Family()) == typeconv.DatumVecCanonicalTypeFamily
-	outputDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(outputType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	leftDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftTyp.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	rightDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightTyp.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	outputDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, outputType.Family()) == typeconv.DatumVecCanonicalTypeFamily
 	if (leftDatumBacked && rightDatumBacked) && !outputDatumBacked {
 		return errBinaryExprWithDatums
 	}

@@ -110,7 +110,7 @@ func newMinRemovableAggregator(
 		queue:        newMinMaxQueue(maxQueueLength),
 		omittedIndex: -1,
 	}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(argTyp.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(args.BufferAllocator.Ctx, argTyp.Family()) {
 	case types.BoolFamily:
 		switch argTyp.Width() {
 		case -1:
@@ -2088,7 +2088,7 @@ func newMaxRemovableAggregator(
 		queue:        newMinMaxQueue(maxQueueLength),
 		omittedIndex: -1,
 	}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(argTyp.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(args.BufferAllocator.Ctx, argTyp.Family()) {
 	case types.BoolFamily:
 		switch argTyp.Width() {
 		case -1:

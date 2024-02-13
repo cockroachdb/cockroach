@@ -7,6 +7,7 @@
 package coldata
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -49,11 +50,11 @@ type Vec struct {
 
 // ColumnFactory is an interface that can construct columns for Batches.
 type ColumnFactory interface {
-	MakeColumn(t *types.T, length int) Column
+	MakeColumn(ctx context.Context, t *types.T, length int) Column
 	// MakeColumns batch-allocates columns of the given type and the given
 	// length. Note that datum-backed vectors will be incomplete - the caller
 	// must set the correct type on each one.
-	MakeColumns(columns []Column, t *types.T, length int)
+	MakeColumns(ctx context.Context, columns []Column, t *types.T, length int)
 }
 
 type defaultColumnFactory struct{}
@@ -62,8 +63,8 @@ type defaultColumnFactory struct{}
 // explicitly supported by the vectorized engine (i.e. not datum-backed).
 var StandardColumnFactory ColumnFactory = &defaultColumnFactory{}
 
-func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
-	switch canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()); canonicalTypeFamily {
+func (cf *defaultColumnFactory) MakeColumn(ctx context.Context, t *types.T, length int) Column {
+	switch canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()); canonicalTypeFamily {
 	case types.BoolFamily:
 		return make(Bools, length)
 	case types.BytesFamily:
@@ -94,9 +95,11 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
 	}
 }
 
-func (cf *defaultColumnFactory) MakeColumns(columns []Column, t *types.T, length int) {
+func (cf *defaultColumnFactory) MakeColumns(
+	ctx context.Context, columns []Column, t *types.T, length int,
+) {
 	allocLength := len(columns) * length
-	switch canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()); canonicalTypeFamily {
+	switch canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()); canonicalTypeFamily {
 	case types.BoolFamily:
 		alloc := make(Bools, allocLength)
 		for i := range columns {
@@ -173,11 +176,11 @@ func (cf *defaultColumnFactory) MakeColumns(columns []Column, t *types.T, length
 
 // NewVec returns a new Vec, initialized with a length using the given column
 // factory.
-func NewVec(t *types.T, length int, factory ColumnFactory) *Vec {
+func NewVec(ctx context.Context, t *types.T, length int, factory ColumnFactory) *Vec {
 	return &Vec{
 		t:                   t,
-		canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()),
-		col:                 factory.MakeColumn(t, length),
+		canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()),
+		col:                 factory.MakeColumn(ctx, t, length),
 		nulls:               NewNulls(length),
 	}
 }

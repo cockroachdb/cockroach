@@ -6,7 +6,6 @@
 package colrpc
 
 import (
-	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -28,8 +27,6 @@ import (
 func TestOutboxCatchesPanics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
-
 	// Use the release-build panic-catching behavior instead of the
 	// crdb_test-build behavior.
 	defer colexecerror.ProductionBehaviorForTests()()
@@ -40,7 +37,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
 	input.Init(ctx)
-	outbox, err := NewOutbox(&execinfra.FlowCtx{Gateway: false}, 0 /* processorID */, testAllocator, testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil /* getStats */)
+	outbox, err := NewOutbox(ctx, &execinfra.FlowCtx{Gateway: false}, 0 /* processorID */, testAllocator, testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil /* getStats */)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
@@ -84,8 +81,6 @@ func TestOutboxCatchesPanics(t *testing.T) {
 func TestOutboxDrainsMetadataSources(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
-
 	var (
 		input = colexecop.NewBatchBuffer()
 		typs  = []*types.T{types.Int}
@@ -96,6 +91,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	newOutboxWithMetaSources := func() (*Outbox, *uint32, error) {
 		var sourceDrained uint32
 		outbox, err := NewOutbox(
+			ctx,
 			&execinfra.FlowCtx{Gateway: false},
 			0, /* processorID */
 			testAllocator,

@@ -1274,6 +1274,8 @@ func MakeDistSQLReceiver(
 	clockUpdater clockUpdater,
 	tracing *SessionTracing,
 ) *DistSQLReceiver {
+	// TODO: think through this.
+	ctx = execversion.WithVersion(ctx, execversion.Latest)
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
 	r := receiverSyncPool.Get().(*DistSQLReceiver)
 	// Check whether the result writer supports pushing batches into it directly

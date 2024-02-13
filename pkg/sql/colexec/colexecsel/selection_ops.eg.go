@@ -8,6 +8,7 @@ package colexecsel
 
 import (
 	"bytes"
+	"context"
 	"math"
 	"time"
 
@@ -57089,6 +57090,7 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given left and right column types and comparison.
 func GetSelectionConstOperator(
+	ctx context.Context,
 	cmpOp treecmp.ComparisonOperator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
@@ -57109,12 +57111,12 @@ func GetSelectionConstOperator(
 		// input vectors is of a tuple type.
 		switch cmpOp.Symbol {
 		case treecmp.EQ:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.BoolFamily:
 						switch constType.Width() {
 						case -1:
@@ -57127,7 +57129,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.BytesFamily:
 						switch constType.Width() {
 						case -1:
@@ -57140,7 +57142,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57168,7 +57170,7 @@ func GetSelectionConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57193,7 +57195,7 @@ func GetSelectionConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57219,7 +57221,7 @@ func GetSelectionConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57248,7 +57250,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57277,7 +57279,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.TimestampTZFamily:
 						switch constType.Width() {
 						case -1:
@@ -57290,7 +57292,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntervalFamily:
 						switch constType.Width() {
 						case -1:
@@ -57303,7 +57305,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.JsonFamily:
 						switch constType.Width() {
 						case -1:
@@ -57316,7 +57318,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch constType.Width() {
 						case -1:
@@ -57327,12 +57329,12 @@ func GetSelectionConstOperator(
 				}
 			}
 		case treecmp.NE:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.BoolFamily:
 						switch constType.Width() {
 						case -1:
@@ -57345,7 +57347,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.BytesFamily:
 						switch constType.Width() {
 						case -1:
@@ -57358,7 +57360,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57386,7 +57388,7 @@ func GetSelectionConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57411,7 +57413,7 @@ func GetSelectionConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57437,7 +57439,7 @@ func GetSelectionConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57466,7 +57468,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57495,7 +57497,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.TimestampTZFamily:
 						switch constType.Width() {
 						case -1:
@@ -57508,7 +57510,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntervalFamily:
 						switch constType.Width() {
 						case -1:
@@ -57521,7 +57523,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.JsonFamily:
 						switch constType.Width() {
 						case -1:
@@ -57534,7 +57536,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch constType.Width() {
 						case -1:
@@ -57545,12 +57547,12 @@ func GetSelectionConstOperator(
 				}
 			}
 		case treecmp.LT:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.BoolFamily:
 						switch constType.Width() {
 						case -1:
@@ -57563,7 +57565,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.BytesFamily:
 						switch constType.Width() {
 						case -1:
@@ -57576,7 +57578,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57604,7 +57606,7 @@ func GetSelectionConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57629,7 +57631,7 @@ func GetSelectionConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57655,7 +57657,7 @@ func GetSelectionConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57684,7 +57686,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57713,7 +57715,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.TimestampTZFamily:
 						switch constType.Width() {
 						case -1:
@@ -57726,7 +57728,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntervalFamily:
 						switch constType.Width() {
 						case -1:
@@ -57739,7 +57741,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.JsonFamily:
 						switch constType.Width() {
 						case -1:
@@ -57752,7 +57754,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch constType.Width() {
 						case -1:
@@ -57763,12 +57765,12 @@ func GetSelectionConstOperator(
 				}
 			}
 		case treecmp.LE:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.BoolFamily:
 						switch constType.Width() {
 						case -1:
@@ -57781,7 +57783,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.BytesFamily:
 						switch constType.Width() {
 						case -1:
@@ -57794,7 +57796,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57822,7 +57824,7 @@ func GetSelectionConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57847,7 +57849,7 @@ func GetSelectionConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57873,7 +57875,7 @@ func GetSelectionConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57902,7 +57904,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -57931,7 +57933,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.TimestampTZFamily:
 						switch constType.Width() {
 						case -1:
@@ -57944,7 +57946,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntervalFamily:
 						switch constType.Width() {
 						case -1:
@@ -57957,7 +57959,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.JsonFamily:
 						switch constType.Width() {
 						case -1:
@@ -57970,7 +57972,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch constType.Width() {
 						case -1:
@@ -57981,12 +57983,12 @@ func GetSelectionConstOperator(
 				}
 			}
 		case treecmp.GT:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.BoolFamily:
 						switch constType.Width() {
 						case -1:
@@ -57999,7 +58001,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.BytesFamily:
 						switch constType.Width() {
 						case -1:
@@ -58012,7 +58014,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -58040,7 +58042,7 @@ func GetSelectionConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -58065,7 +58067,7 @@ func GetSelectionConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -58091,7 +58093,7 @@ func GetSelectionConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -58120,7 +58122,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -58149,7 +58151,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.TimestampTZFamily:
 						switch constType.Width() {
 						case -1:
@@ -58162,7 +58164,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntervalFamily:
 						switch constType.Width() {
 						case -1:
@@ -58175,7 +58177,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.JsonFamily:
 						switch constType.Width() {
 						case -1:
@@ -58188,7 +58190,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch constType.Width() {
 						case -1:
@@ -58199,12 +58201,12 @@ func GetSelectionConstOperator(
 				}
 			}
 		case treecmp.GE:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.BoolFamily:
 						switch constType.Width() {
 						case -1:
@@ -58217,7 +58219,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.BytesFamily:
 						switch constType.Width() {
 						case -1:
@@ -58230,7 +58232,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -58258,7 +58260,7 @@ func GetSelectionConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -58283,7 +58285,7 @@ func GetSelectionConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -58309,7 +58311,7 @@ func GetSelectionConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -58338,7 +58340,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntFamily:
 						switch constType.Width() {
 						case 16:
@@ -58367,7 +58369,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.TimestampTZFamily:
 						switch constType.Width() {
 						case -1:
@@ -58380,7 +58382,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.IntervalFamily:
 						switch constType.Width() {
 						case -1:
@@ -58393,7 +58395,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case types.JsonFamily:
 						switch constType.Width() {
 						case -1:
@@ -58406,7 +58408,7 @@ func GetSelectionConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch constType.Width() {
 						case -1:
@@ -58429,6 +58431,7 @@ func GetSelectionConstOperator(
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given left and right column types and comparison.
 func GetSelectionOperator(
+	ctx context.Context,
 	cmpOp treecmp.ComparisonOperator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
@@ -58449,12 +58452,12 @@ func GetSelectionOperator(
 		// input vectors is of a tuple type.
 		switch cmpOp.Symbol {
 		case treecmp.EQ:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.BoolFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58467,7 +58470,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.BytesFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58480,7 +58483,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58508,7 +58511,7 @@ func GetSelectionOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58533,7 +58536,7 @@ func GetSelectionOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58559,7 +58562,7 @@ func GetSelectionOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58588,7 +58591,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58617,7 +58620,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.TimestampTZFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58630,7 +58633,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58643,7 +58646,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.JsonFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58656,7 +58659,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58667,12 +58670,12 @@ func GetSelectionOperator(
 				}
 			}
 		case treecmp.NE:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.BoolFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58685,7 +58688,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.BytesFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58698,7 +58701,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58726,7 +58729,7 @@ func GetSelectionOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58751,7 +58754,7 @@ func GetSelectionOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58777,7 +58780,7 @@ func GetSelectionOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58806,7 +58809,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58835,7 +58838,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.TimestampTZFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58848,7 +58851,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58861,7 +58864,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.JsonFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58874,7 +58877,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58885,12 +58888,12 @@ func GetSelectionOperator(
 				}
 			}
 		case treecmp.LT:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.BoolFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58903,7 +58906,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.BytesFamily:
 						switch rightType.Width() {
 						case -1:
@@ -58916,7 +58919,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58944,7 +58947,7 @@ func GetSelectionOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58969,7 +58972,7 @@ func GetSelectionOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -58995,7 +58998,7 @@ func GetSelectionOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59024,7 +59027,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59053,7 +59056,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.TimestampTZFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59066,7 +59069,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59079,7 +59082,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.JsonFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59092,7 +59095,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59103,12 +59106,12 @@ func GetSelectionOperator(
 				}
 			}
 		case treecmp.LE:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.BoolFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59121,7 +59124,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.BytesFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59134,7 +59137,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59162,7 +59165,7 @@ func GetSelectionOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59187,7 +59190,7 @@ func GetSelectionOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59213,7 +59216,7 @@ func GetSelectionOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59242,7 +59245,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59271,7 +59274,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.TimestampTZFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59284,7 +59287,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59297,7 +59300,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.JsonFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59310,7 +59313,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59321,12 +59324,12 @@ func GetSelectionOperator(
 				}
 			}
 		case treecmp.GT:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.BoolFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59339,7 +59342,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.BytesFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59352,7 +59355,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59380,7 +59383,7 @@ func GetSelectionOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59405,7 +59408,7 @@ func GetSelectionOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59431,7 +59434,7 @@ func GetSelectionOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59460,7 +59463,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59489,7 +59492,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.TimestampTZFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59502,7 +59505,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59515,7 +59518,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.JsonFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59528,7 +59531,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59539,12 +59542,12 @@ func GetSelectionOperator(
 				}
 			}
 		case treecmp.GE:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.BoolFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59557,7 +59560,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.BytesFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59570,7 +59573,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59598,7 +59601,7 @@ func GetSelectionOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59623,7 +59626,7 @@ func GetSelectionOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59649,7 +59652,7 @@ func GetSelectionOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59678,7 +59681,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -59707,7 +59710,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.TimestampTZFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59720,7 +59723,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59733,7 +59736,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case types.JsonFamily:
 						switch rightType.Width() {
 						case -1:
@@ -59746,7 +59749,7 @@ func GetSelectionOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:

@@ -135,8 +135,8 @@ func GetCastOperator(
 			return &castIdentityOp{castOpBase: base}, nil
 		}
 	}
-	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
-	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
 	if isFromDatum {
 		if isToDatum {
 			return &castDatumDatumOp{castOpBase: base}, nil
@@ -187,15 +187,15 @@ func GetCastOperator(
 	return nil, err
 }
 
-func IsCastSupported(fromType, toType *types.T) bool {
+func IsCastSupported(ctx context.Context, fromType, toType *types.T) bool {
 	if fromType.Family() == types.UnknownFamily {
 		return true
 	}
 	if isIdentityCast(fromType, toType) {
 		return true
 	}
-	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
-	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
 	if isFromDatum {
 		if isToDatum {
 			return true

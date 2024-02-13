@@ -6,7 +6,6 @@
 package colflow_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -52,7 +51,7 @@ func (t *testBatchReceiver) PushBatch(
 // the same way as in vectorizedFlowCreator.setupFlow.
 func TestVectorizedMetaPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
@@ -96,7 +95,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		output,
 		func() {}, /* cancelFlow */
 	)
-	f.Run(context.Background())
+	f.Run(ctx)
 
 	// Ensure that the expected number of batches and metadata objects have been
 	// pushed into the output.

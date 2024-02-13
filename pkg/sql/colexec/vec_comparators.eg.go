@@ -8,6 +8,7 @@ package colexec
 
 import (
 	"bytes"
+	"context"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -525,8 +526,8 @@ func (c *DatumVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	}
 }
 
-func GetVecComparator(t *types.T, numVecs int) vecComparator {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+func GetVecComparator(ctx context.Context, t *types.T, numVecs int) vecComparator {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:

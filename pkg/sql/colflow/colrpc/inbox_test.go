@@ -58,7 +58,7 @@ func TestInboxCancellation(t *testing.T) {
 	t.Run("ReaderWaitingForStreamHandler", func(t *testing.T) {
 		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
-		ctx, cancelFn := context.WithCancel(context.Background())
+		ctx, cancelFn := context.WithCancel(ctx)
 		// Cancel the context.
 		cancelFn()
 		// Init should encounter an error if the context is canceled.
@@ -75,7 +75,7 @@ func TestInboxCancellation(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
 		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
-		ctx, cancelFn := context.WithCancel(context.Background())
+		ctx, cancelFn := context.WithCancel(ctx)
 
 		// Setup reader and stream.
 		go func() {
@@ -110,7 +110,7 @@ func TestInboxCancellation(t *testing.T) {
 		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 
-		ctx, cancelFn := context.WithCancel(context.Background())
+		ctx, cancelFn := context.WithCancel(ctx)
 
 		cancelFn()
 		// A stream arrives but there is no reader.
@@ -129,7 +129,7 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	require.NoError(t, err)
 
 	rpcLayer := makeMockFlowStreamRPCLayer()
-	streamHandlerErrCh := handleStream(context.Background(), inbox, rpcLayer.server, func() { close(rpcLayer.client.csChan) })
+	streamHandlerErrCh := handleStream(ctx, inbox, rpcLayer.server, func() { close(rpcLayer.client.csChan) })
 
 	m := &execinfrapb.ProducerMessage{}
 	m.Data.RawBytes = []byte("garbage")
@@ -143,7 +143,7 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	// inbox.Next should panic given that the deserializer will encounter garbage
 	// data.
 	require.Panics(t, func() {
-		inbox.Init(context.Background())
+		inbox.Init(ctx)
 		inbox.Next()
 	})
 
@@ -158,8 +158,6 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 
 func TestInboxTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
 
 	inbox, err := NewInbox(testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0))
 	require.NoError(t, err)
@@ -265,14 +263,14 @@ func TestInboxShutdown(t *testing.T) {
 					"cancel=%t/next=%t/stream=%t/inf=%t",
 					cancel, runNextGoroutine, runRunWithStreamGoroutine, infiniteBatches,
 				), func(t *testing.T) {
-					inboxCtx, inboxCancel := context.WithCancel(context.Background())
+					inboxCtx, inboxCancel := context.WithCancel(ctx)
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(inboxCtx)
 					inbox, err := NewInbox(colmem.NewAllocator(inboxCtx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 					require.NoError(t, err)
-					c, err := colserde.NewArrowBatchConverter(typs, colserde.BatchToArrowOnly, testMemAcc)
+					c, err := colserde.NewArrowBatchConverter(inboxCtx, typs, colserde.BatchToArrowOnly, testMemAcc)
 					require.NoError(t, err)
-					r, err := colserde.NewRecordBatchSerializer(typs)
+					r, err := colserde.NewRecordBatchSerializer(inboxCtx, typs)
 					require.NoError(t, err)
 
 					goroutines := []struct {
@@ -301,7 +299,7 @@ func TestInboxShutdown(t *testing.T) {
 									go func() {
 										defer wg.Done()
 										defer c.Close(context.Background())
-										arrowData, err := c.BatchToArrow(context.Background(), batch)
+										arrowData, err := c.BatchToArrow(ctx, batch)
 										if err != nil {
 											errCh <- err
 											return
