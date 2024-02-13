@@ -372,7 +372,6 @@ func ConsoleKeys() (res []InternalKey) {
 }
 
 var allConsoleKeys = []InternalKey{
-	"cross_cluster_replication.enabled",
 	"keyvisualizer.enabled",
 	"keyvisualizer.sample_interval",
 	"sql.index_recommendation.drop_unused_duration",
