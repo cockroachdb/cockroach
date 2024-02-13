@@ -492,6 +492,10 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			skip.WithIssue(t, issue)
 			return ""
 
+		case "skip-under-duress":
+			skip.UnderDuress(t)
+			return ""
+
 		case "reset":
 			ds.cleanup(ctx, t)
 			ds = newDatadrivenTestState()
