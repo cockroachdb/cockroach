@@ -223,6 +223,13 @@ func (mr *MetricsRecorder) RemoveTenantRegistry(tenantID roachpb.TenantID) {
 	delete(mr.mu.tenantRegistries, tenantID)
 }
 
+// AppRegistry returns the metric registry for application-level metrics.
+func (mr *MetricsRecorder) AppRegistry() *metric.Registry {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	return mr.mu.appRegistry
+}
+
 // AddNode adds various metric registries an initialized server, along
 // with its descriptor and start time.
 // The registries are:
