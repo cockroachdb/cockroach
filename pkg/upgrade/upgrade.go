@@ -103,14 +103,6 @@ func (m *upgrade) Name() string {
 	return fmt.Sprintf("Upgrade to %s: %q", m.v.String(), m.description)
 }
 
-// V22_2StartupMigrationName is part of the upgradebase.Upgrade interface.
-func (m *upgrade) V22_2StartupMigrationName() string {
-	if !m.permanent {
-		panic("V22_2StartupMigrationName() called on non-permanent upgrade.")
-	}
-	return m.v22_2StartupMigrationName
-}
-
 func (m *upgrade) RestoreBehavior() string {
 	return string(m.restore)
 }
