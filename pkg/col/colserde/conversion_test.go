@@ -25,9 +25,9 @@ import (
 func BenchmarkConversion(b *testing.B) {
 	ctx := context.Background()
 	createSerializer := func(typ *types.T) (*colserde.ArrowBatchConverter, *colserde.RecordBatchSerializer) {
-		c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BatchToArrowOnly, testMemAcc)
+		c, err := colserde.NewArrowBatchConverter(ctx, []*types.T{typ}, colserde.BatchToArrowOnly, testMemAcc)
 		require.NoError(b, err)
-		s, err := colserde.NewRecordBatchSerializer([]*types.T{typ})
+		s, err := colserde.NewRecordBatchSerializer(ctx, []*types.T{typ})
 		require.NoError(b, err)
 		return c, s
 	}
@@ -74,9 +74,9 @@ func BenchmarkConversion(b *testing.B) {
 				}
 				serialized = buf.Bytes()
 			}
-			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.ArrowToBatchOnly, nil /* acc */)
+			c, err := colserde.NewArrowBatchConverter(ctx, []*types.T{typ}, colserde.ArrowToBatchOnly, nil /* acc */)
 			require.NoError(b, err)
-			s, err := colserde.NewRecordBatchSerializer([]*types.T{typ})
+			s, err := colserde.NewRecordBatchSerializer(ctx, []*types.T{typ})
 			require.NoError(b, err)
 			result := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{typ})
 			var arrowScratch []array.Data
@@ -87,7 +87,7 @@ func BenchmarkConversion(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				if err = c.ArrowToBatch(arrowScratch, batchLength, result); err != nil {
+				if err = c.ArrowToBatch(ctx, arrowScratch, batchLength, result); err != nil {
 					b.Fatal(err)
 				}
 				if result.Width() != 1 {

@@ -58,7 +58,7 @@ func NewWindowPeerGrouper(
 			orderIdxs[i] = ordCol.ColIdx
 		}
 		input, distinctCol = colexecbase.OrderedDistinctColsToOperators(
-			input, orderIdxs, typs, false, /* nullsAreDistinct */
+			allocator.Ctx, input, orderIdxs, typs, false, /* nullsAreDistinct */
 		)
 	}
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, outputColIdx)

@@ -94,6 +94,7 @@ type rangeOffsetHandler interface {
 }
 
 func newRangeOffsetHandler(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	datumAlloc *tree.DatumAlloc,
 	bound *execinfrapb.WindowerSpec_Frame_Bound,
@@ -116,7 +117,7 @@ func newRangeOffsetHandler(
 					// {{range .WidthOverloads}}
 					case _TYPE_WIDTH:
 						op := &_OP_STRING{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(_OFFSET_GOTYPE),
+							offset: decodeOffset(ctx, datumAlloc, ordColType, bound.TypedOffset).(_OFFSET_GOTYPE),
 						}
 						// {{if eq .VecMethod "Datum"}}
 						// {{if .BinOpIsPlus}}
@@ -369,14 +370,14 @@ func (b *rangeOffsetHandlerBase) startPartition(
 
 // decodeOffset decodes the given encoded offset into the given type.
 func decodeOffset(
-	datumAlloc *tree.DatumAlloc, orderColType *types.T, typedOffset []byte,
+	ctx context.Context, datumAlloc *tree.DatumAlloc, orderColType *types.T, typedOffset []byte,
 ) interface{} {
 	offsetType := getOffsetType(orderColType)
 	datum, err := execinfra.DecodeDatum(datumAlloc, offsetType, typedOffset)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(orderColType.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, orderColType.Family()) {
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return datum
 	}

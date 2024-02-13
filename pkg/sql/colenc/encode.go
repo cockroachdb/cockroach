@@ -247,7 +247,7 @@ func (b *BatchEncoder) encodePK(ctx context.Context, ind catalog.Index) error {
 	kys := b.keys
 
 	var nulls coldata.Nulls
-	if err := b.encodeIndexKey(keyCols, &nulls); err != nil {
+	if err := b.encodeIndexKey(ctx, keyCols, &nulls); err != nil {
 		return err
 	}
 	if nulls.MaybeHasNulls() {
@@ -371,7 +371,7 @@ func (b *BatchEncoder) encodePK(ctx context.Context, ind catalog.Index) error {
 				colIDDelta := valueside.MakeColumnIDDelta(lastColIDs[row], colID)
 				lastColIDs[row] = colID
 				var err error
-				values[row], err = valuesideEncodeCol(values[row], colIDDelta, vec, row+b.start)
+				values[row], err = valuesideEncodeCol(ctx, values[row], colIDDelta, vec, row+b.start)
 				if err != nil {
 					return err
 				}
@@ -425,7 +425,7 @@ func (b *BatchEncoder) encodeSecondaryIndex(ctx context.Context, ind catalog.Ind
 	kys := b.keys
 
 	// Encode key suffix columns and save the results in extraKeys.
-	err = encodeColumns(ind.IndexDesc().KeySuffixColumnIDs, nil /*directions*/, b.colMap, b.start, b.end, b.b.ColVecs(), b.extraKeys)
+	err = encodeColumns(ctx, ind.IndexDesc().KeySuffixColumnIDs, nil /*directions*/, b.colMap, b.start, b.end, b.b.ColVecs(), b.extraKeys)
 	if err != nil {
 		return err
 	}
@@ -439,7 +439,7 @@ func (b *BatchEncoder) encodeSecondaryIndex(ctx context.Context, ind catalog.Ind
 	} else {
 		keyAndSuffixCols := b.rh.TableDesc.IndexFetchSpecKeyAndSuffixColumns(ind)
 		keyCols := keyAndSuffixCols[:ind.NumKeyColumns()]
-		if err := b.encodeIndexKey(keyCols, &nulls); err != nil {
+		if err := b.encodeIndexKey(ctx, keyCols, &nulls); err != nil {
 			return err
 		}
 	}
@@ -461,19 +461,21 @@ func (b *BatchEncoder) encodeSecondaryIndex(ctx context.Context, ind catalog.Ind
 	}
 
 	if noFamilies {
-		if err := b.encodeSecondaryIndexNoFamilies(ind, kys); err != nil {
+		if err := b.encodeSecondaryIndexNoFamilies(ctx, ind, kys); err != nil {
 			return err
 		}
 	} else {
 		familyToColumns := rowenc.MakeFamilyToColumnMap(ind, b.rh.TableDesc)
-		if err := b.encodeSecondaryIndexWithFamilies(familyToColumns, ind, kys); err != nil {
+		if err := b.encodeSecondaryIndexWithFamilies(ctx, familyToColumns, ind, kys); err != nil {
 			return err
 		}
 	}
 	return b.checkMemory()
 }
 
-func (b *BatchEncoder) encodeSecondaryIndexNoFamilies(ind catalog.Index, kys []roachpb.Key) error {
+func (b *BatchEncoder) encodeSecondaryIndexNoFamilies(
+	ctx context.Context, ind catalog.Index, kys []roachpb.Key,
+) error {
 	for row := 0; row < b.count; row++ {
 		// Elided partial index keys will be empty.
 		if len(kys[row]) == 0 {
@@ -496,7 +498,7 @@ func (b *BatchEncoder) encodeSecondaryIndexNoFamilies(ind catalog.Index, kys []r
 		}
 	}
 	cols := rowenc.GetValueColumns(ind)
-	if err := b.writeColumnValues(kys, values, ind, cols); err != nil {
+	if err := b.writeColumnValues(ctx, kys, values, ind, cols); err != nil {
 		return err
 	}
 	b.p.InitPutBytes(kys, values)
@@ -504,7 +506,10 @@ func (b *BatchEncoder) encodeSecondaryIndexNoFamilies(ind catalog.Index, kys []r
 }
 
 func (b *BatchEncoder) encodeSecondaryIndexWithFamilies(
-	familyMap map[catid.FamilyID][]rowenc.ValueEncodedColumn, ind catalog.Index, kys []roachpb.Key,
+	ctx context.Context,
+	familyMap map[catid.FamilyID][]rowenc.ValueEncodedColumn,
+	ind catalog.Index,
+	kys []roachpb.Key,
 ) error {
 	// TODO (rohany): is there a natural way of caching this information as well?
 	// We have to iterate over the map in sorted family order. Other parts of the code
@@ -537,7 +542,7 @@ func (b *BatchEncoder) encodeSecondaryIndexWithFamilies(
 				values[r] = b.extraKeys[r]
 			}
 		}
-		if err := b.writeColumnValues(kys, values, ind, storedColsInFam); err != nil {
+		if err := b.writeColumnValues(ctx, kys, values, ind, storedColsInFam); err != nil {
 			return err
 		}
 		for row := 0; row < len(kys); row++ {
@@ -576,7 +581,11 @@ func (b *BatchEncoder) encodeSecondaryIndexWithFamilies(
 // writeColumnValues writes the value encoded versions of the desired columns
 // from the input into the value byte slice.
 func (b *BatchEncoder) writeColumnValues(
-	kys []roachpb.Key, values [][]byte, ind catalog.Index, cols []rowenc.ValueEncodedColumn,
+	ctx context.Context,
+	kys []roachpb.Key,
+	values [][]byte,
+	ind catalog.Index,
+	cols []rowenc.ValueEncodedColumn,
 ) error {
 	var err error
 	lastColIDs := b.lastColIDs
@@ -600,7 +609,7 @@ func (b *BatchEncoder) writeColumnValues(
 			}
 			colIDDelta := valueside.MakeColumnIDDelta(lastColIDs[row], col.ColID)
 			lastColIDs[row] = col.ColID
-			values[row], err = valuesideEncodeCol(values[row], colIDDelta, vec, row+b.start)
+			values[row], err = valuesideEncodeCol(ctx, values[row], colIDDelta, vec, row+b.start)
 			if err != nil {
 				return err
 			}
@@ -612,6 +621,7 @@ func (b *BatchEncoder) writeColumnValues(
 // encodeColumns is the vector version of rowenc.EncodeColumns. It is generic
 // so we can use it on raw byte slices and roachpb.Key.
 func encodeColumns[T []byte | roachpb.Key](
+	ctx context.Context,
 	columnIDs []descpb.ColumnID,
 	directions rowenc.Directions,
 	colMap catalog.TableColMap,
@@ -633,7 +643,7 @@ func encodeColumns[T []byte | roachpb.Key](
 				return err
 			}
 		}
-		if err = encodeKeys(keys, dir, vec, start, end); err != nil {
+		if err = encodeKeys(ctx, keys, dir, vec, start, end); err != nil {
 			return err
 		}
 	}

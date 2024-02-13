@@ -52,6 +52,7 @@ var (
 	_ sqltelemetry.EnumTelemetryType
 	_ telemetry.Counter
 	_ apd.Context
+	_ encoding.Direction
 )
 
 // {{/*
@@ -292,13 +293,13 @@ func GetProjectionOperator(
 		switch op.Symbol {
 		// {{range .BinOps}}
 		case treebin._NAME:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			// {{range .LeftFamilies}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:
 				switch leftType.Width() {
 				// {{range .LeftWidths}}
 				case _LEFT_TYPE_WIDTH:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					// {{range .RightFamilies}}
 					case _RIGHT_CANONICAL_TYPE_FAMILY:
 						switch rightType.Width() {
@@ -327,13 +328,13 @@ func GetProjectionOperator(
 			switch op.Symbol {
 			// {{range .CmpOps}}
 			case treecmp._NAME:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 				// {{range .LeftFamilies}}
 				case _LEFT_CANONICAL_TYPE_FAMILY:
 					switch leftType.Width() {
 					// {{range .LeftWidths}}
 					case _LEFT_TYPE_WIDTH:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						// {{range .RightFamilies}}
 						case _RIGHT_CANONICAL_TYPE_FAMILY:
 							switch rightType.Width() {

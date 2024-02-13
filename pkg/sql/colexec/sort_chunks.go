@@ -266,7 +266,7 @@ func newChunker(
 ) *chunker {
 	partitioners := make([]partitioner, len(alreadySortedCols))
 	for i, col := range alreadySortedCols {
-		partitioners[i] = newPartitioner(inputTypes[col], nullsAreDistinct)
+		partitioners[i] = newPartitioner(unlimitedAllocator.Ctx, inputTypes[col], nullsAreDistinct)
 	}
 	deselector := colexecutils.NewDeselectorOp(unlimitedAllocator, input, inputTypes)
 	return &chunker{

@@ -41,7 +41,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
 	input.Init(ctx)
-	outbox, err := NewOutbox(&execinfra.FlowCtx{Gateway: false}, 0 /* processorID */, testAllocator, testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil /* getStats */)
+	outbox, err := NewOutbox(ctx, &execinfra.FlowCtx{Gateway: false}, 0 /* processorID */, testAllocator, testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil /* getStats */)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
@@ -97,6 +97,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	newOutboxWithMetaSources := func() (*Outbox, *uint32, error) {
 		var sourceDrained uint32
 		outbox, err := NewOutbox(
+			ctx,
 			&execinfra.FlowCtx{Gateway: false},
 			0, /* processorID */
 			testAllocator,

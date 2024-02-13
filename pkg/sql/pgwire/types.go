@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -376,6 +377,9 @@ func (b *writeBuffer) writeTextColumnarElement(
 
 	default:
 		// All other types are represented via the datum-backed vector.
+		if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
+			panic(err)
+		}
 		writeTextDatumNotNull(b, vecs.DatumCols[colIdx].Get(rowIdx).(tree.Datum), conv, sessionLoc, typ)
 	}
 }
@@ -881,6 +885,9 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 
 	default:
 		// All other types are represented via the datum-backed vector.
+		if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
+			panic(err)
+		}
 		writeBinaryDatumNotNull(ctx, b, vecs.DatumCols[colIdx].Get(rowIdx).(tree.Datum), sessionLoc, typ)
 	}
 }

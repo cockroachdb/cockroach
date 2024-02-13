@@ -12,6 +12,7 @@
 package coldata
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -147,7 +148,7 @@ type memColumn struct {
 
 // ColumnFactory is an interface that can construct columns for Batches.
 type ColumnFactory interface {
-	MakeColumn(t *types.T, length int) Column
+	MakeColumn(ctx context.Context, t *types.T, length int) Column
 }
 
 type defaultColumnFactory struct{}
@@ -156,8 +157,8 @@ type defaultColumnFactory struct{}
 // explicitly supported by the vectorized engine (i.e. not datum-backed).
 var StandardColumnFactory ColumnFactory = &defaultColumnFactory{}
 
-func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
-	switch canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()); canonicalTypeFamily {
+func (cf *defaultColumnFactory) MakeColumn(ctx context.Context, t *types.T, length int) Column {
+	switch canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()); canonicalTypeFamily {
 	case types.BoolFamily:
 		return make(Bools, length)
 	case types.BytesFamily:
@@ -190,18 +191,18 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
 
 // NewMemColumn returns a new memColumn, initialized with a length using the
 // given column factory.
-func NewMemColumn(t *types.T, length int, factory ColumnFactory) Vec {
+func NewMemColumn(ctx context.Context, t *types.T, length int, factory ColumnFactory) Vec {
 	var m memColumn
-	m.init(t, length, factory)
+	m.init(ctx, t, length, factory)
 	return &m
 }
 
 // init initializes the receiver with a length using the given column factory.
-func (m *memColumn) init(t *types.T, length int, factory ColumnFactory) {
+func (m *memColumn) init(ctx context.Context, t *types.T, length int, factory ColumnFactory) {
 	*m = memColumn{
 		t:                   t,
-		canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()),
-		col:                 factory.MakeColumn(t, length),
+		canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()),
+		col:                 factory.MakeColumn(ctx, t, length),
 		nulls:               NewNulls(length),
 	}
 }

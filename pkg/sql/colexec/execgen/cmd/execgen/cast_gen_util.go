@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -754,7 +755,7 @@ type castBetweenDatumsTmplInfo struct {
 }
 
 func (i castFromWidthTmplInfo) VecMethod() string {
-	return toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(i.fromType.Family()), i.Width)
+	return toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.WithLatestVersion(), i.fromType.Family()), i.Width)
 }
 
 func getTypeName(typ *types.T) string {
@@ -776,7 +777,7 @@ func (i castFromWidthTmplInfo) TypeName() string {
 }
 
 func (i castFromWidthTmplInfo) Sliceable() bool {
-	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(i.fromType.Family()))
+	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.WithLatestVersion(), i.fromType.Family()))
 }
 
 func (i castToWidthTmplInfo) TypeName() string {
@@ -788,7 +789,7 @@ func (i castToWidthTmplInfo) Cast(to, from, evalCtx, toType, buf string) string 
 }
 
 func (i castToWidthTmplInfo) Sliceable() bool {
-	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(i.toType.Family()))
+	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.WithLatestVersion(), i.toType.Family()))
 }
 
 func (i castDatumTmplInfo) VecMethod() string {
@@ -812,7 +813,7 @@ func (i castDatumToWidthTmplInfo) Cast(to, from, evalCtx, toType, buf string) st
 }
 
 func (i castDatumToWidthTmplInfo) Sliceable() bool {
-	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(i.toType.Family()))
+	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.WithLatestVersion(), i.toType.Family()))
 }
 
 func (i castBetweenDatumsTmplInfo) TypeName() string {
@@ -933,8 +934,8 @@ func getCastFromTmplInfos() castTmplInfo {
 					toFamilyTmplInfo.Widths = append(toFamilyTmplInfo.Widths, castToWidthTmplInfo{
 						toType:    castInfo.to,
 						Width:     getWidth(castInfo.to),
-						VecMethod: toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(castInfo.to.Family()), getWidth(castInfo.to)),
-						GoType:    toPhysicalRepresentation(typeconv.TypeFamilyToCanonicalTypeFamily(castInfo.to.Family()), getWidth(castInfo.to)),
+						VecMethod: toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.WithLatestVersion(), castInfo.to.Family()), getWidth(castInfo.to)),
+						GoType:    toPhysicalRepresentation(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.WithLatestVersion(), castInfo.to.Family()), getWidth(castInfo.to)),
 						CastFn:    castInfo.cast,
 					})
 				}
@@ -979,7 +980,7 @@ func getCastFromTmplInfos() castTmplInfo {
 		for toTypeIdx := toFamilyStartIdx; toTypeIdx < toFamilyEndIdx; toTypeIdx++ {
 			toType := nativeTypes[toTypeIdx]
 			width := getWidth(toType)
-			canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family())
+			canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.WithLatestVersion(), toType.Family())
 			physicalRepresentation := toPhysicalRepresentation(canonicalTypeFamily, width)
 			datumTmplInfo.Widths = append(datumTmplInfo.Widths, castDatumToWidthTmplInfo{
 				toType:    toType,

@@ -40,12 +40,12 @@ func TestFileRoundtrip(t *testing.T) {
 		bCopy := coldatatestutils.CopyBatch(b, typs, testColumnFactory)
 
 		var buf bytes.Buffer
-		s, err := colserde.NewFileSerializer(&buf, typs, testMemAcc)
+		s, err := colserde.NewFileSerializer(ctx, &buf, typs, testMemAcc)
 		require.NoError(t, err)
 		require.NoError(t, s.AppendBatch(ctx, b))
 		// Append the same batch again.
 		require.NoError(t, s.AppendBatch(ctx, bCopy))
-		require.NoError(t, s.Finish())
+		require.NoError(t, s.Finish(ctx))
 		s.Close(ctx)
 
 		// Parts of the deserialization modify things (null bitmaps) in place, so
@@ -54,14 +54,14 @@ func TestFileRoundtrip(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			func() {
 				roundtrip := testAllocator.NewMemBatchWithFixedCapacity(typs, b.Length())
-				d, err := colserde.NewFileDeserializerFromBytes(typs, buf.Bytes())
+				d, err := colserde.NewFileDeserializerFromBytes(ctx, typs, buf.Bytes())
 				require.NoError(t, err)
 				defer func() { require.NoError(t, d.Close(ctx)) }()
 				require.Equal(t, typs, d.Typs())
 				require.Equal(t, 2, d.NumBatches())
 
 				// Check the first batch.
-				require.NoError(t, d.GetBatch(0, roundtrip))
+				require.NoError(t, d.GetBatch(ctx, 0, roundtrip))
 				coldata.AssertEquivalentBatches(t, original, roundtrip)
 
 				// Modify the returned batch (by appending some other random
@@ -80,7 +80,7 @@ func TestFileRoundtrip(t *testing.T) {
 				roundtrip.SetLength(original.Length() + length)
 
 				// Now check the second batch.
-				require.NoError(t, d.GetBatch(1, roundtrip))
+				require.NoError(t, d.GetBatch(ctx, 1, roundtrip))
 				coldata.AssertEquivalentBatches(t, original, roundtrip)
 			}()
 		}
@@ -98,10 +98,10 @@ func TestFileRoundtrip(t *testing.T) {
 		f, err := os.Create(path)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, f.Close()) }()
-		s, err := colserde.NewFileSerializer(f, typs, testMemAcc)
+		s, err := colserde.NewFileSerializer(ctx, f, typs, testMemAcc)
 		require.NoError(t, err)
 		require.NoError(t, s.AppendBatch(ctx, b))
-		require.NoError(t, s.Finish())
+		require.NoError(t, s.Finish(ctx))
 		s.Close(ctx)
 		require.NoError(t, f.Sync())
 
@@ -111,12 +111,12 @@ func TestFileRoundtrip(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			func() {
 				roundtrip := testAllocator.NewMemBatchWithFixedCapacity(typs, b.Length())
-				d, err := colserde.NewTestFileDeserializerFromPath(typs, path)
+				d, err := colserde.NewTestFileDeserializerFromPath(ctx, typs, path)
 				require.NoError(t, err)
 				defer func() { require.NoError(t, d.Close(ctx)) }()
 				require.Equal(t, typs, d.Typs())
 				require.Equal(t, 1, d.NumBatches())
-				require.NoError(t, d.GetBatch(0, roundtrip))
+				require.NoError(t, d.GetBatch(ctx, 0, roundtrip))
 
 				coldata.AssertEquivalentBatches(t, original, roundtrip)
 			}()
@@ -133,7 +133,7 @@ func TestFileIndexing(t *testing.T) {
 	batchSize := 1
 
 	var buf bytes.Buffer
-	s, err := colserde.NewFileSerializer(&buf, typs, testMemAcc)
+	s, err := colserde.NewFileSerializer(ctx, &buf, typs, testMemAcc)
 	require.NoError(t, err)
 
 	for i := 0; i < numInts; i++ {
@@ -142,16 +142,16 @@ func TestFileIndexing(t *testing.T) {
 		b.ColVec(0).Int64()[0] = int64(i)
 		require.NoError(t, s.AppendBatch(ctx, b))
 	}
-	require.NoError(t, s.Finish())
+	require.NoError(t, s.Finish(ctx))
 
-	d, err := colserde.NewFileDeserializerFromBytes(typs, buf.Bytes())
+	d, err := colserde.NewFileDeserializerFromBytes(ctx, typs, buf.Bytes())
 	require.NoError(t, err)
 	defer func() { require.NoError(t, d.Close(ctx)) }()
 	require.Equal(t, typs, d.Typs())
 	require.Equal(t, numInts, d.NumBatches())
 	for batchIdx := numInts - 1; batchIdx >= 0; batchIdx-- {
 		b := testAllocator.NewMemBatchWithFixedCapacity(typs, batchSize)
-		require.NoError(t, d.GetBatch(batchIdx, b))
+		require.NoError(t, d.GetBatch(ctx, batchIdx, b))
 		require.Equal(t, batchSize, b.Length())
 		require.Equal(t, 1, b.Width())
 		require.Equal(t, int64(batchIdx), b.ColVec(0).Int64()[0])
