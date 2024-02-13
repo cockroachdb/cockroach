@@ -2087,3 +2087,8 @@ func (s *SQLServer) ExecutorConfig() *sql.ExecutorConfig {
 func (s *SQLServer) InternalExecutor() isql.Executor {
 	return s.internalExecutor
 }
+
+// MetricsRegistry returns the application-level metrics registry.
+func (s *SQLServer) MetricsRegistry() *metric.Registry {
+	return s.metricsRegistry
+}
