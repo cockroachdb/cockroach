@@ -178,32 +178,6 @@ const (
 
 	VBootstrapMax
 
-	// Permanent_V22_2SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
-	// telemetry logging jobs.
-	// This is a permanent migration which should exist forever.
-	Permanent_V22_2SQLSchemaTelemetryScheduledJobs
-
-	// Permanent_V23_1KeyVisualizerTablesAndJobs adds the system tables that
-	// support the key visualizer.
-	Permanent_V23_1KeyVisualizerTablesAndJobs
-
-	// Permanent_V23_1_CreateJobsMetricsPollingJob creates the permanent job
-	// responsible for polling the jobs table for metrics.
-	Permanent_V23_1_CreateJobsMetricsPollingJob
-
-	// Permanent_V23_1_CreateAutoConfigRunnerJob is the version where the auto
-	// config runner persistent job has been created.
-	Permanent_V23_1_CreateAutoConfigRunnerJob
-
-	// Permanent_V23_1ChangeSQLStatsTTL is the version where the gc TTL was
-	// updated to all SQL Stats tables.
-	Permanent_V23_1ChangeSQLStatsTTL
-
-	// Permanent_V23_1CreateSystemActivityUpdateJob is the version at which
-	// Cockroach adds a job that periodically updates the statement_activity and
-	// transaction_activity tables.
-	Permanent_V23_1CreateSystemActivityUpdateJob
-
 	// V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
 	V23_1
 
@@ -321,14 +295,6 @@ var versionTable = [numKeys]roachpb.Version{
 	VBootstrapSystem: {Major: 0, Minor: 0, Internal: 2},
 	VBootstrapTenant: {Major: 0, Minor: 0, Internal: 4},
 	VBootstrapMax:    {Major: 0, Minor: 0, Internal: 424242},
-
-	// Permanent upgrades from previous versions.
-	Permanent_V22_2SQLSchemaTelemetryScheduledJobs: {Major: 22, Minor: 1, Internal: 42},
-	Permanent_V23_1KeyVisualizerTablesAndJobs:      {Major: 22, Minor: 2, Internal: 32},
-	Permanent_V23_1_CreateJobsMetricsPollingJob:    {Major: 22, Minor: 2, Internal: 38},
-	Permanent_V23_1_CreateAutoConfigRunnerJob:      {Major: 22, Minor: 2, Internal: 90},
-	Permanent_V23_1ChangeSQLStatsTTL:               {Major: 22, Minor: 2, Internal: 98},
-	Permanent_V23_1CreateSystemActivityUpdateJob:   {Major: 22, Minor: 2, Internal: 102},
 
 	V23_1: {Major: 23, Minor: 1, Internal: 0},
 
