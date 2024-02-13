@@ -49,7 +49,12 @@ go_test(
         "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
+        "//pkg/col/coldataext",
+        "//pkg/settings/cluster",
         "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",

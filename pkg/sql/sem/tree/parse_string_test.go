@@ -11,6 +11,7 @@
 package tree_test
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
@@ -64,7 +65,7 @@ func TestParseStringTypeGamut(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	factory := coldataext.NewExtendedColumnFactory(evalCtx)
-	b := coldata.NewMemBatchWithCapacity(types.Scalar, 2, factory)
+	b := coldata.NewMemBatchWithCapacity(context.Background(), types.Scalar, 2, factory)
 	vecHandlers := make([]tree.ValueHandler, len(types.Scalar))
 	rng, _ := randutil.NewTestRand()
 	for i, typ := range types.Scalar {
@@ -77,7 +78,7 @@ func TestParseStringTypeGamut(t *testing.T) {
 		}
 		d, _, err1 := tree.ParseAndRequireString(typ, s, evalCtx)
 		vecHandlers[i] = coldataext.MakeVecHandler(b.ColVec(i))
-		err2 := tree.ParseAndRequireStringHandler(typ, s, evalCtx, vecHandlers[i], &evalCtx.ParseHelper)
+		err2 := tree.ParseAndRequireStringHandler(context.Background(), typ, s, evalCtx, vecHandlers[i], &evalCtx.ParseHelper)
 		require.Equal(t, err1, err2)
 		if err1 == nil {
 			if d.ResolvedType().Family() == types.FloatFamily {
@@ -131,7 +132,7 @@ func TestParseStringHandlerErrors(t *testing.T) {
 		_, _, err1 := tree.ParseAndRequireString(tc.t, tc.val, evalCtx)
 		require.Errorf(t, err1, "parsing `%s` as `%v` didn't error as expected", tc.val, tc.t)
 		vh := &anyHandler{}
-		err2 := tree.ParseAndRequireStringHandler(tc.t, tc.val, evalCtx, vh, &evalCtx.ParseHelper)
+		err2 := tree.ParseAndRequireStringHandler(context.Background(), tc.t, tc.val, evalCtx, vh, &evalCtx.ParseHelper)
 		require.Equal(t, err1.Error(), err2.Error())
 	}
 }
@@ -196,14 +197,14 @@ func BenchmarkParseString(b *testing.B) {
 	for col, tc := range benchCases {
 		b.Run("vec/"+tc.typ.Name(), func(b *testing.B) {
 			var vhs = make([]tree.ValueHandler, len(benchCases))
-			ba := coldata.NewMemBatchWithCapacity(typs, numRows, factory)
+			ba := coldata.NewMemBatchWithCapacity(context.Background(), typs, numRows, factory)
 			for i := range benchCases {
 				vhs[i] = coldataext.MakeVecHandler(ba.ColVec(i))
 			}
 			b.ResetTimer()
 			rowCount := 0
 			for i := 0; i < b.N; i++ {
-				err := tree.ParseAndRequireStringHandler(tc.typ, tc.str, evalCtx, vhs[col], &evalCtx.ParseHelper)
+				err := tree.ParseAndRequireStringHandler(context.Background(), tc.typ, tc.str, evalCtx, vhs[col], &evalCtx.ParseHelper)
 				require.NoError(b, err)
 				rowCount++
 				if rowCount == numRows {

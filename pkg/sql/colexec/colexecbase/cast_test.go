@@ -48,7 +48,7 @@ func TestRandomizedCast(t *testing.T) {
 		for {
 			from, to = randgen.RandType(rng), randgen.RandType(rng)
 			if _, ok := cast.LookupCastVolatility(from, to); ok {
-				if colexecbase.IsCastSupported(from, to) {
+				if colexecbase.IsCastSupported(ctx, from, to) {
 					return from, to
 				}
 			}

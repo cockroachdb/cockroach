@@ -537,7 +537,7 @@ func TestEstimateBatchSizeBytes(t *testing.T) {
 			// (where unset elements remain nil for which we only include the
 			// DatumOverhead). This exception is ok given that we still perform
 			// the correct accounting after the actual elements are set.
-			if typeconv.TypeFamilyToCanonicalTypeFamily(typs[i].Family()) != typeconv.DatumVecCanonicalTypeFamily {
+			if typeconv.TypeFamilyToCanonicalTypeFamily(context.Background(), typs[i].Family()) != typeconv.DatumVecCanonicalTypeFamily {
 				break
 			}
 		}

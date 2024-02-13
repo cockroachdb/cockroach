@@ -11,6 +11,8 @@
 package colenc
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -19,9 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/errors"
 )
 
 // helper routine to simplify wordy code below, return true if value/row is null
@@ -48,7 +48,7 @@ func partialIndexAndNullCheck[T []byte | roachpb.Key](
 //
 // vec=nil indicates that all values are NULL.
 func encodeKeys[T []byte | roachpb.Key](
-	kys []T, dir encoding.Direction, vec coldata.Vec, start, end int,
+	ctx context.Context, kys []T, dir encoding.Direction, vec coldata.Vec, start, end int,
 ) error {
 	count := end - start
 	if vec == nil {
@@ -197,10 +197,8 @@ func encodeKeys[T []byte | roachpb.Key](
 			kys[r] = b
 		}
 	default:
-		if buildutil.CrdbTestBuild {
-			if typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) != typeconv.DatumVecCanonicalTypeFamily {
-				return errors.AssertionFailedf("type %v wasn't a datum backed type, maybe new type was added?", typ)
-			}
+		if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
+			return err
 		}
 		for r := 0; r < count; r++ {
 			b := kys[r]
@@ -222,7 +220,7 @@ func encodeKeys[T []byte | roachpb.Key](
 // the caller if there are null values in any of the columns and which rows as
 // well.
 func (b *BatchEncoder) encodeIndexKey(
-	keyCols []fetchpb.IndexFetchSpec_KeyColumn, nulls *coldata.Nulls,
+	ctx context.Context, keyCols []fetchpb.IndexFetchSpec_KeyColumn, nulls *coldata.Nulls,
 ) error {
 	kys := b.keys
 	for _, k := range keyCols {
@@ -240,7 +238,7 @@ func (b *BatchEncoder) encodeIndexKey(
 		} else {
 			nulls.SetNulls()
 		}
-		if err := encodeKeys(kys, dir, vec, b.start, b.end); err != nil {
+		if err = encodeKeys(ctx, kys, dir, vec, b.start, b.end); err != nil {
 			return err
 		}
 		if vec.Nulls().MaybeHasNulls() {

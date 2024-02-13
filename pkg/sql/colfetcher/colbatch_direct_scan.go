@@ -112,13 +112,13 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 	}
 	if !s.deserializerInitialized {
 		if err = s.deserializer.Init(
-			s.allocator, s.resultTypes, false, /* alwaysReallocate */
+			s.Ctx, s.allocator, s.resultTypes, false, /* alwaysReallocate */
 		); err != nil {
 			colexecerror.InternalError(err)
 		}
 		s.deserializerInitialized = true
 	}
-	batch := s.deserializer.Deserialize(res.BatchResponse)
+	batch := s.deserializer.Deserialize(s.Ctx, res.BatchResponse)
 	s.mu.Lock()
 	s.mu.rowsRead += int64(batch.Length())
 	s.mu.Unlock()
@@ -222,7 +222,7 @@ func NewColBatchDirectScan(
 	)
 	var hasDatumVec bool
 	for _, t := range tableArgs.typs {
-		if typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		if typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) == typeconv.DatumVecCanonicalTypeFamily {
 			hasDatumVec = true
 			break
 		}

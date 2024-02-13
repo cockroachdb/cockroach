@@ -6,9 +6,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/col/typeconv",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/execversion",
         "//pkg/sql/types",
+        "//pkg/util/buildutil",
         "//pkg/util/duration",
         "//pkg/util/json",
         "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

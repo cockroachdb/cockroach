@@ -11,10 +11,12 @@
 package colencoding
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
@@ -46,6 +48,7 @@ import (
 // NULL, regardless of whether or not indexColIdx indicates that the column
 // should be decoded.
 func DecodeKeyValsToCols(
+	ctx context.Context,
 	da *tree.DatumAlloc,
 	vecs *coldata.TypedVecs,
 	rowIdx int,
@@ -72,9 +75,8 @@ func DecodeKeyValsToCols(
 			}
 			var isNull bool
 			key, isNull, scratch, err = decodeTableKeyToCol(
-				da, vecs, vecIdx, rowIdx,
-				keyCols[j].Type, key, keyCols[j].Direction,
-				scratch,
+				ctx, da, vecs, vecIdx, rowIdx,
+				keyCols[j].Type, key, keyCols[j].Direction, scratch,
 			)
 			foundNull = isNull || foundNull
 		}
@@ -90,6 +92,7 @@ func DecodeKeyValsToCols(
 // See the analog, keyside.Decode, in rowenc/column_type_encoding.go.
 // decodeTableKeyToCol also returns whether or not the decoded value was NULL.
 func decodeTableKeyToCol(
+	ctx context.Context,
 	da *tree.DatumAlloc,
 	vecs *coldata.TypedVecs,
 	vecIdx int,
@@ -211,6 +214,9 @@ func decodeTableKeyToCol(
 		vecs.BytesCols[colIdx].Set(rowIdx, key[:keyLen])
 		rkey = key[keyLen:]
 	default:
+		if err = typeconv.AssertDatumBacked(ctx, valType); err != nil {
+			return nil, false, scratch, err
+		}
 		var d tree.Datum
 		encDir := encoding.Ascending
 		if dir == catenumpb.IndexColumn_DESC {
@@ -229,6 +235,7 @@ func decodeTableKeyToCol(
 //
 // See the analog, valueside.UnmarshalLegacy, in valueside/legacy.go.
 func UnmarshalColumnValueToCol(
+	ctx context.Context,
 	da *tree.DatumAlloc,
 	vecs *coldata.TypedVecs,
 	vecIdx, rowIdx int,
@@ -291,6 +298,9 @@ func UnmarshalColumnValueToCol(
 		vecs.JSONCols[colIdx].Bytes.Set(rowIdx, v)
 	// Types backed by tree.Datums.
 	default:
+		if err = typeconv.AssertDatumBacked(ctx, typ); err != nil {
+			return err
+		}
 		var d tree.Datum
 		d, err = valueside.UnmarshalLegacy(da, typ, value)
 		if err != nil {

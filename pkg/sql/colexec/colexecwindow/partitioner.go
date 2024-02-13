@@ -42,7 +42,7 @@ func NewWindowSortingPartitioner(
 	input = createDiskBackedSorter(input, inputTyps, partitionAndOrderingCols)
 
 	var distinctCol []bool
-	input, distinctCol = colexecbase.OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps, false /* nullsAreDistinct */)
+	input, distinctCol = colexecbase.OrderedDistinctColsToOperators(allocator.Ctx, input, partitionIdxs, inputTyps, false /* nullsAreDistinct */)
 
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, partitionColIdx)
 	return &windowSortingPartitioner{
