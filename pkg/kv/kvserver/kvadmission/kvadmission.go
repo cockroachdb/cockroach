@@ -249,10 +249,12 @@ func (n *controllerImpl) AdmitKVWork(
 	if source == kvpb.AdmissionHeader_OTHER {
 		bypassAdmission = true
 	}
+	// bypassAdmission => bypassStoreAdmission.
+	bypassStoreAdmission := bypassAdmission
 	// TODO(abaptist): Revisit and deprecate this setting in v23.1.
 	if admission.KVBulkOnlyAdmissionControlEnabled.Get(&n.settings.SV) {
 		if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
-			bypassAdmission = true
+			bypassStoreAdmission = true
 		}
 	}
 	createTime := ba.AdmissionHeader.CreateTime
@@ -278,8 +280,10 @@ func (n *controllerImpl) AdmitKVWork(
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
 		storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
 		if storeAdmissionQ != nil {
+			storeAdmissionInfo := admissionInfo
+			storeAdmissionInfo.BypassAdmission = bypassStoreAdmission
 			storeWorkHandle, err := storeAdmissionQ.Admit(
-				ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
+				ctx, admission.StoreWriteWorkInfo{WorkInfo: storeAdmissionInfo})
 			if err != nil {
 				return Handle{}, err
 			}
