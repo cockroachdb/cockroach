@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+
 	// Import for the side effect of registering the MVCC statistics update job.
 	_ "github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -30,7 +31,7 @@ import (
 )
 
 func createMVCCStatisticsTableAndJobMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cv clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 
 	// Create the table.
@@ -49,7 +50,12 @@ func createMVCCStatisticsTableAndJobMigration(
 	if d.TestingKnobs != nil && d.TestingKnobs.SkipMVCCStatisticsJobBootstrap {
 		return nil
 	}
+	return createMVCCStatisticsJob(ctx, cv, d)
+}
 
+func createMVCCStatisticsJob(
+	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+) error {
 	record := jobs.Record{
 		JobID:         jobs.MVCCStatisticsJobID,
 		Description:   "mvcc statistics update job",

@@ -30,6 +30,48 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func bootstrapSystem(
+	ctx context.Context, cv clusterversion.ClusterVersion, deps upgrade.SystemDeps,
+) error {
+	for _, fn := range []upgrade.SystemUpgradeFunc{
+		populateVersionSetting,
+		keyVisualizerTablesMigration,
+		sqlStatsTTLChange,
+	} {
+		if err := fn(ctx, cv, deps); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type bootstrapStep struct {
+	name string
+	fn   upgrade.TenantUpgradeFunc
+}
+
+func bootstrapCluster(
+	ctx context.Context, cv clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+) error {
+	for _, u := range []bootstrapStep{
+		{"add users and roles", addRootUser},
+		{"enable diagnostics reporting", optInToDiagnosticsStatReporting},
+		{"initialize the cluster.secret setting", initializeClusterSecret},
+		{"update system.locations with default location data", updateSystemLocationData},
+		{"create default databases", createDefaultDbs},
+		{"add default SQL schema telemetry schedule", ensureSQLSchemaTelemetrySchedule},
+		{"create jobs metrics polling job", createJobsMetricsPollingJob},
+		{"create auto config runner job", createAutoConfigRunnerJob},
+		{"create sql activity updater job", createActivityUpdateJobMigration},
+		{"create mvcc stats job", createMVCCStatisticsJob},
+	} {
+		if err := u.fn(ctx, cv, deps); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func addRootUser(
 	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
