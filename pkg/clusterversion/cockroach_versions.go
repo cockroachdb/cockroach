@@ -174,10 +174,6 @@ const (
 
 	VPrimordial1 Key = iota
 	VPrimordial2
-	VPrimordial3
-	VPrimordial4
-	VPrimordial5
-	VPrimordial6
 
 	// No new VPrimordial versions should be added.
 
@@ -325,10 +321,6 @@ const (
 var versionTable = [numKeys]roachpb.Version{
 	VPrimordial1:   {Major: 0, Minor: 0, Internal: 2},
 	VPrimordial2:   {Major: 0, Minor: 0, Internal: 4},
-	VPrimordial3:   {Major: 0, Minor: 0, Internal: 6},
-	VPrimordial4:   {Major: 0, Minor: 0, Internal: 8},
-	VPrimordial5:   {Major: 0, Minor: 0, Internal: 10},
-	VPrimordial6:   {Major: 0, Minor: 0, Internal: 12},
 	VPrimordialMax: {Major: 0, Minor: 0, Internal: 424242},
 
 	// Permanent upgrades from previous versions.
