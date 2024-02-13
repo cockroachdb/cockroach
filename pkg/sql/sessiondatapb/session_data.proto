@@ -142,6 +142,8 @@ message SessionData {
   // could be adopted by any node in the cluster (not necessarily the gateway)
   // and so we will need this information available on all nodes.
   int64 distsql_plan_gateway_bias = 31;
+  // StreamerEnabled controls whether the Streamer API can be used.
+  bool streamer_enabled = 32;
 }
 
 // DataConversionConfig contains the parameters that influence the output
