@@ -82,7 +82,7 @@ var upgrades = []upgradebase.Upgrade{
 	),
 	upgrade.NewTenantUpgrade(
 		"create system.mvcc_statistics table and job",
-		clusterversion.Permanent_V23_2_MVCCStatisticsTable.Version(),
+		clusterversion.V23_2_MVCCStatisticsTable.Version(),
 		upgrade.NoPrecondition,
 		createMVCCStatisticsTableAndJobMigration,
 		upgrade.RestoreActionNotRequired("table is relevant to the storage cluster and is not restored"),
