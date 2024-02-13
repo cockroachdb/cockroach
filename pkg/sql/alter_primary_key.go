@@ -772,7 +772,7 @@ func addIndexMutationWithSpecificPrimaryKey(
 	if err := table.AddIndexMutationMaybeWithTempIndex(toAdd, descpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}
-	if err := table.AllocateIDsWithoutValidation(ctx); err != nil {
+	if err := table.AllocateIDsWithoutValidation(ctx, true /*createMissingPrimaryKey*/); err != nil {
 		return err
 	}
 
