@@ -1446,8 +1446,17 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 			desc.AddColumn(t.Column)
 
 		case *descpb.DescriptorMutation_Index:
-			if err := desc.AddSecondaryIndex(*t.Index); err != nil {
-				return err
+			// If a primary index is being made public, then we only need set the
+			// index inside the descriptor directly. Only the declarative schema
+			// changer will use index mutations like this.
+			isPrimaryIndexToPublic := desc.IsPrimaryKeySwapMutation(&m)
+			if isPrimaryIndexToPublic {
+				desc.SetPrimaryIndex(*t.Index)
+			} else {
+				// Otherwise, we need to add this index as a secondary index.
+				if err := desc.AddSecondaryIndex(*t.Index); err != nil {
+					return err
+				}
 			}
 
 		case *descpb.DescriptorMutation_Constraint:
@@ -2059,9 +2068,9 @@ func (desc *wrapper) MakeFirstMutationPublic(
 		}
 		i++
 		switch {
-		case policy.shouldSkip(&mutation):
+		case policy.shouldSkip(desc, &mutation):
 			// Don't add to clone.
-		case policy.shouldRetain(&mutation):
+		case policy.shouldRetain(desc, &mutation):
 			mutation.Direction = descpb.DescriptorMutation_ADD
 			fallthrough
 		default:
@@ -2093,9 +2102,11 @@ func (p mutationPublicationPolicy) includes(f catalog.MutationPublicationFilter)
 	return p.policy.Contains(int(f))
 }
 
-func (p mutationPublicationPolicy) shouldSkip(m *descpb.DescriptorMutation) bool {
+func (p mutationPublicationPolicy) shouldSkip(
+	desc catalog.TableDescriptor, m *descpb.DescriptorMutation,
+) bool {
 	switch {
-	case m.GetPrimaryKeySwap() != nil:
+	case desc.IsPrimaryKeySwapMutation(m):
 		return p.includes(catalog.IgnorePKSwaps)
 	case m.GetConstraint() != nil:
 		return p.includes(catalog.IgnoreConstraints)
@@ -2104,7 +2115,9 @@ func (p mutationPublicationPolicy) shouldSkip(m *descpb.DescriptorMutation) bool
 	}
 }
 
-func (p mutationPublicationPolicy) shouldRetain(m *descpb.DescriptorMutation) bool {
+func (p mutationPublicationPolicy) shouldRetain(
+	desc catalog.TableDescriptor, m *descpb.DescriptorMutation,
+) bool {
 	switch {
 	case m.GetColumn() != nil && m.Direction == descpb.DescriptorMutation_DROP:
 		return p.includes(catalog.RetainDroppingColumns)
