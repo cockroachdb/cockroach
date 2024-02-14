@@ -112,6 +112,13 @@ func (a *Authorizer) HasCapabilityForBatch(
 		if entry.ServiceMode == mtinfopb.ServiceModeNone || entry.ServiceMode == mtinfopb.ServiceModeStopping {
 			return errors.Newf("operation not allowed when in service mode %q", entry.ServiceMode)
 		}
+		// Shared service tenants in UA implicitly have all capabilities. If/when
+		// we offer shared service for truly _multi-tenant_ deployments and wish to
+		// restrict some of those tenants, we can add another service mode that is
+		// similar to shared but adds restriction to only granted capabilities.
+		if entry.ServiceMode == mtinfopb.ServiceModeShared {
+			return nil
+		}
 		return a.capCheckForBatch(ctx, tenID, ba, entry)
 	case authorizerModeAllowAll:
 		return nil
