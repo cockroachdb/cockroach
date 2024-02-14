@@ -225,7 +225,7 @@ var SecondaryTenantSplitAtEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"sql.split_at.allow_for_secondary_tenant.enabled",
 	"enable the use of ALTER TABLE/INDEX ... SPLIT AT in virtual clusters",
-	false,
+	true,
 	settings.WithName("sql.virtual_cluster.feature_access.manual_range_split.enabled"),
 )
 
@@ -236,7 +236,7 @@ var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"sql.scatter.allow_for_secondary_tenant.enabled",
 	"enable the use of ALTER TABLE/INDEX ... SCATTER in virtual clusters",
-	false,
+	true,
 	settings.WithName("sql.virtual_cluster.feature_access.manual_range_scatter.enabled"),
 )
 

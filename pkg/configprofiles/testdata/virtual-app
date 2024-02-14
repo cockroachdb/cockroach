@@ -39,19 +39,6 @@ sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled true
 trace.redact_at_virtual_cluster_boundary.enabled false
 
 system-sql
-SELECT tenant_id, name, value FROM system.tenant_settings
-WHERE name IN (
-'sql.scatter.allow_for_secondary_tenant.enabled',
-'sql.split_at.allow_for_secondary_tenant.enabled'
-)
-ORDER BY tenant_id, name
-----
-2 sql.scatter.allow_for_secondary_tenant.enabled true
-2 sql.split_at.allow_for_secondary_tenant.enabled true
-3 sql.scatter.allow_for_secondary_tenant.enabled true
-3 sql.split_at.allow_for_secondary_tenant.enabled true
-
-system-sql
 SHOW TENANTS WITH CAPABILITIES
 ----
 1 system ready shared can_admin_relocate_range true

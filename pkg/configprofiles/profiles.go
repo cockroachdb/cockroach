@@ -111,10 +111,6 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 			// Create a main secondary tenant template.
 			"CREATE VIRTUAL CLUSTER template",
 			"ALTER VIRTUAL CLUSTER template GRANT ALL CAPABILITIES",
-			// Enable admin scatter/split in tenant SQL.
-			// TODO(knz): Move this to in-tenant config task.
-			"ALTER VIRTUAL CLUSTER template SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_scatter.enabled = true",
-			"ALTER VIRTUAL CLUSTER template SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_split.enabled = true",
 		},
 	),
 	// Finally.

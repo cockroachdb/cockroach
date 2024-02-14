@@ -55,8 +55,6 @@ func TestBackupSharedProcessTenantNodeDown(t *testing.T) {
 		InitManualReplication, params)
 	defer cleanup()
 
-	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_split.enabled=true")
-	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_scatter.enabled=true")
 	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING server.sqlliveness.ttl='2s'")
 	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING server.sqlliveness.heartbeat='250ms'")
 
