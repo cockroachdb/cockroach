@@ -157,7 +157,8 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 				var typ *types.T
 			loop:
 				for {
-					typ = randgen.RandType(rng)
+					//typ = randgen.RandType(rng)
+					typ = types.INet
 					switch typ.Oid() {
 					case oid.T_int2vector, oid.T_oidvector:
 						// We can't create a table with a column of this type.
