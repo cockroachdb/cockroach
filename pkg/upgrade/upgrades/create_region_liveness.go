@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/errors"
 )
@@ -45,20 +45,13 @@ func createRegionLivenessTables(
 		return err
 	}
 
-	regionLivenessBuilder := tabledesc.NewBuilder(systemschema.RegionLivenessTable.TableDesc())
-	regionLivenessMutable := regionLivenessBuilder.BuildExistingMutableTable()
-	if setDBLocality {
-		regionLivenessMutable.SetTableLocalityGlobal()
-	}
-	if err := createSystemTable(ctx, d.DB.KV(), d.Settings, d.Codec,
-		regionLivenessMutable); err != nil {
+	if err := createSystemTable(ctx, d.DB, d.Settings, d.Codec,
+		systemschema.RegionLivenessTable, tree.LocalityLevelGlobal); err != nil {
 		return err
 	}
 
-	// After creating this table, we need to set locality on it if the system
-	// database is already multi-region.
+	// Additionally, we need to set type of the region column.
 	if setDBLocality {
-		// Additionally, we need to set type of the region column
 		if err := d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 			systemDB, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, keys.SystemDatabaseID)
 			if err != nil {

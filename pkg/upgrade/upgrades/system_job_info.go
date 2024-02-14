@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
@@ -27,7 +28,7 @@ func systemJobInfoTableMigration(
 ) error {
 	// Create the job_info table proper.
 	if err := createSystemTable(
-		ctx, d.DB.KV(), d.Settings, d.Codec, systemschema.SystemJobInfoTable,
+		ctx, d.DB, d.Settings, d.Codec, systemschema.SystemJobInfoTable, tree.LocalityLevelTable,
 	); err != nil {
 		return err
 	}
