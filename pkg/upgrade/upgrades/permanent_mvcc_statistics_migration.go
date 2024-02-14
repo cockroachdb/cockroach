@@ -30,7 +30,7 @@ import (
 )
 
 func createMVCCStatisticsTableAndJobMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cv clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 
 	// Create the table.
@@ -46,6 +46,12 @@ func createMVCCStatisticsTableAndJobMigration(
 	}
 
 	// Bake the job.
+	return createMVCCStatisticsJob(ctx, cv, d)
+}
+
+func createMVCCStatisticsJob(
+	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+) error {
 	if d.TestingKnobs != nil && d.TestingKnobs.SkipMVCCStatisticsJobBootstrap {
 		return nil
 	}

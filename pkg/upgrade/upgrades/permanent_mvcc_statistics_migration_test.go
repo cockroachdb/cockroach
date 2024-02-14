@@ -54,7 +54,7 @@ func TestMVCCStatisticsMigration(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.Permanent_V23_2_MVCCStatisticsTable,
+		clusterversion.V23_2_MVCCStatisticsTable,
 		nil,
 		false,
 	)

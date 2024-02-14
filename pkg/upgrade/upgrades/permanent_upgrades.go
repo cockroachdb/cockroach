@@ -30,6 +30,62 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// bootstrapSystem runs a series of steps required to bootstrap a new cluster's
+// system tenant. These are run before the rest of the initialization steps in
+// bootstrapCluster. The steps are run when, and only when, a new cluster is
+// created, so typically when a step is added here it is also invoked in a
+// separate upgrade migration so that existing clusters will run it as well.
+func bootstrapSystem(
+	ctx context.Context, cv clusterversion.ClusterVersion, deps upgrade.SystemDeps,
+) error {
+	for _, u := range []struct {
+		name string
+		fn   upgrade.SystemUpgradeFunc
+	}{
+		{"initialize cluster version", populateVersionSetting},
+		{"configure key visualizer", keyVisualizerTablesMigration},
+		{"configure sql activity table TTLs", sqlStatsTTLChange},
+	} {
+		log.Infof(ctx, "executing system bootstrap step %q", u.name)
+		if err := u.fn(ctx, cv, deps); err != nil {
+			return errors.Wrapf(err, "system bootstrap step %q failed", u.name)
+		}
+	}
+	return nil
+}
+
+// bootstrapCluster runs a series of steps required to bootstrap a new cluster,
+// i.e. those things which run once when a new cluster is initialized, including
+// when a virtual cluster is created. The steps are run when, and only when, a
+// new cluster is created, so typically when a step is added here it is also
+// invoked in a separate upgrade migration so that existing clusters will run it
+// as well.
+func bootstrapCluster(
+	ctx context.Context, cv clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+) error {
+	for _, u := range []struct {
+		name string
+		fn   upgrade.TenantUpgradeFunc
+	}{
+		{"add users and roles", addRootUser},
+		{"enable diagnostics reporting", optInToDiagnosticsStatReporting},
+		{"initialize the cluster.secret setting", initializeClusterSecret},
+		{"update system.locations with default location data", updateSystemLocationData},
+		{"create default databases", createDefaultDbs},
+		{"add default SQL schema telemetry schedule", ensureSQLSchemaTelemetrySchedule},
+		{"create jobs metrics polling job", createJobsMetricsPollingJob},
+		{"create auto config runner job", createAutoConfigRunnerJob},
+		{"create sql activity updater job", createActivityUpdateJobMigration},
+		{"create mvcc stats job", createMVCCStatisticsJob},
+	} {
+		log.Infof(ctx, "executing bootstrap step %q", u.name)
+		if err := u.fn(ctx, cv, deps); err != nil {
+			return errors.Wrapf(err, "bootstrap step %q failed", u.name)
+		}
+	}
+	return nil
+}
+
 func addRootUser(
 	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
