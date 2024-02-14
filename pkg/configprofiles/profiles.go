@@ -90,10 +90,6 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 		/* nonTxnSQL */ []string{
 			// Enable multi-region abstractions in secondary tenants.
 			"SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled = true",
-			// Disable range coalescing (as long as the problems related
-			// to range coalescing have not been solved yet).
-			"SET CLUSTER SETTING spanconfig.range_coalescing.system.enabled = false",
-			"SET CLUSTER SETTING spanconfig.range_coalescing.application.enabled = false",
 			// Make the operator double-check virtual cluster deletions.
 			"SET CLUSTER SETTING sql.drop_virtual_cluster.enabled = false",
 		},
