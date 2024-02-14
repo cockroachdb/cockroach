@@ -831,10 +831,6 @@ func applyInternalExecutorSessionExceptions(sd *sessiondata.SessionData) {
 	// DisableBuffering is not supported by the InternalExecutor
 	// which uses streamingCommandResults.
 	sd.LocalOnlySessionData.AvoidBuffering = false
-	// At the moment, we disable the usage of the Streamer API in the internal
-	// executor to avoid possible concurrency with the "outer" query (which
-	// might be using the RootTxn).
-	sd.SessionData.StreamerEnabled = false
 	// If the internal executor creates a new transaction, then it runs in
 	// SERIALIZABLE. If it's used in an existing transaction, then it inherits the
 	// isolation level of the existing transaction.
@@ -1032,6 +1028,14 @@ func (ie *InternalExecutor) execInternal(
 
 	applyInternalExecutorSessionExceptions(sd)
 	applyOverrides(sessionDataOverride, sd)
+	if !rw.async() && (txn != nil && txn.Type() == kv.RootTxn) {
+		// If the "outer" query uses the RootTxn and the sync result channel is
+		// requested, then we must disable both DistSQL and Streamer to ensure
+		// that the "inner" query doesn't use the LeafTxn (which could result in
+		// illegal concurrency).
+		sd.DistSQLMode = sessiondatapb.DistSQLOff
+		sd.StreamerEnabled = false
+	}
 	sd.Internal = true
 	if sd.User().Undefined() {
 		return nil, errors.AssertionFailedf("no user specified for internal query")
