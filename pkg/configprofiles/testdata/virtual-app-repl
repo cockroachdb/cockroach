@@ -12,8 +12,6 @@ ok
 system-sql
 SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
 WHERE variable IN (
-'sql.virtual_cluster.feature_access.zone_configs.enabled',
-'sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled',
 'sql.virtual_cluster.feature_access.multiregion.enabled',
 'sql.virtual_cluster.feature_access.multiregion.enabled',
 'spanconfig.range_coalescing.system.enabled',
@@ -34,8 +32,6 @@ spanconfig.range_coalescing.system.enabled false
 sql.create_virtual_cluster.default_template template
 sql.drop_virtual_cluster.enabled false
 sql.virtual_cluster.feature_access.multiregion.enabled true
-sql.virtual_cluster.feature_access.zone_configs.enabled true
-sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled true
 
 system-sql
 SHOW TENANTS WITH CAPABILITIES
