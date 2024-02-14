@@ -88,8 +88,6 @@ var staticProfiles = map[string]configProfile{
 var virtClusterInitTasks = []autoconfigpb.Task{
 	makeTask("initial cluster config",
 		/* nonTxnSQL */ []string{
-			// Enable multi-region abstractions in secondary tenants.
-			"SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled = true",
 			// Make the operator double-check virtual cluster deletions.
 			"SET CLUSTER SETTING sql.drop_virtual_cluster.enabled = false",
 		},
