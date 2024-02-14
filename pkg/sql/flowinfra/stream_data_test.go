@@ -110,7 +110,7 @@ func TestStreamEncodeDecode(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	for test := 0; test < 100; test++ {
 		rowLen := rng.Intn(20)
-		types := randgen.RandEncodableColumnTypes(rng, rowLen)
+		types := randgen.RandColumnTypes(rng, rowLen)
 		info := make([]execinfrapb.DatumInfo, rowLen)
 		for i := range info {
 			info[i].Type = types[i]

@@ -991,7 +991,7 @@ func BenchmarkEncodeDatum(b *testing.B) {
 	r := rand.New(rand.NewSource(0))
 	datums := make([]tree.Datum, 10000)
 	for i := range datums {
-		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandEncodableType(r), 0, /* nullChance */
+		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandType(r), 0, /* nullChance */
 			false /* favorCommonData */, false /* targetColumnIsUnique */)
 	}
 	b.ResetTimer()
@@ -1006,7 +1006,7 @@ func BenchmarkIsDatumEqual(b *testing.B) {
 	r := rand.New(rand.NewSource(0))
 	datums := make([]tree.Datum, 1000)
 	for i := range datums {
-		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandEncodableType(r), 0, /* nullChance */
+		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandType(r), 0, /* nullChance */
 			false /* favorCommonData */, false /* targetColumnIsUnique */)
 	}
 	b.ResetTimer()

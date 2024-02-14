@@ -52,7 +52,7 @@ func randTypes(rng *rand.Rand, numCols int) ([]*types.T, []func(tree.Datum) inte
 	convFns := make([]func(tree.Datum) interface{}, numCols)
 	for i := range colTypes {
 		for convFns[i] == nil {
-			colTypes[i] = randgen.RandEncodableType(rng)
+			colTypes[i] = randgen.RandType(rng)
 			convFns[i] = typeConvFn(colTypes[i])
 		}
 	}
