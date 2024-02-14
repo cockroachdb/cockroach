@@ -958,17 +958,17 @@ func (sj *StartableJob) ReportExecutionResults(
 	return errors.AssertionFailedf("job does not produce results")
 }
 
-// CleanupOnRollback will unregister the job in the case that the creating
-// transaction has been rolled back. It will return an assertion failure if
-// the transaction used to create this job is committed. It will return an
-// error but proceed with cleanup if the transaction is still open under
-// the assumption that this is being called due to an unrecoverable error
-// that prevented the transaction from being cleaned up.
+// CleanupOnRollback will unregister the job in the case that the
+// creating transaction has been rolled back. It will return an
+// assertion failure if the transaction used to create this job is
+// committed. It will return an error but proceed with cleanup under
+// the assumption that this is being called due to an unrecoverable
+// error. It is assumed that callers will not be calling Start on any
+// job that has had CleanupOnRollback called on it.
 func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
-
-	if sj.txn.IsCommitted() && ctx.Err() == nil {
-		return errors.AssertionFailedf(
-			"cannot call CleanupOnRollback for a StartableJob created by a committed transaction")
+	sj.registry.unregister(sj.ID())
+	if sj.cancel != nil {
+		sj.cancel()
 	}
 
 	// Note that we check the context error because when a context is canceled in
@@ -977,10 +977,9 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 	// Another issue is that the cleanup may fail with an ambiguous error due to
 	// networking problems leading the transaction in an undefined state.
 	// Given that, proceed to clean up regardless.
-
-	sj.registry.unregister(sj.ID())
-	if sj.cancel != nil {
-		sj.cancel()
+	if sj.txn.IsCommitted() && ctx.Err() == nil {
+		return errors.AssertionFailedf(
+			"cannot call CleanupOnRollback for a StartableJob created by a committed transaction")
 	}
 
 	// This is an error, but it's likely due to some shutdown behavior so do not
