@@ -832,8 +832,16 @@ func ensureColCanBeUsedInInboundFK(b BuildCtx, tableID catid.DescID, columnID ca
 	}
 }
 
+func retrieveTableElem(b BuildCtx, tableID catid.DescID) *scpb.Table {
+	return b.QueryByID(tableID).FilterTable().Filter(func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.Table,
+	) bool {
+		return e.TableID == tableID
+	}).MustGetZeroOrOneElement()
+}
+
 func mustRetrieveTableElem(b BuildCtx, tableID catid.DescID) *scpb.Table {
-	_, _, tblElem := scpb.FindTable(b.QueryByID(tableID))
+	tblElem := retrieveTableElem(b, tableID)
 	if tblElem == nil {
 		panic(errors.AssertionFailedf("programming error: cannot find a Table element for table %v", tableID))
 	}
