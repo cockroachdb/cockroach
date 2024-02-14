@@ -124,21 +124,22 @@ func (f randTestingFramework) runRandTest() testResult {
 	staticEvents := f.getStaticEvents(cluster, staticSettings)
 	seed := f.s.randSource.Int63()
 	simulator := gen.GenerateSimulation(f.s.duration, cluster, ranges, load, staticSettings, staticEvents, seed)
-	initialState, initialTime := simulator.State(), simulator.Curr()
+	initialStateStr, initialTime := simulator.State().PrettyPrint(), simulator.Curr()
 	simulator.RunSim(ctx)
 	history := simulator.History()
 	failed, reason := checkAssertions(ctx, history, f.s.assertions)
 	return testResult{
-		seed:          seed,
-		failed:        failed,
-		reason:        reason,
-		clusterGen:    cluster,
-		rangeGen:      ranges,
-		loadGen:       load,
-		eventGen:      staticEvents,
-		initialState:  initialState,
-		initialTime:   initialTime,
-		eventExecutor: simulator.EventExecutor(),
+		seed:            seed,
+		failed:          failed,
+		reason:          reason,
+		clusterGen:      cluster,
+		rangeGen:        ranges,
+		loadGen:         load,
+		eventGen:        staticEvents,
+		initialStateStr: initialStateStr,
+		initialTime:     initialTime,
+		history:         history,
+		eventExecutor:   simulator.EventExecutor(),
 	}
 }
 
