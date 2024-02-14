@@ -27,6 +27,20 @@ func ComputeStatsForRange(
 		ctx, d, reader, nowNanos, storage.ComputeStatsVisitors{})
 }
 
+func ComputeStatsForUserOnlyRange(
+	ctx context.Context, d *roachpb.RangeDescriptor, reader storage.Reader, nowNanos int64,
+) (enginepb.MVCCStats, error) {
+	return ComputeStatsForUserOnlyRangeWithVisitors(
+		ctx, d, reader, nowNanos, storage.ComputeStatsVisitors{})
+}
+
+func ComputeStatsExcludingUserForRange(
+	ctx context.Context, d *roachpb.RangeDescriptor, reader storage.Reader, nowNanos int64,
+) (enginepb.MVCCStats, error) {
+	return ComputeStatsExcludingUserRangeWithVisitors(
+		ctx, d, reader, nowNanos, storage.ComputeStatsVisitors{})
+}
+
 // ComputeStatsForRangeWithVisitors is like ComputeStatsForRange but also
 // calls the given callbacks for every key.
 func ComputeStatsForRangeWithVisitors(
@@ -36,8 +50,38 @@ func ComputeStatsForRangeWithVisitors(
 	nowNanos int64,
 	visitors storage.ComputeStatsVisitors,
 ) (enginepb.MVCCStats, error) {
+	return computeStatsForSpansWithVisitors(ctx, MakeReplicatedKeySpans(d), reader, nowNanos, visitors)
+}
+
+func ComputeStatsForUserOnlyRangeWithVisitors(
+	ctx context.Context,
+	d *roachpb.RangeDescriptor,
+	reader storage.Reader,
+	nowNanos int64,
+	visitors storage.ComputeStatsVisitors,
+) (enginepb.MVCCStats, error) {
+	return computeStatsForSpansWithVisitors(ctx, MakeReplicatedKeySpansUserOnly(d), reader, nowNanos, visitors)
+}
+
+func ComputeStatsExcludingUserRangeWithVisitors(
+	ctx context.Context,
+	d *roachpb.RangeDescriptor,
+	reader storage.Reader,
+	nowNanos int64,
+	visitors storage.ComputeStatsVisitors,
+) (enginepb.MVCCStats, error) {
+	return computeStatsForSpansWithVisitors(ctx, MakeReplicatedKeySpansExcludingUser(d), reader, nowNanos, visitors)
+}
+
+func computeStatsForSpansWithVisitors(
+	ctx context.Context,
+	spans []roachpb.Span,
+	reader storage.Reader,
+	nowNanos int64,
+	visitors storage.ComputeStatsVisitors,
+) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
-	for _, keySpan := range MakeReplicatedKeySpans(d) {
+	for _, keySpan := range spans {
 		msDelta, err := storage.ComputeStatsWithVisitors(
 			ctx, reader, keySpan.Key, keySpan.EndKey, nowNanos, visitors)
 		if err != nil {

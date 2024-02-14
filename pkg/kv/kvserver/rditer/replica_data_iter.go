@@ -113,6 +113,21 @@ func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	})
 }
 
+func MakeReplicatedKeySpansUserOnly(d *roachpb.RangeDescriptor) []roachpb.Span {
+	return Select(d.RangeID, SelectOpts{
+		ReplicatedBySpan:      d.RSpan(),
+		ReplicatedSpansFilter: ReplicatedSpansUserOnly,
+	})
+}
+
+func MakeReplicatedKeySpansExcludingUser(d *roachpb.RangeDescriptor) []roachpb.Span {
+	return Select(d.RangeID, SelectOpts{
+		ReplicatedBySpan:      d.RSpan(),
+		ReplicatedByRangeID:   true,
+		ReplicatedSpansFilter: ReplicatedSpansExcludeUser,
+	})
+}
+
 // MakeReplicatedKeySpanSet is similar to MakeReplicatedKeySpans, except it
 // creates a SpanSet instead of a slice of spans. Note that lock table spans
 // are skipped.

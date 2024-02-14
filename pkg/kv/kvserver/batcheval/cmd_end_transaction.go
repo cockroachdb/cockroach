@@ -1054,11 +1054,17 @@ func splitTrigger(
 			"unable to fetch original range mvcc stats for split")
 	}
 
+	postSplitLeftFn := func() (enginepb.MVCCStats, error) {
+		leftLocalStats, _ := rditer.ComputeStatsExcludingUserForRange(ctx, &split.LeftDesc, batch, ts.WallTime)
+		leftLocalStats.Add(split.PreSplitLeftStats)
+		return leftLocalStats, nil
+	}
+
 	h := splitStatsHelperInput{
 		AbsPreSplitBothStored: currentStats,
 		DeltaBatchEstimated:   bothDeltaMS,
 		DeltaRangeKey:         rangeKeyDeltaMS,
-		PostSplitScanLeftFn:   makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
+		PostSplitScanLeftFn:   postSplitLeftFn,
 		PostSplitScanRightFn:  makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
 		ScanRightFirst:        splitScansRightForStatsFirst || emptyRHS,
 	}
@@ -1239,6 +1245,15 @@ func splitTriggerHelper(
 		}
 	}
 
+	preSplitStats := split.PreSplitTotalStats
+	currentStats := statsInput.AbsPreSplitBothStored
+	metrics := result.Metrics{
+		SplitDiscrepancyKeyCount: int(currentStats.KeyCount - preSplitStats.KeyCount),
+		SplitDiscrepancyKeyBytes: int(currentStats.KeyBytes - preSplitStats.KeyBytes),
+		SplitDiscrepancyValCount: int(currentStats.ValCount - preSplitStats.ValCount),
+		SplitDiscrepancyValBytes: int(currentStats.ValBytes - preSplitStats.ValBytes),
+	}
+
 	var pd result.Result
 	pd.Replicated.Split = &kvserverpb.Split{
 		SplitTrigger: *split,
@@ -1246,6 +1261,7 @@ func splitTriggerHelper(
 		// hand side range (i.e. it goes from zero to its stats).
 		RHSDelta: *h.AbsPostSplitRight(),
 	}
+	pd.Local.Metrics = &metrics
 
 	deltaPostSplitLeft := h.DeltaPostSplitLeft()
 	return deltaPostSplitLeft, pd, nil

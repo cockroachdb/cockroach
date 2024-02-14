@@ -2303,6 +2303,32 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	// Split discrepancy metrics
+	metaSplitDiscrepancyKeyCount = metric.Metadata{
+		Name:        "kv.split_discrepancy_key_count",
+		Help:        "Number of keys difference between pre and post split MVCC stats",
+		Measurement: "Keys",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSplitDiscrepancyKeyBytes = metric.Metadata{
+		Name:        "kv.split_discrepancy_key_bytes",
+		Help:        "Number of key bytes difference between pre and post split MVCC stats",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaSplitDiscrepancyValCount = metric.Metadata{
+		Name:        "kv.split_discrepancy_val_count",
+		Help:        "Number of values difference between pre and post split MVCC stats",
+		Measurement: "Keys",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSplitDiscrepancyValBytes = metric.Metadata{
+		Name:        "kv.split_discrepancy_val_bytes",
+		Help:        "Number of value bytes difference between pre and post split MVCC stats",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -2690,6 +2716,12 @@ type StoreMetrics struct {
 
 	FlushUtilization *metric.GaugeFloat64
 	FsyncLatency     *metric.ManualWindowHistogram
+
+	// Split discrepancy stats
+	SplitDiscrepancyKeyCount *metric.Gauge
+	SplitDiscrepancyKeyBytes *metric.Gauge
+	SplitDiscrepancyValCount *metric.Gauge
+	SplitDiscrepancyValBytes *metric.Gauge
 }
 
 type tenantMetricsRef struct {
@@ -3423,6 +3455,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		ReplicaReadBatchDroppedLatchesBeforeEval: metric.NewCounter(metaReplicaReadBatchDroppedLatchesBeforeEval),
 		ReplicaReadBatchWithoutInterleavingIter:  metric.NewCounter(metaReplicaReadBatchWithoutInterleavingIter),
+
+		// Split discrepancy
+		SplitDiscrepancyKeyCount: metric.NewGauge(metaSplitDiscrepancyKeyCount),
+		SplitDiscrepancyKeyBytes: metric.NewGauge(metaSplitDiscrepancyKeyBytes),
+		SplitDiscrepancyValCount: metric.NewGauge(metaSplitDiscrepancyValCount),
+		SplitDiscrepancyValBytes: metric.NewGauge(metaSplitDiscrepancyValBytes),
 	}
 
 	storeRegistry.AddMetricStruct(sm)
@@ -3648,6 +3686,15 @@ func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.M
 
 	sm.AddSSTableAsWrites.Inc(int64(metric.AddSSTableAsWrites))
 	metric.AddSSTableAsWrites = 0
+
+	sm.SplitDiscrepancyKeyCount.Update(int64(metric.SplitDiscrepancyKeyCount))
+	metric.SplitDiscrepancyKeyCount = 0
+	sm.SplitDiscrepancyKeyBytes.Update(int64(metric.SplitDiscrepancyKeyBytes))
+	metric.SplitDiscrepancyKeyBytes = 0
+	sm.SplitDiscrepancyValCount.Update(int64(metric.SplitDiscrepancyValCount))
+	metric.SplitDiscrepancyValCount = 0
+	sm.SplitDiscrepancyValBytes.Update(int64(metric.SplitDiscrepancyValBytes))
+	metric.SplitDiscrepancyValBytes = 0
 
 	if metric != (result.Metrics{}) {
 		log.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)
