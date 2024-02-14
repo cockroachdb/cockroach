@@ -1153,6 +1153,15 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 	}
 }
 
+// AbandonedJobInfoRowsCleanupQuery is used by the CLI command
+// job-cleanup-job-info to delete jobs that were abandoned because of
+// previous CRDB bugs. It is exposed here for testing.
+const AbandonedJobInfoRowsCleanupQuery = `
+	DELETE
+FROM system.job_info
+WHERE written < $1 AND job_id NOT IN (SELECT id FROM system.jobs)
+LIMIT $2`
+
 // The ordering is important as we keep track of the maximum ID we've seen.
 const expiredJobsQueryWithJobInfoTable = `
 WITH

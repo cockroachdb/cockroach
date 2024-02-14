@@ -319,6 +319,66 @@ func TestRegistryGCPagination(t *testing.T) {
 	require.Zero(t, count)
 }
 
+func TestRegistryAbandedJobInfoRowsCleanupQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	defer srv.Stopper().Stop(ctx)
+
+	var (
+		now                  = timeutil.Now()
+		insertAge            = now.Add(-12 * time.Hour)
+		cleanupStartTsTooOld = now.Add(-24 * time.Hour)
+		cleanupStartTs       = now.Add(-6 * time.Hour)
+	)
+
+	assertAbandonedJobInfoCount := func(expected int) {
+		t.Helper()
+		var count int
+		db.QueryRow(t, "SELECT count(1) FROM system.job_info WHERE job_id NOT IN (SELECT id FROM system.jobs)").Scan(&count)
+		require.Equal(t, expected, count)
+	}
+
+	assertDeletedCount := func(r gosql.Result, expected int64) {
+		t.Helper()
+		actual, err := r.RowsAffected()
+		require.NoError(t, err)
+		require.Equal(t, expected, actual)
+	}
+
+	// Insert 10 bad rows.
+	db.Exec(t, "INSERT INTO system.job_info (job_id, info_key, value, written) (SELECT id, 'hello', 'world', $1 FROM  generate_series(2000, 2009) as id)",
+		insertAge)
+	assertAbandonedJobInfoCount(10)
+
+	// Delete with a time before the inserts finds nothing.
+	assertDeletedCount(db.Exec(t, AbandonedJobInfoRowsCleanupQuery, cleanupStartTsTooOld, 5),
+		0)
+
+	// Delete with limit 5 only deletes 5.
+	assertDeletedCount(db.Exec(t, AbandonedJobInfoRowsCleanupQuery, cleanupStartTs, 5),
+		5)
+
+	// We should still have 5 left.
+	assertAbandonedJobInfoCount(5)
+
+	// Delete with limit 20 deletes 5 more
+	assertDeletedCount(db.Exec(t, AbandonedJobInfoRowsCleanupQuery, cleanupStartTs, 20),
+		5)
+
+	// We should still have none left.
+	assertAbandonedJobInfoCount(0)
+
+	// Delete should find nothing
+	assertDeletedCount(db.Exec(t, AbandonedJobInfoRowsCleanupQuery, cleanupStartTs, 5),
+		0)
+	assertDeletedCount(db.Exec(t, AbandonedJobInfoRowsCleanupQuery, timeutil.Now(), 5),
+		0)
+}
+
 // TestCreateJobWritesToJobInfo tests that the `Create` methods exposed by the
 // registry to create a job write the job payload and progress to the
 // system.job_info table alongwith creating a job record in the system.jobs
