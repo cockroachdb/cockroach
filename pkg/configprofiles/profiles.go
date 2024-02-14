@@ -88,8 +88,6 @@ var staticProfiles = map[string]configProfile{
 var virtClusterInitTasks = []autoconfigpb.Task{
 	makeTask("initial cluster config",
 		/* nonTxnSQL */ []string{
-			// Disable trace redaction (this ought to be configurable per-tenant, but is not possible yet in v23.1).
-			"SET CLUSTER SETTING trace.redact_at_virtual_cluster_boundary.enabled = false",
 			// Enable zone config changes in secondary tenants  (this ought to be configurable per-tenant, but is not possible yet in v23.1).
 			"SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true",
 			"SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled = true",

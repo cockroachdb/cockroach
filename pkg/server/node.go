@@ -239,7 +239,7 @@ var (
 		settings.SystemOnly,
 		"server.secondary_tenants.redact_trace.enabled",
 		"if enabled, storage/KV trace results are redacted when returned to a virtual cluster",
-		true,
+		false,
 		settings.WithName("trace.redact_at_virtual_cluster_boundary.enabled"),
 	)
 
