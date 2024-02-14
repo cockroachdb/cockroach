@@ -124,6 +124,10 @@ func (r *RoachtestHTTPClient) ResetSession() {
 }
 
 func (r *RoachtestHTTPClient) addCookie(ctx context.Context, cookieUrl string) error {
+	// If the cluster is not running in secure mode, don't try to add cookies.
+	if !r.cluster.IsSecure() {
+		return nil
+	}
 	// If we haven't extracted the sessionID yet, do so.
 	if r.sessionID == "" {
 		id, err := getSessionID(ctx, r.cluster, r.l, r.cluster.All())

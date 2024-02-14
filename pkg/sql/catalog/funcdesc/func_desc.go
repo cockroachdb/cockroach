@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -553,7 +555,7 @@ func (desc *Mutable) SetParentSchemaID(id descpb.ID) {
 func (desc *Mutable) AddConstraintReference(id descpb.ID, constraintID descpb.ConstraintID) error {
 	for _, dep := range desc.DependsOn {
 		if dep == id {
-			return errors.Errorf(
+			return pgerror.Newf(pgcode.InvalidFunctionDefinition,
 				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
 			)
 		}
@@ -597,7 +599,7 @@ func (desc *Mutable) RemoveConstraintReference(id descpb.ID, constraintID descpb
 func (desc *Mutable) AddColumnReference(id descpb.ID, colID descpb.ColumnID) error {
 	for _, dep := range desc.DependsOn {
 		if dep == id {
-			return errors.Errorf(
+			return pgerror.Newf(pgcode.InvalidFunctionDefinition,
 				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
 			)
 		}
