@@ -178,7 +178,7 @@ configurations generated using seed 2643318057788968173
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
-	stores(15)=[s1n1=(replicas(65)),s2n2=(replicas(64)),s3n3=(replicas(66)),s4n4=(replicas(63)),s5n5=(replicas(63)),s6n6=(replicas(63)),s7n7=(replicas(63)),s8n8=(replicas(62)),s9n9=(replicas(64)),s10n10=(replicas(64)),s11n11=(replicas(62)),s12n12=(replicas(63)),s13n13=(replicas(63)),s14n14=(replicas(64)),s15n15=(replicas(64))]
+	stores(15)=[s1n1=(replicas(64)),s2n2=(replicas(51)),s3n3=(replicas(12)),s4n4=(replicas(25)),s5n5=(replicas(115)),s6n6=(replicas(90)),s7n7=(replicas(114)),s8n8=(replicas(25)),s9n9=(replicas(26)),s10n10=(replicas(64)),s11n11=(replicas(0)),s12n12=(replicas(114)),s13n13=(replicas(103)),s14n14=(replicas(51)),s15n15=(replicas(90))]
 topology:
 US
   US_1
