@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"math"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
 	"github.com/stretchr/testify/require"
@@ -41,7 +39,7 @@ var tpchTables = []string{
 
 // tpchVecTestRunConfig specifies the configuration of a tpchvec test run.
 type tpchVecTestRunConfig struct {
-	// numRunsPerQuery determines how many time a single query runs, set to 1
+	// numRunsPerQuery determines how many times a single query runs, set to 1
 	// by default.
 	numRunsPerQuery int
 	// clusterSetups specifies all cluster setup queries that need to be
@@ -68,8 +66,6 @@ func performClusterSetup(t test.Test, conn *gosql.DB, clusterSetup []string) {
 type tpchVecTestCase interface {
 	// getRunConfig returns the configuration of tpchvec test run.
 	getRunConfig() tpchVecTestRunConfig
-	// preQueryRunHook is called before each tpch query is run.
-	preQueryRunHook(t test.Test, conn *gosql.DB, clusterSetup []string)
 	// postQueryRunHook is called after each tpch query is run with the output and
 	// the index of the setup it was run in.
 	postQueryRunHook(t test.Test, output []byte, setupIdx int)
@@ -91,10 +87,6 @@ func (b tpchVecTestCaseBase) getRunConfig() tpchVecTestRunConfig {
 		}},
 		setupNames: []string{"default"},
 	}
-}
-
-func (b tpchVecTestCaseBase) preQueryRunHook(t test.Test, conn *gosql.DB, clusterSetup []string) {
-	performClusterSetup(t, conn, clusterSetup)
 }
 
 func (b tpchVecTestCaseBase) postQueryRunHook(test.Test, []byte, int) {}
@@ -488,87 +480,7 @@ func getTPCHVecWorkloadCmd(numRunsPerQuery, queryNum int) string {
 		numRunsPerQuery, queryNum)
 }
 
-func baseTestRun(
-	ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, tc tpchVecTestCase,
-) {
-	runConfig := tc.getRunConfig()
-	for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
-		for setupIdx, setup := range runConfig.clusterSetups {
-			tc.preQueryRunHook(t, conn, setup)
-			result, err := c.RunWithDetailsSingleNode(
-				ctx, t.L(), c.Node(1),
-				getTPCHVecWorkloadCmd(runConfig.numRunsPerQuery, queryNum),
-			)
-			workloadOutput := result.Stdout + result.Stderr
-			t.L().Printf(workloadOutput)
-			if err != nil {
-				// Note: if you see an error like "exit status 1", it is likely caused
-				// by the erroneous output of the query.
-				t.Fatal(err)
-			}
-			tc.postQueryRunHook(t, []byte(workloadOutput), setupIdx)
-		}
-	}
-}
-
-type tpchVecSmithcmpTest struct {
-	tpchVecTestCaseBase
-}
-
-const tpchVecSmithcmp = "smithcmp"
-
-func smithcmpPreTestRunHook(
-	ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, clusterSetup []string,
-) {
-	performClusterSetup(t, conn, clusterSetup)
-	const smithcmpSHA = "a3f41f5ba9273249c5ecfa6348ea8ee3ac4b77e3"
-	node := c.Node(1)
-	if c.IsLocal() && runtime.GOOS != "linux" {
-		t.Fatalf("must run on linux os, found %s", runtime.GOOS)
-	}
-	// This binary has been manually compiled using
-	// './build/builder.sh go build ./pkg/cmd/smithcmp' and uploaded to S3
-	// bucket at cockroach/smithcmp. The binary shouldn't change much, so it is
-	// acceptable.
-	smithcmp, err := binfetcher.Download(ctx, binfetcher.Options{
-		Component: tpchVecSmithcmp,
-		Binary:    tpchVecSmithcmp,
-		Version:   smithcmpSHA,
-		GOOS:      "linux",
-		GOARCH:    "amd64",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.Put(ctx, smithcmp, "./"+tpchVecSmithcmp, node)
-}
-
-func smithcmpTestRun(
-	ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, tc tpchVecTestCase,
-) {
-	runConfig := tc.getRunConfig()
-	smithcmpPreTestRunHook(ctx, t, c, conn, runConfig.clusterSetups[0])
-	const (
-		configFile = `tpchvec_smithcmp.toml`
-		configURL  = `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/cmd/roachtest/tests/` + configFile
-	)
-	firstNode := c.Node(1)
-	if err := c.RunE(ctx, firstNode, fmt.Sprintf("curl %s > %s", configURL, configFile)); err != nil {
-		t.Fatal(err)
-	}
-	cmd := fmt.Sprintf("./%s %s", tpchVecSmithcmp, configFile)
-	if err := c.RunE(ctx, firstNode, cmd); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func runTPCHVec(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	testCase tpchVecTestCase,
-	testRun func(ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, tc tpchVecTestCase),
-) {
+func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tpchVecTestCase) {
 	firstNode := c.Node(1)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", firstNode)
 	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
@@ -589,7 +501,24 @@ func runTPCHVec(
 	err := WaitFor3XReplication(ctx, t, conn)
 	require.NoError(t, err)
 
-	testRun(ctx, t, c, conn, testCase)
+	runConfig := testCase.getRunConfig()
+	for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
+		for setupIdx, clusterSetup := range runConfig.clusterSetups {
+			performClusterSetup(t, conn, clusterSetup)
+			result, err := c.RunWithDetailsSingleNode(
+				ctx, t.L(), c.Node(1),
+				getTPCHVecWorkloadCmd(runConfig.numRunsPerQuery, queryNum),
+			)
+			workloadOutput := result.Stdout + result.Stderr
+			t.L().Printf(workloadOutput)
+			if err != nil {
+				// Note: if you see an error like "exit status 1", it is likely caused
+				// by the erroneous output of the query.
+				t.Fatal(err)
+			}
+			testCase.postQueryRunHook(t, []byte(workloadOutput), setupIdx)
+		}
+	}
 	testCase.postTestRunHook(ctx, t, c, conn)
 }
 
@@ -607,7 +536,7 @@ func registerTPCHVec(r registry.Registry) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.defaults.vectorize", /* settingName */
 				1.5,                      /* slownessThreshold */
-			), baseTestRun)
+			))
 		},
 	})
 
@@ -618,19 +547,7 @@ func registerTPCHVec(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCHVec(ctx, t, c, tpchVecDiskTest{}, baseTestRun)
-		},
-	})
-
-	r.Add(registry.TestSpec{
-		Name:             "tpchvec/smithcmp",
-		Owner:            registry.OwnerSQLQueries,
-		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		RequiresLicense:  true,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCHVec(ctx, t, c, tpchVecSmithcmpTest{}, smithcmpTestRun)
+			runTPCHVec(ctx, t, c, tpchVecDiskTest{})
 		},
 	})
 
@@ -645,7 +562,7 @@ func registerTPCHVec(r registry.Registry) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.distsql.use_streamer.enabled", /* settingName */
 				1.5,                                /* slownessThreshold */
-			), baseTestRun)
+			))
 		},
 	})
 
@@ -677,7 +594,7 @@ func registerTPCHVec(r registry.Registry) {
 				clusterSetups,
 				setupNames,
 			)
-			runTPCHVec(ctx, t, c, benchTest, baseTestRun)
+			runTPCHVec(ctx, t, c, benchTest)
 		},
 	})
 }
