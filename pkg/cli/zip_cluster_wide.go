@@ -41,7 +41,7 @@ const (
 func makeClusterWideZipRequests(
 	admin serverpb.AdminClient, status serverpb.StatusClient,
 ) []zipRequest {
-	return []zipRequest{
+	zipRequests := []zipRequest{
 		// NB: we intentionally omit liveness since it's already pulled manually (we
 		// act on the output to special case decommissioned nodes).
 		{
@@ -62,13 +62,16 @@ func makeClusterWideZipRequests(
 			},
 			pathName: settingsName,
 		},
-		{
+	}
+	if zipCtx.includeRangeInfo {
+		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{})
 			},
 			pathName: problemRangesName,
-		},
+		})
 	}
+	return zipRequests
 }
 
 // nodesInfo holds node details pulled from a SQL or storage node.
