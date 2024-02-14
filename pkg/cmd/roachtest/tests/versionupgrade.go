@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -27,11 +29,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 type versionFeatureTest struct {
@@ -186,6 +192,104 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 				String()
 
 			return c.RunE(ctx, option.WithNodes(c.Node(randomNode)), runCmd)
+		},
+	)
+
+	mvt.OnStartup(
+		"create a table with random types",
+		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			// Pick a set of 10 random types to use in the column definitions.
+			randomTypes := make([]*types.T, 10)
+			for i := range randomTypes {
+				var typ *types.T
+			loop:
+				for {
+					typ = randgen.RandType(rng)
+					switch typ.Oid() {
+					case oid.T_int2vector, oid.T_oidvector:
+						// We can't create a table with a column of this type.
+						continue loop
+					case oid.T_regtype:
+						// Casting random integers to REGTYPE might fail later.
+						continue loop
+					}
+					// Check that this type is valid to be used in the column
+					// definition. Ideally, we'd have used
+					// colinfo.ValidateColumnDefType helper, but it doesn't seem
+					// easy to get the version handle the helper expects.
+					err := h.Exec(rng, fmt.Sprintf("CREATE TABLE test_type (c %s)", typ.SQLString()))
+					if err != nil {
+						continue
+					}
+					if err = h.Exec(rng, "DROP TABLE test_type"); err != nil {
+						l.Printf("ERROR when dropping test_type table: %s", err)
+						return err
+					}
+					break
+				}
+				randomTypes[i] = typ
+			}
+			// Create the table with the types we picked.
+			var sb strings.Builder
+			sb.WriteString("CREATE TABLE random_types (k INT PRIMARY KEY")
+			for i := range randomTypes {
+				sb.WriteString(fmt.Sprintf(", col%d %s", i, randomTypes[i].SQLString()))
+			}
+			sb.WriteString(")")
+			if err := h.Exec(rng, sb.String()); err != nil {
+				l.Printf("ERROR when creating random_types table: %s", err)
+				return err
+			}
+			// Insert up to 10 rows with random data into the table.
+			formatter := tree.NewFmtCtx(tree.FmtParsable)
+			numRows := 1 + rng.Intn(10)
+			for j := 0; j < numRows; j++ {
+				// For each new row we might add a range split.
+				if rng.Float64() < 0.2 {
+					if err := h.Exec(rng, fmt.Sprintf("ALTER TABLE random_types SPLIT AT VALUES (%d)", j)); err != nil {
+						l.Printf("ERROR when adding a split point to random_types table: %s", err)
+						return err
+					}
+				}
+				sb.Reset()
+				sb.WriteString("INSERT INTO random_types VALUES (" + strconv.Itoa(j))
+				for i := range randomTypes {
+					d := randgen.RandDatum(rng, randomTypes[i], false /* nullOk */)
+					formatter.Reset()
+					formatter.FormatNode(d)
+					sb.WriteString(fmt.Sprintf(", %s::%s", formatter.String(), randomTypes[i].SQLString()))
+				}
+				sb.WriteString(")")
+				if err := h.Exec(rng, sb.String()); err != nil {
+					l.Printf("ERROR when inserting into random_types table: %s", err)
+					return err
+				}
+			}
+
+			return nil
+		})
+	mvt.InMixedVersion(
+		"read the table with random types",
+		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			// Scatter the table to get different DistSQL plans.
+			err := h.Exec(rng, "ALTER TABLE random_types SCATTER")
+			if err != nil {
+				l.Printf(" ERROR when scattering random_types table: %s", err)
+				return err
+			}
+			// Perform a full scan of the table. Do it a handful of times for a
+			// couple of reasons:
+			// - the Exec helper randomizes the gateway node for query
+			// - after the first execution on each node, the range cache will be
+			// populated on it, so that the next execution might be distributed.
+			for i := 0; i < 10; i++ {
+				err = h.Exec(rng, "SELECT * FROM random_types")
+				if err != nil {
+					l.Printf(" ERROR when scanning random_types table: %s", err)
+					return err
+				}
+			}
+			return nil
 		},
 	)
 
