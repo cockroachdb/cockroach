@@ -100,7 +100,7 @@ has-capability-for-batch ten=10 cmds=(Scan)
 ----
 ok
 
-# Set the service state to externa and make sure we can send a batch.
+# Set the service state to shared and make sure we can send a batch.
 upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false service=shared
 ----
 ok
@@ -108,3 +108,16 @@ ok
 has-capability-for-batch ten=10 cmds=(Scan)
 ----
 ok
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
+----
+ok
+
+# Set the service state to external and make sure we are restricted again.
+upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false service=external
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
+----
+client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
