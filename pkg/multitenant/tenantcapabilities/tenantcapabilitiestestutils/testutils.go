@@ -162,7 +162,7 @@ func GetServiceState(t *testing.T, d *datadriven.TestData) mtinfopb.TenantServic
 		}
 		return serviceState
 	}
-	return mtinfopb.ServiceModeShared
+	return mtinfopb.ServiceModeExternal
 }
 
 // AlteredCapabilitiesString pretty-prints all altered capability
