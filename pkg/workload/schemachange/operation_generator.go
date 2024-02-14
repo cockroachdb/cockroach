@@ -2860,6 +2860,13 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			if col.typ.Family() == types.Oid.Family() {
 				d = tree.NewDOid(randgen.RandColumnType(og.params.rng).Oid())
 			}
+			// We have seen cases where randomly generated ints easily hit an
+			// integer overflow in our workload when we allow a larger width.
+			// Since there is no real advantage to testing these large numbers,
+			// limit the number by flooring the width to 16 (-32768 to 32767).
+			if col.typ.Family() == types.IntFamily && col.typ.Width() > int32(16) {
+				d = tree.NewDInt(tree.DInt(int16(og.params.rng.Uint64())))
+			}
 			str := tree.AsStringWithFlags(d, tree.FmtParsable)
 			// For strings use the actual type, so that comparisons for NULL values are sane.
 			if col.typ.Family() == types.StringFamily {
