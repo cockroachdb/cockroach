@@ -15,7 +15,6 @@
 package colflow_test
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -45,7 +44,6 @@ func TestColBatchScanMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
@@ -126,7 +124,6 @@ func BenchmarkColBatchScan(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	logScope := log.Scope(b)
 	defer logScope.Close(b)
-	ctx := context.Background()
 
 	srv, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)

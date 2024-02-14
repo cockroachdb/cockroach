@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -203,7 +204,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := execversion.WithLatestVersion()
 	inboxToNumInputTypes := make(map[*colrpc.Inbox][]*types.T)
 	outboxCreated := false
 	componentCreator := callbackRemoteComponentCreator{
@@ -272,7 +273,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	ctx := context.Background()
+	ctx := execversion.WithLatestVersion()
 	defer evalCtx.Stop(ctx)
 
 	// We use an on-disk engine for this test since we're testing FS interactions
