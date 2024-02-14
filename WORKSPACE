@@ -480,11 +480,11 @@ c_deps()
 # Ref: https://github.com/bazelbuild/rules_foreign_cc/blob/main/foreign_cc/repositories.bzl
 http_archive(
     name = "rules_foreign_cc",
-    sha256 = "272ac2cde4efd316c8d7c0140dee411c89da104466701ac179286ef5a89c7b58",
-    strip_prefix = "cockroachdb-rules_foreign_cc-6f7f1b1",
+    sha256 = "03afebfc3f173666a3820a29512265c710c3a08d0082ba77469779d3e3af5a11",
+    strip_prefix = "cockroachdb-rules_foreign_cc-8d34d77",
     urls = [
-        # As of commit 6f7f1b1c6f911db5706c2fcbb3d5669d95974a34 (release 0.7.0 plus a couple patches)
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_foreign_cc-6f7f1b1.tar.gz",
+        # As of commit 8d34d777736b2d895e4e4fbb755deb424ae1f6c7 (release 0.7.0 plus a couple patches)
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_foreign_cc-8d34d77.tar.gz",
     ],
 )
 
