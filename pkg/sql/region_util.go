@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
@@ -2469,26 +2471,44 @@ func (p *planner) GetRangeDescByID(
 // global and regional by row. The locality changes reduce how long it
 // takes a server to start up in a multi-region deployment.
 func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
-	globalTables := []string{
-		"users",
-		"zones",
-		"privileges",
-		"comments",
-		"role_options",
-		"role_members",
-		"database_role_settings",
-		"settings",
-		"descriptor",
-		"namespace",
-		"table_statistics",
-		"web_sessions",
-		"region_liveness",
+	systemTables := systemschema.MakeSystemTables()
+	globalTables := map[string]struct{}{
+		"users":                  {},
+		"zones":                  {},
+		"privileges":             {},
+		"comments":               {},
+		"role_options":           {},
+		"role_members":           {},
+		"database_role_settings": {},
+		"settings":               {},
+		"descriptor":             {},
+		"namespace":              {},
+		"table_statistics":       {},
+		"web_sessions":           {},
+		"region_liveness":        {},
 	}
 
-	rbrTables := []string{
-		"sqlliveness",
-		"sql_instances",
-		"lease",
+	rbrTables := map[string]struct{}{
+		"sqlliveness":   {},
+		"sql_instances": {},
+		"lease":         {},
+	}
+
+	// Configure all ohter tables are region tables, with the system database
+	// primary region as the region.
+	regionTables := make([]string, 0, len(systemTables))
+	for _, table := range systemTables {
+		if !table.IsTable() {
+			continue
+		}
+		name := table.GetName()
+		if _, ok := rbrTables[name]; ok {
+			continue
+		}
+		if _, ok := globalTables[name]; ok {
+			continue
+		}
+		regionTables = append(regionTables, name)
 	}
 
 	// Retrieve the system database descriptor and ensure it supports
@@ -2593,8 +2613,13 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 	}
 
 	// Configure global system tables
-	for _, tableName := range globalTables {
+	for tableName := range globalTables {
 		descriptor, err := getDescriptor(tableName)
+		// Some system tables only come into effect once the
+		// version changes, so skip over those.
+		if sqlerrors.IsUndefinedRelationError(err) {
+			continue
+		}
 		if err != nil {
 			return err
 		}
@@ -2614,8 +2639,29 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		}
 	}
 
+	// Configure by region tables next.
+	primaryRegionName, err := systemDB.PrimaryRegionName()
+	if err != nil {
+		return err
+	}
+	for _, tableName := range regionTables {
+		descriptor, err := getDescriptor(tableName)
+		// Some system tables only come into effect once the
+		// version changes, so skip over those.
+		if sqlerrors.IsUndefinedRelationError(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		descriptor.SetTableLocalityRegionalByTable(tree.Name(primaryRegionName))
+		if err := applyLocalityChange(descriptor, "global"); err != nil {
+			return err
+		}
+	}
+
 	// Configure regional by row system tables
-	for _, tableName := range rbrTables {
+	for tableName := range rbrTables {
 		descriptor, err := getDescriptor(tableName)
 		if err != nil {
 			return err
