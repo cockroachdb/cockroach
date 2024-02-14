@@ -10,6 +10,8 @@
 
 package tree
 
+import "sort"
+
 // formatNodeForFingerprint recurses into a node to format it for a normalized
 // statement fingerprinting.
 func (ctx *FmtCtx) formatNodeForFingerprint(n NodeFormatter) {
@@ -24,6 +26,15 @@ func (ctx *FmtCtx) formatNodeForFingerprint(n NodeFormatter) {
 		case *Array:
 			v.formatForFingerprint(ctx)
 			return
+		case *UpdateExprs:
+			// We want to sort name lists to avoid creating different fingerprints
+			// for equivalent queries. For example:
+			// SELECT a, b FROM t
+			// SELECT b, a FROM t
+			// TODO if sorting is too slow we'll likely need to hash
+			// while walking the tree.
+			v.formatForFingerprint(ctx)
+			return
 		case *Placeholder, *StrVal, Datum, Constant:
 			// If we have a placeholder, a string literal, a datum or a constant,
 			// we want to print the same special character for all of them. This
@@ -34,6 +45,49 @@ func (ctx *FmtCtx) formatNodeForFingerprint(n NodeFormatter) {
 		}
 	}
 	n.Format(ctx)
+}
+
+func isExprOnlyLiteralsOrPlaceholders(expr Expr) bool {
+	switch e := expr.(type) {
+	case Datum, Constant, *Placeholder:
+		return true
+	case *Tuple:
+		return e.Exprs.onlyContainsLiteralsOrPlaceholders()
+	default:
+		return false
+	}
+}
+
+func (node *UpdateExpr) containsOnlyLiteralsOrPlaceholders() bool {
+	if node.Tuple {
+		return false
+	}
+
+	return isExprOnlyLiteralsOrPlaceholders(node.Expr)
+}
+
+// formatForFingerprint formats update expressions  that are a simple list of
+// assignments for stmt fingerprints. We want to sort them to avoid creating
+// different fingerprints for equivalent queries.
+// For example:
+// UPDATE t SET a = 1, b = 2
+// UPDATE t SET b = 2, a = 1
+// TODO if sorting is too slow we'll likely need to hash while walking the tree.
+func (node *UpdateExprs) formatForFingerprint(ctx *FmtCtx) {
+	for _, setClause := range *node {
+		if !setClause.containsOnlyLiteralsOrPlaceholders() {
+			node.Format(ctx)
+			return
+		}
+	}
+
+	v2 := *node
+	sort.Slice(v2, func(i, j int) bool {
+		// We've verified these are not tuple update exprs.
+		return v2[i].Names[0] < v2[j].Names[0]
+	})
+	v2.Format(ctx)
+
 }
 
 // It shortens multi-value VALUES clauses to a VALUES clause with a single value.
@@ -52,28 +106,17 @@ func (node *ValuesClause) formatForFingerprint(ctx *FmtCtx) {
 // are either literals or placeholders or tuples containing only literals or
 // placeholders.
 func (node *Exprs) onlyContainsLiteralsOrPlaceholders() bool {
-	exprs := []Exprs{*node}
-
-	for len(exprs) > 0 {
-		exprsCurrent := exprs[len(exprs)-1]
-		exprs = exprs[:len(exprs)-1]
-		var i int
-		for i = 0; i < len(exprsCurrent); i++ {
-			expr := exprsCurrent[i]
-			switch expr.(type) {
-			case Datum, Constant, *Placeholder:
-				continue
-			case *Tuple:
-				exprs = append(exprs, expr.(*Tuple).Exprs)
-				continue
-			default:
-				return false
-			}
-		}
-		if i != len(exprsCurrent) {
+	for i := 0; i < len(*node); i++ {
+		switch e := (*node)[i].(type) {
+		case Datum, Constant, *Placeholder:
+			continue
+		case *Tuple:
+			return e.Exprs.onlyContainsLiteralsOrPlaceholders()
+		default:
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -87,23 +130,7 @@ func (node *Exprs) maybeCollapseExprs() Exprs {
 		return exprs
 	}
 
-	// First, determine if there are only literals/placeholders.
-	var i int
-	for i = 0; i < len(exprs); i++ {
-		switch expr := exprs[i].(type) {
-		case Datum, Constant, *Placeholder:
-			continue
-		case *Tuple:
-			if expr.Exprs.onlyContainsLiteralsOrPlaceholders() {
-				continue
-			}
-		}
-
-		break
-	}
-
-	// If so, then use the special representation.
-	if i == len(exprs) {
+	if node.onlyContainsLiteralsOrPlaceholders() {
 		v2 := append(make(Exprs, 0, 2), exprs[:1]...)
 		v2 = append(v2, arityIndicator(len(exprs)-1))
 		return v2
