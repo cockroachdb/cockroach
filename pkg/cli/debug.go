@@ -1456,6 +1456,13 @@ func init() {
 	DebugCmd.AddCommand(debugStatementBundleCmd)
 
 	DebugCmd.AddCommand(debugJobTraceFromClusterCmd)
+	DebugCmd.AddCommand(debugJobCleanupInfoRows)
+	f = debugJobCleanupInfoRows.PersistentFlags()
+	f.IntVar(&jobCleanupInfoRowOpts.PageSize, "page-size", jobCleanupInfoRowOpts.PageSize,
+		"number of deletes to perform per query",
+	)
+	f.DurationVar(&jobCleanupInfoRowOpts.Age, "age", jobCleanupInfoRowOpts.Age,
+		"minimum age of job_info rows to delete; rows younger than this will not be deleted")
 
 	f = debugSyncBenchCmd.Flags()
 	f.IntVarP(&syncBenchOpts.Concurrency, "concurrency", "c", syncBenchOpts.Concurrency,
