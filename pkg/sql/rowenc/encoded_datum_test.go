@@ -521,7 +521,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 		len := rng.Intn(5)
 		contents := make([]*types.T, len)
 		for j := range contents {
-			contents[j] = randgen.RandEncodableType(rng)
+			contents[j] = randgen.RandType(rng)
 		}
 		colTypes[i] = types.MakeTuple(contents)
 		tests[i] = randgen.RandDatum(rng, colTypes[i], true)
