@@ -14,6 +14,7 @@ go_library(
         "convert_url.go",
         "debug.go",
         "debug_check_store.go",
+        "debug_job_cleanup.go",
         "debug_job_trace.go",
         "debug_list_files.go",
         "debug_logconfig.go",
