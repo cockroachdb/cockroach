@@ -7,7 +7,6 @@ server started
 system-sql
 SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
 WHERE variable IN (
-'sql.drop_virtual_cluster.enabled',
 'sql.create_virtual_cluster.default_template',
 'server.controller.default_target_cluster',
 'kv.rangefeed.enabled',
@@ -19,7 +18,6 @@ kv.rangefeed.enabled true
 physical_replication.enabled true
 server.controller.default_target_cluster system
 sql.create_virtual_cluster.default_template template
-sql.drop_virtual_cluster.enabled false
 
 system-sql
 SHOW TENANTS WITH CAPABILITIES

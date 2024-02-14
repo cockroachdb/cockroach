@@ -87,10 +87,7 @@ var staticProfiles = map[string]configProfile{
 // each config profile. See enableReplication() for an example.
 var virtClusterInitTasks = []autoconfigpb.Task{
 	makeTask("initial cluster config",
-		/* nonTxnSQL */ []string{
-			// Make the operator double-check virtual cluster deletions.
-			"SET CLUSTER SETTING sql.drop_virtual_cluster.enabled = false",
-		},
+		/* nonTxnSQL */ []string{},
 		nil, /* txnSQL */
 	),
 	makeTask("create virtual cluster template",
