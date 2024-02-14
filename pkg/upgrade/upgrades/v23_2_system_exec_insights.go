@@ -22,10 +22,10 @@ import (
 func systemExecInsightsTableMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
-	if err := createSystemTable(ctx, d.DB.KV(), d.Settings, d.Codec, systemschema.TransactionExecInsightsTable); err != nil {
+	if err := createSystemTable(ctx, d.DB, d.Settings, d.Codec, systemschema.TransactionExecInsightsTable, true /*setGlobalLocality*/); err != nil {
 		return err
 	}
-	if err := createSystemTable(ctx, d.DB.KV(), d.Settings, d.Codec, systemschema.StatementExecInsightsTable); err != nil {
+	if err := createSystemTable(ctx, d.DB, d.Settings, d.Codec, systemschema.StatementExecInsightsTable, true /*setGlobalLocality*/); err != nil {
 		return err
 	}
 	return nil

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -90,8 +91,9 @@ SELECT *
 			table.GetParentID(), table.GetParentSchemaID(), table.GetName())
 	}
 	require.Len(t, checkEntries(t), 0)
+	descDB := tc.Server(0).InternalDB().(descs.DB)
 	require.NoError(t, upgrades.CreateSystemTable(
-		ctx, tc.Server(0).DB(), tc.Server(0).ClusterSettings(), keys.SystemSQLCodec, table,
+		ctx, descDB, tc.Server(0).ClusterSettings(), keys.SystemSQLCodec, table, true, /*setLocality*/
 	))
 	require.Len(t, checkEntries(t), 1)
 	sqlDB.CheckQueryResults(t,
@@ -100,7 +102,7 @@ SELECT *
 
 	// Make sure it's idempotent.
 	require.NoError(t, upgrades.CreateSystemTable(
-		ctx, tc.Server(0).DB(), tc.Server(0).ClusterSettings(), keys.SystemSQLCodec, table,
+		ctx, descDB, tc.Server(0).ClusterSettings(), keys.SystemSQLCodec, table, true, /*setLocality*/
 	))
 	require.Len(t, checkEntries(t), 1)
 

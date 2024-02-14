@@ -20,20 +20,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 )
 
 // createSystemTable is a function to inject a new system table. If the table
-// already exists, ths function is a no-op.
+// already exists, ths function is a no-op. If the setGlobalLocality flag is
+// true this system table will be setup as a global table on multi-region clusters,
+// otherwise the locality needs to be configured by the caller.
 func createSystemTable(
 	ctx context.Context,
-	db *kv.DB,
+	db descs.DB,
 	settings *cluster.Settings,
 	codec keys.SQLCodec,
 	desc catalog.TableDescriptor,
+	setGlobalLocality bool,
 ) error {
-	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, _, err := CreateSystemTableInTxn(ctx, settings, txn, codec, desc)
+	return db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		dbDesc, err := txn.Descriptors().ByID(txn.KV()).Get().Database(ctx, keys.SystemDatabaseID)
+		if err != nil {
+			return err
+		}
+		setGlobalLocality = setGlobalLocality && dbDesc.IsMultiRegion()
+		if setGlobalLocality {
+			tableDescBuilder := tabledesc.NewBuilder(desc.TableDesc())
+			mutableDesc := tableDescBuilder.BuildExistingMutableTable()
+			mutableDesc.SetTableLocalityGlobal()
+			desc = mutableDesc
+		}
+		_, _, err = CreateSystemTableInTxn(ctx, settings, txn.KV(), codec, desc)
 		return err
 	})
 }

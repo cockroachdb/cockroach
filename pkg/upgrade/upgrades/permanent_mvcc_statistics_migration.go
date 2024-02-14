@@ -36,10 +36,11 @@ func createMVCCStatisticsTableAndJobMigration(
 	// Create the table.
 	err := createSystemTable(
 		ctx,
-		d.DB.KV(),
+		d.DB,
 		d.Settings,
 		d.Codec,
 		systemschema.SystemMVCCStatisticsTable,
+		true, /*setGlobalLocality*/
 	)
 	if err != nil {
 		return err

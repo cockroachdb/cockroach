@@ -50,8 +50,8 @@ func createRegionLivenessTables(
 	if setDBLocality {
 		regionLivenessMutable.SetTableLocalityGlobal()
 	}
-	if err := createSystemTable(ctx, d.DB.KV(), d.Settings, d.Codec,
-		regionLivenessMutable); err != nil {
+	if err := createSystemTable(ctx, d.DB, d.Settings, d.Codec,
+		regionLivenessMutable, false /*setGlobalLocality*/); err != nil {
 		return err
 	}
 
