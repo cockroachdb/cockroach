@@ -269,17 +269,16 @@ func (p *testPlanner) clusterSetupSteps() []testStep {
 	if p.prng.Float64() < p.options.useFixturesProbability {
 		steps = []testStep{
 			p.newSingleStep(
-				installFixturesStep{version: initialVersion, crdbNodes: p.crdbNodes},
+				installFixturesStep{version: initialVersion},
 			),
 		}
 	}
 
 	return append(steps,
 		p.newSingleStep(startStep{
-			version:   initialVersion,
-			rt:        p.rt,
-			crdbNodes: p.crdbNodes,
-			settings:  p.clusterSettings(),
+			version:  initialVersion,
+			rt:       p.rt,
+			settings: p.clusterSettings(),
 		}),
 		p.newSingleStep(waitForStableClusterVersionStep{
 			nodes:          p.crdbNodes,
@@ -293,7 +292,7 @@ func (p *testPlanner) clusterSetupSteps() []testStep {
 // the test (as defined by user-provided functions) is ready to start.
 func (p *testPlanner) startupSteps() []testStep {
 	p.currentContext.Stage = OnStartupStage
-	return p.hooks.StartupSteps(p.longRunningContext(), p.isLocal)
+	return p.hooks.StartupSteps(p.longRunningContext(), p.prng, p.isLocal)
 }
 
 // testStartSteps are the user-provided steps that should run when the
@@ -302,7 +301,7 @@ func (p *testPlanner) startupSteps() []testStep {
 func (p *testPlanner) testStartSteps() []testStep {
 	return append(
 		p.startupSteps(),
-		p.hooks.BackgroundSteps(p.longRunningContext(), p.bgChans, p.isLocal)...,
+		p.hooks.BackgroundSteps(p.longRunningContext(), p.bgChans, p.prng, p.isLocal)...,
 	)
 }
 
@@ -311,11 +310,7 @@ func (p *testPlanner) testStartSteps() []testStep {
 // of upgrading/downgrading.
 func (p *testPlanner) initUpgradeSteps() []testStep {
 	p.currentContext.Stage = InitUpgradeStage
-	return []testStep{
-		p.newSingleStep(
-			preserveDowngradeOptionStep{prng: p.newRNG(), crdbNodes: p.crdbNodes},
-		),
-	}
+	return []testStep{p.newSingleStep(preserveDowngradeOptionStep{})}
 }
 
 // afterUpgradeSteps are the steps to be run once the nodes have been
@@ -328,7 +323,7 @@ func (p *testPlanner) afterUpgradeSteps(
 	p.currentContext.Finalizing = false
 	p.currentContext.Stage = AfterUpgradeFinalizedStage
 	if scheduleHooks {
-		return p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.isLocal)
+		return p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng, p.isLocal)
 	}
 
 	// Currently, we only schedule user-provided hooks after the upgrade
@@ -385,7 +380,7 @@ func (p *testPlanner) changeVersionSteps(
 		))
 		p.currentContext.changeVersion(node, to)
 		if scheduleHooks {
-			steps = append(steps, p.hooks.MixedVersionSteps(p.currentContext, p.isLocal)...)
+			steps = append(steps, p.hooks.MixedVersionSteps(p.currentContext, p.prng, p.isLocal)...)
 		} else if j == waitIndex {
 			// If we are not scheduling user-provided hooks, we wait a short
 			// while in this state to allow some time for background
@@ -409,12 +404,10 @@ func (p *testPlanner) finalizeUpgradeSteps(
 ) []testStep {
 	p.currentContext.Finalizing = true
 	p.currentContext.Stage = RunningUpgradeMigrationsStage
-	runMigrations := p.newSingleStep(
-		allowUpgradeStep{prng: p.newRNG(), crdbNodes: p.crdbNodes},
-	)
+	runMigrations := p.newSingleStep(allowUpgradeStep{})
 	var mixedVersionStepsDuringMigrations []testStep
 	if scheduleHooks {
-		mixedVersionStepsDuringMigrations = p.hooks.MixedVersionSteps(p.currentContext, p.isLocal)
+		mixedVersionStepsDuringMigrations = p.hooks.MixedVersionSteps(p.currentContext, p.prng, p.isLocal)
 	}
 
 	waitForMigrations := p.newSingleStep(
@@ -448,7 +441,7 @@ func (p *testPlanner) shouldRollback(toVersion *clusterupgrade.Version) bool {
 }
 
 func (p *testPlanner) newSingleStep(impl singleStepProtocol) *singleStep {
-	return newSingleStep(p.currentContext, impl)
+	return newSingleStep(p.currentContext, impl, p.newRNG())
 }
 
 func (p *testPlanner) clusterSettings() []install.ClusterSettingOption {
@@ -770,6 +763,7 @@ func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 				newSingleStep = &singleStep{
 					context: index.ContextForInsertion(ss, mut.op),
 					impl:    mut.impl,
+					rng:     rngFromRNG(rng),
 				}
 			}
 
