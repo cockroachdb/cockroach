@@ -20,11 +20,11 @@ import (
 type StmtFingerprintID uint64
 
 // ConstructStatementFingerprintID constructs an ID by hashing query with
-// constants redacted, its database and failure status, and if it was part of an
+// constants redacted, its database, and if it was part of an
 // implicit txn. At the time of writing, these are the axis' we use to bucket
 // queries for stats collection (see stmtKey).
 func ConstructStatementFingerprintID(
-	stmtNoConstants string, failed bool, implicitTxn bool, database string,
+	stmtNoConstants string, implicitTxn bool, database string,
 ) StmtFingerprintID {
 	fnv := util.MakeFNV64()
 	for _, c := range stmtNoConstants {
@@ -32,11 +32,6 @@ func ConstructStatementFingerprintID(
 	}
 	for _, c := range database {
 		fnv.Add(uint64(c))
-	}
-	if failed {
-		fnv.Add('F')
-	} else {
-		fnv.Add('S')
 	}
 	if implicitTxn {
 		fnv.Add('I')
@@ -156,9 +151,6 @@ func (s *AggregatedStatementMetadata) Add(other *CollectedStatementStatistics) {
 	if other.Key.DistSQL {
 		s.DistSQLCount++
 	}
-	if other.Key.Failed {
-		s.FailedCount++
-	}
 	if other.Key.FullScan {
 		s.FullScanCount++
 	}
@@ -214,6 +206,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	}
 
 	s.Count += other.Count
+	s.FailureCount += other.FailureCount
 }
 
 // AlmostEqual compares two StatementStatistics and their contained NumericStats

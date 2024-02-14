@@ -2812,7 +2812,6 @@ func (ex *connExecutor) execCopyOut(
 		f.FormatNode(cmd.Stmt)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 			f.CloseAndGetString(),
-			copyErr != nil,
 			ex.implicitTxn(),
 			ex.planner.CurrentDatabase(),
 		)
@@ -3077,7 +3076,6 @@ func (ex *connExecutor) execCopyIn(
 		f.FormatNode(cmd.Stmt)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 			f.CloseAndGetString(),
-			copyErr != nil,
 			ex.implicitTxn(),
 			ex.planner.CurrentDatabase(),
 		)
