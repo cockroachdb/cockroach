@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -181,6 +182,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 			store.rebalanceObjManager.Objective().ToSplitObjective(),
 		)
 	}
+	r.allocatorToken = &plan.AllocatorToken{}
 
 	// NB: the state will be loaded when the replica gets initialized.
 	r.mu.state = uninitState

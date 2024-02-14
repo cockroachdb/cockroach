@@ -1128,8 +1128,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	require.Nil(t, pErr)
 
 	testutils.SucceedsSoon(t, func() error {
-		// Validate that we upreplicated outside of SF. NB: This will occur prior
-		// to the lease preference being satisfied.
+		// Validate that we upreplicated outside of SF.
 		require.Equal(t, 3, len(repl.Desc().Replicas().Voters().VoterDescriptors()))
 		for _, replDesc := range repl.Desc().Replicas().Voters().VoterDescriptors() {
 			serv, err := tc.FindMemberServer(replDesc.StoreID)

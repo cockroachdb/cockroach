@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -80,26 +79,6 @@ const (
 	// replicateQueueTimerDuration is the duration between replication of queued
 	// replicas.
 	replicateQueueTimerDuration = 0 // zero duration to process replication greedily
-
-	// replicateQueueLeasePreferencePriority is the priority replicas are
-	// enqueued into the replicate queue with when violating lease preferences.
-	// This priority is lower than any voter up-replication, yet higher than
-	// removal, non-voter addition and rebalancing.
-	// See allocatorimpl.AllocatorAction.Priority.
-	replicateQueueLeasePreferencePriority = 1001
-)
-
-// MinLeaseTransferInterval controls how frequently leases can be transferred
-// for rebalancing. It does not prevent transferring leases in order to allow
-// a replica to be removed from a range.
-var MinLeaseTransferInterval = settings.RegisterDurationSetting(
-	settings.SystemOnly,
-	"kv.allocator.min_lease_transfer_interval",
-	"controls how frequently leases can be transferred for rebalancing. "+
-		"It does not prevent transferring leases in order to allow a "+
-		"replica to be removed from a range.",
-	1*time.Second,
-	settings.NonNegativeDuration,
 )
 
 // EnqueueInReplicateQueueOnSpanConfigUpdateEnabled controls whether replicas
@@ -543,8 +522,7 @@ type replicateQueue struct {
 	purgCh <-chan time.Time
 	// updateCh is signalled every time there is an update to the cluster's store
 	// descriptors.
-	updateCh          chan time.Time
-	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
+	updateCh chan time.Time
 	// logTracesThresholdFunc returns the threshold for logging traces from
 	// processing a replica.
 	logTracesThresholdFunc queueProcessTimeoutFunc
@@ -641,19 +619,27 @@ func (rq *replicateQueue) shouldQueue(
 		repl,
 		desc,
 		&conf,
-		rq.canTransferLeaseFrom,
+		plan.PlannerOptions{},
 	)
 }
 
 func (rq *replicateQueue) process(
 	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
+	if tokenErr := repl.allocatorToken.Acquire(ctx, rq.name, func(ctx context.Context) {
+		rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
+	}); tokenErr != nil {
+		return false, tokenErr
+	}
+	defer repl.allocatorToken.Release(ctx)
+
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
 		Multiplier:     2,
 		MaxRetries:     5,
 	}
+
 	// TODO(baptist): Change to Replica.SpanConfig() once the refactor is done to
 	// have that use the confReader.
 	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
@@ -756,7 +742,7 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 		tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
 
-	requeue, err := rq.processOneChange(ctx, repl, desc, conf, rq.canTransferLeaseFrom,
+	requeue, err := rq.processOneChange(ctx, repl, desc, conf,
 		false /* scatter */, false, /* dryRun */
 	)
 
@@ -846,13 +832,8 @@ func ShouldRequeue(
 		// lease was transferred away.
 		requeue = false
 
-	} else if change.Action == allocatorimpl.AllocatorConsiderRebalance &&
-		!change.Replica.LeaseViolatesPreferences(ctx, conf) {
-		// Don't requeue after a successful rebalance operation, when the lease
-		// does not violate any preferences. If the lease does violate preferences,
-		// the next process attempt will either find a target to transfer the lease
-		// or place the replica into purgatory if unable. See
-		// CantTransferLeaseViolatingPreferencesError.
+	} else if change.Action == allocatorimpl.AllocatorConsiderRebalance {
+		// Don't requeue after a successful rebalance operation.
 		requeue = false
 
 	} else {
@@ -870,7 +851,6 @@ func (rq *replicateQueue) processOneChange(
 	repl *Replica,
 	desc *roachpb.RangeDescriptor,
 	conf *roachpb.SpanConfig,
-	canTransferLeaseFrom plan.CanTransferLeaseFrom,
 	scatter, dryRun bool,
 ) (requeue bool, _ error) {
 	// Ensure that the replica can be processed. The replica must not be
@@ -880,7 +860,8 @@ func (rq *replicateQueue) processOneChange(
 		return false, err
 	}
 
-	change, err := rq.planner.PlanOneChange(ctx, repl, desc, conf, canTransferLeaseFrom, scatter)
+	change, err := rq.planner.PlanOneChange(
+		ctx, repl, desc, conf, plan.PlannerOptions{Scatter: scatter})
 	// When there is an error planning a change, return the error immediately
 	// and do not requeue. It is unlikely that the range or storepool state
 	// will change quickly enough in order to not get the same error and
@@ -1078,7 +1059,6 @@ func (rq *replicateQueue) TransferLease(
 	}
 
 	rq.storePool.UpdateLocalStoresAfterLeaseTransfer(source, target, rangeUsageInfo)
-	rq.lastLeaseTransfer.Store(timeutil.Now())
 	return nil
 }
 
@@ -1115,29 +1095,6 @@ func (rq *replicateQueue) changeReplicas(
 		details, chgs,
 	)
 	return err
-}
-
-// canTransferLeaseFrom checks is a lease can be transferred from the specified
-// replica. It considers two factors if the replica is in -conformance with
-// lease preferences and the last time a transfer occurred to avoid thrashing.
-func (rq *replicateQueue) canTransferLeaseFrom(
-	ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig,
-) bool {
-	if !repl.OwnsValidLease(ctx, rq.store.cfg.Clock.NowAsClockTimestamp()) {
-		// This replica is not the leaseholder, so it can't transfer the lease.
-		return false
-	}
-	// Do a best effort check to see if this replica conforms to the configured
-	// lease preferences (if any), if it does not we want to encourage more
-	// aggressive lease movement and not delay it.
-	if repl.LeaseViolatesPreferences(ctx, conf) {
-		return true
-	}
-	if lastLeaseTransfer := rq.lastLeaseTransfer.Load(); lastLeaseTransfer != nil {
-		minInterval := MinLeaseTransferInterval.Get(&rq.store.cfg.Settings.SV)
-		return timeutil.Since(lastLeaseTransfer.(time.Time)) > minInterval
-	}
-	return true
 }
 
 func (*replicateQueue) postProcessScheduled(

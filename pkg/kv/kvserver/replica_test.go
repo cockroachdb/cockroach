@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -13549,7 +13548,6 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 		tc.repl,
 		tc.repl.Desc(),
 		conf,
-		func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool { return false },
 		false, /* scatter */
 		true,  /* dryRun */
 	)
