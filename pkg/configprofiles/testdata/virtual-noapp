@@ -7,8 +7,6 @@ server started
 system-sql
 SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
 WHERE variable IN (
-'sql.virtual_cluster.feature_access.multiregion.enabled',
-'sql.virtual_cluster.feature_access.multiregion.enabled',
 'sql.drop_virtual_cluster.enabled',
 'sql.create_virtual_cluster.default_template',
 'server.controller.default_target_cluster',
@@ -22,7 +20,6 @@ physical_replication.enabled false
 server.controller.default_target_cluster system
 sql.create_virtual_cluster.default_template template
 sql.drop_virtual_cluster.enabled false
-sql.virtual_cluster.feature_access.multiregion.enabled true
 
 system-sql
 SHOW TENANTS WITH CAPABILITIES
