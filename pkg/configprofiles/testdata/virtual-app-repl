@@ -12,7 +12,6 @@ ok
 system-sql
 SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
 WHERE variable IN (
-'trace.redact_at_virtual_cluster_boundary.enabled',
 'sql.virtual_cluster.feature_access.zone_configs.enabled',
 'sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled',
 'sql.virtual_cluster.feature_access.multiregion.enabled',
@@ -37,7 +36,6 @@ sql.drop_virtual_cluster.enabled false
 sql.virtual_cluster.feature_access.multiregion.enabled true
 sql.virtual_cluster.feature_access.zone_configs.enabled true
 sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled true
-trace.redact_at_virtual_cluster_boundary.enabled false
 
 system-sql
 SHOW TENANTS WITH CAPABILITIES
