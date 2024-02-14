@@ -751,7 +751,9 @@ func verifyHighFollowerReadRatios(
 	}
 	adminURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(adminNode))
 	require.NoError(t, err)
-	url := "https://" + adminURLs[0] + "/ts/query"
+	// follower-reads/mixed-version runs on insecure mode, so we need http.
+	// Tests that do run on secure mode will redirect to https.
+	url := "http://" + adminURLs[0] + "/ts/query"
 	request := tspb.TimeSeriesQueryRequest{
 		StartNanos: start.UnixNano(),
 		EndNanos:   end.UnixNano(),
@@ -859,6 +861,8 @@ func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) 
 			if err != nil {
 				return err
 			}
+			// follower-reads/mixed-version runs on insecure mode, so we need http.
+			// Tests that do run on secure mode will redirect to https.
 			url := "http://" + adminUIAddrs[0] + "/_status/vars"
 			client := roachtestutil.DefaultHTTPClient(c, t.L())
 			resp, err := client.Get(ctx, url)
@@ -928,9 +932,15 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 func runFollowerReadsMixedVersionSingleRegionTest(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
-
 	topology := topologySpec{multiRegion: false}
-	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness)
+	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness,
+		// In 23.1, the `user_id` field was added to `system.web_sessions`.
+		// If the cluster is migrating to 23.1, auth-session login will not
+		// be aware of this new field and authentication will fail.
+		// TODO(DarrylWong): When 22.2 is no longer supported, we won't run
+		// into the above issue anymore and can enable secure clusters.
+		mixedversion.ClusterSettingOption(install.SecureOption(false)),
+	)
 }
 
 // runFollowerReadsMixedVersionGlobalTableTest runs a multi-region follower-read
@@ -950,6 +960,12 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		// Use a longer upgrade timeout to give the migrations enough time to finish
 		// considering the cross-region latency.
 		mixedversion.UpgradeTimeout(60*time.Minute),
+		// In 23.1, the `user_id` field was added to `system.web_sessions`.
+		// If the cluster is migrating to 23.1, auth-session login will not
+		// be aware of this new field and authentication will fail.
+		// TODO(DarrylWong): When 22.2 is no longer supported, we won't run
+		// into the above issue anymore and can enable secure clusters.
+		mixedversion.ClusterSettingOption(install.SecureOption(false)),
 	)
 }
 
