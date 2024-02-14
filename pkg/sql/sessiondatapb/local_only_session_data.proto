@@ -368,9 +368,7 @@ message LocalOnlySessionData {
   // prepared again.
   int64 prepared_statements_cache_size = 97;
   reserved 98;
-  // DisableDropVirtualCluster causes errors when the client
-  // attempts to drop virtual clusters or tenant records.
-  bool disable_drop_virtual_cluster = 99;
+  reserved 99;
   // MultipleActivePortalEnabled determines if the pgwire portal execution
   // for certain queries can be paused. If true, portals with read-only SELECT
   // query without sub/post queries can be executed in interleaving manner, but

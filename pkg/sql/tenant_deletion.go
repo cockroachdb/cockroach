@@ -33,7 +33,7 @@ func (p *planner) DropTenantByID(
 ) error {
 	if p.SessionData().DisableDropVirtualCluster || p.SessionData().SafeUpdates {
 		err := errors.Newf("DROP VIRTUAL CLUSTER causes irreversible data loss")
-		err = errors.WithMessage(err, "rejected (via sql_safe_updates or disable_drop_virtual_cluster)")
+		err = errors.WithMessage(err, "rejected (via sql_safe_updates)")
 		err = pgerror.WithCandidateCode(err, pgcode.Warning)
 		return err
 	}
