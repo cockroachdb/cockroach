@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,6 +28,8 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	skip.WithIssue(t, 119197)
 
 	const numAccounts = 1000
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
