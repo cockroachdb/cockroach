@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -126,7 +127,7 @@ func getShowZoneConfigRow(
 	zoneID, zone, subzone, err := GetZoneConfigInTxn(
 		ctx, p.txn, p.Descriptors(), targetID, index, partition, false, /* getInheritedDefault */
 	)
-	if errors.Is(err, errNoZoneConfigApplies) {
+	if errors.Is(err, sqlerrors.ErrNoZoneConfigApplies) {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
 		// config applies.
