@@ -47,7 +47,6 @@ type stmtKey struct {
 // sampledPlanKey is used by the Optimizer to determine if we should build a full EXPLAIN plan.
 type sampledPlanKey struct {
 	stmtNoConstants string
-	failed          bool
 	implicitTxn     bool
 	database        string
 }
@@ -57,9 +56,6 @@ func (p sampledPlanKey) size() int64 {
 }
 
 func (s stmtKey) String() string {
-	if s.failed {
-		return "!" + s.stmtNoConstants
-	}
 	return s.stmtNoConstants
 }
 
@@ -235,7 +231,6 @@ func NewTempContainerFromExistingStmtStats(
 		key := stmtKey{
 			sampledPlanKey: sampledPlanKey{
 				stmtNoConstants: statistics[i].Key.KeyData.Query,
-				failed:          statistics[i].Key.KeyData.Failed,
 				implicitTxn:     statistics[i].Key.KeyData.ImplicitTxn,
 				database:        statistics[i].Key.KeyData.Database,
 			},
@@ -252,7 +247,7 @@ func NewTempContainerFromExistingStmtStats(
 		stmtStats.mu.data.Add(&statistics[i].Stats)
 
 		// Setting all metadata fields.
-		if stmtStats.mu.data.SensitiveInfo.LastErr == "" && key.failed {
+		if stmtStats.mu.data.SensitiveInfo.LastErr == "" {
 			stmtStats.mu.data.SensitiveInfo.LastErr = statistics[i].Stats.SensitiveInfo.LastErr
 		}
 
@@ -446,7 +441,7 @@ func (s *stmtStats) mergeStatsLocked(statistics *appstatspb.CollectedStatementSt
 	s.mu.data.Add(&statistics.Stats)
 
 	// Setting all metadata fields.
-	if s.mu.data.SensitiveInfo.LastErr == "" && statistics.Key.Failed {
+	if s.mu.data.SensitiveInfo.LastErr == "" {
 		s.mu.data.SensitiveInfo.LastErr = statistics.Stats.SensitiveInfo.LastErr
 	}
 
@@ -469,7 +464,6 @@ func (s *Container) getStatsForStmt(
 	stmtNoConstants string,
 	implicitTxn bool,
 	database string,
-	failed bool,
 	planHash uint64,
 	transactionFingerprintID appstatspb.TransactionFingerprintID,
 	createIfNonexistent bool,
@@ -485,7 +479,6 @@ func (s *Container) getStatsForStmt(
 	key = stmtKey{
 		sampledPlanKey: sampledPlanKey{
 			stmtNoConstants: stmtNoConstants,
-			failed:          failed,
 			implicitTxn:     implicitTxn,
 			database:        database,
 		},
@@ -644,7 +637,6 @@ func (s *Container) PopAllStats(
 				Vec:                      vectorized,
 				ImplicitTxn:              key.implicitTxn,
 				FullScan:                 fullScan,
-				Failed:                   key.failed,
 				App:                      s.appName,
 				Database:                 database,
 				PlanHash:                 key.planHash,
@@ -718,7 +710,6 @@ func (s *Container) MergeApplicationStatementStats(
 			key := stmtKey{
 				sampledPlanKey: sampledPlanKey{
 					stmtNoConstants: statistics.Key.Query,
-					failed:          statistics.Key.Failed,
 					implicitTxn:     statistics.Key.ImplicitTxn,
 					database:        statistics.Key.Database,
 				},
@@ -1004,6 +995,6 @@ type transactionCounts struct {
 
 func constructStatementFingerprintIDFromStmtKey(key stmtKey) appstatspb.StmtFingerprintID {
 	return appstatspb.ConstructStatementFingerprintID(
-		key.stmtNoConstants, key.failed, key.implicitTxn, key.database,
+		key.stmtNoConstants, key.implicitTxn, key.database,
 	)
 }

@@ -33,7 +33,6 @@ const baseStmt: Partial<Stmt> = {
       query: "SELECT node_id FROM system.statement_statistics",
       app: "$ cockroach sql",
       distSQL: true,
-      failed: false,
       implicit_txn: true,
       vec: true,
       full_scan: true,
@@ -45,6 +44,7 @@ const baseStmt: Partial<Stmt> = {
   },
   stats: {
     count: Long.fromInt(1),
+    failure_count: Long.fromInt(0),
     first_attempt_count: Long.fromInt(1),
     max_retries: Long.fromInt(0),
     num_rows: {

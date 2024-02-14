@@ -64,10 +64,10 @@ SET application_name = ''
 query TTB
 SELECT txn_fingerprint_id, key, implicit_txn FROM crdb_internal.node_statement_statistics WHERE application_name = 'multi_stmts_test' ORDER BY txn_fingerprint_id
 ----
-10659166962890673102  SELECT '_'                  true
-10659166962890673102  SELECT _, _                 true
-10659166962890673102  SELECT _, _, _              true
-17854018046052698166  SET application_name = '_'  true
+3783666325893023269  SET application_name = '_'  true
+6795574265959791651  SELECT '_'                  true
+6795574265959791651  SELECT _, _                 true
+6795574265959791651  SELECT _, _, _              true
 
 statement ok
 CREATE TABLE test(x INT, y INT, z INT); INSERT INTO test(x, y, z) VALUES (0,0,0);
@@ -153,26 +153,26 @@ RESET distsql
 
 query TT colnames
 SELECT key,flags
-  FROM test.crdb_internal.node_statement_statistics
- WHERE application_name = 'valuetest' ORDER BY key, flags
+FROM test.crdb_internal.node_statement_statistics
+WHERE application_name = 'valuetest' ORDER BY key, flags
 ----
 key                                                               flags
-INSERT INTO test VALUES (_, _, __more1_10__), (__more1_10__)            ·
-SELECT (_, _, __more1_10__) FROM test WHERE _                        ·
-SELECT key FROM test.crdb_internal.node_statement_statistics      ·
-SELECT sin(_)                                                     ·
-SELECT sqrt(_)                                                    !
-SELECT x FROM (VALUES (_, _, __more1_10__), (__more1_10__)) AS t (x)    ·
-SELECT x FROM test WHERE y = (_ / z)                              !+
-SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                 ·
-SELECT x FROM test WHERE y IN (_, _, __more1_10__)                   +
-SELECT x FROM test WHERE y NOT IN (_, _, __more1_10__)               ·
+INSERT INTO test VALUES (_, _, __more1_10__), (__more1_10__)              ·
+SELECT (_, _, __more1_10__) FROM test WHERE _                             ·
+SELECT key FROM test.crdb_internal.node_statement_statistics              ·
+SELECT sin(_)                                                             ·
+SELECT sqrt(_)                                                            ·
+SELECT x FROM (VALUES (_, _, __more1_10__), (__more1_10__)) AS t (x)      ·
+SELECT x FROM test WHERE y = (_ / z)                                      +
+SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                         ·
+SELECT x FROM test WHERE y IN (_, _, __more1_10__)                        +
+SELECT x FROM test WHERE y NOT IN (_, _, __more1_10__)                    ·
 SET CLUSTER SETTING "debug.panic_on_failed_assertions.enabled" = DEFAULT  ·
 SET CLUSTER SETTING "debug.panic_on_failed_assertions.enabled" = _        ·
-SET application_name = '_'                                        ·
-SET distsql = "on"                                                ·
+SET application_name = '_'                                                ·
+SET distsql = "on"                                                        ·
 SHOW CLUSTER SETTING "debug.panic_on_failed_assertions.enabled"           ·
-SHOW application_name                                             ·
+SHOW application_name                                                     ·
 
 # Check that the latency measurements looks reasonable, protecting
 # against failure to measure (#22877).
@@ -275,14 +275,14 @@ BEGIN
 query TTI
 SELECT * FROM app_stmts_view ORDER BY 2
 ----
-11619138756491374338  SELECT _        1
-12989550133819508941  SELECT _, _     1
-10964754960692259604  SELECT _, _, _  1
+10543509969653713419  SELECT _        1
+5745311157220589902  SELECT _, _     1
+5153809228704478461  SELECT _, _, _  1
 
 query TTI
 SELECT * FROM txn_fingerprint_view
 ----
-2090134368184080810  {11619138756491374338,12989550133819508941,10964754960692259604}  1
+7184384531886178123  {10543509969653713419,5745311157220589902,5153809228704478461}  1
 
 statement OK
 COMMIT
@@ -299,17 +299,17 @@ SET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints = 0
 query TTI
 SELECT * FROM app_stmts_view ORDER BY 2
 ----
-15045407606492622104  SELECT * FROM app_stmts_view ORDER BY _  1
-738932590625820206    SELECT * FROM txn_fingerprint_view       1
-11619138756491374338  SELECT _                                 1
-12989550133819508941  SELECT _, _                              1
-10964754960692259604  SELECT _, _, _                           1
+7849245716382231737  SELECT * FROM app_stmts_view ORDER BY _  1
+18313404398542206079    SELECT * FROM txn_fingerprint_view       1
+10543509969653713419  SELECT _                                 1
+5745311157220589902  SELECT _, _                              1
+5153809228704478461  SELECT _, _, _                           1
 
 query TTI rowsort
 SELECT * FROM txn_fingerprint_view
 ----
-2090134368184080810   {11619138756491374338,12989550133819508941,10964754960692259604}  1
-16408814675491704331  {15045407606492622104,738932590625820206}                         1
+7184384531886178123   {10543509969653713419,5745311157220589902,5153809228704478461}  1
+18258640834625550893  {7849245716382231737,18313404398542206079}                         1
 
 # Run more fingerprints to ensure that we are still updating our existing fingerprint but not creating more
 # fingerprints.
@@ -325,17 +325,17 @@ BEGIN
 query TTI
 SELECT * FROM app_stmts_view ORDER BY 2
 ----
-15045407606492622104  SELECT * FROM app_stmts_view ORDER BY _  1
-738932590625820206    SELECT * FROM txn_fingerprint_view       1
-11619138756491374338  SELECT _                                 2
-12989550133819508941  SELECT _, _                              2
-10964754960692259604  SELECT _, _, _                           2
+7849245716382231737  SELECT * FROM app_stmts_view ORDER BY _  1
+18313404398542206079    SELECT * FROM txn_fingerprint_view       1
+10543509969653713419  SELECT _                                 2
+5745311157220589902  SELECT _, _                              2
+5153809228704478461  SELECT _, _, _                           2
 
 query TTI rowsort
 SELECT * FROM txn_fingerprint_view
 ----
-2090134368184080810   {11619138756491374338,12989550133819508941,10964754960692259604}  2
-16408814675491704331  {15045407606492622104,738932590625820206}                         1
+7184384531886178123   {10543509969653713419,5745311157220589902,5153809228704478461}  2
+18258640834625550893  {7849245716382231737,18313404398542206079}                         1
 
 statement ok
 COMMIT
@@ -356,23 +356,23 @@ BEGIN
 query TTI
 SELECT * FROM app_stmts_view ORDER BY 2
 ----
-15045407606492622104  SELECT * FROM app_stmts_view ORDER BY _                                2
-738932590625820206    SELECT * FROM txn_fingerprint_view                                     2
-11619138756491374338  SELECT _                                                               2
-11619138756491374338  SELECT _                                                               1
-12989550133819508941  SELECT _, _                                                            2
-12989550133819508941  SELECT _, _                                                            1
-10964754960692259604  SELECT _, _, _                                                         2
-13598297958913191023  SELECT _, _, _, _                                                      1
-8880410704856970575   SET CLUSTER SETTING "sql.metrics.max_mem_stmt_fingerprints" = DEFAULT  1
-6650120188975168745   SET CLUSTER SETTING "sql.metrics.max_mem_txn_fingerprints" = DEFAULT   1
+7849245716382231737  SELECT * FROM app_stmts_view ORDER BY _                                2
+18313404398542206079    SELECT * FROM txn_fingerprint_view                                     2
+10543509969653713419  SELECT _                                                               2
+10543509969653713419  SELECT _                                                               1
+5745311157220589902  SELECT _, _                                                            2
+5745311157220589902  SELECT _, _                                                            1
+5153809228704478461  SELECT _, _, _                                                         2
+5323573557126703672  SELECT _, _, _, _                                                      1
+8979787910399768568   SET CLUSTER SETTING "sql.metrics.max_mem_stmt_fingerprints" = DEFAULT  1
+17515881800496300282   SET CLUSTER SETTING "sql.metrics.max_mem_txn_fingerprints" = DEFAULT   1
 
 query TTI rowsort
 SELECT * FROM txn_fingerprint_view
 ----
-2090134368184080810   {11619138756491374338,12989550133819508941,10964754960692259604}  2
-4151720013906157265   {11619138756491374338,12989550133819508941,13598297958913191023}  1
-16408814675491704331  {15045407606492622104,738932590625820206}                         2
+7184384531886178123   {10543509969653713419,5745311157220589902,5153809228704478461}  2
+7913717851072930190   {10543509969653713419,5745311157220589902,5323573557126703672}  1
+18258640834625550893  {7849245716382231737,18313404398542206079}                         2
 
 statement ok
 COMMIT

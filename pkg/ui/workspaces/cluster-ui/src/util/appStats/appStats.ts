@@ -206,6 +206,7 @@ export function addStatementStats(
 
   return {
     count: a.count.add(b.count),
+    failure_count: a.failure_count.add(b.failure_count),
     first_attempt_count: a.first_attempt_count.add(b.first_attempt_count),
     max_retries: a.max_retries.greaterThan(b.max_retries)
       ? a.max_retries
@@ -273,7 +274,6 @@ export interface ExecutionStatistics {
   vec: boolean;
   implicit_txn: boolean;
   full_scan: boolean;
-  failed: boolean;
   node_id: number;
   txn_fingerprint_ids: Long[];
   stats: StatementStatistics;
@@ -294,7 +294,6 @@ export function flattenStatementStats(
     vec: stmt.key.key_data.vec,
     implicit_txn: stmt.key.key_data.implicit_txn,
     full_scan: stmt.key.key_data.full_scan,
-    failed: stmt.key.key_data.failed,
     node_id: stmt.key.node_id,
     txn_fingerprint_ids: stmt.txn_fingerprint_ids,
     stats: stmt.stats,

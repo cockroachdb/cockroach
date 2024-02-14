@@ -450,7 +450,7 @@ func TestStatusAPIStatements(t *testing.T) {
 		// See if the statements returned are what we executed.
 		var statementsInResponse []string
 		for _, respStatement := range resp.Statements {
-			if respStatement.Key.KeyData.Failed {
+			if respStatement.Stats.FailureCount > 0 {
 				// We ignore failed statements here as the INSERT statement can fail and
 				// be automatically retried, confusing the test success check.
 				continue
@@ -753,7 +753,6 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 		count    int
 		fullScan bool
 		distSQL  bool
-		failed   bool
 	}
 
 	// expectedStatementStatsMap maps the query response format to the associated
@@ -769,7 +768,6 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 			expectedStatementStatsMap[stmt.respQuery] = ExpectedStatementData{
 				fullScan: stmt.fullScan,
 				distSQL:  stmt.distSQL,
-				failed:   stmt.failed,
 				count:    stmt.count,
 			}
 		}
@@ -798,7 +796,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 			// statements that were that were successfully executed by the test app
 			// to avoid counting such failures. If a statement that we expect to be
 			// successful is not found in the response, the test will fail later.
-			if respStatement.Key.KeyData.App == testAppName && !respStatement.Key.KeyData.Failed {
+			if respStatement.Key.KeyData.App == testAppName && respStatement.Stats.FailureCount == 0 {
 				actualResponseStatsMap[respStatement.Key.KeyData.Query] = respStatement
 			}
 		}
@@ -810,13 +808,11 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 			actualCount := respStatement.Stats.FirstAttemptCount
 			actualFullScan := respStatement.Key.KeyData.FullScan
 			actualDistSQL := respStatement.Key.KeyData.DistSQL
-			actualFailed := respStatement.Key.KeyData.Failed
 
 			stmtJSONString := responseToJSON(respStatement)
 
 			require.Equal(t, expectedData.fullScan, actualFullScan, "failed for respStatement: %v", stmtJSONString)
 			require.Equal(t, expectedData.distSQL, actualDistSQL, "failed for respStatement: %v", stmtJSONString)
-			require.Equal(t, expectedData.failed, actualFailed, "failed for respStatement: %v", stmtJSONString)
 			require.Equal(t, expectedData.count, int(actualCount), "failed for respStatement: %v", stmtJSONString)
 		}
 	}
@@ -912,7 +908,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		var statementsInResponse []string
 		expectedTxnFingerprints := map[appstatspb.TransactionFingerprintID]struct{}{}
 		for _, respStatement := range resp.Statements {
-			if respStatement.Key.KeyData.Failed {
+			if respStatement.Stats.FailureCount > 0 {
 				// We ignore failed statements here as the INSERT statement can fail and
 				// be automatically retried, confusing the test success check.
 				continue
@@ -1066,8 +1062,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	}
 
 	query := `INSERT INTO posts VALUES (_, '_')`
-	fingerprintID := appstatspb.ConstructStatementFingerprintID(query,
-		false, true, `roachblog`)
+	fingerprintID := appstatspb.ConstructStatementFingerprintID(query, true, `roachblog`)
 	path := fmt.Sprintf(`stmtdetails/%v`, fingerprintID)
 
 	var resp serverpb.StatementDetailsResponse
@@ -1260,8 +1255,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	}
 
 	selectQuery := "SELECT _, _, _, _"
-	fingerprintID = appstatspb.ConstructStatementFingerprintID(selectQuery, false,
-		true, "defaultdb")
+	fingerprintID = appstatspb.ConstructStatementFingerprintID(selectQuery, true, "defaultdb")
 
 	testPath(
 		fmt.Sprintf(`stmtdetails/%v`, fingerprintID),
@@ -1583,7 +1577,6 @@ func generateStatement() appstatspb.CollectedStatementStatistics {
 			Database:                 "test_database",
 			DistSQL:                  true,
 			FullScan:                 true,
-			Failed:                   false,
 			ImplicitTxn:              true,
 			PlanHash:                 uint64(200),
 			Query:                    "SELECT * FROM foo",
@@ -1729,7 +1722,6 @@ func insertStatementIntoSystemStmtStatsTable(
 	metadata := struct {
 		Database     string `json:"db"`
 		DistSQL      bool   `json:"distsql"`
-		Failed       bool   `json:"failed"`
 		FullScan     bool   `json:"fullScan"`
 		ImplicitTxn  bool   `json:"implicitTxn"`
 		Query        string `json:"query"`
@@ -1739,7 +1731,6 @@ func insertStatementIntoSystemStmtStatsTable(
 	}{
 		Database:     statement.Key.Database,
 		DistSQL:      statement.Key.DistSQL,
-		Failed:       statement.Key.Failed,
 		FullScan:     statement.Key.FullScan,
 		ImplicitTxn:  statement.Key.ImplicitTxn,
 		Query:        statement.Key.Query,

@@ -36,7 +36,7 @@ SELECT * FROM t LIMIT 1;
 	"PlanGist": "AgHQAQIAAAAAAg==",
 	"ScanCount": 1,
 	"Statement": "SELECT * FROM \"\".\"\".t LIMIT ‹1›",
-	"StatementFingerprintID": 17888549871399373000,
+	"StatementFingerprintID": 13897981974204410000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
 	"User": "root"
@@ -49,9 +49,9 @@ SELECT * FROM t LIMIT 1;
 	"RowsRead": 0,
 	"RowsWritten": 0,
 	"StatementFingerprintIDs": [
-		17888549871399373000
+		13897981974204410000
 	],
-	"TransactionFingerprintID": 6278959165882708000,
+	"TransactionFingerprintID": 8051364883217634000,
 	"User": "root"
 }
 
@@ -67,7 +67,7 @@ SELECT 1, 2, 3;
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICBgYG",
 	"Statement": "SELECT ‹1›, ‹2›, ‹3›",
-	"StatementFingerprintID": 16698501115058330000,
+	"StatementFingerprintID": 16048716862824137000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
 	"User": "root"
@@ -80,9 +80,9 @@ SELECT 1, 2, 3;
 	"RowsRead": 0,
 	"RowsWritten": 0,
 	"StatementFingerprintIDs": [
-		16698501115058330000
+		16048716862824137000
 	],
-	"TransactionFingerprintID": 5250989384299556000,
+	"TransactionFingerprintID": 8204366343298190000,
 	"User": "root"
 }
 
@@ -98,7 +98,7 @@ SELECT 'hello';
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICAgYC",
 	"Statement": "SELECT ‹'hello'›",
-	"StatementFingerprintID": 15578946620736494000,
+	"StatementFingerprintID": 3806682926156079000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
 	"User": "root"
@@ -111,9 +111,9 @@ SELECT 'hello';
 	"RowsRead": 0,
 	"RowsWritten": 0,
 	"StatementFingerprintIDs": [
-		15578946620736494000
+		3806682926156079000
 	],
-	"TransactionFingerprintID": 8597429024882746000,
+	"TransactionFingerprintID": 11220631332681050000,
 	"User": "root"
 }
 
@@ -152,7 +152,7 @@ SET application_name = '$ internal-console-app';
 	"EventType": "sampled_query",
 	"PlanGist": "Ais=",
 	"Statement": "SET application_name = ‹'$ internal-console-app'›",
-	"StatementFingerprintID": 13549091137440920000,
+	"StatementFingerprintID": 12632102921712570000,
 	"StmtPosInTxn": 1,
 	"Tag": "SET",
 	"User": "root"
@@ -169,7 +169,7 @@ SELECT * FROM t LIMIT 1;
 	"PlanGist": "AgHQAQIAAAAAAg==",
 	"ScanCount": 1,
 	"Statement": "SELECT * FROM \"\".\"\".t LIMIT ‹1›",
-	"StatementFingerprintID": 17888549871399373000,
+	"StatementFingerprintID": 13897981974204410000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
 	"User": "root"
@@ -183,9 +183,9 @@ SELECT * FROM t LIMIT 1;
 	"RowsWritten": 0,
 	"SkippedTransactions": 5,
 	"StatementFingerprintIDs": [
-		17888549871399373000
+		13897981974204410000
 	],
-	"TransactionFingerprintID": 6278959165882708000,
+	"TransactionFingerprintID": 8051364883217634000,
 	"User": "root"
 }
 
@@ -201,7 +201,7 @@ SELECT 1, 2, 3;
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICBgYG",
 	"Statement": "SELECT ‹1›, ‹2›, ‹3›",
-	"StatementFingerprintID": 16698501115058330000,
+	"StatementFingerprintID": 16048716862824137000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
 	"User": "root"
@@ -214,9 +214,9 @@ SELECT 1, 2, 3;
 	"RowsRead": 0,
 	"RowsWritten": 0,
 	"StatementFingerprintIDs": [
-		16698501115058330000
+		16048716862824137000
 	],
-	"TransactionFingerprintID": 5250989384299556000,
+	"TransactionFingerprintID": 8204366343298190000,
 	"User": "root"
 }
 
@@ -232,7 +232,7 @@ SELECT 'hello';
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICAgYC",
 	"Statement": "SELECT ‹'hello'›",
-	"StatementFingerprintID": 15578946620736494000,
+	"StatementFingerprintID": 3806682926156079000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
 	"User": "root"
@@ -245,9 +245,9 @@ SELECT 'hello';
 	"RowsRead": 0,
 	"RowsWritten": 0,
 	"StatementFingerprintIDs": [
-		15578946620736494000
+		3806682926156079000
 	],
-	"TransactionFingerprintID": 8597429024882746000,
+	"TransactionFingerprintID": 11220631332681050000,
 	"User": "root"
 }
 
