@@ -11,7 +11,6 @@
 package workload
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -73,65 +72,6 @@ func WriteCSVRows(
 	}
 	csvW.Flush()
 	return rowBatchIdx, csvW.Error()
-}
-
-type csvRowsReader struct {
-	t                    Table
-	batchStart, batchEnd int
-
-	buf  bytes.Buffer
-	csvW *csv.Writer
-
-	batchIdx int
-	cb       coldata.Batch
-	a        bufalloc.ByteAllocator
-
-	stringsBuf []string
-}
-
-func (r *csvRowsReader) Read(p []byte) (n int, err error) {
-	if r.cb == nil {
-		r.cb = coldata.NewMemBatchWithCapacity(nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
-	}
-
-	for {
-		if r.buf.Len() > 0 {
-			return r.buf.Read(p)
-		}
-		r.buf.Reset()
-		if r.batchIdx == r.batchEnd {
-			return 0, io.EOF
-		}
-		r.a = r.a.Truncate()
-		r.t.InitialRows.FillBatch(r.batchIdx, r.cb, &r.a)
-		r.batchIdx++
-		if numCols := r.cb.Width(); cap(r.stringsBuf) < numCols {
-			r.stringsBuf = make([]string, numCols)
-		} else {
-			r.stringsBuf = r.stringsBuf[:numCols]
-		}
-		for rowIdx, numRows := 0, r.cb.Length(); rowIdx < numRows; rowIdx++ {
-			for colIdx, col := range r.cb.ColVecs() {
-				r.stringsBuf[colIdx] = colDatumToCSVString(col, rowIdx)
-			}
-			if err := r.csvW.Write(r.stringsBuf); err != nil {
-				return 0, err
-			}
-		}
-		r.csvW.Flush()
-	}
-}
-
-// NewCSVRowsReader returns an io.Reader that outputs the initial data of the
-// given table as CSVs. If batchEnd is the zero-value it defaults to the end of
-// the table.
-func NewCSVRowsReader(t Table, batchStart, batchEnd int) io.Reader {
-	if batchEnd == 0 {
-		batchEnd = t.InitialRows.NumBatches
-	}
-	r := &csvRowsReader{t: t, batchStart: batchStart, batchEnd: batchEnd, batchIdx: batchStart}
-	r.csvW = csv.NewWriter(&r.buf)
-	return r
 }
 
 func colDatumToCSVString(col coldata.Vec, rowIdx int) string {
