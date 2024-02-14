@@ -39,11 +39,14 @@ var _ tracing.EventListener = &ContentionEventsListener{}
 
 // Notify is part of the tracing.EventListener interface.
 func (c *ContentionEventsListener) Notify(event tracing.Structured) tracing.EventConsumptionStatus {
-	ce, ok := event.(protoutil.Message).(*kvpb.ContentionEvent)
-	if !ok {
+	switch t := event.(protoutil.Message).(type) {
+	case *kvpb.ContentionEvent:
+		c.CumulativeContentionTime += t.Duration
+	case *kvpb.LatchWaitEvent:
+		c.CumulativeContentionTime += t.Duration
+	default:
 		return tracing.EventNotConsumed
 	}
-	c.CumulativeContentionTime += ce.Duration
 	return tracing.EventConsumed
 }
 

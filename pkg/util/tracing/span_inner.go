@@ -272,6 +272,13 @@ func (s *spanInner) RecordStructured(item Structured) {
 	}
 }
 
+func (s *spanInner) NotifyListeners(item Structured) {
+	if s.isNoop() {
+		return
+	}
+	s.crdb.notifyListeners(item)
+}
+
 func (s *spanInner) Record(msg string) {
 	s.Recordf("%s", msg)
 }
