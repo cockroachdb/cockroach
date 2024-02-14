@@ -944,59 +944,66 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 	f.formatScalarWithLabel("", scalar, tp)
 }
 
-func (f *ExprFmtCtx) formatScalarWithLabel(
-	label string, scalar opt.ScalarExpr, tp treeprinter.Node,
-) {
-	formatUDFInputAndBody := func(udf *UDFCallExpr, tp treeprinter.Node) {
-		var n treeprinter.Node
-		if !udf.Def.CalledOnNullInput {
-			tp.Child("strict")
+func (f *ExprFmtCtx) formatUDFDefinition(def *UDFDefinition, tp treeprinter.Node) {
+	if !def.CalledOnNullInput {
+		tp.Child("strict")
+	}
+	if _, seen := f.seenUDFs[def]; !seen {
+		// Ensure that the definition of the UDF is not printed out again if it
+		// is recursively called.
+		f.seenUDFs[def] = struct{}{}
+		if len(def.Params) > 0 {
+			f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
 		}
-		if len(udf.Args) > 0 {
-			n = tp.Child("args")
-			for i := range udf.Args {
-				f.formatExpr(udf.Args[i], n)
+		n := tp.Child("body")
+		for i := range def.Body {
+			if i == 0 && def.CursorDeclaration != nil {
+				// The first statement is opening a cursor.
+				cur := n.Child("open-cursor")
+				f.formatExpr(def.Body[i], cur)
+				continue
 			}
+			f.formatExpr(def.Body[i], n)
 		}
-		if _, seen := f.seenUDFs[udf.Def]; !seen {
-			// Ensure that the definition of the UDF is not printed out again if it
-			// is recursively called.
-			f.seenUDFs[udf.Def] = struct{}{}
-			if len(udf.Def.Params) > 0 {
-				f.formatColList(tp, "params:", udf.Def.Params, opt.ColSet{} /* notNullCols */)
+		delete(f.seenUDFs, def)
+	} else {
+		tp.Child("recursive-call")
+	}
+	if def.ExceptionBlock != nil {
+		n := tp.Child("exception-handler")
+		for i := range def.ExceptionBlock.Codes {
+			code := def.ExceptionBlock.Codes[i]
+			body := def.ExceptionBlock.Actions[i].Body
+			var branch treeprinter.Node
+			if code.String() == "OTHERS" {
+				branch = n.Child("OTHERS")
+			} else {
+				branch = n.Childf("SQLSTATE '%s'", code)
 			}
-			n = tp.Child("body")
-			for i := range udf.Def.Body {
-				if i == 0 && udf.Def.CursorDeclaration != nil {
-					// The first statement is opening a cursor.
-					cur := n.Child("open-cursor")
-					f.formatExpr(udf.Def.Body[i], cur)
-					continue
-				}
-				f.formatExpr(udf.Def.Body[i], n)
-			}
-			delete(f.seenUDFs, udf.Def)
-		} else {
-			tp.Child("recursive-call")
-		}
-		if udf.Def.ExceptionBlock != nil {
-			n = tp.Child("exception-handler")
-			for i := range udf.Def.ExceptionBlock.Codes {
-				code := udf.Def.ExceptionBlock.Codes[i]
-				body := udf.Def.ExceptionBlock.Actions[i].Body
-				var branch treeprinter.Node
-				if code.String() == "OTHERS" {
-					branch = n.Child("OTHERS")
-				} else {
-					branch = n.Childf("SQLSTATE '%s'", code)
-				}
-				for j := range body {
-					f.formatExpr(body[j], branch)
-				}
+			for j := range body {
+				f.formatExpr(body[j], branch)
 			}
 		}
 	}
+}
 
+func (f *ExprFmtCtx) formatRoutineArgs(args ScalarListExpr, tp treeprinter.Node) {
+	if len(args) > 0 {
+		n := tp.Child("args")
+		for i := range args {
+			f.formatExpr(args[i], n)
+		}
+	}
+}
+
+func (f *ExprFmtCtx) formatUDFCall(udf *UDFCallExpr, tp treeprinter.Node) {
+	f.formatRoutineArgs(udf.Args, tp)
+	f.formatUDFDefinition(udf.Def, tp)
+}
+
+func (f *ExprFmtCtx) formatScalarWithLabel(
+	label string, scalar opt.ScalarExpr, tp treeprinter.Node,
+) {
 	f.Buffer.Reset()
 	if label != "" {
 		f.Buffer.WriteString(label)
@@ -1056,7 +1063,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		fmt.Fprintf(f.Buffer, "%s: %s", udf.Def.RoutineType, udf.Def.Name)
 		f.FormatScalarProps(scalar)
 		tp = tp.Child(f.Buffer.String())
-		formatUDFInputAndBody(udf, tp)
+		f.formatUDFCall(udf, tp)
 		return
 	}
 
@@ -1107,6 +1114,25 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		scalarProps = f.scalarPropsStrings(scalar)
 	}
 
+	if dispatcher, ok := scalar.(*DispatcherExpr); ok {
+		tp = tp.Child("dispatcher")
+		f.formatScalar(dispatcher.Input, tp)
+		for i, def := range dispatcher.Branches {
+			if def == nil {
+				// Optimization rules may remove branches from the list.
+				continue
+			}
+			n := tp.Childf("branch: %d", i)
+			f.formatUDFDefinition(def, n)
+		}
+		return
+	} else if dispatch, ok := scalar.(*DispatchExpr); ok {
+		tp = tp.Childf("dispatch: %d", dispatch.Dispatcher)
+		tp.Childf("branch: %d", dispatch.Branch)
+		f.formatRoutineArgs(dispatch.Args, tp)
+		return
+	}
+
 	var intercepted bool
 	if udf, ok := scalar.(*UDFCallExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
 		// A UDF function body will be printed after the scalar props, so
@@ -1133,7 +1159,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	tp = tp.Child(f.Buffer.String())
 
 	if udf, ok := scalar.(*UDFCallExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
-		formatUDFInputAndBody(udf, tp)
+		f.formatUDFCall(udf, tp)
 	}
 
 	if !intercepted {

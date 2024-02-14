@@ -81,8 +81,10 @@ func init() {
 		opt.ExistsOp:   (*Builder).buildExistsSubquery,
 		opt.SubqueryOp: (*Builder).buildSubquery,
 
-		// User-defined functions.
-		opt.UDFCallOp: (*Builder).buildUDF,
+		// Routines.
+		opt.UDFCallOp:    (*Builder).buildUDF,
+		opt.DispatcherOp: (*Builder).buildDispatcher,
+		opt.DispatchOp:   (*Builder).buildDispatch,
 	}
 
 	for _, op := range opt.BoolOperators {
@@ -841,6 +843,7 @@ func (b *Builder) buildSubquery(
 			ef := ref.(exec.Factory)
 			eb := New(ctx, ef, b.optimizer, b.mem, b.catalog, input, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
+			eb.dispatchers = b.dispatchers
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
 			ePlan, err := eb.buildRelational(input)
@@ -934,16 +937,9 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Build the argument expressions.
-	var err error
-	var args tree.TypedExprs
-	if len(udf.Args) > 0 {
-		args = make(tree.TypedExprs, len(udf.Args))
-		for i := range udf.Args {
-			args[i], err = b.buildScalar(ctx, udf.Args[i])
-			if err != nil {
-				return nil, err
-			}
-		}
+	args, err := b.buildRoutineArgs(ctx, udf.Args)
+	if err != nil {
+		return nil, err
 	}
 
 	for _, s := range udf.Def.Body {
@@ -1021,6 +1017,26 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.BlockState,
 		udf.Def.CursorDeclaration,
 	), nil
+}
+
+// buildRoutineArgs handles the common logic for building the arguments of a
+// routine.
+func (b *Builder) buildRoutineArgs(
+	ctx *buildScalarCtx, args memo.ScalarListExpr,
+) (tree.TypedExprs, error) {
+	// Build the argument expressions.
+	var err error
+	var typedArgs tree.TypedExprs
+	if len(args) > 0 {
+		typedArgs = make(tree.TypedExprs, len(args))
+		for i := range args {
+			typedArgs[i], err = b.buildScalar(ctx, args[i])
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return typedArgs, nil
 }
 
 // initRoutineExceptionHandler initializes the exception handler (if any) for
@@ -1199,6 +1215,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 			ef := ref.(exec.Factory)
 			eb := New(ctx, ef, &o, f.Memo(), b.catalog, optimizedExpr, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
+			eb.dispatchers = b.dispatchers
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
 			plan, err := eb.Build()
@@ -1229,4 +1246,71 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 func expectedLazyRoutineError(typ string) error {
 	return errors.AssertionFailedf("expected %s to be lazily planned as a routine", typ)
+}
+
+// buildDispatcher builds a DispatcherExpr expression into a typed expression
+// that can be evaluated.
+func (b *Builder) buildDispatcher(
+	ctx *buildScalarCtx, scalar opt.ScalarExpr,
+) (tree.TypedExpr, error) {
+	dispatcherExpr := scalar.(*memo.DispatcherExpr)
+	if b.dispatchers == nil {
+		b.dispatchers = make(map[memo.DispatcherID]*tree.DispatchChannel)
+	} else if b.dispatchers[dispatcherExpr.ID] != nil {
+		return nil, errors.AssertionFailedf("conflicting DispatcherID: %d", dispatcherExpr.ID)
+	}
+	dispatchChannel := &tree.DispatchChannel{}
+	b.dispatchers[dispatcherExpr.ID] = dispatchChannel
+	input, err := b.buildScalar(ctx, dispatcherExpr.Input)
+	if err != nil {
+		return nil, err
+	}
+	branches := make([]*tree.RoutineExpr, 0, len(dispatcherExpr.Branches))
+	for _, def := range dispatcherExpr.Branches {
+		if def.BlockState != nil {
+			b.initRoutineExceptionHandler(def.BlockState, def.ExceptionBlock)
+		}
+		actionPlanGen := b.buildRoutinePlanGenerator(
+			def.Params,
+			def.Body,
+			def.BodyProps,
+			false, /* allowOuterWithRefs */
+			nil,   /* wrapRootExpr */
+		)
+		// Build a routine with no arguments for the branch. The actual arguments
+		// will be supplied when (if) the branch is invoked.
+		branches = append(branches, tree.NewTypedRoutineExpr(
+			def.Name,
+			nil, /* args */
+			actionPlanGen,
+			def.Typ,
+			true, /* enableStepping */
+			def.CalledOnNullInput,
+			def.MultiColDataSource,
+			def.SetReturning,
+			false,                 /* tailCall */
+			false,                 /* procedure */
+			def.BlockState,        /* blockState */
+			def.CursorDeclaration, /* cursorDeclaration */
+		))
+	}
+	return tree.NewDispatcherExpr(input, branches, dispatchChannel, dispatcherExpr.Typ), nil
+}
+
+// buildDispatch builds a DispatchExpr expression into a typed expression that
+// can be evaluated.
+func (b *Builder) buildDispatch(
+	ctx *buildScalarCtx, scalar opt.ScalarExpr,
+) (tree.TypedExpr, error) {
+	dispatch := scalar.(*memo.DispatchExpr)
+	dispatchChannel := b.dispatchers[dispatch.Dispatcher]
+	if dispatchChannel == nil {
+		return nil, errors.AssertionFailedf("expected dispatcher for DispatchExpr")
+	}
+
+	args, err := b.buildRoutineArgs(ctx, dispatch.Args)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDispatchExpr(args, dispatch.Branch, dispatchChannel, dispatch.Typ), nil
 }

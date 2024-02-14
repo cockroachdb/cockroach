@@ -1216,6 +1216,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 		eb := New(ctx, ef, &o, f.Memo(), b.catalog, newRightSide, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 		eb.disableTelemetry = true
 		eb.withExprs = withExprs
+		eb.dispatchers = b.dispatchers
 		plan, err := eb.Build()
 		if err != nil {
 			if errors.IsAssertionFailure(err) {
@@ -3044,7 +3045,8 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		// below will add to withExprs. Cap the slice to force reallocation on any
 		// appends, so that they don't overwrite overwrite later appends by our
 		// original builder.
-		withExprs: b.withExprs[:len(b.withExprs):len(b.withExprs)],
+		withExprs:   b.withExprs[:len(b.withExprs):len(b.withExprs)],
+		dispatchers: b.dispatchers,
 	}
 
 	fn := func(ef exec.Factory, bufferRef exec.Node) (exec.Plan, error) {
@@ -3165,17 +3167,9 @@ func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
 	}
 
 	// Build the argument expressions.
-	var err error
-	var args tree.TypedExprs
-	ctx := buildScalarCtx{}
-	if len(udf.Args) > 0 {
-		args = make(tree.TypedExprs, len(udf.Args))
-		for i := range udf.Args {
-			args[i], err = b.buildScalar(&ctx, udf.Args[i])
-			if err != nil {
-				return execPlan{}, err
-			}
-		}
+	args, err := b.buildRoutineArgs(&buildScalarCtx{}, udf.Args)
+	if err != nil {
+		return execPlan{}, err
 	}
 
 	for _, s := range udf.Def.Body {

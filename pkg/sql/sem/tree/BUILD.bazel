@@ -46,6 +46,7 @@ go_library(
         "decimal.go",
         "delete.go",
         "discard.go",
+        "dispatch.go",
         "drop.go",
         "drop_owned_by.go",
         "eval.go",

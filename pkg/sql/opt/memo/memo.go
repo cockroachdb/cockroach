@@ -187,6 +187,9 @@ type Memo struct {
 	// curWithID is the highest currently in-use WITH ID.
 	curWithID opt.WithID
 
+	// curDispatcherID is the highest currently in-use Dispatcher ID.
+	curDispatcherID DispatcherID
+
 	newGroupFn func(opt.Expr)
 
 	// disableCheckExpr disables expression validation performed by CheckExpr,
@@ -515,6 +518,12 @@ func (m *Memo) RowsProcessed(expr RelExpr) (_ float64, ok bool) {
 func (m *Memo) NextWithID() opt.WithID {
 	m.curWithID++
 	return m.curWithID
+}
+
+// NextDispatcherID returns a not-yet-assigned identifier for a Dispatcher.
+func (m *Memo) NextDispatcherID() DispatcherID {
+	m.curDispatcherID++
+	return m.curDispatcherID
 }
 
 // Detach is used when we detach a memo that is to be reused later (either for

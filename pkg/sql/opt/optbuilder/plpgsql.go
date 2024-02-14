@@ -149,7 +149,14 @@ type plpgsqlBuilder struct {
 	// returnType is the return type of the PL/pgSQL function.
 	returnType *types.T
 
-	// continuations is used to model the control flow of a PL/pgSQL function.
+	// dispatcherID is the ID of the (single) Dispatcher expression that will
+	// coordinate execution of the subroutines.
+	dispatcherID memo.DispatcherID
+
+	// branches is the set of subroutines handled by the Dispatcher expression.
+	branches memo.RoutineDefList
+
+	// continuations is used to model the control flow of a PL/pgSQL routine.
 	// The head of the continuations stack is used upon reaching the end of a
 	// statement block to call a function that models the statements that come
 	// next after the block. In the context of a loop, this is used to recursively
@@ -178,10 +185,11 @@ func newPLpgSQLBuilder(
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
 	b := &plpgsqlBuilder{
-		ob:         ob,
-		colRefs:    colRefs,
-		returnType: returnType,
-		blocks:     make([]plBlock, 0, initialBlocksCap),
+		ob:           ob,
+		colRefs:      colRefs,
+		returnType:   returnType,
+		blocks:       make([]plBlock, 0, initialBlocksCap),
+		dispatcherID: ob.factory.Memo().NextDispatcherID(),
 	}
 	// Build the initial block for the routine parameters, which are considered
 	// PL/pgSQL variables.
@@ -226,6 +234,26 @@ type plBlock struct {
 	// shared between parent and child or sibling blocks - it is unique within a
 	// given block.
 	state *tree.BlockState
+}
+
+// buildRoutine constructs an expression for the body statements of a PL/pgSQL
+// routine.
+func (b *plpgsqlBuilder) buildRoutine(body *ast.Block, s *scope) *scope {
+	bodyScope := s.push()
+	bodyScope = b.buildBlock(body, bodyScope)
+	input := b.ob.factory.ConstructSubquery(bodyScope.expr, &memo.SubqueryPrivate{})
+	dispatcher := b.ob.factory.ConstructDispatcher(input, &memo.DispatcherPrivate{
+		ID:       b.dispatcherID,
+		Branches: b.branches,
+		Typ:      b.returnType,
+	})
+	b.ensureScopeHasExpr(s)
+	b.addBarrierIfVolatile(s, dispatcher)
+	dispatchColName := scopeColName("").WithMetadataName(b.makeIdentifier("dispatcher"))
+	dispatchScope := s.push()
+	b.ob.synthesizeColumn(dispatchScope, dispatchColName, b.returnType, nil /* expr */, dispatcher)
+	b.ob.constructProjectForScope(s, dispatchScope)
+	return dispatchScope
 }
 
 // buildBlock constructs an expression that returns the result of executing a
@@ -321,7 +349,6 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		b.appendPlpgSQLStmts(&blockCon, astBlock.Body)
 		return b.callContinuation(&blockCon, s)
 	}
-	// Finally, build the body statements for the block.
 	return b.buildPLpgSQLStatements(astBlock.Body, s)
 }
 
@@ -402,17 +429,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// to the continuation that was built above).
 			elseScope := b.buildPLpgSQLStatements(t.ElseBody, s.push())
 			b.popContinuation()
-
-			// If one of the branches does not terminate, return nil to indicate a
-			// non-terminal branch.
-			if thenScope == nil || elseScope == nil {
-				return nil
-			}
-			for j := range elsifScopes {
-				if elsifScopes[j] == nil {
-					return nil
-				}
-			}
 
 			// Build a scalar CASE statement that conditionally executes each branch
 			// of the IF statement as a subquery.
@@ -1125,7 +1141,7 @@ func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) *memo.ExceptionBlock 
 		return nil
 	}
 	codes := make([]pgcode.Code, 0, len(block.Exceptions))
-	handlers := make([]*memo.UDFDefinition, 0, len(block.Exceptions))
+	handlers := make(memo.RoutineDefList, 0, len(block.Exceptions))
 	addHandler := func(codeStr string, handler *memo.UDFDefinition) {
 		code := pgcode.MakeCode(strings.ToUpper(codeStr))
 		switch code {
@@ -1172,10 +1188,11 @@ func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) *memo.ExceptionBlock 
 	}
 }
 
-// buildEndOfFunctionRaise builds a RAISE statement that throws an error when
-// control reaches the end of a PLpgSQL routine without reaching a RETURN
-// statement.
-func (b *plpgsqlBuilder) buildEndOfFunctionRaise(inScope *scope) *scope {
+// getEndOfFunctionCon builds a continuation to be called when control reaches
+// the end of a PLpgSQL routine without returning. This is handled by a RAISE
+// statement that throws an appropriate error. Note that the continuation is
+// cached and reused if multiple locations must call it.
+func (b *plpgsqlBuilder) getEndOfFunctionCon() *continuation {
 	makeConstStr := func(str string) opt.ScalarExpr {
 		return b.ob.factory.ConstructConstVal(tree.NewDString(str), types.String)
 	}
@@ -1186,7 +1203,7 @@ func (b *plpgsqlBuilder) buildEndOfFunctionRaise(inScope *scope) *scope {
 		makeConstStr(""), /* hint */
 		makeConstStr(pgcode.RoutineExceptionFunctionExecutedNoReturnStatement.String()), /* code */
 	}
-	con := b.makeContinuation("_end_of_function")
+	con := b.makeContinuation("end_of_function")
 	con.def.Volatility = volatility.Volatile
 	b.appendBodyStmt(&con, b.buildPLpgSQLRaise(con.s, args))
 	// Build a dummy statement that returns NULL. It won't be executed, but
@@ -1195,9 +1212,9 @@ func (b *plpgsqlBuilder) buildEndOfFunctionRaise(inScope *scope) *scope {
 	eofScope := con.s.push()
 	typedNull := b.ob.factory.ConstructNull(b.returnType)
 	b.ob.synthesizeColumn(eofScope, eofColName, b.returnType, nil /* expr */, typedNull)
-	b.ob.constructProjectForScope(inScope, eofScope)
+	b.ob.constructProjectForScope(con.s, eofScope)
 	b.appendBodyStmt(&con, eofScope)
-	return b.callContinuation(&con, inScope)
+	return &con
 }
 
 // buildFetch projects a call to the crdb_internal.plpgsql_fetch builtin
@@ -1306,6 +1323,7 @@ func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
 // continuations will have more parameters than those of its parent.
 func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 	s := b.ob.allocScope()
+	b.ensureScopeHasExpr(s)
 	params := make(opt.ColList, 0, b.variableCount())
 	addParam := func(name ast.Variable, typ *types.T) {
 		colName := scopeColName(name)
@@ -1325,18 +1343,17 @@ func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 			addParam(name, block.varTypes[name])
 		}
 	}
-	b.ensureScopeHasExpr(s)
-	return continuation{
-		def: &memo.UDFDefinition{
-			Params:            params,
-			Name:              b.makeIdentifier(conName),
-			Typ:               b.returnType,
-			CalledOnNullInput: true,
-			BlockState:        b.block().state,
-			RoutineType:       tree.UDFRoutine,
-		},
-		s: s,
+	branchIdx := len(b.branches)
+	def := &memo.UDFDefinition{
+		Params:            params,
+		Name:              b.makeIdentifier(conName),
+		Typ:               b.returnType,
+		CalledOnNullInput: true,
+		BlockState:        b.block().state,
+		RoutineType:       tree.UDFRoutine,
 	}
+	b.branches = append(b.branches, def)
+	return continuation{def: def, branchIdx: branchIdx, s: s}
 }
 
 // makeRecursiveContinuation allocates a new continuation routine that can
@@ -1379,7 +1396,7 @@ func (b *plpgsqlBuilder) appendPlpgSQLStmts(con *continuation, stmts []ast.State
 // given continuation function.
 func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 	if con == nil {
-		return b.buildEndOfFunctionRaise(s)
+		return b.callContinuation(b.getEndOfFunctionCon(), s)
 	}
 	args := make(memo.ScalarListExpr, 0, len(con.def.Params))
 	addArg := func(name ast.Variable) {
@@ -1407,13 +1424,16 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 			addArg(name)
 		}
 	}
-	// PLpgSQL continuation routines are always in tail-call position.
-	call := b.ob.factory.ConstructUDFCall(args, &memo.UDFCallPrivate{Def: con.def, TailCall: true})
-	b.addBarrierIfVolatile(s, call)
+	dispatch := b.ob.factory.ConstructDispatch(args, &memo.DispatchPrivate{
+		Dispatcher: b.dispatcherID,
+		Branch:     con.branchIdx,
+		Typ:        b.returnType,
+	})
+	b.addBarrierIfVolatile(s, dispatch)
 
 	returnColName := scopeColName("").WithMetadataName(con.def.Name)
 	returnScope := s.push()
-	b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, call)
+	b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, dispatch)
 	b.ob.constructProjectForScope(s, returnScope)
 	return returnScope
 }
@@ -1508,6 +1528,10 @@ func (b *plpgsqlBuilder) makeIdentifier(id string) string {
 // continuation holds the information necessary to pick up execution from some
 // branching point in the control flow.
 type continuation struct {
+	// branchIdx is the index of this continuation in the routine's dispatcher
+	// branches list.
+	branchIdx int
+
 	// def is used to construct a call into a routine that picks up execution
 	// from a branch in the control flow.
 	def *memo.UDFDefinition

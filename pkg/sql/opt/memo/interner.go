@@ -777,6 +777,16 @@ func (h *hasher) HashUDFDefinition(val *UDFDefinition) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
+func (h *hasher) HashDispatcherID(val DispatcherID) {
+	h.HashUint64(uint64(val))
+}
+
+func (h *hasher) HashRoutineDefList(val RoutineDefList) {
+	for _, def := range val {
+		h.HashUDFDefinition(def)
+	}
+}
+
 // ----------------------------------------------------------------------
 //
 // Equality functions
@@ -1309,6 +1319,22 @@ func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
 		return false
 	}
 	return h.IsColListEqual(l.Params, r.Params) && l.IsRecursive == r.IsRecursive
+}
+
+func (h *hasher) IsDispatcherIDEqual(l, r DispatcherID) bool {
+	return l == r
+}
+
+func (h *hasher) IsRoutineDefListEqual(l, r RoutineDefList) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if !h.IsUDFDefinitionEqual(l[i], r[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // encodeDatum turns the given datum into an encoded string of bytes. If two

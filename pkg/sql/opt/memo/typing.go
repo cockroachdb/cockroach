@@ -192,6 +192,8 @@ func init() {
 	typingFuncMap[opt.ArrayFlattenOp] = typeArrayFlatten
 	typingFuncMap[opt.IfErrOp] = typeIfErr
 	typingFuncMap[opt.UDFCallOp] = typeUDFCall
+	typingFuncMap[opt.DispatcherOp] = typeDispatcher
+	typingFuncMap[opt.DispatchOp] = typeDispatch
 
 	// Override default typeAsAggregate behavior for aggregate functions with
 	// a large number of possible overloads or where ReturnType depends on
@@ -389,6 +391,16 @@ func typeCast(e opt.ScalarExpr) *types.T {
 // typeUDFCall returns the type of a UDF call operator
 func typeUDFCall(e opt.ScalarExpr) *types.T {
 	return e.(*UDFCallExpr).Def.Typ
+}
+
+// typeDispatcher returns the type of a Dispatcher operator
+func typeDispatcher(e opt.ScalarExpr) *types.T {
+	return e.(*DispatcherExpr).Typ
+}
+
+// typeDispatch returns the type of a Dispatch operator
+func typeDispatch(e opt.ScalarExpr) *types.T {
+	return e.(*DispatchExpr).Typ
 }
 
 // typeSubquery returns the type of a subquery, which is equal to the type of

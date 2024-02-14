@@ -1267,6 +1267,40 @@ define UDFCallPrivate {
     TailCall bool
 }
 
+# Dispatcher coordinates the execution of multiple (possibly nested) routine
+# calls. This improves performance for deeply nested calls, and also allows
+# for nested transaction management. See the tree.DispatcherExpr comment for
+# further details.
+[Scalar]
+define Dispatcher {
+    Input ScalarExpr
+    _ DispatcherPrivate
+}
+
+[Private]
+define DispatcherPrivate {
+    ID DispatcherID
+    Branches RoutineDefList
+    Typ Type
+}
+
+# Dispatch is logically equivalent to a routine invocation. In reality, it
+# passes its arguments to a Dispatcher and indicates the routine to execute,
+# so that the Dispatcher can execute the routine in its own (less deeply nested)
+# context. See the tree.DispatcherExpr comment for further details.
+[Scalar]
+define Dispatch {
+    Args ScalarListExpr
+    _ DispatchPrivate
+}
+
+[Private]
+define DispatchPrivate {
+    Dispatcher DispatcherID
+    Branch int
+    Typ Type
+}
+
 # KVOptions is a set of KVOptionItems that specify arbitrary keys and values
 # that are used as modifiers for various statements (see tree.KVOptions). The
 # key is a constant string but the value can be a scalar expression.

@@ -622,7 +622,7 @@ func (e *evaluator) EvalSubquery(ctx context.Context, subquery *tree.Subquery) (
 func (e *evaluator) EvalRoutineExpr(
 	ctx context.Context, routine *tree.RoutineExpr,
 ) (tree.Datum, error) {
-	args, err := e.evalRoutineArgs(ctx, routine)
+	args, err := e.evalRoutineArgs(ctx, routine.Args)
 	if err != nil {
 		return nil, err
 	}
@@ -630,21 +630,52 @@ func (e *evaluator) EvalRoutineExpr(
 }
 
 func (e *evaluator) evalRoutineArgs(
-	ctx context.Context, expr *tree.RoutineExpr,
+	ctx context.Context, routineArgs tree.TypedExprs,
 ) (args tree.Datums, err error) {
-	if len(expr.Args) > 0 {
+	if len(routineArgs) > 0 {
 		// Evaluate each argument expression.
 		// TODO(mgartner): Use a scratch tree.Datums to avoid allocation on
 		// every invocation.
-		args = make(tree.Datums, len(expr.Args))
-		for i := range expr.Args {
-			args[i], err = expr.Args[i].Eval(ctx, e)
+		args = make(tree.Datums, len(routineArgs))
+		for i := range routineArgs {
+			args[i], err = routineArgs[i].Eval(ctx, e)
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 	return args, nil
+}
+
+func (e *evaluator) EvalDispatchExpr(
+	ctx context.Context, dispatch *tree.DispatchExpr,
+) (tree.Datum, error) {
+	args, err := e.evalRoutineArgs(ctx, dispatch.Args)
+	if err != nil {
+		return nil, err
+	}
+	dispatch.Sender.Send(dispatch.BranchIdx, args)
+	return tree.DNull, nil
+}
+
+func (e *evaluator) EvalDispatcherExpr(
+	ctx context.Context, dispatcher *tree.DispatcherExpr,
+) (tree.Datum, error) {
+	res, err := dispatcher.Input.Eval(ctx, e)
+	if err != nil {
+		return nil, err
+	}
+	for dispatcher.Receiver.HasNext() {
+		branchOrd, args := dispatcher.Receiver.Next()
+		if branchOrd >= len(dispatcher.Branches) {
+			return nil, errors.AssertionFailedf("branch ordinal out of range: %d", branchOrd)
+		}
+		res, err = e.Planner.EvalRoutineExpr(ctx, dispatcher.Branches[branchOrd], args)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (e *evaluator) EvalTuple(ctx context.Context, t *tree.Tuple) (tree.Datum, error) {
