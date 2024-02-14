@@ -174,14 +174,13 @@ func (pr *Progress) UpdateOnEntriesSend(entries int, bytes uint64) {
 // index acked by it. The method returns false if the given n index comes from
 // an outdated message. Otherwise it updates the progress and returns true.
 func (pr *Progress) MaybeUpdate(n uint64) bool {
-	var updated bool
-	if pr.Match < n {
-		pr.Match = n
-		updated = true
-		pr.MsgAppFlowPaused = false
+	if n <= pr.Match {
+		return false
 	}
-	pr.Next = max(pr.Next, n+1)
-	return updated
+	pr.Match = n
+	pr.Next = max(pr.Next, n+1) // invariant: Match < Next
+	pr.MsgAppFlowPaused = false
+	return true
 }
 
 // MaybeDecrTo adjusts the Progress to the receipt of a MsgApp rejection. The
