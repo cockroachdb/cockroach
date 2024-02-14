@@ -99,7 +99,6 @@ func (s *StmtStatsIterator) Next() bool {
 			Vec:                      vectorized,
 			ImplicitTxn:              stmtKey.implicitTxn,
 			FullScan:                 fullScan,
-			Failed:                   stmtKey.failed,
 			App:                      s.container.appName,
 			Database:                 database,
 			PlanHash:                 stmtKey.planHash,

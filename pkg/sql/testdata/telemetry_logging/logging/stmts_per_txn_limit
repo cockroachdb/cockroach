@@ -27,7 +27,7 @@ BEGIN; SELECT 1; SELECT 2; COMMIT;
 	"PlanGist": "AgICAgYC",
 	"SkippedQueries": 1,
 	"Statement": "SELECT ‹1›",
-	"StatementFingerprintID": 16085855936700856000,
+	"StatementFingerprintID": 2101516650360650000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
 	"User": "root"
@@ -40,10 +40,10 @@ BEGIN; SELECT 1; SELECT 2; COMMIT;
 	"RowsRead": 0,
 	"RowsWritten": 0,
 	"StatementFingerprintIDs": [
-		16085855936700856000,
-		16085855936700856000
+		2101516650360650000,
+		2101516650360650000
 	],
-	"TransactionFingerprintID": 14263644654231036000,
+	"TransactionFingerprintID": 6419625091330320000,
 	"User": "root"
 }
 
@@ -60,7 +60,7 @@ SELECT 5;
 	"PlanGist": "AgICAgYC",
 	"SkippedQueries": 2,
 	"Statement": "SELECT ‹5›",
-	"StatementFingerprintID": 16085855936700856000,
+	"StatementFingerprintID": 2101516650360650000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
 	"User": "root"
@@ -73,9 +73,9 @@ SELECT 5;
 	"RowsRead": 0,
 	"RowsWritten": 0,
 	"StatementFingerprintIDs": [
-		16085855936700856000
+		2101516650360650000
 	],
-	"TransactionFingerprintID": 8097417102642120000,
+	"TransactionFingerprintID": 12846987492365242000,
 	"User": "root"
 }
 
@@ -96,7 +96,7 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
 	"PlanGist": "AgICAgYC",
 	"SkippedQueries": 1,
 	"Statement": "SELECT ‹1›",
-	"StatementFingerprintID": 16085855936700856000,
+	"StatementFingerprintID": 2101516650360650000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
 	"User": "root"
@@ -110,7 +110,7 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICAgYC",
 	"Statement": "SELECT ‹2›",
-	"StatementFingerprintID": 16085855936700856000,
+	"StatementFingerprintID": 2101516650360650000,
 	"StmtPosInTxn": 2,
 	"Tag": "SELECT",
 	"User": "root"
@@ -124,7 +124,7 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICAgYC",
 	"Statement": "SELECT ‹3›",
-	"StatementFingerprintID": 16085855936700856000,
+	"StatementFingerprintID": 2101516650360650000,
 	"StmtPosInTxn": 3,
 	"Tag": "SELECT",
 	"User": "root"
@@ -138,12 +138,12 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
 	"RowsWritten": 0,
 	"SkippedTransactions": 1,
 	"StatementFingerprintIDs": [
-		16085855936700856000,
-		16085855936700856000,
-		16085855936700856000,
-		16085855936700856000
+		2101516650360650000,
+		2101516650360650000,
+		2101516650360650000,
+		2101516650360650000
 	],
-	"TransactionFingerprintID": 63991751604173224,
+	"TransactionFingerprintID": 2831371359051261000,
 	"User": "root"
 }
 
@@ -164,7 +164,7 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
 	"PlanGist": "AgICAgYC",
 	"SkippedQueries": 1,
 	"Statement": "SELECT ‹1›",
-	"StatementFingerprintID": 16085855936700856000,
+	"StatementFingerprintID": 2101516650360650000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
 	"User": "root"
@@ -178,7 +178,7 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICAgYC",
 	"Statement": "SELECT ‹2›",
-	"StatementFingerprintID": 16085855936700856000,
+	"StatementFingerprintID": 2101516650360650000,
 	"StmtPosInTxn": 2,
 	"Tag": "SELECT",
 	"User": "root"
@@ -192,7 +192,7 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICAgYC",
 	"Statement": "SELECT ‹3›",
-	"StatementFingerprintID": 16085855936700856000,
+	"StatementFingerprintID": 2101516650360650000,
 	"StmtPosInTxn": 3,
 	"Tag": "SELECT",
 	"User": "root"
@@ -206,7 +206,7 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICAgYC",
 	"Statement": "SELECT ‹4›",
-	"StatementFingerprintID": 16085855936700856000,
+	"StatementFingerprintID": 2101516650360650000,
 	"StmtPosInTxn": 4,
 	"Tag": "SELECT",
 	"User": "root"
@@ -220,11 +220,11 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
 	"RowsWritten": 0,
 	"SkippedTransactions": 1,
 	"StatementFingerprintIDs": [
-		16085855936700856000,
-		16085855936700856000,
-		16085855936700856000,
-		16085855936700856000
+		2101516650360650000,
+		2101516650360650000,
+		2101516650360650000,
+		2101516650360650000
 	],
-	"TransactionFingerprintID": 63991751604173224,
+	"TransactionFingerprintID": 2831371359051261000,
 	"User": "root"
 }

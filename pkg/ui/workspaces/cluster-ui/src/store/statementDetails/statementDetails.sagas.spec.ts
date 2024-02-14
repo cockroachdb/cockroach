@@ -64,7 +64,6 @@ describe("SQLDetailsStats sagas", () => {
           query: "SELECT * FROM crdb_internal.node_build_info",
           app_names: ["$ cockroach sql", "newname"],
           dist_sql_count: new Long(2),
-          failed_count: new Long(2),
           implicit_txn: true,
           vec_count: new Long(2),
           full_scan_count: new Long(2),
@@ -163,6 +162,7 @@ describe("SQLDetailsStats sagas", () => {
           },
           nodes: [new Long(1)],
           plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
+          failure_count: new Long(2),
         },
       },
       statement_statistics_per_aggregated_ts: [

@@ -398,9 +398,6 @@ func formatSQLStats(stats []appstatspb.CollectedStatementStatistics) string {
 		nodeApp := n.Child(app)
 		for _, s := range bucketByApp[app] {
 			var flags []string
-			if s.Key.Failed {
-				flags = append(flags, "failed")
-			}
 			if !s.Key.DistSQL {
 				flags = append(flags, "nodist")
 			}

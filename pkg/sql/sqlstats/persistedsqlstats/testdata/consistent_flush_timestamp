@@ -24,7 +24,7 @@ WHERE
   app_name = 'consistent-test'
 ORDER BY aggregated_ts
 ----
-2021-09-20 14:00:00 +0000 UTC,705fcdf3f12803ec,["df3c70bf7729b433"]
+2021-09-20 14:00:00 +0000 UTC,b249ab0edc510f5b,["1d2a16425a50b884"]
 
 
 observe-sql
@@ -38,7 +38,7 @@ WHERE
   app_name = 'consistent-test'
 ORDER BY aggregated_ts
 ----
-2021-09-20 14:00:00 +0000 UTC,df3c70bf7729b433,SELECT _
+2021-09-20 14:00:00 +0000 UTC,1d2a16425a50b884,SELECT _
 
 sql-stats-flush
 ----
@@ -54,7 +54,7 @@ WHERE
   app_name = 'consistent-test'
 ORDER BY aggregated_ts
 ----
-2021-09-20 14:00:00 +0000 UTC,df3c70bf7729b433,SELECT _
+2021-09-20 14:00:00 +0000 UTC,1d2a16425a50b884,SELECT _
 
 observe-sql
 SELECT
@@ -67,7 +67,7 @@ WHERE
   app_name = 'consistent-test'
 ORDER BY aggregated_ts
 ----
-2021-09-20 14:00:00 +0000 UTC,705fcdf3f12803ec,["df3c70bf7729b433"]
+2021-09-20 14:00:00 +0000 UTC,b249ab0edc510f5b,["1d2a16425a50b884"]
 
 exec-sql
 SELECT 1
@@ -84,8 +84,8 @@ WHERE
   app_name = 'consistent-test'
 ORDER BY aggregated_ts
 ----
-2021-09-20 14:00:00 +0000 UTC,df3c70bf7729b433,SELECT _
-2021-09-20 15:00:00 +0000 UTC,df3c70bf7729b433,SELECT _
+2021-09-20 14:00:00 +0000 UTC,1d2a16425a50b884,SELECT _
+2021-09-20 15:00:00 +0000 UTC,1d2a16425a50b884,SELECT _
 
 observe-sql
 SELECT
@@ -98,8 +98,8 @@ WHERE
   app_name = 'consistent-test'
 ORDER BY aggregated_ts
 ----
-2021-09-20 14:00:00 +0000 UTC,705fcdf3f12803ec,["df3c70bf7729b433"]
-2021-09-20 15:00:00 +0000 UTC,705fcdf3f12803ec,["df3c70bf7729b433"]
+2021-09-20 14:00:00 +0000 UTC,b249ab0edc510f5b,["1d2a16425a50b884"]
+2021-09-20 15:00:00 +0000 UTC,b249ab0edc510f5b,["1d2a16425a50b884"]
 
 unregister-callback event=stmt-stats-flushed
 ----
