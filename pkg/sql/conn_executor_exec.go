@@ -2403,7 +2403,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	recv.measureClientTime = planner.instrumentation.ShouldCollectExecStats()
 	recv.progressAtomic = progressAtomic
 	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {
-		recv.testingKnobs.pushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(planner.stmt.SQL)
+		recv.testingKnobs.pushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(ctx, planner.stmt.SQL)
 	}
 	defer recv.Release()
 

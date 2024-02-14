@@ -907,7 +907,7 @@ func tsOrNull(micros int64) (tree.Datum, error) {
 }
 
 const (
-	// SystemJobsAndJobInfoBaseQuery consults both the `system.jobs` and
+	// systemJobsAndJobInfoBaseQuery consults both the `system.jobs` and
 	// `system.job_info` tables to return relevant information about a job.
 	//
 	// NB: Every job on creation writes a row each for its payload and progress to
@@ -917,7 +917,7 @@ const (
 	// Theoretically, a job could have no rows corresponding to its progress and
 	// so we perform a LEFT JOIN to get a NULL value when no progress row is
 	// found.
-	SystemJobsAndJobInfoBaseQuery = `
+	systemJobsAndJobInfoBaseQuery = `
 WITH
 	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' ORDER BY written DESC),
 	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' ORDER BY written DESC)
@@ -961,13 +961,13 @@ const (
 func getInternalSystemJobsQuery(predicate systemJobsPredicate) string {
 	switch predicate {
 	case noPredicate:
-		return SystemJobsAndJobInfoBaseQuery
+		return systemJobsAndJobInfoBaseQuery
 	case jobID:
 		return systemJobsAndJobInfoBaseQueryWithIDPredicate + systemJobsIDPredicate
 	case jobType:
-		return SystemJobsAndJobInfoBaseQuery + systemJobsTypePredicate
+		return systemJobsAndJobInfoBaseQuery + systemJobsTypePredicate
 	case jobStatus:
-		return SystemJobsAndJobInfoBaseQuery + systemJobsStatusPredicate
+		return systemJobsAndJobInfoBaseQuery + systemJobsStatusPredicate
 	}
 
 	return ""
