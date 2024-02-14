@@ -723,14 +723,23 @@ func addSecondaryIndexTargetsForAddColumn(
 	}
 }
 
-func mustRetrieveTemporaryIndexElem(
+func retrieveTemporaryIndexElem(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
 ) (temporaryIndexElem *scpb.TemporaryIndex) {
-	scpb.ForEachTemporaryIndex(b.QueryByID(tableID), func(current scpb.Status, target scpb.TargetStatus, e *scpb.TemporaryIndex) {
+	b.QueryByID(tableID).FilterTemporaryIndex().ForEach(func(
+		_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex,
+	) {
 		if e.IndexID == indexID {
 			temporaryIndexElem = e
 		}
 	})
+	return temporaryIndexElem
+}
+
+func mustRetrieveTemporaryIndexElem(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) (temporaryIndexElem *scpb.TemporaryIndex) {
+	temporaryIndexElem = retrieveTemporaryIndexElem(b, tableID, indexID)
 	if temporaryIndexElem == nil {
 		panic(errors.AssertionFailedf("programming error: cannot find a TemporaryIndex element"+
 			" of ID %v", indexID))
