@@ -77,10 +77,6 @@ func (s *Controller) ResetClusterSQLStats(ctx context.Context) error {
 // ResetActivityTables implements the tree.SQLStatsController interface. This
 // method resets the {statement|transaction}_activity system tables.
 func (s *Controller) ResetActivityTables(ctx context.Context) error {
-	if !s.st.Version.IsActive(ctx, clusterversion.Permanent_V23_1CreateSystemActivityUpdateJob) {
-		return nil
-	}
-
 	if err := s.resetSysTableStats(ctx, "system.statement_activity"); err != nil {
 		return err
 	}
