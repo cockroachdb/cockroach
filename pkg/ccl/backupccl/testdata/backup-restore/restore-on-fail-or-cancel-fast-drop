@@ -33,14 +33,6 @@ exec-sql vc=system
 SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '250ms';
 ----
 
-exec-sql vc=system
-SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true;
-----
-
-exec-sql vc=system
-SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled = true;
-----
-
 # The protected timestamp poll interval controls how often our cache of
 # protected timestamps is updated. The GC threshold can only advance as far as
 # the time at which the cache was updated. We set this low so our cache is

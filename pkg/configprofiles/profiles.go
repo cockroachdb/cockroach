@@ -88,9 +88,6 @@ var staticProfiles = map[string]configProfile{
 var virtClusterInitTasks = []autoconfigpb.Task{
 	makeTask("initial cluster config",
 		/* nonTxnSQL */ []string{
-			// Enable zone config changes in secondary tenants  (this ought to be configurable per-tenant, but is not possible yet in v23.1).
-			"SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true",
-			"SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled = true",
 			// Enable multi-region abstractions in secondary tenants.
 			"SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled = true",
 			// Disable range coalescing (as long as the problems related
