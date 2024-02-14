@@ -11,7 +11,6 @@
 package colflow
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -35,8 +34,8 @@ import (
 func TestNumBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	tu := newTestUtils(ctx)
+
+	ctx, tu := newTestUtils()
 	defer tu.cleanup(ctx)
 	nBatches := 10
 	noop := colexecop.NewNoop(makeFiniteChunksSourceWithBatchSize(tu.testAllocator, nBatches, coldata.BatchSize()))
@@ -60,8 +59,8 @@ func TestNumBatches(t *testing.T) {
 func TestNumTuples(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	tu := newTestUtils(ctx)
+
+	ctx, tu := newTestUtils()
 	defer tu.cleanup(ctx)
 	nBatches := 10
 	for _, batchSize := range []int{1, 16, 1024} {
@@ -90,10 +89,10 @@ func TestNumTuples(t *testing.T) {
 func TestVectorizedStatsCollector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	ctx := context.Background()
-	tu := newTestUtils(ctx)
+	ctx, tu := newTestUtils()
 	defer tu.cleanup(ctx)
 	for nBatches := 1; nBatches < 5; nBatches++ {
 		timeSource := timeutil.NewTestTimeSource()

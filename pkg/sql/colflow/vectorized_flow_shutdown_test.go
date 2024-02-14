@@ -110,7 +110,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,

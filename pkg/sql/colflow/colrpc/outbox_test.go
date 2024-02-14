@@ -11,7 +11,6 @@
 package colrpc
 
 import (
-	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -32,8 +31,6 @@ import (
 
 func TestOutboxCatchesPanics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
 
 	var (
 		input    = colexecop.NewBatchBuffer()
@@ -84,8 +81,6 @@ func TestOutboxCatchesPanics(t *testing.T) {
 
 func TestOutboxDrainsMetadataSources(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
 
 	var (
 		input = colexecop.NewBatchBuffer()
