@@ -37,6 +37,11 @@ var DatumVecCanonicalTypeFamily = types.Family(1000000)
 // handled by using tree.Datums, and such types are mapped to
 // DatumVecCanonicalTypeFamily.
 func TypeFamilyToCanonicalTypeFamily(ctx context.Context, family types.Family) types.Family {
+	if buildutil.CrdbTestBuild {
+		if ctx != context.Background() {
+			_ = execversion.VersionFromContext(ctx)
+		}
+	}
 	switch family {
 	case types.BoolFamily:
 		return types.BoolFamily
