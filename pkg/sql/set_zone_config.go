@@ -467,16 +467,16 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// default (whichever applies -- a database if targetID is a table,
 		// default if targetID is a database, etc.). For this, we use the last
 		// parameter getInheritedDefault to GetZoneConfigInTxn().
-		// These zones are only used for validations. The merged zone is will
+		// These zones are only used for validations. The merged zone will
 		// not be written.
 		_, completeZone, completeSubzone, err := GetZoneConfigInTxn(
 			params.ctx, params.p.txn, params.p.Descriptors(), targetID, index, partition, n.setDefault,
 		)
 
-		if errors.Is(err, errNoZoneConfigApplies) {
+		if errors.Is(err, sqlerrors.ErrNoZoneConfigApplies) {
 			// No zone config yet.
 			//
-			// GetZoneConfigInTxn will fail with errNoZoneConfigApplies when
+			// GetZoneConfigInTxn will fail with ErrNoZoneConfigApplies when
 			// the target ID is not a database object, i.e. one of the system
 			// ranges (liveness, meta, etc.), and did not have a zone config
 			// already.
