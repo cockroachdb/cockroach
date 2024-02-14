@@ -231,6 +231,49 @@ func TestMrSystemDatabase(t *testing.T) {
 		})
 	})
 
+	t.Run("RegionTables", func(t *testing.T) {
+		query := `
+		    SELECT target
+			FROM [SHOW ALL ZONE CONFIGURATIONS]
+			WHERE target LIKE 'TABLE system.public.%'
+			    AND raw_config_sql NOT LIKE '%global_reads = true%'
+			ORDER BY target;
+		`
+		tDB.CheckQueryResults(t, query, [][]string{
+			{"TABLE system.public.eventlog"},
+			{"TABLE system.public.external_connections"},
+			{"TABLE system.public.job_info"},
+			{"TABLE system.public.jobs"},
+			{"TABLE system.public.join_tokens"},
+			{"TABLE system.public.locations"},
+			{"TABLE system.public.migrations"},
+			{"TABLE system.public.mvcc_statistics"},
+			{"TABLE system.public.protected_ts_meta"},
+			{"TABLE system.public.protected_ts_records"},
+			{"TABLE system.public.rangelog"},
+			{"TABLE system.public.replication_constraint_stats"},
+			{"TABLE system.public.replication_critical_localities"},
+			{"TABLE system.public.replication_stats"},
+			{"TABLE system.public.reports_meta"},
+			{"TABLE system.public.scheduled_jobs"},
+			{"TABLE system.public.span_count"},
+			{"TABLE system.public.span_stats_buckets"},
+			{"TABLE system.public.span_stats_samples"},
+			{"TABLE system.public.span_stats_tenant_boundaries"},
+			{"TABLE system.public.span_stats_unique_keys"},
+			{"TABLE system.public.statement_activity"},
+			{"TABLE system.public.statement_bundle_chunks"},
+			{"TABLE system.public.statement_diagnostics"},
+			{"TABLE system.public.statement_diagnostics_requests"},
+			{"TABLE system.public.statement_execution_insights"},
+			{"TABLE system.public.statement_statistics"},
+			{"TABLE system.public.transaction_activity"},
+			{"TABLE system.public.transaction_execution_insights"},
+			{"TABLE system.public.transaction_statistics"},
+			{"TABLE system.public.ui"},
+		})
+	})
+
 	t.Run("QueryByEnum", func(t *testing.T) {
 		// This is a regression test for a bug triggered by setting up the system
 		// database. If the operation to configure the does not clear table
