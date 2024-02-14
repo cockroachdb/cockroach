@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -480,6 +481,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 			RemoteUser:  remoteUser,
 			VPC:         "global",
 			MachineType: string(found.HardwareProfile.VMSize),
+			CPUArch:     CpuArchFromAzureMachineType(string(found.HardwareProfile.VMSize)),
 			// We add a fake availability-zone suffix since other roachprod
 			// code assumes particular formats. For example, "eastus2z".
 			Zone: *found.Location + "z",
@@ -612,7 +614,7 @@ func (p *Provider) createVM(
 	name, sshKey string,
 	opts vm.CreateOpts,
 	providerOpts ProviderOpts,
-) (vm compute.VirtualMachine, err error) {
+) (machine compute.VirtualMachine, err error) {
 	startupArgs := azureStartupArgs{RemoteUser: remoteUser}
 	if !opts.SSDOpts.UseLocalSSD {
 		// We define lun42 explicitly in the data disk request below.
@@ -626,7 +628,7 @@ func (p *Provider) createVM(
 
 	startupScript, err := evalStartupTemplate(startupArgs)
 	if err != nil {
-		return vm, err
+		return machine, err
 	}
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
@@ -662,9 +664,16 @@ func (p *Provider) createVM(
 		l.Printf("WARNING: increasing the OS volume size to minimally allowed 32GB")
 		osVolumeSize = 32
 	}
+	imageSKUForArch := func(arch string) string {
+		if arch == string(vm.ArchARM64) {
+			return "22_04-lts-arm64"
+		}
+		return "22_04-lts-gen2"
+	}
+
 	// Derived from
 	// https://github.com/Azure-Samples/azure-sdk-for-go-samples/blob/79e3f3af791c3873d810efe094f9d61e93a6ccaa/compute/vm.go#L41
-	vm = compute.VirtualMachine{
+	machine = compute.VirtualMachine{
 		Location: group.Location,
 		Zones:    to.StringSlicePtr([]string{providerOpts.Zone}),
 		Tags:     tags,
@@ -675,15 +684,15 @@ func (p *Provider) createVM(
 			StorageProfile: &compute.StorageProfile{
 				// From https://discourse.ubuntu.com/t/find-ubuntu-images-on-microsoft-azure/18918
 				// You can find available versions by running the following command:
-				// az vm image list --all --publisher Canonical
+				// az machine image list --all --publisher Canonical
 				// To get the latest 22.04 version:
-				// az vm image list --all --publisher Canonical | \
+				// az machine image list --all --publisher Canonical | \
 				// jq '[.[] | select(.sku=="22_04-lts")] | max_by(.version)'
 				ImageReference: &compute.ImageReference{
 					Publisher: to.StringPtr("Canonical"),
 					Offer:     to.StringPtr("0001-com-ubuntu-server-jammy"),
-					Sku:       to.StringPtr("22_04-lts"),
-					Version:   to.StringPtr("22.04.202309190"),
+					Sku:       to.StringPtr(imageSKUForArch(opts.Arch)),
+					Version:   to.StringPtr("22.04.202312060"),
 				},
 				OsDisk: &compute.OSDisk{
 					CreateOption: compute.DiskCreateOptionTypesFromImage,
@@ -728,7 +737,7 @@ func (p *Provider) createVM(
 		if err != nil {
 			return compute.VirtualMachine{}, err
 		}
-		vm.VirtualMachineProperties.StorageProfile.ImageReference = &compute.ImageReference{
+		machine.VirtualMachineProperties.StorageProfile.ImageReference = &compute.ImageReference{
 			Publisher: to.StringPtr("Canonical"),
 			Offer:     to.StringPtr(image[0]),
 			Sku:       to.StringPtr(image[1]),
@@ -774,7 +783,7 @@ func (p *Provider) createVM(
 			}
 
 			// UltraSSDs must be enabled separately.
-			vm.AdditionalCapabilities = &compute.AdditionalCapabilities{
+			machine.AdditionalCapabilities = &compute.AdditionalCapabilities{
 				UltraSSDEnabled: to.BoolPtr(true),
 			}
 		case "premium-disk":
@@ -788,9 +797,9 @@ func (p *Provider) createVM(
 			return compute.VirtualMachine{}, err
 		}
 
-		vm.StorageProfile.DataDisks = &dataDisks
+		machine.StorageProfile.DataDisks = &dataDisks
 	}
-	future, err := client.CreateOrUpdate(ctx, *group.Name, name, vm)
+	future, err := client.CreateOrUpdate(ctx, *group.Name, name, machine)
 	if err != nil {
 		return
 	}
@@ -1532,4 +1541,23 @@ func getUbuntuImage(version vm.UbuntuVersion) ([]string, error) {
 	}
 
 	return nil, errors.Errorf("Unknown Ubuntu version specified.")
+}
+
+var azureMachineTypes = regexp.MustCompile(`^(Standard_[DE])(\d+)((?:p|l|pl)?ds)_v5$`)
+
+// CpuArchFromAzureMachineType attempts to determine the CPU architecture from the corresponding Azure
+// machine type. In case the machine type is not recognized, it defaults to AMD64.
+// TODO(srosenberg): remove when the Azure SDK finally exposes the CPU architecture for a given VM.
+func CpuArchFromAzureMachineType(machineType string) vm.CPUArch {
+	matches := azureMachineTypes.FindStringSubmatch(machineType)
+
+	if len(matches) >= 3 {
+		series := matches[1] + matches[3]
+		if series == "Standard_Dps" || series == "Standard_Dpds" ||
+			series == "Standard_Dplds" || series == "Standard_Dpls" ||
+			series == "Standard_Eps" || series == "Standard_Epds" {
+			return vm.ArchARM64
+		}
+	}
+	return vm.ArchAMD64
 }
