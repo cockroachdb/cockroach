@@ -895,6 +895,18 @@ var rowsAffectedResultColumns = colinfo.ResultColumns{
 	},
 }
 
+const opNameKey = "intExec"
+
+// GetInternalOpName returns the "opName" parameter that was specified when
+// issuing a query via the Internal Executor.
+func GetInternalOpName(ctx context.Context) (opName string, ok bool) {
+	tag, ok := logtags.FromContext(ctx).GetTag(opNameKey)
+	if !ok {
+		return "", false
+	}
+	return tag.ValueStr(), true
+}
+
 // execInternal is the main entry point for executing a statement via the
 // InternalExecutor. From the high level it does the following:
 // - parses the statement as well as its arguments
@@ -1008,7 +1020,7 @@ func (ie *InternalExecutor) execInternal(
 		return nil, err
 	}
 
-	ctx = logtags.AddTag(ctx, "intExec", opName)
+	ctx = logtags.AddTag(ctx, opNameKey, opName)
 
 	var sd *sessiondata.SessionData
 	if ie.sessionDataStack != nil {

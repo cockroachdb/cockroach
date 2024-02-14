@@ -50,7 +50,7 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &ExecutorTestingKnobs{
-				DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+				DistSQLReceiverPushCallbackFactory: func(_ context.Context, query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 					var block bool
 					for _, testQuery := range statements {
 						block = block || query == testQuery
