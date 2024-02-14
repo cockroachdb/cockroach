@@ -479,3 +479,5 @@ var (
 	ErrNoFunction        = pgerror.New(pgcode.InvalidName, "no function specified")
 	ErrNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
 )
+
+var ErrNoZoneConfigApplies = errors.New("no zone config applies")
