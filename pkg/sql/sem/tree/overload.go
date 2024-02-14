@@ -253,7 +253,7 @@ type Overload struct {
 	FunctionProperties
 
 	// Type indicates if the overload represents a built-in function, a
-	// user-defined function, or a user-define procedure.
+	// user-defined function, or a user-defined procedure.
 	Type RoutineType
 	// Body is the SQL string body of a function. It can be set even if Type is
 	// BuiltinRoutine if a builtin function is defined using a SQL string.
@@ -262,9 +262,12 @@ type Overload struct {
 	// in a Schema descriptor, which means that the full UDF descriptor need to be
 	// fetched to get more info, e.g. function Body.
 	UDFContainsOnlySignature bool
-	// ReturnSet is set to true when a user-defined function is defined to return
-	// a set of values.
-	ReturnSet bool
+	// NamedReturnColumn is non-empty when a user-defined function returns a
+	// single column of non-RECORD type and has named OUT parameter.
+	NamedReturnColumn string
+	// HasNamedReturnColumns is set when a user-defined function has multiple
+	// OUT parameters that specify an implicit alias for the RECORD return type.
+	HasNamedReturnColumns bool
 	// Version is the descriptor version of the descriptor used to construct
 	// this version of the function overload. Only used for UDFs.
 	Version uint64

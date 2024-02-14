@@ -84,6 +84,8 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	// Resolve the parameter names and types.
 	paramTypes := make(tree.ParamTypes, len(c.Params))
 	var outParamTypes []*types.T
+	var firstOutParamName string
+	var outParamNames []string
 	for i := range c.Params {
 		param := &c.Params[i]
 		typ, err := tree.ResolveType(context.Background(), param.Type, tc)
@@ -93,6 +95,14 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		paramTypes.SetAt(i, string(param.Name), typ)
 		if param.IsOutParam() {
 			outParamTypes = append(outParamTypes, typ)
+			paramName := string(param.Name)
+			if len(outParamNames) == 0 {
+				firstOutParamName = paramName
+			}
+			if paramName == "" {
+				paramName = fmt.Sprintf("column%d", len(outParamTypes))
+			}
+			outParamNames = append(outParamNames, paramName)
 		}
 	}
 
@@ -101,7 +111,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	if len(outParamTypes) == 1 {
 		outParamType = outParamTypes[0]
 	} else if len(outParamTypes) > 1 {
-		outParamType = types.MakeTuple(outParamTypes)
+		outParamType = types.MakeLabeledTuple(outParamTypes, outParamNames)
 	}
 	// Resolve the return type.
 	var retType *types.T
@@ -147,17 +157,22 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	}
 	tc.currUDFOid++
 	overload := &tree.Overload{
-		Oid:               tc.currUDFOid,
-		Types:             paramTypes,
-		ReturnType:        tree.FixedReturnType(retType),
-		Body:              body,
-		Volatility:        v,
-		CalledOnNullInput: calledOnNullInput,
-		Language:          language,
-		Type:              routineType,
+		Oid:                   tc.currUDFOid,
+		Types:                 paramTypes,
+		ReturnType:            tree.FixedReturnType(retType),
+		Body:                  body,
+		Volatility:            v,
+		CalledOnNullInput:     calledOnNullInput,
+		HasNamedReturnColumns: len(outParamNames) > 1,
+		Language:              language,
+		Type:                  routineType,
 	}
+	overload.ReturnsRecordType = types.IsRecordType(retType)
 	if c.ReturnType != nil && c.ReturnType.SetOf {
 		overload.Class = tree.GeneratorClass
+	}
+	if len(outParamNames) == 1 {
+		overload.NamedReturnColumn = firstOutParamName
 	}
 	prefixedOverload := tree.MakeQualifiedOverload("public", overload)
 	def := &tree.ResolvedFunctionDefinition{
@@ -169,7 +184,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	tc.udfs[name] = def
 }
 
-// RevokedExecution revokes execution of the function with the given OID.
+// RevokeExecution revokes execution of the function with the given OID.
 func (tc *Catalog) RevokeExecution(oid oid.Oid) {
 	tc.revokedUDFOids.Add(int(oid))
 }

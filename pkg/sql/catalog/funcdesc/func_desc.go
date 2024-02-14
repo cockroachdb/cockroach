@@ -11,6 +11,7 @@
 package funcdesc
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -660,15 +661,17 @@ func (desc *Mutable) RemoveReference(id descpb.ID) {
 	desc.DependedOnBy = ret
 }
 
-// ToRoutineObj converts the descriptor to a tree.RoutineObj.
+// ToRoutineObj converts the descriptor to a tree.RoutineObj. Note that not all
+// fields are set.
 func (desc *immutable) ToRoutineObj() *tree.RoutineObj {
 	ret := &tree.RoutineObj{
 		FuncName: tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
 		Params:   make(tree.RoutineParams, len(desc.Params)),
 	}
-	for i := range desc.Params {
+	for i, p := range desc.Params {
 		ret.Params[i] = tree.RoutineParam{
-			Type: desc.Params[i].Type,
+			Type:  p.Type,
+			Class: ToTreeRoutineParamClass(p.Class),
 		}
 	}
 	return ret
@@ -703,23 +706,45 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		routineType = tree.ProcedureRoutine
 	}
 	ret = &tree.Overload{
-		Oid:        catid.FuncIDToOID(desc.ID),
-		ReturnType: tree.FixedReturnType(desc.ReturnType.Type),
-		ReturnSet:  desc.ReturnType.ReturnSet,
-		Body:       desc.FunctionBody,
-		Type:       routineType,
-		Version:    uint64(desc.Version),
-		Language:   desc.getCreateExprLang(),
+		Oid:      catid.FuncIDToOID(desc.ID),
+		Body:     desc.FunctionBody,
+		Type:     routineType,
+		Version:  uint64(desc.Version),
+		Language: desc.getCreateExprLang(),
 	}
 
-	argTypes := make(tree.ParamTypes, 0, len(desc.Params))
+	signatureTypes := make(tree.ParamTypes, 0, len(desc.Params))
+	var firstOutParamName string
+	var outParamNames []string
 	for _, param := range desc.Params {
-		argTypes = append(
-			argTypes,
-			tree.ParamType{Name: param.Name, Typ: param.Type},
-		)
+		class := ToTreeRoutineParamClass(param.Class)
+		if tree.IsInParamClass(class) {
+			// Only IN parameters should be included into the signature of this
+			// function overload.
+			signatureTypes = append(signatureTypes, tree.ParamType{Name: param.Name, Typ: param.Type})
+		}
+		if tree.IsOutParamClass(class) {
+			paramName := param.Name
+			if len(outParamNames) == 0 {
+				firstOutParamName = paramName
+			}
+			if paramName == "" {
+				paramName = fmt.Sprintf("column%d", len(outParamNames)+1)
+			}
+			outParamNames = append(outParamNames, paramName)
+		}
 	}
-	ret.Types = argTypes
+	returnType := desc.ReturnType.Type
+	if types.IsRecordType(returnType) {
+		ret.ReturnsRecordType = true
+		returnType = types.MakeLabeledTuple(returnType.TupleContents(), outParamNames)
+	}
+	ret.ReturnType = tree.FixedReturnType(returnType)
+	ret.Types = signatureTypes
+	if len(outParamNames) == 1 {
+		ret.NamedReturnColumn = firstOutParamName
+	}
+	ret.HasNamedReturnColumns = len(outParamNames) > 1
 	ret.Volatility, err = desc.getOverloadVolatility()
 	if err != nil {
 		return nil, err
@@ -785,7 +810,7 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 		ret.Params[i] = tree.RoutineParam{
 			Name:  tree.Name(desc.Params[i].Name),
 			Type:  desc.Params[i].Type,
-			Class: toTreeNodeParamClass(desc.Params[i].Class),
+			Class: ToTreeRoutineParamClass(desc.Params[i].Class),
 		}
 		if desc.Params[i].DefaultExpr != nil {
 			ret.Params[i].DefaultVal, err = parser.ParseExpr(*desc.Params[i].DefaultExpr)
@@ -844,7 +869,9 @@ func (desc *immutable) getCreateExprNullInputBehavior() tree.RoutineNullInputBeh
 	return 0
 }
 
-func toTreeNodeParamClass(class catpb.Function_Param_Class) tree.RoutineParamClass {
+// ToTreeRoutineParamClass converts the proto enum value to the correspoding
+// tree.RoutineParamClass.
+func ToTreeRoutineParamClass(class catpb.Function_Param_Class) tree.RoutineParamClass {
 	switch class {
 	case catpb.Function_Param_IN:
 		return tree.RoutineParamIn
