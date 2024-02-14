@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
@@ -2457,26 +2460,53 @@ func (p *planner) GetRangeDescByID(
 // global and regional by row. The locality changes reduce how long it
 // takes a server to start up in a multi-region deployment.
 func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
-	globalTables := []string{
-		"users",
-		"zones",
-		"privileges",
-		"comments",
-		"role_options",
-		"role_members",
-		"database_role_settings",
-		"settings",
-		"descriptor",
-		"namespace",
-		"table_statistics",
-		"web_sessions",
-		"region_liveness",
+	systemTables := systemschema.MakeSystemTables()
+	globalTables := map[catconstants.SystemTableName]clusterversion.Key{
+		catconstants.UsersTableName:                clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.ZonesTableName:                clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.SystemPrivilegeTableName:      clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.CommentsTableName:             clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.RoleOptionsTableName:          clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.RoleMembersTableName:          clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.DatabaseRoleSettingsTableName: clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.SettingsTableName:             clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.DescriptorTableName:           clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.NamespaceTableName:            clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.TableStatisticsTableName:      clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.WebSessionsTableName:          clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.RegionalLiveness:              clusterversion.V23_2_RegionaLivenessTable,
 	}
 
-	rbrTables := []string{
-		"sqlliveness",
-		"sql_instances",
-		"lease",
+	rbrTables := map[catconstants.SystemTableName]clusterversion.Key{
+		catconstants.SqllivenessTableName:  clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.SQLInstancesTableName: clusterversion.BinaryMinSupportedVersionKey,
+		catconstants.LeaseTableName:        clusterversion.BinaryMinSupportedVersionKey,
+	}
+
+	regionByTableVersions := map[catconstants.SystemTableName]clusterversion.Key{
+		catconstants.StmtExecInsightsTableName: clusterversion.V23_2_AddSystemExecInsightsTable,
+		catconstants.TxnExecInsightsTableName:  clusterversion.V23_2_AddSystemExecInsightsTable,
+	}
+
+	// Configure all ohter tables are region tables, with the system database
+	// primary region as the region.
+	regionTables := make([]string, 0, len(systemTables))
+	for _, table := range systemTables {
+		if !table.IsTable() {
+			continue
+		}
+		name := catconstants.SystemTableName(table.GetName())
+		if _, ok := rbrTables[name]; ok {
+			continue
+		}
+		if _, ok := globalTables[name]; ok {
+			continue
+		}
+		version, hasVersion := regionByTableVersions[name]
+		if !hasVersion ||
+			p.ExecCfg().Settings.Version.IsActive(ctx, version) {
+			regionTables = append(regionTables, string(name))
+		}
 	}
 
 	// Retrieve the system database descriptor and ensure it supports
@@ -2581,8 +2611,11 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 	}
 
 	// Configure global system tables
-	for _, tableName := range globalTables {
-		descriptor, err := getDescriptor(tableName)
+	for tableName, version := range globalTables {
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, version) {
+			continue
+		}
+		descriptor, err := getDescriptor(string(tableName))
 		if err != nil {
 			return err
 		}
@@ -2602,9 +2635,30 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		}
 	}
 
-	// Configure regional by row system tables
-	for _, tableName := range rbrTables {
+	// Configure by region tables next.
+	primaryRegionName, err := systemDB.PrimaryRegionName()
+	if err != nil {
+		return err
+	}
+	for _, tableName := range regionTables {
 		descriptor, err := getDescriptor(tableName)
+		// Some system tables only come into effect once the
+		// version changes, so skip over those.
+		if sqlerrors.IsUndefinedRelationError(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		descriptor.SetTableLocalityRegionalByTable(tree.Name(primaryRegionName))
+		if err := applyLocalityChange(descriptor, "global"); err != nil {
+			return err
+		}
+	}
+
+	// Configure regional by row system tables
+	for tableName := range rbrTables {
+		descriptor, err := getDescriptor(string(tableName))
 		if err != nil {
 			return err
 		}

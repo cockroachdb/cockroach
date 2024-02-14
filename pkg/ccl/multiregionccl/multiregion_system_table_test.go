@@ -17,7 +17,9 @@ import (
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
@@ -231,6 +233,49 @@ func TestMrSystemDatabase(t *testing.T) {
 		})
 	})
 
+	t.Run("RegionTables", func(t *testing.T) {
+		query := `
+		    SELECT target
+			FROM [SHOW ALL ZONE CONFIGURATIONS]
+			WHERE target LIKE 'TABLE system.public.%'
+			    AND raw_config_sql NOT LIKE '%global_reads = true%'
+			ORDER BY target;
+		`
+		tDB.CheckQueryResults(t, query, [][]string{
+			{"TABLE system.public.eventlog"},
+			{"TABLE system.public.external_connections"},
+			{"TABLE system.public.job_info"},
+			{"TABLE system.public.jobs"},
+			{"TABLE system.public.join_tokens"},
+			{"TABLE system.public.locations"},
+			{"TABLE system.public.migrations"},
+			{"TABLE system.public.mvcc_statistics"},
+			{"TABLE system.public.protected_ts_meta"},
+			{"TABLE system.public.protected_ts_records"},
+			{"TABLE system.public.rangelog"},
+			{"TABLE system.public.replication_constraint_stats"},
+			{"TABLE system.public.replication_critical_localities"},
+			{"TABLE system.public.replication_stats"},
+			{"TABLE system.public.reports_meta"},
+			{"TABLE system.public.scheduled_jobs"},
+			{"TABLE system.public.span_count"},
+			{"TABLE system.public.span_stats_buckets"},
+			{"TABLE system.public.span_stats_samples"},
+			{"TABLE system.public.span_stats_tenant_boundaries"},
+			{"TABLE system.public.span_stats_unique_keys"},
+			{"TABLE system.public.statement_activity"},
+			{"TABLE system.public.statement_bundle_chunks"},
+			{"TABLE system.public.statement_diagnostics"},
+			{"TABLE system.public.statement_diagnostics_requests"},
+			{"TABLE system.public.statement_execution_insights"},
+			{"TABLE system.public.statement_statistics"},
+			{"TABLE system.public.transaction_activity"},
+			{"TABLE system.public.transaction_execution_insights"},
+			{"TABLE system.public.transaction_statistics"},
+			{"TABLE system.public.ui"},
+		})
+	})
+
 	t.Run("QueryByEnum", func(t *testing.T) {
 		// This is a regression test for a bug triggered by setting up the system
 		// database. If the operation to configure the does not clear table
@@ -407,4 +452,119 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, r, "us-east1")
 	}
+}
+
+func TestMrSystemDatabaseUpgrade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	// Enable settings required for configuring a tenant's system database as multi-region.
+	makeSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.ByKey(clusterversion.V23_2),
+			clusterversion.TestingBinaryMinSupportedVersion,
+			false)
+		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		return cs
+	}
+
+	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3,
+		base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+			},
+		},
+		multiregionccltestutils.WithSettings(makeSettings()))
+	defer cleanup()
+
+	id, err := roachpb.MakeTenantID(11)
+	require.NoError(t, err)
+
+	tenantArgs := base.TestTenantArgs{
+		Settings: makeSettings(),
+		TestingKnobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+			},
+		},
+		TenantID: id,
+		Locality: cluster.Servers[0].Locality(),
+	}
+	_, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
+
+	tDB := sqlutils.MakeSQLRunner(tenantSQL)
+
+	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
+	tDB.Exec(t, `ALTER DATABASE defaultdb SET PRIMARY REGION "us-east1"`)
+	tDB.Exec(t, `ALTER DATABASE defaultdb ADD REGION "us-east2"`)
+	tDB.Exec(t, `ALTER DATABASE defaultdb ADD REGION "us-east3"`)
+	tDB.Exec(t, "ALTER DATABASE defaultdb SURVIVE REGION FAILURE")
+
+	tDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE DATABASE system]", [][]string{
+		{"CREATE DATABASE system PRIMARY REGION \"us-east1\" REGIONS = \"us-east1\", \"us-east2\", \"us-east3\" SURVIVE REGION FAILURE"},
+	})
+
+	_, err = cluster.Conns[0].Exec("SET CLUSTER SETTING version = crdb_internal.node_executable_version();")
+	require.NoError(t, err)
+	tDB.Exec(t, "SET CLUSTER SETTING version = crdb_internal.node_executable_version();")
+
+	tDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE DATABASE system]", [][]string{
+		{"CREATE DATABASE system PRIMARY REGION \"us-east1\" REGIONS = \"us-east1\", \"us-east2\", \"us-east3\" SURVIVE REGION FAILURE"},
+	})
+
+	tDB.CheckQueryResults(t, "SELECT table_name, locality FROM [SHOW TABLES FROM system] ORDER BY table_name",
+		[][]string{{"comments", "GLOBAL"},
+			{"database_role_settings", "GLOBAL"},
+			{"descriptor", "GLOBAL"},
+			{"descriptor_id_seq", "REGIONAL BY TABLE IN PRIMARY REGION"},
+			{"eventlog", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"external_connections", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"job_info", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"jobs", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"join_tokens", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"lease", "REGIONAL BY ROW AS crdb_region"},
+			{"locations", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"migrations", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"mvcc_statistics", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"namespace", "GLOBAL"},
+			{"privileges", "GLOBAL"},
+			{"protected_ts_meta", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"protected_ts_records", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"rangelog", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"region_liveness", "GLOBAL"},
+			{"replication_constraint_stats", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"replication_critical_localities", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"replication_stats", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"reports_meta", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"role_id_seq", "REGIONAL BY TABLE IN PRIMARY REGION"},
+			{"role_members", "GLOBAL"},
+			{"role_options", "GLOBAL"},
+			{"scheduled_jobs", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"settings", "GLOBAL"},
+			{"span_count", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"span_stats_buckets", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"span_stats_samples", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"span_stats_tenant_boundaries", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"span_stats_unique_keys", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"sql_instances", "REGIONAL BY ROW AS crdb_region"},
+			{"sqlliveness", "REGIONAL BY ROW AS crdb_region"},
+			{"statement_activity", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"statement_bundle_chunks", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"statement_diagnostics", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"statement_diagnostics_requests", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"statement_execution_insights", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"statement_statistics", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"table_statistics", "GLOBAL"},
+			{"transaction_activity", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"transaction_execution_insights", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"transaction_statistics", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"ui", "REGIONAL BY TABLE IN \"us-east1\""},
+			{"users", "GLOBAL"},
+			{"web_sessions", "GLOBAL"},
+			{"zones", "GLOBAL"},
+		})
 }
