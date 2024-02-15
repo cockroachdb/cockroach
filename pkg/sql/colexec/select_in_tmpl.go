@@ -176,9 +176,9 @@ func fillDatumRow_TYPE(
 
 	// {{if or (eq .VecMethod "Int16") (eq .VecMethod "Int32")}}
 	// Ensure that we always upcast all integer types.
-	conv := colconv.GetDatumToPhysicalFn(types.Int)
+	conv := colconv.GetDatumToPhysicalFn(ctx, types.Int)
 	//{{else}}
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	// {{end}}
 	var result []_GOTYPE_UPCAST_INT
 	hasNulls := false

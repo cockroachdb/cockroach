@@ -412,7 +412,7 @@ func TestSetAccountingHelper(t *testing.T) {
 					batch.ColVec(vecIdx).Bytes().Set(rowIdx, v)
 				default:
 					datum := randgen.RandDatum(rng, typ, false /* nullOk */)
-					converter := colconv.GetDatumToPhysicalFn(typ)
+					converter := colconv.GetDatumToPhysicalFn(context.Background(), typ)
 					coldata.SetValueAt(batch.ColVec(vecIdx), converter(datum), rowIdx)
 				}
 			}

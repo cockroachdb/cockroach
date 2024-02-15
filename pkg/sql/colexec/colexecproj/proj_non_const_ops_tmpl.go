@@ -351,7 +351,7 @@ func GetProjectionOperator(
 			projOpBase:          projOpBase,
 			adapter:             colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
 			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}, true /* willRelease */),
-			datumToVecConverter: colconv.GetDatumToPhysicalFn(outputType),
+			datumToVecConverter: colconv.GetDatumToPhysicalFn(allocator.Ctx, outputType),
 		}, nil
 	}
 	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())

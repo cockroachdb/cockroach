@@ -173,7 +173,7 @@ func newDefaultOrderedAggAlloc(
 		ctx:                ctx,
 		evalCtx:            evalCtx,
 		inputArgsConverter: inputArgsConverter,
-		resultConverter:    colconv.GetDatumToPhysicalFn(outputType),
+		resultConverter:    colconv.GetDatumToPhysicalFn(ctx, outputType),
 		otherArgsScratch:   otherArgsScratch,
 		arguments:          constArguments,
 	}

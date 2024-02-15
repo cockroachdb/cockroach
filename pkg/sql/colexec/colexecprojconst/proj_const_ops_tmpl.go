@@ -318,7 +318,7 @@ func GetProjection_CONST_SIDEConstOperator(
 		outputIdx:         outputIdx,
 		calledOnNullInput: calledOnNullInput,
 	}
-	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
+	c := colconv.GetDatumToPhysicalFn(allocator.Ctx, constType)(constArg)
 	// {{if _IS_CONST_LEFT}}
 	leftType, rightType := constType, inputTypes[colIdx]
 	// {{else}}
@@ -419,7 +419,7 @@ func GetProjection_CONST_SIDEConstOperator(
 			adapter:             colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
 			constArg:            constArg,
 			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}, true /* willRelease */),
-			datumToVecConverter: colconv.GetDatumToPhysicalFn(outputType),
+			datumToVecConverter: colconv.GetDatumToPhysicalFn(allocator.Ctx, outputType),
 		}, nil
 		// {{end}}
 	}

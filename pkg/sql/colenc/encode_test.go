@@ -634,7 +634,7 @@ func buildVecKVs(
 
 	for row, d := range datums {
 		for col, t := range typs {
-			converter := colconv.GetDatumToPhysicalFn(t)
+			converter := colconv.GetDatumToPhysicalFn(context.Background(), t)
 			if d[col] != tree.DNull {
 				coldata.SetValueAt(b.ColVec(col), converter(d[col]), row)
 			} else {

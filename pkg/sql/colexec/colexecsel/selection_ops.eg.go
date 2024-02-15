@@ -58470,7 +58470,7 @@ func GetSelectionConstOperator(
 	cmpExpr *tree.ComparisonExpr,
 ) (colexecop.Operator, error) {
 	leftType, constType := inputTypes[colIdx], constArg.ResolvedType()
-	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
+	c := colconv.GetDatumToPhysicalFn(ctx, constType)(constArg)
 	selConstOpBase := selConstOpBase{
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		colIdx:         colIdx,

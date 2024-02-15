@@ -57,8 +57,8 @@ func TestRandomizedCast(t *testing.T) {
 		log.Infof(ctx, "%s to %s", from.String(), to.String())
 		input := colexectestutils.Tuples{}
 		output := colexectestutils.Tuples{}
-		fromConverter := colconv.GetDatumToPhysicalFn(from)
-		toConverter := colconv.GetDatumToPhysicalFn(to)
+		fromConverter := colconv.GetDatumToPhysicalFn(ctx, from)
+		toConverter := colconv.GetDatumToPhysicalFn(ctx, to)
 		errorExpected := false
 		for i := 0; i < numRows; i++ {
 			// We don't allow any NULL datums to be generated, so disable this

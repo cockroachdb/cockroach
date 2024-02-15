@@ -409,7 +409,7 @@ func fillDatumRowBool(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []bool
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -643,7 +643,7 @@ func fillDatumRowBytes(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result [][]byte
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -865,7 +865,7 @@ func fillDatumRowDecimal(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []apd.Decimal
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -1092,7 +1092,7 @@ func fillDatumRowInt16(
 	datumTuple.Normalize(ctx, evalCtx)
 
 	// Ensure that we always upcast all integer types.
-	conv := colconv.GetDatumToPhysicalFn(types.Int)
+	conv := colconv.GetDatumToPhysicalFn(ctx, types.Int)
 	var result []int64
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -1330,7 +1330,7 @@ func fillDatumRowInt32(
 	datumTuple.Normalize(ctx, evalCtx)
 
 	// Ensure that we always upcast all integer types.
-	conv := colconv.GetDatumToPhysicalFn(types.Int)
+	conv := colconv.GetDatumToPhysicalFn(ctx, types.Int)
 	var result []int64
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -1567,7 +1567,7 @@ func fillDatumRowInt64(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []int64
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -1804,7 +1804,7 @@ func fillDatumRowFloat64(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []float64
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -2049,7 +2049,7 @@ func fillDatumRowTimestamp(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []time.Time
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -2282,7 +2282,7 @@ func fillDatumRowInterval(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []duration.Duration
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -2508,7 +2508,7 @@ func fillDatumRowJSON(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []json.JSON
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -2736,7 +2736,7 @@ func fillDatumRowINet(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []ipaddr.IPAddr
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -2962,7 +2962,7 @@ func fillDatumRowDatum(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []interface{}
 	hasNulls := false
 	for _, d := range datumTuple.D {

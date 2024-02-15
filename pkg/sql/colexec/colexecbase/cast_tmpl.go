@@ -524,7 +524,7 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 			outputCol := outputVec._TO_TYPE()
 			outputNulls := outputVec.Nulls()
 			// {{if and (eq $fromFamily "DatumVecCanonicalTypeFamily") (not (eq $toFamily "DatumVecCanonicalTypeFamily"))}}
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			// {{end}}
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)

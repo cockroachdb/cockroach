@@ -49264,7 +49264,7 @@ func GetProjectionRConstOperator(
 		outputIdx:         outputIdx,
 		calledOnNullInput: calledOnNullInput,
 	}
-	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
+	c := colconv.GetDatumToPhysicalFn(allocator.Ctx, constType)(constArg)
 	leftType, rightType := inputTypes[colIdx], constType
 	switch op := op.(type) {
 	case treebin.BinaryOperator:
@@ -53755,7 +53755,7 @@ func GetProjectionRConstOperator(
 			adapter:             colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
 			constArg:            constArg,
 			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}, true /* willRelease */),
-			datumToVecConverter: colconv.GetDatumToPhysicalFn(outputType),
+			datumToVecConverter: colconv.GetDatumToPhysicalFn(allocator.Ctx, outputType),
 		}, nil
 	}
 	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())

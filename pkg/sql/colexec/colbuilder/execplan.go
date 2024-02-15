@@ -2310,7 +2310,7 @@ func planProjectionOperators(
 			// operator.
 			return colexecbase.NewConstNullOp(allocator, input, resultIdx), nil
 		}
-		constVal := colconv.GetDatumToPhysicalFn(datumType)(datum)
+		constVal := colconv.GetDatumToPhysicalFn(ctx, datumType)(datum)
 		return colexecbase.NewConstOp(allocator, input, datumType, constVal, resultIdx)
 	}
 	resultIdx = -1

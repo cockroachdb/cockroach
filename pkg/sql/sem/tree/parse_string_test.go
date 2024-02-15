@@ -85,7 +85,7 @@ func TestParseStringTypeGamut(t *testing.T) {
 					continue
 				}
 			}
-			converter := colconv.GetDatumToPhysicalFn(typ)
+			converter := colconv.GetDatumToPhysicalFn(context.Background(), typ)
 			coldata.SetValueAt(b.ColVec(i), converter(d), 1 /* rowIdx */)
 			// ParseAndRequireStringHandler set the first row and second was converted datum,
 			// test that they are equal.
