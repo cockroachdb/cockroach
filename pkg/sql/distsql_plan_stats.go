@@ -655,6 +655,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 
 	recv := MakeDistSQLReceiver(
 		ctx,
+		evalCtx.Settings.Version,
 		resultWriter,
 		tree.DDL,
 		evalCtx.ExecCfg.RangeDescriptorCache,

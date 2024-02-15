@@ -406,6 +406,7 @@ func (e *familyEvaluator) executePlan(
 	// receiver writes the results to the writer.
 	receiver := sql.MakeDistSQLReceiver(
 		ctx,
+		e.execCfg.Settings.Version,
 		writer,
 		tree.Rows,
 		e.execCfg.RangeDescriptorCache,

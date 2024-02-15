@@ -272,6 +272,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 
 		distSQLReceiver := sql.MakeDistSQLReceiver(
 			ctx,
+			evalCtx.Settings.Version,
 			metadataCallbackWriter,
 			tree.Rows,
 			execCfg.RangeDescriptorCache,

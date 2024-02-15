@@ -613,6 +613,7 @@ FAMILY extra (extra)
 
 				r := MakeDistSQLReceiver(
 					ctx,
+					execCfg.Settings.Version,
 					writer,
 					tree.Rows,
 					planner.execCfg.RangeDescriptorCache,

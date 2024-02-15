@@ -212,6 +212,7 @@ func distBackup(
 
 	recv := sql.MakeDistSQLReceiver(
 		ctx,
+		evalCtx.Settings.Version,
 		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
 		tree.Rows,
 		nil,   /* rangeCache */

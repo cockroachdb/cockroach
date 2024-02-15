@@ -98,6 +98,7 @@ func ShowCloudStorageTestPlanHook(
 
 		recv := sql.MakeDistSQLReceiver(
 			ctx,
+			evalCtx.Settings.Version,
 			rowResultWriter,
 			tree.Rows,
 			nil, /* rangeCache */
