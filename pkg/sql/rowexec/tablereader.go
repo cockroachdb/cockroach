@@ -317,14 +317,15 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			KVPairsRead:         optional.MakeUint(uint64(tr.fetcher.GetKVPairsRead())),
 			TuplesRead:          is.NumTuples,
 			KVTime:              is.WaitTime,
-			ContentionTime:      optional.MakeTimeValue(tr.contentionEventsListener.CumulativeContentionTime),
+			ContentionTime:      optional.MakeTimeValue(tr.contentionEventsListener.GetContentionTime()),
 			BatchRequestsIssued: optional.MakeUint(uint64(tr.fetcher.GetBatchRequestsIssued())),
 			KVCPUTime:           optional.MakeTimeValue(is.kvCPUTime),
 		},
 		Output: tr.OutputHelper.Stats(),
 	}
-	ret.Exec.ConsumedRU = optional.MakeUint(tr.tenantConsumptionListener.ConsumedRU)
-	execstats.PopulateKVMVCCStats(&ret.KV, &tr.scanStatsListener.ScanStats)
+	ret.Exec.ConsumedRU = optional.MakeUint(tr.tenantConsumptionListener.GetConsumedRU())
+	scanStats := tr.scanStatsListener.GetScanStats()
+	execstats.PopulateKVMVCCStats(&ret.KV, &scanStats)
 	return ret
 }
 
