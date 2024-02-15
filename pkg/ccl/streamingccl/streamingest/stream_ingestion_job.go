@@ -228,6 +228,9 @@ func ingestWithRetries(
 		if i := r.CurrentAttempt(); i > 5 {
 			status := redact.Sprintf("retrying after error on attempt %d: %s", i, err)
 			updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError, status)
+		} else {
+			// At least log the retryable error if we're not updating the status.
+			log.Infof(ctx, "hit retryable error %s", err)
 		}
 		newReplicatedTime := loadReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob)
 		if lastReplicatedTime.Less(newReplicatedTime) {
