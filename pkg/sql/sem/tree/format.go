@@ -172,9 +172,9 @@ const (
 	FmtForFingerprint
 )
 
-// StmtFingerprintSubChar is the string that replaces
+// StmtFingerprintConstPlaceholder is the string that replaces
 // all literals and placeholders in a query when computing its fingerprint.
-const StmtFingerprintSubChar = '_'
+const StmtFingerprintConstPlaceholder = "_"
 
 // PasswordSubstitution is the string that replaces
 // passwords unless FmtShowPasswords is specified.

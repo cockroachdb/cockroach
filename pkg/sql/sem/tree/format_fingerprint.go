@@ -26,6 +26,9 @@ func (ctx *FmtCtx) formatNodeForFingerprint(n NodeFormatter) {
 		case *Array:
 			v.formatForFingerprint(ctx)
 			return
+		case *Insert:
+			v.formatForFingerprint(ctx)
+			return
 		case *UpdateExprs:
 			// We want to sort name lists to avoid creating different fingerprints
 			// for equivalent queries. For example:
@@ -40,7 +43,7 @@ func (ctx *FmtCtx) formatNodeForFingerprint(n NodeFormatter) {
 			// we want to print the same special character for all of them. This
 			// is to avoid creating different fingerprints for queries that are
 			// actually equivalent.
-			ctx.WriteByte(StmtFingerprintSubChar)
+			ctx.WriteString(StmtFingerprintConstPlaceholder)
 			return
 		}
 	}
@@ -49,7 +52,7 @@ func (ctx *FmtCtx) formatNodeForFingerprint(n NodeFormatter) {
 
 func isExprOnlyLiteralsOrPlaceholders(expr Expr) bool {
 	switch e := expr.(type) {
-	case Datum, Constant, *Placeholder:
+	case Datum, Constant, *Placeholder, *CastExpr:
 		return true
 	case *Tuple:
 		return e.Exprs.onlyContainsLiteralsOrPlaceholders()
@@ -58,7 +61,24 @@ func isExprOnlyLiteralsOrPlaceholders(expr Expr) bool {
 	}
 }
 
-func (node *UpdateExpr) containsOnlyLiteralsOrPlaceholders() bool {
+func (node *Insert) formatForFingerprint(ctx *FmtCtx) {
+	if node.Rows != nil {
+		switch node.Rows.Select.(type) {
+		case *ValuesClause:
+			// Sort col names.
+			v2 := *node
+			v2.Columns = append(make(NameList, 0, len(node.Columns)), node.Columns...)
+			sort.Slice(v2.Columns, func(i, j int) bool {
+				return v2.Columns[i] < v2.Columns[j]
+			})
+			v2.Format(ctx)
+			return
+		}
+	}
+	node.Format(ctx)
+}
+
+func (node *UpdateExpr) containsOnlyNamesLiteralsOrPlaceholders() bool {
 	if node.Tuple {
 		return false
 	}
@@ -70,18 +90,23 @@ func (node *UpdateExpr) containsOnlyLiteralsOrPlaceholders() bool {
 // assignments for stmt fingerprints. We want to sort them to avoid creating
 // different fingerprints for equivalent queries.
 // For example:
-// UPDATE t SET a = 1, b = 2
-// UPDATE t SET b = 2, a = 1
+// UPDATE t SET a = 1, b = 2, c = 3, d = 4
+// UPDATE t SET d = 4, c = 3, b = 2, a = 1
 // TODO if sorting is too slow we'll likely need to hash while walking the tree.
 func (node *UpdateExprs) formatForFingerprint(ctx *FmtCtx) {
+	if len(*node) < 2 {
+		node.Format(ctx)
+		return
+	}
+
 	for _, setClause := range *node {
-		if !setClause.containsOnlyLiteralsOrPlaceholders() {
+		if !setClause.containsOnlyNamesLiteralsOrPlaceholders() {
 			node.Format(ctx)
 			return
 		}
 	}
 
-	v2 := *node
+	v2 := append(make(UpdateExprs, 0, len(*node)), *node...)
 	sort.Slice(v2, func(i, j int) bool {
 		// We've verified these are not tuple update exprs.
 		return v2[i].Names[0] < v2[j].Names[0]
@@ -107,12 +132,7 @@ func (node *ValuesClause) formatForFingerprint(ctx *FmtCtx) {
 // placeholders.
 func (node *Exprs) onlyContainsLiteralsOrPlaceholders() bool {
 	for i := 0; i < len(*node); i++ {
-		switch e := (*node)[i].(type) {
-		case Datum, Constant, *Placeholder:
-			continue
-		case *Tuple:
-			return e.Exprs.onlyContainsLiteralsOrPlaceholders()
-		default:
+		if !isExprOnlyLiteralsOrPlaceholders((*node)[i]) {
 			return false
 		}
 	}
