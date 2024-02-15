@@ -275,7 +275,10 @@ func runPlanInsidePlan(
 	defer plan.close(ctx)
 	execCfg := params.ExecCfg()
 	recv := MakeDistSQLReceiver(
-		ctx, resultWriter, tree.Rows,
+		ctx,
+		execCfg.Settings.Version,
+		resultWriter,
+		tree.Rows,
 		execCfg.RangeDescriptorCache,
 		params.p.Txn(),
 		execCfg.Clock,

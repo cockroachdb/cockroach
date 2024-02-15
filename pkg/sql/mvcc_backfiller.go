@@ -155,6 +155,7 @@ func (im *IndexBackfillerMergePlanner) plan(
 		cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
 		recv := MakeDistSQLReceiver(
 			ctx,
+			evalCtx.Settings.Version,
 			&cbw,
 			tree.Rows, /* stmtType - doesn't matter here since no result are produced */
 			im.execCfg.RangeDescriptorCache,

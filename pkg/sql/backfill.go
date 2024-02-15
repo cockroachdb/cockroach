@@ -1097,6 +1097,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 	cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
 	recv := MakeDistSQLReceiver(
 		ctx,
+		evalCtx.Settings.Version,
 		&cbw,
 		tree.Rows, /* stmtType - doesn't matter here since no result are produced */
 		sc.rangeDescriptorCache,
@@ -1342,6 +1343,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.KV().ReadTimestamp(), txn.Descriptors())
 			recv := MakeDistSQLReceiver(
 				ctx,
+				evalCtx.Settings.Version,
 				&cbw,
 				tree.Rows, /* stmtType - doesn't matter here since no result are produced */
 				sc.rangeDescriptorCache,

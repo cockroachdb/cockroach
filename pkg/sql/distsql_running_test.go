@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -162,6 +163,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		})
 		recv := MakeDistSQLReceiver(
 			ctx,
+			execCfg.Settings.Version,
 			rw,
 			stmt.AST.StatementReturnType(),
 			execCfg.RangeDescriptorCache,
@@ -282,6 +284,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		})
 		recv := MakeDistSQLReceiver(
 			ctx,
+			execCfg.Settings.Version,
 			rw,
 			stmt.AST.StatementReturnType(),
 			execCfg.RangeDescriptorCache,
@@ -420,11 +423,13 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	st := cluster.MakeTestingClusterSettings()
 	txn := kv.NewTxn(ctx, db, s.NodeID())
 
 	rw := &errOnlyResultWriter{}
 	recv := MakeDistSQLReceiver(
 		ctx,
+		st.Version,
 		rw,
 		tree.Rows, /* StatementReturnType */
 		nil,       /* rangeCache */
@@ -573,8 +578,10 @@ func TestDistSQLReceiverDrainsOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	st := cluster.MakeTestingClusterSettings()
 	recv := MakeDistSQLReceiver(
 		context.Background(),
+		st.Version,
 		&errOnlyResultWriter{},
 		tree.Rows,
 		nil, /* rangeCache */

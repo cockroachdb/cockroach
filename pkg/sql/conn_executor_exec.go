@@ -2394,7 +2394,10 @@ func (ex *connExecutor) execWithDistSQLEngine(
 ) (topLevelQueryStats, error) {
 	defer planner.curPlan.savePlanInfo()
 	recv := MakeDistSQLReceiver(
-		ctx, res, stmtType,
+		ctx,
+		planner.execCfg.Settings.Version,
+		res,
+		stmtType,
 		ex.server.cfg.RangeDescriptorCache,
 		planner.txn,
 		ex.server.cfg.Clock,

@@ -142,6 +142,7 @@ func (dsp *DistSQLPlanner) Exec(
 	execCfg := p.ExecCfg()
 	recv := MakeDistSQLReceiver(
 		ctx,
+		execCfg.Settings.Version,
 		rw,
 		stmt.AST.StatementReturnType(),
 		execCfg.RangeDescriptorCache,
@@ -172,6 +173,7 @@ func (dsp *DistSQLPlanner) ExecLocalAll(
 	defer p.curPlan.close(ctx)
 	recv := MakeDistSQLReceiver(
 		ctx,
+		execCfg.Settings.Version,
 		res,
 		p.stmt.AST.StatementReturnType(),
 		execCfg.RangeDescriptorCache,

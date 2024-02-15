@@ -101,6 +101,7 @@ func checkAllNodesForIngestingJob(
 
 	recv := sql.MakeDistSQLReceiver(
 		ctx,
+		evalCtx.Settings.Version,
 		res,
 		tree.Ack,
 		nil, /* rangeCache */

@@ -283,6 +283,7 @@ func startDistChangefeed(
 
 		recv := sql.MakeDistSQLReceiver(
 			ctx,
+			evalCtx.Settings.Version,
 			resultRows,
 			tree.Rows,
 			execCtx.ExecCfg().RangeDescriptorCache,

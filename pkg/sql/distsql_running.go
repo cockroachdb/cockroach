@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -425,7 +426,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// TODO(yuzefovich): avoid populating some fields of the SetupFlowRequest
 		// for local plans.
 		LeafTxnInputState: leafInputState,
-		Version:           execversion.Version,
+		Version:           execversion.VersionFromContext(recv.ctx),
 		EvalContext:       execinfrapb.MakeEvalContext(&evalCtx.Context),
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
@@ -1213,6 +1214,7 @@ type clockUpdater interface {
 // on errors. Nil if the flow overall doesn't run in a transaction.
 func MakeDistSQLReceiver(
 	ctx context.Context,
+	version clusterversion.Handle,
 	resultWriter rowResultWriter,
 	stmtType tree.StatementReturnType,
 	rangeCache *rangecache.RangeCache,
@@ -1221,7 +1223,11 @@ func MakeDistSQLReceiver(
 	tracing *SessionTracing,
 ) *DistSQLReceiver {
 	// TODO: think through this.
-	ctx = execversion.WithVersion(ctx, execversion.Version)
+	v := execversion.MinAcceptedVersion
+	if version.IsActive(ctx, clusterversion.V24_1) {
+		v = execversion.Version
+	}
+	ctx = execversion.WithVersion(ctx, v)
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
 	r := receiverSyncPool.Get().(*DistSQLReceiver)
 	// Check whether the result writer supports pushing batches into it directly

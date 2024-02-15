@@ -423,6 +423,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		})
 		recv := MakeDistSQLReceiver(
 			ctx,
+			sc.execCfg.Settings.Version,
 			rw,
 			tree.Rows,
 			sc.execCfg.RangeDescriptorCache,
