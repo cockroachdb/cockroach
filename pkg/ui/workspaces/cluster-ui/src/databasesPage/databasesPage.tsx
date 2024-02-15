@@ -59,6 +59,7 @@ import {
 } from "../api";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { checkInfoAvailable } from "../databases";
+import { cockroach } from "../../../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -107,6 +108,8 @@ export interface DatabasesPageDataDatabase {
   tables?: SqlApiQueryResponse<DatabaseTablesResponse>;
   // Array of node IDs used to unambiguously filter by node and region.
   nodes?: number[];
+  /** A list of node statuses so that store ids can be mapped to nodes. */
+  nodeStatuses: cockroach.server.status.statuspb.INodeStatus[]
   // String of nodes grouped by region in alphabetical order, e.g.
   // regionA(n1,n2), regionB(n3). Used for display in the table's
   // "Regions/Nodes" column.

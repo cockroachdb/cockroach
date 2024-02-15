@@ -11,7 +11,10 @@
 import { DatabasesListResponse, SqlExecutionErrorMessage } from "../api";
 import { DatabasesPageDataDatabase } from "../databasesPage";
 import {
+  Nodes,
+  Stores,
   buildIndexStatToRecommendationsMap,
+  getNodeIdsFromStoreIds,
   getNodesByRegionString,
   normalizePrivileges,
   normalizeRoles,
@@ -38,6 +41,8 @@ interface DerivedDatabaseDetailsParams {
   spanStats: Record<string, DatabaseDetailsSpanStatsState>;
   nodeRegions: Record<string, string>;
   isTenant: boolean;
+  /** A list of node statuses so that store ids can be mapped to nodes. */
+  nodeStatuses: cockroach.server.status.statuspb.INodeStatus[]
 }
 
 export const deriveDatabaseDetailsMemoized = createSelector(
@@ -46,12 +51,14 @@ export const deriveDatabaseDetailsMemoized = createSelector(
   (params: DerivedDatabaseDetailsParams) => params.spanStats,
   (params: DerivedDatabaseDetailsParams) => params.nodeRegions,
   (params: DerivedDatabaseDetailsParams) => params.isTenant,
+  (params: DerivedDatabaseDetailsParams) => params.nodeStatuses,
   (
     dbListResp,
     databaseDetails,
     spanStats,
     nodeRegions,
     isTenant,
+    nodeStatuses,
   ): DatabasesPageDataDatabase[] => {
     const databases = dbListResp?.databases ?? [];
     return databases.map(dbName => {
@@ -61,9 +68,9 @@ export const deriveDatabaseDetailsMemoized = createSelector(
         dbName,
         dbDetails,
         spanStatsForDB,
-        dbListResp.error,
         nodeRegions,
         isTenant,
+        nodeStatuses,
       );
     });
   },
@@ -73,12 +80,17 @@ const deriveDatabaseDetails = (
   database: string,
   dbDetails: DatabaseDetailsState,
   spanStats: DatabaseDetailsSpanStatsState,
-  dbListError: SqlExecutionErrorMessage,
   nodeRegionsByID: Record<string, string>,
   isTenant: boolean,
+  nodeStatuses: cockroach.server.status.statuspb.INodeStatus[],
 ): DatabasesPageDataDatabase => {
   const dbStats = dbDetails?.data?.results.stats;
-  const nodes = dbStats?.replicaData.replicas || [];
+  /** List of store IDs for the current cluster. All of the values in the
+   * `*replicas` columns correspond to store IDs. */
+  const stores: Stores = { kind: "store", ids: dbStats?.replicaData.replicas || [] };
+  /** List of node IDs for the current cluster. */
+  const nodes: Nodes = { kind: "node", ids: getNodeIdsFromStoreIds(stores, nodeStatuses) };
+
   const nodesByRegionString = getNodesByRegionString(
     nodes,
     nodeRegionsByID,
@@ -99,7 +111,8 @@ const deriveDatabaseDetails = (
     name: database,
     spanStats: spanStats?.data?.results.spanStats,
     tables: dbDetails?.data?.results.tablesResp,
-    nodes: nodes,
+    nodes: nodes.ids,
+    nodeStatuses: nodeStatuses,
     nodesByRegionString,
     numIndexRecommendations,
   };
@@ -147,7 +160,7 @@ const deriveDatabaseTableDetails = (
   const normalizedPrivileges = normalizePrivileges(
     [].concat(...grants.map(grant => grant.privileges)),
   );
-  const nodes = results?.stats.replicaData.nodeIDs || [];
+  const nodes: Nodes = { kind: "node", ids: results?.stats.replicaData.nodeIDs || [] };
   return {
     name: table,
     loading: !!details?.inFlight,
@@ -164,7 +177,7 @@ const deriveDatabaseTableDetails = (
       statsLastUpdated: results?.heuristicsDetails,
       indexStatRecs: results?.stats.indexStats,
       spanStats: results?.stats.spanStats,
-      nodes: nodes,
+      nodes: nodes.ids,
       nodesByRegionString: getNodesByRegionString(nodes, nodeRegions, isTenant),
     },
   };
@@ -188,7 +201,7 @@ export const deriveTablePageDetailsMemoized = createSelector(
         user: grant.user,
         privileges: normalizePrivileges(grant.privileges),
       })) || [];
-    const nodes = results?.stats.replicaData.nodeIDs || [];
+    const nodes: Nodes = { kind: "node", ids: results?.stats.replicaData.nodeIDs || [] };
     return {
       loading: !!details?.inFlight,
       loaded: !!details?.valid,
