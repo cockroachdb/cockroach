@@ -17,6 +17,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/optional",
         "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",

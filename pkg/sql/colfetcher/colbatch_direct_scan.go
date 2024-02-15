@@ -59,7 +59,7 @@ func (s *ColBatchDirectScan) Init(ctx context.Context) {
 	}
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(
 		s.Ctx, s.flowCtx, "colbatchdirectscan", s.processorID,
-		&s.contentionEventsListener, &s.scanStatsListener, &s.tenantConsumptionListener,
+		&s.ContentionEventsListener, &s.ScanStatsListener, &s.TenantConsumptionListener,
 	)
 	firstBatchLimit := cFetcherFirstBatchLimit(s.limitHint, s.spec.MaxKeysPerRow)
 	err := s.fetcher.SetupNextFetch(

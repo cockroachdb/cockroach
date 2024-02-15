@@ -109,11 +109,11 @@ type ColIndexJoin struct {
 
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
-	tracingSpan               *tracing.Span
-	contentionEventsListener  execstats.ContentionEventsListener
-	scanStatsListener         execstats.ScanStatsListener
-	tenantConsumptionListener execstats.TenantConsumptionListener
-	mu                        struct {
+	tracingSpan *tracing.Span
+	execstats.ContentionEventsListener
+	execstats.ScanStatsListener
+	execstats.TenantConsumptionListener
+	mu struct {
 		syncutil.Mutex
 		// rowsRead contains the number of total rows this ColIndexJoin has
 		// returned so far.
@@ -142,7 +142,7 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 	}
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(
 		s.Ctx, s.flowCtx, "colindexjoin", s.processorID,
-		&s.contentionEventsListener, &s.scanStatsListener, &s.tenantConsumptionListener,
+		&s.ContentionEventsListener, &s.ScanStatsListener, &s.TenantConsumptionListener,
 	)
 	s.Input.Init(s.Ctx)
 }
@@ -415,21 +415,6 @@ func (s *ColIndexJoin) GetBatchRequestsIssued() int64 {
 // GetKVCPUTime is part of the colexecop.KVReader interface.
 func (s *ColIndexJoin) GetKVCPUTime() time.Duration {
 	return s.cf.cpuStopWatch.Elapsed()
-}
-
-// GetContentionTime is part of the colexecop.KVReader interface.
-func (s *ColIndexJoin) GetContentionTime() time.Duration {
-	return s.contentionEventsListener.CumulativeContentionTime
-}
-
-// GetScanStats is part of the colexecop.KVReader interface.
-func (s *ColIndexJoin) GetScanStats() execstats.ScanStats {
-	return s.scanStatsListener.ScanStats
-}
-
-// GetConsumedRU is part of the colexecop.KVReader interface.
-func (s *ColIndexJoin) GetConsumedRU() uint64 {
-	return s.tenantConsumptionListener.ConsumedRU
 }
 
 // UsedStreamer is part of the colexecop.KVReader interface.

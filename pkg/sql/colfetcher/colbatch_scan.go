@@ -49,11 +49,11 @@ type colBatchScanBase struct {
 	ignoreMisplannedRanges bool
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
-	tracingSpan               *tracing.Span
-	contentionEventsListener  execstats.ContentionEventsListener
-	scanStatsListener         execstats.ScanStatsListener
-	tenantConsumptionListener execstats.TenantConsumptionListener
-	mu                        struct {
+	tracingSpan *tracing.Span
+	execstats.ContentionEventsListener
+	execstats.ScanStatsListener
+	execstats.TenantConsumptionListener
+	mu struct {
 		syncutil.Mutex
 		// rowsRead contains the number of total rows this ColBatchScan has
 		// returned so far.
@@ -88,21 +88,6 @@ func (s *colBatchScanBase) GetRowsRead() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mu.rowsRead
-}
-
-// GetContentionTime is part of the colexecop.KVReader interface.
-func (s *colBatchScanBase) GetContentionTime() time.Duration {
-	return s.contentionEventsListener.CumulativeContentionTime
-}
-
-// GetScanStats is part of the colexecop.KVReader interface.
-func (s *colBatchScanBase) GetScanStats() execstats.ScanStats {
-	return s.scanStatsListener.ScanStats
-}
-
-// GetConsumedRU is part of the colexecop.KVReader interface.
-func (s *colBatchScanBase) GetConsumedRU() uint64 {
-	return s.tenantConsumptionListener.ConsumedRU
 }
 
 // UsedStreamer is part of the colexecop.KVReader interface.
@@ -239,7 +224,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	}
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(
 		s.Ctx, s.flowCtx, "colbatchscan", s.processorID,
-		&s.contentionEventsListener, &s.scanStatsListener, &s.tenantConsumptionListener,
+		&s.ContentionEventsListener, &s.ScanStatsListener, &s.TenantConsumptionListener,
 	)
 	limitBatches := !s.parallelize
 	if err := s.cf.StartScan(

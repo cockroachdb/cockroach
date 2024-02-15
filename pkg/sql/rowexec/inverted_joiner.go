@@ -774,7 +774,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 			KVPairsRead:         optional.MakeUint(uint64(ij.fetcher.GetKVPairsRead())),
 			TuplesRead:          fis.NumTuples,
 			KVTime:              fis.WaitTime,
-			ContentionTime:      optional.MakeTimeValue(ij.contentionEventsListener.CumulativeContentionTime),
+			ContentionTime:      optional.MakeTimeValue(ij.contentionEventsListener.GetContentionTime()),
 			BatchRequestsIssued: optional.MakeUint(uint64(ij.fetcher.GetBatchRequestsIssued())),
 			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
 		},
@@ -784,8 +784,9 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: ij.OutputHelper.Stats(),
 	}
-	ret.Exec.ConsumedRU = optional.MakeUint(ij.tenantConsumptionListener.ConsumedRU)
-	execstats.PopulateKVMVCCStats(&ret.KV, &ij.scanStatsListener.ScanStats)
+	ret.Exec.ConsumedRU = optional.MakeUint(ij.tenantConsumptionListener.GetConsumedRU())
+	scanStats := ij.scanStatsListener.GetScanStats()
+	execstats.PopulateKVMVCCStats(&ret.KV, &scanStats)
 	return &ret
 }
 
