@@ -66,6 +66,11 @@ func TypeFamilyToCanonicalTypeFamily(ctx context.Context, family types.Family) t
 	case types.IntervalFamily:
 		return types.IntervalFamily
 	case types.INetFamily:
+		if ctx != context.Background() {
+			if execversion.VersionFromContext(ctx) < execversion.NativeINetVersion {
+				return DatumVecCanonicalTypeFamily
+			}
+		}
 		return types.INetFamily
 	default:
 		// TODO(yuzefovich): consider adding native support for
