@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1655,15 +1656,26 @@ func TestInjectRetryOnCommitErrors(t *testing.T) {
 func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderStress(t, "slow test")
 
 	ctx := context.Background()
+	var shouldBlock syncutil.AtomicBool
+	blockingInternalTxns := make(chan struct{})
+	g := ctxgroup.WithContext(ctx)
 	params := base.TestServerArgs{}
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		OnRecordTxnFinish: func(isInternal bool, _ *sessionphase.Times, _ string) {
+			if isInternal && shouldBlock.Get() {
+				<-blockingInternalTxns
+			}
+		},
+	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
-	dbConn := s.ApplicationLayer().SQLConn(t)
-	defer dbConn.Close()
-
-	waitChannel := make(chan struct{})
+	defer sqlDB.Close()
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
 
 	selectQuery := "SELECT * FROM t.foo"
 	selectInternalQueryActive := `SELECT count(*) FROM crdb_internal.cluster_queries WHERE query = '` + selectQuery + `'`
@@ -1675,92 +1687,119 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 	testDB.Exec(t, "CREATE TABLE t.foo (i INT PRIMARY KEY)")
 	testDB.Exec(t, "INSERT INTO t.foo VALUES (1)")
 
-	// Begin a user-initiated transaction.
-	testDB.Exec(t, "BEGIN")
+	// Don't let internal transactions finish until the we're done counting
+	// the metrics. Use a closure so that the blockingInternalTxns channel
+	// can be closed with a defer.
+	func() {
+		shouldBlock.Set(true)
+		defer close(blockingInternalTxns)
+		prevInternalTxnsOpen := sqlServer.InternalMetrics.EngineMetrics.SQLTxnsOpen.Value()
+		prevInternalActiveStatements := sqlServer.InternalMetrics.EngineMetrics.SQLActiveStatements.Value()
 
-	// Check that the number of open transactions has incremented.
-	require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+		// Begin a user-initiated transaction.
+		testDB.Exec(t, "BEGIN")
 
-	// Create a state of contention.
-	testDB.Exec(t, "SELECT * FROM t.foo WHERE i = 1 FOR UPDATE")
+		// Check that the number of open transactions has incremented, but not the
+		// internal metric.
+		require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+		require.Equal(t, prevInternalTxnsOpen, sqlServer.InternalMetrics.EngineMetrics.SQLTxnsOpen.Value())
 
-	// Execute internal statement (this case is identical to opening an internal
-	// transaction).
-	go func() {
-		_, err := s.InternalExecutor().(*sql.InternalExecutor).ExecEx(ctx,
-			"test-internal-active-stmt-wait",
-			nil,
-			sessiondata.NodeUserSessionDataOverride,
-			selectQuery)
-		require.NoError(t, err, "expected internal SELECT query to be successful, but encountered an error")
-		waitChannel <- struct{}{}
+		// Create a state of contention. Use a cancellable context so that the
+		// other queries that get blocked on this one don't deadlock if the test
+		// aborts.
+		_, err := sqlDB.ExecContext(ctx, "SELECT * FROM t.foo WHERE i = 1 FOR UPDATE")
+		require.NoError(t, err)
+
+		// Execute internal statement (this case is identical to opening an internal
+		// transaction).
+		g.GoCtx(func(ctx context.Context) error {
+			_, err := s.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+				ctx,
+				"test-internal-active-stmt-wait",
+				nil,
+				sessiondata.NodeUserSessionDataOverride,
+				selectQuery)
+			if err != nil {
+				return errors.Wrapf(err, "expected internal SELECT query to be successful, but encountered an error")
+			}
+			return nil
+		})
+
+		// Check that the internal statement is active.
+		testutils.SucceedsSoon(t, func() error {
+			row := testDB.QueryStr(t, selectInternalQueryActive)
+			if row[0][0] == "0" {
+				return errors.New("internal select query is not active yet")
+			}
+			return nil
+		})
+
+		testutils.SucceedsSoon(t, func() error {
+			// Check that the number of open user transactions has not incremented. Open
+			// transaction count already at one from initial user-initiated transaction.
+			if sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value() != 1 {
+				return errors.Newf("Wrong SQLTxnsOpen value. Expected: %d. Actual: %d", 1, sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+			}
+			// Check that the number of active user statements has not incremented.
+			if sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value() != 0 {
+				return errors.Newf("Wrong SQLActiveStatements value. Expected: %d. Actual: %d", 0, sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
+			}
+			// The internal metrics should have updated.
+			if v := sqlServer.InternalMetrics.EngineMetrics.SQLTxnsOpen.Value(); v <= prevInternalTxnsOpen {
+				return errors.Newf("Wrong InternalSQLTxnsOpen value. Expected: greater than %d. Actual: %d", prevInternalTxnsOpen, v)
+			}
+			if v := sqlServer.InternalMetrics.EngineMetrics.SQLActiveStatements.Value(); v != prevInternalActiveStatements+1 {
+				return errors.Newf("Wrong InternalSQLActiveStatements value. Expected: %d. Actual: %d", prevInternalActiveStatements+1, v)
+			}
+			return nil
+		})
+
+		require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+		require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
+		require.Less(t, prevInternalTxnsOpen, sqlServer.InternalMetrics.EngineMetrics.SQLTxnsOpen.Value())
+		require.Equal(t, prevInternalActiveStatements+1, sqlServer.InternalMetrics.EngineMetrics.SQLActiveStatements.Value())
+
+		// Create active user-initiated statement.
+		g.GoCtx(func(ctx context.Context) error {
+			_, err := sqlDB.Exec(selectQuery)
+			if err != nil {
+				return errors.Wrapf(err, "expected user SELECT query to be successful, but encountered an error")
+			}
+			return nil
+		})
+
+		// Check that the user statement is active.
+		testutils.SucceedsSoon(t, func() error {
+			row := testDB.QueryStr(t, selectUserQueryActive)
+			if row[0][0] == "0" {
+				return errors.New("user select query is not active yet")
+			}
+			return nil
+		})
+
+		testutils.SucceedsSoon(t, func() error {
+			// Check that the number of open user transactions has incremented. Second
+			// db connection creates an implicit user-initiated transaction.
+			if sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value() != 2 {
+				return errors.Newf("Wrong SQLTxnsOpen value. Expected: %d. Actual: %d", 2, sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+			}
+			// Check that the number of active user statements has incremented.
+			if sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value() != 1 {
+				return errors.Newf("Wrong SQLActiveStatements value. Expected: %d. Actual: %d", 1, sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
+			}
+			return nil
+		})
+
+		require.Equal(t, int64(2), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+		require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
+
+		// Commit the initial user-initiated transaction. The internal and user
+		// select queries are no longer in contention.
+		testDB.Exec(t, "COMMIT")
 	}()
-
-	// Check that the internal statement is active.
-	testutils.SucceedsWithin(t, func() error {
-		row := testDB.QueryStr(t, selectInternalQueryActive)
-		if row[0][0] == "0" {
-			return errors.New("internal select query is not active yet")
-		}
-		return nil
-	}, 5*time.Second)
-
-	testutils.SucceedsWithin(t, func() error {
-		// Check that the number of open transactions has not incremented. We only
-		// want to track user's open transactions. Open transaction count already
-		// at one from initial user-initiated transaction.
-		if sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value() != 1 {
-			return errors.Newf("Wrong SQLTxnsOpen value. Expected: %d. Actual: %d", 1, sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
-		}
-		// Check that the number of active statements has not incremented. We only
-		// want to track user's active statements.
-		if sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value() != 0 {
-			return errors.Newf("Wrong SQLActiveStatements value. Expected: %d. Actual: %d", 0, sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
-		}
-		return nil
-	}, 5*time.Second)
-
-	require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
-	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
-
-	// Create active user-initiated statement.
-	go func() {
-		_, err := dbConn.Exec(selectQuery)
-		require.NoError(t, err, "expected user SELECT query to be successful, but encountered an error")
-		waitChannel <- struct{}{}
-	}()
-
-	// Check that the user statement is active.
-	testutils.SucceedsWithin(t, func() error {
-		row := testDB.QueryStr(t, selectUserQueryActive)
-		if row[0][0] == "0" {
-			return errors.New("user select query is not active yet")
-		}
-		return nil
-	}, 5*time.Second)
-
-	testutils.SucceedsWithin(t, func() error {
-		// Check that the number of open transactions has incremented. Second db
-		// connection creates an implicit user-initiated transaction.
-		if sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value() != 2 {
-			return errors.Newf("Wrong SQLTxnsOpen value. Expected: %d. Actual: %d", 2, sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
-		}
-		// Check that the number of active statements has incremented.
-		if sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value() != 1 {
-			return errors.Newf("Wrong SQLActiveStatements value. Expected: %d. Actual: %d", 1, sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
-		}
-		return nil
-	}, 5*time.Second)
-
-	require.Equal(t, int64(2), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
-	require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
-
-	// Commit the initial user-initiated transaction. The internal and user
-	// select queries are no longer in contention.
-	testDB.Exec(t, "COMMIT")
 
 	// Check that both the internal & user statements are no longer active.
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		userRow := testDB.QueryStr(t, selectUserQueryActive)
 		internalRow := testDB.QueryStr(t, selectInternalQueryActive)
 
@@ -1770,9 +1809,9 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 			return errors.New("internal select query is still active")
 		}
 		return nil
-	}, 5*time.Second)
+	})
 
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		// Check that the number of open transactions has decremented by 2 (should
 		// decrement for initial user transaction and user statement executed
 		// on second db connection).
@@ -1785,14 +1824,13 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 			return errors.Newf("Wrong SQLActiveStatements value. Expected: %d. Actual: %d", 0, sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
 		}
 		return nil
-	}, 5*time.Second)
+	})
 
 	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
 	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
 
 	// Wait for both goroutine queries to finish before calling defer.
-	<-waitChannel
-	<-waitChannel
+	require.NoError(t, g.Wait())
 }
 
 // TestEmptyTxnIsBeingCorrectlyCounted tests that SQL Active Transaction

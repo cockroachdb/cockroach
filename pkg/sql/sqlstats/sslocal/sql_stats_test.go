@@ -41,9 +41,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
@@ -722,18 +724,26 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 		},
 	}
 
+	g := ctxgroup.WithContext(ctx)
+	var finishedExecute syncutil.AtomicBool
 	waitTxnFinish := make(chan struct{})
 	currentTestCaseIdx := 0
 	const latencyThreshold = time.Second * 5
 
 	var params base.TestServerArgs
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		AfterExecute: func(ctx context.Context, stmt string, err error) {
+			if currentTestCaseIdx < len(testData) && testData[currentTestCaseIdx].query == stmt {
+				finishedExecute.Set(true)
+			}
+		},
 		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string) {
-			if !isInternal && testData[currentTestCaseIdx].query == stmt {
+			if !isInternal && testData[currentTestCaseIdx].query == stmt && finishedExecute.Get() {
 				testData[currentTestCaseIdx].phaseTimes = phaseTimes.Clone()
-				go func() {
+				g.GoCtx(func(ctx context.Context) error {
 					waitTxnFinish <- struct{}{}
-				}()
+					return nil
+				})
 			}
 		},
 	}
@@ -747,6 +757,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 	require.NoError(t, err, "error connecting with pg url")
 
 	for currentTestCaseIdx < len(testData) {
+		finishedExecute.Set(false)
 		tc := testData[currentTestCaseIdx]
 		// Make extended protocol query
 		_ = c.QueryRow(ctx, tc.query, tc.placeholders...)
@@ -754,13 +765,14 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 		<-waitTxnFinish
 
 		// Ensure test case phase times are populated by query txn.
-		require.True(t, tc.phaseTimes != nil)
+		require.NotNil(t, tc.phaseTimes)
 		// Ensure SessionTransactionStarted variable is populated.
-		require.True(t, !tc.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted).IsZero())
+		require.False(t, tc.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted).IsZero())
 		// Ensure compute transaction service latency is within a reasonable threshold.
-		require.True(t, tc.phaseTimes.GetTransactionServiceLatency() < latencyThreshold)
+		require.Less(t, tc.phaseTimes.GetTransactionServiceLatency(), latencyThreshold)
 		currentTestCaseIdx++
 	}
+	require.NoError(t, g.Wait())
 }
 
 func TestFingerprintCreation(t *testing.T) {
