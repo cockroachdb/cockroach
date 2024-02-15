@@ -881,7 +881,7 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 		"pubsub":       1,
 		"sinkless":     2,
 		"cloudstorage": 0,
-		"pulsar":       0,
+		"pulsar":       1,
 	}
 	if options.externalIODir != "" {
 		sinkWeights["cloudstorage"] = 3
@@ -1247,6 +1247,7 @@ func verifyLogsWithEmittedBytesAndMessages(
 		var emittedBytes int64 = 0
 		var emittedMessages int64 = 0
 		for _, msg := range emittedBytesLogs {
+			t.Logf("read message %v", msg)
 			if msg.JobId != int64(jobID) {
 				continue
 			}
