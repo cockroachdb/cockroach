@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -2393,6 +2395,12 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	progressAtomic *uint64,
 ) (topLevelQueryStats, error) {
 	defer planner.curPlan.savePlanInfo()
+	// TODO: think through this.
+	v := execversion.MinAcceptedVersion
+	if planner.execCfg.Settings.Version.IsActive(ctx, clusterversion.V24_1) {
+		v = execversion.Version
+	}
+	ctx = execversion.WithVersion(ctx, v)
 	recv := MakeDistSQLReceiver(
 		ctx,
 		planner.execCfg.Settings.Version,
