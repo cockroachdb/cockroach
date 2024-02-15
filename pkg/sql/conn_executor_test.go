@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1663,7 +1664,7 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 	dbConn := s.ApplicationLayer().SQLConn(t)
 	defer dbConn.Close()
 
-	waitChannel := make(chan struct{})
+	wg := sync.WaitGroup{}
 
 	selectQuery := "SELECT * FROM t.foo"
 	selectInternalQueryActive := `SELECT count(*) FROM crdb_internal.cluster_queries WHERE query = '` + selectQuery + `'`
@@ -1678,22 +1679,30 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 	// Begin a user-initiated transaction.
 	testDB.Exec(t, "BEGIN")
 
-	// Check that the number of open transactions has incremented.
+	// Check that the number of open transactions has incremented, but not the
+	// internal metric.
 	require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
 
 	// Create a state of contention.
 	testDB.Exec(t, "SELECT * FROM t.foo WHERE i = 1 FOR UPDATE")
 
+	prevInternalTxnsOpen := sqlServer.InternalMetrics.EngineMetrics.SQLTxnsOpen.Value()
+	prevInternalActiveStatements := sqlServer.InternalMetrics.EngineMetrics.SQLActiveStatements.Value()
+
 	// Execute internal statement (this case is identical to opening an internal
 	// transaction).
 	go func() {
+		wg.Add(1)
+		defer wg.Done()
 		_, err := s.InternalExecutor().(*sql.InternalExecutor).ExecEx(ctx,
 			"test-internal-active-stmt-wait",
 			nil,
 			sessiondata.NodeUserSessionDataOverride,
 			selectQuery)
-		require.NoError(t, err, "expected internal SELECT query to be successful, but encountered an error")
-		waitChannel <- struct{}{}
+		if err != nil {
+			t.Errorf("expected internal SELECT query to be successful, but encountered an error: %v", err)
+			return
+		}
 	}()
 
 	// Check that the internal statement is active.
@@ -1719,15 +1728,29 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 		}
 		return nil
 	}, 5*time.Second)
+	testutils.SucceedsWithin(t, func() error {
+		// The internal metrics should have updated.
+		if v := sqlServer.InternalMetrics.EngineMetrics.SQLTxnsOpen.Value(); v != prevInternalTxnsOpen+1 {
+			return errors.Newf("Wrong InternalSQLTxnsOpen value. Expected: %d. Actual: %d", prevInternalTxnsOpen+1, v)
+		}
+		if v := sqlServer.InternalMetrics.EngineMetrics.SQLActiveStatements.Value(); v != prevInternalActiveStatements+1 {
+			return errors.Newf("Wrong InternalSQLActiveStatements value. Expected: %d. Actual: %d", prevInternalActiveStatements+1, v)
+		}
+		return nil
+	}, 5*time.Second)
 
 	require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
 	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
 
 	// Create active user-initiated statement.
 	go func() {
+		wg.Add(1)
+		defer wg.Done()
 		_, err := dbConn.Exec(selectQuery)
-		require.NoError(t, err, "expected user SELECT query to be successful, but encountered an error")
-		waitChannel <- struct{}{}
+		if err != nil {
+			t.Errorf("expected user SELECT query to be successful, but encountered an error: %v", err)
+			return
+		}
 	}()
 
 	// Check that the user statement is active.
@@ -1791,8 +1814,7 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
 
 	// Wait for both goroutine queries to finish before calling defer.
-	<-waitChannel
-	<-waitChannel
+	wg.Wait()
 }
 
 // TestEmptyTxnIsBeingCorrectlyCounted tests that SQL Active Transaction
