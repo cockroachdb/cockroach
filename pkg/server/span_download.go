@@ -119,6 +119,7 @@ func sendDownloadSpans(ctx context.Context, spans roachpb.Spans, out chan roachp
 			return ctx.Err()
 		}
 	}
+	log.Infof(ctx, "all %d download spans enqueued", len(spans))
 	return nil
 }
 
@@ -132,6 +133,7 @@ func downloadSpans(ctx context.Context, eng storage.Engine, spans chan roachpb.S
 				return err
 			}
 		}
+		log.Infof(ctx, "finished downloading %d spans", len(spans))
 		return nil
 	})
 }
