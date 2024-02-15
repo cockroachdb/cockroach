@@ -65,7 +65,7 @@ var SecondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"sql.zone_configs.allow_for_secondary_tenant.enabled",
 	"enable the use of ALTER CONFIGURE ZONE in virtual clusters",
-	false,
+	true,
 	settings.WithName("sql.virtual_cluster.feature_access.zone_configs.enabled"),
 )
 
@@ -76,7 +76,7 @@ var SecondaryTenantsAllZoneConfigsEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled",
 	"enable unrestricted usage of ALTER CONFIGURE ZONE in virtual clusters",
-	false,
+	true,
 )
 
 // RequireSystemTenantOrClusterSetting returns a setting disabled error if

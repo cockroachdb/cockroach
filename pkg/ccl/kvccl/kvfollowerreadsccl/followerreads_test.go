@@ -1001,9 +1001,6 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			systemSQL := sqlutils.MakeSQLRunner(tc.Conns[0])
 			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.1s'`)
 			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
-			// We're making assertions on traces collected by the tenant using
-			// log lines in KV so we must ensure they're not redacted.
-			systemSQL.Exec(t, `SET CLUSTER SETTING trace.redact_at_virtual_cluster_boundary.enabled = 'false'`)
 
 			historicalQuery := `SELECT * FROM t.test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`
 			recCh := make(chan tracingpb.Recording, 1)
