@@ -997,7 +997,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		),
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
-			execinfra.Version,
 			cfg.Settings,
 			cfg.nodeIDContainer.SQLInstanceID(),
 			cfg.rpcContext,

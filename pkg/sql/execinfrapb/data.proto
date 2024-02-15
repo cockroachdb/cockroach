@@ -365,6 +365,8 @@ message RemoteProducerMetadata {
 //
 // For the meaning of the fields, see the corresponding constants in
 // distsqlrun/server.go.
+// TODO(yuzefovich): propagating version information is no longer needed once
+// compatibility with 23.2 is unnecessary.
 message DistSQLVersionGossipInfo {
   optional uint32 version = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "DistSQLVersion"];
