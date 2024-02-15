@@ -105,6 +105,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.jobs table"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"migrate old-style PTS records to the new style",
+		clusterversion.V24_1_MigrateOldStylePTSRecords.Version(),
+		upgrade.NoPrecondition,
+		migrateOldStylePTSRecords,
+		upgrade.RestoreActionNotRequired("restore does not restore the PTS table"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
