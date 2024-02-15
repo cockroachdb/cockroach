@@ -41,7 +41,13 @@ var (
 // be caught by the panic-catcher mechanism of the vectorized engine and will
 // be propagated as an error accordingly.
 func GetDatumToPhysicalFn(ctx context.Context, ct *types.T) func(tree.Datum) interface{} {
-	switch ct.Family() {
+	family := ct.Family()
+	if family == types.INetFamily && typeconv.TypeFamilyToCanonicalTypeFamily(ctx, family) == typeconv.DatumVecCanonicalTypeFamily {
+		// Use this trick so that we fall into the default case that handles all
+		// datum-backed types.
+		family = typeconv.DatumVecCanonicalTypeFamily + 1
+	}
+	switch family {
 	// {{range .}}
 	case _TYPE_FAMILY:
 		switch ct.Width() {

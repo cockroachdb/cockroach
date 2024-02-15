@@ -108,9 +108,21 @@ func DecodeTableValueToCol(
 		buf, d, err = encoding.DecodeUntaggedDurationValue(buf)
 		vecs.IntervalCols[colIdx][rowIdx] = d
 	case types.INetFamily:
-		var i ipaddr.IPAddr
-		buf, i, err = encoding.DecodeUntaggedIPAddrValue(buf)
-		vecs.INetCols[colIdx][rowIdx] = i
+		if vecs.Vecs[vecIdx].CanonicalTypeFamily() == types.INetFamily {
+			var i ipaddr.IPAddr
+			buf, i, err = encoding.DecodeUntaggedIPAddrValue(buf)
+			vecs.INetCols[colIdx][rowIdx] = i
+		} else {
+			if err = typeconv.AssertDatumBacked(ctx, valTyp); err != nil {
+				return buf, err
+			}
+			var d tree.Datum
+			d, buf, err = valueside.DecodeUntaggedDatum(da, valTyp, buf)
+			if err != nil {
+				return buf, err
+			}
+			vecs.DatumCols[colIdx].Set(rowIdx, d)
+		}
 	// Types backed by tree.Datums.
 	default:
 		if err = typeconv.AssertDatumBacked(ctx, valTyp); err != nil {

@@ -388,7 +388,14 @@ func (b *writeBuffer) writeTextColumnarElement(
 		}
 
 	case types.INetFamily:
-		b.writeLengthPrefixedString(vecs.INetCols[colIdx].Get(rowIdx).String())
+		if vecs.Vecs[vecIdx].CanonicalTypeFamily() == types.INetFamily {
+			b.writeLengthPrefixedString(vecs.INetCols[colIdx].Get(rowIdx).String())
+		} else {
+			if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
+				panic(err)
+			}
+			writeTextDatumNotNull(b, vecs.DatumCols[colIdx].Get(rowIdx).(tree.Datum), conv, sessionLoc, typ)
+		}
 
 	default:
 		// All other types are represented via the datum-backed vector.
@@ -938,7 +945,14 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 		}
 
 	case types.INetFamily:
-		writeBinaryIPAddr(b, vecs.INetCols[colIdx].Get(rowIdx))
+		if vecs.Vecs[vecIdx].CanonicalTypeFamily() == types.INetFamily {
+			writeBinaryIPAddr(b, vecs.INetCols[colIdx].Get(rowIdx))
+		} else {
+			if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
+				panic(err)
+			}
+			writeBinaryDatumNotNull(ctx, b, vecs.DatumCols[colIdx].Get(rowIdx).(tree.Datum), sessionLoc, typ)
+		}
 
 	default:
 		// All other types are represented via the datum-backed vector.

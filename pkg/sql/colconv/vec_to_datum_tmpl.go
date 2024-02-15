@@ -362,7 +362,14 @@ func vecToDatum(
 		_ = sel[length-1]
 	}
 	var idx, destIdx, srcIdx int
-	switch ct := col.Type(); ct.Family() {
+	ct := col.Type()
+	family := ct.Family()
+	if family == types.INetFamily && col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+		// Use this trick so that we fall into the default case that handles all
+		// datum-backed types.
+		family = typeconv.DatumVecCanonicalTypeFamily + 1
+	}
+	switch family {
 	// {{/*
 	//     String family is handled separately because the conversion changes
 	//     based on the runtime parameter (type's Oid). We don't want to

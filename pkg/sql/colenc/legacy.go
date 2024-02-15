@@ -7,6 +7,7 @@ package colenc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -88,11 +89,14 @@ func MarshalLegacy(colType *types.T, vec *coldata.Vec, row int) (roachpb.Value, 
 			return r, nil
 		}
 	case types.INetFamily:
-		if vec.Type().Family() == types.INetFamily {
+		switch vec.CanonicalTypeFamily() {
+		case types.INetFamily:
 			i := vec.INet().Get(row)
 			data := i.ToBuffer(nil /* appendTo */)
 			r.SetBytes(data)
 			return r, nil
+		case typeconv.DatumVecCanonicalTypeFamily:
+			return valueside.MarshalLegacy(colType, vec.Datum().Get(row).(tree.Datum))
 		}
 	default:
 		return valueside.MarshalLegacy(colType, vec.Datum().Get(row).(tree.Datum))

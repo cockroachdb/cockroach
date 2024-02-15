@@ -137,6 +137,11 @@ func GetCastOperator(
 			return &castIdentityOp{castOpBase: base}, nil
 		}
 	}
+	// {{/*
+	//     Note that because we handle datum-backed vectors separately and check
+	//     whether either of the types is datum-backed, we don't need to have
+	//     special logic for handling INet type in mixed-version clusters.
+	// */}}
 	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
 	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
 	if isFromDatum {

@@ -400,7 +400,6 @@ func schema(ctx context.Context, fb *flatbuffers.Builder, typs []*types.T) flatb
 			fbTypOffset = arrowserde.BinaryEnd(fb)
 			fbTyp = arrowserde.TypeUtf8
 		default:
-			// TODO(yuzefovich): enum case is missing here, investigate that.
 			panic(errors.Errorf(`don't know how to map %s`, typ))
 		}
 		arrowserde.FieldStart(fb)

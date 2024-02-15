@@ -61,7 +61,12 @@ func encodeKeys[T []byte | roachpb.Key](
 		return nil
 	}
 	nulls := vec.Nulls()
-	switch typ := vec.Type(); typ.Family() {
+	typ := vec.Type()
+	family := typ.Family()
+	if family == types.INetFamily && vec.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+		family = typeconv.DatumVecCanonicalTypeFamily
+	}
+	switch family {
 	case types.BoolFamily:
 		bs := vec.Bool()
 		for r := 0; r < count; r++ {

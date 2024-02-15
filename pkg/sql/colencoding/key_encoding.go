@@ -210,19 +210,32 @@ func decodeTableKeyToCol(
 		vecs.BytesCols[colIdx].Set(rowIdx, key[:keyLen])
 		rkey = key[keyLen:]
 	case types.INetFamily:
-		// No need to perform the deep copy since we don't hold onto the byte
-		// slice.
-		if dir == catenumpb.IndexColumn_ASC {
-			rkey, scratch, err = encoding.DecodeBytesAscending(key, scratch[:0])
+		if vecs.Vecs[vecIdx].CanonicalTypeFamily() == types.INetFamily {
+			// No need to perform the deep copy since we don't hold onto the
+			// byte slice.
+			if dir == catenumpb.IndexColumn_ASC {
+				rkey, scratch, err = encoding.DecodeBytesAscending(key, scratch[:0])
+			} else {
+				rkey, scratch, err = encoding.DecodeBytesDescending(key, scratch[:0])
+			}
+			if err != nil {
+				return nil, false, scratch, err
+			}
+			var ipAddr ipaddr.IPAddr
+			_, err = ipAddr.FromBuffer(scratch)
+			vecs.INetCols[colIdx].Set(rowIdx, ipAddr)
 		} else {
-			rkey, scratch, err = encoding.DecodeBytesDescending(key, scratch[:0])
+			if err = typeconv.AssertDatumBacked(ctx, valType); err != nil {
+				return nil, false, scratch, err
+			}
+			var d tree.Datum
+			encDir := encoding.Ascending
+			if dir == catenumpb.IndexColumn_DESC {
+				encDir = encoding.Descending
+			}
+			d, rkey, err = keyside.Decode(da, valType, key, encDir)
+			vecs.DatumCols[colIdx].Set(rowIdx, d)
 		}
-		if err != nil {
-			return nil, false, scratch, err
-		}
-		var ipAddr ipaddr.IPAddr
-		_, err = ipAddr.FromBuffer(scratch)
-		vecs.INetCols[colIdx].Set(rowIdx, ipAddr)
 	default:
 		if err = typeconv.AssertDatumBacked(ctx, valType); err != nil {
 			return nil, false, scratch, err
@@ -307,14 +320,26 @@ func UnmarshalColumnValueToCol(
 		v, err = value.GetBytes()
 		vecs.JSONCols[colIdx].Bytes.Set(rowIdx, v)
 	case types.INetFamily:
-		var v []byte
-		v, err = value.GetBytes()
-		if err != nil {
-			return err
+		if vecs.Vecs[vecIdx].CanonicalTypeFamily() == types.INetFamily {
+			var v []byte
+			v, err = value.GetBytes()
+			if err != nil {
+				return err
+			}
+			var ipAddr ipaddr.IPAddr
+			_, err = ipAddr.FromBuffer(v)
+			vecs.INetCols[colIdx].Set(rowIdx, ipAddr)
+		} else {
+			if err = typeconv.AssertDatumBacked(ctx, typ); err != nil {
+				return err
+			}
+			var d tree.Datum
+			d, err = valueside.UnmarshalLegacy(da, typ, value)
+			if err != nil {
+				return err
+			}
+			vecs.DatumCols[colIdx].Set(rowIdx, d)
 		}
-		var ipAddr ipaddr.IPAddr
-		_, err = ipAddr.FromBuffer(v)
-		vecs.INetCols[colIdx].Set(rowIdx, ipAddr)
 	// Types backed by tree.Datums.
 	default:
 		if err = typeconv.AssertDatumBacked(ctx, typ); err != nil {

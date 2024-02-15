@@ -113,7 +113,7 @@ func (v *valuesOp) Next() coldata.Batch {
 				"malformed ValuesCoreSpec row: %x, rows left %d", rowData, len(v.data),
 			))
 		}
-		EncDatumRowToColVecs(v.row, nRows, v.vecs, v.typs, &v.dalloc)
+		EncDatumRowToColVecs(v.row, nRows, v.vecs, &v.dalloc)
 		batchDone = v.helper.AccountForSet(nRows)
 		v.data = v.data[1:]
 		nRows++
