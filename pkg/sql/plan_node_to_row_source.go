@@ -262,15 +262,15 @@ func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetad
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (p *planNodeToRowSource) execStatsForTrace() *execinfrapb.ComponentStats {
 	// Propagate contention time and RUs from IO requests.
-	if p.contentionEventsListener.CumulativeContentionTime == 0 && p.tenantConsumptionListener.ConsumedRU == 0 {
+	if p.contentionEventsListener.GetContentionTime() == 0 && p.tenantConsumptionListener.GetConsumedRU() == 0 {
 		return nil
 	}
 	return &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
-			ContentionTime: optional.MakeTimeValue(p.contentionEventsListener.CumulativeContentionTime),
+			ContentionTime: optional.MakeTimeValue(p.contentionEventsListener.GetContentionTime()),
 		},
 		Exec: execinfrapb.ExecStats{
-			ConsumedRU: optional.MakeUint(p.tenantConsumptionListener.ConsumedRU),
+			ConsumedRU: optional.MakeUint(p.tenantConsumptionListener.GetConsumedRU()),
 		},
 	}
 }

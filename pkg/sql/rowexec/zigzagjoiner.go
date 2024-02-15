@@ -852,10 +852,11 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	kvStats := execinfrapb.KVStats{
 		BytesRead:           optional.MakeUint(uint64(z.getBytesRead())),
 		KVPairsRead:         optional.MakeUint(uint64(z.getKVPairsRead())),
-		ContentionTime:      optional.MakeTimeValue(z.contentionEventsListener.CumulativeContentionTime),
+		ContentionTime:      optional.MakeTimeValue(z.contentionEventsListener.GetContentionTime()),
 		BatchRequestsIssued: optional.MakeUint(uint64(z.getBatchRequestsIssued())),
 	}
-	execstats.PopulateKVMVCCStats(&kvStats, &z.scanStatsListener.ScanStats)
+	scanStats := z.scanStatsListener.GetScanStats()
+	execstats.PopulateKVMVCCStats(&kvStats, &scanStats)
 	for i := range z.infos {
 		fis, ok := getFetcherInputStats(z.infos[i].fetcher)
 		if !ok {
@@ -869,7 +870,7 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		KV:     kvStats,
 		Output: z.OutputHelper.Stats(),
 	}
-	ret.Exec.ConsumedRU = optional.MakeUint(z.tenantConsumptionListener.ConsumedRU)
+	ret.Exec.ConsumedRU = optional.MakeUint(z.tenantConsumptionListener.GetConsumedRU())
 	return ret
 }
 
