@@ -24576,7 +24576,7 @@ func GetProjectionLConstOperator(
 		outputIdx:         outputIdx,
 		calledOnNullInput: calledOnNullInput,
 	}
-	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
+	c := colconv.GetDatumToPhysicalFn(allocator.Ctx, constType)(constArg)
 	leftType, rightType := constType, inputTypes[colIdx]
 	switch op := op.(type) {
 	case treebin.BinaryOperator:

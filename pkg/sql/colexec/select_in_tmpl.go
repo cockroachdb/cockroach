@@ -108,7 +108,7 @@ func GetInProjectionOperator(
 				outputIdx:      resultIdx,
 				negate:         negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(evalCtx, t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(allocator.Ctx, evalCtx, t, datumTuple)
 			return obj, nil
 			// {{end}}
 		}
@@ -137,7 +137,7 @@ func GetInOperator(
 				colIdx:         colIdx,
 				negate:         negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(evalCtx, t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(ctx, evalCtx, t, datumTuple)
 			return obj, nil
 			// {{end}}
 		}
@@ -172,12 +172,12 @@ type projectInOp_TYPE struct {
 var _ colexecop.Operator = &projectInOp_TYPE{}
 
 func fillDatumRow_TYPE(
-	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
+	ctx context.Context, evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]_GOTYPE, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []_GOTYPE
 	hasNulls := false
 	for _, d := range datumTuple.D {
