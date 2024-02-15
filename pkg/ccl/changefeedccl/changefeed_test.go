@@ -5976,7 +5976,7 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 	}
 
 	// TODO(#89421): include pubsub once it supports metrics
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless", "pubsub"))
+	cdcTest(t, testFn, feedTestForceSink("pulsar"))
 }
 
 func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
@@ -6010,7 +6010,7 @@ func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
 	}
 
 	// TODO(#89421): include pubsub once it supports metrics
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless", "pubsub"))
+	cdcTest(t, testFn, feedTestForceSink("pulsar"))
 }
 
 func TestChangefeedHandlesDrainingNodes(t *testing.T) {
@@ -9057,7 +9057,7 @@ func TestBatchSizeMetric(t *testing.T) {
 		})
 		require.NoError(t, foo.Close())
 	}
-	cdcTest(t, testFn)
+	cdcTest(t, testFn, feedTestForceSink("pulsar"))
 }
 
 // TestParallelIOMetrics tests parallel io metrics.
