@@ -47,8 +47,10 @@ type ImmediateMutationVisitor interface {
 	MakeIndexAbsent(context.Context, MakeIndexAbsent) error
 	MakeAbsentColumnDeleteOnly(context.Context, MakeAbsentColumnDeleteOnly) error
 	SetAddedColumnType(context.Context, SetAddedColumnType) error
-	MakeWriteOnlyColumnPublic(context.Context, MakeWriteOnlyColumnPublic) error
-	MakePublicColumnWriteOnly(context.Context, MakePublicColumnWriteOnly) error
+	MakeWriteOnlyColumnPublicButInaccessible(context.Context, MakeWriteOnlyColumnPublicButInaccessible) error
+	MakePublicButInaccessibleColumnPublic(context.Context, MakePublicButInaccessibleColumnPublic) error
+	MakePublicColumnPublicButInaccessible(context.Context, MakePublicColumnPublicButInaccessible) error
+	MakePublicButInaccessibleColumnWriteOnly(context.Context, MakePublicButInaccessibleColumnWriteOnly) error
 	MakeWriteOnlyColumnDeleteOnly(context.Context, MakeWriteOnlyColumnDeleteOnly) error
 	RemoveDroppedColumnType(context.Context, RemoveDroppedColumnType) error
 	MakeDeleteOnlyColumnAbsent(context.Context, MakeDeleteOnlyColumnAbsent) error
@@ -257,13 +259,23 @@ func (op SetAddedColumnType) Visit(ctx context.Context, v ImmediateMutationVisit
 }
 
 // Visit is part of the ImmediateMutationOp interface.
-func (op MakeWriteOnlyColumnPublic) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
-	return v.MakeWriteOnlyColumnPublic(ctx, op)
+func (op MakeWriteOnlyColumnPublicButInaccessible) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MakeWriteOnlyColumnPublicButInaccessible(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
-func (op MakePublicColumnWriteOnly) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
-	return v.MakePublicColumnWriteOnly(ctx, op)
+func (op MakePublicButInaccessibleColumnPublic) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MakePublicButInaccessibleColumnPublic(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op MakePublicColumnPublicButInaccessible) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MakePublicColumnPublicButInaccessible(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op MakePublicButInaccessibleColumnWriteOnly) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MakePublicButInaccessibleColumnWriteOnly(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

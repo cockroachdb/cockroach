@@ -104,8 +104,8 @@ func (i *immediateVisitor) MakeDeleteOnlyColumnWriteOnly(
 	)
 }
 
-func (i *immediateVisitor) MakeWriteOnlyColumnPublic(
-	ctx context.Context, op scop.MakeWriteOnlyColumnPublic,
+func (i *immediateVisitor) MakeWriteOnlyColumnPublicButInaccessible(
+	ctx context.Context, op scop.MakeWriteOnlyColumnPublicButInaccessible,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
@@ -119,6 +119,7 @@ func (i *immediateVisitor) MakeWriteOnlyColumnPublic(
 	if err != nil {
 		return err
 	}
+	mut.GetColumn().Inaccessible = true
 	// TODO(ajwerner): Should the op just have the column descriptor? What's the
 	// type hydration status here? Cloning is going to blow away hydration. Is
 	// that okay?
@@ -139,8 +140,40 @@ func (i *immediateVisitor) MakeWriteOnlyColumnPublic(
 	return nil
 }
 
-func (i *immediateVisitor) MakePublicColumnWriteOnly(
-	ctx context.Context, op scop.MakePublicColumnWriteOnly,
+func (i *immediateVisitor) MakePublicButInaccessibleColumnPublic(
+	ctx context.Context, op scop.MakePublicButInaccessibleColumnPublic,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	for idx := range tbl.Columns {
+		if tbl.Columns[idx].ID == op.ColumnID {
+			tbl.Columns[idx].Inaccessible = false
+		}
+	}
+	return nil
+}
+
+func (i *immediateVisitor) MakePublicColumnPublicButInaccessible(
+	ctx context.Context, op scop.MakePublicColumnPublicButInaccessible,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	for i, col := range tbl.PublicColumns() {
+		if col.GetID() == op.ColumnID {
+			tbl.Columns[i].Inaccessible = true
+			return nil
+		}
+	}
+	return errors.AssertionFailedf("failed to find column %d in table %q (%d)",
+		op.ColumnID, tbl.GetName(), tbl.GetID())
+}
+
+func (i *immediateVisitor) MakePublicButInaccessibleColumnWriteOnly(
+	ctx context.Context, op scop.MakePublicButInaccessibleColumnWriteOnly,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
