@@ -1965,7 +1965,7 @@ func init() {
 func makeBenchRowKey(b *testing.B, buf []byte, id int, columnFamily uint32) roachpb.Key {
 	var err error
 	buf = append(buf, benchRowPrefix...)
-	buf, _, err = rowenc.EncodeColumns(
+	buf, err = rowenc.EncodeColumns(
 		[]descpb.ColumnID{0}, nil /* directions */, benchRowColMap,
 		[]tree.Datum{tree.NewDInt(tree.DInt(id))}, buf)
 	if err != nil {

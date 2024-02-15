@@ -650,7 +650,7 @@ func EncodeInvertedIndexPrefixKeys(
 		// efficient.
 		keyPrefix = growKey(keyPrefix, len(keyPrefix))
 
-		keyPrefix, _, err = EncodeColumns(colIDs, dirs, colMap, values, keyPrefix)
+		keyPrefix, err = EncodeColumns(colIDs, dirs, colMap, values, keyPrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -1326,7 +1326,7 @@ func EncodeSecondaryIndex(
 
 	// Add the extra columns - they are encoded in ascending order which is done
 	// by passing nil for the encoding directions.
-	extraKey, _, err := EncodeColumns(
+	extraKey, err := EncodeColumns(
 		secondaryIndex.IndexDesc().KeySuffixColumnIDs,
 		nil, /* directions */
 		colMap,
@@ -1656,24 +1656,21 @@ func EncodeColumns(
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
-) (key []byte, containsNull bool, err error) {
+) (key []byte, err error) {
 	key = keyPrefix
 	for colIdx, id := range columnIDs {
 		val := findColumnValue(id, colMap, values)
-		if val == tree.DNull {
-			containsNull = true
-		}
 
 		dir, err := directions.Get(colIdx)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 
 		if key, err = keyside.Encode(key, val, dir); err != nil {
-			return nil, false, err
+			return nil, err
 		}
 	}
-	return key, containsNull, nil
+	return key, nil
 }
 
 // growKey returns a new key with  the same contents as the given key and with

@@ -116,7 +116,7 @@ func (b *BatchEncoder) encodeInvertedIndexPrefixKeys(
 		colIDs := index.IndexDesc().KeyColumnIDs[:numColumns-1]
 		dirs := index.IndexDesc().KeyColumnDirections
 
-		_, err = encodeColumns(colIDs, dirs, b.colMap, b.start, b.end, b.b.ColVecs(), kys)
+		err = encodeColumns(colIDs, dirs, b.colMap, b.start, b.end, b.b.ColVecs(), kys)
 		if err != nil {
 			return nil, err
 		}
@@ -152,7 +152,7 @@ func writeColumnValueOneRow(
 		}
 		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.ColID)
 		lastColID = col.ColID
-		value, err = valuesideEncodeCol(value, vec.Type(), colIDDelta, vec, row)
+		value, err = valuesideEncodeCol(value, colIDDelta, vec, row)
 		if err != nil {
 			return nil, err
 		}

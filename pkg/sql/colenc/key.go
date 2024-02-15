@@ -45,8 +45,10 @@ func partialIndexAndNullCheck[T []byte | roachpb.Key](
 
 // encodeKeys is the columnar version of keyside.Encode.
 // Cases taken from decodeTableKeyToCol.
+//
+// vec=nil indicates that all values are NULL.
 func encodeKeys[T []byte | roachpb.Key](
-	kys []T, typ *types.T, dir encoding.Direction, vec coldata.Vec, start, end int,
+	kys []T, dir encoding.Direction, vec coldata.Vec, start, end int,
 ) error {
 	count := end - start
 	if vec == nil {
@@ -61,9 +63,10 @@ func encodeKeys[T []byte | roachpb.Key](
 				kys[r] = encoding.EncodeNullDescending(b)
 			}
 		}
+		return nil
 	}
 	nulls := vec.Nulls()
-	switch typ.Family() {
+	switch typ := vec.Type(); typ.Family() {
 	case types.BoolFamily:
 		bs := vec.Bool()
 		for r := 0; r < count; r++ {
@@ -237,7 +240,7 @@ func (b *BatchEncoder) encodeIndexKey(
 		} else {
 			nulls.SetNulls()
 		}
-		if err := encodeKeys(kys, k.Type, dir, vec, b.start, b.end); err != nil {
+		if err := encodeKeys(kys, dir, vec, b.start, b.end); err != nil {
 			return err
 		}
 		if vec.Nulls().MaybeHasNulls() {
