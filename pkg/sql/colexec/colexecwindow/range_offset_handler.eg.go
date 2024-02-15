@@ -10777,7 +10777,7 @@ func decodeOffset(
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return datum
 	}
-	typeConverter := colconv.GetDatumToPhysicalFn(offsetType)
+	typeConverter := colconv.GetDatumToPhysicalFn(ctx, offsetType)
 	return typeConverter(datum)
 }
 

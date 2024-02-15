@@ -13049,7 +13049,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bool()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -13206,7 +13206,7 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int16()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -13363,7 +13363,7 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int32()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -13520,7 +13520,7 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -13677,7 +13677,7 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Float64()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -13834,7 +13834,7 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Decimal()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -13991,7 +13991,7 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -14148,7 +14148,7 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Timestamp()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -14305,7 +14305,7 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Interval()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -14462,7 +14462,7 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bytes()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -14615,7 +14615,7 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bytes()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -14768,7 +14768,7 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Timestamp()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -14925,7 +14925,7 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bytes()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -15078,7 +15078,7 @@ func (c *castDatumInetOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.INet()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -15235,7 +15235,7 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.JSON()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
