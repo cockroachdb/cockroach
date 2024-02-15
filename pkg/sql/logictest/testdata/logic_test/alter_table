@@ -3185,9 +3185,6 @@ t_96728     t_96728_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)               
 subtest alter_table_with_multiple_commands_99035
 
 statement ok
-SET CLUSTER SETTING sql.schema.force_declarative_statements = "+ALTER TABLE";
-
-statement ok
 DROP TABLE IF EXISTS t_99035;
 CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
 INSERT INTO t_99035 VALUES (0,0);
@@ -3340,9 +3337,6 @@ CREATE TABLE public.t_99035 (
   CONSTRAINT t_99035_p_fkey FOREIGN KEY (p) REFERENCES public.t_99035(j),
   CONSTRAINT check_j CHECK (j >= 0:::INT8)
 )
-
-statement ok
-RESET CLUSTER SETTING sql.schema.force_declarative_statements;
 
 subtest end
 
