@@ -1245,7 +1245,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			KVPairsRead:         optional.MakeUint(uint64(jr.fetcher.GetKVPairsRead())),
 			TuplesRead:          fis.NumTuples,
 			KVTime:              fis.WaitTime,
-			ContentionTime:      optional.MakeTimeValue(jr.contentionEventsListener.CumulativeContentionTime),
+			ContentionTime:      optional.MakeTimeValue(jr.contentionEventsListener.GetContentionTime()),
 			BatchRequestsIssued: optional.MakeUint(uint64(jr.fetcher.GetBatchRequestsIssued())),
 			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
 			UsedStreamer:        jr.usesStreamer,
@@ -1264,8 +1264,9 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			ret.Exec.MaxAllocatedDisk.Add(jr.streamerInfo.diskMonitor.MaximumBytes())
 		}
 	}
-	ret.Exec.ConsumedRU = optional.MakeUint(jr.tenantConsumptionListener.ConsumedRU)
-	execstats.PopulateKVMVCCStats(&ret.KV, &jr.scanStatsListener.ScanStats)
+	ret.Exec.ConsumedRU = optional.MakeUint(jr.tenantConsumptionListener.GetConsumedRU())
+	scanStats := jr.scanStatsListener.GetScanStats()
+	execstats.PopulateKVMVCCStats(&ret.KV, &scanStats)
 	return ret
 }
 
