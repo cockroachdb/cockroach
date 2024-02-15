@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -78,7 +77,9 @@ func CreateTestStorePool(
 	mc := timeutil.NewManualTime(time.Date(2020, 0, 0, 0, 0, 0, 0, time.UTC))
 	clock := hlc.NewClockForTesting(mc)
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
-	g := gossip.NewTest(1, stopper, metric.NewRegistry())
+	// One node gossip network with nodeId 1.
+	gn := gossip.NewTestNetwork()
+	g := gn.StartGossip(1, stopper, nil)
 	mnl := NewMockNodeLiveness(defaultNodeStatus)
 
 	liveness.TimeUntilNodeDead.Override(ctx, &st.SV, timeUntilNodeDeadValue)

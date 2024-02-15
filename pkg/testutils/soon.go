@@ -24,7 +24,7 @@ import (
 const (
 	// DefaultSucceedsSoonDuration is the maximum amount of time unittests
 	// will wait for a condition to become true. See SucceedsSoon().
-	DefaultSucceedsSoonDuration = 45 * time.Second
+	DefaultSucceedsSoonDuration = 5 * time.Second
 
 	// RaceSucceedsSoonDuration is the maximum amount of time
 	// unittests will wait for a condition to become true when

@@ -73,7 +73,7 @@ func NewStorePool(
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
 
 	// Never gossip, pass in nil values.
-	g := gossip.NewTest(1, stopper, metric.NewRegistry())
+	g := gossip.NewTest(1, stopper, metric.NewRegistry(), nil)
 	sp := storepool.NewStorePool(
 		ambientCtx,
 		st,

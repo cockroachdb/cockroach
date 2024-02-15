@@ -137,7 +137,7 @@ func newRaftTransportTestContext(t testing.TB, st *cluster.Settings) *raftTransp
 	// we can't enforce some of the RPC check validation.
 	rttc.nodeRPCContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	rttc.gossip = gossip.NewTest(1, rttc.stopper, metric.NewRegistry())
+	rttc.gossip = gossip.NewTest(1, rttc.stopper, metric.NewRegistry(), nil)
 
 	return rttc
 }

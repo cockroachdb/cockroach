@@ -90,7 +90,7 @@ func makeGossip(t *testing.T, stopper *stop.Stopper, nodeIDs []int) (*gossip.Gos
 	clock := hlc.NewClockForTesting(nil)
 
 	const nodeID = 1
-	g := gossip.NewTest(nodeID, stopper, metric.NewRegistry())
+	g := gossip.NewTest(nodeID, stopper, metric.NewRegistry(), nil)
 	if err := g.SetNodeDescriptor(newNodeDesc(nodeID)); err != nil {
 		t.Fatal(err)
 	}

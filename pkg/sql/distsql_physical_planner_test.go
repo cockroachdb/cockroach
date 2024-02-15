@@ -1106,7 +1106,7 @@ func TestPartitionSpans(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
-	mockGossip := gossip.NewTest(roachpb.NodeID(1), s.Stopper(), metric.NewRegistry())
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), s.Stopper(), metric.NewRegistry(), nil)
 	var nodeDescs []*roachpb.NodeDescriptor
 	mockInstances := make(mockAddressResolver)
 	for i := 1; i <= 10; i++ {
@@ -1544,7 +1544,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			// reflect tc.nodesNotAdvertisingDistSQLVersion.
 			testStopper := stop.NewStopper()
 			defer testStopper.Stop(context.Background())
-			mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry())
+			mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry(), nil)
 			var nodeDescs []*roachpb.NodeDescriptor
 			for i := 1; i <= 2; i++ {
 				sqlInstanceID := base.SQLInstanceID(i)
@@ -1638,7 +1638,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	mockGossip := gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry())
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry(), nil)
 	var nodeDescs []*roachpb.NodeDescriptor
 	for i := 1; i <= 2; i++ {
 		sqlInstanceID := base.SQLInstanceID(i)
@@ -1733,7 +1733,7 @@ func TestCheckNodeHealth(t *testing.T) {
 
 	const sqlInstanceID = base.SQLInstanceID(5)
 
-	mockGossip := gossip.NewTest(roachpb.NodeID(sqlInstanceID), stopper, metric.NewRegistry())
+	mockGossip := gossip.NewTest(roachpb.NodeID(sqlInstanceID), stopper, metric.NewRegistry(), nil)
 
 	desc := &roachpb.NodeDescriptor{
 		NodeID:  roachpb.NodeID(sqlInstanceID),

@@ -71,7 +71,6 @@ go_test(
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_kr_pretty//:pretty",
-        "@com_github_olekukonko_tablewriter//:tablewriter",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@io_etcd_go_raft_v3//:raft",

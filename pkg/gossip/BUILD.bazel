@@ -11,6 +11,7 @@ go_library(
         "info.go",
         "infostore.go",
         "keys.go",
+        "network.go",
         "node_set.go",
         "server.go",
         "status.go",
@@ -90,7 +91,6 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
-        "@org_golang_google_grpc//:go_default_library",
     ],
 )
 
