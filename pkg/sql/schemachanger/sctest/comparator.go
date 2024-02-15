@@ -220,6 +220,7 @@ func preExecutionProcessing(
 	if willLineBeExecutedInDSC(ctx, t, declarativeLine, declarativeConn) {
 		legacyLineModifiers := []sqlLineModifier{
 			modifyExprsReferencingSequencesWithTrue,
+			modifyLineMultipleAlterTables,
 			modifyAlterPKWithRowIDCol,
 			modifyAlterPKWithSamePKColsButDifferentSharding,
 			modifyLineToSkipValidateConstraint,
@@ -533,6 +534,40 @@ func modifyExprsReferencingSequencesWithTrue(
 		newParsedStmts = append(newParsedStmts, parsedStmt)
 	}
 
+	return newParsedStmts
+}
+
+// modifyLineMultipleAlterTables modifies line so that if there are multiple
+// ALTERs in one ALTER TABLE command, they are split up into multiple ALTER
+// TABLE statements.
+func modifyLineMultipleAlterTables(
+	ctx context.Context, t *testing.T, parsedStmts statements.Statements, conn *gosql.Conn,
+) (newParsedStmts statements.Statements) {
+	for _, parsedStmt := range parsedStmts {
+		atCmd, ok := parsedStmt.AST.(*tree.AlterTable)
+		if !ok || len(atCmd.Cmds) == 1 {
+			newParsedStmts = append(newParsedStmts, parsedStmt)
+			continue
+		}
+		for _, cmd := range atCmd.Cmds {
+			newParsedStmts = append(
+				newParsedStmts,
+				statements.Statement[tree.Statement]{
+					AST: &tree.BeginTransaction{},
+				},
+				statements.Statement[tree.Statement]{
+					AST: &tree.AlterTable{
+						Table:    atCmd.Table,
+						IfExists: atCmd.IfExists,
+						Cmds:     []tree.AlterTableCmd{cmd},
+					},
+				},
+				statements.Statement[tree.Statement]{
+					AST: &tree.CommitTransaction{},
+				},
+			)
+		}
+	}
 	return newParsedStmts
 }
 
