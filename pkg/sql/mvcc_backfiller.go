@@ -153,7 +153,7 @@ func (im *IndexBackfillerMergePlanner) plan(
 
 	return func(ctx context.Context) error {
 		cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
-		recv := MakeDistSQLReceiver(
+		recv, _ := MakeDistSQLReceiver(
 			ctx,
 			evalCtx.Settings.Version,
 			&cbw,
@@ -166,7 +166,6 @@ func (im *IndexBackfillerMergePlanner) plan(
 		defer recv.Release()
 		evalCtxCopy := evalCtx
 		im.execCfg.DistSQLPlanner.Run(
-			ctx,
 			planCtx,
 			nil, /* txn - the processors manage their own transactions */
 			p, recv, &evalCtxCopy,

@@ -96,7 +96,7 @@ func ShowCloudStorageTestPlanHook(
 			return nil
 		})
 
-		recv := sql.MakeDistSQLReceiver(
+		recv, _ := sql.MakeDistSQLReceiver(
 			ctx,
 			evalCtx.Settings.Version,
 			rowResultWriter,
@@ -109,7 +109,7 @@ func ShowCloudStorageTestPlanHook(
 		defer recv.Release()
 
 		evalCtxCopy := *evalCtx
-		dsp.Run(ctx, planCtx, nil, plan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+		dsp.Run(planCtx, nil, plan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 		return rowResultWriter.Err()
 	}
 	return fn, Header, nil, false, nil

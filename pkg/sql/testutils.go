@@ -140,7 +140,8 @@ func (dsp *DistSQLPlanner) Exec(
 		return nil
 	})
 	execCfg := p.ExecCfg()
-	recv := MakeDistSQLReceiver(
+	var recv *DistSQLReceiver
+	recv, ctx = MakeDistSQLReceiver(
 		ctx,
 		execCfg.Settings.Version,
 		rw,
@@ -161,7 +162,7 @@ func (dsp *DistSQLPlanner) Exec(
 		distributionType)
 	planCtx.stmtType = recv.stmtType
 
-	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv, nil /* finishedSetupFn */)
+	dsp.PlanAndRun(evalCtx, planCtx, p.txn, p.curPlan.main, recv, nil /* finishedSetupFn */)
 	return rw.Err()
 }
 
@@ -171,7 +172,8 @@ func (dsp *DistSQLPlanner) ExecLocalAll(
 	ctx context.Context, execCfg ExecutorConfig, p *planner, res RestrictedCommandResult,
 ) error {
 	defer p.curPlan.close(ctx)
-	recv := MakeDistSQLReceiver(
+	var recv *DistSQLReceiver
+	recv, ctx = MakeDistSQLReceiver(
 		ctx,
 		execCfg.Settings.Version,
 		res,
@@ -196,5 +198,5 @@ func (dsp *DistSQLPlanner) ExecLocalAll(
 		factoryEvalCtx.Annotations = &p.semaCtx.Annotations
 		return &factoryEvalCtx
 	}
-	return dsp.PlanAndRunAll(ctx, evalCtx, planCtx, p, recv, evalCtxFactory)
+	return dsp.PlanAndRunAll(evalCtx, planCtx, p, recv, evalCtxFactory)
 }

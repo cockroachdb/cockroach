@@ -270,7 +270,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 
 		metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter()
 
-		distSQLReceiver := sql.MakeDistSQLReceiver(
+		recv, _ := sql.MakeDistSQLReceiver(
 			ctx,
 			evalCtx.Settings.Version,
 			metadataCallbackWriter,
@@ -280,16 +280,15 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 			nil, /* clockUpdater */
 			evalCtx.Tracing,
 		)
-		defer distSQLReceiver.Release()
+		defer recv.Release()
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
 		distSQLPlanner.Run(
-			ctx,
 			planCtx,
 			nil, /* txn */
 			physicalPlan,
-			distSQLReceiver,
+			recv,
 			&evalCtxCopy,
 			nil, /* finishedSetupFn */
 		)
