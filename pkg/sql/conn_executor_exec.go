@@ -502,9 +502,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			cancelQuery()
 		})
 
-		if ex.executorType != executorTypeInternal {
-			ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
-		}
+		// Note ex.metrics is Server.Metrics for the connExecutor that serves the
+		// client connection, and is Server.InternalMetrics for internal executors.
+		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
 
 		// If the query timed out, we intercept the error, payload, and event here
 		// for the same reasons we intercept them for canceled queries above.
@@ -533,9 +533,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}(ctx, res)
 
-	if ex.executorType != executorTypeInternal {
-		ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
-	}
+	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
+	// client connection, and is Server.InternalMetrics for internal executors.
+	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
 	// TODO(sql-sessions): persist the planner for a pausable portal, and reuse
 	// it for each re-execution.
@@ -548,7 +548,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.noticeSender = res
 	ih := &p.instrumentation
 
-	if maxOpen := maxOpenTransactions.Get(&ex.server.cfg.Settings.SV); maxOpen > 0 {
+	if maxOpen := maxOpenTransactions.Get(&ex.server.cfg.Settings.SV); maxOpen > 0 && ex.executorType != executorTypeInternal {
 		// NB: SQLTxnsOpen does not include internal executor transactions.
 		if ex.metrics.EngineMetrics.SQLTxnsOpen.Value() > maxOpen {
 			hasAdmin, err := ex.planner.HasAdminRole(ctx)
@@ -3260,9 +3260,9 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
 	}
 
-	if ex.executorType != executorTypeInternal {
-		ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
-	}
+	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
+	// client connection, and is Server.InternalMetrics for internal executors.
+	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
 
 	ex.extraTxnState.shouldExecuteOnTxnFinish = true
 	ex.extraTxnState.txnFinishClosure.txnStartTime = txnStart
@@ -3294,9 +3294,9 @@ func (ex *connExecutor) recordTransactionFinish(
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
 	ex.totalActiveTimeStopWatch.Stop()
-	if ex.executorType != executorTypeInternal {
-		ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
-	}
+	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
+	// client connection, and is Server.InternalMetrics for internal executors.
+	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
 	if contentionDuration := ex.extraTxnState.accumulatedStats.ContentionTime.Nanoseconds(); contentionDuration > 0 {
