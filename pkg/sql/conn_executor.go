@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -86,6 +87,14 @@ import (
 	"github.com/cockroachdb/redact"
 	"golang.org/x/net/trace"
 )
+
+var maxOpenTransactions = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"server.max_open_transactions_per_gateway",
+	"the maximum number of open SQL transactions per gateway allowed at a given time. "+
+		"Negative values result in unlimited number of connections. Superusers are not affected by this limit.",
+	-1,
+).WithPublic()
 
 // noteworthyMemoryUsageBytes is the minimum size tracked by a
 // transaction or session monitor before the monitor starts explicitly
