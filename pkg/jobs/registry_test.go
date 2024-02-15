@@ -1221,6 +1221,52 @@ func BenchmarkRunEmptyJob(b *testing.B) {
 	})
 }
 
+// BenchmarkShowJob benchmarks SHOW JOB performance with >10k jobs in
+// the jobs-related table.
+func BenchmarkShowJob(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	defer ResetConstructors()
+
+	RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+		return jobstest.FakeResumer{}
+	}, UsesTenantCostControl)
+
+	ctx := context.Background()
+	b.Run("SHOW JOB", func(b *testing.B) {
+		b.StopTimer()
+		s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
+		defer s.Stopper().Stop(ctx)
+		r := s.ApplicationLayer().JobRegistry().(*Registry)
+		idb := s.ApplicationLayer().InternalDB().(isql.DB)
+
+		for batch := 0; batch < 10; batch++ {
+			err := idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				for j := 0; j < 1000; j++ {
+					jobID := r.MakeJobID()
+					_, err := r.CreateJobWithTxn(ctx, Record{
+						JobID:       jobID,
+						Description: "testing job",
+						Username:    username.RootUserName(),
+						Details:     jobspb.ImportDetails{},
+						Progress:    jobspb.ImportProgress{},
+					}, jobID, txn)
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+			require.NoError(b, err)
+		}
+		b.ResetTimer()
+		b.StartTimer()
+		for n := 0; n < b.N; n++ {
+			require.NoError(b, sqlDB.QueryRow("SHOW JOB 101").Err())
+		}
+	})
+}
+
 func TestDeleteTerminalJobByID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
