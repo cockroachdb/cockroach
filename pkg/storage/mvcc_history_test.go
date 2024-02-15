@@ -3013,7 +3013,7 @@ func toKey(s string, sqlCodec keys.SQLCodec) roachpb.Key {
 		var colMap catalog.TableColMap
 		colMap.Set(0, 0)
 		key := sqlCodec.IndexPrefix(1, 1)
-		key, _, err = rowenc.EncodeColumns([]descpb.ColumnID{0}, nil /* directions */, colMap, []tree.Datum{tree.NewDString(pk)}, key)
+		key, err = rowenc.EncodeColumns([]descpb.ColumnID{0}, nil /* directions */, colMap, []tree.Datum{tree.NewDString(pk)}, key)
 		if err != nil {
 			panic(err)
 		}
