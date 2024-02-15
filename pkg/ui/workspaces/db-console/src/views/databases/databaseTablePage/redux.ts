@@ -59,12 +59,18 @@ export const mapStateToProps = (
     util.minDate,
   );
   const nodeRegions = nodeRegionsByIDSelector(state);
+  const nodeStatuses = state?.cachedData.nodes.data;
 
   return {
     databaseName: database,
     name: table,
     schemaName: "",
-    details: deriveTablePageDetailsMemoized({ details, nodeRegions, isTenant }),
+    details: deriveTablePageDetailsMemoized({
+      details,
+      nodeRegions,
+      isTenant,
+      nodeStatuses,
+    }),
     showNodeRegionsSection: selectIsMoreThanOneNode(state) && !isTenant,
     automaticStatsCollectionEnabled:
       selectAutomaticStatsCollectionEnabled(state) || false,

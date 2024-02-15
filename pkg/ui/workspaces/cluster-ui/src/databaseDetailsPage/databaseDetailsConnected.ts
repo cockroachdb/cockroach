@@ -54,6 +54,7 @@ const mapStateToProps = (
     databaseDetails[database]?.data?.results.tablesResp.tables || [];
   const nodeRegions = nodeRegionsByIDSelector(state);
   const isTenant = selectIsTenant(state);
+  const nodeStatuses = state.adminUI?.nodes.data;
   return {
     loading: !!databaseDetails[database]?.inFlight,
     loaded: !!databaseDetails[database]?.valid,
@@ -74,6 +75,7 @@ const mapStateToProps = (
       tableDetails: state.adminUI?.tableDetails,
       nodeRegions,
       isTenant,
+      nodeStatuses,
     }),
     showIndexRecommendations: selectIndexRecommendationsEnabled(state),
     csIndexUnusedDuration: selectDropUnusedIndexDuration(state),

@@ -18,6 +18,7 @@ import {
   defaultFilters,
   api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import * as fakeApi from "src/util/fakeApi";
@@ -154,6 +155,7 @@ describe("Databases Page", function () {
           spanStatsQueryError: undefined,
           name: "system",
           nodes: [],
+          nodeStatuses: undefined,
           spanStats: undefined,
           tables: undefined,
           nodesByRegionString: "",
@@ -170,6 +172,7 @@ describe("Databases Page", function () {
           spanStatsQueryError: undefined,
           name: "test",
           nodes: [],
+          nodeStatuses: undefined,
           spanStats: undefined,
           tables: undefined,
           nodesByRegionString: "",
@@ -199,7 +202,9 @@ describe("Databases Page", function () {
       "gcp-europe-west1",
     ];
 
-    const nodes = Array.from(Array(regions.length).keys()).map(node_id => {
+    const nodes: cockroach.server.serverpb.INodeResponse[] = Array.from(
+      Array(regions.length).keys(),
+    ).map(node_id => {
       return {
         desc: {
           node_id: node_id + 1, // 1-index offset.
@@ -212,6 +217,7 @@ describe("Databases Page", function () {
             ],
           },
         },
+        store_statuses: [{ desc: { store_id: node_id + 1 } }],
       };
     });
 
@@ -300,6 +306,128 @@ describe("Databases Page", function () {
       spanStatsQueryError: undefined,
       name: "test",
       nodes: [1, 2, 3],
+      nodeStatuses: [
+        {
+          activity: {},
+          args: [],
+          desc: {
+            locality: {
+              tiers: [
+                {
+                  key: "region",
+                  value: "gcp-us-east1",
+                },
+              ],
+            },
+            locality_address: [],
+            node_id: 1,
+          },
+          env: [],
+          latencies: {},
+          metrics: {},
+          store_statuses: [{ desc: { store_id: 1 }, metrics: {} }],
+        },
+        {
+          activity: {},
+          args: [],
+          desc: {
+            locality: {
+              tiers: [
+                {
+                  key: "region",
+                  value: "gcp-us-east1",
+                },
+              ],
+            },
+            locality_address: [],
+            node_id: 2,
+          },
+          env: [],
+          latencies: {},
+          metrics: {},
+          store_statuses: [{ desc: { store_id: 2 }, metrics: {} }],
+        },
+        {
+          activity: {},
+          args: [],
+          desc: {
+            locality: {
+              tiers: [
+                {
+                  key: "region",
+                  value: "gcp-europe-west1",
+                },
+              ],
+            },
+            locality_address: [],
+            node_id: 3,
+          },
+          env: [],
+          latencies: {},
+          metrics: {},
+          store_statuses: [{ desc: { store_id: 3 }, metrics: {} }],
+        },
+        {
+          activity: {},
+          args: [],
+          desc: {
+            locality: {
+              tiers: [
+                {
+                  key: "region",
+                  value: "gcp-us-east1",
+                },
+              ],
+            },
+            locality_address: [],
+            node_id: 4,
+          },
+          env: [],
+          latencies: {},
+          metrics: {},
+          store_statuses: [{ desc: { store_id: 4 }, metrics: {} }],
+        },
+        {
+          activity: {},
+          args: [],
+          desc: {
+            locality: {
+              tiers: [
+                {
+                  key: "region",
+                  value: "gcp-europe-west2",
+                },
+              ],
+            },
+            locality_address: [],
+            node_id: 5,
+          },
+          env: [],
+          latencies: {},
+          metrics: {},
+          store_statuses: [{ desc: { store_id: 5 }, metrics: {} }],
+        },
+        {
+          activity: {},
+          args: [],
+          desc: {
+            locality: {
+              tiers: [
+                {
+                  key: "region",
+                  value: "gcp-europe-west1",
+                },
+              ],
+            },
+            locality_address: [],
+            node_id: 6,
+          },
+          env: [],
+          latencies: {},
+          metrics: {},
+          store_statuses: [{ desc: { store_id: 6 }, metrics: {} }],
+        },
+      ],
       spanStats: undefined,
       tables: {
         tables: [`"public"."foo"`, `"public"."bar"`],

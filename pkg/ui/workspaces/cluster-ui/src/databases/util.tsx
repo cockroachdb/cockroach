@@ -58,31 +58,71 @@ export class GetDatabaseInfoError extends Error {
   }
 }
 
-// getNodesByRegionString converts a list of node ids and map of
-// node ids to region to a string of node ids by region, ordered
-// by region name, e.g.
-// regionA(n1, n2), regionB(n2,n3), ...
+/** Store ids and node ids are both of type `number[]`. To disambiguate, a
+ * `kind` field is included in the type. */
+export type Stores = { kind: "store"; ids: number[] };
+
+/** getNodeIdsFromStoreIds converts a list of store IDs to a list of node IDs.
+ *
+ * @param stores - Store ids for the cluster.
+ * @param nodeStatuses - A list of nodes that includes store information.
+ * @returns A list of node ids for the cluster.
+ */
+export function getNodeIdsFromStoreIds(
+  stores: Stores,
+  nodeStatuses: cockroach.server.status.statuspb.INodeStatus[],
+): number[] {
+  /** Associates stores with their node. Nodes can have multiple stores:
+   * `{ store1: node1, store2: node1 }` */
+  const nodeByStoreMap: Record<number, number> = {};
+  nodeStatuses?.map(node =>
+    node.store_statuses?.map(store => {
+      nodeByStoreMap[store.desc.store_id] = node.desc.node_id;
+    }),
+  );
+
+  /** A unique list of node IDs derived from the nodeByStoreMap. */
+  const nodeIds = Array.from(
+    new Set(stores.ids.map(id => nodeByStoreMap[id])),
+  ).filter(value => value !== undefined);
+
+  return nodeIds;
+}
+
+/** Node ids and store IDs are both of type `number[]`. To disambiguate, a
+ * `kind` field is included in the type. */
+export type Nodes = { kind: "node"; ids: number[] };
+
+/** getNodesByRegionString converts a list of node IDs to a user-facing string.
+ *
+ * @param nodes - Node ids for the cluster.
+ * @param nodeRegions - A map of node IDs to region IDs.
+ * @param isTenant - Whether the cluster is a tenant cluster.
+ * @returns A string of node IDs by region, ordered by region name, e.g.
+ * `regionA(n1, n2), regionB(n2,n3), ...`
+ */
 export function getNodesByRegionString(
-  nodes: number[],
+  nodes: Nodes,
   nodeRegions: Record<string, string>,
   isTenant: boolean,
 ): string {
   return nodesByRegionMapToString(
-    createNodesByRegionMap(nodes, nodeRegions),
+    createNodesByRegionMap(nodes.ids, nodeRegions),
     isTenant,
   );
 }
 
-// nodesByRegionMapToString converts a map of regions to node ids,
-// ordered by region name, e.g. converts:
-// { regionA: [1, 2], regionB: [2, 3] }
-// to:
-// regionA(n1, n2), regionB(n2,n3), ...
-// If the cluster is a tenant cluster, then we redact node info
-// and only display the region name, e.g.
-// regionA(n1, n2), regionB(n2,n3), ... becomes:
-// regionA, regionB, ...
-export function nodesByRegionMapToString(
+/** nodesByRegionMapToString converts a map of regions to node ids,
+ * ordered by region name, e.g. converts:
+ * `{ regionA: [1, 2], regionB: [2, 3] }`
+ * to:
+ * `regionA(n1, n2), regionB(n2,n3), ...`
+ *
+ * If the cluster is a tenant cluster, then we redact node info
+ * and only display the region name, e.g.
+ * `regionA(n1, n2), regionB(n2,n3), ...` becomes:
+ * `regionA, regionB, ...` */
+function nodesByRegionMapToString(
   nodesByRegion: Record<string, number[]>,
   isTenant: boolean,
 ): string {
@@ -102,7 +142,7 @@ export function nodesByRegionMapToString(
     .join(", ");
 }
 
-export function createNodesByRegionMap(
+function createNodesByRegionMap(
   nodes: number[],
   nodeRegions: Record<string, string>,
 ): Record<string, number[]> {

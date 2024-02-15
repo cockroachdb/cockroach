@@ -77,6 +77,7 @@ export const mapStateToProps = (
   const dbTables =
     databaseDetails[database]?.data?.results.tablesResp.tables || [];
   const nodeRegions = nodeRegionsByIDSelector(state);
+  const nodeStatuses = state?.cachedData.nodes.data;
   return {
     loading: !!databaseDetails[database]?.inFlight,
     loaded: !!databaseDetails[database]?.valid,
@@ -97,6 +98,7 @@ export const mapStateToProps = (
       tableDetails,
       nodeRegions,
       isTenant,
+      nodeStatuses,
     }),
     showIndexRecommendations: selectIndexRecommendationsEnabled(state),
     csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
