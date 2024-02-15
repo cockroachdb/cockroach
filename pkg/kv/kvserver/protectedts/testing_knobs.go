@@ -21,6 +21,10 @@ type TestingKnobs struct {
 	//
 	// TODO(adityamaru): Delete in 22.2.
 	DisableProtectedTimestampForMultiTenant bool
+
+	// WriteDeprecatedPTSRecords When set to true, deprecated protected timestamp
+	// records will be written, only if deprecated spans are supplied.
+	WriteDeprecatedPTSRecords bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

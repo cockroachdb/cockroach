@@ -150,8 +150,6 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
                     unique_rowid(),
                     status,
                     created,
-                    NULL,
-                    NULL,
                     created_by_type,
                     created_by_id,
                     claim_session_id,
