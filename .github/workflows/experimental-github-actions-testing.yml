@@ -69,3 +69,23 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
+  acceptance:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: ./build/github/get-engflow-keys.sh
+      - name: run acceptance tests
+        run: ./build/github/acceptance-test.sh
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - uses: actions/upload-artifact@v4
+        with:
+          name: acceptance artifacts
+          path: artifacts
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+
