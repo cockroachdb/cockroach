@@ -1562,10 +1562,6 @@ func (s *Smither) makeOrderBy(refs colRefs) tree.OrderBy {
 	var ob tree.OrderBy
 	for s.coin() {
 		ref := refs[s.rnd.Intn(len(refs))]
-		// We don't support order by jsonb columns.
-		if ref.typ.Family() == types.JsonFamily {
-			continue
-		}
 		// PostGIS cannot order box2d types.
 		if s.postgres && ref.typ.Family() == types.Box2DFamily {
 			continue
