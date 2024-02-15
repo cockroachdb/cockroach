@@ -118,6 +118,14 @@ var maxNumNonRootConnections = settings.RegisterIntSetting(
 	-1,
 )
 
+var maxOpenTransactions = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"server.max_open_transactions_per_gateway",
+	"the maximum number of open SQL transactions per gateway allowed at a given time. "+
+		"Negative values result in unlimited number of connections. Superusers are not affected by this limit.",
+	-1,
+	settings.WithPublic)
+
 // maxNumNonRootConnectionsReason is used to supplement the error message for connections that denied due to
 // server.cockroach_cloud.max_client_connections_per_gateway.
 // Note(alyshan): This setting is not public. It is intended to be used by Cockroach Cloud when limiting

@@ -47,6 +47,7 @@ go_test(
         "inverted_index_test.go",
         "kv_test.go",
         "main_test.go",
+        "max_open_txns_test.go",
         "monotonic_insert_test.go",
         "random_schema_test.go",
         "read_committed_test.go",
