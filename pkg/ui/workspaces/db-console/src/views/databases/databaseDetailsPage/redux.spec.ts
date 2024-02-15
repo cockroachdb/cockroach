@@ -125,6 +125,10 @@ class TestDriver {
     );
   }
 
+  async refreshNodes() {
+    return this.actions.refreshNodes();
+  }
+
   private findTable(name: string) {
     return _.find(this.properties().tables, { name });
   }
@@ -375,9 +379,29 @@ describe("Database Details Page", function () {
       ],
     );
 
+    fakeApi.stubNodesUI({
+      nodes: [...Array(5).keys()].map(node_id => {
+        return {
+          desc: {
+            node_id: node_id + 1, // 1-index offset.
+            locality: {
+              tiers: [
+                {
+                  key: "region",
+                  value: "gcp-us-east1",
+                },
+              ],
+            },
+          },
+          store_statuses: [{ desc: { store_id: node_id + 1 } }],
+        };
+      }),
+    });
+
     await driver.refreshDatabaseDetails();
     await driver.refreshTableDetails(`"public"."foo"`);
     await driver.refreshTableDetails(`"public"."bar"`);
+    await driver.refreshNodes();
 
     driver.assertTableDetails(`"public"."foo"`, {
       name: `"public"."foo"`,
@@ -407,7 +431,7 @@ describe("Database Details Page", function () {
           live_percentage: 0.5,
         },
         nodes: [1, 2, 3],
-        nodesByRegionString: "",
+        nodesByRegionString: "gcp-us-east1(n1,n2,n3)",
       },
     });
 
@@ -437,7 +461,7 @@ describe("Database Details Page", function () {
           approximate_disk_bytes: 10,
         },
         nodes: [1, 2, 3, 4, 5],
-        nodesByRegionString: "",
+        nodesByRegionString: "gcp-us-east1(n1,n2,n3,n4,n5)",
       },
     });
   });

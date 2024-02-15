@@ -65,11 +65,17 @@ export const mapStateToProps = (
   );
   const nodeRegions = nodeRegionsByIDSelector(state);
   const isTenant = selectIsTenant(state);
+  const nodeStatuses = state.adminUI?.nodes.data;
   return {
     databaseName: database,
     name: table,
     schemaName: schema,
-    details: deriveTablePageDetailsMemoized({ details, nodeRegions, isTenant }),
+    details: deriveTablePageDetailsMemoized({
+      details,
+      nodeRegions,
+      isTenant,
+      nodeStatuses,
+    }),
     showNodeRegionsSection: Object.keys(nodeRegions).length > 1 && !isTenant,
     automaticStatsCollectionEnabled:
       selectAutomaticStatsCollectionEnabled(state),
