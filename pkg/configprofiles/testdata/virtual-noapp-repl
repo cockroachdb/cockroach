@@ -9,13 +9,11 @@ SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
 WHERE variable IN (
 'sql.create_virtual_cluster.default_template',
 'server.controller.default_target_cluster',
-'kv.rangefeed.enabled',
-'physical_replication.enabled'
+'kv.rangefeed.enabled'
 )
 ORDER BY variable
 ----
 kv.rangefeed.enabled true
-physical_replication.enabled true
 server.controller.default_target_cluster system
 sql.create_virtual_cluster.default_template template
 
