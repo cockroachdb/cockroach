@@ -207,7 +207,7 @@ func distBackup(
 
 	rowResultWriter := sql.NewRowResultWriter(nil)
 
-	recv := sql.MakeDistSQLReceiver(
+	recv, _ := sql.MakeDistSQLReceiver(
 		ctx,
 		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
 		tree.Rows,
@@ -225,6 +225,6 @@ func distBackup(
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	return rowResultWriter.Err()
 }

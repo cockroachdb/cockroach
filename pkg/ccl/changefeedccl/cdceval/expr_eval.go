@@ -401,8 +401,9 @@ func (e *familyEvaluator) executePlan(
 		}
 	})
 
-	// receiver writes the results to the writer.
-	receiver := sql.MakeDistSQLReceiver(
+	// recv writes the results to the writer.
+	var recv *sql.DistSQLReceiver
+	recv, ctx = sql.MakeDistSQLReceiver(
 		ctx,
 		writer,
 		tree.Rows,
@@ -423,8 +424,8 @@ func (e *familyEvaluator) executePlan(
 			e.errCh <- err
 		}()
 
-		defer receiver.Release()
-		if err := sql.RunCDCEvaluation(ctx, plan, &input, inputCols, receiver); err != nil {
+		defer recv.Release()
+		if err := sql.RunCDCEvaluation(ctx, plan, &input, inputCols, recv); err != nil {
 			return err
 		}
 		return writer.Err()

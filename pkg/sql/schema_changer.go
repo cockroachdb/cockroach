@@ -421,7 +421,8 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			res.Add(counts)
 			return nil
 		})
-		recv := MakeDistSQLReceiver(
+		var recv *DistSQLReceiver
+		recv, ctx = MakeDistSQLReceiver(
 			ctx,
 			rw,
 			tree.Rows,
@@ -446,7 +447,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 				subqueryResultMemAcc := localPlanner.Mon().MakeBoundAccount()
 				defer subqueryResultMemAcc.Close(ctx)
 				if !sc.distSQLPlanner.PlanAndRunSubqueries(
-					ctx, localPlanner, localPlanner.ExtendedEvalContextCopy,
+					localPlanner, localPlanner.ExtendedEvalContextCopy,
 					localPlanner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
 					false, /* skipDistSQLDiagramGeneration */
 					false, /* mustUseLeafTxn */

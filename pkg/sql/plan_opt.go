@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -264,6 +265,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 
 	// Build the plan tree.
 	if mode := p.SessionData().ExperimentalDistSQLPlanningMode; mode != sessiondatapb.ExperimentalDistSQLPlanningOff {
+		ctx = execversion.WithVersion(ctx, execversion.Latest)
 		planningMode := distSQLDefaultPlanning
 		// If this transaction has modified or created any types, it is not safe to
 		// distribute due to limitations around leasing descriptors modified in the

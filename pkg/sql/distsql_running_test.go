@@ -155,7 +155,8 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
 		})
-		recv := MakeDistSQLReceiver(
+		var recv *DistSQLReceiver
+		recv, ctx = MakeDistSQLReceiver(
 			ctx,
 			rw,
 			stmt.AST.StatementReturnType(),
@@ -182,7 +183,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		planCtx.stmtType = recv.stmtType
 
 		execCfg.DistSQLPlanner.PlanAndRun(
-			ctx, evalCtx, planCtx, txn, p.curPlan.main, recv, nil, /* finishedSetupFn */
+			evalCtx, planCtx, txn, p.curPlan.main, recv, nil, /* finishedSetupFn */
 		)
 		return rw.Err()
 	})
@@ -275,7 +276,8 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
 		})
-		recv := MakeDistSQLReceiver(
+		var recv *DistSQLReceiver
+		recv, ctx = MakeDistSQLReceiver(
 			ctx,
 			rw,
 			stmt.AST.StatementReturnType(),
@@ -301,7 +303,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			factoryEvalCtx.Context = evalCtx.Context
 			return &factoryEvalCtx
 		}
-		err = execCfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, p, recv, evalCtxFactory)
+		err = execCfg.DistSQLPlanner.PlanAndRunAll(evalCtx, planCtx, p, recv, evalCtxFactory)
 		if err != nil {
 			return err
 		}
@@ -419,7 +421,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 	txn := kv.NewTxn(ctx, db, s.NodeID())
 
 	rw := &errOnlyResultWriter{}
-	recv := MakeDistSQLReceiver(
+	recv, _ := MakeDistSQLReceiver(
 		ctx,
 		rw,
 		tree.Rows, /* StatementReturnType */
@@ -572,7 +574,7 @@ func TestDistSQLReceiverDrainsOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	recv := MakeDistSQLReceiver(
+	recv, _ := MakeDistSQLReceiver(
 		context.Background(),
 		&errOnlyResultWriter{},
 		tree.Rows,

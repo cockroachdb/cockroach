@@ -209,7 +209,7 @@ func (ib *IndexBackfillPlanner) plan(
 
 	return func(ctx context.Context) error {
 		cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: callback}
-		recv := MakeDistSQLReceiver(
+		recv, _ := MakeDistSQLReceiver(
 			ctx,
 			&cbw,
 			tree.Rows, /* stmtType - doesn't matter here since no result are produced */
@@ -220,7 +220,7 @@ func (ib *IndexBackfillPlanner) plan(
 		)
 		defer recv.Release()
 		evalCtxCopy := evalCtx
-		ib.execCfg.DistSQLPlanner.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, nil)
+		ib.execCfg.DistSQLPlanner.Run(planCtx, nil, p, recv, &evalCtxCopy, nil)
 		return cbw.Err()
 	}, nil
 }

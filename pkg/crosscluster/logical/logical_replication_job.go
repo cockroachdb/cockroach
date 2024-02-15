@@ -227,7 +227,7 @@ func (r *logicalReplicationResumer) ingest(
 			rangeStats:            newRangeStatsCollector(planInfo.writeProcessorCount),
 		}
 		rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
-		distSQLReceiver := sql.MakeDistSQLReceiver(
+		distSQLReceiver, _ := sql.MakeDistSQLReceiver(
 			ctx,
 			sql.NewMetadataCallbackWriter(rowResultWriter, rh.handleMeta),
 			tree.Rows,
@@ -240,7 +240,6 @@ func (r *logicalReplicationResumer) ingest(
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
 		distSQLPlanner.Run(
-			ctx,
 			initialPlanCtx,
 			nil, /* txn */
 			initialPlan,

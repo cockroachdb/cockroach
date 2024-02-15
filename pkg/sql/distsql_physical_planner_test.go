@@ -197,7 +197,8 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	rangeCache := rangecache.NewRangeCache(st, nil /* db */, size, stopper)
-	r := MakeDistSQLReceiver(
+	var recv *DistSQLReceiver
+	recv, ctx = MakeDistSQLReceiver(
 		ctx,
 		&errOnlyResultWriter{}, /* resultWriter */
 		tree.Rows,
@@ -216,7 +217,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	}
 
 	// Push some metadata and check that the caches are updated with it.
-	status := r.Push(nil /* row */, &execinfrapb.ProducerMetadata{
+	status := recv.Push(nil /* row */, &execinfrapb.ProducerMetadata{
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[0],
@@ -238,7 +239,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	if status != execinfra.NeedMoreRows {
 		t.Fatalf("expected status NeedMoreRows, got: %d", status)
 	}
-	status = r.Push(nil /* row */, &execinfrapb.ProducerMetadata{
+	status = recv.Push(nil /* row */, &execinfrapb.ProducerMetadata{
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[2],

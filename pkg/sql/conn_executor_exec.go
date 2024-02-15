@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -31,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -3261,14 +3259,11 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	distSQLProhibitedErr error,
 ) (topLevelQueryStats, error) {
 	defer planner.curPlan.savePlanInfo()
-	// TODO: think through this.
-	v := execversion.V24_3
-	if planner.execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_1) {
-		v = execversion.V25_1
-	}
-	ctx = execversion.WithVersion(ctx, v)
-	recv := MakeDistSQLReceiver(
-		ctx, res, stmtType,
+	var recv *DistSQLReceiver
+	recv, ctx = MakeDistSQLReceiver(
+		ctx,
+		res,
+		stmtType,
 		ex.server.cfg.RangeDescriptorCache,
 		planner.txn,
 		ex.server.cfg.Clock,
@@ -3312,7 +3307,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 				return factoryEvalCtx
 			}
 		}
-		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
+		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(evalCtx, planCtx, planner, recv, evalCtxFactory)
 	}
 	return recv.stats, err
 }

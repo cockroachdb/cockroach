@@ -606,7 +606,8 @@ FAMILY extra (extra)
 					return nil
 				})
 
-				r := MakeDistSQLReceiver(
+				var recv *DistSQLReceiver
+				recv, ctx = MakeDistSQLReceiver(
 					ctx,
 					writer,
 					tree.Rows,
@@ -615,9 +616,9 @@ FAMILY extra (extra)
 					nil, /* clockUpdater */
 					planner.extendedEvalCtx.Tracing,
 				)
-				defer r.Release()
+				defer recv.Release()
 
-				if err := RunCDCEvaluation(ctx, plan, &input, inputCols, r); err != nil {
+				if err := RunCDCEvaluation(ctx, plan, &input, inputCols, recv); err != nil {
 					return err
 				}
 				return writer.Err()
