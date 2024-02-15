@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -215,7 +216,7 @@ func makeFetchSpec(
 		}
 	}
 	var fetchSpec fetchpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(&fetchSpec, keys.SystemSQLCodec, table, index, colIDs); err != nil {
+	if err := rowenc.InitIndexFetchSpec(execversion.WithLatestVersion(), &fetchSpec, keys.SystemSQLCodec, table, index, colIDs); err != nil {
 		t.Fatal(err)
 	}
 	return fetchSpec

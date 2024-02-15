@@ -179,6 +179,7 @@ go_test(
         "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/execversion",
         "//pkg/sql/flowinfra",
         "//pkg/sql/inverted",
         "//pkg/sql/isql",

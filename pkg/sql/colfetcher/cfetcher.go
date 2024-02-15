@@ -357,7 +357,7 @@ func (cf *cFetcher) resetBatch() {
 func (cf *cFetcher) Init(
 	allocator *colmem.Allocator, nextKVer storage.NextKVer, tableArgs *cFetcherTableArgs,
 ) error {
-	if tableArgs.spec.Version != fetchpb.IndexFetchSpecVersionInitial {
+	if tableArgs.spec.Version > fetchpb.IndexFetchSpecLatestVersion {
 		return errors.Newf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
 	}
 	table := newCTableInfo()

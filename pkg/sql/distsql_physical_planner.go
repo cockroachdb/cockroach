@@ -1904,7 +1904,7 @@ func (dsp *DistSQLPlanner) convertOrdering(
 // The generated specs will be used as templates for planning potentially
 // multiple TableReaders.
 func initTableReaderSpecTemplate(
-	n *scanNode, codec keys.SQLCodec,
+	ctx context.Context, n *scanNode, codec keys.SQLCodec,
 ) (*execinfrapb.TableReaderSpec, execinfrapb.PostProcessSpec, error) {
 	if n.isCheck {
 		return nil, execinfrapb.PostProcessSpec{}, errors.AssertionFailedf("isCheck no longer supported")
@@ -1921,7 +1921,7 @@ func initTableReaderSpecTemplate(
 		LockingWaitPolicy:               n.lockingWaitPolicy,
 		LockingDurability:               n.lockingDurability,
 	}
-	if err := rowenc.InitIndexFetchSpec(&s.FetchSpec, codec, n.desc, n.index, colIDs); err != nil {
+	if err := rowenc.InitIndexFetchSpec(ctx, &s.FetchSpec, codec, n.desc, n.index, colIDs); err != nil {
 		return nil, execinfrapb.PostProcessSpec{}, err
 	}
 
@@ -1939,7 +1939,7 @@ func initTableReaderSpecTemplate(
 func (dsp *DistSQLPlanner) createTableReaders(
 	ctx context.Context, planCtx *PlanningCtx, n *scanNode,
 ) (*PhysicalPlan, error) {
-	spec, post, err := initTableReaderSpecTemplate(n, planCtx.ExtendedEvalCtx.Codec)
+	spec, post, err := initTableReaderSpecTemplate(ctx, n, planCtx.ExtendedEvalCtx.Codec)
 	if err != nil {
 		return nil, err
 	}
@@ -3039,6 +3039,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	}
 	index := n.table.desc.GetPrimaryIndex()
 	if err := rowenc.InitIndexFetchSpec(
+		ctx,
 		&joinReaderSpec.FetchSpec,
 		planCtx.ExtendedEvalCtx.Codec,
 		n.table.desc,
@@ -3124,6 +3125,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		fetchOrdinals.Add(n.table.cols[i].Ordinal())
 	}
 	if err := rowenc.InitIndexFetchSpec(
+		ctx,
 		&joinReaderSpec.FetchSpec,
 		planCtx.ExtendedEvalCtx.Codec,
 		n.table.desc,
@@ -3248,6 +3250,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 		fetchColIDs[i] = n.table.cols[i].GetID()
 	}
 	if err := rowenc.InitIndexFetchSpec(
+		ctx,
 		&invertedJoinerSpec.FetchSpec,
 		planCtx.ExtendedEvalCtx.Codec,
 		n.table.desc,
@@ -3379,6 +3382,7 @@ func (dsp *DistSQLPlanner) planZigzagJoin(
 			fetchColIDs[i] = side.cols[i].GetID()
 		}
 		if err := rowenc.InitIndexFetchSpec(
+			ctx,
 			&s.FetchSpec,
 			planCtx.ExtendedEvalCtx.Codec,
 			side.desc,
