@@ -42,6 +42,7 @@ import {
   selectDropUnusedIndexDuration,
   selectIndexRecommendationsEnabled,
 } from "../store/clusterSettings/clusterSettings.selectors";
+import { actions as nodesActions } from "../store/nodes/nodes.reducer";
 
 const mapStateToProps = (
   state: AppState,
@@ -53,6 +54,7 @@ const mapStateToProps = (
     databaseDetails[database]?.data?.results.tablesResp.tables || [];
   const nodeRegions = nodeRegionsByIDSelector(state);
   const isTenant = selectIsTenant(state);
+  const nodeStatuses = state.adminUI?.nodes.data;
   return {
     loading: !!databaseDetails[database]?.inFlight,
     loaded: !!databaseDetails[database]?.valid,
@@ -73,6 +75,7 @@ const mapStateToProps = (
       tableDetails: state.adminUI?.tableDetails,
       nodeRegions,
       isTenant,
+      nodeStatuses,
     }),
     showIndexRecommendations: selectIndexRecommendationsEnabled(state),
     csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
@@ -172,6 +175,9 @@ const mapDispatchToProps = (
         value: filters,
       }),
     );
+  },
+  refreshNodes: () => {
+    dispatch(nodesActions.refresh());
   },
 });
 
