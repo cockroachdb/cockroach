@@ -126,11 +126,7 @@ message ConsumerHandshake {
   // dealine, this stream will be disconnected by the server-side.
   optional google.protobuf.Timestamp consumer_schedule_deadline = 2 [(gogoproto.stdtime) = true];
 
-  // The server's DistSQL version range.
-  optional uint32 version = 3 [(gogoproto.nullable) = false,
-    (gogoproto.casttype) = "DistSQLVersion"];
-  optional uint32 min_accepted_version = 4 [(gogoproto.nullable) = false,
-    (gogoproto.casttype) = "DistSQLVersion"];
+  reserved 3, 4;
 }
 
 // CancelDeadFlowsRequest is a request to cancel some flows that are running on
