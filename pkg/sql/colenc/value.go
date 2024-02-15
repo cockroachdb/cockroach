@@ -78,8 +78,15 @@ func valuesideEncodeCol(
 		}
 		return encoding.EncodeUUIDValue(appendTo, uint32(colID), u), nil
 	case types.INetFamily:
-		i := vec.INet().Get(row)
-		return encoding.EncodeIPAddrValue(appendTo, uint32(colID), i), nil
+		if vec.CanonicalTypeFamily() == types.INetFamily {
+			i := vec.INet().Get(row)
+			return encoding.EncodeIPAddrValue(appendTo, uint32(colID), i), nil
+		} else {
+			if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
+				return nil, err
+			}
+			return valueside.Encode(appendTo, colID, vec.Datum().Get(row).(tree.Datum), nil)
+		}
 	default:
 		if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
 			return nil, err

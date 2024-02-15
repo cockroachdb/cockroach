@@ -70,7 +70,9 @@ type DistSQLVersion uint32
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
 // TODO: update comment.
-const Version DistSQLVersion = 71
+const Version DistSQLVersion = 72
+
+const NativeINetVersion = 72
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
