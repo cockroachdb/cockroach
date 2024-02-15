@@ -1,5 +1,250 @@
+diff --git a/src/context/context.go b/src/context/context.go
+index ee66b43c85..4e0dcf3a73 100644
+--- a/src/context/context.go
++++ b/src/context/context.go
+@@ -472,17 +472,7 @@ func (c *cancelCtx) propagateCancel(parent Context, child canceler) {
+ 
+ 	if p, ok := parentCancelCtx(parent); ok {
+ 		// parent is a *cancelCtx, or derives from one.
+-		p.mu.Lock()
+-		if p.err != nil {
+-			// parent has already been canceled
+-			child.cancel(false, p.err, p.cause)
+-		} else {
+-			if p.children == nil {
+-				p.children = make(map[canceler]struct{})
+-			}
+-			p.children[child] = struct{}{}
+-		}
+-		p.mu.Unlock()
++		p.addChild(child)
+ 		return
+ 	}
+ 
+@@ -510,6 +500,22 @@ func (c *cancelCtx) propagateCancel(parent Context, child canceler) {
+ 	}()
+ }
+ 
++// addChild adds child to the list of children.
++// NB: CockroachDB runtime patch.
++func (c *cancelCtx) addChild(child canceler) {
++	c.mu.Lock()
++	if c.err != nil {
++		// parent has already been canceled
++		child.cancel(false, c.err, c.cause)
++	} else {
++		if c.children == nil {
++			c.children = make(map[canceler]struct{})
++		}
++		c.children[child] = struct{}{}
++	}
++	c.mu.Unlock()
++}
++
+ type stringer interface {
+ 	String() string
+ }
+@@ -783,3 +789,33 @@ func value(c Context, key any) any {
+ 		}
+ 	}
+ }
++
++// CockroachDB runtime patch.
++// cancelerAdapter invokes f when cancel context completes.
++type cancelerAdapter struct {
++	*cancelCtx
++	f func()
++}
++
++func (c *cancelerAdapter) cancel(removeFromParent bool, err, cause error) {
++	if removeFromParent {
++		removeChild(c.cancelCtx, c)
++	}
++	c.f()
++}
++
++// PropagateCancel arranges for f to be invoked when parent is done.
++// Parent must be one of the cancelable contexts.
++// Returns true if cancellation will be propagated, false if the parent
++// is not cancelable.
++// This is similar to AfterFunc(), but does not spin up goroutine, and instead
++// invokes f on whatever goroutine completed parent context.
++func PropagateCancel(parent Context, f func()) bool {
++	p, ok := parent.Value(&cancelCtxKey).(*cancelCtx)
++	if !ok {
++		return false
++	}
++	a := cancelerAdapter{cancelCtx: p, f: f}
++	p.addChild(&a)
++	return true
++}
+diff --git a/src/crypto/md5/md5.go b/src/crypto/md5/md5.go
+index ccee4ea3a9..e15bc6d6d6 100644
+--- a/src/crypto/md5/md5.go
++++ b/src/crypto/md5/md5.go
+@@ -27,6 +27,10 @@ const Size = 16
+ // The blocksize of MD5 in bytes.
+ const BlockSize = 64
+ 
++// The maximum number of bytes that can be passed to block.
++const maxAsmIters = 1024
++const maxAsmSize = BlockSize * maxAsmIters // 64KiB
++
+ const (
+ 	init0 = 0x67452301
+ 	init1 = 0xEFCDAB89
+@@ -130,6 +134,11 @@ func (d *digest) Write(p []byte) (nn int, err error) {
+ 	if len(p) >= BlockSize {
+ 		n := len(p) &^ (BlockSize - 1)
+ 		if haveAsm {
++			for n > maxAsmSize {
++				block(d, p[:maxAsmSize])
++				p = p[maxAsmSize:]
++				n -= maxAsmSize
++			}
+ 			block(d, p[:n])
+ 		} else {
+ 			blockGeneric(d, p[:n])
+diff --git a/src/crypto/md5/md5_test.go b/src/crypto/md5/md5_test.go
+index 851e7fb10d..e120be3718 100644
+--- a/src/crypto/md5/md5_test.go
++++ b/src/crypto/md5/md5_test.go
+@@ -120,10 +120,11 @@ func TestGoldenMarshal(t *testing.T) {
+ 
+ func TestLarge(t *testing.T) {
+ 	const N = 10000
++	const offsets = 4
+ 	ok := "2bb571599a4180e1d542f76904adc3df" // md5sum of "0123456789" * 1000
+-	block := make([]byte, 10004)
++	block := make([]byte, N+offsets)
+ 	c := New()
+-	for offset := 0; offset < 4; offset++ {
++	for offset := 0; offset < offsets; offset++ {
+ 		for i := 0; i < N; i++ {
+ 			block[offset+i] = '0' + byte(i%10)
+ 		}
+@@ -142,6 +143,31 @@ func TestLarge(t *testing.T) {
+ 	}
+ }
+ 
++func TestExtraLarge(t *testing.T) {
++	const N = 100000
++	const offsets = 4
++	ok := "13572e9e296cff52b79c52148313c3a5" // md5sum of "0123456789" * 10000
++	block := make([]byte, N+offsets)
++	c := New()
++	for offset := 0; offset < offsets; offset++ {
++		for i := 0; i < N; i++ {
++			block[offset+i] = '0' + byte(i%10)
++		}
++		for blockSize := 10; blockSize <= N; blockSize *= 10 {
++			blocks := N / blockSize
++			b := block[offset : offset+blockSize]
++			c.Reset()
++			for i := 0; i < blocks; i++ {
++				c.Write(b)
++			}
++			s := fmt.Sprintf("%x", c.Sum(nil))
++			if s != ok {
++				t.Fatalf("md5 TestExtraLarge offset=%d, blockSize=%d = %s want %s", offset, blockSize, s, ok)
++			}
++		}
++	}
++}
++
+ // Tests that blockGeneric (pure Go) and block (in assembly for amd64, 386, arm) match.
+ func TestBlockGeneric(t *testing.T) {
+ 	gen, asm := New().(*digest), New().(*digest)
+diff --git a/src/crypto/sha256/sha256.go b/src/crypto/sha256/sha256.go
+index 2deafbc9fc..567a3c81f9 100644
+--- a/src/crypto/sha256/sha256.go
++++ b/src/crypto/sha256/sha256.go
+@@ -28,6 +28,10 @@ const Size224 = 28
+ // The blocksize of SHA256 and SHA224 in bytes.
+ const BlockSize = 64
+ 
++// The maximum number of bytes that can be passed to block.
++const maxAsmIters = 1024
++const maxAsmSize = BlockSize * maxAsmIters // 64KiB
++
+ const (
+ 	chunk     = 64
+ 	init0     = 0x6A09E667
+@@ -191,6 +195,11 @@ func (d *digest) Write(p []byte) (nn int, err error) {
+ 	}
+ 	if len(p) >= chunk {
+ 		n := len(p) &^ (chunk - 1)
++		for n > maxAsmSize {
++			block(d, p[:maxAsmSize])
++			p = p[maxAsmSize:]
++			n -= maxAsmSize
++		}
+ 		block(d, p[:n])
+ 		p = p[n:]
+ 	}
+diff --git a/src/crypto/sha256/sha256_test.go b/src/crypto/sha256/sha256_test.go
+index 7304678346..4d5e8bcd55 100644
+--- a/src/crypto/sha256/sha256_test.go
++++ b/src/crypto/sha256/sha256_test.go
+@@ -183,6 +183,56 @@ func TestGoldenMarshal(t *testing.T) {
+ 	}
+ }
+ 
++func TestLarge(t *testing.T) {
++	const N = 10000
++	const offsets = 4
++	ok := "4c207598af7a20db0e3334dd044399a40e467cb81b37f7ba05a4f76dcbd8fd59" // sha256sum of "0123456789" * 1000
++	block := make([]byte, N+offsets)
++	c := New()
++	for offset := 0; offset < offsets; offset++ {
++		for i := 0; i < N; i++ {
++			block[offset+i] = '0' + byte(i%10)
++		}
++		for blockSize := 10; blockSize <= N; blockSize *= 10 {
++			blocks := N / blockSize
++			b := block[offset : offset+blockSize]
++			c.Reset()
++			for i := 0; i < blocks; i++ {
++				c.Write(b)
++			}
++			s := fmt.Sprintf("%x", c.Sum(nil))
++			if s != ok {
++				t.Fatalf("sha256 TestLarge offset=%d, blockSize=%d = %s want %s", offset, blockSize, s, ok)
++			}
++		}
++	}
++}
++
++func TestExtraLarge(t *testing.T) {
++	const N = 100000
++	const offsets = 4
++	ok := "aca9e593cc629cbaa94cd5a07dc029424aad93e5129e5d11f8dcd2f139c16cc0" // sha256sum of "0123456789" * 10000
++	block := make([]byte, N+offsets)
++	c := New()
++	for offset := 0; offset < offsets; offset++ {
++		for i := 0; i < N; i++ {
++			block[offset+i] = '0' + byte(i%10)
++		}
++		for blockSize := 10; blockSize <= N; blockSize *= 10 {
++			blocks := N / blockSize
++			b := block[offset : offset+blockSize]
++			c.Reset()
++			for i := 0; i < blocks; i++ {
++				c.Write(b)
++			}
++			s := fmt.Sprintf("%x", c.Sum(nil))
++			if s != ok {
++				t.Fatalf("sha256 TestExtraLarge offset=%d, blockSize=%d = %s want %s", offset, blockSize, s, ok)
++			}
++		}
++	}
++}
++
+ func TestMarshalTypeMismatch(t *testing.T) {
+ 	h1 := New()
+ 	h2 := New224()
 diff --git a/src/runtime/extern.go b/src/runtime/extern.go
-index 26dcf0bd52..75865d2868 100644
+index 26dcf0bd52..01b84268db 100644
 --- a/src/runtime/extern.go
 +++ b/src/runtime/extern.go
 @@ -85,6 +85,10 @@ It is a comma-separated list of name=val pairs setting these named variables:
@@ -14,10 +259,10 @@ index 26dcf0bd52..75865d2868 100644
  	error at each collection, summarizing the amount of memory collected and the
  	length of the pause. The format of this line is subject to change. Included in
 diff --git a/src/runtime/malloc.go b/src/runtime/malloc.go
-index 44479cc2be..a24ce64a24 100644
+index b2026ad0dc..6db0ca52f9 100644
 --- a/src/runtime/malloc.go
 +++ b/src/runtime/malloc.go
-@@ -1270,7 +1270,7 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
+@@ -1274,7 +1274,7 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
  // Returns the G for which the assist credit was accounted.
  func deductAssistCredit(size uintptr) *g {
  	var assistG *g
@@ -27,10 +272,10 @@ index 44479cc2be..a24ce64a24 100644
  		assistG = getg()
  		if assistG.m.curg != nil {
 diff --git a/src/runtime/proc.go b/src/runtime/proc.go
-index 554a60d747..8d64ee31c8 100644
+index afb33c1e8b..ccdaaab3e8 100644
 --- a/src/runtime/proc.go
 +++ b/src/runtime/proc.go
-@@ -1027,7 +1027,18 @@ func casgstatus(gp *g, oldval, newval uint32) {
+@@ -1073,7 +1073,18 @@ func casgstatus(gp *g, oldval, newval uint32) {
  		}
  	}
  
@@ -49,7 +294,7 @@ index 554a60d747..8d64ee31c8 100644
  		// Track every gTrackingPeriod time a goroutine transitions out of running.
  		if casgstatusAlwaysTrack || gp.trackingSeq%gTrackingPeriod == 0 {
  			gp.tracking = true
-@@ -1048,7 +1059,6 @@ func casgstatus(gp *g, oldval, newval uint32) {
+@@ -1094,7 +1105,6 @@ func casgstatus(gp *g, oldval, newval uint32) {
  		// We transitioned out of runnable, so measure how much
  		// time we spent in this state and add it to
  		// runnableTime.
@@ -57,7 +302,7 @@ index 554a60d747..8d64ee31c8 100644
  		gp.runnableTime += now - gp.trackingStamp
  		gp.trackingStamp = 0
  	case _Gwaiting:
-@@ -1061,7 +1071,6 @@ func casgstatus(gp *g, oldval, newval uint32) {
+@@ -1107,7 +1117,6 @@ func casgstatus(gp *g, oldval, newval uint32) {
  		// a more representative estimate of the absolute value.
  		// gTrackingPeriod also represents an accurate sampling period
  		// because we can only enter this state from _Grunning.
@@ -65,7 +310,7 @@ index 554a60d747..8d64ee31c8 100644
  		sched.totalMutexWaitTime.Add((now - gp.trackingStamp) * gTrackingPeriod)
  		gp.trackingStamp = 0
  	}
-@@ -1072,12 +1081,10 @@ func casgstatus(gp *g, oldval, newval uint32) {
+@@ -1118,12 +1127,10 @@ func casgstatus(gp *g, oldval, newval uint32) {
  			break
  		}
  		// Blocking on a lock. Write down the timestamp.
@@ -78,7 +323,7 @@ index 554a60d747..8d64ee31c8 100644
  		gp.trackingStamp = now
  	case _Grunning:
  		// We're transitioning into running, so turn off
-@@ -3412,6 +3419,14 @@ func dropg() {
+@@ -3646,6 +3653,14 @@ func dropg() {
  	setGNoWB(&gp.m.curg, nil)
  }
  
@@ -93,7 +338,7 @@ index 554a60d747..8d64ee31c8 100644
  // checkTimers runs any timers for the P that are ready.
  // If now is not 0 it is the current time.
  // It returns the passed time or the current time if now was passed as 0.
-@@ -3646,6 +3661,8 @@ func goexit0(gp *g) {
+@@ -3880,6 +3895,8 @@ func goexit0(gp *g) {
  	gp.param = nil
  	gp.labels = nil
  	gp.timer = nil
@@ -148,7 +393,7 @@ diff --git a/src/runtime/sizeof_test.go b/src/runtime/sizeof_test.go
 index fb9195481a..55e37287c2 100644
 --- a/src/runtime/sizeof_test.go
 +++ b/src/runtime/sizeof_test.go
-@@ -21,6 +21,6 @@ func TestSizeof(t *testing.T) {
+@@ -21,7 +21,7 @@ func TestSizeof(t *testing.T) {
  		_32bit uintptr // size on 32bit platforms
  		_64bit uintptr // size on 64bit platforms
  	}{
@@ -156,84 +401,4 @@ index fb9195481a..55e37287c2 100644
 +		{runtime.G{}, 260, 416},   // g, but exported for testing
  		{runtime.Sudog{}, 56, 88}, // sudog, but exported for testing
  	}
-diff -ru a/src/context/context.go b/src/context/context.go
---- a/src/context/context.go
-+++ b/src/context/context.go
-@@ -472,17 +472,7 @@
  
- 	if p, ok := parentCancelCtx(parent); ok {
- 		// parent is a *cancelCtx, or derives from one.
--		p.mu.Lock()
--		if p.err != nil {
--			// parent has already been canceled
--			child.cancel(false, p.err, p.cause)
--		} else {
--			if p.children == nil {
--				p.children = make(map[canceler]struct{})
--			}
--			p.children[child] = struct{}{}
--		}
--		p.mu.Unlock()
-+		p.addChild(child)
- 		return
- 	}
- 
-@@ -510,6 +500,22 @@
- 	}()
- }
- 
-+// addChild adds child to the list of children.
-+// NB: CockroachDB runtime patch.
-+func (c *cancelCtx) addChild(child canceler) {
-+	c.mu.Lock()
-+	if c.err != nil {
-+		// parent has already been canceled
-+		child.cancel(false, c.err, c.cause)
-+	} else {
-+		if c.children == nil {
-+			c.children = make(map[canceler]struct{})
-+		}
-+		c.children[child] = struct{}{}
-+	}
-+	c.mu.Unlock()
-+}
-+
- type stringer interface {
- 	String() string
- }
-@@ -781,5 +787,35 @@
- 		default:
- 			return c.Value(key)
- 		}
-+	}
-+}
-+
-+// CockroachDB runtime patch.
-+// cancelerAdapter invokes f when cancel context completes.
-+type cancelerAdapter struct {
-+	*cancelCtx
-+	f func()
-+}
-+
-+func (c *cancelerAdapter) cancel(removeFromParent bool, err, cause error) {
-+	if removeFromParent {
-+		removeChild(c.cancelCtx, c)
- 	}
-+	c.f()
- }
-+
-+// PropagateCancel arranges for f to be invoked when parent is done.
-+// Parent must be one of the cancelable contexts.
-+// Returns true if cancellation will be propagated, false if the parent
-+// is not cancelable.
-+// This is similar to AfterFunc(), but does not spin up goroutine, and instead
-+// invokes f on whatever goroutine completed parent context.
-+func PropagateCancel(parent Context, f func()) bool {
-+	p, ok := parent.Value(&cancelCtxKey).(*cancelCtx)
-+	if !ok {
-+		return false
-+	}
-+	a := cancelerAdapter{cancelCtx: p, f: f}
-+	p.addChild(&a)
-+	return true
-+}
