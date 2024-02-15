@@ -78,11 +78,11 @@ func TestRowFetcherCache(t *testing.T) {
 	}
 
 	// Ensure a cache hit using the same table descriptor, family, and targets.
-	rf, _, err := rfCache.RowFetcherForColumnFamily(tableDesc, cFamilyID, nil, false)
+	rf, _, err := rfCache.RowFetcherForColumnFamily(ctx, tableDesc, cFamilyID, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rf2, _, err := rfCache.RowFetcherForColumnFamily(tableDesc, cFamilyID, nil, false)
+	rf2, _, err := rfCache.RowFetcherForColumnFamily(ctx, tableDesc, cFamilyID, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestRowFetcherCache(t *testing.T) {
 	// Changing a type in another column family does not cause a cache eviction.
 	sqlDB.Exec(t, `ALTER TYPE status ADD VALUE 'pending'`)
 	refreshDesc()
-	rf3, _, err := rfCache.RowFetcherForColumnFamily(tableDesc, cFamilyID, nil, false)
+	rf3, _, err := rfCache.RowFetcherForColumnFamily(ctx, tableDesc, cFamilyID, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestRowFetcherCache(t *testing.T) {
 	// Changing a type in the same column family does cause a cache eviction.
 	sqlDB.Exec(t, `ALTER TYPE priority ADD VALUE 'medium'`)
 	refreshDesc()
-	rf4, _, err := rfCache.RowFetcherForColumnFamily(tableDesc, cFamilyID, nil, false)
+	rf4, _, err := rfCache.RowFetcherForColumnFamily(ctx, tableDesc, cFamilyID, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}

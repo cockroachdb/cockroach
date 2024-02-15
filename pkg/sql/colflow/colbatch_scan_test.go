@@ -74,7 +74,7 @@ func TestColBatchScanMeta(t *testing.T) {
 	}
 	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&fetchSpec, s.Codec(), td, td.GetPrimaryIndex(),
+		ctx, &fetchSpec, s.Codec(), td, td.GetPrimaryIndex(),
 		[]descpb.ColumnID{td.PublicColumns()[0].GetID()},
 	); err != nil {
 		t.Fatal(err)
@@ -138,7 +138,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 			span := tableDesc.PrimaryIndexSpan(s.Codec())
 			var fetchSpec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(
-				&fetchSpec, s.Codec(), tableDesc, tableDesc.GetPrimaryIndex(),
+				ctx, &fetchSpec, s.Codec(), tableDesc, tableDesc.GetPrimaryIndex(),
 				[]descpb.ColumnID{tableDesc.PublicColumns()[0].GetID(), tableDesc.PublicColumns()[1].GetID()},
 			); err != nil {
 				b.Fatal(err)

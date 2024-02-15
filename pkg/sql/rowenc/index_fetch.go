@@ -6,10 +6,13 @@
 package rowenc
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -23,15 +26,20 @@ import (
 // inverted and we fetch the inverted key, the corresponding Column contains the
 // inverted column type.
 func InitIndexFetchSpec(
+	ctx context.Context,
 	s *fetchpb.IndexFetchSpec,
 	codec keys.SQLCodec,
 	table catalog.TableDescriptor,
 	index catalog.Index,
 	fetchColumnIDs []descpb.ColumnID,
 ) error {
+	version := uint32(fetchpb.IndexFetchSpecNativeINetVersion)
+	if ctx != context.Background() && execversion.FromContext(ctx) < execversion.V25_1 {
+		version -= 1
+	}
 	oldFetchedCols := s.FetchedColumns
 	*s = fetchpb.IndexFetchSpec{
-		Version:             fetchpb.IndexFetchSpecVersionInitial,
+		Version:             version,
 		TableID:             table.GetID(),
 		TableName:           table.GetName(),
 		IndexID:             index.GetID(),

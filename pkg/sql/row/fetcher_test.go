@@ -52,7 +52,7 @@ func makeIndexFetchSpec(
 		}
 	}
 	var spec fetchpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(&spec, codec, entry.tableDesc, index, colIDs); err != nil {
+	if err := rowenc.InitIndexFetchSpec(context.Background(), &spec, codec, entry.tableDesc, index, colIDs); err != nil {
 		t.Fatal(err)
 	}
 	return spec

@@ -90,7 +90,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, `d`, `parent`)
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, codec, desc, desc.GetPrimaryIndex(), desc.PublicColumnIDs(),
+		ctx, &spec, codec, desc, desc.GetPrimaryIndex(), desc.PublicColumnIDs(),
 	); err != nil {
 		t.Fatal(err)
 	}

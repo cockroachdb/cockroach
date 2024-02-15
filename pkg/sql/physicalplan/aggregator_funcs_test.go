@@ -141,7 +141,7 @@ func checkDistAggregationInfo(
 			Spans: make([]roachpb.Span, 1),
 		}
 		if err := rowenc.InitIndexFetchSpec(
-			&tr.FetchSpec, ts.Codec(), tableDesc, tableDesc.GetPrimaryIndex(), columnIDs,
+			ctx, &tr.FetchSpec, ts.Codec(), tableDesc, tableDesc.GetPrimaryIndex(), columnIDs,
 		); err != nil {
 			t.Fatal(err)
 		}

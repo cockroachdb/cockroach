@@ -54,8 +54,7 @@ func TestServer(t *testing.T) {
 		Spans:   []roachpb.Span{td.PrimaryIndexSpan(s.Codec())},
 	}
 	if err := rowenc.InitIndexFetchSpec(
-		&ts.FetchSpec, s.Codec(), td, td.GetPrimaryIndex(),
-		[]descpb.ColumnID{1, 2}, // a b
+		ctx, &ts.FetchSpec, s.Codec(), td, td.GetPrimaryIndex(), []descpb.ColumnID{1, 2}, // a b
 	); err != nil {
 		t.Fatal(err)
 	}

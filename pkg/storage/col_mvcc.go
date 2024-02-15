@@ -422,7 +422,11 @@ func mvccScanToCols(
 	st *cluster.Settings,
 ) (MVCCScanResult, error) {
 	// TODO: think through this.
-	ctx = execversion.WithVersion(ctx, execversion.Latest)
+	if indexFetchSpec.Version >= fetchpb.IndexFetchSpecNativeINetVersion {
+		ctx = execversion.WithVersion(ctx, execversion.V25_1)
+	} else {
+		ctx = execversion.WithVersion(ctx, execversion.V24_3)
+	}
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
 	adapter := mvccScanFetchAdapter{machine: onNextKVSeek}
 	adapter.results.maxKeysPerRow = indexFetchSpec.MaxKeysPerRow

@@ -116,7 +116,7 @@ func TestSpanAssembler(t *testing.T) {
 
 									var fetchSpec fetchpb.IndexFetchSpec
 									if err := rowenc.InitIndexFetchSpec(
-										&fetchSpec, codec, testTable, testTable.GetPrimaryIndex(), nil, /* fetchedColumnIDs */
+										ctx, &fetchSpec, codec, testTable, testTable.GetPrimaryIndex(), nil, /* fetchedColumnIDs */
 									); err != nil {
 										t.Fatal(err)
 									}

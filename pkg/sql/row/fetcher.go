@@ -355,7 +355,7 @@ type FetcherInitArgs struct {
 
 // Init sets up a Fetcher for a given table and index.
 func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
-	if args.Spec.Version != fetchpb.IndexFetchSpecVersionInitial {
+	if args.Spec.Version > fetchpb.IndexFetchSpecLatestVersion {
 		return errors.Newf("unsupported IndexFetchSpec version %d", args.Spec.Version)
 	}
 

@@ -387,6 +387,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		var alloc tree.DatumAlloc
 		var spec fetchpb.IndexFetchSpec
 		require.NoError(t, rowenc.InitIndexFetchSpec(
+			ctx,
 			&spec,
 			codec,
 			table,

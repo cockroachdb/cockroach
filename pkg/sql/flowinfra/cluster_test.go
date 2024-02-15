@@ -103,7 +103,7 @@ func runTestClusterFlow(
 	require.NoError(t, err)
 
 	var spec fetchpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(&spec, codec, desc, desc.ActiveIndexes()[1], []descpb.ColumnID{1, 2}); err != nil {
+	if err := rowenc.InitIndexFetchSpec(ctx, &spec, codec, desc, desc.ActiveIndexes()[1], []descpb.ColumnID{1, 2}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -164,7 +164,7 @@ func runTestClusterFlow(
 
 	var pkSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&pkSpec, codec, desc, desc.GetPrimaryIndex(), []descpb.ColumnID{1, 2, 3},
+		ctx, &pkSpec, codec, desc, desc.GetPrimaryIndex(), []descpb.ColumnID{1, 2, 3},
 	); err != nil {
 		t.Fatal(err)
 	}
