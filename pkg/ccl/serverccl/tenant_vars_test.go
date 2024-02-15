@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/tls"
 	"net/http"
+	"net/url"
 	"os"
 	"testing"
 
@@ -62,13 +63,16 @@ func TestTenantVars(t *testing.T) {
 		}
 
 		startNowNanos := timeutil.Now().UnixNano()
-		url := tenant.AdminURL() + "/_status/load"
+		urlParsed, err := url.Parse(tenant.AdminURL())
+		require.NoError(t, err)
+		urlParsed.Path = urlParsed.Path + "/_status/load"
+		urlString := urlParsed.String()
 		client := http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			},
 		}
-		resp, err := client.Get(url)
+		resp, err := client.Get(urlString)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, 200, resp.StatusCode,
@@ -115,7 +119,7 @@ func TestTenantVars(t *testing.T) {
 
 		require.LessOrEqual(t, 0., uptimeSeconds)
 
-		resp, err = client.Get(url)
+		resp, err = client.Get(urlString)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, 200, resp.StatusCode,
