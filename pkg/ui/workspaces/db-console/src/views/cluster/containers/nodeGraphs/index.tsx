@@ -88,7 +88,6 @@ import moment from "moment-timezone";
 import {
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,
-  selectCrossClusterReplicationEnabled,
 } from "src/redux/clusterSettings";
 import { getDataFromServer } from "src/util/dataFromServer";
 import { getCookieValue } from "src/redux/cookies";
@@ -184,7 +183,6 @@ type MapStateToProps = {
   nodeDisplayNameByID: ReturnType<
     typeof nodeDisplayNameByIDSelector.resultFunc
   >;
-  crossClusterReplicationEnabled: boolean;
   tenantOptions: ReturnType<() => DropdownOption[]>;
   currentTenant: string | null;
 };
@@ -397,13 +395,7 @@ export class NodeGraphs extends React.Component<
       nodeIDs.length > 8 ? 90 + Math.ceil(nodeIDs.length / 3) * 10 : 50;
     const filteredDropdownOptions = dashboardDropdownOptions
       // Don't show KV dashboards if the logged-in user doesn't have permission to view them.
-      .filter(option => canViewKvGraphs || !option.isKvDashboard)
-      // Don't show the replication dashboard if not enabled.
-      .filter(
-        option =>
-          this.props.crossClusterReplicationEnabled ||
-          option.label !== "Physical Cluster Replication",
-      );
+      .filter(option => canViewKvGraphs || !option.isKvDashboard);
 
     return (
       <div style={{ paddingBottom }}>
@@ -543,7 +535,6 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   storeIDsByNodeID: selectStoreIDsByNodeID(state),
   nodeDropdownOptions: nodeDropdownOptionsSelector(state),
   nodeDisplayNameByID: nodeDisplayNameByIDSelector(state),
-  crossClusterReplicationEnabled: selectCrossClusterReplicationEnabled(state),
   tenantOptions: tenantDropdownOptions(state),
   currentTenant: getCookieValue("tenant"),
 });

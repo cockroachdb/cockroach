@@ -187,11 +187,7 @@ func startReplication(
 	conn, err := pgx.ConnectConfig(queryCtx, pgxConfig)
 	require.NoError(t, err)
 
-	rows, err := conn.Query(queryCtx, `SET CLUSTER SETTING physical_replication.enabled = true;`)
-	require.NoError(t, err)
-	rows.Close()
-
-	rows, err = conn.Query(queryCtx, `SET avoid_buffering = true`)
+	rows, err := conn.Query(queryCtx, `SET avoid_buffering = true`)
 	require.NoError(t, err)
 	rows.Close()
 	rows, err = conn.Query(queryCtx, create, args...)

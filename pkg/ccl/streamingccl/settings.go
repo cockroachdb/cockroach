@@ -14,16 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 )
 
-// CrossClusterReplicationEnabled enables the ability to setup and control a
-// cross cluster replication stream.
-var CrossClusterReplicationEnabled = settings.RegisterBoolSetting(
-	settings.SystemVisible,
-	"cross_cluster_replication.enabled",
-	"enables the ability to setup and control a cross cluster replication stream",
-	false,
-	settings.WithName("physical_replication.enabled"),
-)
-
 // StreamReplicationStreamLivenessTrackFrequency controls frequency to check
 // the liveness of a streaming replication producer job.
 var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSetting(

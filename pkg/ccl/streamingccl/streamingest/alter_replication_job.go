@@ -138,26 +138,12 @@ func alterReplicationJobTypeCheck(
 	return true, nil, nil
 }
 
-var physicalReplicationDisabledErr = errors.WithTelemetry(
-	pgerror.WithCandidateCode(
-		errors.WithHint(
-			errors.Newf("physical replication is disabled"),
-			"You can enable physical replication by running `SET CLUSTER SETTING physical_replication.enabled = true`.",
-		),
-		pgcode.ExperimentalFeature,
-	),
-	"physical_replication.enabled")
-
 func alterReplicationJobHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 	alterTenantStmt, ok := stmt.(*tree.AlterTenantReplication)
 	if !ok {
 		return nil, nil, nil, false, nil
-	}
-
-	if !streamingccl.CrossClusterReplicationEnabled.Get(&p.ExecCfg().Settings.SV) {
-		return nil, nil, nil, false, physicalReplicationDisabledErr
 	}
 
 	if !p.ExecCfg().Codec.ForSystemTenant() {
