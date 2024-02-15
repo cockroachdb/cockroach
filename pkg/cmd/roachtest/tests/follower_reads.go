@@ -664,7 +664,9 @@ func verifySQLLatency(
 	if err != nil {
 		t.Fatal(err)
 	}
-	url := "https://" + adminURLs[0] + "/ts/query"
+	// follower-reads/mixed-version runs on insecure mode, so we need http.
+	// Tests that do run on secure mode will redirect to https.
+	url := "http://" + adminURLs[0] + "/ts/query"
 	var sources []string
 	for i := range liveNodes {
 		sources = append(sources, strconv.Itoa(i))
