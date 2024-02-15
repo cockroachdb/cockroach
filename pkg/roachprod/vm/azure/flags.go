@@ -35,8 +35,8 @@ type ProviderOpts struct {
 // this comment, `westus` did not.
 var defaultLocations = []string{
 	"eastus",
+	"canadacentral",
 	"westus2",
-	"westeurope",
 }
 
 var defaultZone = "1"
