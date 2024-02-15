@@ -931,6 +931,13 @@ func (ie *InternalExecutor) execInternal(
 
 	applyInternalExecutorSessionExceptions(sd)
 	applyOverrides(sessionDataOverride, sd)
+	if !rw.async() && (txn != nil && txn.Type() == kv.RootTxn) {
+		// If the "outer" query uses the RootTxn and the sync result channel is
+		// requested, then we must disable DistSQL to ensure that the "inner"
+		// query doesn't use the LeafTxn (which could result in illegal
+		// concurrency).
+		sd.DistSQLMode = sessiondatapb.DistSQLOff
+	}
 	sd.Internal = true
 	if sd.User().Undefined() {
 		return nil, errors.AssertionFailedf("no user specified for internal query")
