@@ -644,16 +644,8 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	resultWriter *RowResultWriter,
 ) error {
 	ctx = logtags.AddTag(ctx, "create-stats-distsql", nil)
-
-	details := job.Details().(jobspb.CreateStatsDetails)
-	physPlan, err := dsp.createPlanForCreateStats(ctx, planCtx, semaCtx, job.ID(), details)
-	if err != nil {
-		return err
-	}
-
-	FinalizePlan(ctx, planCtx, physPlan)
-
-	recv := MakeDistSQLReceiver(
+	var recv *DistSQLReceiver
+	recv, ctx = MakeDistSQLReceiver(
 		ctx,
 		evalCtx.Settings.Version,
 		resultWriter,
@@ -665,6 +657,14 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	)
 	defer recv.Release()
 
-	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	details := job.Details().(jobspb.CreateStatsDetails)
+	physPlan, err := dsp.createPlanForCreateStats(ctx, planCtx, semaCtx, job.ID(), details)
+	if err != nil {
+		return err
+	}
+
+	FinalizePlan(ctx, planCtx, physPlan)
+
+	dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 	return resultWriter.Err()
 }

@@ -276,7 +276,8 @@ func runPlanInsidePlan(
 ) error {
 	defer plan.close(ctx)
 	execCfg := params.ExecCfg()
-	recv := MakeDistSQLReceiver(
+	var recv *DistSQLReceiver
+	recv, ctx = MakeDistSQLReceiver(
 		ctx,
 		execCfg.Settings.Version,
 		resultWriter,
@@ -320,7 +321,6 @@ func runPlanInsidePlan(
 		subqueryResultMemAcc := params.p.Mon().MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
 		if !execCfg.DistSQLPlanner.PlanAndRunSubqueries(
-			ctx,
 			&plannerCopy,
 			evalCtxFactory,
 			plan.subqueryPlans,
@@ -363,7 +363,7 @@ func runPlanInsidePlan(
 		finishedSetupFn, cleanup := getFinishedSetupFn(&plannerCopy)
 		defer cleanup()
 		execCfg.DistSQLPlanner.PlanAndRun(
-			ctx, evalCtx, planCtx, plannerCopy.Txn(), plan.main, recv, finishedSetupFn,
+			evalCtx, planCtx, plannerCopy.Txn(), plan.main, recv, finishedSetupFn,
 		)
 	}()
 
