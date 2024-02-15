@@ -187,7 +187,7 @@ func (p *pulsarSink) EmitRow(
 		}
 	}
 	producer := p.topicProducers[topicName]
-	producer.SendAsync(ctx, msg, p.msgCallback(ctx, alloc))
+	producer.SendAsync(ctx, msg, p.msgCallback(ctx, alloc, mvcc))
 
 	return p.checkError()
 }
@@ -223,7 +223,7 @@ func (p *pulsarSink) EmitResolvedTimestamp(
 		producer.SendAsync(ctx, &pulsar.ProducerMessage{
 			Payload:     data,
 			OrderingKey: orderingKey,
-		}, p.msgCallback(ctx, kvevent.Alloc{}))
+		}, p.setError)
 		return nil
 	})
 	if err != nil {
@@ -254,25 +254,24 @@ func (p *pulsarSink) Flush(ctx context.Context) error {
 // msgCallback releases the alloc associated with a message and
 // records errors.
 func (p *pulsarSink) msgCallback(
-	ctx context.Context, a kvevent.Alloc,
+	ctx context.Context, a kvevent.Alloc, mvcc hlc.Timestamp,
 ) func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
 	return func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
 		if err == nil {
-			p.metrics.recordOneMessage()
+			p.metrics.recordOneMessage()(mvcc, len(message.Payload), len(message.Payload))
 		} else {
-			verboseErr := errors.Wrapf(err, "failed to send message %d for payload %s", id, message.Payload)
-			p.setError(verboseErr)
+			p.setError(id, message, err)
 		}
-
 		a.Release(ctx)
 	}
 }
 
 // setError sets an error.
-func (p *pulsarSink) setError(err error) {
+func (p *pulsarSink) setError(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
 	if err == nil {
 		return
 	}
+	err = errors.Wrapf(err, "failed to send message %d for payload %s", id, message.Payload)
 	select {
 	case p.errCh <- err:
 	default:
