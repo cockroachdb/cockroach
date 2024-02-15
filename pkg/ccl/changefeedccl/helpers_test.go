@@ -881,7 +881,7 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 		"pubsub":       1,
 		"sinkless":     2,
 		"cloudstorage": 0,
-		"pulsar":       0,
+		"pulsar":       1,
 	}
 	if options.externalIODir != "" {
 		sinkWeights["cloudstorage"] = 3
