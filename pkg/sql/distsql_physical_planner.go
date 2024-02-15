@@ -55,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -88,11 +87,6 @@ import (
 //     and add processing stages (connected to the result routers of the children
 //     node).
 type DistSQLPlanner struct {
-	// planVersion is the version of DistSQL targeted by the plan we're building.
-	// This is currently only assigned to the node's current DistSQL version and
-	// is used to skip incompatible nodes when mapping spans.
-	planVersion execinfrapb.DistSQLVersion
-
 	st *cluster.Settings
 	// The SQLInstanceID of the gateway node that initiated this query.
 	gatewaySQLInstanceID base.SQLInstanceID
@@ -173,7 +167,6 @@ var ReplicaOraclePolicy = replicaoracle.BinPackingChoice
 // before this planner is used.
 func NewDistSQLPlanner(
 	ctx context.Context,
-	planVersion execinfrapb.DistSQLVersion,
 	st *cluster.Settings,
 	sqlInstanceID base.SQLInstanceID,
 	rpcCtx *rpc.Context,
@@ -190,7 +183,6 @@ func NewDistSQLPlanner(
 	clock *hlc.Clock,
 ) *DistSQLPlanner {
 	dsp := &DistSQLPlanner{
-		planVersion:          planVersion,
 		st:                   st,
 		gatewaySQLInstanceID: sqlInstanceID,
 		stopper:              stopper,
@@ -818,9 +810,6 @@ const (
 	// NodeUnhealthy means that the node should be avoided because
 	// it's not healthy.
 	NodeUnhealthy
-	// NodeDistSQLVersionIncompatible means that the node should be avoided
-	// because it's DistSQL version is not compatible.
-	NodeDistSQLVersionIncompatible
 )
 
 // spanPartitionState captures information about the current state of the
@@ -1268,24 +1257,6 @@ func (h *distSQLNodeHealth) checkSystem(
 	return nil
 }
 
-// nodeVersionIsCompatibleSystem decides whether a particular node's DistSQL
-// version is compatible with dsp.planVersion. It uses gossip to find out the
-// node's version range. It should only be used by the system tenant.
-func (dsp *DistSQLPlanner) nodeVersionIsCompatibleSystem(sqlInstanceID base.SQLInstanceID) bool {
-	g, ok := dsp.gossip.Optional(distsql.MultiTenancyIssueNo)
-	if !ok {
-		if buildutil.CrdbTestBuild {
-			panic(errors.AssertionFailedf("gossip is expected to be available for the system tenant"))
-		}
-		return false
-	}
-	var v execinfrapb.DistSQLVersionGossipInfo
-	if err := g.GetInfoProto(gossip.MakeDistSQLNodeVersionKey(sqlInstanceID), &v); err != nil {
-		return false
-	}
-	return distsql.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
-}
-
 // checkInstanceHealthAndVersionSystem returns information about a node's health
 // and compatibility. The info is also recorded in planCtx.nodeStatuses. It
 // should only be used by the system tenant.
@@ -1296,13 +1267,9 @@ func (dsp *DistSQLPlanner) checkInstanceHealthAndVersionSystem(
 		return status
 	}
 
-	var status NodeStatus
+	status := NodeOK
 	if err := dsp.nodeHealth.checkSystem(ctx, sqlInstanceID); err != nil {
 		status = NodeUnhealthy
-	} else if !dsp.nodeVersionIsCompatibleSystem(sqlInstanceID) {
-		status = NodeDistSQLVersionIncompatible
-	} else {
-		status = NodeOK
 	}
 	planCtx.nodeStatuses[sqlInstanceID] = status
 	return status

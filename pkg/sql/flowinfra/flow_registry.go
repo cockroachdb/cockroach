@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -585,8 +584,6 @@ func (fr *FlowRegistry) ConnectInboundStream(
 			Handshake: &execinfrapb.ConsumerHandshake{
 				ConsumerScheduled:        false,
 				ConsumerScheduleDeadline: &deadline,
-				Version:                  execinfra.Version,
-				MinAcceptedVersion:       execinfra.MinAcceptedVersion,
 			},
 		}); err != nil {
 			return nil, nil, nil, err
@@ -617,9 +614,7 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	// Don't mark s as connected until after the handshake succeeds.
 	handshakeErr := stream.Send(&execinfrapb.ConsumerSignal{
 		Handshake: &execinfrapb.ConsumerHandshake{
-			ConsumerScheduled:  true,
-			Version:            execinfra.Version,
-			MinAcceptedVersion: execinfra.MinAcceptedVersion,
+			ConsumerScheduled: true,
 		},
 	})
 
