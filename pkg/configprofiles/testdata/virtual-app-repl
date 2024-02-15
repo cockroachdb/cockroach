@@ -12,14 +12,6 @@ ok
 system-sql
 SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
 WHERE variable IN (
-'trace.redact_at_virtual_cluster_boundary.enabled',
-'sql.virtual_cluster.feature_access.zone_configs.enabled',
-'sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled',
-'sql.virtual_cluster.feature_access.multiregion.enabled',
-'sql.virtual_cluster.feature_access.multiregion.enabled',
-'spanconfig.range_coalescing.system.enabled',
-'spanconfig.range_coalescing.application.enabled',
-'sql.drop_virtual_cluster.enabled',
 'sql.create_virtual_cluster.default_template',
 'server.controller.default_target_cluster',
 'kv.rangefeed.enabled',
@@ -30,27 +22,7 @@ ORDER BY variable
 kv.rangefeed.enabled true
 physical_replication.enabled true
 server.controller.default_target_cluster application
-spanconfig.range_coalescing.application.enabled false
-spanconfig.range_coalescing.system.enabled false
 sql.create_virtual_cluster.default_template template
-sql.drop_virtual_cluster.enabled false
-sql.virtual_cluster.feature_access.multiregion.enabled true
-sql.virtual_cluster.feature_access.zone_configs.enabled true
-sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled true
-trace.redact_at_virtual_cluster_boundary.enabled false
-
-system-sql
-SELECT tenant_id, name, value FROM system.tenant_settings
-WHERE name IN (
-'sql.scatter.allow_for_secondary_tenant.enabled',
-'sql.split_at.allow_for_secondary_tenant.enabled'
-)
-ORDER BY tenant_id, name
-----
-2 sql.scatter.allow_for_secondary_tenant.enabled true
-2 sql.split_at.allow_for_secondary_tenant.enabled true
-3 sql.scatter.allow_for_secondary_tenant.enabled true
-3 sql.split_at.allow_for_secondary_tenant.enabled true
 
 system-sql
 SHOW TENANTS WITH CAPABILITIES

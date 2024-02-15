@@ -238,6 +238,7 @@ var retiredSettings = map[InternalKey]struct{}{
 	"kv.rangefeed.use_dedicated_connection_class.enabled":  {},
 	"sql.trace.session_eventlog.enabled":                   {},
 	"sql.show_ranges_deprecated_behavior.enabled":          {},
+	"sql.drop_virtual_cluster.enabled":                     {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults

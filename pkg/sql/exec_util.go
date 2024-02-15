@@ -225,7 +225,7 @@ var SecondaryTenantSplitAtEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"sql.split_at.allow_for_secondary_tenant.enabled",
 	"enable the use of ALTER TABLE/INDEX ... SPLIT AT in virtual clusters",
-	false,
+	true,
 	settings.WithName("sql.virtual_cluster.feature_access.manual_range_split.enabled"),
 )
 
@@ -236,7 +236,7 @@ var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"sql.scatter.allow_for_secondary_tenant.enabled",
 	"enable the use of ALTER TABLE/INDEX ... SCATTER in virtual clusters",
-	false,
+	true,
 	settings.WithName("sql.virtual_cluster.feature_access.manual_range_scatter.enabled"),
 )
 
@@ -722,25 +722,6 @@ var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there i
 
 const sqlTxnName string = "sql txn"
 const metricsSampleInterval = 10 * time.Second
-
-// enableDropVirtualCluster (or rather, its inverted boolean value) defines
-// the default value for the session var "disable_drop_virtual_cluster".
-//
-// Note:
-//   - We use a cluster setting here instead of a default role option
-//     because we need this to be settable also for the 'admin' role.
-//   - The cluster setting is named "enable" because boolean cluster
-//     settings are all ".enabled" -- we do not have ".disabled"
-//     settings anywhere.
-//   - The session var is named "disable_" because we want the Go
-//     default value (false) to mean that tenant deletion is enabled.
-//     This is needed for backward-compatibility with Cockroach Cloud.
-var enableDropVirtualCluster = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"sql.drop_virtual_cluster.enabled",
-	"default value (inverted) for the disable_virtual_cluster session setting",
-	true,
-)
 
 // Fully-qualified names for metrics.
 var (
@@ -3263,10 +3244,6 @@ func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondatapb.Serial
 
 func (m *sessionDataMutator) SetSafeUpdates(val bool) {
 	m.data.SafeUpdates = val
-}
-
-func (m *sessionDataMutator) SetDisableDropVirtualCluster(val bool) {
-	m.data.DisableDropVirtualCluster = val
 }
 
 func (m *sessionDataMutator) SetCheckFunctionBodies(val bool) {

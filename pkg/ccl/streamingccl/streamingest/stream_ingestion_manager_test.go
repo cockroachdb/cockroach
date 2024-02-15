@@ -43,7 +43,6 @@ func TestRevertTenantToTimestamp(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	systemSQL := sqlutils.MakeSQLRunner(systemDB)
 
-	systemSQL.Exec(t, "ALTER VIRTUAL CLUSTER ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_split.enabled=true")
 	systemSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 	systemSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='100ms'")
 	systemSQL.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval ='100ms'")
@@ -164,7 +163,6 @@ func TestRevertTenantToTimestampPTS(t *testing.T) {
 	s := srv.ApplicationLayer()
 	systemSQL := sqlutils.MakeSQLRunner(systemDB)
 
-	systemSQL.Exec(t, "ALTER VIRTUAL CLUSTER ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true")
 	systemSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 	systemSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='100ms'")
 	systemSQL.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval ='100ms'")

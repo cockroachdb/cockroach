@@ -87,21 +87,7 @@ var staticProfiles = map[string]configProfile{
 // each config profile. See enableReplication() for an example.
 var virtClusterInitTasks = []autoconfigpb.Task{
 	makeTask("initial cluster config",
-		/* nonTxnSQL */ []string{
-			// Disable trace redaction (this ought to be configurable per-tenant, but is not possible yet in v23.1).
-			"SET CLUSTER SETTING trace.redact_at_virtual_cluster_boundary.enabled = false",
-			// Enable zone config changes in secondary tenants  (this ought to be configurable per-tenant, but is not possible yet in v23.1).
-			"SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true",
-			"SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled = true",
-			// Enable multi-region abstractions in secondary tenants.
-			"SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled = true",
-			// Disable range coalescing (as long as the problems related
-			// to range coalescing have not been solved yet).
-			"SET CLUSTER SETTING spanconfig.range_coalescing.system.enabled = false",
-			"SET CLUSTER SETTING spanconfig.range_coalescing.application.enabled = false",
-			// Make the operator double-check virtual cluster deletions.
-			"SET CLUSTER SETTING sql.drop_virtual_cluster.enabled = false",
-		},
+		/* nonTxnSQL */ []string{},
 		nil, /* txnSQL */
 	),
 	makeTask("create virtual cluster template",
@@ -111,10 +97,6 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 			// Create a main secondary tenant template.
 			"CREATE VIRTUAL CLUSTER template",
 			"ALTER VIRTUAL CLUSTER template GRANT ALL CAPABILITIES",
-			// Enable admin scatter/split in tenant SQL.
-			// TODO(knz): Move this to in-tenant config task.
-			"ALTER VIRTUAL CLUSTER template SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_scatter.enabled = true",
-			"ALTER VIRTUAL CLUSTER template SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_split.enabled = true",
 		},
 	),
 	// Finally.
