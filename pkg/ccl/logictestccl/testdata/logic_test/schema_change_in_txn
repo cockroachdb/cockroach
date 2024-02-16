@@ -12,7 +12,7 @@ skip_on_retry
 subtest index_resolution_does_not_lead_to_new_version
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE DATABASE db;
 CREATE TABLE db.t(i INT PRIMARY KEY, j INT, k INT);
 CREATE INDEX idx_i ON db.t (i);

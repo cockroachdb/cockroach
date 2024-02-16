@@ -1008,7 +1008,7 @@ FETCH foo;
 
 # The exception block can catch an error thrown as the cursor is being opened.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 DECLARE dup CURSOR FOR SELECT 0;
 
 statement ok
@@ -1098,7 +1098,7 @@ FETCH 3 FROM foo;
 # within the exception handler itself.
 statement ok
 ABORT;
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 DECLARE dup CURSOR FOR SELECT 0;
 
 statement ok

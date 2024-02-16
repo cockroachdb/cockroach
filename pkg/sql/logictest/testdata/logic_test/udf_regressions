@@ -369,6 +369,8 @@ SELECT fn(1);
 
 statement ok
 USE test;
+
+statement ok
 DROP DATABASE d CASCADE;
 DROP FUNCTION fn;
 

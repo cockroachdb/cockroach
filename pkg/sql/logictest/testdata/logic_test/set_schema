@@ -191,7 +191,7 @@ INSERT INTO s1.t3 VALUES (1)
 
 # Test ALTER TABLE SET SCHEMA inside a transaction.
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER TABLE s1.t3 SET SCHEMA s2
@@ -209,7 +209,7 @@ statement ok
 ROLLBACK
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER TABLE s1.t3 SET SCHEMA s2
@@ -233,7 +233,7 @@ CREATE TABLE s1.t4(x INT)
 
 # Ensure set schema gets rolled back if the transaction is canceled.
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER TABLE s1.t4 SET SCHEMA s2
@@ -377,7 +377,7 @@ CREATE TYPE s1.typ3 AS ENUM ('hello')
 
 # Test ALTER TYPE SET SCHEMA inside a transaction.
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER TYPE s1.typ3 SET SCHEMA s2
@@ -390,7 +390,7 @@ statement ok
 ROLLBACK
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER TYPE s1.typ3 SET SCHEMA s2
@@ -412,7 +412,7 @@ CREATE TYPE s1.typ4 AS ENUM ('hello')
 
 # Ensure set schema gets rolled back if the transaction is canceled.
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER TYPE s1.typ4 SET SCHEMA s2

@@ -19,7 +19,7 @@ INSERT INTO supermarket (person, aisle)
 
 # Use SELECT FOR UPDATE under serializable isolation.
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 query I
 SELECT aisle FROM supermarket WHERE person = 'gideon' FOR UPDATE
@@ -416,26 +416,12 @@ GRANT USAGE ON TYPE typ TO testuser
 statement ok
 ROLLBACK
 
-statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
+# If the first statement is a schema change, then the transaction isolation
+# level can be upgraded safely.
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 CREATE DATABASE foo;
-SELECT 1;
-
-statement ok
-ROLLBACK
-
-statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
-BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
-ALTER DATABASE postgres RENAME TO foo;
-SELECT 1;
-
-statement ok
-ROLLBACK
-
-statement error to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
-BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
-CREATE SCHEMA s;
-SELECT 1;
+CREATE TABLE t (a INT);
 
 statement ok
 ROLLBACK

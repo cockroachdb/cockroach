@@ -56,11 +56,15 @@ subtest end
 
 subtest ttl_automatic_column_notice
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 CREATE TABLE tbl_ttl_automatic_column (id INT PRIMARY KEY) WITH (ttl_automatic_column = 'on')
 ----
 NOTICE: ttl_automatic_column is no longer used. Setting ttl_expire_after automatically creates a TTL column. Resetting ttl_expire_after removes the automatically created column.
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 ALTER TABLE tbl_ttl_automatic_column RESET (ttl_automatic_column)
 ----
@@ -70,11 +74,15 @@ subtest end
 
 subtest ttl_range_concurrency_notice
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 CREATE TABLE tbl_ttl_range_concurrency (id INT PRIMARY KEY) WITH (ttl_range_concurrency = 2)
 ----
 NOTICE: ttl_range_concurrency is no longer configurable.
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 ALTER TABLE tbl_ttl_range_concurrency RESET (ttl_range_concurrency)
 ----
@@ -278,7 +286,7 @@ statement error cannot modify TTL settings while another schema change on the ta
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl), RESET (ttl_expire_after)
 
 statement error cannot modify TTL settings while another schema change on the table is being processed
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl);
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change SET (ttl_select_batch_size = 200)
 
@@ -286,7 +294,7 @@ statement ok
 ROLLBACK
 
 statement error cannot perform other schema changes in the same transaction as a TTL mutation
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl);
 CREATE INDEX tbl_idx ON tbl_existing_ttl_concurrent_schema_change (id)
 
@@ -306,7 +314,7 @@ statement error cannot modify TTL settings while another schema change on the ta
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes'), SET (ttl_select_batch_size = 200)
 
 statement error cannot modify TTL settings while another schema change on the table is being processed
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
 ALTER TABLE tbl_add_ttl_concurrent_schema_change RESET (ttl_select_batch_size)
 
@@ -314,7 +322,7 @@ statement ok
 ROLLBACK
 
 statement error cannot modify TTL settings while another schema change on the table is being processed
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE INDEX tbl_idx ON tbl_add_ttl_concurrent_schema_change (id);
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
 
@@ -322,7 +330,7 @@ statement ok
 ROLLBACK
 
 statement error cannot perform other schema changes in the same transaction as a TTL mutation
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
 CREATE INDEX tbl_idx ON tbl_add_ttl_concurrent_schema_change (id)
 
@@ -543,6 +551,8 @@ WHERE label IN ('row-level-ttl: $label_suffix', 'row-level-ttl: $label_suffix2')
 
 statement ok
 USE test;
+
+statement ok
 DROP DATABASE drop_me CASCADE
 
 query I

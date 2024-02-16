@@ -264,7 +264,7 @@ create table foo (i int primary key);
 insert into foo values (1);
 
 statement ok
-begin;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 alter table foo add check (i <= 0)
 
 # Verify that SHOW COMMIT TIMESTAMP will wait for the schema changes.
@@ -327,6 +327,8 @@ show commit timestamp
 statement ok
 commit
 
+# The timestamps are different under READ COMMITTED.
+skipif config local-read-committed
 query IT
   SELECT i,
          CASE
@@ -340,6 +342,21 @@ ORDER BY i ASC;
 2  ts2
 3  ts1
 4  ts2
+
+onlyif config local-read-committed
+query IT
+  SELECT i,
+         CASE
+         WHEN ts = $ts1 THEN 'ts1'
+         WHEN ts = $ts2 THEN 'ts2'
+         END
+    FROM (SELECT i, crdb_internal_mvcc_timestamp AS ts FROM foo)
+ORDER BY i ASC;
+----
+1  ts1
+2  NULL
+3  ts1
+4  NULL
 
 statement ok
 drop table foo

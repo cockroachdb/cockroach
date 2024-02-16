@@ -2350,7 +2350,7 @@ SELECT f();
 subtest upsert_into
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 query II rowsort
 SELECT * FROM xy;

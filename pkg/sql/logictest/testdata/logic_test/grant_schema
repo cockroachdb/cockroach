@@ -47,6 +47,8 @@ test           public       root     ALL             true
 
 statement ok
 SET experimental_enable_temp_tables = true;
+
+statement ok
 CREATE TEMP TABLE t(a INT)
 
 let $temp_schema

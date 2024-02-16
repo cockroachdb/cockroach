@@ -68,6 +68,7 @@ digraph finite_state_machine {
 	"Open{ImplicitTxn:true, WasUpgraded:false}" -> "NoTxn{}" [label = <RetriableErr{CanAutoRetry:false, IsCommit:true}<BR/><I>Retriable err on COMMIT</I>>]
 	"Open{ImplicitTxn:true, WasUpgraded:false}" -> "Open{ImplicitTxn:true, WasUpgraded:false}" [label = <RetriableErr{CanAutoRetry:true, IsCommit:false}<BR/><I>Retriable err; will auto-retry</I>>]
 	"Open{ImplicitTxn:true, WasUpgraded:false}" -> "Open{ImplicitTxn:true, WasUpgraded:false}" [label = <RetriableErr{CanAutoRetry:true, IsCommit:true}<BR/><I>Retriable err; will auto-retry</I>>]
+	"Open{ImplicitTxn:true, WasUpgraded:false}" -> "NoTxn{}" [label = <TxnCommittedDueToDDL{}<BR/><I>auto-commit before DDL</I>>]
 	"Open{ImplicitTxn:true, WasUpgraded:false}" -> "NoTxn{}" [label = <TxnFinishAborted{}<BR/><I>ROLLBACK, or after a statement running as an implicit txn fails</I>>]
 	"Open{ImplicitTxn:true, WasUpgraded:false}" -> "NoTxn{}" [label = <TxnFinishCommitted{}<BR/><I>COMMIT, or after a statement running as an implicit txn</I>>]
 	"Open{ImplicitTxn:true, WasUpgraded:false}" -> "Open{ImplicitTxn:false, WasUpgraded:true}" [label = "TxnUpgradeToExplicit{}"]

@@ -1,3 +1,7 @@
+# LogicTest: !local-read-committed
+# READ COMMITTED does not work with UNIQUE WITHOUT INDEX constraints.
+# See https://github.com/cockroachdb/cockroach/issues/110873.
+
 statement ok
 SET experimental_enable_unique_without_index_constraints = true
 
