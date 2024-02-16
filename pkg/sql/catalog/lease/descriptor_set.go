@@ -12,6 +12,7 @@ package lease
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"sort"
 
@@ -39,7 +40,7 @@ func (l *descriptorSet) String() string {
 		if i > 0 {
 			buf.WriteString(" ")
 		}
-		buf.WriteString(fmt.Sprintf("%d:%d", s.GetVersion(), s.getExpiration().WallTime))
+		buf.WriteString(fmt.Sprintf("%d:%d", s.GetVersion(), s.getExpiration(context.TODO()).WallTime))
 	}
 	return buf.String()
 }
