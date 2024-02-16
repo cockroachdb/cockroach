@@ -84,8 +84,7 @@ describe("TableDetails sagas", () => {
           live_percentage: 75,
         },
         replicaData: {
-          nodeIDs: [1, 2, 3],
-          nodeCount: 3,
+          storeIDs: [1, 2, 3],
           replicaCount: 3,
         },
         indexStats: {

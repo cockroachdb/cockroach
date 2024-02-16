@@ -39,8 +39,7 @@ const withLoadingIndicator: DatabaseTablePageProps = {
     queryError: undefined,
     createStatement: { create_statement: "" },
     replicaData: {
-      nodeIDs: [],
-      nodeCount: 0,
+      storeIDs: [],
       replicaCount: 0,
     },
     indexData: { columns: [], indexes: [] },
@@ -105,8 +104,7 @@ const withData: DatabaseTablePageProps = {
     `,
     },
     replicaData: {
-      nodeIDs: [1, 2, 3, 4, 5, 6, 7],
-      nodeCount: 7,
+      storeIDs: [1, 2, 3, 4, 5, 6, 7],
       replicaCount: 7,
     },
     indexData: {
