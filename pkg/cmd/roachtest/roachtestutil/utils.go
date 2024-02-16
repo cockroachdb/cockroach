@@ -11,37 +11,15 @@
 package roachtestutil
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
 // SystemInterfaceSystemdUnitName is a convenience function that
 // returns the systemd unit name for the system interface
 func SystemInterfaceSystemdUnitName() string {
 	return install.VirtualClusterLabel(install.SystemInterfaceName, 0)
-}
-
-// DefaultPGUrl is a wrapper over roachprod.PgUrl that calls it with the arguments
-// that *almost* all roachtests want: single tenant and only a single node.
-func DefaultPGUrl(
-	ctx context.Context,
-	c cluster.Cluster,
-	l *logger.Logger,
-	node option.NodeListOption,
-	auth install.PGAuthMode,
-) (string, error) {
-	opts := roachprod.PGURLOptions{Auth: auth, Secure: c.IsSecure()}
-	pgurl, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), "certs", opts)
-	if err != nil {
-		return "", err
-	}
-	return pgurl[0], nil
 }
 
 // SetDefaultSQLPort sets the SQL port to the default of 26257 if it is
