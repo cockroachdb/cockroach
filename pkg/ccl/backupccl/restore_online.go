@@ -312,33 +312,52 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 }
 
 func (r *restoreResumer) sendDownloadWorker(
-	execCtx sql.JobExecContext, downloadSpansCh chan roachpb.Spans,
+	execCtx sql.JobExecContext, spans roachpb.Spans, completionPoller chan struct{},
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		ctx, tsp := tracing.ChildSpan(ctx, "backupccl.sendDownloadWorker")
 		defer tsp.Finish()
-		for sp := range downloadSpansCh {
-			log.VInfof(ctx, 1, "sending download request for %d spans", len(sp))
+
+		for rt := retry.StartWithCtx(
+			ctx, retry.Options{InitialBackoff: time.Millisecond * 100, MaxBackoff: time.Second * 10},
+		); ; rt.Next() {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			log.Infof(ctx, "sending download request for %d spans", len(spans))
 			var resp *serverpb.DownloadSpanResponse
 			var err error
 			if resp, err = execCtx.ExecCfg().TenantStatusServer.DownloadSpan(ctx, &serverpb.DownloadSpanRequest{
-				Spans: sp,
+				Spans: spans,
 			}); err != nil {
 				return err
 			}
-			if len(resp.ErrorsByNodeID) > 0 {
-				return errors.Newf("failed to download spans on all nodes: %v", resp.ErrorsByNodeID)
+			log.Infof(ctx, "finished sending download requests for %d spans, %d errors", len(spans), len(resp.ErrorsByNodeID))
+			for n, err := range resp.ErrorsByNodeID {
+				return errors.Newf("failed to download spans on %d nodes; n%d returned %v", len(resp.ErrorsByNodeID), n, err)
+			}
+
+			// Wait for the completion poller to signal that it has checked our work.
+			select {
+			case _, ok := <-completionPoller:
+				if !ok {
+					return nil
+				}
+			case <-ctx.Done():
+				return ctx.Err()
 			}
 		}
-		return nil
 	}
 }
 
 // waitForDownloadToComplete waits until there are no more ExternalFileBytes
-// remaining to be downloaded for the restore.
+// remaining to be downloaded for the restore. It sends a signal on the passed
+// channel each time it polls the span, and closes it when it stops.
 func (r *restoreResumer) waitForDownloadToComplete(
-	ctx context.Context, execCtx sql.JobExecContext, details jobspb.RestoreDetails,
+	ctx context.Context, execCtx sql.JobExecContext, details jobspb.RestoreDetails, ch chan struct{},
 ) error {
+	defer close(ch)
+
 	ctx, tsp := tracing.ChildSpan(ctx, "backupccl.waitForDownloadToComplete")
 	defer tsp.Finish()
 	total, err := r.maybeCalculateTotalDownloadSpans(ctx, execCtx, details)
@@ -392,6 +411,12 @@ func (r *restoreResumer) waitForDownloadToComplete(
 			}
 			lastProgressUpdate = timeutil.Now()
 		}
+		// Signal the download job if it is waiting that we've polled and found work
+		// left for it to do.
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
 	}
 }
 
@@ -399,14 +424,11 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	grp := ctxgroup.WithContext(ctx)
-	downloadSpansCh := make(chan roachpb.Spans, 1)
+	completionPoller := make(chan struct{})
 
-	downloadSpansCh <- details.DownloadSpans
-	close(downloadSpansCh)
-
-	grp.GoCtx(r.sendDownloadWorker(execCtx, downloadSpansCh))
+	grp.GoCtx(r.sendDownloadWorker(execCtx, details.DownloadSpans, completionPoller))
 	grp.GoCtx(func(ctx context.Context) error {
-		return r.waitForDownloadToComplete(ctx, execCtx, details)
+		return r.waitForDownloadToComplete(ctx, execCtx, details, completionPoller)
 	})
 
 	if err := grp.Wait(); err != nil {

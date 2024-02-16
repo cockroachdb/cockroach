@@ -33,6 +33,7 @@ func registerAcceptance(r registry.Registry) {
 		encryptionSupport registry.EncryptionSupport
 		defaultLeases     bool
 		requiresLicense   bool
+		nativeLibs        []string
 		disallowLocal     bool
 	}{
 		registry.OwnerKV: {
@@ -83,6 +84,7 @@ func registerAcceptance(r registry.Registry) {
 				fn:            runVersionUpgrade,
 				timeout:       2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
 				defaultLeases: true,
+				nativeLibs:    registry.LibGEOS,
 			},
 		},
 		registry.OwnerDisasterRecovery: {
@@ -145,6 +147,9 @@ func registerAcceptance(r registry.Registry) {
 			}
 			if tc.disallowLocal {
 				testSpec.CompatibleClouds = testSpec.CompatibleClouds.NoLocal()
+			}
+			if len(tc.nativeLibs) > 0 {
+				testSpec.NativeLibs = tc.nativeLibs
 			}
 			testSpec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tc.fn(ctx, t, c)

@@ -79,6 +79,7 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			Cluster:           r.MakeClusterSpec(4),
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			RequiresLicense:   true,
+			NativeLibs:        registry.LibGEOS,
 			CompatibleClouds:  registry.OnlyGCE,
 			Suites:            registry.Suites(registry.Nightly),
 			Skip:              sp.skip,
