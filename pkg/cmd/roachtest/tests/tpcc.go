@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -1377,11 +1378,15 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				t.Fatal(err)
 			}
 			// cockroach gen haproxy does not support specifying a non root user
-			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1), install.AuthRootCert)
+			pgurl, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), "certs", roachprod.PGURLOptions{
+				External: true,
+				Auth:     install.AuthRootCert,
+				Secure:   c.IsSecure(),
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			c.Run(ctx, loadNodes, fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl))
+			c.Run(ctx, loadNodes, fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl[0]))
 			// Increase the maximum connection limit to ensure that no TPC-C
 			// load gen workers get stuck during connection initialization.
 			// 10k warehouses requires at least 20,000 connections, so add a
