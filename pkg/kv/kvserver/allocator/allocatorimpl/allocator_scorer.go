@@ -75,7 +75,7 @@ const (
 	// DefaultReplicaIOOverloadThreshold is used to avoid allocating to stores with an
 	// IO overload score greater than what's set. This is typically used in
 	// conjunction with IOOverloadMeanThreshold below.
-	DefaultReplicaIOOverloadThreshold = 0.4
+	DefaultReplicaIOOverloadThreshold = 0.3
 
 	// DefaultLeaseIOOverloadThreshold is used to block lease transfers to stores
 	// with an IO overload score greater than this threshold. This is typically
@@ -85,7 +85,7 @@ const (
 	// DefaultLeaseIOOverloadShedThreshold is used to shed leases from stores
 	// with an IO overload score greater than the this threshold. This is
 	// typically used in conjunction with IOOverloadMeanThreshold below.
-	DefaultLeaseIOOverloadShedThreshold = 0.5
+	DefaultLeaseIOOverloadShedThreshold = 0.4
 
 	// IOOverloadMeanThreshold is the percentage above the mean after which a
 	// store could be conisdered IO overload if also exceeding the absolute IO
@@ -182,7 +182,7 @@ var LeaseIOOverloadThreshold = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"kv.allocator.lease_io_overload_threshold",
 	"a store will not receive new leases when its IO overload score is above this "+
-		"value and `kv.allocator.io_overload_threshold_enforcement_leases` is "+
+		"value and `kv.allocator.io_overload_threshold` is "+
 		"`shed` or `block_transfer_to`",
 	DefaultLeaseIOOverloadThreshold,
 )
