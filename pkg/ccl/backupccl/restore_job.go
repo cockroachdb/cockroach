@@ -165,39 +165,42 @@ func restoreWithRetry(
 		MaxBackoff: 1 * time.Second,
 		MaxRetries: 5,
 	}
+	if execCtx.ExecCfg().BackupRestoreTestingKnobs != nil &&
+		execCtx.ExecCfg().BackupRestoreTestingKnobs.RestoreDistSQLRetryPolicy != nil {
+		retryOpts = *execCtx.ExecCfg().BackupRestoreTestingKnobs.RestoreDistSQLRetryPolicy
+	}
 
 	// We want to retry a restore if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
-	var res roachpb.RowCount
-	var err error
+	var (
+		res                    roachpb.RowCount
+		err                    error
+		previousPersistedSpans jobspb.RestoreFrontierEntries
+		currentPersistedSpans  jobspb.RestoreFrontierEntries
+	)
+
 	for r := retry.StartWithCtx(restoreCtx, retryOpts); r.Next(); {
-		// Re-plan inner loop (does not count as retries, done by outer loop).
-		for {
-			res, err = restore(
-				restoreCtx,
-				execCtx,
-				backupManifests,
-				backupLocalityInfo,
-				endTime,
-				dataToRestore,
-				resumer,
-				encryption,
-				kmsEnv,
-			)
-			if err == nil || !errors.Is(err, sql.ErrPlanChanged) {
-				break
-			}
-		}
+		res, err = restore(
+			restoreCtx,
+			execCtx,
+			backupManifests,
+			backupLocalityInfo,
+			endTime,
+			dataToRestore,
+			resumer,
+			encryption,
+			kmsEnv,
+		)
 
 		if err == nil {
 			break
 		}
 
-		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
+		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) || errors.Is(err, restoreProcError) {
 			return roachpb.RowCount{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
 
-		if joberror.IsPermanentBulkJobError(err) {
+		if joberror.IsPermanentBulkJobError(err) && !errors.Is(err, retryableRestoreProcError) {
 			return roachpb.RowCount{}, err
 		}
 
@@ -209,6 +212,14 @@ func restoreWithRetry(
 		}
 
 		log.Warningf(restoreCtx, "encountered retryable error: %+v", err)
+		currentPersistedSpans = resumer.job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
+		if !currentPersistedSpans.Equal(previousPersistedSpans) {
+			// If the previous persisted spans are different than the current, it
+			// implies that further progress has been persisted.
+			r.Reset()
+			log.Infof(restoreCtx, "restored frontier has advanced since last retry, resetting retry counter")
+		}
+		previousPersistedSpans = currentPersistedSpans
 	}
 
 	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
@@ -457,10 +468,23 @@ func restore(
 		), "running distributed restore")
 	}
 	tasks = append(tasks, runRestore)
+	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+	if testingKnobs != nil && testingKnobs.RunBeforeRestoreFlow != nil {
+		if err := testingKnobs.RunBeforeRestoreFlow(); err != nil {
+			return emptyRowCount, err
+		}
+	}
 
 	if err := ctxgroup.GoAndWait(restoreCtx, tasks...); err != nil {
 		return emptyRowCount, errors.Wrapf(err, "importing %d ranges", numImportSpans)
 	}
+
+	if testingKnobs != nil && testingKnobs.RunAfterRestoreFlow != nil {
+		if err := testingKnobs.RunAfterRestoreFlow(); err != nil {
+			return emptyRowCount, err
+		}
+	}
+
 	// progress go routines should be shutdown, but use lock just to be safe.
 	progressTracker.mu.Lock()
 	defer progressTracker.mu.Unlock()

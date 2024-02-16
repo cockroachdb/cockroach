@@ -591,11 +591,12 @@ func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProc
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-					RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, entry *execinfrapb.RestoreSpanEntry) {
+					RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, entry *execinfrapb.RestoreSpanEntry) error {
 						// The total size of the backup files should be less than the target
 						// SST size, thus should all fit in one import span.
 						require.Equal(t, actualNumFiles, len(entry.Files))
 						restoreProcessorKnobCount.Add(1)
+						return nil
 					},
 				},
 			},
