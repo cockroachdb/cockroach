@@ -213,7 +213,7 @@ var LeaseIOOverloadThresholdEnforcement = settings.RegisterEnumSetting(
 		"`block_transfer_to` a store will receive no new leases but won't lose existing leases,"+
 		"`shed`: a store will receive no new leases and shed existing leases to "+
 		"non io-overloaded stores, this is a superset of block_transfer_to",
-	"block_transfer_to",
+	"shed",
 	map[int64]string{
 		int64(IOOverloadThresholdIgnore):         "ignore",
 		int64(IOOverloadThresholdBlockTransfers): "block_transfer_to",
