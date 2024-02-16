@@ -74,6 +74,8 @@ func (is Server) CollectChecksum(
 //
 // It is the caller's responsibility to cancel or set a timeout on the context.
 // If the context is never canceled, WaitForApplication will retry forever.
+//
+// TODO(erikgrinaker): consider using Replica.WaitForLeaseAppliedIndex().
 func (is Server) WaitForApplication(
 	ctx context.Context, req *WaitForApplicationRequest,
 ) (*WaitForApplicationResponse, error) {

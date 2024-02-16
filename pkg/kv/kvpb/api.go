@@ -600,6 +600,12 @@ func (r *BarrierResponse) combine(_ context.Context, c combinable, _ *BatchReque
 			return err
 		}
 		r.Timestamp.Forward(otherR.Timestamp)
+		if r.LeaseAppliedIndex != 0 || otherR.LeaseAppliedIndex != 0 {
+			return errors.AssertionFailedf("can't combine BarrierResponses with LeaseAppliedIndex")
+		}
+		if r.RangeDesc.NextReplicaID != 0 || otherR.RangeDesc.NextReplicaID != 0 {
+			return errors.AssertionFailedf("can't combine BarrierResponses with RangeDesc")
+		}
 	}
 	return nil
 }
@@ -1579,7 +1585,13 @@ func (*RangeStatsRequest) flags() flag { return isRead }
 func (*QueryResolvedTimestampRequest) flags() flag {
 	return isRead | isRange | requiresClosedTSOlderThanStorageSnapshot
 }
-func (*BarrierRequest) flags() flag     { return isWrite | isRange }
+func (r *BarrierRequest) flags() flag {
+	flags := isWrite | isRange | isAlone
+	if r.WithLeaseAppliedIndex {
+		flags |= isUnsplittable // the LAI is only valid for a single range
+	}
+	return flags
+}
 func (*IsSpanEmptyRequest) flags() flag { return isRead | isRange }
 
 // IsParallelCommit returns whether the EndTxn request is attempting to perform
