@@ -120,5 +120,12 @@ func TestCleanupIntentsDuringBackupPerformanceRegression(t *testing.T) {
 		// Each of the 1,000 transactions is expected to get pushed once, but in an
 		// actual run of the test we might see more pushes (e.g. of other transactions).
 		require.GreaterOrEqual(t, 1100, int(numPushBatches.Load()))
+
+		if !abort {
+			for _, tx := range transactions {
+				// Ensure the long-running transactions can commit.
+				require.NoError(t, tx.Commit())
+			}
+		}
 	})
 }
