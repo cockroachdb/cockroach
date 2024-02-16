@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -253,7 +254,7 @@ func getReplicationStatsAndStatus(
 			errors.Newf("job with id %d is not a stream ingestion job", job.ID())
 	}
 
-	details.StreamAddress, err = redactSourceURI(details.StreamAddress)
+	details.StreamAddress, err = streamclient.RedactSourceURI(details.StreamAddress)
 	if err != nil {
 		return nil, jobspb.ReplicationError.String(), err
 	}

@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -39,7 +38,7 @@ const defaultRetentionTTLSeconds = int32(25 * 60 * 60)
 func streamIngestionJobDescription(
 	p sql.PlanHookState, sourceAddr string, streamIngestion *tree.CreateTenantFromReplication,
 ) (string, error) {
-	redactedSourceAddr, err := redactSourceURI(sourceAddr)
+	redactedSourceAddr, err := streamclient.RedactSourceURI(sourceAddr)
 	if err != nil {
 		return "", err
 	}
@@ -53,10 +52,6 @@ func streamIngestionJobDescription(
 	}
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(redactedCreateStmt, ann), nil
-}
-
-func redactSourceURI(addr string) (string, error) {
-	return cloud.SanitizeExternalStorageURI(addr, streamclient.RedactableURLParameters)
 }
 
 func ingestionTypeCheck(

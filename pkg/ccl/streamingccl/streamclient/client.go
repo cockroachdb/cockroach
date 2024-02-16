@@ -13,6 +13,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -231,7 +232,11 @@ func getFirstDialer(
 			}
 		}
 		// Note the failure and attempt the next address
-		log.Errorf(ctx, "failed to connect to address %s: %s", streamAddress, err.Error())
+		redactedAddress, errRedact := RedactSourceURI(streamAddress.String())
+		if errRedact != nil {
+			log.Warning(ctx, "failed to redact stream address")
+		}
+		log.Errorf(ctx, "failed to connect to address %s: %s", redactedAddress, err.Error())
 		combinedError = errors.CombineErrors(combinedError, err)
 	}
 	return nil, errors.Wrap(combinedError, "failed to connect to any address")
@@ -267,6 +272,10 @@ func processOptions(opts []Option) *options {
 		o(ret)
 	}
 	return ret
+}
+
+func RedactSourceURI(addr string) (string, error) {
+	return cloud.SanitizeExternalStorageURI(addr, RedactableURLParameters)
 }
 
 /*
