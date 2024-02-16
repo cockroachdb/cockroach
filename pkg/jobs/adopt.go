@@ -504,88 +504,129 @@ func (r *Registry) clearLeaseForJobID(jobID jobspb.JobID, ex isql.Executor, txn 
 	})
 }
 
-const pauseAndCancelUpdate = `
+const (
+	// cancelUpdate moves a job from cancel-requested to
+	// reverting, resetting the num_runs and last_run values to
+	// ensure that it can be adopted (for OnFailOrCancel handling)
+	// quickly.
+	cancelUpdate = `
    UPDATE system.jobs
-      SET status =
-          CASE
-						 WHEN status = '` + string(StatusPauseRequested) + `' THEN '` + string(StatusPaused) + `'
-						 WHEN status = '` + string(StatusCancelRequested) + `' THEN '` + string(StatusReverting) + `'
-						 ELSE status
-          END,
-					num_runs = 0,
-					last_run = NULL
-    WHERE (status IN ('` + string(StatusPauseRequested) + `', '` + string(StatusCancelRequested) + `'))
+      SET status = '` + string(StatusReverting) + `', num_runs = 0, last_run = NULL
+    WHERE status = '` + string(StatusCancelRequested) + `'
       AND ((claim_session_id = $1) AND (claim_instance_id = $2))
-RETURNING id, status
+    LIMIT $3
+RETURNING id
 `
 
+	// pauseUpdate moves a job from pause-requested to paused,
+	// resetting the num_runs and last_run values to ensure it can
+	// be adopted quickly if resumed.
+	pauseUpdate = `
+   UPDATE system.jobs
+      SET status = '` + string(StatusPaused) + `', num_runs = 0, last_run = NULL
+    WHERE status = '` + string(StatusPauseRequested) + `'
+      AND ((claim_session_id = $1) AND (claim_instance_id = $2))
+    LIMIT $3
+RETURNING id
+`
+)
+
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
-	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		// Run the claim transaction at low priority to ensure that it does not
-		// contend with foreground reads.
+	var (
+		batchSize  = 100
+		processed  int
+		pauseDone  bool
+		cancelDone bool
+		pauseErr   error
+		cancelErr  error
+	)
+	for !(cancelDone && pauseDone) {
+		if !pauseDone {
+			processed, pauseErr = r.servePauseBatch(ctx, s, batchSize)
+			pauseDone = processed == 0
+		}
+		if !cancelDone {
+			processed, cancelErr = r.serveCancelBatch(ctx, s, batchSize)
+			cancelDone = processed == 0
+		}
+	}
+	return errors.CombineErrors(pauseErr, cancelErr)
+}
+
+func (r *Registry) servePauseBatch(
+	ctx context.Context, s sqlliveness.Session, batchSize int,
+) (int, error) {
+	return r.serveCancelOrPauseBatch(ctx, s, "pause-request", pauseUpdate, batchSize,
+		func(job *Job, _ isql.Txn) error {
+			log.Infof(ctx, "job %d, session %s: paused", job.id, s.ID())
+			return nil
+		})
+}
+
+func (r *Registry) serveCancelBatch(
+	ctx context.Context, s sqlliveness.Session, batchSize int,
+) (int, error) {
+	return r.serveCancelOrPauseBatch(ctx, s, "cancel-request", cancelUpdate, batchSize,
+		func(job *Job, txn isql.Txn) error {
+			if err := job.WithTxn(txn).Update(ctx, func(
+				txn isql.Txn, md JobMetadata, ju *JobUpdater,
+			) error {
+				if md.Payload.Error == "" {
+					// Set default cancellation reason.
+					md.Payload.Error = errJobCanceled.Error()
+				}
+				encodedErr := errors.EncodeError(ctx, errJobCanceled)
+				md.Payload.FinalResumeError = &encodedErr
+				ju.UpdatePayload(md.Payload)
+				return nil
+			}); err != nil {
+				return errors.Wrapf(err, "job %d: tried to cancel but could not mark as reverting", job.id)
+			}
+			log.Infof(ctx, "job %d, session id: %s canceled: the job is now reverting",
+				job.id, s.ID())
+			return nil
+		})
+}
+
+func (r *Registry) serveCancelOrPauseBatch(
+	ctx context.Context,
+	s sqlliveness.Session,
+	name string,
+	query string,
+	batchSize int,
+	afterJobCancel func(job *Job, txn isql.Txn) error,
+) (int, error) {
+	processed := 0
+	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		// Run the transaction at low priority to ensure that
+		// it does not contend with foreground reads.
 		if err := txn.KV().SetUserPriority(roachpb.MinUserPriority); err != nil {
 			return errors.WithAssertionFailure(err)
 		}
-		// Note that we have to buffer all rows first - before processing each
-		// job - because we have to make sure that the query executes without an
-		// error (otherwise, the system.jobs table might diverge from the jobs
-		// registry).
 		rows, err := txn.QueryBufferedEx(
-			ctx, "cancel/pause-requested", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-			pauseAndCancelUpdate, s.ID().UnsafeBytes(), r.ID(),
+			ctx, name, txn.KV(), sessiondata.NodeUserSessionDataOverride,
+			query, s.ID().UnsafeBytes(), r.ID(), batchSize,
 		)
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
 		}
+		processed = len(rows)
 		for _, row := range rows {
 			id := jobspb.JobID(*row[0].(*tree.DInt))
-			job := &Job{id: id, registry: r}
-			statusString := *row[1].(*tree.DString)
-			switch Status(statusString) {
-			case StatusPaused:
-				if !r.cancelRegisteredJobContext(id) {
-					// If we didn't already have a running job for this lease,
-					// clear out the lease here since it won't be cleared be
-					// cleared out on Resume exit.
-					r.clearLeaseForJobID(id, txn, txn.KV())
-				}
-				log.Infof(ctx, "job %d, session %s: paused", id, s.ID())
-			case StatusReverting:
-				if err := job.WithTxn(txn).Update(ctx, func(
-					txn isql.Txn, md JobMetadata, ju *JobUpdater,
-				) error {
-					if !r.cancelRegisteredJobContext(id) {
-						// If we didn't already have a running job for this
-						// lease, clear out the lease here since it won't be
-						// cleared be cleared out on Resume exit.
-						//
-						// NB: This working as part of the update depends on
-						// the fact that the job struct does not have a
-						// claim set and thus won't validate the claim on
-						// update.
-						r.clearLeaseForJobID(id, txn, txn.KV())
-					}
-					if md.Payload.Error == "" {
-						// Set default cancellation reason.
-						md.Payload.Error = errJobCanceled.Error()
-					}
-					encodedErr := errors.EncodeError(ctx, errJobCanceled)
-					md.Payload.FinalResumeError = &encodedErr
-					ju.UpdatePayload(md.Payload)
-					// When we cancel a job, we want to reset its last_run and num_runs
-					// so that the job can be picked-up in the next adopt-loop, sooner
-					// than its current next-retry time.
-					ju.UpdateRunStats(0 /* numRuns */, r.clock.Now().GoTime() /* lastRun */)
-					return nil
-				}); err != nil {
-					return errors.Wrapf(err, "job %d: tried to cancel but could not mark as reverting", id)
-				}
-				log.Infof(ctx, "job %d, session id: %s canceled: the job is now reverting",
-					id, s.ID())
-			default:
-				return errors.AssertionFailedf("unexpected job status %s: %v", statusString, job)
+			if !r.cancelRegisteredJobContext(id) {
+				// If we didn't already have a running job for this
+				// lease, clear out the lease here since it won't be
+				// cleared be cleared out on Resume exit.
+				r.clearLeaseForJobID(id, txn, txn.KV())
+			}
+			if afterJobCancel != nil {
+				afterJobCancel(&Job{id: id, registry: r}, txn)
 			}
 		}
 		return nil
 	})
+	if err != nil {
+		return 0, err
+	}
+	return processed, err
 }
