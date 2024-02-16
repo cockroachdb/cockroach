@@ -840,9 +840,14 @@ CREATE TABLE crdb_internal.schema_changes (
 	},
 }
 
+type crdbInternalLeasesTableEntry struct {
+	desc         catalog.Descriptor
+	takenOffline bool
+	expiration   tree.DTimestamp
+}
+
 // TODO(tbg): prefix with node_.
 var crdbInternalLeasesTable = virtualSchemaTable{
-	comment: `acquired table leases (RAM; local node only)`,
 	schema: `
 CREATE TABLE crdb_internal.leases (
   node_id     INT NOT NULL,
@@ -852,33 +857,45 @@ CREATE TABLE crdb_internal.leases (
   expiration  TIMESTAMP NOT NULL,
   deleted     BOOL NOT NULL
 )`,
+	comment: `acquired table leases (RAM; local node only)`,
 	populate: func(
 		ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
 	) error {
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
-		var iterErr error
+		var leaseEntries []crdbInternalLeasesTableEntry
 		p.LeaseMgr().VisitLeases(func(desc catalog.Descriptor, takenOffline bool, _ int, expiration tree.DTimestamp) (wantMore bool) {
-			if ok, err := p.HasAnyPrivilege(ctx, desc); err != nil {
-				iterErr = err
-				return false
-			} else if !ok {
-				return true
-			}
-
-			if err := addRow(
-				tree.NewDInt(tree.DInt(nodeID)),
-				tree.NewDInt(tree.DInt(int64(desc.GetID()))),
-				tree.NewDString(desc.GetName()),
-				tree.NewDInt(tree.DInt(int64(desc.GetParentID()))),
-				&expiration,
-				tree.MakeDBool(tree.DBool(takenOffline)),
-			); err != nil {
-				iterErr = err
-				return false
-			}
+			// Because we have locked the lease manager while visiting every lease,
+			// it not safe to *acquire* or *release* any leases in the process. As
+			// a result, build an in memory cache of entries and process them after
+			// all the locks have been released. Previously we would check privileges,
+			// which would need to get the lease on the role_member table. Simply skipping
+			// this check on that table will not be sufficient since any active lease
+			// on it could expire or need an renewal and cause the sample problem.
+			leaseEntries = append(leaseEntries, crdbInternalLeasesTableEntry{
+				desc:         desc,
+				takenOffline: takenOffline,
+				expiration:   expiration,
+			})
 			return true
 		})
-		return iterErr
+		for _, entry := range leaseEntries {
+			if ok, err := p.HasAnyPrivilege(ctx, entry.desc); err != nil {
+				return err
+			} else if !ok {
+				continue
+			}
+			if err := addRow(
+				tree.NewDInt(tree.DInt(nodeID)),
+				tree.NewDInt(tree.DInt(int64(entry.desc.GetID()))),
+				tree.NewDString(entry.desc.GetName()),
+				tree.NewDInt(tree.DInt(int64(entry.desc.GetParentID()))),
+				&entry.expiration,
+				tree.MakeDBool(tree.DBool(entry.takenOffline)),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 

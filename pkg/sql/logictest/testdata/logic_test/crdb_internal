@@ -1417,3 +1417,18 @@ CREATE TABLE t76710_1 AS SELECT * FROM crdb_internal.statement_statistics;
 
 statement ok
 CREATE MATERIALIZED VIEW t76710_2 AS SELECT fingerprint_id FROM crdb_internal.cluster_statement_statistics;
+
+# In #119253 we observed a deadlock when visiting leases inside crdb_internal.lease
+# between the lease manager and the authorization check for each descriptor. This
+# test validates that this is no longer the case.
+subtest allow_role_memberships_to_change_during_transaction
+
+user testuser
+
+statement ok
+set allow_role_memberships_to_change_during_transaction=true
+
+statement ok
+SELECT  * FROM crdb_internal.leases;
+
+subtest end
