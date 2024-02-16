@@ -84,6 +84,8 @@ var envVars = []string{
 	// NB: This is crucial for chaos tests as we expect changefeeds to see
 	// many retries.
 	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true",
+	"COCKROACH_CHANGEFEED_TESTING_INCLUDE_PARQUET_TEST_METADATA=true",
+	"COCKROACH_CHANGEFEED_TESTING_INCLUDE_PARQUET_READER_METADATA=true",
 }
 
 type cdcTester struct {
@@ -1161,6 +1163,47 @@ func registerCDC(r registry.Registry) {
 			})
 			waitForCompletion()
 
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/initial-scan-only/parquet/metamorphic",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		RequiresLicense:  true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			// Metamorphic testing runs two changefeeds,
+			// Run the workload with 1 warehouse only to speed up the test.
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1})
+
+			// Randomly select one table as changefeed target and skip other tables to
+			// speed up the test.
+			randomlySelectedIndex := getRandomIndex(len(allTpccTargets))
+			selectedTargetTable := allTpccTargets[randomlySelectedIndex]
+			trimmedTargetTable := strings.TrimPrefix(selectedTargetTable, `tpcc.`)
+
+			firstFeed := ct.newChangefeed(feedArgs{
+				sinkType: cloudStorageSink,
+				targets:  []string{selectedTargetTable},
+				opts:     map[string]string{"initial_scan": "'only'", "format": "'parquet'"},
+			})
+			firstFeed.waitForCompletion()
+
+			secFeed := ct.newChangefeed(feedArgs{
+				sinkType: cloudStorageSink,
+				targets:  []string{selectedTargetTable},
+				opts:     map[string]string{"initial_scan": "'only'", "format": "'parquet'"},
+			})
+			secFeed.waitForCompletion()
+
+			db := c.Conn(context.Background(), t.L(), 1)
+			sqlRunner := sqlutils.MakeSQLRunner(db)
+			checkTwoChangeFeedExportContent(ctx, t, sqlRunner, firstFeed.sinkURI, secFeed.sinkURI, trimmedTargetTable)
 		},
 	})
 	r.Add(registry.TestSpec{
