@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# You MUST run prepare-summarize-build.sh before running this script.
+
 set -euxo pipefail
 
 if [ ! -f $1 ]
@@ -10,7 +12,12 @@ fi
 
 THIS_DIR=$(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)
 
-bazel build //pkg/cmd/bazci/bazel-github-helper --config crosslinux --jobs 300 $($THIS_DIR/engflow-args.sh) --bes_keywords helper-binary
+if [ ! -f _bazel/bin/pkg/cmd/bazci/bazel-github-helper/bazel-github-helper_/bazel-github-helper ]
+then
+    echo 'bazel-github-helper not found'
+    exit 1
+fi
+
 _bazel/bin/pkg/cmd/bazci/bazel-github-helper/bazel-github-helper_/bazel-github-helper -eventsfile $1 -servername mesolite -cert /home/agent/engflow.crt -key /home/agent/engflow.key -jsonout test-results.json
 gcloud storage cp test-results.json gs://engflow-data/$(date +%F)/$(python3 -c "import json, sys; print(json.load(sys.stdin)['invocation_id'])" < test-results.json).json
 rm test-results.json

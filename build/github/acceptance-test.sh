@@ -2,14 +2,14 @@
 
 set -euxo pipefail
 
-./build/github/run-bazel.sh build --config crosslinux //pkg/cmd/cockroach-short \
+bazel build --config crosslinux //pkg/cmd/cockroach-short \
     --jobs 100 $(./build/github/engflow-args.sh)
 
 ARTIFACTSDIR=$PWD/artifacts
 mkdir -p $ARTIFACTSDIR
 COCKROACH=$(bazel info bazel-bin --config=crosslinux)/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short
 
-./build/github/run-bazel.sh test //pkg/acceptance:acceptance_test \
+bazel test //pkg/acceptance:acceptance_test \
   --config crosslinux \
   --jobs 100 $(./build/github/engflow-args.sh) \
   --remote_download_minimal \
