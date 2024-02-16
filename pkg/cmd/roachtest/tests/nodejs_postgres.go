@@ -50,13 +50,14 @@ func registerNodeJSPostgres(r registry.Registry) {
 
 		err = repeatRunE(ctx, t, c, node, "create sql user",
 			fmt.Sprintf(
-				`./cockroach sql --certs-dir certs --port={pgport:1} -e "CREATE USER %s CREATEDB"`, user,
+				`./cockroach sql --certs-dir %s --port={pgport:1} -e "CREATE USER %s CREATEDB"`, install.CockroachNodeCertsDir, user,
 			))
 		require.NoError(t, err)
 
 		err = repeatRunE(ctx, t, c, node, "create test database",
-			`./cockroach sql --certs-dir certs --port={pgport:1} -e "CREATE DATABASE postgres_node_test"`,
-		)
+			fmt.Sprintf(
+				`./cockroach sql --certs-dir %s --port={pgport:1} -e "CREATE DATABASE postgres_node_test"`, install.CockroachNodeCertsDir,
+			))
 		require.NoError(t, err)
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
