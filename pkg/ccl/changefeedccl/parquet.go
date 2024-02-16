@@ -22,15 +22,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/errors"
 )
 
-// includeParquestTestMetadata configures the parquet writer to write
-// metadata required for reading parquet files in tests.
-var includeParquestTestMetadata = buildutil.CrdbTestBuild
+// includeParquestTestMetadata configures the parquet writer to write extra
+// column metadata for parquet files in tests.
+var includeParquestTestMetadata = buildutil.CrdbTestBuild ||
+	envutil.EnvOrDefaultBool("COCKROACH_CHANGEFEED_TESTING_INCLUDE_PARQUET_TEST_METADATA",
+		false)
 
 type parquetWriter struct {
 	inner        *parquet.Writer
@@ -115,6 +118,7 @@ func newParquetWriterFromRow(
 		if opts, err = addParquetTestMetadata(row, encodingOpts, opts); err != nil {
 			return nil, err
 		}
+		opts = append(opts, parquet.WithMetadata(parquet.MakeReaderMetadata(schemaDef)))
 	}
 	writer, err := parquet.NewWriter(schemaDef, sink, opts...)
 
@@ -335,4 +339,20 @@ func deserializeMap(s string) (orderedKeys []string, m map[string]int, err error
 		m[key] = value
 	}
 	return orderedKeys, m, nil
+}
+
+// TestingGetEventTypeColIdx returns the index of the extra column added to
+// every parquet file which indicate the type of event that generated a
+// particular row. Please read parquetCrdbEventTypeColName and
+// addParquetTestMetadata for more details.
+func TestingGetEventTypeColIdx(rd parquet.ReadDatumsMetadata) (int, error) {
+	columnsNamesString, ok := rd.MetaFields["allCols"]
+	if !ok {
+		return -1, errors.Errorf("could not find column names in parquet metadata")
+	}
+	_, columnNameSet, err := deserializeMap(columnsNamesString)
+	if err != nil {
+		return -1, err
+	}
+	return columnNameSet[parquetCrdbEventTypeColName], nil
 }
