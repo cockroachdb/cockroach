@@ -47,31 +47,9 @@ var staticProfiles = map[string]configProfile{
 		// to generate clusters with default configurations.
 		description: "no extra configuration applied - using source code defaults",
 	},
-	// The "example" profile exists for demonstration and documentation
-	// purposes.
-	"example": {
-		description: "creates an 'example' database and data table, for illustration purposes",
-		tasks: []autoconfigpb.Task{
-			makeTask("create an example database",
-				/* nonTxnSQL */ nil,
-				/* txnSQL */ []string{
-					"CREATE DATABASE IF NOT EXISTS example",
-					"CREATE TABLE IF NOT EXISTS example.data AS SELECT 'hello' AS value",
-				},
-			),
-		},
-	},
-	"virtual+noapp": {
-		description: "virtualization enabled but no virtual cluster defined yet",
-		tasks:       virtClusterInitTasks,
-	},
 	"virtual+noapp+repl": {
 		description: "virtualization enabled but no virtual cluster defined yet, with replication enabled",
 		tasks:       enableReplication(virtClusterInitTasks),
-	},
-	"virtual+app+sharedservice": {
-		description: "one virtual cluster configured to serve SQL application traffic",
-		tasks:       virtClusterWithAppServiceInitTasks,
 	},
 	"virtual+app+sharedservice+repl": {
 		description: "one virtual cluster configured to serve SQL application traffic, with replication enabled",
@@ -85,28 +63,7 @@ var staticProfiles = map[string]configProfile{
 // NOTE: DO NOT MODIFY TASKS HERE. Task execution is identified by the
 // task ID; already-run tasks will not re-run. Add tasks at the end of
 // each config profile. See enableReplication() for an example.
-var virtClusterInitTasks = []autoconfigpb.Task{
-	makeTask("initial cluster config",
-		/* nonTxnSQL */ []string{},
-		nil, /* txnSQL */
-	),
-	makeTask("create virtual cluster template",
-		nil, /* nonTxnSQL */
-		/* txnSQL */
-		[]string{
-			// Create a main secondary tenant template.
-			"CREATE VIRTUAL CLUSTER template",
-			"ALTER VIRTUAL CLUSTER template GRANT ALL CAPABILITIES",
-		},
-	),
-	// Finally.
-	makeTask("use the application virtual cluster template by default in CREATE VIRTUAL CLUSTER",
-		/* nonTxnSQL */ []string{
-			"SET CLUSTER SETTING sql.create_virtual_cluster.default_template = 'template'",
-		},
-		nil, /* txnSQL */
-	),
-}
+var virtClusterInitTasks = []autoconfigpb.Task{}
 
 // NOTE: DO NOT MODIFY TASKS HERE. Task execution is identified by the
 // task ID; already-run tasks will not re-run. Add tasks at the end of

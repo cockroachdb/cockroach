@@ -12,7 +12,6 @@ ok
 system-sql
 SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
 WHERE variable IN (
-'sql.create_virtual_cluster.default_template',
 'server.controller.default_target_cluster',
 'kv.rangefeed.enabled'
 )
@@ -20,7 +19,6 @@ ORDER BY variable
 ----
 kv.rangefeed.enabled true
 server.controller.default_target_cluster application
-sql.create_virtual_cluster.default_template template
 
 system-sql
 SHOW TENANTS WITH CAPABILITIES
@@ -36,25 +34,14 @@ SHOW TENANTS WITH CAPABILITIES
 1 system ready shared can_view_tsdb_metrics true
 1 system ready shared exempt_from_rate_limiting true
 1 system ready shared span_config_bounds {}
-2 template ready none can_admin_relocate_range true
-2 template ready none can_admin_scatter true
-2 template ready none can_admin_split true
-2 template ready none can_admin_unsplit true
-2 template ready none can_check_consistency true
-2 template ready none can_debug_process true
-2 template ready none can_use_nodelocal_storage true
-2 template ready none can_view_node_info true
-2 template ready none can_view_tsdb_metrics true
-2 template ready none exempt_from_rate_limiting true
-2 template ready none span_config_bounds {}
-3 application ready shared can_admin_relocate_range true
-3 application ready shared can_admin_scatter true
-3 application ready shared can_admin_split true
-3 application ready shared can_admin_unsplit true
-3 application ready shared can_check_consistency true
-3 application ready shared can_debug_process true
-3 application ready shared can_use_nodelocal_storage true
-3 application ready shared can_view_node_info true
-3 application ready shared can_view_tsdb_metrics true
-3 application ready shared exempt_from_rate_limiting true
-3 application ready shared span_config_bounds {}
+2 application ready shared can_admin_relocate_range false
+2 application ready shared can_admin_scatter true
+2 application ready shared can_admin_split true
+2 application ready shared can_admin_unsplit false
+2 application ready shared can_check_consistency false
+2 application ready shared can_debug_process false
+2 application ready shared can_use_nodelocal_storage false
+2 application ready shared can_view_node_info false
+2 application ready shared can_view_tsdb_metrics false
+2 application ready shared exempt_from_rate_limiting false
+2 application ready shared span_config_bounds {}
