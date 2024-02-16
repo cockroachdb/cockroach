@@ -288,23 +288,23 @@ func (sf *streamIngestionFrontier) Next() (
 		row, meta := sf.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
-				sf.MoveToDraining(nil /* err */)
+				sf.MoveToDrainingAndLogError(nil /* err */)
 			}
 			return nil, meta
 		}
 		if row == nil {
-			sf.MoveToDraining(nil /* err */)
+			sf.MoveToDrainingAndLogError(nil /* err */)
 			break
 		}
 
 		if err := sf.noteResolvedTimestamps(row[0]); err != nil {
-			sf.MoveToDraining(err)
+			sf.MoveToDrainingAndLogError(err)
 			break
 		}
 
 		if err := sf.maybeUpdateProgress(); err != nil {
 			log.Errorf(sf.Ctx(), "failed to update progress: %+v", err)
-			sf.MoveToDraining(err)
+			sf.MoveToDrainingAndLogError(err)
 			break
 		}
 
@@ -313,14 +313,14 @@ func (sf *streamIngestionFrontier) Next() (
 		}
 
 		if err := sf.maybeCheckForLaggingNodes(); err != nil {
-			sf.MoveToDraining(err)
+			sf.MoveToDrainingAndLogError(err)
 			break
 		}
 
 		// Send back a row to the job so that it can update the progress.
 		select {
 		case <-sf.Ctx().Done():
-			sf.MoveToDraining(sf.Ctx().Err())
+			sf.MoveToDrainingAndLogError(sf.Ctx().Err())
 			return nil, sf.DrainHelper()
 			// Send the latest persisted replicated time in the heartbeat to the source cluster
 			// as even with retries we will never request an earlier row than it, and
@@ -333,11 +333,16 @@ func (sf *streamIngestionFrontier) Next() (
 			if err != nil {
 				log.Errorf(sf.Ctx(), "heartbeat sender exited with error: %s", err)
 			}
-			sf.MoveToDraining(err)
+			sf.MoveToDrainingAndLogError(err)
 			return nil, sf.DrainHelper()
 		}
 	}
 	return nil, sf.DrainHelper()
+}
+
+func (sf *streamIngestionFrontier) MoveToDrainingAndLogError(err error) {
+	log.Infof(sf.Ctx(), "gracefully draining with error %s", err)
+	sf.MoveToDraining(err)
 }
 
 func (sf *streamIngestionFrontier) close() {
