@@ -94,4 +94,15 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-
+  check_generated_code:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: ./build/github/get-engflow-keys.sh
+      - name: check generated code
+        run: ./build/github/check-generated-code.sh
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
