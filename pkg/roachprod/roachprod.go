@@ -923,6 +923,7 @@ type PGURLOptions struct {
 	External           bool
 	VirtualClusterName string
 	SQLInstance        int
+	Localhost          bool
 	Auth               install.PGAuthMode
 }
 
@@ -943,6 +944,10 @@ func PgURL(
 	if opts.External {
 		for i := 0; i < len(nodes); i++ {
 			ips[i] = c.VMs[nodes[i]-1].PublicIP
+		}
+	} else if opts.Localhost {
+		for i := 0; i < len(nodes); i++ {
+			ips[i] = "localhost"
 		}
 	} else {
 		for i := 0; i < len(nodes); i++ {

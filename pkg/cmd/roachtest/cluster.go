@@ -2480,7 +2480,13 @@ func (c *clusterImpl) pgURLErr(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts roachprod.PGURLOptions,
 ) ([]string, error) {
 	opts.Secure = c.IsSecure()
-	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(nodes), c.localCertsDir, opts)
+
+	// Use CockroachNodeCertsDir if it's an internal url with access to the node.
+	certsDir := install.CockroachNodeCertsDir
+	if opts.External {
+		certsDir = c.localCertsDir
+	}
+	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(nodes), certsDir, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -2494,6 +2500,8 @@ func (c *clusterImpl) pgURLErr(
 func (c *clusterImpl) InternalPGUrl(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts roachprod.PGURLOptions,
 ) ([]string, error) {
+	// The certificates are only valid for localhost and not the internal ip.
+	opts.Localhost = true
 	return c.pgURLErr(ctx, l, nodes, opts)
 }
 

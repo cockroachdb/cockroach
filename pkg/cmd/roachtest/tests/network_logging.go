@@ -81,7 +81,7 @@ func registerNetworkLogging(r registry.Registry) {
 			c.MakeNodes(crdbNodes),
 			install.CockroachNodeCertsDir, /* certsDir */
 			roachprod.PGURLOptions{
-				External: false,
+				External: true,
 				Secure:   true})
 		require.NoError(t, err)
 		workloadPGURLs := make([]string, len(secureUrls))
