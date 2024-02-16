@@ -1082,3 +1082,15 @@ func BenchmarkStartSpan(b *testing.B) {
 	}
 	b.ReportAllocs()
 }
+
+func BenchmarkStartSpan_OpNameRegexp(b *testing.B) {
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
+	require.True(b, tr.AlwaysTrace())
+	// Set some arbitrary regex. In our benchmark, we'll always match, but only the
+	// final clause in the regex.
+	require.NoError(b, tr.setVerboseOpNameRegexp("op1|op2|op3|^op[a-zA-Z]+"))
+	for i := 0; i < b.N; i++ {
+		tr.StartSpan("opAB")
+	}
+	b.ReportAllocs()
+}
