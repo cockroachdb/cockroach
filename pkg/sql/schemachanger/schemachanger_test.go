@@ -938,7 +938,7 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			`SET CLUSTER SETTING sql.scHEma.fOrce_declarative_statements="-CREATE SCHEMA, +CREATE SEQUENCE"  -- expect to skip this line`,
 			"CREATE TABLE t6 (i INT PRIMARY KEY, j INT NOT NULL, k INT NOT NULL);",
 			"ALTER TABLE t6 DROP COLUMN i; -- unimplemented in legacy schema changer; expect to skip this line",
-			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- ditto",
+			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- should get rewritten for legacy schema changer",
 			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k; -- ditto",
 			"ALTER TABLE t6 ADD COLUMN p INT DEFAULT 30, DROP COLUMN p; -- ditto",
 			"SET experimental_enable_temp_tables = true;",
