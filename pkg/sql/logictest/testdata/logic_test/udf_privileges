@@ -804,4 +804,3 @@ statement ok
 SET ROLE root
 
 subtest end
-

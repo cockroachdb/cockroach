@@ -19,6 +19,7 @@ import (
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,7 +42,10 @@ func CountLeases(
 	at hlc.Timestamp,
 	forAnyVersion bool,
 ) (int, error) {
-	leasingMode := SessionBasedLeasingMode(LeaseEnableSessionBasedLeasing.Get(&settings.SV))
+	// Indicates if the leasing descriptor has been upgraded for session based
+	// leasing.
+	leasingDescIsSessionBased := hasSessionBasedLeasingDesc(ctx, settings)
+	leasingMode := readSessionBasedLeasingMode(ctx, settings)
 	whereClauses := make([][]string, 2)
 	for _, t := range versions {
 		versionClause := ""
@@ -61,11 +65,24 @@ func CountLeases(
 	whereClauseIdx := make([]int, 0, 2)
 	syntheticDescriptors := make(catalog.Descriptors, 0, 2)
 	if leasingMode != SessionBasedOnly {
-		syntheticDescriptors = append(syntheticDescriptors, nil)
+		// The leasing descriptor is not session based yet, so we need to inject
+		// in synthetically.
+		if !leasingDescIsSessionBased {
+			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V23_2())
+		} else {
+			syntheticDescriptors = append(syntheticDescriptors, nil)
+		}
 		whereClauseIdx = append(whereClauseIdx, 0)
+
 	}
 	if leasingMode >= SessionBasedDrain {
-		syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V24_1())
+		// The leasing descriptor has been upgraded to be session based, so
+		// we need to use a synthetic descriptor for the old expiry based format.
+		if leasingDescIsSessionBased {
+			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable())
+		} else {
+			syntheticDescriptors = append(syntheticDescriptors, nil)
+		}
 		whereClauseIdx = append(whereClauseIdx, 1)
 	}
 
@@ -120,13 +137,16 @@ func countLeasesNonMultiRegion(
 	ctx context.Context, txn isql.Txn, at hlc.Timestamp, whereClauses []string,
 ) (int, error) {
 	stmt := fmt.Sprintf(
-		`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE `,
+		`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE 
+crdb_region=$2 AND`,
 		at.AsOfSystemTime(),
 	) + strings.Join(whereClauses, " OR ")
 	values, err := txn.QueryRowEx(
 		ctx, "count-leases", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		stmt, at.GoTime(),
+		stmt,
+		at.GoTime(),
+		enum.One, // Single region database can only have one region prefix assigned.
 	)
 	if err != nil {
 		return 0, err

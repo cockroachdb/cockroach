@@ -109,7 +109,7 @@ func (t *descriptorState) findForTimestamp(
 		// Check to see if the ModificationTime is valid.
 		if desc := t.mu.active.data[i]; desc.GetModificationTime().LessEq(timestamp) {
 			latest := i+1 == len(t.mu.active.data)
-			if !desc.hasExpired(timestamp) {
+			if !desc.hasExpired(ctx, timestamp) {
 				// Existing valid descriptor version.
 				desc.incRefCount(ctx, expensiveLogEnabled)
 				return desc, latest, nil

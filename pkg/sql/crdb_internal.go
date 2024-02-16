@@ -1565,7 +1565,7 @@ CREATE TABLE crdb_internal.kv_session_based_leases (
 `,
 	comment: `reads from the internal session based leases table (before the table format is converted)`,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
-		return p.InternalSQLTxn().WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V24_1()},
+		return p.InternalSQLTxn().WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable()},
 			func() error {
 				rows, err := p.InternalSQLTxn().QueryBuffered(
 					ctx, "query-leases", p.Txn(),

@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -128,12 +130,6 @@ func (t *leaseTest) cleanup() {
 
 func (t *leaseTest) getLeases(descID descpb.ID) string {
 	const sql = `
-  SELECT COALESCE(l.version, s.version) as version, COALESCE(l."nodeID", s.sql_instance_id) as "nodeID"
-    FROM system.lease as l
-		FULL OUTER JOIN  "".crdb_internal.kv_session_based_leases as s
-		ON l."descID" = s.desc_id AND l."nodeID" = s.sql_instance_id AND l.version=s.version
-   WHERE COALESCE("descID", s.desc_id) = $1 AND COALESCE("nodeID", s.sql_instance_id) > $2
-UNION
   SELECT version, sql_instance_id as "nodeID"
     FROM "".crdb_internal.kv_session_based_leases
    WHERE "desc_id" = $1 AND "sql_instance_id" > $2
@@ -316,7 +312,7 @@ func TestLeaseManager(testingT *testing.T) {
 	l2 := t.mustAcquire(1, descID)
 	if l1.Underlying().GetID() != l2.Underlying().GetID() {
 		t.Fatalf("expected same lease, but found %v != %v", l1, l2)
-	} else if e1, e2 := l1.Expiration(), l2.Expiration(); e1 != e2 {
+	} else if e1, e2 := l1.Expiration(ctx), l2.Expiration(ctx); e1 != e2 {
 		t.Fatalf("expected same lease timestamps, but found %v != %v", e1, e2)
 	}
 	t.expectLeases(descID, "/1/1")
@@ -427,12 +423,12 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 
 	l1 := t.mustAcquire(1, descID)
 	t.expectLeases(descID, "/1/1")
-	e1 := l1.Expiration()
+	e1 := l1.Expiration(ctx)
 
 	// Another lease acquisition from the same node will result in a new lease.
 	rt := removalTracker.TrackRemoval(l1.Underlying())
 	l3 := t.mustAcquire(1, descID)
-	e3 := l3.Expiration()
+	e3 := l3.Expiration(ctx)
 	if l1.Underlying().GetID() == l3.Underlying().GetID() && e3.WallTime == e1.WallTime {
 		t.Fatalf("expected different leases, but found %v", l1)
 	}
@@ -1325,7 +1321,7 @@ CREATE TABLE t.test2 ();
 		test1Desc.GetParentSchemaID(),
 		"test1",
 	)
-	eo1 := ts1.Expiration()
+	eo1 := ts1.Expiration(ctx)
 	if err != nil {
 		t.Fatal(err)
 	} else if err := t.release(1, ts1); err != nil {
@@ -1345,7 +1341,7 @@ CREATE TABLE t.test2 ();
 		t.Fatalf("expected 2 leases to be acquired, but acquired %d times",
 			count)
 	}
-	eo2 := ts2.Expiration()
+	eo2 := ts2.Expiration(ctx)
 
 	// Reset testAcquisitionBlockCount as the first acqusition will always block.
 	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
@@ -1364,7 +1360,7 @@ CREATE TABLE t.test2 ();
 		if err != nil {
 			t.Fatal(err)
 		}
-		en1 := ts1.Expiration()
+		en1 := ts1.Expiration(ctx)
 		defer func() {
 			if err := t.release(1, ts1); err != nil {
 				t.Fatal(err)
@@ -1393,7 +1389,7 @@ CREATE TABLE t.test2 ();
 		if err != nil {
 			t.Fatal(err)
 		}
-		en2 := ts2.Expiration()
+		en2 := ts2.Expiration(ctx)
 		defer func() {
 			if err := t.release(1, ts2); err != nil {
 				t.Fatal(err)
@@ -2739,9 +2735,9 @@ func TestHistoricalDescriptorAcquire(t *testing.T) {
 	// Ensure the modificationTime <= timestamp < expirationTime
 	modificationTime := acquiredDescriptor.Underlying().GetModificationTime()
 	assert.Truef(t, modificationTime.LessEq(ts1) &&
-		ts1.Less(acquiredDescriptor.Expiration()), "modification: %s, ts1: %s, "+
+		ts1.Less(acquiredDescriptor.Expiration(ctx)), "modification: %s, ts1: %s, "+
 		"expiration: %s", modificationTime.String(), ts1.String(),
-		acquiredDescriptor.Expiration().String())
+		acquiredDescriptor.Expiration(ctx).String())
 }
 
 func TestDropDescriptorRacesWithAcquisition(t *testing.T) {
@@ -3001,10 +2997,12 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	var txnID string
 
 	var params base.TestServerArgs
-	params.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
-		base.TestTenantProbabilistic, 112957,
-	)
-	params.Settings = cluster.MakeTestingClusterSettings()
+	// Disable tenants for this test since on-going upgrades will interfere
+	// with the knobs used.
+	params.DefaultTestTenant = base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs
+	params.Settings = cluster.MakeTestingClusterSettingsWithVersions(clusterversion.V23_2.Version(),
+		clusterversion.MinSupported.Version(),
+		false)
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
 	lease.LeaseDuration.Override(ctx, &params.Settings.SV, 0)
@@ -3034,7 +3032,10 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 			return nil
 		},
 	}
-
+	params.Knobs.Server = &server.TestingKnobs{
+		BinaryVersionOverride:          clusterversion.V23_2.Version(),
+		DisableAutomaticVersionUpgrade: make(chan struct{}),
+	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	// Setup tables for the test.
@@ -3730,11 +3731,17 @@ func TestSessionLeasingTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.MinSupported.Version(), false)
 	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, int64(lease.SessionBasedDualWrite))
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings:          st,
 		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				BinaryVersionOverride:          clusterversion.V23_2.Version(),
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+			},
+		},
 	})
 	defer srv.Stopper().Stop(ctx)
 	runner := sqlutils.MakeSQLRunner(sqlDB)
@@ -3742,7 +3749,7 @@ func TestSessionLeasingTable(t *testing.T) {
 	idb := srv.InternalDB().(isql.DB)
 	executor := idb.Executor()
 	// Insert using a synthetic descriptor.
-	err := executor.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V24_1()}, func() error {
+	err := executor.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable()}, func() error {
 		_, err := executor.Exec(ctx, "add-rows-for-test", nil,
 			"INSERT INTO system.lease VALUES (1, -1, 1, 'some session id', 'region')")
 		return err

@@ -448,4 +448,3 @@ CREATE INDEX ON v (b);
 # schema changer.
 statement ok
 CREATE INDEX ON v ((b>0));
-
