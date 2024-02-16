@@ -214,8 +214,13 @@ statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
 skipif config local-mixed-23.1
+skipif config local-read-committed
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+onlyif config local-read-committed
+statement error pgcode 25001 cannot change the isolation level of a running transaction
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 statement ok
 ROLLBACK
@@ -227,8 +232,13 @@ statement ok
 SELECT * FROM kv LIMIT 1
 
 skipif config local-mixed-23.1
+skipif config local-read-committed
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET transaction_isolation = 'READ COMMITTED'
+
+onlyif config local-read-committed
+statement error pgcode 25001 cannot change the isolation level of a running transaction
+SET transaction_isolation = 'SERIALIZABLE'
 
 statement ok
 ROLLBACK

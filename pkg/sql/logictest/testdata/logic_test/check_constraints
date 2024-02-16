@@ -57,7 +57,7 @@ statement ok
 INSERT INTO t2 (a, c) VALUES (2, -1)
 
 statement ok
-CREATE TABLE t3 (a INT, b INT CHECK (b < a))
+CREATE TABLE t3 (a INT, b INT CHECK (b < a), FAMILY f1 (a), FAMILY f2 (b))
 
 statement ok
 INSERT INTO t3 (a, b) VALUES (3, 2)
@@ -106,7 +106,12 @@ statement error pgcode 42703 column "b" does not exist, referenced in "a < b"
 CREATE TABLE t4 (a INT, CHECK (a < b), CHECK (a+b+c+d < 20))
 
 statement ok
-CREATE TABLE t4 (a INT, b INT DEFAULT 5, c INT, d INT, CHECK (a < b), CONSTRAINT "all" CHECK (a+b+c+d < 20))
+CREATE TABLE t4 (
+  a INT, b INT DEFAULT 5, c INT, d INT,
+  CHECK (a < b),
+  CONSTRAINT "all" CHECK (a+b+c+d < 20),
+  FAMILY f1 (a, b, c, d)
+)
 
 statement ok
 INSERT INTO t4 (a, b) VALUES (2, 3)
@@ -128,9 +133,15 @@ SELECT * from t3
 ----
 3 2
 
+skipif config local-read-committed 112488
 statement error pgcode 23514 failed to satisfy CHECK constraint
 UPDATE t3 SET b = 3 WHERE a = 3
 
+onlyif config local-read-committed 112488
+statement error multi-column-family check constraints are not yet supported under read committed isolation
+UPDATE t3 SET b = 3 WHERE a = 3
+
+skipif config local-read-committed 112488
 statement ok
 UPDATE t3 SET b = 1 WHERE a = 3
 
@@ -141,7 +152,12 @@ statement ok
 UPDATE t4 SET a = 0 WHERE c = 3
 
 statement ok
-CREATE TABLE t5 (k INT PRIMARY KEY, a INT, b int CHECK (a > b))
+CREATE TABLE t5 (
+  k INT PRIMARY KEY,
+  a INT,
+  b int CHECK (a > b),
+  FAMILY f1 (k, a, b)
+)
 
 statement error pgcode 23514 failed to satisfy CHECK constraint
 INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
@@ -312,17 +328,25 @@ INSERT INTO t9 VALUES (5, 3)
 statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
 INSERT INTO t9 VALUES (6, 7)
 
+skipif config local-read-committed 112488
 statement ok
 UPDATE t9 SET b = 4 WHERE a = 5
 
+skipif config local-read-committed 112488
 statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
 UPDATE t9 SET b = 6 WHERE a = 5
 
+skipif config local-read-committed 112488
 statement ok
 UPDATE t9 SET a = 7 WHERE a = 4
 
+skipif config local-read-committed 112488
 statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
 UPDATE t9 SET a = 2 WHERE a = 5
+
+onlyif config local-read-committed 112488
+statement error multi-column-family check constraints are not yet supported under read committed isolation
+UPDATE t9 SET b = 4 WHERE a = 5
 
 # Check constraints on computed columns.
 

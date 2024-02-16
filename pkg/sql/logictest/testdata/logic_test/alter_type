@@ -17,7 +17,7 @@ SELECT ARRAY['hi']::_newname
 
 # Test that we can use the new name within a transaction.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE newname RENAME TO renameagain
 
 query T
@@ -28,9 +28,9 @@ hi
 statement ok
 ROLLBACK
 
-# We should be able to rename a type multiple types in a transaction.
+# We should be able to rename a type multiple times in a transaction.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE newname RENAME TO new_name
 
 query T
@@ -194,7 +194,7 @@ statement ok
 CREATE TABLE new_enum_values (x build)
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE build ADD VALUE 'g';
 ALTER TYPE build ADD VALUE '_a' BEFORE 'a'
 
@@ -392,7 +392,7 @@ statement ok
 CREATE TYPE a AS ENUM('a')
 
 statement error enum value "b" is being added, try again later
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE a ADD VALUE 'b';
 ALTER TYPE a DROP VALUE 'b';
 
@@ -400,7 +400,7 @@ statement ok
 ROLLBACK
 
 statement error enum value "a" is being dropped, try again later
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE a DROP VALUE 'a';
 ALTER TYPE a ADD VALUE 'a';
 
@@ -409,7 +409,7 @@ ROLLBACK
 
 
 statement error pq: enum value "a" is already being dropped
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE a DROP VALUE 'a';
 ALTER TYPE a DROP VALUE 'a'
 
@@ -419,7 +419,7 @@ ROLLBACK
 subtest if_not_exists_in_same_txn
 
 statement error enum value "a" is being dropped, try again later
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE a DROP VALUE 'a';
 ALTER TYPE a ADD VALUE IF NOT EXISTS 'a';
 
@@ -427,7 +427,7 @@ statement ok
 ROLLBACK
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE a ADD VALUE 'b';
 ALTER TYPE a ADD VALUE IF NOT EXISTS 'b';
 COMMIT
@@ -435,7 +435,7 @@ COMMIT
 subtest add_rename_in_same_txn
 
 statement error enum value "c" is being added, try again later
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE a ADD VALUE 'c';
 ALTER TYPE a RENAME VALUE 'c' TO 'new_name';
 
@@ -445,7 +445,7 @@ ROLLBACK
 subtest drop_rename_in_same_txn
 
 statement error enum value "a" is being dropped
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE a DROP VALUE 'a';
 ALTER TYPE a RENAME VALUE 'a' TO 'new_name';
 
@@ -564,6 +564,8 @@ subtest if_not_exists
 statement ok
 CREATE TYPE ifNotExists AS ENUM()
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 CREATE TYPE IF NOT EXISTS ifNotExists AS ENUM();
 ----

@@ -391,7 +391,13 @@ ALTER TABLE t DROP COLUMN IF EXISTS e
 
 # Negative test to assert that NOTICEs are NOT emitted if there are no indexes
 # being dropped.
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 statement notice ^$
+ALTER TABLE t DROP COLUMN IF EXISTS e CASCADE
+
+onlyif config local-read-committed
+statement ok
 ALTER TABLE t DROP COLUMN IF EXISTS e CASCADE
 
 statement ok
@@ -655,7 +661,7 @@ ALTER TABLE add_default ADD g INT DEFAULT 'foo'::regtype::INT
 subtest 26422
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER TABLE add_default ADD fee FLOAT NOT NULL DEFAULT 2.99
@@ -1144,7 +1150,7 @@ DROP TABLE telemetry_test
 
 # Disable stats injection in explicit transactions.
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 CREATE TABLE inject_stats (k CHAR PRIMARY KEY, v TIMESTAMPTZ)
@@ -1229,7 +1235,7 @@ CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (x INT, y INT, INDEX i (x))
 
 statement error pq: column \"x\" does not exist
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE t2 DROP COLUMN x;
 ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1(x);
 
@@ -1267,7 +1273,7 @@ statement ok
 DROP TABLE t1, t2 CASCADE
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (y INT);
 ALTER TABLE t2 ADD COLUMN x INT REFERENCES t1 (x);
@@ -1289,7 +1295,7 @@ statement ok
 DROP TABLE t1, t2 CASCADE
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (y INT);
 ALTER TABLE t2 ADD COLUMN x INT;
@@ -1312,7 +1318,7 @@ statement ok
 DROP TABLE t1, t2 CASCADE
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE t1 (x INT PRIMARY KEY);
 INSERT INTO t1 VALUES (1);
 CREATE TABLE t2 (y INT);
@@ -1343,7 +1349,7 @@ CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (y INT)
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE t2 ADD COLUMN x INT;
 CREATE INDEX ON t2 (x);
 ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x);
@@ -1370,7 +1376,7 @@ CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (x INT)
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE INDEX ON t2 (x);
 ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x);
 COMMIT
@@ -1553,16 +1559,19 @@ statement error column "g" does not exist
 ALTER TABLE unique_without_index ADD CONSTRAINT bad_partial_unique UNIQUE WITHOUT INDEX (f) WHERE g > 0
 
 # The unique constraint prevents new duplicate values.
+skipif config local-read-committed 110873
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "my_unique_f"\nDETAIL: Key \(f\)=\(1\) already exists\.
 INSERT INTO unique_without_index (f) VALUES (1), (1)
 
 # There is no unique constraint on e, yet, so this insert succeeds.
+skipif config local-read-committed 110873
 statement ok
 INSERT INTO unique_without_index (e, f) VALUES (1, 1), (1, 2)
 
 # But trying to add a unique constraint now fails.
 # Note that we omit the constraint name in the expected error message because if the declarative schema changer is used,
 # the constraint name, at the time of validation failure, is still a place-holder name.
+skipif config local-read-committed 110873
 statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX (e)
 
@@ -1572,15 +1581,19 @@ ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e2 UNIQUE WITHOUT INDEX (e) NOT VALID
 
 # Trying to validate one of the constraints will fail.
+skipif config local-read-committed 110873
 statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # But after we delete a row, validation should succeed.
 statement ok
 DELETE FROM unique_without_index WHERE e = 1 AND f = 1;
+
+statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # All these constraints are already valid, so validation should succeed.
+skipif config local-read-committed 110873
 statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_b;
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_a_b;
@@ -1639,6 +1652,8 @@ ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1
 # But after we delete a row, validation should succeed.
 statement ok
 DELETE FROM unique_without_index_partial WHERE a = 1 AND b = 3 AND c = -3;
+
+statement ok
 ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1;
 
 # Creating a new validated constraint should also succeed.
@@ -1775,7 +1790,7 @@ DELETE FROM t54629 WHERE c = 1;
 subtest regression_45985
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE t45985 (a INT);
 ALTER TABLE t45985 ADD COLUMN b INT;
 COMMIT;
@@ -1797,7 +1812,7 @@ statement ok
 CREATE TABLE t_col_drop (a INT);
 
 statement error pgcode 0A000 constraint "a_auto_not_null" in the middle of being added, try again later
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE t_col_drop ALTER COLUMN a SET NOT NULL;
 ALTER TABLE t_col_drop DROP COLUMN a;
 
@@ -1808,7 +1823,7 @@ statement ok
 DROP TABLE t_col_drop
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE t_col_drop (a INT);
 ALTER TABLE t_col_drop ALTER COLUMN a SET NOT NULL;
 ALTER TABLE t_col_drop DROP COLUMN a;
@@ -1857,7 +1872,7 @@ statement ok
 CREATE TABLE t60786(i INT PRIMARY KEY);
 
 statement error pgcode 0A000 constraint "fk" in the middle of being added, try again later
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE child_60786(i INT PRIMARY KEY);
 ALTER TABLE t60786 ADD CONSTRAINT fk FOREIGN KEY (i) REFERENCES child_60786(i) NOT VALID;
 ALTER TABLE t60786 DROP CONSTRAINT fk CASCADE
@@ -1866,7 +1881,7 @@ statement ok
 ROLLBACK
 
 statement error pgcode 0A000 constraint "ck" in the middle of being added, try again later
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE t60786 ADD CONSTRAINT ck CHECK(i > 0) NOT VALID;
 ALTER TABLE t60786 DROP CONSTRAINT ck CASCADE
 
@@ -1874,7 +1889,7 @@ statement ok
 ROLLBACK
 
 statement error pgcode 0A000 constraint "uq" in the middle of being added, try again later
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE t60786 ADD CONSTRAINT uq UNIQUE WITHOUT INDEX(i) NOT VALID;
 ALTER TABLE t60786 DROP CONSTRAINT uq CASCADE
 
@@ -1915,6 +1930,8 @@ subtest if_table_exists_already
 statement ok
 CREATE TABLE new_table()
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 CREATE TABLE IF NOT EXISTS new_table();
 ----
@@ -2252,7 +2269,7 @@ statement ok
 SET use_declarative_schema_changer = 'off';
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE tb AS SELECT 123::INT AS k FROM generate_series(1, 10);
 SET tracing = on,kv;
 ALTER TABLE tb ADD COLUMN v STRING NOT NULL DEFAULT ('abc'::STRING);
@@ -2277,7 +2294,7 @@ statement ok
 SET CLUSTER SETTING bulkio.column_backfill.update_chunk_size_threshold_bytes = 1;
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE TABLE tb AS SELECT 123::INT AS k FROM generate_series(1, 10);
 SET tracing = on,kv;
 ALTER TABLE tb ADD COLUMN v STRING NOT NULL DEFAULT ('abc'::STRING);
@@ -2317,6 +2334,8 @@ ALTER TABLE storage_param_table SET (fillfactor=true)
 statement error unimplemented: storage parameter "toast_tuple_target"
 ALTER TABLE storage_param_table SET (toast_tuple_target=100)
 
+# Read committed emits extra notices, so skip it.
+skipif config local-read-committed
 query T noticetrace
 ALTER TABLE storage_param_table SET (fillfactor=99.9, autovacuum_enabled = off)
 ----
@@ -2342,21 +2361,21 @@ ALTER TABLE storage_param_table RESET (fillfactor, toast_tuple_target)
 subtest drop-and-add-constraint-primary-index
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 create table const_tbl (a int, b int, constraint "bob" primary key (a, b));
 alter table const_tbl drop constraint "bob";
 alter table const_tbl add constraint "bob" primary key (a, b); -- this statement
 COMMIT;
 
 statement error relation \"const_tbl\" \(\d+\): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction.*
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 alter table const_tbl drop constraint "bob";
 alter table const_tbl add constraint "bob" primary key (a, b); -- this statement
 alter table const_tbl drop constraint "bob";
 COMMIT;
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 alter table const_tbl drop constraint "bob";
 -- Note: Primary key must be restored first before any other command will
 -- be allowed.
@@ -2372,7 +2391,7 @@ statement ok
 alter table const_tbl add constraint "steve" CHECK (a > 100);
 
 statement error  pq: duplicate constraint name: "steve"
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 alter table const_tbl drop constraint "steve";
 alter table const_tbl add constraint "steve" CHECK (a > 100);
 COMMIT;
@@ -2471,7 +2490,7 @@ CREATE TABLE pk_fk_src(id int8 primary key, legacy_id int8 not null);
 CREATE TABLE pk_fk_ref(a_id int8 references pk_fk_src (id));
 
 statement error "pk_fk_src_pkey" is referenced by foreign key from table "pk_fk_ref"
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE pk_fk_src DROP CONSTRAINT "pk_fk_src_pkey";
 ALTER TABLE pk_fk_src ADD CONSTRAINT "pk_fk_src_pkey" PRIMARY KEY (legacy_id);
 COMMIT;
@@ -2480,7 +2499,7 @@ statement ok
 ROLLBACK;
 
 statement error "pk_fk_src_pkey" is referenced by foreign key from table "pk_fk_ref"
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE pk_fk_src DROP CONSTRAINT "pk_fk_src_pkey";
 ALTER TABLE pk_fk_src ADD CONSTRAINT "pk_fk_src_pkey_new" PRIMARY KEY (legacy_id);
 COMMIT;
@@ -3366,6 +3385,8 @@ subtest 99281
 
 statement ok
 SET experimental_enable_unique_without_index_constraints = true;
+
+statement ok
 CREATE TABLE t_99281 (i INT PRIMARY KEY, j INT NOT NULL, k INT NOT NULL, FAMILY "primary" (i,j,k));
 INSERT INTO t_99281 VALUES (0,0,0), (1,0,1);
 
