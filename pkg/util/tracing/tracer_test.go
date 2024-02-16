@@ -1021,3 +1021,12 @@ func TestTracerStackHistory(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkStartSpan(b *testing.B) {
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
+	require.True(b, tr.AlwaysTrace())
+	for i := 0; i < b.N; i++ {
+		tr.StartSpan("opName")
+	}
+	b.ReportAllocs()
+}
