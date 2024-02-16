@@ -37,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -350,6 +352,24 @@ var RangeDistributionStrategy = settings.RegisterEnumSetting(
 	},
 	settings.WithPublic)
 
+type frontierPlacementType int64
+
+const (
+	frontierOnGateway    frontierPlacementType = 0
+	frontierOnRandomNode frontierPlacementType = 1
+)
+
+var frontierPlacementStrategy = settings.RegisterEnumSetting(
+	settings.ApplicationLevel,
+	"changefeed.default_frontier_placement_strategy",
+	"controls where the changefeed frontier is placed",
+	util.ConstantWithMetamorphicTestChoice("changefeed.default_frontier_placement_strategy",
+		"random", "gateway").(string),
+	map[int64]string{
+		int64(defaultDistribution):        "gateway",
+		int64(balancedSimpleDistribution): "random",
+	})
+
 func makePlan(
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
@@ -469,11 +489,33 @@ func makePlan(
 			aggregatorCorePlacement[i].Core.ChangeAggregator = aggregatorSpecs[i]
 		}
 
+		frontierSQLInstance := dsp.GatewayID()
+		switch s := frontierPlacementStrategy.Get(sv); frontierPlacementType(s) {
+		case frontierOnRandomNode:
+			rng, _ := randutil.NewPseudoRand()
+			all, err := dsp.GetAllInstancesByLocality(ctx, locFilter)
+			if len(all) == 0 || err != nil {
+				// Rather unlikely anything else is
+				// going to succeed if we've hit this
+				// case.
+				log.Warningf(ctx,
+					"random frontier placement requested, but no GetAllInstancesByLocality failed to return nodes (err: %s), using gateway instance %d",
+					err.Error(), frontierSQLInstance)
+			} else {
+				frontierSQLInstance = all[rng.Intn(len(all))].InstanceID
+				log.VInfof(ctx, 2, "placing frontier on randomly chosen instance instance %d", frontierSQLInstance)
+			}
+		case frontierOnGateway:
+			log.VInfof(ctx, 2, "placing frontier on gateway instance %d", frontierSQLInstance)
+		default:
+			log.Warningf(ctx, "unknown frontier placement strategy: %d, using gateway instance %d", s, frontierSQLInstance)
+		}
+
 		p := planCtx.NewPhysicalPlan()
 		p.AddNoInputStage(aggregatorCorePlacement, execinfrapb.PostProcessSpec{}, changefeedResultTypes, execinfrapb.Ordering{})
 		p.AddSingleGroupStage(
 			ctx,
-			dsp.GatewayID(),
+			frontierSQLInstance,
 			execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
 			execinfrapb.PostProcessSpec{},
 			changefeedResultTypes,
