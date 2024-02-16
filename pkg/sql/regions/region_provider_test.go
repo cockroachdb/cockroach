@@ -245,7 +245,7 @@ type fakeLeasedDescriptor struct {
 func (f fakeLeasedDescriptor) Underlying() catalog.Descriptor {
 	return f.Descriptor
 }
-func (f fakeLeasedDescriptor) Expiration() hlc.Timestamp {
+func (f fakeLeasedDescriptor) Expiration(_ context.Context) hlc.Timestamp {
 	return hlc.MaxTimestamp
 }
 func (f fakeLeasedDescriptor) Release(ctx context.Context) {
