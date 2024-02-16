@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -65,6 +67,7 @@ type kvEventToRowConsumer struct {
 	topicNamer           *TopicNamer
 
 	metrics *sliMetrics
+	sv      *settings.Values
 
 	// This pacer is used to incorporate event consumption to elastic CPU
 	// control. This helps ensure that event encoding/decoding does not throttle
@@ -252,6 +255,7 @@ func newKVEventToRowConsumer(
 		encodingOpts:         encodingOpts,
 		metrics:              metrics,
 		pacer:                pacer,
+		sv:                   cfg.SV(),
 	}, nil
 }
 
@@ -391,11 +395,10 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	// being tracked by the local span frontier. The poller should not be forwarding
 	// r updates that have timestamps less than or equal to any resolved timestamp
 	// it's forwarded before.
-	// TODO(dan): This should be an assertion once we're confident this can never
-	// happen under any circumstance.
 	if schemaTS.LessEq(c.frontier.Frontier()) && !schemaTS.Equal(c.cursor) {
-		log.Errorf(ctx, "cdc ux violation: detected timestamp %s that is less than "+
-			"or equal to the local frontier %s.", schemaTS, c.frontier.Frontier())
+		logcrash.ReportOrPanic(ctx, c.sv,
+			"cdc ux violation: detected timestamp %s that is less than or equal to the local frontier %s.",
+			schemaTS, c.frontier.Frontier())
 		return nil
 	}
 
