@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1046,7 +1047,7 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	require.Equal(t, "replicating", status)
 	require.Equal(t, "none", serviceMode)
 	require.Equal(t, "source", source)
-	expectedURI, err := redactSourceURI(c.SrcURL.String())
+	expectedURI, err := streamclient.RedactSourceURI(c.SrcURL.String())
 	require.NoError(t, err)
 	require.Equal(t, expectedURI, sourceUri)
 	require.Equal(t, ingestionJobID, jobId)
