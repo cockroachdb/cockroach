@@ -272,7 +272,7 @@ var opWeights = []int{
 	dropSequence:                      1,
 	dropTable:                         1,
 	dropView:                          1,
-	alterTypeDropValue:                0, // Disabled and tracked with #114844, #113859, and #115612.
+	alterTypeDropValue:                1,
 	dropSchema:                        1,
 	alterDatabasePrimaryRegion:        0, // Disabled and tracked with #83831
 	alterTableRenameColumn:            1,
