@@ -284,12 +284,10 @@ func startTenantServer(
 
 // createTenantAdminRole creates a role that can be used to log into a secure cluster's db console.
 func createTenantAdminRole(t test.Test, tenantName string, tenantSQL *sqlutils.SQLRunner) {
-	username := "secure"
-	password := "roach"
-	tenantSQL.Exec(t, fmt.Sprintf(`CREATE ROLE %s WITH LOGIN PASSWORD '%s'`, username, password))
-	tenantSQL.Exec(t, fmt.Sprintf(`GRANT ADMIN TO %s`, username))
+	tenantSQL.Exec(t, fmt.Sprintf(`CREATE ROLE IF NOT EXISTS %s WITH LOGIN PASSWORD '%s'`, install.DefaultUser, install.DefaultPassword))
+	tenantSQL.Exec(t, fmt.Sprintf(`GRANT ADMIN TO %s`, install.DefaultUser))
 	t.L().Printf(`Log into %s db console with username "%s" and password "%s"`,
-		tenantName, username, password)
+		tenantName, install.DefaultUser, install.DefaultPassword)
 }
 
 const appTenantName = "app"

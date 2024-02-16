@@ -1793,11 +1793,11 @@ func copyPGCertsAndMakeURL(
 	if err != nil {
 		return "", err
 	}
-	sslClientCert, err := os.ReadFile(filepath.Join(tmpDir, "client.root.crt"))
+	sslClientCert, err := os.ReadFile(filepath.Join(tmpDir, fmt.Sprintf("client.%s.crt", install.DefaultUser)))
 	if err != nil {
 		return "", err
 	}
-	sslClientKey, err := os.ReadFile(filepath.Join(tmpDir, "client.root.key"))
+	sslClientKey, err := os.ReadFile(filepath.Join(tmpDir, fmt.Sprintf("client.%s.key", install.DefaultUser)))
 	if err != nil {
 		return "", err
 	}

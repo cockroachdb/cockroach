@@ -131,7 +131,8 @@ func registerKV(r registry.Registry) {
 			}
 		}
 		if opts.sharedProcessMT {
-			createInMemoryTenant(ctx, t, c, appTenantName, c.Range(1, nodes), true /* secure */)
+			startOpts = option.DefaultStartSharedVirtualClusterOpts(appTenantName)
+			c.StartServiceForVirtualCluster(ctx, t.L(), c.Range(1, nodes), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 		}
 
 		t.Status("running workload")
