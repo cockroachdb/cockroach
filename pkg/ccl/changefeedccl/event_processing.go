@@ -14,6 +14,7 @@ import (
 	"hash/crc32"
 	"runtime"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -391,12 +392,15 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	// being tracked by the local span frontier. The poller should not be forwarding
 	// r updates that have timestamps less than or equal to any resolved timestamp
 	// it's forwarded before.
-	// TODO(dan): This should be an assertion once we're confident this can never
-	// happen under any circumstance.
 	if schemaTS.LessEq(c.frontier.Frontier()) && !schemaTS.Equal(c.cursor) {
-		log.Errorf(ctx, "cdc ux violation: detected timestamp %s that is less than "+
-			"or equal to the local frontier %s.", schemaTS, c.frontier.Frontier())
-		return nil
+		if build.IsRelease() {
+			log.Errorf(ctx, "cdc ux violation: detected timestamp %s that is less than "+
+				"or equal to the local frontier %s.", schemaTS, c.frontier.Frontier())
+			return nil
+		} else {
+			return errors.AssertionFailedf("cdc ux violation: detected timestamp %s that is less than "+
+				"or equal to the local frontier %s.", schemaTS, c.frontier.Frontier())
+		}
 	}
 
 	evCtx := eventContext{
