@@ -16,8 +16,9 @@ jobs:
           # Instead, we want to check out the PR as is.
           ref: ${{ github.event.pull_request.head.sha }}
       - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
       - name: run tests
-        run: ./build/github/run-bazel.sh test //pkg:all_tests //pkg/ui:lint //pkg/ui:test --config crosslinux --jobs 300 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --bes_keywords ci-unit-test --config=use_ci_timeouts --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
+        run: bazel test //pkg:all_tests //pkg/ui:lint //pkg/ui:test --config crosslinux --jobs 300 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --bes_keywords ci-unit-test --config=use_ci_timeouts --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
       - name: upload test results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
@@ -31,8 +32,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
       - name: build
-        run: ./build/github/run-bazel.sh build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev //c-deps:libgeos --config crossmacos --jobs 100 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --bes_keywords build-macos-amd64 --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
+        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev //c-deps:libgeos --config crossmacos --jobs 100 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --bes_keywords build-macos-amd64 --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
@@ -46,8 +48,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
       - name: build
-        run: ./build/github/run-bazel.sh build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev //c-deps:libgeos --config crossmacosarm --jobs 100 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --bes_keywords build-macos-arm64 --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
+        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev //c-deps:libgeos --config crossmacosarm --jobs 100 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --bes_keywords build-macos-arm64 --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
@@ -61,8 +64,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
       - name: build
-        run: ./build/github/run-bazel.sh build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss --config crosswindows --jobs 100 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --bes_keywords build-windows --build_event_binary_file=bes.bin --enable_runfiles $(./build/github/engflow-args.sh)
+        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss --config crosswindows --jobs 100 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --bes_keywords build-windows --build_event_binary_file=bes.bin --enable_runfiles $(./build/github/engflow-args.sh)
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
@@ -76,6 +80,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
       - name: run acceptance tests
         run: ./build/github/acceptance-test.sh
       - name: upload build results
