@@ -1349,19 +1349,28 @@ func (c *clusterImpl) FetchDebugZip(
 		// assumption that a down node will refuse the connection, so it won't
 		// waste our time.
 		for _, node := range nodes {
+			// `cockroach debug zip` does not support non root authentication.
+			pgurl, err := c.InternalPGUrl(ctx, l, c.Node(node), roachprod.PGURLOptions{Auth: install.AuthRootCert})
+			if err != nil {
+				l.Printf("cluster.FetchDebugZip failed to retrieve PGUrl on node %d: %v", test.DefaultCockroachPath, node, err)
+				continue
+			}
+
 			// `cockroach debug zip` is noisy. Suppress the output unless it fails.
 			//
-			// Ignore the files in the the log directory; we pull the logs separately anyway
+			// Ignore the files in the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
 			excludeFiles := "*.log,*.txt,*.pprof"
+
 			cmd := roachtestutil.NewCommand("%s debug zip", test.DefaultCockroachPath).
 				Option("include-range-info").
 				Flag("exclude-files", fmt.Sprintf("'%s'", excludeFiles)).
-				Flag("url", fmt.Sprintf("{pgurl:%d}", node)).
+				Flag("url", pgurl[0]).
 				MaybeFlag(c.IsSecure(), "certs-dir", install.CockroachNodeCertsDir).
+				MaybeFlag(c.IsSecure(), "certs-dir", "certs").
 				Arg(zipName).
 				String()
-			if err := c.RunE(ctx, option.WithNodes(c.Node(node)), cmd); err != nil {
+			if err = c.RunE(ctx, option.WithNodes(c.Node(node)), cmd); err != nil {
 				l.Printf("%s debug zip failed on node %d: %v", test.DefaultCockroachPath, node, err)
 				continue
 			}
