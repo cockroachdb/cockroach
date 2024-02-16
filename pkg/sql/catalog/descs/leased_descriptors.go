@@ -159,7 +159,7 @@ func (ld *leasedDescriptors) getResult(
 		return nil, false, err
 	}
 
-	expiration := ldesc.Expiration()
+	expiration := ldesc.Expiration(ctx)
 	readTimestamp := txn.ReadTimestamp()
 	if expiration.LessEq(txn.ReadTimestamp()) {
 		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
@@ -201,7 +201,7 @@ func (ld *leasedDescriptors) maybeUpdateDeadline(
 	if session != nil {
 		deadline = session.Expiration()
 	}
-	if leaseDeadline, ok := ld.getDeadline(); ok && (deadline.IsEmpty() || leaseDeadline.Less(deadline)) {
+	if leaseDeadline, ok := ld.getDeadline(ctx); ok && (deadline.IsEmpty() || leaseDeadline.Less(deadline)) {
 		// Set the deadline to the lease deadline if session expiration is empty
 		// or lease deadline is less than the session expiration.
 		deadline = leaseDeadline
@@ -242,9 +242,11 @@ func (e *deadlineExpiredError) Error() string {
 
 var _ errors.SafeFormatter = (*deadlineExpiredError)(nil)
 
-func (ld *leasedDescriptors) getDeadline() (deadline hlc.Timestamp, haveDeadline bool) {
+func (ld *leasedDescriptors) getDeadline(
+	ctx context.Context,
+) (deadline hlc.Timestamp, haveDeadline bool) {
 	_ = ld.cache.IterateByID(func(descriptor catalog.NameEntry) error {
-		expiration := descriptor.(lease.LeasedDescriptor).Expiration()
+		expiration := descriptor.(lease.LeasedDescriptor).Expiration(ctx)
 		if !haveDeadline || expiration.Less(deadline) {
 			deadline, haveDeadline = expiration, true
 		}

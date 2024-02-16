@@ -45,6 +45,7 @@ import (
 func TestTableSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	type data struct {
 		version    descpb.DescriptorVersion
 		expiration int64
@@ -111,7 +112,7 @@ func TestTableSet(t *testing.T) {
 			}
 			s := "<nil>"
 			if n != nil {
-				s = fmt.Sprintf("%d:%d", n.GetVersion(), n.getExpiration().WallTime)
+				s = fmt.Sprintf("%d:%d", n.GetVersion(), n.getExpiration(ctx).WallTime)
 			}
 			if d.expected != s {
 				t.Fatalf("%d: expected %s, but found %s", i, d.expected, s)
@@ -181,7 +182,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 				t.Fatal(err)
 			}
 			tables = append(tables, table.Underlying().(catalog.TableDescriptor))
-			expiration = table.Expiration()
+			expiration = table.Expiration(context.Background())
 			table.Release(context.Background())
 		}
 	}
@@ -203,8 +204,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if numLeases := getNumVersions(ts); numLeases != 2 {
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
+	ctx := context.Background()
 	if err := purgeOldVersions(
-		context.Background(), kvDB, tableDesc.GetID(), false, 2 /* minVersion */, leaseManager); err != nil {
+		ctx, kvDB, tableDesc.GetID(), false, 2 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 
@@ -214,7 +216,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	ts.mu.Lock()
 	correctLease := ts.mu.active.data[0].GetID() == tables[5].GetID() &&
 		ts.mu.active.data[0].GetVersion() == tables[5].GetVersion()
-	correctExpiration := ts.mu.active.data[0].getExpiration() == expiration
+	correctExpiration := ts.mu.active.data[0].getExpiration(ctx) == expiration
 	ts.mu.Unlock()
 	if !correctLease {
 		t.Fatalf("wrong lease survived purge")
@@ -566,7 +568,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
-	expiration := lease.Expiration()
+	expiration := lease.Expiration(context.Background())
 	tracker := removalTracker.TrackRemoval(lease.Descriptor)
 
 	// Acquire another lease.
@@ -581,8 +583,8 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if newLease == nil {
 		t.Fatalf("name cache doesn't contain entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
-	if newLease.Expiration() == expiration {
-		t.Fatalf("same lease %s %s", expiration.GoTime(), newLease.Expiration().GoTime())
+	if newLease.Expiration(context.Background()) == expiration {
+		t.Fatalf("same lease %s %s", expiration.GoTime(), newLease.Expiration(context.Background()).GoTime())
 	}
 
 	// TODO(ajwerner): does this matter?
@@ -878,7 +880,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		res := Result{err: err}
 		if table != nil {
 			res.table = table
-			res.exp = table.Expiration()
+			res.exp = table.Expiration(context.Background())
 		}
 		return res
 	}
