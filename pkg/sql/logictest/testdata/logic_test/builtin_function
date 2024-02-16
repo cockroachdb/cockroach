@@ -4068,7 +4068,7 @@ SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[])
 query T
 SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{ "db": [ "defaultdb", "tpcc" ], "distSQLCount": 1, "failedCount": 2, "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 33, "vecCount": 0 }'::JSON, '{ "db": ["tpcc"], "distSQLCount": 23, "failedCount": 0, "fullScanCount": 99, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 3, "vecCount": 2 }'::JSON, '{"hello": "world"}'::JSON ])
 ----
-{"appNames": [], "db": ["defaultdb", "tpcc"], "distSQLCount": 47, "failedCount": 2, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 198, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 39, "vecCount": 4}
+{"appNames": [], "db": ["defaultdb", "tpcc"], "distSQLCount": 24, "failedCount": 2, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 99, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 36, "vecCount": 2}
 
 query T
 SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{"aMalformedMetadaObj": 123}'::JSON, '{"key": "value"}'::JSON ])

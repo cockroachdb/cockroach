@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -257,6 +258,14 @@ var aggregates = map[string]builtinDefinition{
 			"Calculates the sum of squared differences from the mean of the selected values in final stage.",
 		),
 	)),
+
+	"merge_aggregated_stmt_metadata": makeBuiltin(tree.FunctionProperties{
+		Undocumented: true,
+	},
+		makeAggOverload([]*types.T{types.Jsonb}, types.Jsonb, newAggregatedStmtMetadataAggregate,
+			"Merges the statistics data of appstatspb.AggregatedStatementMetadata.", volatility.Stable, true, /* calledOnNullInput */
+		),
+	),
 
 	"merge_stats_metadata": makeBuiltin(tree.FunctionProperties{
 		Undocumented: true,
@@ -1379,8 +1388,9 @@ const sizeOfSTUnionAggregate = int64(unsafe.Sizeof(stUnionAgg{}))
 const sizeOfSTCollectAggregate = int64(unsafe.Sizeof(stCollectAgg{}))
 const sizeOfSTExtentAggregate = int64(unsafe.Sizeof(stExtentAgg{}))
 const sizeOfStatementStatistics = int64(unsafe.Sizeof(aggStatementStatistics{}))
-const sizeOfAggregatedStatementMetadata = int64(unsafe.Sizeof(aggStatementMetadata{}))
+const sizeOfAggStatementMetadata = int64(unsafe.Sizeof(aggStatementMetadata{}))
 const sizeOfTransactionStatistics = int64(unsafe.Sizeof(aggTransactionStatistics{}))
+const sizeOfAggregatedStmtMetadataAggregate = int64(unsafe.Sizeof(aggregatedStmtMetadataAggregate{}))
 
 // aggregateWithIntermediateResult is a common interface for aggregate functions
 // which can return a result without loss of precision. This is useful when an
@@ -1735,7 +1745,7 @@ func (a *aggStatementMetadata) Close(ctx context.Context) {
 
 // Size is part of the eval.AggregateFunc interface.
 func (a *aggStatementMetadata) Size() int64 {
-	return sizeOfAggregatedStatementMetadata
+	return sizeOfAggStatementMetadata
 }
 
 type aggTransactionStatistics struct {
@@ -1819,6 +1829,67 @@ func mergeStatsMetadataHelper(
 	return nil
 }
 
+// Aggregate function for the appstatspb.AggregatedStatementMetadata type.
+type aggregatedStmtMetadataAggregate struct {
+	singleDatumAggregateBase
+	stats appstatspb.AggregatedStatementMetadata
+}
+
+func newAggregatedStmtMetadataAggregate(
+	p []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
+	return &aggregatedStmtMetadataAggregate{
+		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		stats:                    appstatspb.AggregatedStatementMetadata{},
+	}
+}
+
+// Add the statistics and metadata to a single object.
+func (a *aggregatedStmtMetadataAggregate) Add(
+	ctx context.Context, datum tree.Datum, _ ...tree.Datum,
+) error {
+	if datum == nil || datum == tree.DNull {
+		return nil
+	}
+
+	// Rather than try to figure out how the size of a.stats object changes with
+	// each addition, we'll approximate its final memory usage as equal to the
+	// size of the last datum.
+	datumSize := int64(datum.Size())
+	if err := a.updateMemoryUsage(ctx, datumSize); err != nil {
+		return err
+	}
+
+	return mergeAggregatedMetadataHelper(&a.stats, datum)
+}
+
+// Result returns a copy of the aggregated json object.
+func (a *aggregatedStmtMetadataAggregate) Result() (tree.Datum, error) {
+	aggregatedJSON, err := sqlstatsutil.BuildStmtDetailsMetadataJSON(&a.stats)
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewDJSON(aggregatedJSON), nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *aggregatedStmtMetadataAggregate) Reset(ctx context.Context) {
+	a.stats.Reset()
+	a.reset(ctx)
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *aggregatedStmtMetadataAggregate) Close(ctx context.Context) {
+	a.close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *aggregatedStmtMetadataAggregate) Size() int64 {
+	return sizeOfAggregatedStmtMetadataAggregate
+}
+
 func mergeStatementStatsHelper(
 	aggregatedStats *appstatspb.StatementStatistics, statsDatum tree.Datum,
 ) error {
@@ -1858,6 +1929,46 @@ func mergeTransactionStatsHelper(
 	}
 
 	aggregatedStats.Add(&stats)
+	return nil
+}
+
+func mergeAggregatedMetadataHelper(
+	aggMetadata *appstatspb.AggregatedStatementMetadata, datum tree.Datum,
+) error {
+	if datum == tree.DNull {
+		return nil
+	}
+
+	var other appstatspb.AggregatedStatementMetadata
+
+	metadataJSON := tree.MustBeDJSON(datum).JSON
+
+	var err error
+	if aggMetadata.Query == "" {
+		// Set the constant info only if they haven't yet been set.
+		err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &other)
+		// elements then we can skip this as we are already at the zero values.
+		aggMetadata.ImplicitTxn = other.ImplicitTxn
+		aggMetadata.Query = other.Query
+		aggMetadata.QuerySummary = other.QuerySummary
+		aggMetadata.StmtType = other.StmtType
+	} else {
+		err = sqlstatsutil.DecodeAggregatedMetadataAggregatedFieldsOnlyJSON(metadataJSON, &other)
+	}
+	if err != nil {
+		return err
+	}
+
+	// Aggregate relevant stats.
+	aggMetadata.Databases = util.CombineUnique(aggMetadata.Databases, other.Databases)
+	aggMetadata.AppNames = util.CombineUnique(aggMetadata.AppNames, other.AppNames)
+
+	aggMetadata.DistSQLCount += other.DistSQLCount
+	aggMetadata.FailedCount += other.FailedCount
+	aggMetadata.FullScanCount += other.FullScanCount
+	aggMetadata.VecCount += other.VecCount
+	aggMetadata.TotalCount += other.TotalCount
+
 	return nil
 }
 
