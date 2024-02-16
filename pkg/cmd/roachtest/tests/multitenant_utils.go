@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/stretchr/testify/require"
@@ -148,8 +149,8 @@ func (tn *tenantNode) createTenantCert(
 	names = append(names, "localhost", "127.0.0.1")
 
 	cmd := fmt.Sprintf(
-		"./cockroach cert create-tenant-client --certs-dir=certs --ca-key=certs/ca.key %d %s --overwrite",
-		tn.tenantID, strings.Join(names, " "))
+		"./cockroach cert create-tenant-client --certs-dir=%s --ca-key=%s/ca.key %d %s --overwrite",
+		install.CockroachNodeCertsDir, install.CockroachNodeCertsDir, tn.tenantID, strings.Join(names, " "))
 	c.Run(ctx, option.WithNodes(c.Node(tn.node)), cmd)
 }
 
@@ -214,7 +215,7 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	// pgURL has full paths to local certs embedded, i.e.
 	// /tmp/roachtest-certs3630333874/certs, on the cluster we want just certs
 	// (i.e. to run workload on the tenant).
-	secureUrls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(tn.node)), "certs", roachprod.PGURLOptions{
+	secureUrls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(tn.node)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
 		External: false,
 		Secure:   true})
 	require.NoError(t, err)
@@ -265,7 +266,7 @@ func startTenantServer(
 	extraFlags ...string,
 ) chan error {
 	args := []string{
-		"--certs-dir", "certs",
+		"--certs-dir", install.CockroachNodeCertsDir,
 		"--tenant-id=" + strconv.Itoa(tenantID),
 		"--http-addr", ifLocal(c, "127.0.0.1", "0.0.0.0") + ":" + strconv.Itoa(httpPort),
 		"--kv-addrs", strings.Join(kvAddrs, ","),

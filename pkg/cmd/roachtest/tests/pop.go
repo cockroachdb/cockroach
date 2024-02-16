@@ -85,7 +85,7 @@ func registerPop(r registry.Registry) {
 		// pop expects to find certificates in a specific path.
 		err = c.RunE(ctx, option.WithNodes(node), "mkdir -p /mnt/data1/pop/crdb/certs")
 		require.NoError(t, err)
-		err = c.RunE(ctx, option.WithNodes(node), "cp -r certs /mnt/data1/pop/crdb/")
+		err = c.RunE(ctx, option.WithNodes(node), fmt.Sprintf("cp -r %s /mnt/data1/pop/crdb/", install.CockroachNodeCertsDir))
 		require.NoError(t, err)
 
 		err = c.RunE(ctx, option.WithNodes(node), fmt.Sprintf(`cd %s && go build -v -tags sqlite -o tsoda ./soda`, popPath))

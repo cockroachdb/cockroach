@@ -26,8 +26,8 @@ import (
 var asyncpgRunTestCmd = fmt.Sprintf(`
 source venv/bin/activate &&
 cd /mnt/data1/asyncpg && 
-PGPORT={pgport:1} PGHOST=localhost PGUSER=%s PGPASSWORD=%s PGSSLROOTCERT=$HOME/certs/ca.crt PGSSLMODE=require PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
-`, install.DefaultUser, install.DefaultPassword)
+PGPORT={pgport:1} PGHOST=localhost PGUSER=%s PGPASSWORD=%s PGSSLROOTCERT=$HOME/%s/ca.crt PGSSLMODE=require PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
+`, install.DefaultUser, install.DefaultPassword, install.CockroachNodeCertsDir)
 
 var asyncpgReleaseTagRegex = regexp.MustCompile(`^(?P<major>v\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 

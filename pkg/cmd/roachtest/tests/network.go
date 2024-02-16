@@ -87,7 +87,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	require.NoError(t, err)
 
 	t.L().Printf("fetching certs...")
-	certsDir := "/home/ubuntu/certs"
+	certsDir := fmt.Sprintf("/home/ubuntu/%s", install.CockroachNodeCertsDir)
 	localCertsDir, err := filepath.Abs("./network-certs")
 	require.NoError(t, err)
 	require.NoError(t, os.RemoveAll(localCertsDir))

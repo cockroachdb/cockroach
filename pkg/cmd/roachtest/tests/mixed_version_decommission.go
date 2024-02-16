@@ -151,7 +151,7 @@ func partialDecommissionStep(target, from int, binaryVersion *clusterupgrade.Ver
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
 		c.Run(ctx, option.WithNodes(c.Node(from)), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "decommission",
-			"--wait=none", strconv.Itoa(target), "--port", fmt.Sprintf("{pgport:%d}", from), "--certs-dir=certs")
+			"--wait=none", strconv.Itoa(target), "--port", fmt.Sprintf("{pgport:%d}", from), fmt.Sprintf("--certs-dir=%s", install.CockroachNodeCertsDir))
 	}
 }
 
@@ -162,7 +162,7 @@ func recommissionAllStep(from int, binaryVersion *clusterupgrade.Version) versio
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
 		c.Run(ctx, option.WithNodes(c.Node(from)), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "recommission",
-			c.All().NodeIDsString(), "--port", fmt.Sprintf("{pgport:%d}", from), "--certs-dir=certs")
+			c.All().NodeIDsString(), "--port", fmt.Sprintf("{pgport:%d}", from), fmt.Sprintf("--certs-dir=%s", install.CockroachNodeCertsDir))
 	}
 }
 
@@ -172,7 +172,7 @@ func fullyDecommissionStep(target, from int, binaryVersion *clusterupgrade.Versi
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
 		c.Run(ctx, option.WithNodes(c.Node(from)), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "decommission",
-			"--wait=all", strconv.Itoa(target), "--port={pgport:1}", "--certs-dir=certs")
+			"--wait=all", strconv.Itoa(target), "--port={pgport:1}", fmt.Sprintf("--certs-dir=%s", install.CockroachNodeCertsDir))
 
 		// If we are decommissioning a target node from the same node, the drain
 		// step will be skipped. In this case, we should not consider the step done

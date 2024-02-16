@@ -99,7 +99,7 @@ func registerLiquibase(r registry.Registry) {
 		if err = c.RunE(ctx, option.WithNodes(node), `sudo mkdir /cockroach && sudo ln -sf /home/ubuntu/cockroach /cockroach/cockroach.sh`); err != nil {
 			t.Fatal(err)
 		}
-		// TODO(darrylwong): once secure mode is enabled, add --certs-dir=certs
+		// TODO(darrylwong): once secure mode is enabled, add --certs-dir=install.CockroachNodeCertsDir
 		if err = c.RunE(ctx, option.WithNodes(node), `/mnt/data1/liquibase-test-harness/src/test/resources/docker/setup_db.sh localhost`); err != nil {
 			t.Fatal(err)
 		}

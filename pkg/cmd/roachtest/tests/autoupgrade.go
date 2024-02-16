@@ -74,7 +74,7 @@ func registerAutoUpgrade(r registry.Registry) {
 		decommissionAndStop := func(node int) error {
 			t.WorkerStatus("decommission")
 			if err := c.RunE(ctx, option.WithNodes(c.Node(node)),
-				fmt.Sprintf("./cockroach node decommission %d --certs-dir=certs --port={pgport%s}", node, c.Node(node))); err != nil {
+				fmt.Sprintf("./cockroach node decommission %d --certs-dir=%s --port={pgport%s}", node, install.CockroachNodeCertsDir, c.Node(node))); err != nil {
 				return err
 			}
 			t.WorkerStatus("stop")

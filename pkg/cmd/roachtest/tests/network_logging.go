@@ -79,7 +79,7 @@ func registerNetworkLogging(r registry.Registry) {
 		secureUrls, err := roachprod.PgURL(ctx,
 			t.L(),
 			c.MakeNodes(crdbNodes),
-			"certs", /* certsDir */
+			install.CockroachNodeCertsDir, /* certsDir */
 			roachprod.PGURLOptions{
 				External: false,
 				Secure:   true})
