@@ -56,6 +56,7 @@ go_library(
         "expr.go",
         "format.go",
         "format_fingerprint.go",
+        "format_fingerprint_visitors.go",
         "function_definition.go",
         "function_name.go",
         "grant.go",

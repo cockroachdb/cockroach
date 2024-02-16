@@ -11,3 +11,16 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+go_test(
+    name = "fingerprint_cardinality_test",
+    srcs = ["fingerprint_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

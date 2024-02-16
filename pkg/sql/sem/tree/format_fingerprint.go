@@ -29,13 +29,22 @@ func (ctx *FmtCtx) formatNodeForFingerprint(n NodeFormatter) {
 		case *Insert:
 			v.formatForFingerprint(ctx)
 			return
+		case *ReturningExprs:
+			v.formatForFingerprint(ctx)
+		case *SelectExprs:
+			v.formatForFingerprint(ctx)
+			return
+		case *OrExpr:
+			// Collapse OR expressions that are the same.
+			v.formatForFingerprint(ctx)
+			return
 		case *UpdateExprs:
 			// We want to sort name lists to avoid creating different fingerprints
 			// for equivalent queries. For example:
 			// SELECT a, b FROM t
 			// SELECT b, a FROM t
 			// TODO if sorting is too slow we'll likely need to hash
-			// while walking the tree.
+			// by walking the tree.
 			v.formatForFingerprint(ctx)
 			return
 		case *Placeholder, *StrVal, Datum, Constant:
@@ -50,15 +59,44 @@ func (ctx *FmtCtx) formatNodeForFingerprint(n NodeFormatter) {
 	n.Format(ctx)
 }
 
-func isExprOnlyLiteralsOrPlaceholders(expr Expr) bool {
-	switch e := expr.(type) {
-	case Datum, Constant, *Placeholder, *CastExpr:
-		return true
-	case *Tuple:
-		return e.Exprs.onlyContainsLiteralsOrPlaceholders()
-	default:
-		return false
+func (node *OrExpr) formatForFingerprint(ctx *FmtCtx) {
+	// OR expr format:
+	// ((((...) OR (...)) OR (...)) OR rhs)
+	switch e := node.Right.(type) {
+	case *OrExpr:
 	}
+	// We'll check if all exprs in
+}
+
+func maybeSortSelectExprs(node SelectExprs) SelectExprs {
+	if len(node) < 2 {
+		return node
+	}
+
+	hashes := make(map[Expr]uint64, len(node))
+	for _, selectExpr := range node {
+		ok, hash := isExprOnlyNames(selectExpr.Expr)
+		if !ok {
+			return node
+		}
+		hashes[selectExpr.Expr] = hash
+	}
+
+	v2 := append(make(SelectExprs, 0, len(node)), node...)
+	sort.Slice(v2, func(i, j int) bool {
+		return hashes[v2[i].Expr] < hashes[v2[j].Expr]
+	})
+	return v2
+}
+
+func (node *ReturningExprs) formatForFingerprint(ctx *FmtCtx) {
+	sorted := ReturningExprs(maybeSortSelectExprs(SelectExprs(*node)))
+	sorted.Format(ctx)
+}
+
+func (node *SelectExprs) formatForFingerprint(ctx *FmtCtx) {
+	sorted := maybeSortSelectExprs(*node)
+	sorted.Format(ctx)
 }
 
 func (node *Insert) formatForFingerprint(ctx *FmtCtx) {
@@ -83,7 +121,7 @@ func (node *UpdateExpr) containsOnlyNamesLiteralsOrPlaceholders() bool {
 		return false
 	}
 
-	return isExprOnlyLiteralsOrPlaceholders(node.Expr)
+	return isExprCollapsible(node.Expr)
 }
 
 // formatForFingerprint formats update expressions  that are a simple list of
@@ -132,7 +170,7 @@ func (node *ValuesClause) formatForFingerprint(ctx *FmtCtx) {
 // placeholders.
 func (node *Exprs) onlyContainsLiteralsOrPlaceholders() bool {
 	for i := 0; i < len(*node); i++ {
-		if !isExprOnlyLiteralsOrPlaceholders((*node)[i]) {
+		if !isExprCollapsible((*node)[i]) {
 			return false
 		}
 	}

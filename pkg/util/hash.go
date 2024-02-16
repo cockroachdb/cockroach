@@ -57,6 +57,12 @@ func (f *FNV64) Add(c uint64) {
 	f.sum ^= c
 }
 
+func (f *FNV64) AddString(s string) {
+	for i := 0; i < len(s); i++ {
+		f.Add(uint64(s[i]))
+	}
+}
+
 // Sum returns the hash value accumulated till now.
 func (f *FNV64) Sum() uint64 {
 	return f.sum

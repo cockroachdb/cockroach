@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -170,6 +171,23 @@ type UnresolvedName struct {
 	// a meaningful "length"; its actual length (the number of parts
 	// specified) is populated in NumParts above.
 	Parts NameParts
+
+	// fingerprintHash is the hash Parts used for fingerprinting.
+	// It is only set when the UnresolvedName is
+	fingerprintHash uint64
+}
+
+func (u *UnresolvedName) getHashSetIfEmpty() uint64 {
+	if u.fingerprintHash == 0 {
+		hash := util.MakeFNV64()
+		for i := 0; i < u.NumParts; i++ {
+			hash.AddString(u.Parts[i])
+		}
+		u.fingerprintHash = hash.Sum()
+	}
+
+	return u.fingerprintHash
+
 }
 
 // NameParts is the array of strings that composes the path in an
