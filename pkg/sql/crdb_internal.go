@@ -684,7 +684,7 @@ CREATE TABLE crdb_internal.pg_catalog_table_is_implemented (
   name                     STRING NOT NULL,
   implemented              BOOL
 )`,
-	generator: func(ctx context.Context, p *planner, dbDesc catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 2)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			addDesc := func(table *virtualDefEntry, dbName tree.Datum, scName string) error {
@@ -868,9 +868,7 @@ CREATE TABLE crdb_internal.leases (
   expiration  TIMESTAMP NOT NULL,
   deleted     BOOL NOT NULL
 )`,
-	populate: func(
-		ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
-	) error {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 		var iterErr error
 		p.LeaseMgr().VisitLeases(func(desc catalog.Descriptor, takenOffline bool, _ int, expiration tree.DTimestamp) (wantMore bool) {
@@ -921,7 +919,7 @@ const (
 WITH
 	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' ORDER BY written DESC),
 	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' ORDER BY written DESC)
-	SELECT 
+	SELECT
 		DISTINCT(id), status, created, payload.value AS payload, progress.value AS progress,
 		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
 	FROM system.jobs AS j
@@ -1375,7 +1373,7 @@ const crdbInternalKVProtectedTSTableQuery = `
 		  	'cockroach.protectedts.Target',
 		  	target,
 		    false /* emit defaults */,
-		    false /* include redaction marker */ 
+		    false /* include redaction marker */
 		          /* NB: redactions in the debug zip are handled elsewhere by marking columns as sensitive */
 		) as decoded_targets,
 	    crdb_internal_mvcc_timestamp
@@ -1394,16 +1392,16 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
    num_spans 			INT8 NOT NULL,
    spans     			BYTES NOT NULL, -- We do not decode this column since it is deprecated in 22.2+.
    verified  			BOOL NOT NULL,
-   target    			BYTES,  
+   target    			BYTES,
    decoded_meta 		JSON,   -- Decoded data from the meta column above.
-                                -- This data can have different structures depending on the meta_type. 
+                                -- This data can have different structures depending on the meta_type.
    decoded_target 		JSON,   -- Decoded data from the target column above.
-   internal_meta        JSON,   -- Additional metadata added by this virtual table (ex. job owner for job meta_type) 
+   internal_meta        JSON,   -- Additional metadata added by this virtual table (ex. job owner for job meta_type)
    num_ranges  			INT,     -- Number of ranges protected by this PTS record.
    last_updated         DECIMAL -- crdb_internal_mvcc_timestamp of the row
 )`,
 	comment: `decoded protected timestamp metadata from system.protected_ts_records (KV scan). does not decode `,
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
 		defer func() {
 			err = pgerror.Wrap(err, pgcode.Internal, "internal pts table")
 		}()
@@ -1564,7 +1562,7 @@ CREATE TABLE crdb_internal.kv_session_based_leases (
 );
 `,
 	comment: `reads from the internal session based leases table (before the table format is converted)`,
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
 		return p.InternalSQLTxn().WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V24_1()},
 			func() error {
 				rows, err := p.InternalSQLTxn().QueryBuffered(
@@ -2214,7 +2212,7 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
   INDEX(trace_id)
 )`,
 	indexes: []virtualIndex{{populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner,
-		db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+		_ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 		var traceID tracingpb.TraceID
 		switch t := unwrappedConstraint.(type) {
 		case *tree.DInt:
@@ -3259,9 +3257,9 @@ func populateDistSQLFlowsTable(
 var crdbInternalLocalMetricsTable = virtualSchemaTable{
 	comment: "current values for metrics (RAM; local node only)",
 	schema: `CREATE TABLE crdb_internal.node_metrics (
-  store_id 	         INT NULL,         -- the store, if any, for this metric
-  name               STRING NOT NULL,  -- name of the metric
-  value							 FLOAT NOT NULL    -- value of the metric
+  store_id  INT NULL,         -- the store, if any, for this metric
+  name      STRING NOT NULL,  -- name of the metric
+  value     FLOAT NOT NULL    -- value of the metric
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
@@ -4138,10 +4136,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
   dependson_details  STRING
 )
 `,
-	populate: func(
-		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor,
-		addRow func(...tree.Datum) error,
-	) error {
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		fkDep := tree.NewDString("fk")
 		viewDep := tree.NewDString("view")
 		sequenceDep := tree.NewDString("sequence")
@@ -4241,7 +4236,7 @@ CREATE TABLE crdb_internal.feature_usage (
   usage_count           INT NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, _ *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for feature, count := range telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ReadOnly) {
 			if count == 0 {
 				// Skip over empty counters to avoid polluting the output.
@@ -5698,9 +5693,7 @@ CREATE TABLE crdb_internal.kv_catalog_descriptor (
   id            INT NOT NULL,
   descriptor    JSON NOT NULL
 )`,
-	populate: func(
-		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
-	) error {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		all, err := p.Descriptors().GetAll(ctx, p.Txn())
 		if err != nil {
 			return err
@@ -5734,9 +5727,7 @@ CREATE TABLE crdb_internal.kv_catalog_zones (
   id        INT NOT NULL,
   config    JSON NOT NULL
 )`,
-	populate: func(
-		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
-	) error {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		all, err := p.Descriptors().GetAll(ctx, p.Txn())
 		if err != nil {
 			return err
@@ -5773,9 +5764,7 @@ CREATE TABLE crdb_internal.kv_catalog_namespace (
   name             STRING NOT NULL,
   id               INT NOT NULL
 )`,
-	populate: func(
-		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
-	) error {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		all, err := p.Descriptors().GetAll(ctx, p.Txn())
 		if err != nil {
 			return err
@@ -5804,9 +5793,7 @@ CREATE TABLE crdb_internal.kv_catalog_namespace (
 var crdbInternalCatalogCommentsTable = virtualSchemaTable{
 	comment: `like system.comments but overlaid with in-txn in-memory changes and including virtual objects`,
 	schema:  vtable.CrdbInternalCatalogComments,
-	populate: func(
-		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
-	) error {
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		all, err := p.Descriptors().GetAllComments(ctx, p.Txn(), dbContext)
 		if err != nil {
@@ -6022,9 +6009,7 @@ CREATE TABLE crdb_internal.invalid_objects (
   error         STRING,
   error_redactable STRING NOT VISIBLE
 )`,
-	populate: func(
-		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
-	) error {
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// The internalLookupContext will only have descriptors in the current
 		// database. To deal with this, we fall through.
 		c, err := p.Descriptors().GetAllFromStorageUnvalidated(ctx, p.txn)
@@ -6416,7 +6401,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 	descID
 		INTEGER NOT NULL
 );`,
-	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		minID := descpb.ID(keys.MaxReservedDescID + 1)
 		maxID, err := p.ExecCfg().DescIDGenerator.PeekNextUniqueDescID(ctx)
 		if err != nil {
@@ -6583,7 +6568,7 @@ CREATE TABLE crdb_internal.default_privileges (
 	privilege_type  STRING NOT NULL,
 	is_grantable    BOOL
 );`,
-	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 
 		// Cache roles ahead of time to avoid role lookup inside loop.
 		var roles []catpb.DefaultPrivilegesRole
@@ -6788,7 +6773,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
     aggregation_interval       INTERVAL NOT NULL,
     index_recommendations      STRING[] NOT NULL
 );`,
-	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
 		//  RPC handlers. See #69032.
 		acc := p.Mon().MakeBoundAccount()
@@ -7023,7 +7008,7 @@ CREATE VIEW crdb_internal.statement_activity AS
 				contention_time_avg_seconds,
 				cpu_sql_avg_nanos,
 				service_latency_avg_seconds,
-				service_latency_p99_seconds 
+				service_latency_p99_seconds
       FROM
           system.statement_activity`,
 	resultColumns: colinfo.ResultColumns{
@@ -7194,7 +7179,7 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
     statistics            JSONB NOT NULL,
     aggregation_interval  INTERVAL NOT NULL
 );`,
-	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
 		//  RPC handlers. See #69032.
 		acc := p.Mon().MakeBoundAccount()
@@ -7505,17 +7490,17 @@ CREATE TABLE crdb_internal.transaction_contention_events (
     contention_duration          INTERVAL NOT NULL,
     contending_key               BYTES NOT NULL,
     contending_pretty_key     	 STRING NOT NULL,
-		    
+
     waiting_stmt_id              string NOT NULL,
     waiting_stmt_fingerprint_id  BYTES NOT NULL,
-    
+
     database_name                STRING NOT NULL,
     schema_name                  STRING NOT NULL,
     table_name                   STRING NOT NULL,
     index_name                   STRING,
     contention_type              STRING NOT NULL
 );`,
-	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// Check permission first before making RPC fanout.
 		// If a user has VIEWACTIVITYREDACTED role option but the user does not
 		// have the ADMIN role option, then the contending key should be redacted.
@@ -7633,7 +7618,7 @@ CREATE TABLE crdb_internal.index_spans (
 );`,
 	indexes: []virtualIndex{
 		{
-			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 				descID := catid.DescID(tree.MustBeDInt(constraint))
 				var table catalog.TableDescriptor
 				// We need to include offline tables, like in
@@ -7685,7 +7670,7 @@ CREATE TABLE crdb_internal.table_spans (
 );`,
 	indexes: []virtualIndex{
 		{
-			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 				descID := catid.DescID(tree.MustBeDInt(constraint))
 				var table catalog.TableDescriptor
 				// We need to include offline tables, like in
@@ -8101,7 +8086,7 @@ CREATE TABLE crdb_internal.%s (
 var crdbInternalClusterTxnExecutionInsightsTable = virtualSchemaTable{
 	schema:  fmt.Sprintf(txnExecutionInsightsSchemaPattern, "cluster_txn_execution_insights"),
 	comment: `Cluster transaction execution insights`,
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
 		return populateTxnExecutionInsights(ctx, p, addRow, &serverpb.ListExecutionInsightsRequest{})
 	},
 }
@@ -8109,7 +8094,7 @@ var crdbInternalClusterTxnExecutionInsightsTable = virtualSchemaTable{
 var crdbInternalNodeTxnExecutionInsightsTable = virtualSchemaTable{
 	schema:  fmt.Sprintf(txnExecutionInsightsSchemaPattern, "node_txn_execution_insights"),
 	comment: `Node transaction execution insights`,
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
 		return populateTxnExecutionInsights(ctx, p, addRow, &serverpb.ListExecutionInsightsRequest{NodeID: "local"})
 	},
 }
@@ -8283,7 +8268,7 @@ CREATE TABLE crdb_internal.%s (
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
 	schema:  fmt.Sprintf(executionInsightsSchemaPattern, "cluster_execution_insights"),
 	comment: `Cluster-wide statement execution insights`,
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
 		return populateStmtInsights(ctx, p, addRow, &serverpb.ListExecutionInsightsRequest{})
 	},
 }
@@ -8291,7 +8276,7 @@ var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
 var crdbInternalNodeExecutionInsightsTable = virtualSchemaTable{
 	schema:  fmt.Sprintf(executionInsightsSchemaPattern, "node_execution_insights"),
 	comment: `Node statement execution insights`,
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
 		return populateStmtInsights(ctx, p, addRow, &serverpb.ListExecutionInsightsRequest{NodeID: "local"})
 	},
 }

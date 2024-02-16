@@ -138,6 +138,15 @@ type virtualSchemaTable struct {
 	resultColumns colinfo.ResultColumns
 }
 
+// emptyVirtualTable is a populate function to use when a virtual table is
+// always empty, as is the case for many pg_catalog and information_schema
+// tables.
+func emptyVirtualTable(
+	_ context.Context, _ *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
+) error {
+	return nil
+}
+
 // virtualSchemaView represents a view within a virtualSchema
 type virtualSchemaView struct {
 	schema        string
