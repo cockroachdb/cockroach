@@ -71,7 +71,7 @@ func registerOnlineRestore(r registry.Registry) {
 			// 400GB tpce Online Restore
 			hardware:               makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */, workloadNode: true}),
 			backup:                 makeRestoringBackupSpecs(backupSpecs{nonRevisionHistory: true, version: "v23.1.11"}),
-			timeout:                5 * time.Hour,
+			timeout:                1 * time.Hour,
 			suites:                 registry.Suites(registry.Nightly),
 			restoreUptoIncremental: 1,
 		},
@@ -206,13 +206,12 @@ func registerOnlineRestore(r registry.Registry) {
 								}
 							}
 							if runWorkload {
-								// If we just completed an offline restore and are running the
-								// workload, run the workload until we're at most 15 minutes
-								// away from timing out.
+								// Run the workload for at most 10 minutes.
 								testRuntime := timeutil.Since(testStartTime)
-								workloadDuration := sp.timeout - testRuntime
-								if workloadDuration > time.Minute*15 {
-									workloadDuration = workloadDuration - time.Minute*15
+								workloadDuration := sp.timeout - (testRuntime + time.Minute)
+								maxWorkloadDuration := time.Minute * 10
+								if workloadDuration > maxWorkloadDuration {
+									workloadDuration = maxWorkloadDuration
 								}
 								fmt.Printf("let workload run for %.2f minutes", workloadDuration.Minutes())
 								time.Sleep(workloadDuration)

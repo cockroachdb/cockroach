@@ -2471,6 +2471,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(5),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		RequiresLicense:   true,
+		NativeLibs:        registry.LibGEOS,
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
