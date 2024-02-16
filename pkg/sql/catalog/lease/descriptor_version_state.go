@@ -91,8 +91,8 @@ func (s *descriptorVersionState) Underlying() catalog.Descriptor {
 	return s.Descriptor
 }
 
-func (s *descriptorVersionState) Expiration() hlc.Timestamp {
-	return s.getExpiration()
+func (s *descriptorVersionState) Expiration(ctx context.Context) hlc.Timestamp {
+	return s.getExpiration(ctx)
 }
 
 // SafeFormat implements redact.SafeFormatter.
@@ -117,16 +117,18 @@ func (s *descriptorVersionState) stringLocked() redact.RedactableString {
 
 // hasExpired checks if the descriptor is too old to be used (by a txn
 // operating) at the given timestamp.
-func (s *descriptorVersionState) hasExpired(timestamp hlc.Timestamp) bool {
+func (s *descriptorVersionState) hasExpired(ctx context.Context, timestamp hlc.Timestamp) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.hasExpiredLocked(timestamp)
+	return s.hasExpiredLocked(ctx, timestamp)
 }
 
 // hasExpired checks if the descriptor is too old to be used (by a txn
 // operating) at the given timestamp.
-func (s *descriptorVersionState) hasExpiredLocked(timestamp hlc.Timestamp) bool {
-	return s.getExpirationLocked().LessEq(timestamp)
+func (s *descriptorVersionState) hasExpiredLocked(
+	ctx context.Context, timestamp hlc.Timestamp,
+) bool {
+	return s.getExpirationLocked(ctx).LessEq(timestamp)
 }
 
 func (s *descriptorVersionState) incRefCount(ctx context.Context, expensiveLogEnabled bool) {
@@ -142,7 +144,7 @@ func (s *descriptorVersionState) incRefCountLocked(ctx context.Context, expensiv
 	}
 }
 
-func (s *descriptorVersionState) getExpirationLocked() hlc.Timestamp {
+func (s *descriptorVersionState) getExpirationLocked(ctx context.Context) hlc.Timestamp {
 	// A descriptor version state can now potentially contain two different types
 	// of expiration:
 	// 1) Fixed expirations, which will be based on some timestamp in the future,
@@ -156,7 +158,7 @@ func (s *descriptorVersionState) getExpirationLocked() hlc.Timestamp {
 	// eventually be *drained*.
 	expiration := s.mu.expiration
 	if s.mu.session != nil &&
-		s.t.m.sessionBasedLeasingModeAtLeast(SessionBasedDrain) {
+		s.t.m.sessionBasedLeasingModeAtLeast(ctx, SessionBasedDrain) {
 		sessionExpiry := s.mu.session.Expiration()
 		if expiration.Less(sessionExpiry) {
 			expiration = sessionExpiry
@@ -165,11 +167,11 @@ func (s *descriptorVersionState) getExpirationLocked() hlc.Timestamp {
 	return expiration
 }
 
-func (s *descriptorVersionState) getExpiration() hlc.Timestamp {
+func (s *descriptorVersionState) getExpiration(ctx context.Context) hlc.Timestamp {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.getExpirationLocked()
+	return s.getExpirationLocked(ctx)
 }
 
 // getStoredLease returns a copy of the stored lease.

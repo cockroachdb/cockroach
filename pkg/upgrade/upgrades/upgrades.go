@@ -113,6 +113,30 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("restore does not restore the PTS table"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"stop writing expiration based leases to system.lease table (equivalent to experimental_use_session_based_leasing=drain)",
+		clusterversion.V24_1_SessionBasedLeasingDrain.Version(),
+		upgrade.NoPrecondition,
+		disableWritesForExpiryBasedLeases,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"only use session based leases  (equivalent to experimental_use_session_based_leasing=session)",
+		clusterversion.V24_1_SessionBasedLeasingOnly.Version(),
+		upgrade.NoPrecondition,
+		adoptUsingOnlySessionBasedLeases,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"update system.lease descriptor to be session base",
+		clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version(),
+		upgrade.NoPrecondition,
+		upgradeSystemLeasesDescriptor,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

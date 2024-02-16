@@ -160,8 +160,8 @@ const (
 	LeaseTableSchema_V24_1 = `CREATE TABLE system.lease (
   desc_id          INT8,
   version          INT8,
-  sql_instance_id  INT8,
-  session_id       BYTES NOT NULL,
+  sql_instance_id  INT8 NOT NULL,
+  session_id       BYTES,
   crdb_region      BYTES NOT NULL,
   CONSTRAINT       "primary" PRIMARY KEY (crdb_region, desc_id, version, session_id),
   FAMILY           "primary" (desc_id, version, sql_instance_id, session_id, crdb_region)
@@ -1205,7 +1205,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // SystemDatabaseSchemaBootstrapVersion is the system database schema version
 // that should be used during bootstrap. It should be bumped up alongside any
 // upgrade that creates or modifies the schema of a system table.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_1_DropPayloadAndProgressFromSystemJobsTable.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1721,9 +1721,9 @@ var (
 // `TestSystemTableLiterals` which checks that they do indeed match, and has
 // suggestions on writing and maintaining them.
 var (
-	// LeaseTable_V24_1 is the descriptor for the leases table with the future
-	// session based leasing tables format.
-	LeaseTable_V24_1 = func() SystemTable {
+	// LeaseTable is the descriptor for the leases table with a session based
+	// leasing table format.
+	LeaseTable = func() SystemTable {
 		return makeSystemTable(
 			LeaseTableSchema_V24_1,
 			systemTable(
@@ -1738,10 +1738,11 @@ var (
 				},
 				[]descpb.ColumnFamilyDescriptor{
 					{
-						Name:        "primary",
-						ID:          0,
-						ColumnNames: []string{"desc_id", "version", "sql_instance_id", "session_id", "crdb_region"},
-						ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+						Name:            "primary",
+						ID:              0,
+						ColumnNames:     []string{"desc_id", "version", "sql_instance_id", "session_id", "crdb_region"},
+						DefaultColumnID: 3,
+						ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5},
 					},
 				},
 				descpb.IndexDescriptor{
@@ -1757,8 +1758,9 @@ var (
 			))
 	}
 
-	// LeaseTable is the descriptor for the leases table.
-	LeaseTable = func() SystemTable {
+	// LeaseTable_V23_2 is the descriptor for the leases table with an expiry based
+	// format
+	LeaseTable_V23_2 = func() SystemTable {
 		return makeSystemTable(
 			LeaseTableSchema,
 			systemTable(
