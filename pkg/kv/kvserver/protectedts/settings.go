@@ -24,7 +24,8 @@ import (
 var MaxBytes = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"kv.protectedts.max_bytes",
-	"if non-zero the limit of the number of bytes of spans and metadata which can be protected",
+	"if non-zero, this limits the number of bytes used by protected timestamp records in the protected timestamps"+
+		" system table. this will be a noop in 24.1 onwards and deprecated in the future",
 	1<<20, // 1 MiB
 	settings.NonNegativeInt,
 	settings.WithVisibility(settings.Reserved),

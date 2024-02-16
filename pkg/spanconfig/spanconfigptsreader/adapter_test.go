@@ -15,9 +15,11 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -45,57 +47,115 @@ func TestAdapter(t *testing.T) {
 	mc := &manualCache{}
 	ms := &manualSubscriber{}
 
-	adapter := NewAdapter(mc, ms)
-	ctx := context.Background()
+	// TODO(#119243): delete the cache in v24.2
+	t.Run("with pts cache", func(t *testing.T) {
+		version := clusterversion.V23_2.Version()
+		adapter := NewAdapter(mc, ms, cluster.MakeTestingClusterSettingsWithVersions(version, version, true))
+		ctx := context.Background()
 
-	// Setup with an empty subscriber and cache; ensure no records are returned
-	// and the freshness timestamp is the minimum of the two.
-	mc.asOf = ts(10)
-	ms.updatedTS = ts(14)
-	timestamps, asOf, err := adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
-	require.NoError(t, err)
-	require.Empty(t, timestamps)
-	require.Equal(t, ts(10), asOf)
+		// Setup with an empty subscriber and cache; ensure no records are returned
+		// and the freshness timestamp is the minimum of the two.
+		mc.asOf = ts(10)
+		ms.updatedTS = ts(14)
+		timestamps, asOf, err := adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+		require.NoError(t, err)
+		require.Empty(t, timestamps)
+		require.Equal(t, ts(10), asOf)
 
-	// Forward the freshness of the cache past the subscriber's.
-	mc.asOf = ts(18)
-	timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
-	require.NoError(t, err)
-	require.Empty(t, timestamps)
-	require.Equal(t, ts(14), asOf)
+		// Forward the freshness of the cache past the subscriber's.
+		mc.asOf = ts(18)
+		timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+		require.NoError(t, err)
+		require.Empty(t, timestamps)
+		require.Equal(t, ts(14), asOf)
 
-	// Add some records to the cache; ensure they're returned.
-	mc.protectedTimestamps = append(mc.protectedTimestamps, ts(6), ts(10))
-	mc.asOf = ts(20)
+		// Add some records to the cache; ensure they're returned.
+		mc.protectedTimestamps = append(mc.protectedTimestamps, ts(6), ts(10))
+		mc.asOf = ts(20)
 
-	timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
-	require.NoError(t, err)
-	require.Equal(t, ts(14), asOf)
-	validateProtectedTimestamps([]hlc.Timestamp{ts(6), ts(10)}, timestamps)
+		timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+		require.NoError(t, err)
+		require.Equal(t, ts(14), asOf)
+		validateProtectedTimestamps([]hlc.Timestamp{ts(6), ts(10)}, timestamps)
 
-	// Add some records to the subscriber, ensure they're returned as well.
-	ms.protectedTimestamps = append(ms.protectedTimestamps, ts(7), ts(12))
-	ms.updatedTS = ts(19)
-	timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
-	require.NoError(t, err)
-	require.Equal(t, ts(19), asOf)
-	validateProtectedTimestamps([]hlc.Timestamp{ts(6), ts(7), ts(10), ts(12)}, timestamps)
+		// Add some records to the subscriber, ensure they're returned as well.
+		ms.protectedTimestamps = append(ms.protectedTimestamps, ts(7), ts(12))
+		ms.updatedTS = ts(19)
+		timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+		require.NoError(t, err)
+		require.Equal(t, ts(19), asOf)
+		validateProtectedTimestamps([]hlc.Timestamp{ts(6), ts(7), ts(10), ts(12)}, timestamps)
 
-	// Clear out records from the cache, bump its freshness.
-	mc.protectedTimestamps = nil
-	mc.asOf = ts(22)
-	timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
-	require.NoError(t, err)
-	require.Equal(t, ts(19), asOf)
-	validateProtectedTimestamps([]hlc.Timestamp{ts(7), ts(12)}, timestamps)
+		// Clear out records from the cache, bump its freshness.
+		mc.protectedTimestamps = nil
+		mc.asOf = ts(22)
+		timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+		require.NoError(t, err)
+		require.Equal(t, ts(19), asOf)
+		validateProtectedTimestamps([]hlc.Timestamp{ts(7), ts(12)}, timestamps)
 
-	// Clear out records from the subscriber, bump its freshness.
-	ms.protectedTimestamps = nil
-	ms.updatedTS = ts(25)
-	timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
-	require.NoError(t, err)
-	require.Equal(t, ts(22), asOf)
-	require.Empty(t, timestamps)
+		// Clear out records from the subscriber, bump its freshness.
+		ms.protectedTimestamps = nil
+		ms.updatedTS = ts(25)
+		timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+		require.NoError(t, err)
+		require.Equal(t, ts(22), asOf)
+		require.Empty(t, timestamps)
+	})
+
+	t.Run("without pts cache", func(t *testing.T) {
+		version := clusterversion.Latest.Version()
+		adapter := NewAdapter(mc, ms, cluster.MakeTestingClusterSettingsWithVersions(version, version, true))
+		ctx := context.Background()
+
+		// Even though the cache has lower freshness, ignore it.
+		mc.asOf = ts(10)
+		ms.updatedTS = ts(14)
+		timestamps, asOf, err := adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+		require.NoError(t, err)
+		require.Empty(t, timestamps)
+		require.Equal(t, ts(14), asOf)
+
+		// Forward the freshness of the cache past the subscriber's. The freshness should be the same.
+		mc.asOf = ts(18)
+		timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+		require.NoError(t, err)
+		require.Empty(t, timestamps)
+		require.Equal(t, ts(14), asOf)
+
+		// Add some records to the cache; ensure they aren't returned.
+		mc.protectedTimestamps = append(mc.protectedTimestamps, ts(6), ts(10))
+		mc.asOf = ts(20)
+		timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+		require.NoError(t, err)
+		require.Equal(t, ts(14), asOf)
+		require.Empty(t, timestamps)
+
+		// Add some records to the subscriber, ensure they're returned only.
+		// The freshness of the adapter is the freshness of the subscriber.
+		ms.protectedTimestamps = append(ms.protectedTimestamps, ts(7), ts(12))
+		ms.updatedTS = ts(21)
+		timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+		require.NoError(t, err)
+		require.Equal(t, ts(21), asOf)
+		validateProtectedTimestamps([]hlc.Timestamp{ts(7), ts(12)}, timestamps)
+
+		// Clear out records from the cache, bump its freshness.
+		mc.protectedTimestamps = nil
+		mc.asOf = ts(22)
+		timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+		require.NoError(t, err)
+		require.Equal(t, ts(21), asOf)
+		validateProtectedTimestamps([]hlc.Timestamp{ts(7), ts(12)}, timestamps)
+
+		// Clear out records from the subscriber, bump its freshness.
+		ms.protectedTimestamps = nil
+		ms.updatedTS = ts(25)
+		timestamps, asOf, err = adapter.GetProtectionTimestamps(ctx, keys.EverythingSpan)
+		require.NoError(t, err)
+		require.Equal(t, ts(25), asOf)
+		require.Empty(t, timestamps)
+	})
 }
 
 type manualSubscriber struct {

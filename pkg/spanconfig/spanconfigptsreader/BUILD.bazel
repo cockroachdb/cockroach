@@ -6,9 +6,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/testutils",
         "//pkg/util/hlc",
@@ -26,9 +28,11 @@ go_test(
         "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
