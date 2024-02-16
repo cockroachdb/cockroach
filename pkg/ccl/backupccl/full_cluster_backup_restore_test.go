@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -54,63 +55,75 @@ func TestFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	settings := clustersettings.MakeTestingClusterSettings()
-	params := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			// Disabled only because backupRestoreTestSetupEmpty, another DR test
-			// helper function, that is not yet enabled to set up tenants within
-			// clusters by default. Tracking issue
-			// https://github.com/cockroachdb/cockroach/issues/76378
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Settings:          settings,
-			Knobs: base.TestingKnobs{
-				SpanConfig: &spanconfig.TestingKnobs{
-					// We compare job progress before and after a restore. Disable
-					// the automatic jobs checkpointing which could possibly mutate
-					// the progress data during the backup/restore process.
-					JobDisablePersistingCheckpoints: true,
-				},
-				GCJob: &sql.GCJobTestingKnobs{
-					// We want to run the GC job to completion without waiting for
-					// MVCC GC.
-					SkipWaitingForMVCCGC: true,
-				},
-			},
-		}}
-	const numAccounts = 10
-	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
-	tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, params)
-	defer cleanupFn()
-	defer cleanupEmptyCluster()
+	// It is easier to assert state in this test if both the backing up and
+	// restoring cluster are run with the same tenant option. We already have
+	// targeted tests for combinations of backing up and restoring between a
+	// system and application tenant.
+	var runOnceUnderDuress bool
+	testutils.RunTrueAndFalse(t, "inSystemTenant", func(t *testing.T, inSystemTenant bool) {
+		if runOnceUnderDuress {
+			skip.IgnoreLintf(t, "test is running under duress; we will only run one configuration because of how long this test takes")
+		}
+		if skip.Duress() {
+			runOnceUnderDuress = true
+		}
+		tenantOption := base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
+		if !inSystemTenant {
+			tenantOption = base.TestTenantAlwaysEnabled
+		}
 
-	// Closed when the restore is allowed to progress with the rest of the backup.
-	allowProgressAfterPreRestore := make(chan struct{})
-	// Closed to signal the zones have been restored.
-	restoredZones := make(chan struct{})
-	for _, server := range tcRestore.Servers {
-		registry := server.JobRegistry().(*jobs.Registry)
-		registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
-			func(raw jobs.Resumer) jobs.Resumer {
-				r := raw.(*restoreResumer)
-				r.testingKnobs.afterPreRestore = func() error {
-					close(restoredZones)
-					<-allowProgressAfterPreRestore
-					return nil
-				}
-				return r
-			})
-	}
+		settings := clustersettings.MakeTestingClusterSettings()
+		params := base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Settings:          settings,
+				DefaultTestTenant: tenantOption,
+				Knobs: base.TestingKnobs{
+					SpanConfig: &spanconfig.TestingKnobs{
+						// We compare job progress before and after a restore. Disable
+						// the automatic jobs checkpointing which could possibly mutate
+						// the progress data during the backup/restore process.
+						JobDisablePersistingCheckpoints: true,
+					},
+					GCJob: &sql.GCJobTestingKnobs{
+						// We want to run the GC job to completion without waiting for
+						// MVCC GC.
+						SkipWaitingForMVCCGC: true,
+					},
+				}}}
+		const numAccounts = 10
+		_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+		tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, params)
+		defer cleanupFn()
+		defer cleanupEmptyCluster()
 
-	// Pause SQL Stats compaction job to ensure the test is deterministic.
-	sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR SQL STATISTICS]`)
+		// Closed when the restore is allowed to progress with the rest of the backup.
+		allowProgressAfterPreRestore := make(chan struct{})
+		// Closed to signal the zones have been restored.
+		restoredZones := make(chan struct{})
+		for _, server := range tcRestore.Servers {
+			registry := server.ApplicationLayer().JobRegistry().(*jobs.Registry)
+			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+				func(raw jobs.Resumer) jobs.Resumer {
+					r := raw.(*restoreResumer)
+					r.testingKnobs.afterPreRestore = func() error {
+						close(restoredZones)
+						<-allowProgressAfterPreRestore
+						return nil
+					}
+					return r
+				})
+		}
 
-	// Disable automatic stats collection on the backup and restoring clusters to ensure
-	// the test is deterministic.
-	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
-	sqlDBRestore.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
+		// Pause SQL Stats compaction job to ensure the test is deterministic.
+		sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR SQL STATISTICS]`)
 
-	// Create some other descriptors as well.
-	sqlDB.Exec(t, `
+		// Disable automatic stats collection on the backup and restoring clusters to ensure
+		// the test is deterministic.
+		sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
+		sqlDBRestore.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
+
+		// Create some other descriptors as well.
+		sqlDB.Exec(t, `
 USE data;
 CREATE SCHEMA test_data_schema;
 CREATE TABLE data.test_data_schema.test_table (a int);
@@ -130,237 +143,238 @@ CREATE SCHEMA empty_schema;
 CREATE TABLE data2.foo (a int);
 `)
 
-	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
-	// Populate system.users.
-	numBatches := 100
-	if util.RaceEnabled {
-		numBatches = 1
-	}
-	usersPerBatch := 10
-	userID := 0
-	for b := 0; b < numBatches; b++ {
-		sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
-			for u := 0; u < usersPerBatch; u++ {
-				if _, err := txn.Exec(fmt.Sprintf("CREATE USER maxroach%d WITH CREATEDB", userID)); err != nil {
-					return err
+		// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
+		// Populate system.users.
+		numBatches := 100
+		if util.RaceEnabled {
+			numBatches = 1
+		}
+		usersPerBatch := 10
+		userID := 0
+		for b := 0; b < numBatches; b++ {
+			sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
+				for u := 0; u < usersPerBatch; u++ {
+					if _, err := txn.Exec(fmt.Sprintf("CREATE USER maxroach%d WITH CREATEDB", userID)); err != nil {
+						return err
+					}
+					userID++
 				}
-				userID++
-			}
-			return nil
-		})
-	}
-
-	// Populate system.zones.
-	sqlDB.Exec(t, `ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 3600`)
-	sqlDB.Exec(t, `ALTER TABLE defaultdb.foo CONFIGURE ZONE USING gc.ttlseconds = 45`)
-	sqlDB.Exec(t, `ALTER DATABASE data2 CONFIGURE ZONE USING gc.ttlseconds = 900`)
-	// Populate system.jobs.
-	// Note: this is not the backup under test, this just serves as a job which
-	// should appear in the restore.
-	// This job will eventually fail since it will run from a new cluster.
-	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://1/throwawayjob'`)
-	// Populate system.settings.
-	sqlDB.Exec(t, `INSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`, "some_key", "some_val")
-	// Populate system.comments.
-	sqlDB.Exec(t, `COMMENT ON TABLE data.bank IS 'table comment string'`)
-	sqlDB.Exec(t, `COMMENT ON DATABASE data IS 'database comment string'`)
-
-	sqlDB.Exec(t,
-		`INSERT INTO system.locations ("localityKey", "localityValue", latitude, longitude) VALUES ($1, $2, $3, $4)`,
-		"city", "New York City", 40.71427, -74.00597,
-	)
-	// Populate system.role_members.
-	sqlDB.Exec(t, `CREATE ROLE system_ops;`)
-	sqlDB.Exec(t, `GRANT system_ops TO maxroach1;`)
-
-	// Populate system.scheduled_jobs table with a first run in the future to prevent immediate adoption.
-	firstRun := timeutil.Now().Add(time.Hour).Format(timeutil.TimestampWithoutTZFormat)
-	sqlDB.Exec(t, `CREATE SCHEDULE FOR BACKUP data.bank INTO $1 RECURRING '@hourly' FULL BACKUP ALWAYS WITH SCHEDULE OPTIONS first_run = $2`, localFoo, firstRun)
-	sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR BACKUP]`)
-
-	injectStats(t, sqlDB, "data.bank", "id")
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
-
-	// Create a bunch of user tables on the restoring cluster that we're going
-	// to delete.
-	numTables := 50
-	if util.RaceEnabled {
-		numTables = 2
-	}
-	for i := 0; i < numTables; i++ {
-		sqlDBRestore.Exec(t, `CREATE DATABASE db_to_drop`)
-		sqlDBRestore.Exec(t, `CREATE TABLE db_to_drop.table_to_drop (a int)`)
-		sqlDBRestore.Exec(t, `ALTER TABLE db_to_drop.table_to_drop CONFIGURE ZONE USING gc.ttlseconds=1`)
-		sqlDBRestore.Exec(t, `DROP DATABASE db_to_drop`)
-	}
-	// Wait for the GC job to finish to ensure the descriptors no longer exist.
-	sqlDBRestore.CheckQueryResultsRetry(
-		t, "SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND status = 'running'",
-		[][]string{{"0"}},
-	)
-
-	doneRestore := make(chan struct{})
-	go func() {
-		defer close(doneRestore)
-		sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
-	}()
-
-	// Check that zones are restored during pre-restore.
-	t.Run("ensure zones are restored during pre-restore", func(t *testing.T) {
-		<-restoredZones
-		// Not specifying the schema makes the query search using defaultdb first.
-		// which ends up returning the error
-		// pq: database "defaultdb" is offline: restoring
-		checkZones := "SELECT n.name, z.config FROM system.public.zones z, system.public.namespace n WHERE n.id = z.id ORDER BY n.name ASC"
-		sqlDBRestore.CheckQueryResults(t, checkZones, sqlDB.QueryStr(t, checkZones))
-
-		// Check that the user tables are still offline.
-		sqlDBRestore.ExpectErr(t, "database \"data\" is offline: restoring", "SELECT * FROM data.public.bank")
-
-		id, err := strconv.Atoi(sqlDBRestore.QueryStr(t, `SELECT id FROM system.public.namespace WHERE name = 'bank'`)[0][0])
-		require.NoError(t, err)
-
-		// Check there is no data in the span that we expect user data to be imported.
-		store := tcRestore.GetFirstStoreFromServer(t, 0)
-		startKey := keys.SystemSQLCodec.TablePrefix(uint32(id))
-		endKey := startKey.PrefixEnd()
-		it, err := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-			UpperBound: endKey,
-		})
-		require.NoError(t, err)
-		defer it.Close()
-		it.SeekGE(storage.MVCCKey{Key: startKey})
-		hasKey, err := it.Valid()
-		require.NoError(t, err)
-		require.False(t, hasKey, "did not expect to find a key, found %s", it.UnsafeKey())
-	})
-
-	// Allow the restore to make progress after we've checked the pre-restore
-	// stage.
-	close(allowProgressAfterPreRestore)
-
-	// Wait for the restore to finish before checking that it did the right thing.
-	<-doneRestore
-
-	t.Run("ensure all databases restored", func(t *testing.T) {
-		sqlDBRestore.CheckQueryResults(t,
-			`SELECT database_name, owner FROM [SHOW DATABASES]`,
-			[][]string{
-				{"data", username.RootUser},
-				{"data2", username.RootUser},
-				{"defaultdb", username.RootUser},
-				{"postgres", username.RootUser},
-				{"system", username.NodeUser},
+				return nil
 			})
-	})
-
-	t.Run("ensure all schemas are restored", func(t *testing.T) {
-		expectedSchemas := map[string][][]string{
-			"defaultdb": {{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}, {"test_schema"}},
-			"data":      {{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}, {"test_data_schema"}},
-			"data2":     {{"crdb_internal"}, {"empty_schema"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}},
 		}
-		for dbName, expectedSchemas := range expectedSchemas {
+
+		// Populate system.zones.
+		sqlDB.Exec(t, `ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 3600`)
+		sqlDB.Exec(t, `ALTER TABLE defaultdb.foo CONFIGURE ZONE USING gc.ttlseconds = 45`)
+		sqlDB.Exec(t, `ALTER DATABASE data2 CONFIGURE ZONE USING gc.ttlseconds = 900`)
+		// Populate system.jobs.
+		// Note: this is not the backup under test, this just serves as a job which
+		// should appear in the restore.
+		// This job will eventually fail since it will run from a new cluster.
+		sqlDB.Exec(t, `BACKUP data.bank INTO 'nodelocal://1/throwawayjob'`)
+		// Populate system.settings.
+		sqlDB.Exec(t, `INSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`, "some_key", "some_val")
+		// Populate system.comments.
+		sqlDB.Exec(t, `COMMENT ON TABLE data.bank IS 'table comment string'`)
+		sqlDB.Exec(t, `COMMENT ON DATABASE data IS 'database comment string'`)
+
+		sqlDB.Exec(t,
+			`INSERT INTO system.locations ("localityKey", "localityValue", latitude, longitude) VALUES ($1, $2, $3, $4)`,
+			"city", "New York City", 40.71427, -74.00597,
+		)
+		// Populate system.role_members.
+		sqlDB.Exec(t, `CREATE ROLE system_ops;`)
+		sqlDB.Exec(t, `GRANT system_ops TO maxroach1;`)
+
+		// Populate system.scheduled_jobs table with a first run in the future to prevent immediate adoption.
+		firstRun := timeutil.Now().Add(time.Hour).Format(timeutil.TimestampWithoutTZFormat)
+		sqlDB.Exec(t, `CREATE SCHEDULE FOR BACKUP data.bank INTO $1 RECURRING '@hourly' FULL BACKUP ALWAYS WITH SCHEDULE OPTIONS first_run = $2`, localFoo, firstRun)
+		sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR BACKUP]`)
+
+		injectStats(t, sqlDB, "data.bank", "id")
+		sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
+
+		// Create a bunch of user tables on the restoring cluster that we're going
+		// to delete.
+		numTables := 50
+		if util.RaceEnabled {
+			numTables = 2
+		}
+		for i := 0; i < numTables; i++ {
+			sqlDBRestore.Exec(t, `CREATE DATABASE db_to_drop`)
+			sqlDBRestore.Exec(t, `CREATE TABLE db_to_drop.table_to_drop (a int)`)
+			sqlDBRestore.Exec(t, `ALTER TABLE db_to_drop.table_to_drop CONFIGURE ZONE USING gc.ttlseconds=1`)
+			sqlDBRestore.Exec(t, `DROP DATABASE db_to_drop`)
+		}
+		// Wait for the GC job to finish to ensure the descriptors no longer exist.
+		sqlDBRestore.CheckQueryResultsRetry(
+			t, "SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND status = 'running'",
+			[][]string{{"0"}},
+		)
+
+		doneRestore := make(chan struct{})
+		go func() {
+			defer close(doneRestore)
+			sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
+		}()
+
+		// Check that zones are restored during pre-restore.
+		t.Run("ensure zones are restored during pre-restore", func(t *testing.T) {
+			<-restoredZones
+			// Not specifying the schema makes the query search using defaultdb first.
+			// which ends up returning the error
+			// pq: database "defaultdb" is offline: restoring
+			checkZones := "SELECT n.name, z.config FROM system.public.zones z, system.public.namespace n WHERE n.id = z.id ORDER BY n.name ASC"
+			sqlDBRestore.CheckQueryResults(t, checkZones, sqlDB.QueryStr(t, checkZones))
+
+			// Check that the user tables are still offline.
+			sqlDBRestore.ExpectErr(t, "database \"data\" is offline: restoring", "SELECT * FROM data.public.bank")
+
+			id, err := strconv.Atoi(sqlDBRestore.QueryStr(t, `SELECT id FROM system.public.namespace WHERE name = 'bank'`)[0][0])
+			require.NoError(t, err)
+
+			// Check there is no data in the span that we expect user data to be imported.
+			store := tcRestore.GetFirstStoreFromServer(t, 0)
+			startKey := keys.SystemSQLCodec.TablePrefix(uint32(id))
+			endKey := startKey.PrefixEnd()
+			it, err := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+				UpperBound: endKey,
+			})
+			require.NoError(t, err)
+			defer it.Close()
+			it.SeekGE(storage.MVCCKey{Key: startKey})
+			hasKey, err := it.Valid()
+			require.NoError(t, err)
+			require.False(t, hasKey, "did not expect to find a key, found %s", it.UnsafeKey())
+		})
+
+		// Allow the restore to make progress after we've checked the pre-restore
+		// stage.
+		close(allowProgressAfterPreRestore)
+
+		// Wait for the restore to finish before checking that it did the right thing.
+		<-doneRestore
+
+		t.Run("ensure all databases restored", func(t *testing.T) {
 			sqlDBRestore.CheckQueryResults(t,
-				fmt.Sprintf(`USE %s; SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name;`, dbName),
-				expectedSchemas)
-		}
-	})
+				`SELECT database_name, owner FROM [SHOW DATABASES]`,
+				[][]string{
+					{"data", username.RootUser},
+					{"data2", username.RootUser},
+					{"defaultdb", username.RootUser},
+					{"postgres", username.RootUser},
+					{"system", username.NodeUser},
+				})
+		})
 
-	t.Run("ensure system table data restored", func(t *testing.T) {
-		// Note the absence of the jobs table. Jobs are tested by another test as
-		// jobs are created during the RESTORE process.
-		systemTablesToVerify := []string{
-			systemschema.CommentsTable.GetName(),
-			systemschema.LocationsTable.GetName(),
-			systemschema.RoleMembersTable.GetName(),
-			systemschema.RoleOptionsTable.GetName(),
-			systemschema.SettingsTable.GetName(),
-			systemschema.TableStatisticsTable.GetName(),
-			systemschema.UITable.GetName(),
-			systemschema.UsersTable.GetName(),
-			systemschema.ScheduledJobsTable.GetName(),
-		}
-
-		verificationQueries := make([]string, len(systemTablesToVerify))
-		// Populate the list of tables we expect to be restored as well as queries
-		// that can be used to ensure that data in those tables is restored.
-		for i, table := range systemTablesToVerify {
-			switch table {
-			case systemschema.TableStatisticsTable.GetName():
-				// createdAt and statisticsID are re-generated on RESTORE.
-				query := `SELECT name, "columnIDs", "rowCount" FROM system.table_statistics`
-				verificationQueries[i] = query
-			case systemschema.SettingsTable.GetName():
-				// We don't include the cluster version.
-				query := fmt.Sprintf("SELECT * FROM system.%s WHERE name <> 'version'", table)
-				verificationQueries[i] = query
-			case systemschema.CommentsTable.GetName():
-				query := fmt.Sprintf("SELECT comment FROM system.%s", table)
-				verificationQueries[i] = query
-			case systemschema.ScheduledJobsTable.GetName():
-				query := fmt.Sprintf("SELECT schedule_id, schedule_name FROM system.%s", table)
-				verificationQueries[i] = query
-			default:
-				query := fmt.Sprintf("SELECT * FROM system.%s", table)
-				verificationQueries[i] = query
+		t.Run("ensure all schemas are restored", func(t *testing.T) {
+			expectedSchemas := map[string][][]string{
+				"defaultdb": {{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}, {"test_schema"}},
+				"data":      {{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}, {"test_data_schema"}},
+				"data2":     {{"crdb_internal"}, {"empty_schema"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}},
 			}
-		}
-
-		for _, read := range verificationQueries {
-			sqlDBRestore.CheckQueryResults(t, read, sqlDB.QueryStr(t, read))
-		}
-	})
-
-	t.Run("ensure user table data restored", func(t *testing.T) {
-		expectedUserTables := [][]string{
-			{"data", "bank"},
-			{"data2", "foo"},
-			{"defaultdb", "foo"},
-		}
-
-		for _, table := range expectedUserTables {
-			query := fmt.Sprintf("SELECT * FROM %s.%s", table[0], table[1])
-			sqlDBRestore.CheckQueryResults(t, query, sqlDB.QueryStr(t, query))
-		}
-	})
-
-	t.Run("ensure that grants are restored", func(t *testing.T) {
-		grantCheck := "use system; SHOW grants"
-		sqlDBRestore.CheckQueryResults(t, grantCheck, sqlDB.QueryStr(t, grantCheck))
-		grantCheck = "use data; SHOW grants"
-		sqlDBRestore.CheckQueryResults(t, grantCheck, sqlDB.QueryStr(t, grantCheck))
-	})
-
-	t.Run("zone_configs", func(t *testing.T) {
-		// The restored zones should be a superset of the zones in the backed up
-		// cluster.
-		zoneIDsResult := sqlDB.QueryStr(t, `SELECT n.name, z.config FROM system.namespace n, system.zones z WHERE z.id = n.id`)
-		var q strings.Builder
-		q.WriteString("SELECT n.name, z.config FROM system.namespace n, system.zones z WHERE z.id = n. id AND name IN (")
-		for i, restoreZoneNameRow := range zoneIDsResult {
-			if i > 0 {
-				q.WriteString(", ")
+			for dbName, expectedSchemas := range expectedSchemas {
+				sqlDBRestore.CheckQueryResults(t,
+					fmt.Sprintf(`USE %s; SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name;`, dbName),
+					expectedSchemas)
 			}
-			q.WriteString(fmt.Sprintf("'%s'", restoreZoneNameRow[0]))
-		}
-		q.WriteString(") ORDER BY name ASC")
-		sqlDBRestore.CheckQueryResults(t, q.String(), sqlDB.QueryStr(t, q.String()))
-	})
+		})
 
-	t.Run("ensure that tables can be created at the excepted ID", func(t *testing.T) {
-		var maxID, dbID, tableID int
-		sqlDBRestore.QueryRow(t, "SELECT max(id) FROM system.namespace").Scan(&maxID)
-		dbName, tableName := "new_db", "new_table"
-		sqlDBRestore.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
-		sqlDBRestore.Exec(t, fmt.Sprintf("CREATE TABLE %s.%s (a int)", dbName, tableName))
-		sqlDBRestore.QueryRow(t,
-			fmt.Sprintf("SELECT id FROM system.namespace WHERE name = '%s'", dbName)).Scan(&dbID)
-		require.True(t, dbID > maxID)
-		sqlDBRestore.QueryRow(t,
-			fmt.Sprintf("SELECT id FROM system.namespace WHERE name = '%s'", tableName)).Scan(&tableID)
-		require.True(t, tableID > maxID)
-		require.NotEqual(t, dbID, tableID)
+		t.Run("ensure system table data restored", func(t *testing.T) {
+			// Note the absence of the jobs table. Jobs are tested by another test as
+			// jobs are created during the RESTORE process.
+			systemTablesToVerify := []string{
+				systemschema.CommentsTable.GetName(),
+				systemschema.LocationsTable.GetName(),
+				systemschema.RoleMembersTable.GetName(),
+				systemschema.RoleOptionsTable.GetName(),
+				systemschema.SettingsTable.GetName(),
+				systemschema.TableStatisticsTable.GetName(),
+				systemschema.UITable.GetName(),
+				systemschema.UsersTable.GetName(),
+				systemschema.ScheduledJobsTable.GetName(),
+			}
+
+			verificationQueries := make([]string, len(systemTablesToVerify))
+			// Populate the list of tables we expect to be restored as well as queries
+			// that can be used to ensure that data in those tables is restored.
+			for i, table := range systemTablesToVerify {
+				switch table {
+				case systemschema.TableStatisticsTable.GetName():
+					// createdAt and statisticsID are re-generated on RESTORE.
+					query := `SELECT name, "columnIDs", "rowCount" FROM system.table_statistics`
+					verificationQueries[i] = query
+				case systemschema.SettingsTable.GetName():
+					// We don't include the cluster version.
+					query := fmt.Sprintf("SELECT * FROM system.%s WHERE name <> 'version'", table)
+					verificationQueries[i] = query
+				case systemschema.CommentsTable.GetName():
+					query := fmt.Sprintf("SELECT comment FROM system.%s", table)
+					verificationQueries[i] = query
+				case systemschema.ScheduledJobsTable.GetName():
+					query := fmt.Sprintf("SELECT schedule_id, schedule_name FROM system.%s", table)
+					verificationQueries[i] = query
+				default:
+					query := fmt.Sprintf("SELECT * FROM system.%s", table)
+					verificationQueries[i] = query
+				}
+			}
+
+			for _, read := range verificationQueries {
+				sqlDBRestore.CheckQueryResults(t, read, sqlDB.QueryStr(t, read))
+			}
+		})
+
+		t.Run("ensure user table data restored", func(t *testing.T) {
+			expectedUserTables := [][]string{
+				{"data", "bank"},
+				{"data2", "foo"},
+				{"defaultdb", "foo"},
+			}
+
+			for _, table := range expectedUserTables {
+				query := fmt.Sprintf("SELECT * FROM %s.%s", table[0], table[1])
+				sqlDBRestore.CheckQueryResults(t, query, sqlDB.QueryStr(t, query))
+			}
+		})
+
+		t.Run("ensure that grants are restored", func(t *testing.T) {
+			grantCheck := "use system; SHOW grants"
+			sqlDBRestore.CheckQueryResults(t, grantCheck, sqlDB.QueryStr(t, grantCheck))
+			grantCheck = "use data; SHOW grants"
+			sqlDBRestore.CheckQueryResults(t, grantCheck, sqlDB.QueryStr(t, grantCheck))
+		})
+
+		t.Run("zone_configs", func(t *testing.T) {
+			// The restored zones should be a superset of the zones in the backed up
+			// cluster.
+			zoneIDsResult := sqlDB.QueryStr(t, `SELECT n.name, z.config FROM system.namespace n, system.zones z WHERE z.id = n.id`)
+			var q strings.Builder
+			q.WriteString("SELECT n.name, z.config FROM system.namespace n, system.zones z WHERE z.id = n. id AND name IN (")
+			for i, restoreZoneNameRow := range zoneIDsResult {
+				if i > 0 {
+					q.WriteString(", ")
+				}
+				q.WriteString(fmt.Sprintf("'%s'", restoreZoneNameRow[0]))
+			}
+			q.WriteString(") ORDER BY name ASC")
+			sqlDBRestore.CheckQueryResults(t, q.String(), sqlDB.QueryStr(t, q.String()))
+		})
+
+		t.Run("ensure that tables can be created at the excepted ID", func(t *testing.T) {
+			var maxID, dbID, tableID int
+			sqlDBRestore.QueryRow(t, "SELECT max(id) FROM system.namespace").Scan(&maxID)
+			dbName, tableName := "new_db", "new_table"
+			sqlDBRestore.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
+			sqlDBRestore.Exec(t, fmt.Sprintf("CREATE TABLE %s.%s (a int)", dbName, tableName))
+			sqlDBRestore.QueryRow(t,
+				fmt.Sprintf("SELECT id FROM system.namespace WHERE name = '%s'", dbName)).Scan(&dbID)
+			require.True(t, dbID > maxID)
+			sqlDBRestore.QueryRow(t,
+				fmt.Sprintf("SELECT id FROM system.namespace WHERE name = '%s'", tableName)).Scan(&tableID)
+			require.True(t, tableID > maxID)
+			require.NotEqual(t, dbID, tableID)
+		})
 	})
 }
 
@@ -621,8 +635,10 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	}
 
 	const numAccounts = 1000
-	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tcBackup, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
+
+	isBackupOfSystemTenant := tcBackup.ApplicationLayer(0).Codec().ForSystemTenant()
 
 	// This test flakes due to
 	// https://github.com/cockroachdb/cockroach/issues/86806. Instead of skipping
@@ -657,7 +673,10 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == backupbase.BackupManifestName || !strings.HasSuffix(path, ".sst") || info.Name() == backupinfo.BackupMetadataDescriptorsListPath || info.Name() == backupinfo.BackupMetadataFilesListPath {
+		if info.Name() == backupbase.BackupManifestName ||
+			!strings.HasSuffix(path, ".sst") ||
+			info.Name() == backupinfo.BackupMetadataDescriptorsListPath ||
+			info.Name() == backupinfo.BackupMetadataFilesListPath {
 			return nil
 		}
 		return os.Remove(path)
@@ -673,33 +692,75 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://1/throwawayjob'`)
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
 
+	// In a single node test cluster when a restore to nodelocal encounters an
+	// error the behaviour is slightly different for a system and application
+	// tenant. In the system tenant we take the local fast-path and so a failure
+	// results in the job failing. In an application tenant there is always an RPC
+	// call involved resulting in the exhausting its retries and pausing.
+	waitForJobCompletion := func(db *sqlutils.SQLRunner, isSystemTenant bool, jobID jobspb.JobID) {
+		if isSystemTenant {
+			db.Exec(t, `USE system;`)
+			jobutils.WaitForJobToFail(t, db, jobID)
+		} else {
+			db.Exec(t, `USE system;`)
+			jobutils.WaitForJobToPause(t, db, jobID)
+			db.Exec(t, `CANCEL JOB $1`, jobID)
+			jobutils.WaitForJobToCancel(t, db, jobID)
+		}
+	}
+
 	t.Run("during restoration of data", func(t *testing.T) {
-		_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+		tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+		isRestoreSystemTenant := tcRestore.ApplicationLayer(0).Codec().ForSystemTenant()
 		defer cleanupEmptyCluster()
-		sqlDBRestore.ExpectErr(t, "sst: no such file", `RESTORE FROM 'nodelocal://1/missing-ssts'`)
+		var jobID jobspb.JobID
+		sqlDBRestore.QueryRow(t, `RESTORE FROM LATEST IN 'nodelocal://1/missing-ssts' WITH detached`).Scan(&jobID)
+		waitForJobCompletion(sqlDBRestore, isRestoreSystemTenant, jobID)
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
-		sqlDBRestore.CheckQueryResults(t,
-			`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
-			[][]string{
-				{"bank"},
-				{"comments"},
-				{"database_role_settings"},
-				{"external_connections"},
-				{"locations"},
-				{"privileges"},
-				{"role_id_seq"},
-				{"role_members"},
-				{"role_options"},
-				{"scheduled_jobs"},
-				{"settings"},
-				{"tenant_settings"},
-				{"ui"},
-				{"users"},
-				{"zones"},
-			},
-		)
+		if isBackupOfSystemTenant {
+			sqlDBRestore.CheckQueryResults(t,
+				`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
+				[][]string{
+					{"bank"},
+					{"comments"},
+					{"database_role_settings"},
+					{"external_connections"},
+					{"locations"},
+					{"privileges"},
+					{"role_id_seq"},
+					{"role_members"},
+					{"role_options"},
+					{"scheduled_jobs"},
+					{"settings"},
+					{"tenant_settings"},
+					{"ui"},
+					{"users"},
+					{"zones"},
+				},
+			)
+		} else {
+			sqlDBRestore.CheckQueryResults(t,
+				`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
+				[][]string{
+					{"bank"},
+					{"comments"},
+					{"database_role_settings"},
+					{"external_connections"},
+					{"locations"},
+					{"privileges"},
+					{"role_id_seq"},
+					{"role_members"},
+					{"role_options"},
+					{"scheduled_jobs"},
+					{"settings"},
+					{"ui"},
+					{"users"},
+					{"zones"},
+				},
+			)
+		}
 	})
 
 	// This test retries the job (by injected a retry error) after restoring a
@@ -707,19 +768,23 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	// out any errors that may occur if some of the system table restoration
 	// functions are not idempotent.
 	t.Run("retry-during-custom-system-table-restore", func(t *testing.T) {
-		customRestoreSystemTables := make([]string, 0)
+		customRestoreSystemTables := make(map[string]systemBackupConfiguration)
 		for table, config := range systemTableBackupConfiguration {
 			if config.customRestoreFunc != nil {
-				customRestoreSystemTables = append(customRestoreSystemTables, table)
+				customRestoreSystemTables[table] = config
 			}
 		}
-		for _, customRestoreSystemTable := range customRestoreSystemTables {
+		for customRestoreSystemTable, cfg := range customRestoreSystemTables {
 			t.Run(customRestoreSystemTable, func(t *testing.T) {
 				args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 				}}
 				tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, args)
 				defer cleanupEmptyCluster()
+
+				if !isBackupOfSystemTenant && cfg.expectMissingInSecondaryTenant {
+					skip.IgnoreLintf(t, "system table %s does not exist in the tenant", customRestoreSystemTable)
+				}
 
 				// Inject a retry error, that returns once.
 				alreadyErrored := false
@@ -771,26 +836,47 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
-		sqlDBRestore.CheckQueryResults(t,
-			`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
-			[][]string{
-				{"bank"},
-				{"comments"},
-				{"database_role_settings"},
-				{"external_connections"},
-				{"locations"},
-				{"privileges"},
-				{"role_id_seq"},
-				{"role_members"},
-				{"role_options"},
-				{"scheduled_jobs"},
-				{"settings"},
-				{"tenant_settings"},
-				{"ui"},
-				{"users"},
-				{"zones"},
-			},
-		)
+		if isBackupOfSystemTenant {
+			sqlDBRestore.CheckQueryResults(t,
+				`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
+				[][]string{
+					{"bank"},
+					{"comments"},
+					{"database_role_settings"},
+					{"external_connections"},
+					{"locations"},
+					{"privileges"},
+					{"role_id_seq"},
+					{"role_members"},
+					{"role_options"},
+					{"scheduled_jobs"},
+					{"settings"},
+					{"tenant_settings"},
+					{"ui"},
+					{"users"},
+					{"zones"},
+				},
+			)
+		} else {
+			sqlDBRestore.CheckQueryResults(t,
+				`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
+				[][]string{
+					{"bank"},
+					{"comments"},
+					{"database_role_settings"},
+					{"external_connections"},
+					{"locations"},
+					{"privileges"},
+					{"role_id_seq"},
+					{"role_members"},
+					{"role_options"},
+					{"scheduled_jobs"},
+					{"settings"},
+					{"ui"},
+					{"users"},
+					{"zones"},
+				})
+		}
 	})
 
 	t.Run("after offline tables", func(t *testing.T) {

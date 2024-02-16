@@ -91,6 +91,8 @@ type systemBackupConfiguration struct {
 
 	// expectMissingInSystemTenant is true for tables that only exist in secondary tenants.
 	expectMissingInSystemTenant bool
+	// expectMissingInSystemTenant is true for tables that only exist in the system tenant.
+	expectMissingInSecondaryTenant bool
 }
 
 type customRestoreFuncDeps struct {
@@ -727,7 +729,8 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.TenantsTable.GetName(): {
-		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+		shouldIncludeInClusterBackup:   optOutOfClusterBackup,
+		expectMissingInSecondaryTenant: true,
 	},
 	systemschema.WebSessionsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
@@ -766,8 +769,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.TenantSettingsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
-		customRestoreFunc:            tenantSettingsTableRestoreFunc,
+		shouldIncludeInClusterBackup:   optInToClusterBackup, // No desc ID columns.
+		customRestoreFunc:              tenantSettingsTableRestoreFunc,
+		expectMissingInSecondaryTenant: true,
 	},
 	systemschema.SpanCountTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
