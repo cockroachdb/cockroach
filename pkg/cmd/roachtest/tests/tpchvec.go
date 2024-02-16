@@ -512,7 +512,9 @@ func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tp
 		if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
 			t.Fatal(err)
 		}
-		conn = createInMemoryTenantWithConn(ctx, t, c, appTenantName, c.All(), c.IsSecure() /* secure */)
+		startOpts := option.DefaultStartSharedVirtualClusterOpts(appTenantName)
+		c.StartServiceForVirtualCluster(ctx, t.L(), c.All(), startOpts, install.MakeClusterSettings(), c.All())
+		conn = c.Conn(ctx, t.L(), c.All().RandNode()[0], option.TenantName(appTenantName))
 	} else {
 		conn = c.Conn(ctx, t.L(), 1)
 		disableMergeQueue = true
