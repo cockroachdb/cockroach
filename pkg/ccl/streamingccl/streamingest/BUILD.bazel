@@ -28,7 +28,6 @@ go_library(
         "//pkg/ccl/streamingccl/streamclient",
         "//pkg/ccl/streamingccl/streamproducer",
         "//pkg/ccl/utilccl",
-        "//pkg/cloud",
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/jobs",
