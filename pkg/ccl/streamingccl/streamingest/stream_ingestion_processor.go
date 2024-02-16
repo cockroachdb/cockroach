@@ -413,6 +413,10 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		id := partitionSpec.PartitionID
 		token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
 		addr := partitionSpec.Address
+		redactedAddr, redactedErr := streamclient.RedactSourceURI(addr)
+		if redactedErr != nil {
+			log.Warning(sip.Ctx(), "could not redact stream address")
+		}
 		var streamClient streamclient.Client
 		if sip.forceClientForTests != nil {
 			streamClient = sip.forceClientForTests
@@ -421,7 +425,8 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			streamClient, err = streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(addr), db,
 				streamclient.WithStreamID(streampb.StreamID(sip.spec.StreamID)))
 			if err != nil {
-				sip.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, addr))
+
+				sip.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, redactedAddr))
 				return
 			}
 			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
@@ -439,7 +444,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			sip.spec.InitialScanTimestamp, previousReplicatedTimestamp)
 
 		if err != nil {
-			sip.MoveToDrainingAndLogError(errors.Wrapf(err, "consuming partition %v", addr))
+			sip.MoveToDrainingAndLogError(errors.Wrapf(err, "consuming partition %v", redactedAddr))
 			return
 		}
 		subscriptions[id] = sub
