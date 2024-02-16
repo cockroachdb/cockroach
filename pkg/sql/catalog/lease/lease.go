@@ -481,7 +481,7 @@ func (m *Manager) readOlderVersionForTimestamp(
 			// If we found a descriptor that isn't the first descriptor, go and check
 			// whether the descriptor for which we're searching actually exists. This
 			// will deal with cases where a concurrent fetch filled it in for us.
-			i > 0 && timestamp.Less(t.mu.active.data[i-1].getExpiration()) {
+			i > 0 && timestamp.Less(t.mu.active.data[i-1].getExpiration(ctx)) {
 			return hlc.Timestamp{}, true
 		}
 		return t.mu.active.data[i].GetModificationTime(), false
@@ -611,7 +611,7 @@ func acquireNodeLease(
 			var minExpiration hlc.Timestamp
 			var lastLease *storedLease
 			if newest != nil {
-				minExpiration = newest.getExpiration()
+				minExpiration = newest.getExpiration(ctx)
 				lastLease = newest.getStoredLease()
 			}
 			// A session will be populated within the leasing infrastructure only when
@@ -644,7 +644,7 @@ func acquireNodeLease(
 				return nil, err
 			}
 			if newDescVersionState != nil {
-				m.names.insert(newDescVersionState)
+				m.names.insert(ctx, newDescVersionState)
 			}
 			if toRelease != nil {
 				releaseLease(ctx, toRelease, m)
@@ -1145,7 +1145,7 @@ type LeasedDescriptor interface {
 
 	// Expiration returns the current expiration. Subsequent calls may return a
 	// later timestamp but will never return an earlier one.
-	Expiration() hlc.Timestamp
+	Expiration(ctx context.Context) hlc.Timestamp
 
 	// Release releases the reference to this leased descriptor. The descriptor
 	// should not be used after the lease has been released.
@@ -1172,7 +1172,7 @@ func (m *Manager) Acquire(
 		if err == nil {
 			// If the latest lease is nearly expired, ensure a renewal is queued.
 			if latest {
-				durationUntilExpiry := time.Duration(desc.getExpiration().WallTime - timestamp.WallTime)
+				durationUntilExpiry := time.Duration(desc.getExpiration(ctx).WallTime - timestamp.WallTime)
 				if durationUntilExpiry < m.storage.leaseRenewalTimeout() {
 					if err := t.maybeQueueLeaseRenewal(ctx, m, id, desc.GetName()); err != nil {
 						return nil, err
@@ -1469,7 +1469,7 @@ func (m *Manager) cleanupExpiredSessionLeases(ctx context.Context) {
 		// ones have expired. The slice is sorted by the expiry time, so once we
 		// find the first non-expired lease we are done.
 		for i, desc := range m.mu.leasesToExpire {
-			if desc.hasExpired(now) {
+			if desc.hasExpired(ctx, now) {
 				latest = i
 			} else {
 				break
