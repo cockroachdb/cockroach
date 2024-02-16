@@ -82,6 +82,7 @@ jobs:
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
       - uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
         with:
           name: acceptance artifacts
           path: artifacts
