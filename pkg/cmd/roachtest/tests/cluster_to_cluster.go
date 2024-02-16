@@ -1779,7 +1779,7 @@ func copyPGCertsAndMakeURL(
 		return "", err
 	}
 
-	tmpDir, err := os.MkdirTemp("", "certs")
+	tmpDir, err := os.MkdirTemp("", install.CockroachNodeCertsDir)
 	if err != nil {
 		return "", err
 	}

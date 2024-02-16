@@ -1262,7 +1262,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger)
 		}
 		sec := "--insecure"
 		if c.IsSecure() {
-			certs := "certs"
+			certs := install.CockroachNodeCertsDir
 			if c.IsLocal() {
 				certs = c.localCertsDir
 			}
@@ -1361,7 +1361,7 @@ func (c *clusterImpl) FetchDebugZip(
 				Option("include-range-info").
 				Flag("exclude-files", fmt.Sprintf("'%s'", excludeFiles)).
 				Flag("url", fmt.Sprintf("{pgurl:%d}", node)).
-				MaybeFlag(c.IsSecure(), "certs-dir", "certs").
+				MaybeFlag(c.IsSecure(), "certs-dir", install.CockroachNodeCertsDir).
 				Arg(zipName).
 				String()
 			if err := c.RunE(ctx, c.Node(node), cmd); err != nil {
@@ -2152,9 +2152,9 @@ func (c *clusterImpl) RefetchCertsFromNode(ctx context.Context, node int) error 
 	// existing dir. Without `--local`, it'll create a new subdir to house the
 	// certs. Bypass that distinction (which should be fixed independently, but
 	// that might cause fallout) by using a non-existing dir here.
-	c.localCertsDir = filepath.Join(c.localCertsDir, "certs")
+	c.localCertsDir = filepath.Join(c.localCertsDir, install.CockroachNodeCertsDir)
 	// Get the certs from the first node.
-	if err := c.Get(ctx, c.l, "./certs", c.localCertsDir, c.Node(node)); err != nil {
+	if err := c.Get(ctx, c.l, fmt.Sprintf("./%s", install.CockroachNodeCertsDir), c.localCertsDir, c.Node(node)); err != nil {
 		return errors.Wrap(err, "cluster.StartE")
 	}
 	// Need to prevent world readable files or lib/pq will complain.

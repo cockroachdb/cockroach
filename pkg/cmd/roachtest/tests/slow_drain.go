@@ -120,7 +120,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 				t.Status(fmt.Sprintf("draining node %d", id))
 				return c.RunE(ctx,
 					c.Node(id),
-					fmt.Sprintf("./cockroach node drain %d --drain-wait=%s --certs-dir=certs --port={pgport:%d}", id, duration.String(), id),
+					fmt.Sprintf("./cockroach node drain %d --drain-wait=%s --certs-dir=%s --port={pgport:%d}", id, duration.String(), install.CockroachNodeCertsDir, id),
 				)
 			}
 			return drain(id)

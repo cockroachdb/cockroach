@@ -556,7 +556,7 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 			// Not all shells like brace expansion, so we'll do it here
 			dirs := []string{"data", "logs"}
 			if !preserveCerts {
-				dirs = append(dirs, "certs*")
+				dirs = append(dirs, fmt.Sprintf("%s*", CockroachNodeCertsDir))
 				dirs = append(dirs, "tenant-certs*")
 			}
 			for _, dir := range dirs {
@@ -569,7 +569,7 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 				`sudo rm -fr logs`,
 			}
 			if !preserveCerts {
-				rmCmds = append(rmCmds, "sudo rm -fr certs*", "sudo rm -fr tenant-certs*")
+				rmCmds = append(rmCmds, fmt.Sprintf("sudo rm -fr %s*", CockroachNodeCertsDir), "sudo rm -fr tenant-certs*")
 			}
 
 			cmd = strings.Join(rmCmds, " && ")
@@ -1634,9 +1634,12 @@ fi
 }
 
 const (
-	certsTarName       = "certs.tar"
-	tenantCertsTarName = "tenant-certs.tar"
-	tenantCertFile     = "client-tenant.%d.crt"
+	// CockroachNodeCertsDir is the certs directory that lives
+	// on the cockroach node itself.
+	CockroachNodeCertsDir = "certs"
+	certsTarName          = "certs.tar"
+	tenantCertsTarName    = "tenant-certs.tar"
+	tenantCertFile        = "client-tenant.%d.crt"
 )
 
 // DistributeCerts will generate and distribute certificates to all the nodes.
@@ -1659,21 +1662,21 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 			}
 			cmd += fmt.Sprintf(`
-rm -fr certs
-mkdir -p certs
+rm -fr %[2]s
+mkdir -p %[2]s
 VERSION=$(%[1]s version --build-tag)
 VERSION=${VERSION::5}
 TENANT_SCOPE_OPT=""
 if [[ $VERSION = v22.2 ]]; then
        TENANT_SCOPE_OPT="--tenant-scope 1,2,3,4,11,12,13,14"
 fi
-%[1]s cert create-ca --certs-dir=certs --ca-key=certs/ca.key
-%[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key $TENANT_SCOPE_OPT
-%[1]s cert create-client testuser --certs-dir=certs --ca-key=certs/ca.key $TENANT_SCOPE_OPT
-%[1]s cert create-client %[2]s --certs-dir=certs --ca-key=certs/ca.key $TENANT_SCOPE_OPT
-%[1]s cert create-node %[3]s --certs-dir=certs --ca-key=certs/ca.key
-tar cvf %[4]s certs
-`, cockroachNodeBinary(c, 1), DefaultUser, strings.Join(nodeNames, " "), certsTarName)
+%[1]s cert create-ca --certs-dir=%[2]s --ca-key=%[2]s/ca.key
+%[1]s cert create-client root --certs-dir=%[2]s --ca-key=%[2]s/ca.key $TENANT_SCOPE_OPT
+%[1]s cert create-client testuser --certs-dir=%[2]s --ca-key=%[2]s/ca.key $TENANT_SCOPE_OPT
+%[1]s cert create-client %[3]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key $TENANT_SCOPE_OPT
+%[1]s cert create-node %[4]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key
+tar cvf %[5]s %[2]s
+`, cockroachNodeBinary(c, 1), CockroachNodeCertsDir, DefaultUser, strings.Join(nodeNames, " "), certsTarName)
 
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("init-certs"))
 		},
@@ -1745,24 +1748,25 @@ func (c *SyncedCluster) createTenantCertBundle(
 			}
 			cmd += fmt.Sprintf(`
 CERT_DIR=tenant-certs/certs
-CA_KEY=certs/ca.key
+CA_KEY=%[1]s/ca.key
 
 rm -fr $CERT_DIR
 mkdir -p $CERT_DIR
-cp certs/ca.crt $CERT_DIR
+cp %[1]s/ca.crt $CERT_DIR
 SHARED_ARGS="--certs-dir=$CERT_DIR --ca-key=$CA_KEY"
-VERSION=$(%[1]s version --build-tag)
+VERSION=$(%[2]s version --build-tag)
 VERSION=${VERSION::3}
 TENANT_SCOPE_OPT=""
 if [[ $VERSION = v22 ]]; then
-        TENANT_SCOPE_OPT="--tenant-scope %[3]d"
+        TENANT_SCOPE_OPT="--tenant-scope %[4]d"
 fi
-%[1]s cert create-node %[2]s $SHARED_ARGS
-%[1]s cert create-tenant-client %[3]d %[2]s $SHARED_ARGS
-%[1]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
-%[1]s cert create-client testuser $TENANT_SCOPE_OPT $SHARED_ARGS
-tar cvf %[4]s $CERT_DIR
+%[2]s cert create-node %[3]s $SHARED_ARGS
+%[2]s cert create-tenant-client %[4]d %[3]s $SHARED_ARGS
+%[2]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
+%[2]s cert create-client testuser $TENANT_SCOPE_OPT $SHARED_ARGS
+tar cvf %[5]s $CERT_DIR
 `,
+				CockroachNodeCertsDir,
 				cockroachNodeBinary(c, node),
 				strings.Join(nodeNames, " "),
 				virtualClusterID,

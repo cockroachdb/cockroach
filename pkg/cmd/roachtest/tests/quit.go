@@ -399,7 +399,7 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID),
 			"./cockroach", "node", "drain", "--logtostderr=INFO",
 			fmt.Sprintf("--port={pgport:%d}", nodeID),
-			"--certs-dir certs",
+			fmt.Sprintf("--certs-dir %s", install.CockroachNodeCertsDir),
 		)
 		t.L().Printf("cockroach node drain:\n%s\n", result.Stdout+result.Stdout)
 		if err != nil {
@@ -444,7 +444,7 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(otherNodeID),
 			"./cockroach", "node", "drain", "--logtostderr=INFO",
 			fmt.Sprintf("--port={pgport:%d}", otherNodeID),
-			"--certs-dir certs",
+			fmt.Sprintf("--certs-dir %s", install.CockroachNodeCertsDir),
 			fmt.Sprintf("%d", nodeID),
 		)
 		t.L().Printf("cockroach node drain:\n%s\n", result.Stdout+result.Stderr)

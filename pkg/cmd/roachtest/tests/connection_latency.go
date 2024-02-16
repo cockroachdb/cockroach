@@ -44,24 +44,24 @@ func runConnectionLatencyTest(
 
 	urlTemplate := func(user string) string {
 		if password {
-			return fmt.Sprintf("postgres://testuser:123@%s:{pgport:1}?sslmode=require&sslrootcert=certs/ca.crt", user)
+			return fmt.Sprintf("postgres://testuser:123@%s:{pgport:1}?sslmode=require&sslrootcert=%s/ca.crt", user, install.CockroachNodeCertsDir)
 		}
 
-		return fmt.Sprintf("postgres://testuser@%s:{pgport:1}?sslcert=certs/client.testuser.crt&sslkey=certs/client.testuser.key&sslrootcert=certs/ca.crt&sslmode=require", user)
+		return fmt.Sprintf("postgres://testuser@%s:{pgport:1}?sslcert=%[2]s/client.testuser.crt&sslkey=%[2]s/client.testuser.key&sslrootcert=%[2]s/ca.crt&sslmode=require", user, install.CockroachNodeCertsDir)
 	}
 
 	var passwordFlag string
 	// Only create the user once.
 	t.L().Printf("creating testuser")
 	if password {
-		err = c.RunE(ctx, c.Node(1), `./cockroach sql --certs-dir certs --port={pgport:1} -e "CREATE USER testuser WITH PASSWORD '123' CREATEDB"`)
+		err = c.RunE(ctx, c.Node(1), fmt.Sprintf(`./cockroach sql --certs-dir %s --port={pgport:1} -e "CREATE USER testuser WITH PASSWORD '123' CREATEDB"`, install.CockroachNodeCertsDir))
 		require.NoError(t, err)
 		err = c.RunE(ctx, c.Node(1), fmt.Sprintf("./workload init connectionlatency --user testuser --password '123' --secure '%s'", urlTemplate("localhost")))
 		require.NoError(t, err)
 		passwordFlag = "--password 123 "
 	} else {
 		// NB: certs for `testuser` are created by `roachprod start --secure`.
-		err = c.RunE(ctx, c.Node(1), `./cockroach sql --certs-dir certs --port={pgport:1} -e "CREATE USER testuser CREATEDB"`)
+		err = c.RunE(ctx, c.Node(1), fmt.Sprintf(`./cockroach sql --certs-dir %s --port={pgport:1} -e "CREATE USER testuser CREATEDB"`, install.CockroachNodeCertsDir))
 		require.NoError(t, err)
 		require.NoError(t, err)
 		err = c.RunE(ctx, c.Node(1), fmt.Sprintf("./workload init connectionlatency --user testuser --secure '%s'", urlTemplate("localhost")))

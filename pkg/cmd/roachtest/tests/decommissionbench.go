@@ -925,7 +925,7 @@ func runSingleDecommission(
 
 	if drainFirst {
 		h.t.Status(fmt.Sprintf("draining node%d", target))
-		cmd := fmt.Sprintf("./cockroach node drain --certs-dir=certs --port={pgport%s} --self", c.Node(target))
+		cmd := fmt.Sprintf("./cockroach node drain --certs-dir=%s --port={pgport%s} --self", install.CockroachNodeCertsDir, c.Node(target))
 		if err := h.c.RunE(ctx, h.c.Node(target), cmd); err != nil {
 			return err
 		}

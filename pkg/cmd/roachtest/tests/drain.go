@@ -136,7 +136,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 			// of server.shutdown.initial_wait, server.shutdown.connections.timeout,
 			// server.shutdown.transactions.timeout times two, and
 			// server.shutdown.lease_transfer_iteration.timeout.
-			fmt.Sprintf("./cockroach node drain --self --drain-wait=10s --certs-dir=certs --port={pgport:%d}", nodeToDrain),
+			fmt.Sprintf("./cockroach node drain --self --drain-wait=10s --certs-dir=%s --port={pgport:%d}", install.CockroachNodeCertsDir, nodeToDrain),
 		)
 		if err != nil {
 			return err
@@ -259,7 +259,7 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 		t.Status(fmt.Sprintf("draining node %d", nodeToDrain))
 		return c.RunE(ctx,
 			c.Node(nodeToDrain),
-			fmt.Sprintf("./cockroach node drain --self --drain-wait=600s --certs-dir=certs --port={pgport:%d}", nodeToDrain),
+			fmt.Sprintf("./cockroach node drain --self --drain-wait=600s --certs-dir=%s --port={pgport:%d}", install.CockroachNodeCertsDir, nodeToDrain),
 		)
 	})
 
@@ -338,7 +338,7 @@ func runClusterNotAtQuorum(ctx context.Context, t test.Test, c cluster.Cluster) 
 	results, _ := c.RunWithDetailsSingleNode(
 		ctx,
 		t.L(),
-		c.Node(3), "./cockroach node drain --self --drain-wait=10s --certs-dir=certs --port={pgport:3}")
+		c.Node(3), fmt.Sprintf("./cockroach node drain --self --drain-wait=10s --certs-dir=%s --port={pgport:3}", install.CockroachNodeCertsDir))
 	t.L().Printf("drain output:\n%s\n%s\n", results.Stdout, results.Stderr)
 	require.Regexp(t, "(cluster settings require a value of at least|could not check drain related cluster settings)", results.Stderr)
 }

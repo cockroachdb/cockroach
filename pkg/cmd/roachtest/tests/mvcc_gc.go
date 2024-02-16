@@ -638,7 +638,7 @@ func sendBatchRequest(
 	}
 	cmd := roachtestutil.NewCommand("./cockroach debug send-kv-batch").
 		Arg(requestFileName).
-		Flag("certs-dir", "certs").
+		Flag("certs-dir", install.CockroachNodeCertsDir).
 		Flag("host", fmt.Sprintf("localhost:{pgport:%d}", node)).
 		String()
 	res, err := c.RunWithDetailsSingleNode(

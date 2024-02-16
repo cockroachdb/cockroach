@@ -1378,7 +1378,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				t.Fatal(err)
 			}
 			// cockroach gen haproxy does not support specifying a non root user
-			pgurl, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), "certs", roachprod.PGURLOptions{
+			pgurl, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
 				External: true,
 				Auth:     install.AuthRootCert,
 				Secure:   c.IsSecure(),
