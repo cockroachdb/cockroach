@@ -213,17 +213,17 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The total number of full table/index scans ${tooltipSelection}.`}
+      tooltip={`The total number of full table/index scans per second ${tooltipSelection}.`}
       showMetricsInTooltip={true}
     >
-      <Axis label="full scans">
+      <Axis label="full scans per second">
         {_.map(nodeIDs, node => (
           <Metric
             key={node}
             name="cr.node.sql.full.scan.count"
             title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
-            downsampleMax
+            nonNegativeRate
           />
         ))}
       </Axis>
