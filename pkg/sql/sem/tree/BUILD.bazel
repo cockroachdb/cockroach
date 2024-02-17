@@ -5,6 +5,7 @@ load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 go_library(
     name = "tree",
     srcs = [
+        "adjust_constants.go",
         "alter_backup.go",
         "alter_backup_schedule.go",
         "alter_changefeed.go",
@@ -58,7 +59,6 @@ go_library(
         "function_definition.go",
         "function_name.go",
         "grant.go",
-        "hide_constants.go",
         "import.go",
         "indexed_vars.go",
         "insert.go",
