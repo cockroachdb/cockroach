@@ -551,6 +551,15 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			timingTag.start("sst")
 			// All batch operations are guaranteed to be point key or range key puts.
 			for batchReader.Next() {
+				// Verify value checksum to catch data corruption
+				// TODO: abstract the verification logic with engine iterator similar
+				// to the implmentation of verifyingMVCCIterator.
+				if snapshotChecksumVerification.Get(&s.ClusterSettings().SV) {
+					val := roachpb.MakeValueFromBytes(batchReader.Value())
+					if err = val.Verify(batchReader.Key()); err != nil {
+						return noSnap, err
+					}
+				}
 				switch batchReader.KeyKind() {
 				case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
 					key, err := batchReader.EngineKey()
@@ -1602,6 +1611,15 @@ var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
 	"threshold after which snapshot SST writes must fsync",
 	kvserverbase.BulkIOWriteBurst,
 	settings.PositiveInt,
+)
+
+// snapshotChecksumVerification is the flag to enable/ disable check sum
+// verification when receiving snapshots.
+var snapshotChecksumVerification = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.snapshot_receiver.checksum_verification.enabled",
+	"flag to enable/disable checksum verification during raft snapshot process",
+	true,
 )
 
 // SendEmptySnapshot creates an OutgoingSnapshot for the input range
