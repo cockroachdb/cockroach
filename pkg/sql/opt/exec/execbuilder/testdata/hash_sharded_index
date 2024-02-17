@@ -28,7 +28,7 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_a_shard_11_comp, column1, check1)
-    │ render check1: crdb_internal_a_shard_11_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    │ render check1: crdb_internal_a_shard_11_comp IN (0, 1, __more1_10__, 10)
     │ render column1: column1
     │ render crdb_internal_a_shard_11_comp: crdb_internal_a_shard_11_comp
     │
@@ -307,7 +307,7 @@ vectorized: true
 │
 └── • render
     │ columns: (column1, crdb_internal_a_shard_12_comp, rowid_default, check1)
-    │ render check1: crdb_internal_a_shard_12_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+    │ render check1: crdb_internal_a_shard_12_comp IN (0, 1, __more1_10__, 11)
     │ render column1: column1
     │ render rowid_default: rowid_default
     │ render crdb_internal_a_shard_12_comp: crdb_internal_a_shard_12_comp
@@ -700,7 +700,7 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, column1, column2, crdb_internal_a_shard_8_comp, crdb_internal_a_shard_8, a, b, upsert_crdb_internal_a_shard_8, upsert_a)
-        │ render check1: upsert_crdb_internal_a_shard_8 IN (0, 1, 2, 3, 4, 5, 6, 7)
+        │ render check1: upsert_crdb_internal_a_shard_8 IN (0, 1, __more1_10__, 7)
         │ render column1: column1
         │ render column2: column2
         │ render crdb_internal_a_shard_8_comp: crdb_internal_a_shard_8_comp
@@ -754,7 +754,7 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_a_shard_8_comp, column1, column2, check1)
-    │ render check1: crdb_internal_a_shard_8_comp IN (0, 1, 2, 3, 4, 5, 6, 7)
+    │ render check1: crdb_internal_a_shard_8_comp IN (0, 1, __more1_10__, 7)
     │ render column1: column1
     │ render column2: column2
     │ render crdb_internal_a_shard_8_comp: crdb_internal_a_shard_8_comp
@@ -791,7 +791,7 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_a_shard_8_comp, column1, column2, check1)
-    │ render check1: crdb_internal_a_shard_8_comp IN (0, 1, 2, 3, 4, 5, 6, 7)
+    │ render check1: crdb_internal_a_shard_8_comp IN (0, 1, __more1_10__, 7)
     │ render column1: column1
     │ render column2: column2
     │ render crdb_internal_a_shard_8_comp: crdb_internal_a_shard_8_comp
@@ -894,7 +894,7 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, column1, column2, crdb_internal_b_shard_8_comp, a, b, crdb_internal_b_shard_8)
-        │ render check1: crdb_internal_b_shard_8_comp IN (0, 1, 2, 3, 4, 5, 6, 7)
+        │ render check1: crdb_internal_b_shard_8_comp IN (0, 1, __more1_10__, 7)
         │ render column1: column1
         │ render column2: column2
         │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
@@ -943,7 +943,7 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, column1, column2, crdb_internal_b_shard_8_comp, a, b, crdb_internal_b_shard_8, upsert_b, upsert_crdb_internal_b_shard_8)
-        │ render check1: upsert_crdb_internal_b_shard_8 IN (0, 1, 2, 3, 4, 5, 6, 7)
+        │ render check1: upsert_crdb_internal_b_shard_8 IN (0, 1, __more1_10__, 7)
         │ render column1: column1
         │ render column2: column2
         │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
@@ -1005,7 +1005,7 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, column1, column2, crdb_internal_b_shard_8_comp, a, b, crdb_internal_b_shard_8, upsert_b, upsert_crdb_internal_b_shard_8)
-        │ render check1: upsert_crdb_internal_b_shard_8 IN (0, 1, 2, 3, 4, 5, 6, 7)
+        │ render check1: upsert_crdb_internal_b_shard_8 IN (0, 1, __more1_10__, 7)
         │ render column1: column1
         │ render column2: column2
         │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
@@ -1067,7 +1067,7 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, column1, column2, crdb_internal_b_shard_8_comp, a, b, crdb_internal_b_shard_8)
-        │ render check1: crdb_internal_b_shard_8_comp IN (0, 1, 2, 3, 4, 5, 6, 7)
+        │ render check1: crdb_internal_b_shard_8_comp IN (0, 1, __more1_10__, 7)
         │ render column1: column1
         │ render column2: column2
         │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
@@ -1126,7 +1126,7 @@ vectorized: true
 │
 └── • render
     │ columns: (column1, column2, crdb_internal_b_shard_8_comp, check1)
-    │ render check1: crdb_internal_b_shard_8_comp IN (0, 1, 2, 3, 4, 5, 6, 7)
+    │ render check1: crdb_internal_b_shard_8_comp IN (0, 1, __more1_10__, 7)
     │ render column1: column1
     │ render column2: column2
     │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
@@ -1184,7 +1184,7 @@ vectorized: true
 │
 └── • render
     │ columns: (column1, column2, crdb_internal_b_shard_8_comp, check1)
-    │ render check1: crdb_internal_b_shard_8_comp IN (0, 1, 2, 3, 4, 5, 6, 7)
+    │ render check1: crdb_internal_b_shard_8_comp IN (0, 1, __more1_10__, 7)
     │ render column1: column1
     │ render column2: column2
     │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
@@ -1242,7 +1242,7 @@ vectorized: true
 │
 └── • render
     │ columns: (column1, column2, crdb_internal_b_shard_8_comp, check1)
-    │ render check1: crdb_internal_b_shard_8_comp IN (0, 1, 2, 3, 4, 5, 6, 7)
+    │ render check1: crdb_internal_b_shard_8_comp IN (0, 1, __more1_10__, 7)
     │ render column1: column1
     │ render column2: column2
     │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
@@ -1282,7 +1282,7 @@ vectorized: true
 │
 └── • render
     │ columns: (column1, column2, crdb_internal_b_shard_8_comp, check1)
-    │ render check1: crdb_internal_b_shard_8_comp IN (0, 1, 2, 3, 4, 5, 6, 7)
+    │ render check1: crdb_internal_b_shard_8_comp IN (0, 1, __more1_10__, 7)
     │ render column1: column1
     │ render column2: column2
     │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp

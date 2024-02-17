@@ -293,6 +293,38 @@ func TestFormatUntypedExpr(t *testing.T) {
 	}
 }
 
+func TestFmtShortenConstants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testData := []struct {
+		expr     string
+		expected string
+	}{
+		{`VALUES (1), (2)`, `VALUES (1), (2)`},
+		{`VALUES (1), (2), (3), (4)`, `VALUES (1), (2), (__more1_10__), (4)`},
+		{`VALUES (1), (2), (3), (4), (5), (6)`, `VALUES (1), (2), (__more1_10__), (6)`},
+		{`VALUES (ARRAY[1, 2])`, `VALUES (ARRAY[1, 2])`},
+		{`VALUES (ARRAY[1, 2, 3, 4])`, `VALUES (ARRAY[1, 2, __more1_10__, 4])`},
+		{`VALUES (ARRAY[1, 2, 3, 4, 5, 6])`, `VALUES (ARRAY[1, 2, __more1_10__, 6])`},
+		{`SELECT (1, 2)`, `SELECT (1, 2)`},
+		{`SELECT (1, 2, 3, 4)`, `SELECT (1, 2, __more1_10__, 4)`},
+		{`SELECT (1, 2, 3, 4, 5, 6)`, `SELECT (1, 2, __more1_10__, 6)`},
+	}
+
+	for i, test := range testData {
+		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
+			stmt, err := parser.ParseOne(test.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stmtStr := tree.AsStringWithFlags(stmt.AST, tree.FmtShortenConstants)
+			if stmtStr != test.expected {
+				t.Fatalf("expected %q, got %q", test.expected, stmtStr)
+			}
+		})
+	}
+}
+
 func TestFormatExpr2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
