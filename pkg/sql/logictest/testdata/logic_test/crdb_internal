@@ -1647,3 +1647,19 @@ USE test;
 DROP DATABASE test_cross_db;
 
 subtest end
+
+
+# In #119253 we observed a deadlock when visiting leases inside crdb_internal.lease
+# between the lease manager and the authorization check for each descriptor. This
+# test validates that this is no longer the case.
+subtest allow_role_memberships_to_change_during_transaction
+
+user testuser
+
+statement ok
+set allow_role_memberships_to_change_during_transaction=true
+
+statement ok
+SELECT  * FROM crdb_internal.leases;
+
+subtest end
