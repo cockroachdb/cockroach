@@ -287,11 +287,15 @@ func uriFmtStringAndArgs(uris []string, startIndex int) (string, []interface{}) 
 // span.
 func waitForTableSplit(t *testing.T, conn *gosql.DB, tableName, dbName string) {
 	t.Helper()
+	query := fmt.Sprintf(`SELECT count(*)
+  FROM crdb_internal.ranges
+ WHERE start_key = crdb_internal.table_span('%s.%s'::regclass::oid::int)[1]`,
+		tree.NameString(dbName),
+		tree.NameString(tableName))
+
 	testutils.SucceedsSoon(t, func() error {
 		count := 0
-		if err := conn.QueryRow(
-			fmt.Sprintf("SELECT count(*) FROM [SHOW RANGES FROM TABLE %s.%s]",
-				tree.NameString(dbName), tree.NameString(tableName))).Scan(&count); err != nil {
+		if err := conn.QueryRow(query).Scan(&count); err != nil {
 			return err
 		}
 		if count == 0 {
