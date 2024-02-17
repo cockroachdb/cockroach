@@ -90,7 +90,7 @@ func emitInternal(
 		// This field contains the original subquery (which could have been modified
 		// by optimizer transformations).
 		if s.ExprNode != nil {
-			flags := tree.FmtSimple
+			flags := tree.FmtSimple | tree.FmtShortenConstants
 			if e.ob.flags.HideValues {
 				flags |= tree.FmtHideConstants
 			}
