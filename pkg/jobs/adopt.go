@@ -262,7 +262,7 @@ func (r *Registry) resumeJob(
 		return nil
 	}
 
-	resumer, err := r.createResumer(job, r.settings)
+	resumer, err := r.createResumer(job)
 	if err != nil {
 		return err
 	}
