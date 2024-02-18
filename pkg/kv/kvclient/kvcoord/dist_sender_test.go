@@ -216,6 +216,10 @@ func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) 
 	return false
 }
 
+func (l *simpleTransportAdapter) Reset() {
+	l.nextReplicaIdx = 0
+}
+
 func (l *simpleTransportAdapter) Release() {}
 
 func makeGossip(t *testing.T, stopper *stop.Stopper, rpcContext *rpc.Context) *gossip.Gossip {
