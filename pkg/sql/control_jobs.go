@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
@@ -66,30 +67,26 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
-		job, err := reg.LoadJobWithTxn(params.ctx, jobspb.JobID(jobID), params.p.InternalSQLTxn())
-		if err != nil {
+		if err := reg.UpdateJobWithTxn(params.ctx, jobspb.JobID(jobID), params.p.InternalSQLTxn(),
+			func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+				if err := jobsauth.Authorize(params.ctx, params.p,
+					md.ID, md.Payload, jobsauth.ControlAccess); err != nil {
+					return err
+				}
+				switch n.desiredStatus {
+				case jobs.StatusPaused:
+					return ju.PauseRequested(params.ctx, txn, md, n.reason)
+				case jobs.StatusRunning:
+					return ju.Unpaused(params.ctx, md)
+				case jobs.StatusCanceled:
+					return ju.CancelRequested(params.ctx, md)
+				default:
+					return errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
+				}
+			}); err != nil {
 			return err
 		}
 
-		payload := job.Payload()
-		if err := jobsauth.Authorize(params.ctx, params.p,
-			job.ID(), &payload, jobsauth.ControlAccess); err != nil {
-			return err
-		}
-		ctrl := job.WithTxn(params.p.InternalSQLTxn())
-		switch n.desiredStatus {
-		case jobs.StatusPaused:
-			err = ctrl.PauseRequested(params.ctx, n.reason)
-		case jobs.StatusRunning:
-			err = ctrl.Unpaused(params.ctx)
-		case jobs.StatusCanceled:
-			err = ctrl.CancelRequested(params.ctx)
-		default:
-			err = errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
-		}
-		if err != nil {
-			return err
-		}
 		n.numRows++
 	}
 	switch n.desiredStatus {
