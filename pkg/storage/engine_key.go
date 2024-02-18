@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -362,4 +364,58 @@ func (lk LockTableKey) EncodedSize() int64 {
 type EngineRangeKeyValue struct {
 	Version []byte
 	Value   []byte
+}
+
+// Verify ensures the checksum of the current batch entry matches the data.
+// Returns an error on checksum mismatch.
+func (key *EngineKey) Verify(value []byte) error {
+	if key.IsMVCCKey() {
+		mvccKey, err := key.ToMVCCKey()
+		if err != nil {
+			return err
+		}
+		if mvccKey.IsValue() {
+			return decodeMVCCValueAndVerify(mvccKey.Key, value)
+		} else {
+			return decodeMVCCMetaAndVerify(mvccKey.Key, value)
+		}
+	} else if key.IsLockTableKey() {
+		lockTableKey, err := key.ToLockTableKey()
+		if err != nil {
+			return err
+		}
+		return decodeMVCCMetaAndVerify(lockTableKey.Key, value)
+	}
+	return decodeMVCCMetaAndVerify(key.Key, value)
+}
+
+// decodeMVCCValueAndVerify will try to decode the value as
+// MVCCValue and then verify the checksum.
+func decodeMVCCValueAndVerify(key roachpb.Key, value []byte) error {
+	mvccValue, ok, err := tryDecodeSimpleMVCCValue(value)
+	if !ok && err == nil {
+		mvccValue, err = decodeExtendedMVCCValue(value)
+	}
+	if err != nil {
+		return err
+	}
+	return mvccValue.Value.Verify(key)
+}
+
+// decodeMVCCMetaAndVerify will try to decode the value as
+// enginepb.MVCCMetadata and then try to  convert the rawbytes
+// as MVCCValue then verify the checksum.
+func decodeMVCCMetaAndVerify(key roachpb.Key, value []byte) error {
+	// TODO(lyang24): refactor to avoid allocation for MVCCMetadata
+	// per each call.
+	var meta enginepb.MVCCMetadata
+	// Time series data might fail the decoding i.e.
+	// key 61
+	// value 0262000917bba16e0aea5ca80900
+	// N.B. we skip checksum checking in this case.
+	// nolint:returnerrcheck
+	if err := protoutil.Unmarshal(value, &meta); err != nil {
+		return nil
+	}
+	return decodeMVCCValueAndVerify(key, meta.RawBytes)
 }
