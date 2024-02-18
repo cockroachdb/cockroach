@@ -139,6 +139,36 @@ func (r *BatchReader) Value() []byte {
 	}
 }
 
+// Verify verifies the checksums of the current record in the batch entry
+// will return error on mismatch.
+func (r *BatchReader) Verify() error {
+	key, err := r.EngineKey()
+	if err != nil {
+		return err
+	}
+	// TODO: verify values with other encoding types.
+	if !key.IsMVCCKey() {
+		return nil
+	}
+	mvccKey, err := key.ToMVCCKey()
+	if err != nil {
+		return err
+	}
+	if mvccKey.IsValue() {
+		mvccValue, ok, err := tryDecodeSimpleMVCCValue(r.Value())
+		if !ok && err == nil {
+			mvccValue, err = decodeExtendedMVCCValue(r.Value())
+		}
+		if err == nil {
+			err = mvccValue.Value.Verify(mvccKey.Key)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return err
+}
+
 // EndKey returns the raw end key of the current ranged batch entry.
 func (r *BatchReader) EndKey() ([]byte, error) {
 	var rawKey []byte

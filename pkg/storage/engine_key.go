@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -362,4 +364,47 @@ func (lk LockTableKey) EncodedSize() int64 {
 type EngineRangeKeyValue struct {
 	Version []byte
 	Value   []byte
+}
+
+// Verify ensures the checksum of the current batch entry matches the data.
+// Returns an error on checksum mismatch.
+func (key *EngineKey) Verify(value []byte) error {
+	if key.IsMVCCKey() {
+		mvccKey, err := key.ToMVCCKey()
+		if err != nil {
+			return err
+		}
+		if mvccKey.IsValue() {
+			return DecodeMVCCValueAndVerify(mvccKey.Key, value)
+		} else {
+			return DecodeMVCCMetaAndVerify(mvccKey.Key, value)
+		}
+	} else if key.IsLockTableKey() {
+		lockTableKey, err := key.ToLockTableKey()
+		if err != nil {
+			return err
+		}
+		return DecodeMVCCMetaAndVerify(lockTableKey.Key, value)
+	}
+	return DecodeMVCCMetaAndVerify(key.Key, value)
+}
+
+func DecodeMVCCValueAndVerify(key roachpb.Key, value []byte) error {
+	mvccValue, ok, err := tryDecodeSimpleMVCCValue(value)
+	if !ok && err == nil {
+		mvccValue, err = decodeExtendedMVCCValue(value)
+	}
+	if err == nil {
+		err = mvccValue.Value.Verify(key)
+	}
+	return err
+}
+
+func DecodeMVCCMetaAndVerify(key roachpb.Key, value []byte) error {
+	var meta enginepb.MVCCMetadata
+	if err := protoutil.Unmarshal(value, &meta); err != nil {
+		return errors.Wrapf(err, "Failed to unmarshal MVCCMetadata")
+	}
+	v := meta.RawBytes
+	return roachpb.MakeValueFromBytes(v).Verify(key)
 }

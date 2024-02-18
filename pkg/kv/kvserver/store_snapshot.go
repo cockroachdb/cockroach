@@ -549,15 +549,22 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 
 			timingTag.start("sst")
+			verifyCheckSum := snapshotChecksumVerification.Get(&s.ClusterSettings().SV)
 			// All batch operations are guaranteed to be point key or range key puts.
 			for batchReader.Next() {
-				switch batchReader.KeyKind() {
-				case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
-					key, err := batchReader.EngineKey()
-					if err != nil {
+				ek, err := batchReader.EngineKey()
+				if err != nil {
+					return noSnap, err
+				}
+				// Verify value checksum to catch data corruption.
+				if verifyCheckSum {
+					if err = ek.Verify(batchReader.Value()); err != nil {
 						return noSnap, err
 					}
-					if err := msstw.Put(ctx, key, batchReader.Value()); err != nil {
+				}
+				switch batchReader.KeyKind() {
+				case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
+					if err := msstw.Put(ctx, ek, batchReader.Value()); err != nil {
 						return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
 					}
 				case pebble.InternalKeyKindDelete, pebble.InternalKeyKindDeleteSized:
@@ -600,10 +607,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 						}
 					}
 				case pebble.InternalKeyKindRangeKeySet:
-					start, err := batchReader.EngineKey()
-					if err != nil {
-						return noSnap, err
-					}
+					start := ek
 					end, err := batchReader.EngineEndKey()
 					if err != nil {
 						return noSnap, err
@@ -1602,6 +1606,15 @@ var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
 	"threshold after which snapshot SST writes must fsync",
 	kvserverbase.BulkIOWriteBurst,
 	settings.PositiveInt,
+)
+
+// snapshotChecksumVerification is the flag to enable/ disable check sum
+// verification when receiving snapshots.
+var snapshotChecksumVerification = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.snapshot_receiver.checksum_verification.enabled",
+	"flag to enable/disable checksum verification during raft snapshot process",
+	true,
 )
 
 // SendEmptySnapshot creates an OutgoingSnapshot for the input range
