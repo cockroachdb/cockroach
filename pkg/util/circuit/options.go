@@ -42,7 +42,8 @@ type Options struct {
 	AsyncProbe func(report func(error), done func())
 
 	// EventHandler receives events from the Breaker. For an implementation that
-	// performs unstructured logging, see EventLogger.
+	// performs unstructured logging, see EventLogger. Can be nil if no event
+	// handler is needed.
 	EventHandler EventHandler
 
 	// signalInterceptor gets to see and change the return value of the Signal
