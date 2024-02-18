@@ -545,6 +545,7 @@ type DistSender struct {
 	transportFactory   TransportFactory
 	rpcRetryOptions    retry.Options
 	asyncSenderSem     *quotapool.IntPool
+	circuitBreakers    *DistSenderCircuitBreakers
 
 	// batchInterceptor is set for tenants; when set, information about all
 	// BatchRequests and BatchResponses are passed through this interceptor, which
@@ -725,6 +726,13 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 			ds.rangeCache.EvictByKey(ctx, roachpb.RKeyMin)
 		})
 	}
+
+	// Set up circuit breakers and spawn the manager goroutine, which runs until
+	// the stopper stops. This can only error if the server is shutting down, so
+	// ignore the returned error.
+	ds.circuitBreakers = NewDistSenderCircuitBreakers(
+		ds.stopper, ds.st, ds.transportFactory, ds.metrics)
+	_ = ds.circuitBreakers.Start()
 
 	if cfg.TestingKnobs.LatencyFunc != nil {
 		ds.latencyFunc = cfg.TestingKnobs.LatencyFunc
@@ -2454,23 +2462,38 @@ func (ds *DistSender) sendToReplicas(
 		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchRequest(comparisonResult, int64(ba.Size()))
 
 		tBegin := timeutil.Now() // for slow log message
-		br, err = transport.SendNext(ctx, ba)
-		if dur := timeutil.Since(tBegin); dur > slowDistSenderReplicaThreshold {
-			var s redact.StringBuilder
-			slowReplicaRPCWarningStr(&s, ba, dur, attempts, err, br)
-			if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
-				// Note that these RPC may or may not have succeeded. Errors are counted separately below.
-				ds.metrics.SlowReplicaRPCs.Inc(1)
-				log.Warningf(ctx, "slow replica RPC: %v", &s)
-			} else {
-				log.Eventf(ctx, "slow replica RPC: %v", &s)
+		sendCtx, cbToken, cbErr := ds.circuitBreakers.ForReplica(desc, &curReplica).
+			Track(ctx, ba, tBegin.UnixNano())
+		if cbErr != nil {
+			// Circuit breaker is tripped. err will be handled below.
+			err = cbErr
+			transport.SkipReplica()
+		} else {
+			br, err = transport.SendNext(sendCtx, ba)
+			tEnd := timeutil.Now()
+			cbToken.Done(br, err, tEnd.UnixNano())
+
+			if dur := tEnd.Sub(tBegin); dur > slowDistSenderReplicaThreshold {
+				var s redact.StringBuilder
+				slowReplicaRPCWarningStr(&s, ba, dur, attempts, err, br)
+				if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
+					// Note that these RPC may or may not have succeeded. Errors are counted separately below.
+					ds.metrics.SlowReplicaRPCs.Inc(1)
+					log.Warningf(ctx, "slow replica RPC: %v", &s)
+				} else {
+					log.Eventf(ctx, "slow replica RPC: %v", &s)
+				}
 			}
 		}
 
 		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchResponse(comparisonResult, int64(br.Size()))
 		ds.maybeIncrementErrCounters(br, err)
 
-		if err != nil {
+		if cbErr != nil {
+			log.VErrEventf(ctx, 2, "circuit breaker error: %s", cbErr)
+			// We know the request did not start, so the error is not ambiguous.
+
+		} else if err != nil {
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
 
 			if grpcutil.IsAuthError(err) {
