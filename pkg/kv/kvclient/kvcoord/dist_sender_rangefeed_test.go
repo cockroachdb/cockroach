@@ -100,7 +100,7 @@ func (c *internalClientCounts) Inc(ic rpc.RestrictedInternalClient) {
 }
 
 type countConnectionsTransport struct {
-	wrapped             kvcoord.Transport
+	kvcoord.Transport
 	counts              *internalClientCounts
 	wrapRangeFeedClient wrapRangeFeedClientFn
 	rfStreamEnabled     bool
@@ -108,23 +108,13 @@ type countConnectionsTransport struct {
 
 var _ kvcoord.Transport = (*countConnectionsTransport)(nil)
 
-func (c *countConnectionsTransport) IsExhausted() bool {
-	return c.wrapped.IsExhausted()
-}
-
-func (c *countConnectionsTransport) SendNext(
-	ctx context.Context, request *kvpb.BatchRequest,
-) (*kvpb.BatchResponse, error) {
-	return c.wrapped.SendNext(ctx, request)
-}
-
 type testFeedCtxKey struct{}
 type useMuxRangeFeedCtxKey struct{}
 
 func (c *countConnectionsTransport) NextInternalClient(
 	ctx context.Context,
 ) (rpc.RestrictedInternalClient, error) {
-	client, err := c.wrapped.NextInternalClient(ctx)
+	client, err := c.Transport.NextInternalClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -149,22 +139,6 @@ func (c *countConnectionsTransport) NextInternalClient(
 	return tc, nil
 }
 
-func (c *countConnectionsTransport) NextReplica() roachpb.ReplicaDescriptor {
-	return c.wrapped.NextReplica()
-}
-
-func (c *countConnectionsTransport) SkipReplica() {
-	c.wrapped.SkipReplica()
-}
-
-func (c *countConnectionsTransport) MoveToFront(descriptor roachpb.ReplicaDescriptor) bool {
-	return c.wrapped.MoveToFront(descriptor)
-}
-
-func (c *countConnectionsTransport) Release() {
-	c.wrapped.Release()
-}
-
 func makeTransportFactory(
 	rfStreamEnabled bool, counts *internalClientCounts, wrapFn wrapRangeFeedClientFn,
 ) func(kvcoord.TransportFactory) kvcoord.TransportFactory {
@@ -175,7 +149,7 @@ func makeTransportFactory(
 				return nil, err
 			}
 			countingTransport := &countConnectionsTransport{
-				wrapped:             transport,
+				Transport:           transport,
 				rfStreamEnabled:     rfStreamEnabled,
 				counts:              counts,
 				wrapRangeFeedClient: wrapFn,

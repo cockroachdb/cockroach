@@ -85,6 +85,11 @@ type Transport interface {
 	// transport.
 	MoveToFront(roachpb.ReplicaDescriptor) bool
 
+	// Reset moves back to the first replica in the transport, according to the
+	// current ordering. This may not be the same replica as MoveToFront if it was
+	// called prior, which places the replica at the next rather than first index.
+	Reset()
+
 	// Release releases any resources held by this Transport.
 	Release()
 }
@@ -283,6 +288,10 @@ func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) bool {
 	return false
 }
 
+func (gt *grpcTransport) Reset() {
+	gt.nextReplicaIdx = 0
+}
+
 // splitHealthy splits the grpcTransport's replica slice into healthy replica
 // and unhealthy replica, based on their connection state. Healthy replicas will
 // be rearranged first in the replicas slice, and unhealthy replicas will be
@@ -393,5 +402,7 @@ func (s *senderTransport) SkipReplica() {
 func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) bool {
 	return true
 }
+
+func (s *senderTransport) Reset() {}
 
 func (s *senderTransport) Release() {}
