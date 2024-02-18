@@ -1541,7 +1541,7 @@ func TestJobLifecycle(t *testing.T) {
 			}, registry.MakeJobID(), txn)
 			return errors.New("boom")
 		}))
-		if err := job.Started(ctx); !testutils.IsError(err, "not found in system.jobs table") {
+		if err := job.Started(ctx); !testutils.IsError(err, "does not exist") {
 			t.Fatalf("unexpected error %v", err)
 		}
 	})

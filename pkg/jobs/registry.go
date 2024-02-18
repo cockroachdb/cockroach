@@ -186,10 +186,7 @@ type Registry struct {
 func (r *Registry) UpdateJobWithTxn(
 	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, updateFunc UpdateFn,
 ) error {
-	job, err := r.LoadJobWithTxn(ctx, jobID, txn)
-	if err != nil {
-		return err
-	}
+	job := Job{registry: r, id: jobID}
 	return job.WithTxn(txn).Update(ctx, updateFunc)
 }
 
@@ -798,7 +795,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 	if err != nil {
 		return err
 	}
-	resumer, err := r.createResumer(j, r.settings)
+	resumer, err := r.createResumer(j)
 	if err != nil {
 		return err
 	}
@@ -1292,7 +1289,7 @@ func (r *Registry) getJobFn(
 	if err != nil {
 		return nil, nil, err
 	}
-	resumer, err := r.createResumer(job, r.settings)
+	resumer, err := r.createResumer(job)
 	if err != nil {
 		return job, nil, errors.Errorf("job %d is not controllable", id)
 	}
@@ -1546,8 +1543,16 @@ func RegisterConstructor(typ jobspb.Type, fn Constructor, opts ...RegisterOption
 	globalMu.options[typ] = resOpts
 }
 
-func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer, error) {
+func (r *Registry) createResumer(job *Job) (Resumer, error) {
 	payload := job.Payload()
+	fn, err := r.resumerConstructorForPayload(&payload)
+	if err != nil {
+		return nil, err
+	}
+	return fn(job, r.settings), nil
+}
+
+func (r *Registry) resumerConstructorForPayload(payload *jobspb.Payload) (Constructor, error) {
 	fn := func() Constructor {
 		globalMu.Lock()
 		defer globalMu.Unlock()
@@ -1558,9 +1563,11 @@ func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer,
 	}
 	if v, ok := r.creationKnobs.Load(payload.Type()); ok {
 		wrapper := v.(func(Resumer) Resumer)
-		return wrapper(fn(job, settings)), nil
+		return func(job *Job, settings *cluster.Settings) Resumer {
+			return wrapper(fn(job, settings))
+		}, nil
 	}
-	return fn(job, settings), nil
+	return fn, nil
 }
 
 // stepThroughStateMachine implements the state machine of the job lifecycle.
