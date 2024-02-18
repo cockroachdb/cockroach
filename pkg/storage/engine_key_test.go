@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -329,6 +330,67 @@ var interestingEngineKeys = [][]byte{
 		Strength: lock.Exclusive,
 		TxnUUID:  uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8")),
 	}),
+}
+
+func TestEngineKeyVerifyMvcc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	b := eng.NewBatch()
+	defer b.Close()
+
+	// Test MVCC Key.
+	k := pointKey("mvccKey", 1)
+	v := MVCCValue{
+		Value: roachpb.MakeValueFromString("test"),
+	}
+	v.Value.InitChecksum(k.Key)
+	require.NoError(t, b.PutMVCC(k, v))
+	r, err := NewBatchReader(b.Repr())
+	require.NoError(t, err)
+	require.True(t, r.Next())
+	ek, _ := r.EngineKey()
+	require.NoError(t, ek.Verify(r.Value()))
+	// Simulate data corruption
+	r.value[len(r.value)-1]++
+	require.ErrorContains(t, ek.Verify(r.Value()), "invalid checksum")
+}
+
+func TestEngineKeyVerifyLockTableKV(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	b := eng.NewBatch()
+	defer b.Close()
+
+	// Test Lock table Key.
+	lk := LockTableKey{
+		Key:      keys.RangeDescriptorKey(roachpb.RKey("baz")), // causes a doubly-local range local key
+		Strength: lock.Exclusive,
+		TxnUUID:  uuid.MakeV4(),
+	}
+	mvccValue := MVCCValue{
+		Value: roachpb.MakeValueFromString("test"),
+	}
+	mvccValue.Value.InitChecksum(lk.Key)
+	ek, _ := lk.ToEngineKey(nil)
+	meta := enginepb.MVCCMetadata{
+		RawBytes: mvccValue.Value.RawBytes,
+	}
+	buf := make([]byte, meta.Size())
+	n, _ := protoutil.MarshalToSizedBuffer(&meta, buf)
+	require.NoError(t, b.PutEngineKey(ek, buf[:n]))
+	r, err := NewBatchReader(b.Repr())
+	require.NoError(t, err)
+	require.True(t, r.Next())
+	require.NoError(t, ek.Verify(r.Value()))
+	// Simulate data corruption
+	r.value[len(r.value)-1]++
+	require.ErrorContains(t, ek.Verify(r.Value()), "invalid checksum")
 }
 
 // FuzzEngineKeysInvariants fuzz tests various functions over engine keys,
