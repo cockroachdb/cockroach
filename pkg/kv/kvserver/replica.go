@@ -2464,3 +2464,8 @@ func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err er
 	ts, err = r.readProtectedTimestampsRLocked(ctx)
 	return err
 }
+
+// GetMutexForTesting returns the replica's mutex, for use in tests.
+func (r *Replica) GetMutexForTesting() *ReplicaMutex {
+	return &r.mu.ReplicaMutex
+}
