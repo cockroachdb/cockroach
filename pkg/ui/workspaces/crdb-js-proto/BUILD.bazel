@@ -1,0 +1,84 @@
+load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_run_binary", "js_test")
+load("@aspect_rules_js//npm:defs.bzl", "npm_package")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("//docs/generated/http:defs.bzl", "PROTOBUF_TARGETS")
+load("//pkg/ui/workspaces/db-console/src/js:defs.bzl", "proto_sources")
+
+npm_link_all_packages(name = "node_modules")
+
+genrule(
+    name = "protos",
+    srcs = [
+        ":node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es",
+        ":proto_sources",
+    ] + PROTOBUF_TARGETS,
+    outs = ["dist"],
+    cmd = """
+    mkdir -p $(OUTS);
+    DESCRIPTOR_SET_IN=$$(for word in $(SRCS); do echo $$word; done | grep '\\.bin$$' | tr -s '\\n' ':');
+    PROTO_PATHS=$$(for f in $(locations :proto_sources);
+        do if [[ "$$f" =~ ^.*/pkg/.*/_virtual_imports/.*_proto/.*.proto$$ ]];
+            then echo $$f | sed 's|.*pkg/.*/_virtual_imports/.*_proto/||' | sed 's|.bin$$||';
+        fi; done | sort -u);
+    export PATH=$$PATH:$$(dirname $(NODE_PATH));
+    $(location @com_google_protobuf//:protoc) \
+    --plugin=$(location :node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es) \
+    --es_out $(OUTS) \
+    --descriptor_set_in $$DESCRIPTOR_SET_IN \
+    --es_opt target=js+dts \
+    $$PROTO_PATHS""",
+    toolchains = ["@nodejs_toolchains//:resolved_toolchain"],
+    tools = [
+        "@com_google_protobuf//:protoc",
+        "@nodejs_toolchains//:resolved_toolchain",
+    ],
+)
+
+proto_sources(
+    name = "proto_sources",
+    protos = [
+        "//pkg/server/serverpb:serverpb_proto",
+        "//pkg/ts/tspb:tspb_proto",
+    ],
+)
+
+genrule(
+    name = "index_ts",
+    srcs = [":protos"],
+    outs = ["index.ts"],
+    cmd = """ABS_ROOT_PATH=$$(realpath $(SRCS));
+            for f in $$(find $$ABS_ROOT_PATH -name *.js); \
+            do filename=$$(basename -s .js $$f); \
+            filepath=$${f#$$ABS_ROOT_PATH/}; filepath=$${filepath%.js}; \
+            import_name=$${filepath/-/_}; \
+            echo export "*" as $${import_name////_} from \\"./$$(basename $(SRCS))/$${filepath}\\"\\; \
+            >> $@; done""",
+)
+
+ts_project(
+    name = "ts_project",
+    srcs = [
+        "tsconfig.json",
+        ":index_ts",
+        ":protos",
+    ],
+    tsconfig = "tsconfig.json",
+    validate = True,
+    deps = [":node_modules"],
+)
+
+npm_package(
+    name = "crdb-js-proto",
+    srcs = [
+        "package.json",
+        "tsconfig.json",
+        ":index_ts",
+        ":protos",
+        ":ts_project",
+    ],
+    package = "@cockroachlabs/crdb-js-proto",
+    visibility = ["//visibility:public"],
+)

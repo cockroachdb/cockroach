@@ -275,6 +275,7 @@ npm_translate_lock(
         "//pkg/ui:pnpm-workspace.yaml",
         "//pkg/ui/patches:topojson@3.0.2.patch",
         "//pkg/ui/workspaces/cluster-ui:package.json",
+        "//pkg/ui/workspaces/crdb-js-proto:package.json",
         "//pkg/ui/workspaces/db-console:package.json",
         "//pkg/ui/workspaces/db-console/src/js:package.json",
         "//pkg/ui/workspaces/e2e-tests:package.json",
