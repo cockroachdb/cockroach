@@ -36,7 +36,7 @@ func createActivityUpdateJobMigration(
 		Description:   "sql activity job",
 		Username:      username.NodeUserName(),
 		Details:       jobspb.AutoUpdateSQLActivityDetails{},
-		Progress:      jobspb.AutoConfigRunnerProgress{},
+		Progress:      jobspb.AutoUpdateSQLActivityProgress{},
 		NonCancelable: true, // The job can't be canceled, but it can be paused.
 	}
 

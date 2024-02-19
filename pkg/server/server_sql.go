@@ -55,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server/autoconfig"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
@@ -1035,7 +1034,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		EventsExporter:             cfg.eventsExporter,
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
-		AutoConfigProvider:         cfg.AutoConfigProvider,
 	}
 
 	if codec.ForSystemTenant() {
@@ -1115,12 +1113,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	if externalConnKnobs := cfg.TestingKnobs.ExternalConnection; externalConnKnobs != nil {
 		execCfg.ExternalConnectionTestingKnobs = externalConnKnobs.(*externalconn.TestingKnobs)
-	}
-	if autoConfigKnobs := cfg.TestingKnobs.AutoConfig; autoConfigKnobs != nil {
-		knobs := autoConfigKnobs.(*autoconfig.TestingKnobs)
-		if knobs.Provider != nil {
-			execCfg.AutoConfigProvider = knobs.Provider
-		}
 	}
 
 	statsRefresher := stats.MakeRefresher(
@@ -1720,8 +1712,6 @@ func (s *SQLServer) preStart(
 		}
 	}
 
-	s.waitForActiveAutoConfigEnvironments(ctx)
-
 	return nil
 }
 
@@ -1750,50 +1740,6 @@ func (s *SQLServer) startJobScheduler(ctx context.Context, knobs base.TestingKno
 		},
 		scheduledjobs.ProdJobSchedulerEnv,
 	)
-}
-
-// waitForActiveAutoConfigEnvironments waits until the set of
-// ActiveEnvironments is empty. ActiveEnvironments is empty once there
-// are no more tasks to run.
-//
-// This is sufficient to ensure all configuration task jobs have
-// completed becuase the environment runner only enqueues a task after
-// the previous task has completed and configuration profiles include
-// an "end task" that runs after all previous tasks.
-func (s *SQLServer) waitForActiveAutoConfigEnvironments(ctx context.Context) {
-	maxWait := 2 * time.Minute
-	serverKnobs := s.cfg.TestingKnobs.Server
-	if serverKnobs != nil && serverKnobs.(*TestingKnobs).AutoConfigProfileStartupWaitTime != nil {
-		maxWait = *serverKnobs.(*TestingKnobs).AutoConfigProfileStartupWaitTime
-	}
-
-	if maxWait == 0 {
-		log.Infof(ctx, "waiting for auto-configuration environments disabled")
-		return
-	}
-
-	envs := s.execCfg.AutoConfigProvider.ActiveEnvironments()
-	if len(envs) == 0 {
-		log.Infof(ctx, "auto-configuration environments not set or already complete")
-		return
-	}
-
-	log.Infof(ctx, "waiting up to %s for auto-configuration environments %v to complete", maxWait, envs)
-	ctx, cancel := context.WithTimeout(ctx, maxWait) // nolint:context
-	defer cancel()
-	retryCfg := retry.Options{
-		InitialBackoff: 100 * time.Millisecond,
-		MaxBackoff:     5 * time.Second,
-	}
-	waitStart := timeutil.Now()
-	for i := retry.StartWithCtx(ctx, retryCfg); i.Next(); {
-		envs := s.execCfg.AutoConfigProvider.ActiveEnvironments()
-		if len(envs) == 0 {
-			log.Infof(ctx, "auto-configuration environments reported no active tasks after %s", timeutil.Since(waitStart))
-			return
-		}
-	}
-	log.Warningf(ctx, "auto-configuration environments still running after %s, moving on", timeutil.Since(waitStart))
 }
 
 // startCheckService verifies that the tenant has the right

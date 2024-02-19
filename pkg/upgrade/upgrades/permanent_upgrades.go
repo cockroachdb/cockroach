@@ -74,7 +74,6 @@ func bootstrapCluster(
 		{"create default databases", createDefaultDbs},
 		{"add default SQL schema telemetry schedule", ensureSQLSchemaTelemetrySchedule},
 		{"create jobs metrics polling job", createJobsMetricsPollingJob},
-		{"create auto config runner job", createAutoConfigRunnerJob},
 		{"create sql activity updater job", createActivityUpdateJobMigration},
 		{"create mvcc stats job", createMVCCStatisticsJob},
 	} {

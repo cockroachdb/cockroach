@@ -176,8 +176,6 @@ go_library(
         "//pkg/server/apiconstants",
         "//pkg/server/apiutil",
         "//pkg/server/authserver",
-        "//pkg/server/autoconfig",
-        "//pkg/server/autoconfig/acprovider",
         "//pkg/server/debug",
         "//pkg/server/debug/pprofui",
         "//pkg/server/decommissioning",

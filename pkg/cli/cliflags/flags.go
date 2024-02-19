@@ -1445,12 +1445,6 @@ Disable the creation of a default dataset in the demo shell.
 This makes 'cockroach demo' faster to start.`,
 	}
 
-	ConfigProfile = FlagInfo{
-		Name:        "config-profile",
-		EnvVar:      "COCKROACH_CONFIG_PROFILE",
-		Description: `Select a configuration profile to apply.`,
-	}
-
 	GeoLibsDir = FlagInfo{
 		Name: "spatial-libs",
 		Description: `

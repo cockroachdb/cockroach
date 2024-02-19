@@ -219,7 +219,6 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 		args.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
 			DontUseJobs:                       true,
 			SkipJobMetricsPollingJobBootstrap: true,
-			SkipAutoConfigRunnerJobBootstrap:  true,
 			SkipUpdateSQLActivityJobBootstrap: true,
 			SkipMVCCStatisticsJobBootstrap:    true,
 		}

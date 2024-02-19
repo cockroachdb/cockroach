@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -267,10 +266,6 @@ type BaseConfig struct {
 	// through an OpenTelemetry Collector.
 	ObsServiceAddr string
 
-	// AutoConfigProvider provides auto-configuration tasks to apply on
-	// the cluster during server initialization.
-	AutoConfigProvider acprovider.Provider
-
 	// RPCListenerFactory provides an alternate implementation of
 	// ListenAndUpdateAddrs for use when creating gPRC
 	// listeners. This is set by in-memory tenants if the user has
@@ -316,7 +311,6 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.Stores = base.StoreSpecList{
 		Specs: []base.StoreSpec{storeSpec},
 	}
-	cfg.AutoConfigProvider = acprovider.NoTaskProvider{}
 	// We use the tag "n" here for both KV nodes and SQL instances,
 	// using the knowledge that the value part of a SQL instance ID
 	// container will prefix the value with the string "sql", resulting

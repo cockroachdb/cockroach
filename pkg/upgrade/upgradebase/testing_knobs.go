@@ -63,11 +63,6 @@ type TestingKnobs struct {
 	// job from being created.
 	SkipJobMetricsPollingJobBootstrap bool
 
-	// SkipAutoConfigRunnerJobBootstrap, if set, disables the
-	// clusterversion.V23_1_CreateAutoConfigRunnerJob upgrade, which prevents a
-	// job from being created.
-	SkipAutoConfigRunnerJobBootstrap bool
-
 	// AfterRunPermanentUpgrades is called after each call to
 	// RunPermanentUpgrades.
 	AfterRunPermanentUpgrades func()

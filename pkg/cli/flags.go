@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/configprofiles"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -389,10 +388,6 @@ func init() {
 		// attributes too? Would this be useful for e.g. SQL query
 		// planning?
 		cliflagcfg.StringFlag(f, &serverCfg.Attrs, cliflags.Attrs)
-		// Cluster initialization. We only do this for a regular start command;
-		// SQL-only servers get their initialization payload from their tenant
-		// configuration.
-		cliflagcfg.VarFlag(f, configprofiles.NewProfileSetter(&serverCfg.AutoConfigProvider), cliflags.ConfigProfile)
 	}
 
 	// Flags common to the start commands, the connect command, and the node join
@@ -832,7 +827,6 @@ func init() {
 		cliflagcfg.IntFlag(f, &demoCtx.HTTPPort, cliflags.DemoHTTPPort)
 		cliflagcfg.StringFlag(f, &demoCtx.ListeningURLFile, cliflags.ListeningURLFile)
 		cliflagcfg.StringFlag(f, &demoCtx.pidFile, cliflags.PIDFile)
-		cliflagcfg.VarFlag(f, configprofiles.NewProfileSetter(&demoCtx.AutoConfigProvider), cliflags.ConfigProfile)
 	}
 
 	{

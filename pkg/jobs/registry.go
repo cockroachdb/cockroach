@@ -315,9 +315,6 @@ const (
 	// JobMetricsPollerJobID A static job ID is used for the job metrics polling job.
 	JobMetricsPollerJobID = jobspb.JobID(101)
 
-	// AutoConfigRunnerJobID A static job ID is used for the auto config runner job.
-	AutoConfigRunnerJobID = jobspb.JobID(102)
-
 	// SqlActivityUpdaterJobID A static job ID is used for the SQL activity tables.
 	SqlActivityUpdaterJobID = jobspb.JobID(103)
 
