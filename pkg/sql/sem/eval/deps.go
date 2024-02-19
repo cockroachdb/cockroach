@@ -486,6 +486,68 @@ type SetCompactionConcurrencyFunc func(
 	ctx context.Context, nodeID, storeID int32, compactionConcurrency uint64,
 ) error
 
+// AuthorizationAccessor for checking authorization (e.g. desc privileges).
+type AuthorizationAccessor interface {
+	// CheckPrivilegeForTableID verifies that the user has `privilege` on the table
+	// denoted by `tableID`.
+	CheckPrivilegeForTableID(
+		ctx context.Context, tableID descpb.ID, privilege privilege.Kind,
+	) error
+
+	// HasPrivilege checks if the user has `privilege` on `descriptor`.
+	HasPrivilege(ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind, user username.SQLUsername) (bool, error)
+
+	// HasAnyPrivilege returns true if user has any privileges at all.
+	HasAnyPrivilege(ctx context.Context, privilegeObject privilege.Object) (bool, error)
+
+	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
+	CheckPrivilegeForUser(
+		ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind, user username.SQLUsername,
+	) error
+
+	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
+	CheckPrivilege(ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind) error
+
+	// CheckAnyPrivilege returns nil if user has any privileges at all.
+	CheckAnyPrivilege(ctx context.Context, descriptor privilege.Object) error
+
+	// UserHasAdminRole returns tuple of bool and error:
+	// (true, nil) means that the user has an admin role (i.e. root or node)
+	// (false, nil) means that the user has NO admin role
+	// (false, err) means that there was an error running the query on
+	// the `system.users` table
+	UserHasAdminRole(ctx context.Context, user username.SQLUsername) (bool, error)
+
+	// HasAdminRole checks if the current session's user has admin role.
+	HasAdminRole(ctx context.Context) (bool, error)
+
+	// MemberOfWithAdminOption looks up all the roles (direct and indirect) that 'member' is a member
+	// of and returns a map of role -> isAdmin.
+	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error)
+
+	// UserHasRoleOption converts the roleoption to its SQL column name and checks
+	// if the user has that option. Requires a valid transaction to be open.
+	//
+	// This check should be done on the version of the privilege that is stored in
+	// the role options table. Example: CREATEROLE instead of NOCREATEROLE.
+	// NOLOGIN instead of LOGIN.
+	UserHasRoleOption(ctx context.Context, user username.SQLUsername, roleOption roleoption.Option) (bool, error)
+
+	// HasRoleOption calls UserHasRoleOption with the current user.
+	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
+
+	// HasGlobalPrivilegeOrRoleOption returns a bool representing whether the current user
+	// has a global privilege or the corresponding legacy role option.
+	HasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) (bool, error)
+
+	// CheckGlobalPrivilegeOrRoleOption checks if the current user has a global privilege
+	// or the corresponding legacy role option, and returns an error if the user does not.
+	CheckGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) error
+
+	// User returns the username of the current session's user.
+	User() username.SQLUsername
+}
+
 // SessionAccessor is a limited interface to access session variables.
 type SessionAccessor interface {
 	// SetSessionVar sets a session variable to a new value. If isLocal is true,

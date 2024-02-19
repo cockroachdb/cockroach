@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -8659,6 +8660,58 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			},
 			Info:              "This function is used internally to implement the PLpgSQL FETCH and MOVE statements.",
 			Volatility:        volatility.Volatile,
+			CalledOnNullInput: true,
+		},
+	),
+	"crdb_internal.user_can_view_job": makeBuiltin(tree.FunctionProperties{
+		Category:         builtinconstants.CategorySystemInfo,
+		Undocumented:     true,
+		DistsqlBlocklist: true,
+	},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "job_id", Typ: types.Int},
+				{Name: "job_payload", Typ: types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DBoolFalse, pgerror.New(
+						pgcode.NullValueNotAllowed, "job_id cannot be NULL",
+					)
+				}
+				if args[1] == tree.DNull {
+					return tree.DBoolFalse, pgerror.New(
+						pgcode.NullValueNotAllowed, "job_payload cannot be NULL",
+					)
+				}
+				if evalCtx.AuthorizationAccessor == nil {
+					return tree.DBoolFalse, errors.AssertionFailedf("expected authorization accessor to be set")
+				}
+
+				jobID := jobspb.JobID(tree.MustBeDInt(args[0]))
+				jobPayloadBytes := []byte(tree.MustBeDBytes(args[1]))
+
+				// TODO(ssd): We may want to change the API for
+				// jobsauth.Authorize. Namely, when checking for
+				// ViewAccess, the only item we need from the
+				// payload is the Username, but here we have to
+				// unmarshal the entire thing.
+				jobPayload := &jobspb.Payload{}
+				if err := protoutil.Unmarshal(jobPayloadBytes, jobPayload); err != nil {
+					return tree.DBoolFalse, err
+				}
+				if err := jobsauth.Authorize(ctx, evalCtx.AuthorizationAccessor, jobID, jobPayload, jobsauth.ViewAccess); err != nil {
+					if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+						return tree.DBoolFalse, nil
+					}
+					return tree.DBoolFalse, err
+				}
+
+				return tree.DBoolTrue, nil
+			},
+			Info:              "This function is used internally to filter job records the user is unable to view",
+			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
 		},
 	),

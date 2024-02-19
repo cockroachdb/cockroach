@@ -100,7 +100,7 @@ crdb_internal  statement_statistics                    view   node  NULL  NULL
 crdb_internal  statement_statistics_persisted          view   node  NULL  NULL
 crdb_internal  statement_statistics_persisted_v22_2    view   node  NULL  NULL
 crdb_internal  super_regions                           table  node  NULL  NULL
-crdb_internal  system_jobs                             table  node  NULL  NULL
+crdb_internal  system_jobs                             view   node  NULL  NULL
 crdb_internal  table_columns                           table  node  NULL  NULL
 crdb_internal  table_indexes                           table  node  NULL  NULL
 crdb_internal  table_row_statistics                    table  node  NULL  NULL

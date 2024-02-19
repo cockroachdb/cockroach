@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -350,7 +350,7 @@ const (
 	ViewClusterMetadataRole
 )
 
-type authzAccessorFactory func(ctx context.Context, opName string) (_ sql.AuthorizationAccessor, cleanup func())
+type authzAccessorFactory func(ctx context.Context, opName string) (_ eval.AuthorizationAccessor, cleanup func())
 
 // roleAuthorizationMux enforces a role (eg. type of user) for an arbitrary
 // inner mux. Meant to be used under authenticationV2Mux. If the logged-in user

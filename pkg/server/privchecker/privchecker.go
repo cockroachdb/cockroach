@@ -17,10 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -38,7 +38,7 @@ type adminPrivilegeChecker struct {
 	// comment in pkg/scheduledjobs/env.go on planHookMaker. It should
 	// be cast to AuthorizationAccessor in order to use privilege
 	// checking functions.
-	makeAuthzAccessor func(opName string) (sql.AuthorizationAccessor, func())
+	makeAuthzAccessor func(opName string) (eval.AuthorizationAccessor, func())
 }
 
 // RequireViewActivityPermission is part of the CheckerForRPCHandlers interface.
@@ -295,7 +295,7 @@ func (c *adminPrivilegeChecker) HasGlobalPrivilege(
 
 // TestingSetPlannerFn is used in tests only.
 func (c *adminPrivilegeChecker) SetAuthzAccessorFactory(
-	fn func(opName string) (sql.AuthorizationAccessor, func()),
+	fn func(opName string) (eval.AuthorizationAccessor, func()),
 ) {
 	c.makeAuthzAccessor = fn
 }

@@ -3618,6 +3618,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			StreamManagerFactory:           p,
 			PrivilegedAccessor:             p,
 			SessionAccessor:                p,
+			AuthorizationAccessor:          p,
 			JobExecContext:                 p,
 			ClientNoticeSender:             p,
 			Sequence:                       p,

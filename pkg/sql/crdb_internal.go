@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -923,192 +922,61 @@ func tsOrNull(micros int64) (tree.Datum, error) {
 	return tree.MakeDTimestampTZ(ts, time.Microsecond)
 }
 
-const (
-	// systemJobsAndJobInfoBaseQuery consults both the `system.jobs` and
-	// `system.job_info` tables to return relevant information about a job.
-	//
-	// NB: Every job on creation writes a row each for its payload and progress to
-	// the `system.job_info` table. For a given job there will always be at most
-	// one row each for its payload and progress. This is because of the
-	// `system.job_info` write semantics described `InfoStorage.Write`.
-	// Theoretically, a job could have no rows corresponding to its progress and
-	// so we perform a LEFT JOIN to get a NULL value when no progress row is
-	// found.
-	systemJobsAndJobInfoBaseQuery = `
-WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' ORDER BY written DESC),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' ORDER BY written DESC)
-	SELECT
-		DISTINCT(id), status, created, payload.value AS payload, progress.value AS progress,
-		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
-	FROM system.jobs AS j
-	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
-	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
-`
-
-	// systemJobsAndJobInfoBaseQueryWithIDPredicate is the same as
-	// systemJobsAndJobInfoBaseQuery but with a predicate on `job_id` in the CTE
-	// queries.
-	systemJobsAndJobInfoBaseQueryWithIDPredicate = `
-WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' AND job_id = $1 ORDER BY written DESC LIMIT 1),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' AND job_id = $1 ORDER BY written DESC LIMIT 1)
-	SELECT
-		id, status, created, payload.value AS payload, progress.value AS progress,
-		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
-	FROM system.jobs AS j
-	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
-	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
-`
-
-	systemJobsIDPredicate     = ` WHERE id = $1`
-	systemJobsTypePredicate   = ` WHERE job_type = $1`
-	systemJobsStatusPredicate = ` WHERE status = $1`
-)
-
-type systemJobsPredicate int
-
-const (
-	noPredicate systemJobsPredicate = iota
-	jobID
-	jobType
-	jobStatus
-)
-
-func getInternalSystemJobsQuery(predicate systemJobsPredicate) string {
-	switch predicate {
-	case noPredicate:
-		return systemJobsAndJobInfoBaseQuery
-	case jobID:
-		return systemJobsAndJobInfoBaseQueryWithIDPredicate + systemJobsIDPredicate
-	case jobType:
-		return systemJobsAndJobInfoBaseQuery + systemJobsTypePredicate
-	case jobStatus:
-		return systemJobsAndJobInfoBaseQuery + systemJobsStatusPredicate
-	}
-
-	return ""
-}
-
-// TODO(tbg): prefix with kv_.
-var crdbInternalSystemJobsTable = virtualSchemaTable{
+// The crdb_internal.system_jobs view selects jobs from the
+// system.jobs and their legacy_payload and legacy_progress columns
+// from the system.job_info table.
+//
+// NB: Every job on creation writes a row each for its payload and progress to
+// the `system.job_info` table. For a given job there will always be at most
+// one row each for its payload and progress. This is because of the
+// `system.job_info` write semantics described `InfoStorage.Write`.
+// Theoretically, a job could have no rows corresponding to its progress and
+// so we perform a LEFT JOIN to get a NULL value when no progress row is
+// found.
+var crdbInternalSystemJobsTable = virtualSchemaView{
 	schema: `
-CREATE TABLE crdb_internal.system_jobs (
-  id                INT8      NOT NULL,
-  status            STRING    NOT NULL,
-  created           TIMESTAMP NOT NULL,
-  payload           BYTES     NOT NULL,
-  progress          BYTES,
-  created_by_type   STRING,
-  created_by_id     INT,
-  claim_session_id  BYTES,
-  claim_instance_id INT8,
-  num_runs          INT8,
-  last_run          TIMESTAMP,
-  job_type          STRING,
-  INDEX (id),
-  INDEX (job_type),
-  INDEX (status)
-)`,
-	comment: `wrapper over system.jobs with row access control (KV scan)`,
-	indexes: []virtualIndex{
-		{
-			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-				q := getInternalSystemJobsQuery(jobID)
-				targetType := tree.MustBeDInt(unwrappedConstraint)
-				return populateSystemJobsTableRows(ctx, p, addRow, q, targetType)
-			},
-		},
-		{
-			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-				q := getInternalSystemJobsQuery(jobType)
-				targetType := tree.MustBeDString(unwrappedConstraint)
-				return populateSystemJobsTableRows(ctx, p, addRow, q, targetType)
-			},
-		},
-		{
-			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-				q := getInternalSystemJobsQuery(jobStatus)
-				targetType := tree.MustBeDString(unwrappedConstraint)
-				return populateSystemJobsTableRows(ctx, p, addRow, q, targetType)
-			},
-		},
+CREATE VIEW crdb_internal.system_jobs AS
+	SELECT
+		DISTINCT (id),
+		status,
+		created,
+		payload.value AS payload,
+		progress.value AS progress,
+		created_by_type,
+		created_by_id,
+		claim_session_id,
+		claim_instance_id,
+		num_runs,
+		last_run,
+		job_type
+	FROM
+		system.jobs AS j
+		LEFT JOIN (
+			SELECT job_id, value FROM system.job_info
+			WHERE info_key = 'legacy_progress'
+			ORDER BY written DESC
+		) AS progress ON j.id = progress.job_id
+		INNER JOIN (
+			SELECT job_id, value FROM system.job_info
+			WHERE info_key = 'legacy_payload'
+			ORDER BY written DESC
+		) AS payload ON j.id = payload.job_id
+	WHERE
+		crdb_internal.user_can_view_job(id, payload.value)`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "id", Typ: types.Int},
+		{Name: "status", Typ: types.String},
+		{Name: "created", Typ: types.Timestamp},
+		{Name: "payload", Typ: types.Bytes},
+		{Name: "progress", Typ: types.Bytes},
+		{Name: "created_by_type", Typ: types.String},
+		{Name: "created_by_id", Typ: types.Int},
+		{Name: "claim_session_id", Typ: types.Bytes},
+		{Name: "claim_instance_id", Typ: types.Int},
+		{Name: "num_runs", Typ: types.Int},
+		{Name: "last_run", Typ: types.Timestamp},
+		{Name: "job_type", Typ: types.String},
 	},
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		_, err := populateSystemJobsTableRows(ctx, p, addRow, getInternalSystemJobsQuery(noPredicate))
-		return err
-	},
-}
-
-// populateSystemJobsTableRows calls addRow for all rows of the system.jobs table
-// except for rows that the user does not have access to. It returns true
-// if at least one row was generated.
-func populateSystemJobsTableRows(
-	ctx context.Context,
-	p *planner,
-	addRow func(...tree.Datum) error,
-	query string,
-	params ...interface{},
-) (result bool, retErr error) {
-	const jobIdIdx = 0
-	const jobPayloadIdx = 3
-
-	matched := false
-
-	// Note: we query system.jobs as root, so we must be careful about which rows we return.
-	it, err := p.InternalSQLTxn().QueryIteratorEx(ctx,
-		"system-jobs-scan",
-		p.Txn(),
-		sessiondata.NodeUserSessionDataOverride,
-		query,
-		params...,
-	)
-	if err != nil {
-		return matched, err
-	}
-
-	cleanup := func(ctx context.Context) {
-		if err := it.Close(); err != nil {
-			retErr = errors.CombineErrors(retErr, err)
-		}
-	}
-	defer cleanup(ctx)
-
-	for {
-		hasNext, err := it.Next(ctx)
-		if !hasNext || err != nil {
-			return matched, err
-		}
-
-		currentRow := it.Cur()
-		jobID, err := strconv.Atoi(currentRow[jobIdIdx].String())
-		if err != nil {
-			return matched, err
-		}
-		payloadBytes := currentRow[jobPayloadIdx]
-		payload, err := jobs.UnmarshalPayload(payloadBytes)
-		if err != nil {
-			return matched, wrapPayloadUnMarshalError(err, currentRow[jobIdIdx])
-		}
-
-		if err := jobsauth.Authorize(ctx, p, jobspb.JobID(jobID), payload, jobsauth.ViewAccess); err != nil {
-			// Filter out jobs which the user is not allowed to see.
-			if IsInsufficientPrivilegeError(err) {
-				continue
-			}
-			return matched, err
-		}
-
-		if err := addRow(currentRow...); err != nil {
-			return matched, err
-		}
-		matched = true
-	}
-}
-
-func wrapPayloadUnMarshalError(err error, jobID tree.Datum) error {
-	return errors.WithHintf(err, "could not decode the payload for job %s."+
-		" consider deleting this job from system.jobs", jobID)
 }
 
 const (
@@ -1394,13 +1262,18 @@ func makeJobsTableRows(
 	}
 }
 
+func wrapPayloadUnMarshalError(err error, jobID tree.Datum) error {
+	return errors.WithHintf(err, "could not decode the payload for job %s."+
+		" consider deleting this job from system.jobs", jobID)
+}
+
 const crdbInternalKVProtectedTSTableQuery = `
 	SELECT id, ts, meta_type, meta, num_spans, spans, verified, target,
 		crdb_internal.pb_to_json(
 		  	'cockroach.protectedts.Target',
 		  	target,
 		    false /* emit defaults */,
-		    false /* include redaction marker */ 
+		    false /* include redaction marker */
 		          /* NB: redactions in the debug zip are handled elsewhere by marking columns as sensitive */
 		) as decoded_targets,
 	    crdb_internal_mvcc_timestamp
@@ -1419,11 +1292,11 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
    num_spans 			INT8 NOT NULL,
    spans     			BYTES NOT NULL, -- We do not decode this column since it is deprecated in 22.2+.
    verified  			BOOL NOT NULL,
-   target    			BYTES,  
+   target    			BYTES,
    decoded_meta 		JSON,   -- Decoded data from the meta column above.
-                                -- This data can have different structures depending on the meta_type. 
+                                -- This data can have different structures depending on the meta_type.
    decoded_target 		JSON,   -- Decoded data from the target column above.
-   internal_meta        JSON,   -- Additional metadata added by this virtual table (ex. job owner for job meta_type) 
+   internal_meta        JSON,   -- Additional metadata added by this virtual table (ex. job owner for job meta_type)
    num_ranges  			INT,     -- Number of ranges protected by this PTS record.
    last_updated         DECIMAL -- crdb_internal_mvcc_timestamp of the row
 )`,
@@ -7048,7 +6921,7 @@ CREATE VIEW crdb_internal.statement_activity AS
 				contention_time_avg_seconds,
 				cpu_sql_avg_nanos,
 				service_latency_avg_seconds,
-				service_latency_p99_seconds 
+				service_latency_p99_seconds
       FROM
           system.statement_activity`,
 	resultColumns: colinfo.ResultColumns{
@@ -7530,10 +7403,10 @@ CREATE TABLE crdb_internal.transaction_contention_events (
     contention_duration          INTERVAL NOT NULL,
     contending_key               BYTES NOT NULL,
     contending_pretty_key     	 STRING NOT NULL,
-		    
+
     waiting_stmt_id              string NOT NULL,
     waiting_stmt_fingerprint_id  BYTES NOT NULL,
-    
+
     database_name                STRING NOT NULL,
     schema_name                  STRING NOT NULL,
     table_name                   STRING NOT NULL,

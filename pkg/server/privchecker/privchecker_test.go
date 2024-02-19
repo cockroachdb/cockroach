@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -64,7 +65,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	execCfg := ts.ExecutorConfig().(sql.ExecutorConfig)
 	kvDB := ts.DB()
 
-	plannerFn := func(opName string) (sql.AuthorizationAccessor, func()) {
+	plannerFn := func(opName string) (eval.AuthorizationAccessor, func()) {
 		// This is a hack to get around a Go package dependency cycle. See comment
 		// in sql/jobs/registry.go on planHookMaker.
 		txn := kvDB.NewTxn(ctx, "test")
@@ -76,7 +77,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			&execCfg,
 			sql.NewInternalSessionData(ctx, execCfg.Settings, opName),
 		)
-		return p.(sql.AuthorizationAccessor), cleanup
+		return p.(eval.AuthorizationAccessor), cleanup
 	}
 
 	underTest := privchecker.NewChecker(

@@ -101,6 +101,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule" // register schedules declared outside of pkg/sql
@@ -1161,7 +1162,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 
 	// Tell the authz server how to connect to SQL.
-	adminAuthzCheck.SetAuthzAccessorFactory(func(opName string) (sql.AuthorizationAccessor, func()) {
+	adminAuthzCheck.SetAuthzAccessorFactory(func(opName string) (eval.AuthorizationAccessor, func()) {
 		// This is a hack to get around a Go package dependency cycle. See comment
 		// in sql/jobs/registry.go on planHookMaker.
 		txn := db.NewTxn(ctx, "check-system-privilege")
@@ -1173,7 +1174,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			sqlServer.execCfg,
 			sql.NewInternalSessionData(ctx, sqlServer.execCfg.Settings, opName),
 		)
-		return p.(sql.AuthorizationAccessor), cleanup
+		return p.(eval.AuthorizationAccessor), cleanup
 	})
 
 	// Create the authentication RPC server (login/logout).
