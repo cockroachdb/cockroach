@@ -573,9 +573,6 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 	// set up for multi-region operations. Even then, ensure that only the
 	// node user may configure the system database.
 	//
-	// Operations to configure the system database will be sent as tasks using
-	// the autoconfig infrastucture.
-	//
 	// TODO(ajwerner): Adopt the auto-config infrastructure for configuring
 	// multi-region primitives in the system database. For now, we also allow
 	// root to perform the various operations to enable testing.

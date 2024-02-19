@@ -268,12 +268,6 @@ SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'POLL JOBS STATS' AN
 ----
 1
 
-# Ensure one AUTO CONFIG RUNNER job is running
-query I
-SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO CONFIG RUNNER' AND status = 'running'
-----
-1
-
 subtest control_job_priv
 
 user testuser
