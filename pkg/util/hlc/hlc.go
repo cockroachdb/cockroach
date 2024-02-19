@@ -340,17 +340,12 @@ func (c *Clock) getPhysicalClockAndCheck(ctx context.Context) int64 {
 	// highest clock reading to win, so keep retrying while we interleave with
 	// updaters with lower clock readings; bail if we interleave with a higher
 	// clock reading.
-	for {
+	for newTime > lastPhysTime {
 		if atomic.CompareAndSwapInt64(&c.lastPhysicalTime, lastPhysTime, newTime) {
 			break
 		}
+		// Someone else updated the timestamp, try again.
 		lastPhysTime = atomic.LoadInt64(&c.lastPhysicalTime)
-		if lastPhysTime >= newTime {
-			// Someone else updated to a later time than ours.
-			break
-		}
-		// Someone else did an update to an earlier time than what we got in newTime.
-		// So try one more time to update.
 	}
 	c.checkPhysicalClock(ctx, oldTime, newTime)
 	return newTime
