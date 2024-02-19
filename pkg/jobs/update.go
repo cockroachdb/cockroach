@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -325,22 +324,6 @@ func (ju *JobUpdater) UpdateRunStats(numRuns int, lastRun time.Time) {
 		NumRuns: numRuns,
 		LastRun: lastRun,
 	}
-}
-
-// UpdateHighwaterProgressed updates job updater progress with the new high water mark.
-func (ju *JobUpdater) UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata) error {
-	if err := md.CheckRunningOrReverting(); err != nil {
-		return err
-	}
-
-	if highWater.Less(hlc.Timestamp{}) {
-		return errors.Errorf("high-water %s is outside allowable range > 0.0", highWater)
-	}
-	md.Progress.Progress = &jobspb.Progress_HighWater{
-		HighWater: &highWater,
-	}
-	ju.UpdateProgress(md.Progress)
-	return nil
 }
 
 func (ju *JobUpdater) PauseRequested(
