@@ -58,5 +58,4 @@ type TestingKnobs struct {
 	LOQRecovery                    ModuleTestingKnobs
 	KeyVisualizer                  ModuleTestingKnobs
 	TenantCapabilitiesTestingKnobs ModuleTestingKnobs
-	AutoConfig                     ModuleTestingKnobs
 }

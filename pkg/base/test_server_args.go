@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -173,10 +172,6 @@ type TestServerArgs struct {
 	// ObsServiceAddr is the address to which events will be exported over OTLP.
 	// If empty, exporting events is inhibited.
 	ObsServiceAddr string
-
-	// AutoConfigProvider provides auto-configuration tasks to apply on
-	// the cluster during server initialization.
-	AutoConfigProvider acprovider.Provider
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
