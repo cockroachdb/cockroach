@@ -10,5 +10,6 @@ pkg/ui/workspaces/db-console/src/js/node_modules
 pkg/ui/workspaces/db-console/ccl/src/js/node_modules
 pkg/ui/workspaces/e2e-tests/node_modules
 pkg/ui/workspaces/eslint-plugin-crdb/node_modules
+pkg/ui/workspaces/crdb-api-client/node_modules
 tmp
 vendor
