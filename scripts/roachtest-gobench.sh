@@ -8,7 +8,7 @@ if [ "$#" -ne 1 ]; then
     exit 1
 fi
 
-for file in $(find $1 -name test.log -o -name '*_ycsb.log' -o -name '*_kv.log'); do
+for file in $(find $1 -name test.log -o -name 'run_*workload-run-*.log'); do
     name=$(dirname $(dirname $(realpath --relative-to=$1 $file)))
     grep -h -A1 __result $file \
         | grep -v '^--$' | grep -v __result | \
