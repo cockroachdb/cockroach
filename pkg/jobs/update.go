@@ -396,7 +396,6 @@ func (ju *JobUpdater) Unpaused(_ context.Context, md JobMetadata) error {
 	} else {
 		ju.UpdateStatus(StatusReverting)
 	}
-	ju.UpdatePayload(md.Payload)
 	return nil
 }
 
