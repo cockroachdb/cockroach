@@ -179,6 +179,11 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 
 	manual.Pause()
 	ts1 := s.Clock().Now()
+	// It's possible that HLC ts1 ran in front of manual.Now() after the Pause()
+	// call. Particularly, if the wall clock regressed during Pause(), and there
+	// was a concurrent Now() with a pre-regression higher timestamp. Forward the
+	// manual clock to avoid flakes below. See #119362.
+	manual.Forward(ts1.WallTime)
 
 	key := roachpb.Key("a")
 	incArgs := incrementArgs(key, 5)
