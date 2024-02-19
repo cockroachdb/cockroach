@@ -176,7 +176,10 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	require.NoError(t, err)
 
 	manual.Pause()
-	ts1 := s.Clock().Now()
+	ts1 := hlc.Timestamp{WallTime: manual.UnixNano()}
+	// NB: it's possible that HLC ran in front of manual.Now() after the Pause()
+	// call. Particularly, if the wall clock regressed during Pause(), and there
+	// was a concurrent Now() with a pre-regression higher timestamp. See #119362.
 
 	key := roachpb.Key("a")
 	incArgs := incrementArgs(key, 5)
