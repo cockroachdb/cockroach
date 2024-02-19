@@ -1293,13 +1293,15 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 }
 
 // RefreshLeases starts a goroutine that refreshes the lease manager
-// leases for descriptors received in the latest system configuration via gossip or
-// rangefeeds. This function must be passed a non-nil gossip if
-// RangefeedLeases is not active.
+// leases for descriptors received in the latest system configuration
+// via rangefeeds.
 func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB) {
 	descUpdateCh := make(chan catalog.Descriptor)
 	descDelCh := make(chan descpb.ID)
-	m.watchForUpdates(ctx, descUpdateCh, descDelCh)
+	rangefeedErrCh := make(chan error, 1)
+
+	m.watchForUpdates(ctx, descUpdateCh, descDelCh, rangefeedErrCh)
+
 	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
 		for {
 			select {
@@ -1378,7 +1380,9 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 				if evFunc := m.testingKnobs.TestingDescriptorRefreshedEvent; evFunc != nil {
 					evFunc(desc.DescriptorProto())
 				}
-
+			case err := <-rangefeedErrCh:
+				log.Errorf(ctx, "rangefeed on system.descriptors failed: %v; restarting", err)
+				m.watchForUpdates(ctx, descUpdateCh, descDelCh, rangefeedErrCh)
 			case <-s.ShouldQuiesce():
 				return
 			}
@@ -1389,7 +1393,10 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 // watchForUpdates will watch a rangefeed on the system.descriptor table for
 // updates.
 func (m *Manager) watchForUpdates(
-	ctx context.Context, descUpdateCh chan<- catalog.Descriptor, descDelCh chan<- descpb.ID,
+	ctx context.Context,
+	descUpdateCh chan<- catalog.Descriptor,
+	descDelCh chan<- descpb.ID,
+	rangefeedErrCh chan<- error,
 ) {
 	if log.V(1) {
 		log.Infof(ctx, "using rangefeeds for lease manager updates")
@@ -1438,6 +1445,12 @@ func (m *Manager) watchForUpdates(
 	_, _ = m.rangeFeedFactory.RangeFeed(
 		ctx, "lease", []roachpb.Span{descriptorTableSpan}, hlc.Timestamp{}, handleEvent,
 		rangefeed.WithSystemTablePriority(),
+		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
+			select {
+			case <-ctx.Done():
+			case rangefeedErrCh <- err:
+			}
+		}),
 	)
 }
 
@@ -1649,7 +1662,7 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 		// Read orphaned leases, and join against the internal session
 		// table in case we have dual written leases.
 		query := `
-SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.version), l.expiration, s."session_id", l.crdb_region, s.crdb_region FROM 
+SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.version), l.expiration, s."session_id", l.crdb_region, s.crdb_region FROM
 	 system.public.lease as l FULL OUTER JOIN "".crdb_internal.kv_session_based_leases as s ON l."nodeID"=s."sql_instance_id" AND
 	  l."descID"=s."desc_id" AND l.version=s.version
 		WHERE COALESCE(l."nodeID", s."sql_instance_id") =%d
