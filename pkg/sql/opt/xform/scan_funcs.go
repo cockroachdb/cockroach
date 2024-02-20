@@ -560,3 +560,16 @@ func (c *CustomFuncs) IsSelectFromRemoteTableRowsOnly(input memo.RelExpr) bool {
 	}
 	return false
 }
+
+// TableHasPartialIndex returns true if the given table has at least one partial
+// index.
+func (c *CustomFuncs) TableHasPartialIndex(tableID opt.TableID) bool {
+	md := c.e.mem.Metadata()
+	tab := md.Table(tableID)
+	for i, n := 0, tab.IndexCount(); i < n; i++ {
+		if _, ok := tab.Index(i).Predicate(); ok {
+			return true
+		}
+	}
+	return false
+}

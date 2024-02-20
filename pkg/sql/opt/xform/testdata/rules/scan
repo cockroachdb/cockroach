@@ -12,6 +12,32 @@ CREATE TABLE a
 )
 ----
 
+exec-ddl
+CREATE TABLE checks (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  c INT,
+  d INT NOT NULL,
+  e INT NOT NULL,
+  f INT NOT NULL,
+  g INT,
+  h INT NOT NULL,
+  x INT,
+  CHECK (a = 5),
+  CHECK (b > 5),
+  CHECK (c = 5),
+  CHECK (d > 5 AND e = 5),
+  CHECK (f > 5 AND g = 5),
+  CHECK (h < 5 OR h > 5),
+  INDEX idx1 (x) WHERE a = 5,
+  INDEX idx2 (x) WHERE b > 5,
+  INDEX idx3 (x) WHERE d > 5 AND e = 5,
+  INDEX idx4 (x) WHERE h < 5 OR h > 5,
+  INDEX idx5 (x) WHERE c = 5,
+  INDEX idx6 (x) WHERE f > 5 AND g = 5
+)
+----
+
 # --------------------------------------------------
 # GenerateIndexScans
 # --------------------------------------------------
@@ -1328,3 +1354,159 @@ locality-optimized-search
       ├── limit: 3
       ├── flags: force-index=def_part_pkey
       └── key: (14)
+
+# --------------------------------------------------
+# GeneratePseudoPartialIndexScans
+# --------------------------------------------------
+
+opt expect=GeneratePseudoPartialIndexScans
+SELECT x FROM checks@idx1;
+----
+select
+ ├── columns: x:9
+ ├── scan checks@idx1,partial
+ │    ├── columns: x:9
+ │    └── flags: force-index=idx1
+ └── filters
+      ├── b:2 > 5 [outer=(2), constraints=(/2: [/6 - ]; tight)]
+      ├── (d:4 > 5) AND (e:5 = 5) [outer=(4,5), constraints=(/4: [/6 - ]; /5: [/5 - /5]; tight), fd=()-->(5)]
+      └── (h:8 < 5) OR (h:8 > 5) [outer=(8), constraints=(/8: (/NULL - /4] [/6 - ]; tight)]
+
+opt expect=GeneratePseudoPartialIndexScans
+SELECT x FROM checks@idx1 ORDER BY x;
+----
+select
+ ├── columns: x:9
+ ├── ordering: +9
+ ├── scan checks@idx1,partial
+ │    ├── columns: x:9
+ │    ├── flags: force-index=idx1
+ │    └── ordering: +9
+ └── filters
+      ├── b:2 > 5 [outer=(2), constraints=(/2: [/6 - ]; tight)]
+      ├── (d:4 > 5) AND (e:5 = 5) [outer=(4,5), constraints=(/4: [/6 - ]; /5: [/5 - /5]; tight), fd=()-->(5)]
+      └── (h:8 < 5) OR (h:8 > 5) [outer=(8), constraints=(/8: (/NULL - /4] [/6 - ]; tight)]
+
+opt expect=GeneratePseudoPartialIndexScans
+SELECT x FROM checks@idx1 ORDER BY x DESC;
+----
+select
+ ├── columns: x:9
+ ├── ordering: -9
+ ├── scan checks@idx1,rev,partial
+ │    ├── columns: x:9
+ │    ├── flags: force-index=idx1
+ │    └── ordering: -9
+ └── filters
+      ├── b:2 > 5 [outer=(2), constraints=(/2: [/6 - ]; tight)]
+      ├── (d:4 > 5) AND (e:5 = 5) [outer=(4,5), constraints=(/4: [/6 - ]; /5: [/5 - /5]; tight), fd=()-->(5)]
+      └── (h:8 < 5) OR (h:8 > 5) [outer=(8), constraints=(/8: (/NULL - /4] [/6 - ]; tight)]
+
+opt expect=GeneratePseudoPartialIndexScans
+SELECT x FROM checks@idx2 ORDER BY x;
+----
+select
+ ├── columns: x:9
+ ├── ordering: +9
+ ├── scan checks@idx2,partial
+ │    ├── columns: x:9
+ │    ├── flags: force-index=idx2
+ │    └── ordering: +9
+ └── filters
+      ├── a:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+      ├── (d:4 > 5) AND (e:5 = 5) [outer=(4,5), constraints=(/4: [/6 - ]; /5: [/5 - /5]; tight), fd=()-->(5)]
+      └── (h:8 < 5) OR (h:8 > 5) [outer=(8), constraints=(/8: (/NULL - /4] [/6 - ]; tight)]
+
+# Case with two referenced variables.
+opt expect=GeneratePseudoPartialIndexScans
+SELECT x FROM checks@idx3 ORDER BY x;
+----
+select
+ ├── columns: x:9
+ ├── ordering: +9
+ ├── scan checks@idx3,partial
+ │    ├── columns: x:9
+ │    ├── flags: force-index=idx3
+ │    └── ordering: +9
+ └── filters
+      ├── a:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+      ├── b:2 > 5 [outer=(2), constraints=(/2: [/6 - ]; tight)]
+      └── (h:8 < 5) OR (h:8 > 5) [outer=(8), constraints=(/8: (/NULL - /4] [/6 - ]; tight)]
+
+# Case with a disjunction.
+opt expect=GeneratePseudoPartialIndexScans
+SELECT x FROM checks@idx4 ORDER BY x;
+----
+select
+ ├── columns: x:9
+ ├── ordering: +9
+ ├── scan checks@idx4,partial
+ │    ├── columns: x:9
+ │    ├── flags: force-index=idx4
+ │    └── ordering: +9
+ └── filters
+      ├── a:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+      ├── b:2 > 5 [outer=(2), constraints=(/2: [/6 - ]; tight)]
+      └── (d:4 > 5) AND (e:5 = 5) [outer=(4,5), constraints=(/4: [/6 - ]; /5: [/5 - /5]; tight), fd=()-->(5)]
+
+# No-op because column "c" is nullable.
+opt expect-not=GeneratePseudoPartialIndexScans
+SELECT x FROM checks@idx5 ORDER BY x;
+----
+sort
+ ├── columns: x:9
+ ├── ordering: +9
+ └── scan checks
+      ├── columns: x:9
+      ├── check constraint expressions
+      │    ├── a:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+      │    ├── b:2 > 5 [outer=(2), constraints=(/2: [/6 - ]; tight)]
+      │    ├── (d:4 > 5) AND (e:5 = 5) [outer=(4,5), constraints=(/4: [/6 - ]; /5: [/5 - /5]; tight), fd=()-->(5)]
+      │    └── (h:8 < 5) OR (h:8 > 5) [outer=(8), constraints=(/8: (/NULL - /4] [/6 - ]; tight)]
+      ├── partial index predicates
+      │    ├── idx1: filters
+      │    │    └── a:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+      │    ├── idx2: filters
+      │    │    └── b:2 > 5 [outer=(2), constraints=(/2: [/6 - ]; tight)]
+      │    ├── idx3: filters
+      │    │    ├── d:4 > 5 [outer=(4), constraints=(/4: [/6 - ]; tight)]
+      │    │    └── e:5 = 5 [outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+      │    ├── idx4: filters
+      │    │    └── (h:8 < 5) OR (h:8 > 5) [outer=(8), constraints=(/8: (/NULL - /4] [/6 - ]; tight)]
+      │    ├── idx5: filters
+      │    │    └── c:3 = 5 [outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
+      │    └── idx6: filters
+      │         ├── f:6 > 5 [outer=(6), constraints=(/6: [/6 - ]; tight)]
+      │         └── g:7 = 5 [outer=(7), constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
+      └── flags: force-index=idx5
+
+# No-op because column "g" is nullable.
+opt expect-not=GeneratePseudoPartialIndexScans
+SELECT x FROM checks@idx6 ORDER BY x;
+----
+sort
+ ├── columns: x:9
+ ├── ordering: +9
+ └── scan checks
+      ├── columns: x:9
+      ├── check constraint expressions
+      │    ├── a:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+      │    ├── b:2 > 5 [outer=(2), constraints=(/2: [/6 - ]; tight)]
+      │    ├── (d:4 > 5) AND (e:5 = 5) [outer=(4,5), constraints=(/4: [/6 - ]; /5: [/5 - /5]; tight), fd=()-->(5)]
+      │    └── (h:8 < 5) OR (h:8 > 5) [outer=(8), constraints=(/8: (/NULL - /4] [/6 - ]; tight)]
+      ├── partial index predicates
+      │    ├── idx1: filters
+      │    │    └── a:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+      │    ├── idx2: filters
+      │    │    └── b:2 > 5 [outer=(2), constraints=(/2: [/6 - ]; tight)]
+      │    ├── idx3: filters
+      │    │    ├── d:4 > 5 [outer=(4), constraints=(/4: [/6 - ]; tight)]
+      │    │    └── e:5 = 5 [outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+      │    ├── idx4: filters
+      │    │    └── (h:8 < 5) OR (h:8 > 5) [outer=(8), constraints=(/8: (/NULL - /4] [/6 - ]; tight)]
+      │    ├── idx5: filters
+      │    │    └── c:3 = 5 [outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
+      │    └── idx6: filters
+      │         ├── f:6 > 5 [outer=(6), constraints=(/6: [/6 - ]; tight)]
+      │         └── g:7 = 5 [outer=(7), constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
+      └── flags: force-index=idx6
