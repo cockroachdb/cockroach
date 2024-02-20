@@ -562,7 +562,8 @@ func setupAWSDMS(
 func setupCockroachDBCluster(ctx context.Context, t test.Test, c cluster.Cluster) func() error {
 	return func() error {
 		t.L().Printf("setting up cockroach")
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		settings := install.MakeClusterSettings(install.SecureOption(false))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.All())
 
 		db := c.Conn(ctx, t.L(), 1)
 		for _, stmt := range []string{
