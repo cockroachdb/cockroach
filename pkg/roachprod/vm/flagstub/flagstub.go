@@ -74,6 +74,10 @@ func (p *provider) AttachVolume(*logger.Logger, vm.Volume, *vm.VM) (string, erro
 	return "", errors.Newf("%s", p.unimplemented)
 }
 
+func (p *provider) CreateLoadBalancer(*logger.Logger, vm.List, int) error {
+	return nil
+}
+
 // CleanSSH implements vm.Provider and is a no-op.
 func (p *provider) CleanSSH(l *logger.Logger) error {
 	return nil
