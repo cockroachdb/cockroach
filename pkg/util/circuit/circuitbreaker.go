@@ -147,7 +147,9 @@ func (b *Breaker) Report(err error) {
 	}()
 
 	opts := b.Opts()
-	opts.EventHandler.OnTrip(b, prevErr, storeErr)
+	if opts.EventHandler != nil {
+		opts.EventHandler.OnTrip(b, prevErr, storeErr)
+	}
 	if prevErr == nil {
 		// If the breaker wasn't previously tripped, trigger the probe to give the
 		// Breaker a shot at healing right away. If the breaker is already tripped,
@@ -163,7 +165,10 @@ func (b *Breaker) Report(err error) {
 // Outside of testing, there should be no reason to call this
 // as it is the probe's job to reset the breaker if appropriate.
 func (b *Breaker) Reset() {
-	b.Opts().EventHandler.OnReset(b)
+	opts := b.Opts()
+	if opts.EventHandler != nil {
+		opts.EventHandler.OnReset(b)
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	// Avoid replacing errAndCh if it wasn't tripped. Otherwise,
@@ -255,7 +260,9 @@ func (b *Breaker) maybeTriggerProbe(force bool) {
 	opts := *b.mu.Options // ok to leak out from under the lock
 	b.mu.Unlock()
 
-	opts.EventHandler.OnProbeLaunched(b)
+	if opts.EventHandler != nil {
+		opts.EventHandler.OnProbeLaunched(b)
+	}
 	var once sync.Once
 	opts.AsyncProbe(
 		func(err error) {
@@ -269,7 +276,9 @@ func (b *Breaker) maybeTriggerProbe(force bool) {
 			// Avoid potential problems when probe calls done() multiple times.
 			// It shouldn't do that, but mistakes happen.
 			once.Do(func() {
-				opts.EventHandler.OnProbeDone(b)
+				if opts.EventHandler != nil {
+					opts.EventHandler.OnProbeDone(b)
+				}
 				b.mu.Lock()
 				defer b.mu.Unlock()
 				b.mu.probing = false

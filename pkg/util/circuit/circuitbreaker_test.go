@@ -438,7 +438,6 @@ func BenchmarkBreaker_Signal(b *testing.B) {
 		AsyncProbe: func(_ func(error), done func()) {
 			done() // never untrip
 		},
-		EventHandler: &EventLogger{Log: func(redact.StringBuilder) {}},
 	})
 
 	// The point of this benchmark is to verify the absence of allocations when
