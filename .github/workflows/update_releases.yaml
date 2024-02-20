@@ -29,11 +29,11 @@ jobs:
     name: Update pkg/testutils/release/cockroach_releases.yaml on ${{ matrix.branch }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: "${{ matrix.branch }}"
       - name: Mount bazel cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: "~/.cache/bazel"
           key: bazel
@@ -43,7 +43,7 @@ jobs:
           $(bazel info bazel-bin)/pkg/cmd/release/release_/release update-releases-file
           git diff
       - name: Update pkg/testutils/release/cockroach_releases.yaml on ${{ matrix.branch }}
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v6
         with:
           base: "${{ matrix.branch }}"
           branch: 'crdb-releases-yaml-update-${{ matrix.branch }}'
