@@ -90,143 +90,153 @@ func registerOnlineRestore(r registry.Registry) {
 		},
 	} {
 		for _, runOnline := range []bool{true, false} {
-			for _, runWorkload := range []bool{true, false} {
-				sp := sp
-				runOnline := runOnline
-				runWorkload := runWorkload
+			for _, useWorkarounds := range []bool{true, false} {
+				for _, runWorkload := range []bool{true, false} {
+					sp := sp
+					runOnline := runOnline
+					runWorkload := runWorkload
+					useWorkarounds := useWorkarounds
 
-				if runOnline {
-					sp.namePrefix = "online/"
-				} else {
-					sp.namePrefix = "offline/"
-					sp.skip = "used for ad hoc experiments"
-				}
-				sp.namePrefix = sp.namePrefix + fmt.Sprintf("workload=%t", runWorkload)
+					if runOnline {
+						sp.namePrefix = "online/"
+					} else {
+						sp.namePrefix = "offline/"
+						sp.skip = "used for ad hoc experiments"
+					}
 
-				sp.initTestName()
-				r.Add(registry.TestSpec{
-					Name:      sp.testName,
-					Owner:     registry.OwnerDisasterRecovery,
-					Benchmark: true,
-					Cluster:   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
-					Timeout:   sp.timeout,
-					// These tests measure performance. To ensure consistent perf,
-					// disable metamorphic encryption.
-					EncryptionSupport: registry.EncryptionAlwaysDisabled,
-					CompatibleClouds:  registry.Clouds(sp.backup.cloud),
-					Suites:            sp.suites,
-					Skip:              sp.skip,
-					// Takes 10 minutes on OR tests for some reason.
-					SkipPostValidations: registry.PostValidationReplicaDivergence,
-					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					sp.namePrefix = sp.namePrefix + fmt.Sprintf("workload=%t/", runWorkload)
+					if !useWorkarounds {
+						sp.skip = "used for ad hoc experiments"
+						sp.namePrefix = sp.namePrefix + fmt.Sprintf("workarounds=%t", useWorkarounds)
+					}
 
-						testStartTime := timeutil.Now()
+					sp.initTestName()
+					r.Add(registry.TestSpec{
+						Name:      sp.testName,
+						Owner:     registry.OwnerDisasterRecovery,
+						Benchmark: true,
+						Cluster:   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+						Timeout:   sp.timeout,
+						// These tests measure performance. To ensure consistent perf,
+						// disable metamorphic encryption.
+						EncryptionSupport: registry.EncryptionAlwaysDisabled,
+						CompatibleClouds:  registry.Clouds(sp.backup.cloud),
+						Suites:            sp.suites,
+						Skip:              sp.skip,
+						// Takes 10 minutes on OR tests for some reason.
+						SkipPostValidations: registry.PostValidationReplicaDivergence,
+						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
-						rd := makeRestoreDriver(t, c, sp)
-						rd.prepareCluster(ctx)
+							testStartTime := timeutil.Now()
 
-						statsCollector, err := createStatCollector(ctx, rd)
-						require.NoError(t, err)
+							rd := makeRestoreDriver(t, c, sp)
+							rd.prepareCluster(ctx)
 
-						m := c.NewMonitor(ctx, sp.hardware.getCRDBNodes())
-						var restoreStartTime time.Time
-						m.Go(func(ctx context.Context) error {
-							db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
-							if err != nil {
-								return err
-							}
-							defer db.Close()
+							statsCollector, err := createStatCollector(ctx, rd)
+							require.NoError(t, err)
 
-							// TODO(dt): what's the right value for this? How do we tune this
-							// on the fly automatically during the restore instead of by-hand?
-							// Context: We expect many operations to take longer than usual
-							// when some or all of the data they touch is remote. For now this
-							// is being blanket set to 1h manually, and a user's run-book
-							// would need to do this by hand before an online restore and
-							// reset it manually after, but ideally the queues would be aware
-							// of remote-ness when they pick their own timeouts and pick
-							// accordingly.
-							if _, err := db.Exec("SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget='1h'"); err != nil {
-								return err
-							}
-							// TODO(dt): AC appears periodically reduce the workload to 0 QPS
-							// during the download phase (sudden jumps from 0 to 2k qps to 0).
-							// Disable for now until we figure out how to smooth this out.
-							if _, err := db.Exec("SET CLUSTER SETTING admission.disk_bandwidth_tokens.elastic.enabled=false"); err != nil {
-								return err
-							}
-							if _, err := db.Exec("SET CLUSTER SETTING admission.kv.enabled=false"); err != nil {
-								return err
-							}
-							if _, err := db.Exec("SET CLUSTER SETTING admission.sql_kv_response.enabled=false"); err != nil {
-								return err
-							}
-							opts := ""
-							if runOnline {
-								opts = "WITH EXPERIMENTAL DEFERRED COPY"
-							}
-							restoreStartTime = timeutil.Now()
-							restoreCmd := rd.restoreCmd("DATABASE tpce", opts)
-							t.L().Printf("Running %s", restoreCmd)
-							if _, err = db.ExecContext(ctx, restoreCmd); err != nil {
-								return err
-							}
-							return nil
-						})
-						m.Wait()
-
-						workloadCtx, workloadCancel := context.WithCancel(ctx)
-						mDownload := c.NewMonitor(workloadCtx, sp.hardware.getCRDBNodes())
-
-						workloadStartTime := timeutil.Now()
-
-						mDownload.Go(func(ctx context.Context) error {
-							if !runWorkload {
-								fmt.Printf("roachtest configured to skip running the foreground workload")
-								return nil
-							}
-							err := sp.backup.workload.run(ctx, t, c, sp.hardware)
-							// We expect the workload to return a context cancelled error because
-							// the roachtest driver cancels the monitor's context after the download job completes
-							if err != nil && ctx.Err() == nil {
-								// Implies the workload context was not cancelled and the workload cmd returned a
-								// different error.
-								return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
-							}
-							rd.t.L().Printf("workload successfully finished")
-							return nil
-						})
-						var downloadEndTimeLowerBound time.Time
-						mDownload.Go(func(ctx context.Context) error {
-							defer workloadCancel()
-							if runOnline {
-								downloadEndTimeLowerBound, err = waitForDownloadJob(ctx, c, t.L())
+							m := c.NewMonitor(ctx, sp.hardware.getCRDBNodes())
+							var restoreStartTime time.Time
+							m.Go(func(ctx context.Context) error {
+								db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
 								if err != nil {
 									return err
 								}
+								defer db.Close()
+
+								if useWorkarounds {
+									// TODO(dt): what's the right value for this? How do we tune this
+									// on the fly automatically during the restore instead of by-hand?
+									// Context: We expect many operations to take longer than usual
+									// when some or all of the data they touch is remote. For now this
+									// is being blanket set to 1h manually, and a user's run-book
+									// would need to do this by hand before an online restore and
+									// reset it manually after, but ideally the queues would be aware
+									// of remote-ness when they pick their own timeouts and pick
+									// accordingly.
+									if _, err := db.Exec("SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget='1h'"); err != nil {
+										return err
+									}
+									// TODO(dt): AC appears periodically reduce the workload to 0 QPS
+									// during the download phase (sudden jumps from 0 to 2k qps to 0).
+									// Disable for now until we figure out how to smooth this out.
+									if _, err := db.Exec("SET CLUSTER SETTING admission.disk_bandwidth_tokens.elastic.enabled=false"); err != nil {
+										return err
+									}
+									if _, err := db.Exec("SET CLUSTER SETTING admission.kv.enabled=false"); err != nil {
+										return err
+									}
+									if _, err := db.Exec("SET CLUSTER SETTING admission.sql_kv_response.enabled=false"); err != nil {
+										return err
+									}
+								}
+								opts := ""
+								if runOnline {
+									opts = "WITH EXPERIMENTAL DEFERRED COPY"
+								}
+								restoreStartTime = timeutil.Now()
+								restoreCmd := rd.restoreCmd("DATABASE tpce", opts)
+								t.L().Printf("Running %s", restoreCmd)
+								if _, err = db.ExecContext(ctx, restoreCmd); err != nil {
+									return err
+								}
+								return nil
+							})
+							m.Wait()
+
+							workloadCtx, workloadCancel := context.WithCancel(ctx)
+							mDownload := c.NewMonitor(workloadCtx, sp.hardware.getCRDBNodes())
+
+							workloadStartTime := timeutil.Now()
+
+							mDownload.Go(func(ctx context.Context) error {
+								if !runWorkload {
+									fmt.Printf("roachtest configured to skip running the foreground workload")
+									return nil
+								}
+								err := sp.backup.workload.run(ctx, t, c, sp.hardware)
+								// We expect the workload to return a context cancelled error because
+								// the roachtest driver cancels the monitor's context after the download job completes
+								if err != nil && ctx.Err() == nil {
+									// Implies the workload context was not cancelled and the workload cmd returned a
+									// different error.
+									return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
+								}
+								rd.t.L().Printf("workload successfully finished")
+								return nil
+							})
+							var downloadEndTimeLowerBound time.Time
+							mDownload.Go(func(ctx context.Context) error {
+								defer workloadCancel()
+								if runOnline {
+									downloadEndTimeLowerBound, err = waitForDownloadJob(ctx, c, t.L())
+									if err != nil {
+										return err
+									}
+								}
+								if runWorkload {
+									// Run the workload for at most 10 minutes.
+									testRuntime := timeutil.Since(testStartTime)
+									workloadDuration := sp.timeout - (testRuntime + time.Minute)
+									maxWorkloadDuration := time.Minute * 10
+									if workloadDuration > maxWorkloadDuration {
+										workloadDuration = maxWorkloadDuration
+									}
+									fmt.Printf("let workload run for %.2f minutes", workloadDuration.Minutes())
+									time.Sleep(workloadDuration)
+								}
+								return nil
+							})
+							mDownload.Wait()
+							if runOnline {
+								require.NoError(t, postRestoreValidation(ctx, c, t.L(), rd.sp.backup.workload.DatabaseName(), downloadEndTimeLowerBound))
 							}
 							if runWorkload {
-								// Run the workload for at most 10 minutes.
-								testRuntime := timeutil.Since(testStartTime)
-								workloadDuration := sp.timeout - (testRuntime + time.Minute)
-								maxWorkloadDuration := time.Minute * 10
-								if workloadDuration > maxWorkloadDuration {
-									workloadDuration = maxWorkloadDuration
-								}
-								fmt.Printf("let workload run for %.2f minutes", workloadDuration.Minutes())
-								time.Sleep(workloadDuration)
+								require.NoError(t, exportStats(ctx, rd, statsCollector, workloadStartTime, restoreStartTime))
 							}
-							return nil
-						})
-						mDownload.Wait()
-						if runOnline {
-							require.NoError(t, postRestoreValidation(ctx, c, t.L(), rd.sp.backup.workload.DatabaseName(), downloadEndTimeLowerBound))
-						}
-						if runWorkload {
-							require.NoError(t, exportStats(ctx, rd, statsCollector, workloadStartTime, restoreStartTime))
-						}
-					},
-				})
+						},
+					})
+				}
 			}
 		}
 	}
