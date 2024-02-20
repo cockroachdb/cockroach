@@ -1529,6 +1529,128 @@ func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 	return propagateDiskLabels(l, project, labelsJoined, zoneToHostNames, len(vms[0].LocalDisks) != 0)
 }
 
+// loadBalancerResourceName returns the name of a load balancer resource. The
+// port is used instead of a service name in order to be able to identify
+// different parts of the name, since we have limited delimiter options.
+func loadBalancerResourceName(clusterName string, port int, resourceType string) string {
+	return fmt.Sprintf("%s-%d-%s-roachprod", clusterName, port, resourceType)
+}
+
+// CreateLoadBalancer creates a load balancer for the given cluster, derived
+// from the VM list, and port. The cluster has to be part of a managed instance
+// group. Additionally, a health check is created for the given port. A proxy is
+// used to support global load balancing. The different parts of the load
+// balancer are created sequentially, as they depend on each other.
+func (p *Provider) CreateLoadBalancer(_ *logger.Logger, vms vm.List, port int) error {
+	if isManaged(vms) {
+		return errors.New("load balancer creation is only supported for managed instance groups")
+	}
+	project := vms[0].Project
+	clusterName, err := vms[0].ClusterName()
+	if err != nil {
+		return err
+	}
+	groups, err := listManagedInstanceGroups(project, instanceGroupName(clusterName))
+	if err != nil {
+		return err
+	}
+	if len(groups) == 0 {
+		return errors.Errorf("no managed instance groups found for cluster %s", clusterName)
+	}
+
+	healthCheckName := loadBalancerResourceName(clusterName, port, "health-check")
+	args := []string{"compute", "health-checks", "create", "tcp",
+		healthCheckName,
+		"--project", project,
+		"--port", strconv.Itoa(port),
+	}
+	cmd := exec.Command("gcloud", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+	}
+
+	loadBalancerName := loadBalancerResourceName(clusterName, port, "load-balancer")
+	args = []string{"beta", "compute", "backend-services", "create", loadBalancerName,
+		"--project", project,
+		"--load-balancing-scheme", "EXTERNAL_MANAGED",
+		"--global-health-checks",
+		"--global",
+		"--protocol", "TCP",
+		"--health-checks", healthCheckName,
+		"--timeout", "5m",
+		"--port-name", "cockroach",
+	}
+	cmd = exec.Command("gcloud", args...)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+	}
+
+	// Add the instance group to the backend service. This has to be done
+	// sequentially, and for each zone, because gcloud does not allow adding
+	// multiple instance groups in parallel.
+	for _, group := range groups {
+		args = []string{"beta", "compute", "backend-services", "add-backend", loadBalancerName,
+			"--project", project,
+			"--global",
+			"--instance-group", group.Name,
+			"--instance-group-zone", group.Zone,
+			"--balancing-mode", "UTILIZATION",
+			"--max-utilization", "0.8",
+		}
+		cmd = exec.Command("gcloud", args...)
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+		}
+	}
+
+	proxyName := loadBalancerResourceName(clusterName, port, "proxy")
+	args = []string{"beta", "compute", "target-tcp-proxies", "create", proxyName,
+		"--project", project,
+		"--backend-service", loadBalancerName,
+		"--proxy-header", "NONE",
+	}
+	cmd = exec.Command("gcloud", args...)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+	}
+
+	args = []string{"beta", "compute", "forwarding-rules", "create",
+		loadBalancerResourceName(clusterName, port, "forwarding-rule"),
+		"--project", project,
+		"--global",
+		"--target-tcp-proxy", proxyName,
+		"--ports", strconv.Itoa(port),
+	}
+	cmd = exec.Command("gcloud", args...)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+	}
+
+	// Named ports can be set in parallel for all instance groups.
+	var g errgroup.Group
+	for _, group := range groups {
+		groupArgs := []string{"beta", "compute", "instance-groups", "set-named-ports", group.Name,
+			"--project", project,
+			"--zone", group.Zone,
+			"--named-ports", "cockroach:" + strconv.Itoa(port),
+		}
+		g.Go(func() error {
+			cmd := exec.Command("gcloud", groupArgs...)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", groupArgs, output)
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
 // Given a machine type, return the allowed number (> 0) of local SSDs, sorted in ascending order.
 // N.B. Only n1, n2, n2d and c2 instances are supported since we don't typically use other instance types.
 // Consult https://cloud.google.com/compute/docs/disks/#local_ssd_machine_type_restrictions for other types of instances.
