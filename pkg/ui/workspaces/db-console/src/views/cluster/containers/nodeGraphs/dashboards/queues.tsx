@@ -49,6 +49,11 @@ export default function (props: GraphDashboardProps) {
           nonNegativeRate
         />
         <Metric
+          name="cr.store.queue.lease.process.failure"
+          title="Lease"
+          nonNegativeRate
+        />
+        <Metric
           name="cr.store.queue.split.process.failure"
           title="Split"
           nonNegativeRate
@@ -101,6 +106,11 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.store.queue.replicate.processingnanos"
           title="Replication"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.lease.processingnanos"
+          title="Lease"
           nonNegativeRate
         />
         <Metric
@@ -213,6 +223,31 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.store.queue.replicate.purgatory"
           title="Replicas in Purgatory"
+          downsampleMax
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Lease Queue"
+      sources={storeSources}
+      tenantSource={tenantSource}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Count} label="actions">
+        <Metric
+          name="cr.store.queue.lease.process.success"
+          title="Successful Actions / sec"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.lease.pending"
+          title="Pending Actions"
+          downsampleMax
+        />
+        <Metric
+          name="cr.store.queue.lease.purgatory"
+          title="Replicas in  Purgatory"
           downsampleMax
         />
       </Axis>
