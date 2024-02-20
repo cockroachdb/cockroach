@@ -2269,7 +2269,7 @@ func (a *Allocator) TransferLeaseTarget(
 	opts allocator.TransferLeaseOptions,
 ) roachpb.ReplicaDescriptor {
 	if a.knobs != nil {
-		if blockFn := a.knobs.BlockTransferTarget; blockFn != nil && blockFn() {
+		if blockFn := a.knobs.BlockTransferTarget; blockFn != nil && blockFn(leaseRepl.GetRangeID()) {
 			return roachpb.ReplicaDescriptor{}
 		}
 	}

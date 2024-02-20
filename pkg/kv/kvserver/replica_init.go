@@ -134,6 +134,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 			DisableTxnPushing:  store.TestingKnobs().DontPushOnLockConflictError,
 			TxnWaitKnobs:       store.TestingKnobs().TxnWaitKnobs,
 		}),
+		allocatorToken: &plan.AllocatorToken{},
 	}
 	r.sideTransportClosedTimestamp.init(store.cfg.ClosedTimestampReceiver, rangeID)
 
@@ -173,7 +174,6 @@ func newUninitializedReplicaWithoutRaftGroup(
 		r.leaseHistory = newLeaseHistory(leaseHistoryMaxEntries)
 	}
 
-	r.allocatorToken = &plan.AllocatorToken{}
 	if store.cfg.StorePool != nil {
 		r.loadStats = load.NewReplicaLoad(store.Clock(), store.cfg.StorePool.GetNodeLocalityString)
 		split.Init(

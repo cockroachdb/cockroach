@@ -62,7 +62,7 @@ type ReplicationPlanner interface {
 		repl AllocatorReplica,
 		desc *roachpb.RangeDescriptor,
 		conf *roachpb.SpanConfig,
-		canTransferLeaseFrom CanTransferLeaseFrom,
+		opts PlannerOptions,
 	) (bool, float64)
 	// PlanOneChange calls the allocator to determine an action to be taken upon a
 	// range. The fn then calls back into the allocator to get the changes
@@ -72,18 +72,18 @@ type ReplicationPlanner interface {
 		repl AllocatorReplica,
 		desc *roachpb.RangeDescriptor,
 		conf *roachpb.SpanConfig,
-		canTransferLeaseFrom CanTransferLeaseFrom,
-		scatter bool,
+		opts PlannerOptions,
 	) (ReplicateChange, error)
 }
 
-// CanTransferLeaseFrom returns true if the lease can be transferred from the
-// replica and false if not.
-type CanTransferLeaseFrom func(
-	ctx context.Context,
-	repl LeaseCheckReplica,
-	conf *roachpb.SpanConfig,
-) bool
+// PlannerOptions declares a set of options that can be set when calling
+// planner methods.
+type PlannerOptions struct {
+	// Scatter indicates whether the range is being scattered.
+	Scatter bool
+	// CanTransferLease indicates whether the lease can be transferred.
+	CanTransferLease bool
+}
 
 // LeaseCheckReplica contains methods that may be used to check a replica's
 // lease.
@@ -149,7 +149,7 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 	repl AllocatorReplica,
 	desc *roachpb.RangeDescriptor,
 	conf *roachpb.SpanConfig,
-	canTransferLeaseFrom CanTransferLeaseFrom,
+	opts PlannerOptions,
 ) (shouldPlanChange bool, priority float64) {
 
 	log.KvDistribution.VEventf(ctx, 6,
@@ -203,40 +203,6 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 		log.KvDistribution.VEventf(ctx, 2, "no rebalance target found, not enqueuing")
 	}
 
-	// If the lease is valid, check to see if we should transfer it.
-	if canTransferLeaseFrom(ctx, repl, conf) {
-		decision := rp.allocator.ShouldTransferLease(
-			ctx,
-			rp.storePool,
-			desc,
-			conf,
-			voterReplicas,
-			repl,
-			repl.RangeUsageInfo(),
-		)
-		if decision.ShouldTransfer() {
-			log.KvDistribution.VEventf(ctx,
-				2, "lease transfer needed %v, enqueuing", decision)
-			return true, 0
-		}
-	}
-
-	leaseStatus := repl.LeaseStatusAt(ctx, now)
-	if !leaseStatus.IsValid() {
-		// The range has an invalid lease. If this replica is the raft leader then
-		// we'd like it to hold a valid lease. We enqueue it regardless of being a
-		// leader or follower, where the leader at the time of processing will
-		// succeed.
-		log.KvDistribution.VEventf(ctx, 2, "invalid lease, enqueuing")
-		return true, 0
-	}
-	if leaseStatus.OwnedBy(repl.StoreID()) && !repl.HasCorrectLeaseType(leaseStatus.Lease) {
-		// This replica holds (or held) an incorrect lease type, switch it to the
-		// correct type. Typically when changing kv.expiration_leases_only.enabled.
-		log.KvDistribution.VEventf(ctx, 2, "incorrect lease type, enqueueing")
-		return true, 0
-	}
-
 	return false, 0
 }
 
@@ -248,8 +214,7 @@ func (rp ReplicaPlanner) PlanOneChange(
 	repl AllocatorReplica,
 	desc *roachpb.RangeDescriptor,
 	conf *roachpb.SpanConfig,
-	canTransferLeaseFrom CanTransferLeaseFrom,
-	scatter bool,
+	opts PlannerOptions,
 ) (change ReplicateChange, _ error) {
 	// Initially set the change to be a no-op, it is then modified below if a
 	// step may be taken for this replica.
@@ -358,8 +323,7 @@ func (rp ReplicaPlanner) PlanOneChange(
 			voterReplicas,
 			nonVoterReplicas,
 			allocatorPrio,
-			canTransferLeaseFrom,
-			scatter,
+			opts.Scatter,
 		)
 	case allocatorimpl.AllocatorFinalizeAtomicReplicationChange, allocatorimpl.AllocatorRemoveLearner:
 		op = AllocationFinalizeAtomicReplicationOp{}
@@ -473,7 +437,7 @@ func (rp ReplicaPlanner) addOrReplaceVoters(
 	}
 
 	op = AllocationChangeReplicasOp{
-		lhStore:           repl.StoreID(),
+		LeaseholderStore:  repl.StoreID(),
 		Usage:             repl.RangeUsageInfo(),
 		Chgs:              ops,
 		AllocatorPriority: allocatorPriority,
@@ -524,7 +488,7 @@ func (rp ReplicaPlanner) addOrReplaceNonVoters(
 	}
 
 	op = AllocationChangeReplicasOp{
-		lhStore:           repl.StoreID(),
+		LeaseholderStore:  repl.StoreID(),
 		Usage:             repl.RangeUsageInfo(),
 		Chgs:              ops,
 		AllocatorPriority: allocatorPrio,
@@ -645,7 +609,7 @@ func (rp ReplicaPlanner) removeVoter(
 	}
 
 	transferOp, err := rp.maybeTransferLeaseAwayTarget(
-		ctx, repl, desc, conf, removeVoter.StoreID, nil /* canTransferLeaseFrom */)
+		ctx, repl, desc, conf, removeVoter.StoreID)
 	if err != nil {
 		return nil, stats, err
 	}
@@ -664,7 +628,7 @@ func (rp ReplicaPlanner) removeVoter(
 	// could save a bunch of work by just performing an atomic demotion of a
 	// voter.
 	op = AllocationChangeReplicasOp{
-		lhStore:           repl.StoreID(),
+		LeaseholderStore:  repl.StoreID(),
 		Usage:             repl.RangeUsageInfo(),
 		Chgs:              kvpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, removeVoter),
 		AllocatorPriority: 0.0, // unused
@@ -703,7 +667,7 @@ func (rp ReplicaPlanner) removeNonVoter(
 	}
 
 	op = AllocationChangeReplicasOp{
-		lhStore:           repl.StoreID(),
+		LeaseholderStore:  repl.StoreID(),
 		Usage:             repl.RangeUsageInfo(),
 		Chgs:              kvpb.MakeReplicationChanges(roachpb.REMOVE_NON_VOTER, target),
 		AllocatorPriority: 0.0, // unused
@@ -741,7 +705,7 @@ func (rp ReplicaPlanner) removeDecommissioning(
 	decommissioningReplica := decommissioningReplicas[0]
 
 	transferOp, err := rp.maybeTransferLeaseAwayTarget(
-		ctx, repl, desc, conf, decommissioningReplica.StoreID, nil /* canTransferLeaseFrom */)
+		ctx, repl, desc, conf, decommissioningReplica.StoreID)
 	if err != nil {
 		return nil, stats, err
 	}
@@ -759,7 +723,7 @@ func (rp ReplicaPlanner) removeDecommissioning(
 	}
 
 	op = AllocationChangeReplicasOp{
-		lhStore:           repl.StoreID(),
+		LeaseholderStore:  repl.StoreID(),
 		Usage:             repl.RangeUsageInfo(),
 		Chgs:              kvpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
 		AllocatorPriority: 0.0, // unused
@@ -796,7 +760,7 @@ func (rp ReplicaPlanner) removeDead(
 	// removed (and if for some reason that happens, the removal is simply going
 	// to fail).
 	op = AllocationChangeReplicasOp{
-		lhStore:           repl.StoreID(),
+		LeaseholderStore:  repl.StoreID(),
 		Usage:             repl.RangeUsageInfo(),
 		Chgs:              kvpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
 		AllocatorPriority: 0.0, // unused
@@ -814,7 +778,6 @@ func (rp ReplicaPlanner) considerRebalance(
 	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	allocatorPrio float64,
-	canTransferLeaseFrom CanTransferLeaseFrom,
 	scatter bool,
 ) (op AllocationOp, stats ReplicateStats, _ error) {
 	// When replica rebalancing is not enabled return early.
@@ -858,39 +821,10 @@ func (rp ReplicaPlanner) considerRebalance(
 		rebalanceTargetType = allocatorimpl.NonVoterTarget
 	}
 
-	// No rebalance target was found, check whether we are able and should
-	// transfer the lease away to another store.
 	if !ok {
 		log.KvDistribution.VInfof(ctx, 2, "no suitable rebalance target for non-voters")
-		if !canTransferLeaseFrom(ctx, repl, conf) {
-			return nil, stats, nil
-		}
-		var err error
-		op, err = rp.shedLeaseTarget(
-			ctx,
-			repl,
-			desc,
-			conf,
-			allocator.TransferLeaseOptions{
-				Goal:                   allocator.FollowTheWorkload,
-				ExcludeLeaseRepl:       false,
-				CheckCandidateFullness: true,
-			},
-		)
-		if err != nil {
-			if scatter && errors.Is(err, CantTransferLeaseViolatingPreferencesError{}) {
-				// When scatter is specified, we ignore lease preference violation
-				// errors returned from shedLeaseTarget. These errors won't place the
-				// replica into purgatory because they are called outside the replicate
-				// queue loop, directly.
-				log.KvDistribution.VEventf(ctx, 3, "%v", err)
-				err = nil
-			}
-			return nil, stats, err
-		}
-		return op, stats, nil
+		return nil, stats, nil
 	}
-
 	// If we have a valid rebalance action (ok == true) and we haven't
 	// transferred our lease away, find the rebalance changes and return them
 	// in an operation.
@@ -914,7 +848,7 @@ func (rp ReplicaPlanner) considerRebalance(
 		rangeRaftProgress(repl.RaftStatus(), existingVoters))
 
 	op = AllocationChangeReplicasOp{
-		lhStore:           repl.StoreID(),
+		LeaseholderStore:  repl.StoreID(),
 		Usage:             rangeUsageInfo,
 		Chgs:              chgs,
 		AllocatorPriority: allocatorPrio,
@@ -924,58 +858,6 @@ func (rp ReplicaPlanner) considerRebalance(
 	return op, stats, nil
 }
 
-// shedLeaseTarget takes in a leaseholder replica, looks for a target for
-// transferring the lease and, if a suitable target is found (e.g. alive, not
-// draining), returns an allocation op to transfer the lease away.
-func (rp ReplicaPlanner) shedLeaseTarget(
-	ctx context.Context,
-	repl AllocatorReplica,
-	desc *roachpb.RangeDescriptor,
-	conf *roachpb.SpanConfig,
-	opts allocator.TransferLeaseOptions,
-) (op AllocationOp, _ error) {
-	usage := repl.RangeUsageInfo()
-	existingVoters := desc.Replicas().VoterDescriptors()
-	// Learner replicas aren't allowed to become the leaseholder or raft leader,
-	// so only consider the `VoterDescriptors` replicas.
-	target := rp.allocator.TransferLeaseTarget(
-		ctx,
-		rp.storePool,
-		desc,
-		conf,
-		existingVoters,
-		repl,
-		usage,
-		false, /* forceDecisionWithoutStats */
-		opts,
-	)
-	if target == (roachpb.ReplicaDescriptor{}) {
-		// If we don't find a suitable target, but we own a lease violating the
-		// lease preferences, and there is a more suitable target, return an error
-		// to place the replica in purgatory and retry sooner. This typically
-		// happens when we've just acquired a violating lease and we eagerly
-		// enqueue the replica before we've received Raft leadership, which
-		// prevents us from finding appropriate lease targets since we can't
-		// determine if any are behind.
-		liveVoters, _ := rp.storePool.LiveAndDeadReplicas(
-			existingVoters, false /* includeSuspectAndDrainingStores */)
-		preferred := rp.allocator.PreferredLeaseholders(rp.storePool, conf, liveVoters)
-		if len(preferred) > 0 &&
-			repl.LeaseViolatesPreferences(ctx, conf) {
-			return nil, CantTransferLeaseViolatingPreferencesError{RangeID: desc.RangeID}
-		}
-		return nil, nil
-	}
-
-	op = AllocationTransferLeaseOp{
-		Source:             repl.StoreID(),
-		Target:             target.StoreID,
-		Usage:              usage,
-		bypassSafetyChecks: false,
-	}
-	return op, nil
-}
-
 // maybeTransferLeaseAwayTarget is called whenever a replica on a given store
 // is slated for removal. If the store corresponds to the store of the caller
 // (which is very likely to be the leaseholder), then this removal would fail.
@@ -983,21 +865,16 @@ func (rp ReplicaPlanner) shedLeaseTarget(
 // true to indicate to the caller that it should not pursue the current
 // replication change further because it is no longer the leaseholder. When the
 // returned bool is false, it should continue. On error, the caller should also
-// stop. If canTransferLeaseFrom is non-nil, it is consulted and an error is
-// returned if it returns false.
+// stop
 func (rp ReplicaPlanner) maybeTransferLeaseAwayTarget(
 	ctx context.Context,
 	repl AllocatorReplica,
 	desc *roachpb.RangeDescriptor,
 	conf *roachpb.SpanConfig,
 	removeStoreID roachpb.StoreID,
-	canTransferLeaseFrom CanTransferLeaseFrom,
 ) (op AllocationOp, _ error) {
 	if removeStoreID != repl.StoreID() {
 		return nil, nil
-	}
-	if canTransferLeaseFrom != nil && !canTransferLeaseFrom(ctx, repl, conf) {
-		return nil, errors.Errorf("cannot transfer lease")
 	}
 	usageInfo := repl.RangeUsageInfo()
 	// The local replica was selected as the removal target, but that replica
@@ -1030,7 +907,7 @@ func (rp ReplicaPlanner) maybeTransferLeaseAwayTarget(
 	if target == (roachpb.ReplicaDescriptor{}) {
 		return nil, nil
 	}
-	log.KvDistribution.Infof(ctx, "transferring lease to s%d", target.StoreID)
+	log.KvDistribution.Infof(ctx, "transferring away lease to s%d", target.StoreID)
 
 	op = AllocationTransferLeaseOp{
 		Source:             repl.StoreID(),
@@ -1041,26 +918,3 @@ func (rp ReplicaPlanner) maybeTransferLeaseAwayTarget(
 
 	return op, nil
 }
-
-// CantTransferLeaseViolatingPreferencesError is an error returned when a lease
-// violates the lease preferences, but we couldn't find a valid target to
-// transfer the lease to. It indicates that the replica should be sent to
-// purgatory, to retry the transfer faster.
-type CantTransferLeaseViolatingPreferencesError struct {
-	RangeID roachpb.RangeID
-}
-
-var _ errors.SafeFormatter = CantTransferLeaseViolatingPreferencesError{}
-
-func (e CantTransferLeaseViolatingPreferencesError) Error() string { return fmt.Sprint(e) }
-
-func (e CantTransferLeaseViolatingPreferencesError) Format(s fmt.State, verb rune) {
-	errors.FormatError(e, s, verb)
-}
-
-func (e CantTransferLeaseViolatingPreferencesError) SafeFormatError(p errors.Printer) (next error) {
-	p.Printf("can't transfer r%d lease violating preferences, no suitable target", e.RangeID)
-	return nil
-}
-
-func (CantTransferLeaseViolatingPreferencesError) PurgatoryErrorMarker() {}

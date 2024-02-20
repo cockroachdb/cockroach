@@ -4006,19 +4006,9 @@ func (r *Replica) adminScatter(
 	}
 
 	// Loop until we hit an error or until we hit `maxAttempts` for the range.
-	// Note that we disable lease transfers until the final step as transferring
-	// the lease prevents any further action on this node.
-	var allowLeaseTransfer bool
-	requeue := true
-	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool {
-		return allowLeaseTransfer
-	}
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
 			break
-		}
-		if currentAttempt == maxAttempts-1 || !requeue {
-			allowLeaseTransfer = true
 		}
 		desc, conf := r.DescAndSpanConfig()
 		_, err := rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
@@ -4026,8 +4016,8 @@ func (r *Replica) adminScatter(
 			// The replica can not be processed, so skip it.
 			break
 		}
-		requeue, err = rq.processOneChange(
-			ctx, r, desc, conf, canTransferLease, true /* scatter */, false, /* dryRun */
+		_, err = rq.processOneChange(
+			ctx, r, desc, conf, true /* scatter */, false, /* dryRun */
 		)
 		if err != nil {
 			// TODO(tbg): can this use IsRetriableReplicationError?
@@ -4052,9 +4042,14 @@ func (r *Replica) adminScatter(
 			newLeaseholderIdx := rand.Intn(len(potentialLeaseTargets))
 			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID
 			if targetStoreID != r.store.StoreID() {
-				log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
-				if err := r.AdminTransferLease(ctx, targetStoreID, false /* bypassSafetyChecks */); err != nil {
-					log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
+				if tokenErr := r.allocatorToken.TryAcquire(ctx, "scatter"); tokenErr != nil {
+					log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, tokenErr)
+				} else {
+					defer r.allocatorToken.Release(ctx)
+					log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
+					if err := r.AdminTransferLease(ctx, targetStoreID, false /* bypassSafetyChecks */); err != nil {
+						log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
+					}
 				}
 			}
 		}
