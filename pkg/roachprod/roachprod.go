@@ -2376,3 +2376,48 @@ func createAttachMountVolumes(
 	}
 	return nil
 }
+
+// CreateLoadBalancer creates a load balancer for the SQL service on the given
+// cluster. Currently only supports GCE.
+func CreateLoadBalancer(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	secure bool,
+	virtualClusterName string,
+	sqlInstance int,
+) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName, install.SecureOption(secure))
+	if err != nil {
+		return err
+	}
+
+	// Find the SQL ports for the service on all nodes.
+	services, err := c.DiscoverServices(
+		ctx, virtualClusterName, install.ServiceTypeSQL,
+		install.ServiceNodePredicate(c.TargetNodes()...), install.ServiceInstancePredicate(sqlInstance),
+	)
+	if err != nil {
+		return err
+	}
+	if len(services) == 0 {
+		return errors.Errorf("%s SQL service not found on cluster %s, start a service first.", virtualClusterName, clusterName)
+	}
+
+	// Confirm that the service has the same port on all nodes.
+	port := services[0].Port
+	for _, service := range services[1:] {
+		if port != service.Port {
+			return errors.Errorf("service %s must share the same port on all nodes, different ports found %d and %d",
+				virtualClusterName, port, service.Port)
+		}
+	}
+
+	// Create a load balancer for the service's port.
+	return vm.FanOut(c.VMs, func(provider vm.Provider, vms vm.List) error {
+		return provider.CreateLoadBalancer(l, vms, port)
+	})
+}
