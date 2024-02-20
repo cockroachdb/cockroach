@@ -67,7 +67,7 @@ func TestRangeFeedIntegration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeClusterSettings()
+	settings := cluster.MakeTestingClusterSettings()
 	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 	})
@@ -163,7 +163,7 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeClusterSettings()
+	settings := cluster.MakeTestingClusterSettings()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      base.TestServerArgs{Settings: settings},
@@ -288,7 +288,7 @@ func TestWithOnCheckpoint(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeClusterSettings()
+	settings := cluster.MakeTestingClusterSettings()
 	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 	})
@@ -388,7 +388,7 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeClusterSettings()
+	settings := cluster.MakeTestingClusterSettings()
 	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 	})
@@ -502,7 +502,7 @@ func TestWithOnSSTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeClusterSettings()
+	settings := cluster.MakeTestingClusterSettings()
 	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Settings:          settings,
 		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109473),
@@ -601,7 +601,7 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	settings := cluster.MakeClusterSettings()
+	settings := cluster.MakeTestingClusterSettings()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109473),
@@ -707,7 +707,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeClusterSettings()
+	settings := cluster.MakeTestingClusterSettings()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings: settings,
@@ -888,7 +888,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeClusterSettings()
+	settings := cluster.MakeTestingClusterSettings()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109472),
 		Knobs: base.TestingKnobs{
@@ -984,7 +984,7 @@ func TestMVCCHistoryMutationError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	settings := cluster.MakeClusterSettings()
+	settings := cluster.MakeTestingClusterSettings()
 	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 	})
@@ -1066,7 +1066,7 @@ func TestRangefeedWithLabelsOption(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeClusterSettings()
+	settings := cluster.MakeTestingClusterSettings()
 	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 	})
@@ -1179,7 +1179,7 @@ func TestRangeFeedStartTimeExclusive(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeClusterSettings()
+	settings := cluster.MakeTestingClusterSettings()
 	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 	})
@@ -1312,7 +1312,7 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 
 	// Speed up the test by reducing various closed/resolved timestamp intervals.
 	const interval = 100 * time.Millisecond
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 	kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, interval)
 	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, interval)
 	closedts.TargetDuration.Override(ctx, &st.SV, interval)
