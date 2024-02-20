@@ -59,15 +59,12 @@ import (
 //     replica at a time.
 // (3) rq.processOneChange(..) called by (2), processes a single replication
 //     change for the current replica.
-// (4) rq.preProcessCheck(..) called by (3), ensures that the replica can be
-//     processed. This checks whether the replica is destroyed, has the correct
-//     lease type and holds a valid lease.
-// (5) planner.PlanOneChange(..) called by (3), uses allocator to determine
+// (4) planner.PlanOneChange(..) called by (3), uses allocator to determine
 //     necessary replication changes. This function is separate to the
 //     replicate queue and stateless. The majority of the replication logic
 //     lives within this function and.
-// (6) rq.applyChange(..) called by (3), actually performs snapshot and
-//     replication changes returned from (5). These changes are applied
+// (5) rq.applyChange(..) called by (3), actually performs snapshot and
+//     replication changes returned from (4). These changes are applied
 //     synchronously.
 
 const (
@@ -873,13 +870,6 @@ func (rq *replicateQueue) processOneChange(
 	canTransferLeaseFrom plan.CanTransferLeaseFrom,
 	scatter, dryRun bool,
 ) (requeue bool, _ error) {
-	// Ensure that the replica can be processed. The replica must not be
-	// destroyed. The replica must have a valid lease. The lease must be the
-	// correct type.
-	if err := rq.preProcessCheck(ctx, repl); err != nil {
-		return false, err
-	}
-
 	change, err := rq.planner.PlanOneChange(ctx, repl, desc, conf, canTransferLeaseFrom, scatter)
 	// When there is an error planning a change, return the error immediately
 	// and do not requeue. It is unlikely that the range or storepool state
@@ -933,42 +923,6 @@ func (rq *replicateQueue) processOneChange(
 
 	// Requeue the replica if it meets the criteria in ShouldRequeue.
 	return ShouldRequeue(ctx, change, conf), nil
-}
-
-// preProcessCheck checks the lease  and destroy status of the replica. This is
-// done to ensure that the replica has a valid lease, correct lease type and is
-// not destroyed.
-// TODO(baptist): Remove this check. It is redundant with Queue.replicaCanBeProcessed
-func (rq *replicateQueue) preProcessCheck(ctx context.Context, repl *Replica) error {
-	// Check lease and destroy status here. The queue does this higher up already, but
-	// adminScatter (and potential other future callers) also call this method and don't
-	// perform this check, which could lead to infinite loops.
-	if _, err := repl.IsDestroyed(); err != nil {
-		return err
-	}
-
-	// Ensure ranges have a lease (returning NLHE if someone else has it), and
-	// switch the lease type if necessary (e.g. due to
-	// kv.expiration_leases_only.enabled).
-	//
-	// TODO(kvoli): This check should fail if not the leaseholder. In the case
-	// where we want to use the replicate queue to acquire leases, this should
-	// occur before planning or as a result. In order to return this in planning,
-	// it is necessary to simulate the prior change having succeeded to then plan
-	// this lease transfer.
-	//
-	// TODO(erikgrinaker): This is also done more eagerly during Raft ticks, but
-	// that doesn't work for quiesced epoch-based ranges, so we have a fallback
-	// here that usually runs within 10 minutes.
-	leaseStatus, pErr := repl.redirectOnOrAcquireLease(ctx)
-	if pErr != nil {
-		return pErr.GoError()
-	}
-	pErr = repl.maybeSwitchLeaseType(ctx, leaseStatus)
-	if pErr != nil {
-		return pErr.GoError()
-	}
-	return nil
 }
 
 func maybeAnnotateDecommissionErr(err error, action allocatorimpl.AllocatorAction) error {
