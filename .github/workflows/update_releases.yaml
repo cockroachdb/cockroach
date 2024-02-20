@@ -13,6 +13,10 @@
 # limitations under the License.
 
 on:
+  # TODO(celia) -- REMOVE THIS ONCE FIX IS VERIFIED --- NO NOT MERGE !!!!
+  pull_request:
+    branches:
+      - master
   schedule:
      - cron: 0 0 * * *
   # Allows you to run this workflow manually from the Actions tab
