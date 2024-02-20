@@ -183,6 +183,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 			store.rebalanceObjManager.Objective().ToSplitObjective(),
 		)
 	}
+	r.allocatorToken = &plan.AllocatorToken{}
 
 	// NB: the state will be loaded when the replica gets initialized.
 	r.mu.state = uninitState
