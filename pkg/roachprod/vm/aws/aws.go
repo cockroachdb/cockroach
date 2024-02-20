@@ -1615,3 +1615,7 @@ func (p *Provider) ListVolumeSnapshots(
 func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
 	panic("unimplemented")
 }
+
+func (p *Provider) CreateLoadBalancer(*logger.Logger, vm.List, int) error {
+	panic("unimplemented")
+}
