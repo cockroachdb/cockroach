@@ -176,7 +176,10 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	require.NoError(t, err)
 
 	manual.Pause()
-	ts1 := s.Clock().Now()
+	ts1 := hlc.Timestamp{WallTime: manual.UnixNano()}
+	// NB: it's possible that HLC ran in front of manual.Now() after the Pause()
+	// call. Particularly, if the wall clock regressed during Pause(), and there
+	// was a concurrent Now() with a pre-regression higher timestamp. See #119362.
 
 	key := roachpb.Key("a")
 	incArgs := incrementArgs(key, 5)
@@ -186,37 +189,28 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	const numCmds = 3
 	clockOffset := s.Clock().MaxOffset() / numCmds
 	for i := int64(1); i <= numCmds; i++ {
-		ts := hlc.ClockTimestamp(ts1.Add(i*clockOffset.Nanoseconds(), 0))
-		if _, err := kv.SendWrappedWith(context.Background(), store.TestSender(), kvpb.Header{Now: ts}, incArgs); err != nil {
-			t.Fatal(err)
-		}
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{
+			Now: hlc.ClockTimestamp(ts1.Add(i*clockOffset.Nanoseconds(), 0)),
+		}, incArgs)
+		require.NoError(t, pErr.GoError())
 	}
 
+	// Expect the clock to advance.
 	ts2 := s.Clock().Now()
-	if expAdvance, advance := ts2.GoTime().Sub(ts1.GoTime()), numCmds*clockOffset; advance != expAdvance {
-		t.Fatalf("expected clock to advance %s; got %s", expAdvance, advance)
-	}
+	require.Equal(t, numCmds*clockOffset, ts2.GoTime().Sub(ts1.GoTime()))
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
 	tsFuture := hlc.ClockTimestamp(ts1.Add(s.Clock().MaxOffset().Nanoseconds()+1, 0))
 	_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{Now: tsFuture}, incArgs)
-	if !testutils.IsPError(pErr, "remote wall time is too far ahead") {
-		t.Fatalf("unexpected error %v", pErr)
-	}
+	require.True(t, testutils.IsPError(pErr, "remote wall time is too far ahead"))
 
 	// The clock did not advance and the final command was not executed.
 	ts3 := s.Clock().Now()
-	if advance := ts3.GoTime().Sub(ts2.GoTime()); advance != 0 {
-		t.Fatalf("expected clock not to advance, but it advanced by %s", advance)
-	}
+	require.Zero(t, ts3.GoTime().Sub(ts2.GoTime()))
 	valRes, err := storage.MVCCGet(context.Background(), store.TODOEngine(), key, ts3,
 		storage.MVCCGetOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := mustGetInt(valRes.Value), incArgs.Increment*numCmds; a != e {
-		t.Errorf("expected %d, got %d", e, a)
-	}
+	require.NoError(t, err)
+	require.Equal(t, incArgs.Increment*numCmds, mustGetInt(valRes.Value))
 }
 
 // TestTxnPutOutOfOrder tests a case where a put operation of an older
