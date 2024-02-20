@@ -180,6 +180,8 @@ type MockEvalCtx struct {
 	CanCreateTxnRecordFn func() (bool, kvpb.TransactionAbortedReason)
 	MinTxnCommitTSFn     func() hlc.Timestamp
 	Lease                roachpb.Lease
+	NextLease            roachpb.Lease
+	LeaseAppliedIndex    kvpb.LeaseAppliedIndex
 	CurrentReadSummary   rspb.ReadSummary
 	ClosedTimestamp      hlc.Timestamp
 	RevokedLeaseSeq      roachpb.LeaseSequence
@@ -240,7 +242,7 @@ func (m *mockEvalCtxImpl) GetTerm(kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 	return m.Term, nil
 }
 func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex {
-	panic("unimplemented")
+	return m.LeaseAppliedIndex
 }
 func (m *mockEvalCtxImpl) Desc() *roachpb.RangeDescriptor {
 	return m.MockEvalCtx.Desc
@@ -283,7 +285,7 @@ func (m *mockEvalCtxImpl) GetLastReplicaGCTimestamp(context.Context) (hlc.Timest
 	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) GetLease() (roachpb.Lease, roachpb.Lease) {
-	return m.Lease, roachpb.Lease{}
+	return m.Lease, m.NextLease
 }
 func (m *mockEvalCtxImpl) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 	return roachpb.RangeInfo{Desc: *m.Desc(), Lease: m.Lease}

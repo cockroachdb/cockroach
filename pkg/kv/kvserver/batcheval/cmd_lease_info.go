@@ -53,6 +53,8 @@ func LeaseInfo(
 	} else {
 		reply.Lease = lease
 	}
+	reply.ClosedTimestamp = cArgs.EvalCtx.GetCurrentClosedTimestamp(ctx)
+	reply.LeaseAppliedIndex = cArgs.EvalCtx.GetLeaseAppliedIndex()
 	reply.EvaluatedBy = cArgs.EvalCtx.StoreID()
 	return result.Result{}, nil
 }

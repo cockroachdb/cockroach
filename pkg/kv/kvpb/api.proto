@@ -1695,6 +1695,14 @@ message LeaseInfoResponse{
   // still not evaluated by the node it was sent to if that node's replica is a
   // learner or the node doesn't have a replica at all.
   int32 evaluated_by = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  // lease_applied_index contains the replica's current lease applied index.
+  // This is not guaranteed to be consistent with other fields as they are read
+  // in separate critical sections.
+  uint64 lease_applied_index = 5  [(gogoproto.casttype) = "LeaseAppliedIndex"];
+  // closed_timestamp contains the replica's current closed timestamp. This is
+  // not guaranteed to be consistent with other fields as they are read in
+  // separate critical sections.
+  util.hlc.Timestamp closed_timestamp = 6 [(gogoproto.nullable) = false];
 }
 
 // A RequestLeaseResponse is the response to a RequestLease() or TransferLease()
