@@ -170,7 +170,6 @@ type registryTestSuite struct {
 	failOrCancelCh      chan error
 	resumeCheckCh       chan struct{}
 	failOrCancelCheckCh chan struct{}
-	onPauseRequest      jobs.OnPauseRequestFunc
 
 	// beforeUpdate is invoked in the BeforeUpdate testing knob if non-nil.
 	beforeUpdate func(orig, updated jobs.JobMetadata) error
@@ -244,7 +243,6 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.failOrCancelCh = make(chan error)
 	rts.resumeCheckCh = make(chan struct{})
 	rts.failOrCancelCheckCh = make(chan struct{})
-	rts.onPauseRequest = noopPauseRequestFunc
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
@@ -324,9 +322,6 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				}()
 				rts.mu.a.Success = true
 				return rts.successErr
-			},
-			PauseRequest: func(ctx context.Context, execCfg interface{}, txn isql.Txn, progress *jobspb.Progress) error {
-				return rts.onPauseRequest(ctx, execCfg, txn, progress)
 			},
 		}
 	}, jobs.UsesTenantCostControl)
@@ -897,74 +892,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		close(rts.failOrCancelCh)
 		rts.mu.e.OnFailOrCancelExit = true
 		rts.check(t, jobs.StatusFailed)
-	})
-
-	t.Run("OnPauseRequest", func(t *testing.T) {
-		rts := registryTestSuite{}
-		rts.setUp(t)
-		defer rts.tearDown()
-		madeUpSpans := []roachpb.Span{
-			{Key: roachpb.Key("foo")},
-		}
-		rts.onPauseRequest = func(ctx context.Context, planHookState interface{}, txn isql.Txn, progress *jobspb.Progress) error {
-			progress.GetImport().SpanProgress = madeUpSpans
-			return nil
-		}
-
-		job, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
-		require.NoError(t, err)
-		rts.job = job
-
-		rts.resumeCheckCh <- struct{}{}
-		rts.mu.e.ResumeStart = true
-		rts.check(t, jobs.StatusRunning)
-
-		// Request that the job is paused.
-		pauseErrCh := make(chan error)
-		go func() {
-			_, err := rts.outerDB.Exec("PAUSE JOB $1", job.ID())
-			pauseErrCh <- err
-		}()
-
-		// Ensure that the pause went off without a problem.
-		require.NoError(t, <-pauseErrCh)
-		rts.check(t, jobs.StatusPaused)
-		{
-			// Make sure the side-effects of our pause function occurred.
-			j, err := rts.registry.LoadJob(rts.ctx, job.ID())
-			require.NoError(t, err)
-			progress := j.Progress()
-			require.Equal(t, madeUpSpans, progress.GetImport().SpanProgress)
-		}
-	})
-	t.Run("OnPauseRequest failure does not pause", func(t *testing.T) {
-		rts := registryTestSuite{}
-		rts.setUp(t)
-		defer rts.tearDown()
-
-		rts.onPauseRequest = func(ctx context.Context, planHookState interface{}, txn isql.Txn, progress *jobspb.Progress) error {
-			return errors.New("boom")
-		}
-
-		job, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
-		require.NoError(t, err)
-		rts.job = job
-
-		// Allow the job to start.
-		rts.resumeCheckCh <- struct{}{}
-		rts.mu.e.ResumeStart = true
-		rts.check(t, jobs.StatusRunning)
-
-		// Request that the job is paused and ensure that the pause hit the error
-		// and failed to pause.
-		_, err = rts.outerDB.Exec("PAUSE JOB $1", job.ID())
-		require.Regexp(t, "boom", err)
-
-		// Allow the job to complete.
-		rts.resumeCh <- nil
-		rts.mu.e.Success = true
-		rts.mu.e.ResumeExit++
-		rts.check(t, jobs.StatusSucceeded)
 	})
 	t.Run("dump traces on pause-unpause-success", func(t *testing.T) {
 		ctx := context.Background()
