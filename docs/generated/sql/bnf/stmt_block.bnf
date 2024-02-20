@@ -696,8 +696,8 @@ string_or_placeholder_list ::=
 	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
 
 insert_target ::=
-	table_name
-	| table_name 'AS' table_alias_name
+	table_name_opt_idx
+	| table_name_opt_idx 'AS' table_alias_name
 
 insert_rest ::=
 	select_stmt

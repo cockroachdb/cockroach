@@ -12435,23 +12435,27 @@ upsert_stmt:
 | opt_with_clause UPSERT error // SHOW HELP: UPSERT
 
 insert_target:
-  table_name
+  table_name_opt_idx
   {
-    name := $1.unresolvedObjectName().ToTableName()
-    $$.val = &name
+    $$.val = $1.tblExpr()
   }
 // Can't easily make AS optional here, because VALUES in insert_rest would have
 // a shift/reduce conflict with VALUES as an optional alias. We could easily
 // allow unreserved_keywords as optional aliases, but that'd be an odd
 // divergence from other places. So just require AS for now.
-| table_name AS table_alias_name
+| table_name_opt_idx AS table_alias_name
   {
-    name := $1.unresolvedObjectName().ToTableName()
-    $$.val = &tree.AliasedTableExpr{Expr: &name, As: tree.AliasClause{Alias: tree.Name($3)}}
+    alias := $1.tblExpr().(*tree.AliasedTableExpr)
+    alias.As = tree.AliasClause{Alias: tree.Name($3)}
+    $$.val = alias
   }
-| numeric_table_ref
+| numeric_table_ref opt_index_flags
   {
-    $$.val = $1.tblExpr()
+    /* SKIP DOC */
+    $$.val = &tree.AliasedTableExpr{
+      Expr: $1.tblExpr(),
+      IndexFlags: $2.indexFlags(),
+    }
   }
 
 insert_rest:
