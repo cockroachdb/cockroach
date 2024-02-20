@@ -3,4 +3,4 @@
 # remote execution arguments to the invocation. You must call get-engflow-keys.sh
 # before this.
 
-echo '--config engflowpublic --jobs 300 --tls_client_certificate=/home/agent/engflow.crt --tls_client_key=/home/agent/engflow.key'
+echo '--config engflowpublic --tls_client_certificate=/home/agent/engflow.crt --tls_client_key=/home/agent/engflow.key'

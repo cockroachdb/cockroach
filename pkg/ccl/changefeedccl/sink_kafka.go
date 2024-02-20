@@ -262,20 +262,10 @@ func (s *kafkaSink) Dial() error {
 		return err
 	}
 
-	if err = client.RefreshMetadata(); err != nil {
-		// Dial() seems to be at a weird state while topics are still setting up and
-		// passing specific topics s.Topics() RefreshMetadata here can trigger a
-		// sarama error. To match the previous behaviour in sarama prior to #114740
-		// during Dial(), we manually fetch metadata for all topics just during
-		// Dial(). See more in #116872.
-		if errors.Is(err, sarama.ErrLeaderNotAvailable) || errors.Is(err, sarama.ErrReplicaNotAvailable) ||
-			errors.Is(err, sarama.ErrTopicAuthorizationFailed) || errors.Is(err, sarama.ErrClusterAuthorizationFailed) {
-			// To match sarama code in NewClient with conf.Metadata.Full == true, we
-			// swallow the error when it is one of the errors above.
-			log.Infof(s.ctx, "kafka sink unable to refreshMetadata during Dial() due to: %s", err.Error())
-		} else {
-			return errors.CombineErrors(err, client.Close())
-		}
+	if err = client.RefreshMetadata(s.Topics()...); err != nil {
+		// Now that we do not fetch metadata for all topics by default, we try
+		// RefreshMetadata manually to check for any connection error.
+		return errors.CombineErrors(err, client.Close())
 	}
 
 	producer, err := s.newAsyncProducer(client)
