@@ -129,21 +129,22 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 		return err
 	}
 
-	if n.Name == jobspb.AutoStatsName {
-		// Don't start the job if there is already a CREATE STATISTICS job running.
-		// (To handle race conditions we check this again after the job starts,
-		// but this check is used to prevent creating a large number of jobs that
-		// immediately fail).
-		if err := checkRunningJobs(ctx, nil /* job */, n.p); err != nil {
-			return err
-		}
-	} else {
+	if n.Name != jobspb.AutoStatsName {
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
 	}
 
 	var job *jobs.StartableJob
 	jobID := n.p.ExecCfg().JobRegistry.MakeJobID()
 	if err := n.p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+		if n.Name == jobspb.AutoStatsName {
+			// Don't start the job if there is already a CREATE STATISTICS job running.
+			// (To handle race conditions we check this again after the job starts,
+			// but this check is used to prevent creating a large number of jobs that
+			// immediately fail).
+			if err := checkRunningJobsInTxn(ctx, jobspb.InvalidJobID, txn); err != nil {
+				return err
+			}
+		}
 		return n.p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &job, jobID, txn, *record)
 	}); err != nil {
 		if job != nil {
@@ -743,13 +744,21 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 	if job != nil {
 		jobID = job.ID()
 	}
-	var exists bool
-	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		exists, err = jobs.RunningJobExists(ctx, jobID, txn, p.ExecCfg().Settings.Version,
-			jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats,
-		)
-		return err
-	}); err != nil {
+	return p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+		return checkRunningJobsInTxn(ctx, jobID, txn)
+	})
+}
+
+// checkRunningJobsInTx checks whether there are any other CreateStats jobs in
+// the pending, running, or paused status that started earlier than this one. If
+// there are, checkRunningJobs returns an error. If jobID is
+// jobspb.InvalidJobID, checkRunningJobs just checks if there are any pending,
+// running, or paused CreateStats jobs.
+func checkRunningJobsInTxn(ctx context.Context, jobID jobspb.JobID, txn isql.Txn) error {
+	exists, err := jobs.RunningJobExists(ctx, jobID, txn,
+		jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats,
+	)
+	if err != nil {
 		return err
 	}
 

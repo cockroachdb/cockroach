@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -28,11 +27,7 @@ import (
 // the ID specified by ignoreJobID as well as any jobs created after it, if
 // the passed ID is not InvalidJobID.
 func RunningJobExists(
-	ctx context.Context,
-	ignoreJobID jobspb.JobID,
-	txn isql.Txn,
-	cv clusterversion.Handle,
-	jobTypes ...jobspb.Type,
+	ctx context.Context, ignoreJobID jobspb.JobID, txn isql.Txn, jobTypes ...jobspb.Type,
 ) (exists bool, retErr error) {
 	var typeStrs string
 	switch len(jobTypes) {
