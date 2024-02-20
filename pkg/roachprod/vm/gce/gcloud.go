@@ -1542,6 +1542,223 @@ func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 	return propagateDiskLabels(l, project, labelsJoined, zoneToHostNames, len(vms[0].LocalDisks) != 0)
 }
 
+type jsonBackendService struct {
+	Name     string `json:"name"`
+	Backends []struct {
+		Group string `json:"group"`
+	} `json:"backends"`
+	HealthChecks []string `json:"healthChecks"`
+	SelfLink     string   `json:"selfLink"`
+}
+
+func listBackendServices(project string) ([]jsonBackendService, error) {
+	args := []string{"compute", "backend-services", "list", "--project", project, "--format", "json"}
+	var backends []jsonBackendService
+	if err := runJSONCommand(args, &backends); err != nil {
+		return nil, err
+	}
+	return backends, nil
+}
+
+type jsonForwardingRule struct {
+	Name     string `json:"name"`
+	SelfLink string `json:"selfLink"`
+	Target   string `json:"target"`
+}
+
+func listForwardingRules(project string) ([]jsonForwardingRule, error) {
+	args := []string{"compute", "forwarding-rules", "list", "--project", project, "--format", "json"}
+	var rules []jsonForwardingRule
+	if err := runJSONCommand(args, &rules); err != nil {
+		return nil, err
+	}
+	return rules, nil
+}
+
+type jsonTargetTCPProxy struct {
+	Name     string `json:"name"`
+	SelfLink string `json:"selfLink"`
+	Service  string `json:"service"`
+}
+
+func listTargetTCPProxies(project string) ([]jsonTargetTCPProxy, error) {
+	args := []string{"compute", "target-tcp-proxies", "list", "--project", project, "--format", "json"}
+	var proxies []jsonTargetTCPProxy
+	if err := runJSONCommand(args, &proxies); err != nil {
+		return nil, err
+	}
+	return proxies, nil
+}
+
+type jsonHealthCheck struct {
+	Name     string `json:"name"`
+	SelfLink string `json:"selfLink"`
+}
+
+func listHealthChecks(project string) ([]jsonHealthCheck, error) {
+	args := []string{"compute", "health-checks", "list", "--project", project, "--format", "json"}
+	var checks []jsonHealthCheck
+	if err := runJSONCommand(args, &checks); err != nil {
+		return nil, err
+	}
+	return checks, nil
+}
+
+// deleteLoadBalancerResources deletes all load balancer resources associated
+// with a given cluster and project. This function does not return an error if
+// the resources do not exist. Multiple load balancers can be associated with a
+// single cluster, so we need to delete all of them. Health checks associated
+// with the cluster are also deleted.
+func deleteLoadBalancerResources(project, clusterName string) error {
+	// List all the components of the load balancer resources tied to the cluster.
+	services, err := listBackendServices(project)
+	if err != nil {
+		return err
+	}
+	filteredServices := make([]jsonBackendService, 0)
+	// Find all backend services tied to the managed instance group.
+	for _, service := range services {
+		for _, backend := range service.Backends {
+			if strings.HasSuffix(backend.Group, fmt.Sprintf("instanceGroups/%s", instanceGroupName(clusterName))) {
+				filteredServices = append(filteredServices, service)
+				break
+			}
+		}
+	}
+	proxies, err := listTargetTCPProxies(project)
+	if err != nil {
+		return err
+	}
+	filteredProxies := make([]jsonTargetTCPProxy, 0)
+	for _, proxy := range proxies {
+		for _, service := range filteredServices {
+			if proxy.Service == service.SelfLink {
+				filteredProxies = append(filteredProxies, proxy)
+				break
+			}
+		}
+	}
+	rules, err := listForwardingRules(project)
+	if err != nil {
+		return err
+	}
+	filteredForwardingRules := make([]jsonForwardingRule, 0)
+	for _, rule := range rules {
+		for _, proxy := range filteredProxies {
+			if rule.Target == proxy.SelfLink {
+				filteredForwardingRules = append(filteredForwardingRules, rule)
+			}
+		}
+	}
+	healthChecks, err := listHealthChecks(project)
+	if err != nil {
+		return err
+	}
+	filteredHealthChecks := make([]jsonHealthCheck, 0)
+	for _, healthCheck := range healthChecks {
+		cluster, resourceType, _, ok := loadBalancerNameParts(healthCheck.Name)
+		if !ok {
+			continue
+		}
+		if cluster == clusterName && resourceType == "health-check" {
+			filteredHealthChecks = append(filteredHealthChecks, healthCheck)
+		}
+	}
+
+	// Delete all the components of the load balancer.
+	var g errgroup.Group
+	for _, rule := range filteredForwardingRules {
+		args := []string{"compute", "forwarding-rules", "delete",
+			rule.Name,
+			"--global",
+			"--quiet",
+			"--project", project,
+		}
+		g.Go(func() error {
+			cmd := exec.Command("gcloud", args...)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			}
+			return nil
+		})
+	}
+	if err = g.Wait(); err != nil {
+		return err
+	}
+	g = errgroup.Group{}
+	for _, proxy := range filteredProxies {
+		args := []string{"compute", "target-tcp-proxies", "delete",
+			proxy.Name,
+			"--quiet",
+			"--project", project,
+		}
+		g.Go(func() error {
+			cmd := exec.Command("gcloud", args...)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			}
+			return nil
+		})
+	}
+	if err = g.Wait(); err != nil {
+		return err
+	}
+	g = errgroup.Group{}
+	for _, service := range filteredServices {
+		args := []string{"compute", "backend-services", "delete",
+			service.Name,
+			"--global",
+			"--quiet",
+			"--project", project,
+		}
+		g.Go(func() error {
+			cmd := exec.Command("gcloud", args...)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			}
+			return nil
+		})
+	}
+	if err = g.Wait(); err != nil {
+		return err
+	}
+	g = errgroup.Group{}
+	for _, healthCheck := range filteredHealthChecks {
+		args := []string{"compute", "health-checks", "delete",
+			healthCheck.Name,
+			"--quiet",
+			"--project", project,
+		}
+		g.Go(func() error {
+			cmd := exec.Command("gcloud", args...)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
+// loadBalancerNameParts returns the cluster name, resource type, and port of a
+// load balancer resource name. The resource type is the type of resource, e.g.
+// "health-check", "load-balancer", "proxy".
+func loadBalancerNameParts(name string) (cluster string, resourceType string, port int, ok bool) {
+	regex := regexp.MustCompile(`^([a-z0-9\-]+)-(\d+)-([a-z0-9\-]+)-roachprod$`)
+	match := regex.FindStringSubmatch(name)
+	if match != nil {
+		cluster = match[1]
+		port, _ = strconv.Atoi(match[2])
+		resourceType = match[3]
+		return cluster, resourceType, port, true
+	}
+	return "", "", 0, false
+}
+
 // loadBalancerResourceName returns the name of a load balancer resource. The
 // port is used instead of a service name in order to be able to identify
 // different parts of the name, since we have limited delimiter options.
@@ -1856,6 +2073,14 @@ func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 
 	var g errgroup.Group
 	for cluster, project := range clusterProjectMap {
+		cluster, project := cluster, project // capture loop variables
+		// Delete any load balancer resources associated with the cluster. Trying to
+		// delete the instance group before the load balancer resources will result
+		// in an error.
+		err := deleteLoadBalancerResources(project, cluster)
+		if err != nil {
+			return err
+		}
 		// Multiple instance groups can exist for a single cluster, one for each zone.
 		projectGroups, err := listManagedInstanceGroups(project, instanceGroupName(cluster))
 		if err != nil {
