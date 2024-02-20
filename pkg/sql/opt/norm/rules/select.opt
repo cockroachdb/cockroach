@@ -448,3 +448,23 @@ $input
     )
     (RemoveFiltersItem $filter $item)
 )
+
+# EliminateFilterImpliedByCheckConstraints detects cases where a filter is
+# implied by the check constraints for the input table-scan, and removes the
+# filter. This is correct because check constraints are static guarantees about
+# the table's rows, rather than filters that are applied to them.
+[EliminateFilterImpliedByCheckConstraints, Normalize]
+(Select
+    $input:(Scan $scanPrivate:*)
+    $filters:[
+        ...
+        $item:* &
+            (IsFilterImpliedByCheckConstraints
+                $item
+                $scanPrivate
+            )
+        ...
+    ]
+)
+=>
+(Select $input (RemoveFiltersItem $filters $item))
