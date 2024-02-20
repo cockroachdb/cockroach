@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
@@ -561,7 +562,7 @@ func (r *Replica) leasePostApplyLocked(
 			log.VEventf(ctx, 2,
 				"acquired lease violates lease preferences, enqueuing for transfer [lease=%v preferences=%v]",
 				newLease, r.mu.conf.LeasePreferences)
-			r.store.replicateQueue.AddAsync(ctx, r, replicateQueueLeasePreferencePriority)
+			r.store.leaseQueue.AddAsync(ctx, r, allocatorimpl.TransferLeaseForPreferences.Priority())
 		default:
 			log.Fatalf(ctx, "unknown lease preferences status: %v", preferenceStatus)
 		}
