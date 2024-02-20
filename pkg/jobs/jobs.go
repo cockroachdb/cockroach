@@ -402,43 +402,12 @@ func (u Updater) CancelRequestedWithReason(ctx context.Context, reason error) er
 
 // onPauseRequestFunc is a function used to perform action on behalf of a job
 // implementation when a pause is requested.
-type onPauseRequestFunc func(
-	ctx context.Context, planHookState interface{}, txn isql.Txn, progress *jobspb.Progress,
-) error
+type onPauseRequestFunc func(ctx context.Context, md JobMetadata, ju *JobUpdater) error
 
-func (u Updater) RunPauseRequestFunc(
-	ctx context.Context, fn onPauseRequestFunc, md JobMetadata,
-) error {
-	execCtx, cleanup := u.j.registry.execCtx(ctx, "pause request", md.Payload.UsernameProto.Decode())
-	defer cleanup()
-
-	return fn(ctx, execCtx, u.txn, md.Progress)
-}
-
-func (u Updater) PauseRequestFuncForPayload(payload *jobspb.Payload) (onPauseRequestFunc, error) {
-	c, err := u.j.registry.resumerConstructorForPayload(payload)
-	if err != nil {
-		return nil, err
-	}
-	resumer := c(u.j, u.j.registry.settings)
-
-	var fn onPauseRequestFunc
-	if pr, ok := resumer.(PauseRequester); ok {
-		fn = pr.OnPauseRequest
-	}
-	return fn, nil
-}
-
-// PauseRequested is like PausedRequestedWithFunc but uses the default
-// implementation of OnPauseRequested if the underlying job is a
-// PauseRequester.
+// PauseRequested is like PausedRequestedWithFunc but with no customer
+// job updater function.
 func (u Updater) PauseRequested(ctx context.Context, reason string) error {
-	payload := u.j.Payload()
-	fn, err := u.PauseRequestFuncForPayload(&payload)
-	if err != nil {
-		return err
-	}
-	return u.PauseRequestedWithFunc(ctx, fn, reason)
+	return u.PauseRequestedWithFunc(ctx, nil /* fn */, reason)
 }
 
 // PauseRequestedWithFunc sets the status of the tracked job to pause-requested.

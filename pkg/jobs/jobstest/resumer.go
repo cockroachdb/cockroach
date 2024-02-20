@@ -10,19 +10,13 @@
 
 package jobstest
 
-import (
-	"context"
-
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-)
+import "context"
 
 // FakeResumer calls optional callbacks during the job lifecycle.
 type FakeResumer struct {
 	OnResume      func(context.Context) error
 	FailOrCancel  func(context.Context) error
 	Success       func() error
-	PauseRequest  func(ctx context.Context, planHookState interface{}, txn isql.Txn, progress *jobspb.Progress) error
 	TraceRealSpan bool
 }
 
@@ -55,13 +49,4 @@ func (d FakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error)
 
 func (d FakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
-}
-
-func (d FakeResumer) OnPauseRequest(
-	ctx context.Context, execCtx interface{}, txn isql.Txn, details *jobspb.Progress,
-) error {
-	if d.PauseRequest == nil {
-		return nil
-	}
-	return d.PauseRequest(ctx, execCtx, txn, details)
 }
