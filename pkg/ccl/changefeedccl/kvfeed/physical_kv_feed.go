@@ -26,6 +26,8 @@ type physicalFeedFactory interface {
 	Run(ctx context.Context, sink kvevent.Writer, cfg rangeFeedConfig) error
 }
 
+// rangeFeedConfig contains configuration options for creating a rangefeed.
+// It provides an abstraction over the actual rangefeed API.
 type rangeFeedConfig struct {
 	Frontier      hlc.Timestamp
 	Spans         []kvcoord.SpanTimePair
@@ -35,20 +37,27 @@ type rangeFeedConfig struct {
 	Knobs         TestingKnobs
 }
 
+// rangefeedFactory is a function that creates and runs a rangefeed.
 type rangefeedFactory func(
 	ctx context.Context,
 	spans []kvcoord.SpanTimePair,
-	eventC chan<- kvcoord.RangeFeedMessage,
+	eventCh chan<- kvcoord.RangeFeedMessage,
 	opts ...kvcoord.RangeFeedOption,
 ) error
 
+// rangefeed tracks a running rangefeed and facilitates conversion from
+// kvcoord.RangeFeedMessage's to kvevent.Event's.
 type rangefeed struct {
+	// memBuf is the buffer that converted kvevent.Event's will be written to.
 	memBuf kvevent.Writer
 	cfg    rangeFeedConfig
-	eventC chan kvcoord.RangeFeedMessage
-	knobs  TestingKnobs
+	// eventCh is a receive-only channel corresponding to the send-only channel
+	// that the rangefeed uses to send event messages to.
+	eventCh <-chan kvcoord.RangeFeedMessage
+	knobs   TestingKnobs
 }
 
+// Run implements the physicalFeedFactory interface.
 func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rangeFeedConfig) error {
 	// To avoid blocking raft, RangeFeed puts all entries in a server side
 	// buffer. But to keep things simple, it's a small fixed-sized buffer. This
@@ -67,11 +76,12 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	// `SchemaFeed` is responsible for detecting and enforcing these , but the
 	// after-KVFeed buffer doesn't have access to any of this state. A cleanup is
 	// in order.
+	eventCh := make(chan kvcoord.RangeFeedMessage, 128)
 	feed := rangefeed{
-		memBuf: sink,
-		cfg:    cfg,
-		eventC: make(chan kvcoord.RangeFeedMessage, 128),
-		knobs:  cfg.Knobs,
+		memBuf:  sink,
+		cfg:     cfg,
+		eventCh: eventCh,
+		knobs:   cfg.Knobs,
 	}
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(feed.addEventsToBuffer)
@@ -90,18 +100,17 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	}
 
 	g.GoCtx(func(ctx context.Context) error {
-		return p(ctx, cfg.Spans, feed.eventC, rfOpts...)
+		return p(ctx, cfg.Spans, eventCh, rfOpts...)
 	})
 	return g.Wait()
 }
 
-// addEventsToBuffer consumes rangefeed events from `p.eventC`, transforms
-// them to changfeed events and push onto `p.memBuf`.
-// `p.memBuf`.
+// addEventsToBuffer consumes rangefeed events from `p.eventCh`, transforms
+// them to kvevent.Event's, and pushes them into `p.memBuf`.
 func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 	for {
 		select {
-		case e := <-p.eventC:
+		case e := <-p.eventCh:
 			switch t := e.GetValue().(type) {
 			case *kvpb.RangeFeedValue:
 				if p.cfg.Knobs.OnRangeFeedValue != nil {
