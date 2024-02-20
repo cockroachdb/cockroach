@@ -113,17 +113,11 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/CancelSession":
 		return a.authTenant(tenID)
 
-	case "/cockroach.server.serverpb.Status/CancelLocalSession":
-		return a.authTenant(tenID)
-
 	case "/cockroach.server.serverpb.Status/CancelQuery":
 		return a.authTenant(tenID)
 
 	case "/cockroach.server.serverpb.Status/TenantRanges":
 		return a.authTenantRanges(tenID)
-
-	case "/cockroach.server.serverpb.Status/CancelLocalQuery":
-		return a.authTenant(tenID)
 
 	case "/cockroach.server.serverpb.Status/TransactionContentionEvents":
 		return a.authTenant(tenID)

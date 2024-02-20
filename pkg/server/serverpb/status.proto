@@ -2286,14 +2286,6 @@ service Status {
     };
   }
 
-  // CancelLocalQuery cancels a SQL query running on this node given its ID.
-  rpc CancelLocalQuery(CancelQueryRequest) returns (CancelQueryResponse) {
-    option (google.api.http) = {
-      post : "/_status/cancel_local_query"
-      body: "*"
-    };
-  }
-
   // CancelQueryByKey cancels a SQL query given its pgwire BackendKeyData.
   // It is invoked through the pgwire protocol, so it's not exposed as an
   // HTTP endpoint.
@@ -2376,14 +2368,6 @@ service Status {
     option (google.api.http) = {
       post : "/_status/cancel_session/{node_id}"
 			body: "*"
-    };
-  }
-
-  // CancelLocalSession forcefully terminates a SQL session running on this node given its ID.
-  rpc CancelLocalSession(CancelSessionRequest) returns (CancelSessionResponse) {
-    option (google.api.http) = {
-      post : "/_status/cancel_local_session"
-      body: "*"
     };
   }
 
