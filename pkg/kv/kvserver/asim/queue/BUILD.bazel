@@ -4,6 +4,7 @@ go_library(
     name = "queue",
     srcs = [
         "allocator_replica.go",
+        "lease_queue.go",
         "pacer.go",
         "queue.go",
         "replicate_queue.go",
@@ -32,6 +33,7 @@ go_library(
 go_test(
     name = "queue_test",
     srcs = [
+        "lease_queue_test.go",
         "pacer_test.go",
         "replicate_queue_test.go",
         "split_queue_test.go",

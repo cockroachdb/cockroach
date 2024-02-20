@@ -96,7 +96,7 @@ type TestingKnobs struct {
 	) *raft.Status
 	// BlockTransferTarget can be used to block returning any transfer targets
 	// from TransferLeaseTarget.
-	BlockTransferTarget func() bool
+	BlockTransferTarget func(roachpb.RangeID) bool
 }
 
 // QPSRebalanceThreshold is much like rangeRebalanceThreshold, but for
