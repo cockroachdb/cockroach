@@ -264,6 +264,15 @@ func (b *indexScanBuilder) Build(grp memo.RelExpr) {
 
 	// 3. Wrap input in inner filter if it was added.
 	if b.hasInnerFilters() {
+		if input.FirstExpr() == grp {
+			// Another rule has already determined that the index scan is part of the
+			// group. The filters are not selective, and using them to construct a
+			// Select expression would lead to a memo cycle.
+			//
+			// Note: while we could attempt to directly determine that the filters
+			// filter no rows, it is possible that doing so could miss an edge case.
+			return
+		}
 		if !b.hasInvertedFilter() && !b.hasIndexJoin() {
 			b.mem.AddSelectToGroup(&memo.SelectExpr{Input: input, Filters: b.innerFilters}, grp)
 			return

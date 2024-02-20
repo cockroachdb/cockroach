@@ -76,3 +76,21 @@
 )
 =>
 (GenerateLocalityOptimizedScan $scanPrivate)
+
+# GeneratePseudoPartialIndexScans generates partial index scans using the
+# table's check constraints. This handles the case when the partial index
+# predicate applies to all rows of the table, and therefore a partial index
+# scan can always be used.
+[GeneratePseudoPartialIndexScans, Explore]
+(Scan
+    $scanPrivate:* &
+        (IsCanonicalScan $scanPrivate) &
+        (TableHasPartialIndex
+            $tableID:(TableIDFromScanPrivate $scanPrivate)
+        )
+)
+=>
+(GeneratePartialIndexScans
+    $scanPrivate
+    (CheckConstraintFilters $tableID)
+)
