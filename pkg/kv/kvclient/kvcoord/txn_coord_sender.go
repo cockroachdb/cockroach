@@ -837,6 +837,13 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(ctx context.Context, pErr *kv
 		}
 
 	case *kvpb.WriteTooOldError:
+		tc.metrics.RestartsWriteTooOld.Inc()
+		// Also increment the deprecated "txn.restarts.writetoooldmulti" metric.
+		// We preserve this for one release to avoid confusion in mixed-version
+		// clusters.
+		// TODO(nvanbenschoten): remove this when compatibility with v23.2 is no
+		// longer needed. At the same time, also remove the corresponding metric
+		// from the "Transaction Restarts" graph in the SQL Dashboard.
 		tc.metrics.RestartsWriteTooOldMulti.Inc()
 
 	case *kvpb.ReadWithinUncertaintyIntervalError:
