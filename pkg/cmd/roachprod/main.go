@@ -464,6 +464,30 @@ destroyed:
 	}),
 }
 
+var loadBalanceCmd = &cobra.Command{
+	Use:   "load-balance <cluster> [virtual-cluster-name]",
+	Short: "create a load balancer for a cluster",
+	Long: `Create a load balancer for a specific service (port), system by default, for the a given cluster.
+
+The load balancer is created using the cloud provider's load balancer service.
+Currently only Google Cloud is supported, and the cluster must have been created
+with the --gce-managed flag. On Google Cloud a load balancer consists of various
+components that include backend services, health checks and forwarding rules.
+These resources will automatically be destroyed when the cluster is destroyed.
+`,
+
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		serviceName := install.SystemInterfaceName
+		if len(args) == 2 {
+			serviceName = args[1]
+		}
+		return roachprod.CreateLoadBalancer(context.Background(), config.Logger,
+			args[0], secure, serviceName, 0,
+		)
+	}),
+}
+
 const tagHelp = `
 The --tag flag can be used to to associate a tag with the process. This tag can
 then be used to restrict the processes which are operated on by the status and
@@ -548,7 +572,7 @@ SIGHUP), unless you also configure --max-wait.
 }
 
 var startInstanceCmd = &cobra.Command{
-	Use:   "start-sql <name> --storage-cluster <storage-cluster> [--external-cluster <virtual-cluster-nodes]",
+	Use:   "start-sql <name> --storage-cluster <storage-cluster> [--external-cluster <virtual-cluster-nodes>]",
 	Short: "start the SQL/HTTP service for a virtual cluster as a separate process",
 	Long: `Start SQL/HTTP instances for a virtual cluster as separate processes.
 
@@ -1463,6 +1487,7 @@ func main() {
 		resetCmd,
 		destroyCmd,
 		extendCmd,
+		loadBalanceCmd,
 		listCmd,
 		syncCmd,
 		gcCmd,
