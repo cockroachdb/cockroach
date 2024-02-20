@@ -403,8 +403,9 @@ func (im *Implicator) orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr
 		//
 		// We must flatten all adjacent ORs in order to handle cases such as:
 		//   (a OR b) => ((a OR b) OR c)
-		eFlat := flattenOrExpr(e)
-		predFlat := flattenOrExpr(pt)
+		var eScratch, predScratch [5]opt.ScalarExpr
+		eFlat := flattenOrExpr(e, eScratch[:0])
+		predFlat := flattenOrExpr(pt, predScratch[:0])
 		for i := range eFlat {
 			eChildImpliesAnyPredChild := false
 			for j := range predFlat {
@@ -777,8 +778,8 @@ func (im *Implicator) simplifyScalarExpr(e opt.ScalarExpr, exactMatches exprSet)
 	}
 }
 
-// flattenOrExpr returns a list of ScalarExprs that are all adjacent via
-// disjunctions to the input OrExpr.
+// flattenOrExpr appends all ScalarExprs that are adjacent to the input OrExpr
+// via disjunctions to the "ors" slice, and returns the updated slice.
 //
 // For example, the input:
 //
@@ -787,9 +788,7 @@ func (im *Implicator) simplifyScalarExpr(e opt.ScalarExpr, exactMatches exprSet)
 // Results in:
 //
 //	[a, (b AND c), d, e]
-func flattenOrExpr(or *memo.OrExpr) []opt.ScalarExpr {
-	ors := make([]opt.ScalarExpr, 0, 2)
-
+func flattenOrExpr(or *memo.OrExpr, ors []opt.ScalarExpr) []opt.ScalarExpr {
 	var collect func(e opt.ScalarExpr)
 	collect = func(e opt.ScalarExpr) {
 		if and, ok := e.(*memo.OrExpr); ok {
@@ -800,7 +799,6 @@ func flattenOrExpr(or *memo.OrExpr) []opt.ScalarExpr {
 		}
 	}
 	collect(or)
-
 	return ors
 }
 
