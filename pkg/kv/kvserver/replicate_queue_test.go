@@ -2623,3 +2623,29 @@ func TestReplicateQueueLeasePreferencePurgatoryError(t *testing.T) {
 		return checkLeaseCount(nextPreferredNode, numRanges)
 	})
 }
+
+// TestReplicateQueueAllocatorToken asserts that the replicate queue will not
+// process a replica if it is unable to acquire the replica's allocator token.
+func TestReplicateQueueAllocatorToken(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+
+	repl := tc.GetRaftLeader(t, roachpb.RKey(scratchKey))
+	require.NoError(t, repl.AllocatorToken().Acquire(ctx, "test", nil))
+	_, processErr, _ := repl.Store().Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
+	require.ErrorIs(t, processErr, plan.ErrAllocatorToken)
+	repl.AllocatorToken().Release(ctx)
+	_, processErr, _ = repl.Store().Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
+	// Expect processing to acquire the token and error on not enough stores in
+	// the cluster, an allocation error.
+	var allocationError allocator.AllocationError
+	require.ErrorAs(t, processErr, &allocationError)
+}
