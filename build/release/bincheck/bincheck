@@ -57,7 +57,7 @@ EOF
 diff -u expected actual
 
 # Verify libgeos functionality on all platforms except MacOS ARM64 and Windows
-if [[ $(uname -om) == "Darwin arm64" || $(uname -o) == "Msys" ]]; then
+if [[ $(uname -sm) == "Darwin arm64" || $(uname -s) == "MINGW64_NT"* ]]; then
   echo "Skipping libgeos tests"
 else
   echo "Testing libgeos functionality"
