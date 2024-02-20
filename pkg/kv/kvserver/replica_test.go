@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -13527,7 +13526,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 	}
 }
 
-func TestReplicateQueueProcessOne(t *testing.T) {
+func TestAdminScatterDestroyedReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -13542,19 +13541,17 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 	tc.repl.mu.destroyStatus.Set(errBoom, destroyReasonMergePending)
 	tc.repl.mu.Unlock()
 
-	conf, err := tc.repl.LoadSpanConfig(ctx)
-	require.NoError(t, err)
-	requeue, err := tc.store.replicateQueue.processOneChange(
-		ctx,
-		tc.repl,
-		tc.repl.Desc(),
-		conf,
-		func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool { return false },
-		false, /* scatter */
-		true,  /* dryRun */
-	)
-	require.Equal(t, errBoom, err)
-	require.False(t, requeue)
+	desc := tc.repl.Desc()
+	resp, err := tc.repl.adminScatter(ctx, kvpb.AdminScatterRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    roachpb.Key(desc.StartKey),
+			EndKey: roachpb.Key(desc.EndKey),
+		},
+	})
+	// The replica is destroyed so it can't be processed underneath the scatter
+	// call. Expect that no bytes are scattered as a result.
+	require.Equal(t, nil, err)
+	require.Equal(t, int64(0), resp.ReplicasScatteredBytes)
 }
 
 // TestContainsEstimatesClamp tests the massaging of ContainsEstimates
