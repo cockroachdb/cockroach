@@ -200,22 +200,6 @@ func (l *simpleTransportAdapter) SkipReplica() {
 	l.nextReplicaIdx++
 }
 
-func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) bool {
-	for i := range l.replicas {
-		if l.replicas[i].IsSame(replica) {
-			// If we've already processed the replica, decrement the current
-			// index before we swap.
-			if i < l.nextReplicaIdx {
-				l.nextReplicaIdx--
-			}
-			// Swap the client representing this replica to the front.
-			l.replicas[i], l.replicas[l.nextReplicaIdx] = l.replicas[l.nextReplicaIdx], l.replicas[i]
-			return true
-		}
-	}
-	return false
-}
-
 func (l *simpleTransportAdapter) Release() {}
 
 func makeGossip(t *testing.T, stopper *stop.Stopper, rpcContext *rpc.Context) *gossip.Gossip {
@@ -823,6 +807,8 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 				attempts++
 				reply := &kvpb.BatchResponse{}
 				if attempts == 1 {
+					// Bump the generation so dist sender will use this new descriptor.
+					tc.nlhe.RangeDesc.Generation = 2
 					reply.Error = kvpb.NewError(&tc.nlhe)
 					return reply, nil
 				}
@@ -951,9 +937,6 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 			if _, pErr := kv.SendWrapped(ctx, ds, put); !testutils.IsPError(pErr, "boom") {
 				t.Fatalf("%d: unexpected error: %v", i, pErr)
 			}
-			if got := ds.Metrics().InLeaseTransferBackoffs.Count(); got != c.expected {
-				t.Fatalf("%d: expected %d backoffs, got %d", i, c.expected, got)
-			}
 		})
 	}
 }
@@ -1029,7 +1012,6 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 	_, pErr := kv.SendWrapped(ctx, ds, get)
 	require.Nil(t, pErr)
 	require.Equal(t, []roachpb.NodeID{1, 2}, sentTo)
-	require.Equal(t, int64(0), ds.Metrics().InLeaseTransferBackoffs.Count())
 }
 
 // TestNoBackoffOnNotLeaseHolderErrorWithoutLease verifies that the DistSender
@@ -1097,7 +1079,6 @@ func TestNoBackoffOnNotLeaseHolderErrorWithoutLease(t *testing.T) {
 	_, pErr := kv.SendWrapped(ctx, ds, kvpb.NewGet(roachpb.Key("a")))
 	require.NoError(t, pErr.GoError())
 	require.Equal(t, []roachpb.NodeID{1, 2, 3}, sentTo)
-	require.Equal(t, int64(0), ds.Metrics().InLeaseTransferBackoffs.Count())
 }
 
 // Test a scenario where a lease indicates a replica that, when contacted,
@@ -1311,22 +1292,17 @@ func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 			require.Nil(t, pErr)
 
 			require.Equal(t, int64(0), ds.Metrics().RangeLookups.Count())
-			// We expect to backoff and retry the same replica 11 times when we get an
-			// NLHE with stale info. See `sameReplicaRetryLimit`.
-			require.Equal(t, int64(11), ds.Metrics().NextReplicaErrCount.Count())
-			require.Equal(t, int64(11), ds.Metrics().NotLeaseHolderErrCount.Count())
+			// We expect to retry once due to the NHLE.
+			require.Equal(t, int64(1), ds.Metrics().NextReplicaErrCount.Count())
+			require.Equal(t, int64(1), ds.Metrics().NotLeaseHolderErrCount.Count())
 
-			// Ensure that we called Node 2 11 times and then finally called Node 1.
-			var expectedCalls []roachpb.NodeID
-			for i := 0; i < 11; i++ {
-				expectedCalls = append(expectedCalls, roachpb.NodeID(2))
-			}
-			expectedCalls = append(expectedCalls, roachpb.NodeID(1))
+			// Ensure that we called Node 2 once and then Node 1.
+			expectedCalls := []roachpb.NodeID{2, 1}
 			require.Equal(t, expectedCalls, calls)
 
 			require.Regexp(
 				t,
-				"backing off due to .* stale info",
+				"retry with updated routing info",
 				finishAndGetRecording().String(),
 			)
 		})
@@ -5932,7 +5908,8 @@ func TestDistSenderNLHEFromUninitializedReplicaDoesNotCauseUnboundedBackoff(t *t
 		},
 	}
 	leaseResp := roachpb.Lease{
-		Replica: roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4},
+		Sequence: 1,
+		Replica:  roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4},
 	}
 
 	call := 0
