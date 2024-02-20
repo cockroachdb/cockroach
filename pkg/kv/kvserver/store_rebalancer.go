@@ -537,6 +537,16 @@ func (sr *StoreRebalancer) RebalanceLeases(
 func (sr *StoreRebalancer) applyLeaseRebalance(
 	ctx context.Context, candidateReplica CandidateReplica, target roachpb.ReplicaDescriptor,
 ) bool {
+	// Try to acquire the allocator token. If this fails, don't retry the range
+	// -- it will most likely be picked up in the next store rebalancer loop
+	// iteration.
+	if err := candidateReplica.Repl().allocatorToken.TryAcquire(ctx,
+		"store-rebalancer"); err != nil {
+		log.KvDistribution.Infof(ctx, "unable to transfer lease to s%d: %v", target.StoreID, err)
+		return false
+	}
+	defer candidateReplica.Repl().allocatorToken.Release(ctx)
+
 	timeout := sr.processTimeoutFn(candidateReplica)
 	if err := timeutil.RunWithTimeout(ctx, "transfer lease", timeout, func(ctx context.Context) error {
 		return sr.rr.TransferLease(
@@ -691,6 +701,16 @@ func (sr *StoreRebalancer) applyRangeRebalance(
 	candidateReplica CandidateReplica,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 ) bool {
+	// Try to acquire the allocator token. If this fails, don't retry the range
+	// -- it will most likely be picked up in the next store rebalancer loop
+	// iteration.
+	if err := candidateReplica.Repl().allocatorToken.TryAcquire(
+		ctx, "store-rebalancer"); err != nil {
+		log.KvDistribution.Errorf(ctx, "unable to relocate range to %v: %v", voterTargets, err)
+		return false
+	}
+	defer candidateReplica.Repl().allocatorToken.Release(ctx)
+
 	descBeforeRebalance := candidateReplica.Desc()
 	log.KvDistribution.Infof(
 		ctx,
