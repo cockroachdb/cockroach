@@ -185,9 +185,6 @@ func (rpcCtx *Context) newPeer(k peerKey) *peer {
 				p.launch(ctx, report, done)
 			})
 		},
-		// Use a noop EventHandler; we do our own logging in the probe since we'll
-		// have better information.
-		EventHandler: &circuit.EventLogger{Log: func(buf redact.StringBuilder) {}},
 	})
 	p.b = b
 	c := newConnectionToNodeID(k, b.Signal)

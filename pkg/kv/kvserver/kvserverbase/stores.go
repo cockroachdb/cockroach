@@ -42,6 +42,7 @@ type Store interface {
 
 	// GetReplicaMutexForTesting returns the mutex of the replica with the given
 	// range ID, or nil if no replica was found. This is used for testing.
+	// Returns a syncutil.RWMutex rather than ReplicaMutex to avoid import cycles.
 	GetReplicaMutexForTesting(rangeID roachpb.RangeID) *syncutil.RWMutex
 }
 
