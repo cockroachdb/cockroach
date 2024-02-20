@@ -525,16 +525,6 @@ export default function (props: GraphDashboardProps) {
           title="Aborted"
           nonNegativeRate
         />
-        <Metric
-          name="cr.node.txn.restarts.txnpush"
-          title="Push Failure"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.txn.restarts.unknown"
-          title="Unknown"
-          nonNegativeRate
-        />
       </Axis>
     </LineGraph>,
 
