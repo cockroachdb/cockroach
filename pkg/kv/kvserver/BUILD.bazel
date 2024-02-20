@@ -287,6 +287,7 @@ go_test(
         "helpers_test.go",
         "intent_resolver_integration_test.go",
         "lease_history_test.go",
+        "lease_queue_test.go",
         "main_test.go",
         "merge_queue_test.go",
         "metric_rules_test.go",

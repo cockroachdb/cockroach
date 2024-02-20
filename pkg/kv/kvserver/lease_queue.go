@@ -12,13 +12,20 @@ package kvserver
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -30,10 +37,29 @@ const (
 	leaseQueuePurgatoryCheckInterval = 10 * time.Second
 )
 
+// MinLeaseTransferInterval controls how frequently leases can be transferred
+// for rebalancing. It does not prevent transferring leases in order to allow a
+// replica to be removed from a range or moving from a non-preferred
+// leaseholder to a preferred leaseholder.
+//
+// TODO(kvoli): Revisit this rate limiting mechanism, a setting which scales
+// with cluster or store size is preferable #119155.
+var MinLeaseTransferInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.allocator.min_lease_transfer_interval",
+	"controls how frequently leases can be transferred for rebalancing. "+
+		"It does not prevent transferring leases in order to allow a "+
+		"replica to be removed from a range.",
+	1*time.Second,
+	settings.NonNegativeDuration,
+)
+
 type leaseQueue struct {
-	allocator allocatorimpl.Allocator
-	storePool storepool.AllocatorStorePool
-	purgCh    <-chan time.Time
+	planner           plan.ReplicationPlanner
+	allocator         allocatorimpl.Allocator
+	storePool         storepool.AllocatorStorePool
+	purgCh            <-chan time.Time
+	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
 	*baseQueue
 }
 
@@ -45,6 +71,7 @@ func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue 
 		storePool = store.cfg.StorePool
 	}
 	lq := &leaseQueue{
+		planner:   plan.NewLeasePlanner(allocator, storePool),
 		allocator: allocator,
 		storePool: storePool,
 		purgCh:    time.NewTicker(leaseQueuePurgatoryCheckInterval).C,
@@ -70,16 +97,46 @@ func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue 
 func (lq *leaseQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
-	// TODO(kvoli): Check whether the lease should be transferred away and at
-	// what priority. Tracked in #118966.
-	return false, 0
+	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
+	if err != nil {
+		return false, 0
+	}
+	desc := repl.Desc()
+	return lq.planner.ShouldPlanChange(ctx, now, repl, desc, &conf, plan.PlannerOptions{
+		CanTransferLease: lq.canTransferLeaseFrom(ctx, repl, &conf),
+	})
 }
 
 func (lq *leaseQueue) process(
 	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
-	// TODO(kvoli): Search for a lease transfer target, if one exists then
-	// transfer the lease away. Tracked in #118966.
+	if tokenErr := repl.allocatorToken.TryAcquire(ctx, lq.name); tokenErr != nil {
+		return false, tokenErr
+	}
+	defer repl.allocatorToken.Release(ctx)
+
+	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
+	if err != nil {
+		return false, err
+	}
+	desc := repl.Desc()
+	change, err := lq.planner.PlanOneChange(ctx, repl, desc, &conf, plan.PlannerOptions{
+		CanTransferLease: lq.canTransferLeaseFrom(ctx, repl, &conf),
+	})
+	if err != nil {
+		log.KvDistribution.Infof(ctx, "err=%v", err)
+		return false, err
+	}
+
+	if transferOp, ok := change.Op.(plan.AllocationTransferLeaseOp); ok {
+		log.KvDistribution.Infof(ctx, "transferring lease to s%d usage=%v", transferOp.Target, transferOp.Usage)
+		lq.lastLeaseTransfer.Store(timeutil.Now())
+		if err := repl.AdminTransferLease(ctx, transferOp.Target, false /* bypassSafetyChecks */); err != nil {
+			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, transferOp.Target)
+		}
+		change.Op.ApplyImpact(lq.storePool)
+	}
+
 	return true, nil
 }
 
@@ -100,4 +157,23 @@ func (lq *leaseQueue) updateChan() <-chan time.Time {
 	// TODO(kvoli): implement an update callback on gossiped store descriptors,
 	// similar to what is done in the replicate queue.
 	return nil
+}
+
+// canTransferLeaseFrom checks is a lease can be transferred from the specified
+// replica. It considers two factors if the replica is in-conformance with
+// lease preferences and the last time a transfer occurred to avoid thrashing.
+func (lq *leaseQueue) canTransferLeaseFrom(
+	ctx context.Context, repl *Replica, conf *roachpb.SpanConfig,
+) bool {
+	// Do a best effort check to see if this replica conforms to the configured
+	// lease preferences (if any), if it does not we want to encourage more
+	// aggressive lease movement and not delay it.
+	if repl.LeaseViolatesPreferences(ctx, conf) {
+		return true
+	}
+	if lastLeaseTransfer := lq.lastLeaseTransfer.Load(); lastLeaseTransfer != nil {
+		minInterval := MinLeaseTransferInterval.Get(&lq.store.cfg.Settings.SV)
+		return timeutil.Since(lastLeaseTransfer.(time.Time)) > minInterval
+	}
+	return true
 }
