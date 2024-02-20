@@ -424,3 +424,52 @@ func (c *CustomFuncs) addConjuncts(
 func (c *CustomFuncs) ForDuplicateRemoval(private *memo.OrdinalityPrivate) (ok bool) {
 	return private.ForDuplicateRemoval
 }
+
+// IsFilterImpliedByCheckConstraints returns true if the given filter is implied
+// by the table's check constraints. This is best-effort, so false negatives are
+// possible.
+func (c *CustomFuncs) IsFilterImpliedByCheckConstraints(
+	item *memo.FiltersItem, scanPrivate *memo.ScanPrivate,
+) bool {
+	// Attempt to retrieve a constraint that tightly describes the filter.
+	if !item.ScalarProps().TightConstraints {
+		return false
+	}
+	if item.ScalarProps().Constraints == nil || item.ScalarProps().Constraints.Length() != 1 {
+		return false
+	}
+	filterCons := item.ScalarProps().Constraints.Constraint(0)
+
+	// Check whether any of the table's check constraints implies the filter.
+	return c.IsConstraintImpliedByCheckConstraints(filterCons, scanPrivate)
+}
+
+// IsConstraintImpliedByCheckConstraints returns true if the given constraint is
+// implied by the table's check constraints. This is best-effort, so false
+// negatives are possible.
+func (c *CustomFuncs) IsConstraintImpliedByCheckConstraints(
+	cons *constraint.Constraint, scanPrivate *memo.ScanPrivate,
+) bool {
+	// TODO(#119423): consider using the partial index implicator to handle more
+	// cases.
+	checkConstraintFilters := c.CheckConstraintFilters(scanPrivate.Table)
+	for i := range checkConstraintFilters {
+		if !checkConstraintFilters[i].ScalarProps().TightConstraints {
+			continue
+		}
+		optionalConstraints := checkConstraintFilters[i].ScalarProps().Constraints
+		if optionalConstraints == nil {
+			continue
+		}
+		for j := 0; j < optionalConstraints.Length(); j++ {
+			optionalConstraint := optionalConstraints.Constraint(j)
+			if cons.Contains(c.f.evalCtx, optionalConstraint) {
+				// The given constraint contains this check constraint. Therefore, any
+				// value that is excluded by the given constraint must also be excluded
+				// from the check constraint(s).
+				return true
+			}
+		}
+	}
+	return false
+}
