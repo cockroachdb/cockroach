@@ -76,7 +76,7 @@ func (e *plannerJobExecContext) SpanStatsConsumer() keyvisualizer.SpanStatsConsu
 }
 
 // JobExecContext provides the execution environment for a job. It is what is
-// passed to the Resume/OnFailOrCancel/OnPauseRequested methods of a jobs's
+// passed to the Resume/OnFailOrCancel methods of a jobs's
 // Resumer to give that resumer access to things like ExecutorCfg, LeaseMgr,
 // etc -- the kinds of things that would usually be on planner or similar during
 // a non-job SQL statement's execution. Unlike a planner however, or planner-ish

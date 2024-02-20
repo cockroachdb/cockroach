@@ -168,10 +168,7 @@ WHERE id = $1
 		},
 	}
 
-	ju := JobUpdater{
-		PauseRequestFunc:       u.PauseRequestFuncForPayload,
-		PauseRequestFuncRunner: u.RunPauseRequestFunc,
-	}
+	var ju JobUpdater
 	if err := updateFn(u.txn, md, &ju); err != nil {
 		return err
 	}
@@ -297,9 +294,6 @@ func (md *JobMetadata) CheckRunningOrReverting() error {
 // JobUpdater accumulates changes to job metadata that are to be persisted.
 type JobUpdater struct {
 	md JobMetadata
-
-	PauseRequestFunc       func(*jobspb.Payload) (onPauseRequestFunc, error)
-	PauseRequestFuncRunner func(context.Context, onPauseRequestFunc, JobMetadata) error
 }
 
 // UpdateStatus sets a new status (to be persisted).
@@ -352,11 +346,7 @@ func (ju *JobUpdater) UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobM
 func (ju *JobUpdater) PauseRequested(
 	ctx context.Context, txn isql.Txn, md JobMetadata, reason string,
 ) error {
-	fn, err := ju.PauseRequestFunc(md.Payload)
-	if err != nil {
-		return err
-	}
-	return ju.PauseRequestedWithFunc(ctx, txn, md, fn, reason)
+	return ju.PauseRequestedWithFunc(ctx, txn, md, nil /* fn */, reason)
 }
 
 func (ju *JobUpdater) PauseRequestedWithFunc(
@@ -369,10 +359,9 @@ func (ju *JobUpdater) PauseRequestedWithFunc(
 		return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
 	}
 	if fn != nil {
-		if err := ju.PauseRequestFuncRunner(ctx, fn, md); err != nil {
+		if err := fn(ctx, md, ju); err != nil {
 			return err
 		}
-		ju.UpdateProgress(md.Progress)
 	}
 	ju.UpdateStatus(StatusPauseRequested)
 	md.Payload.PauseReason = reason

@@ -1309,15 +1309,12 @@ func (r *Registry) cancelRequested(ctx context.Context, txn isql.Txn, id jobspb.
 func (r *Registry) PauseRequested(
 	ctx context.Context, txn isql.Txn, id jobspb.JobID, reason string,
 ) error {
-	job, resumer, err := r.getJobFn(ctx, txn, id)
+	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
 	}
-	var onPauseRequested onPauseRequestFunc
-	if pr, ok := resumer.(PauseRequester); ok {
-		onPauseRequested = pr.OnPauseRequest
-	}
-	return job.WithTxn(txn).PauseRequestedWithFunc(ctx, onPauseRequested, reason)
+
+	return job.WithTxn(txn).PauseRequestedWithFunc(ctx, nil, reason)
 }
 
 // Succeeded marks the job with id as succeeded.
@@ -1445,17 +1442,6 @@ type registerOptions struct {
 
 	// metrics allow jobs to register job specific metrics.
 	metrics metric.Struct
-}
-
-// PauseRequester is an extension of Resumer which allows job implementers to inject
-// logic during the transaction which moves a job to PauseRequested.
-type PauseRequester interface {
-	Resumer
-
-	// OnPauseRequest is called in the transaction that moves a job to PauseRequested.
-	// If an error is returned, the pause request will fail. execCtx is a
-	// sql.JobExecCtx.
-	OnPauseRequest(ctx context.Context, execCtx interface{}, txn isql.Txn, details *jobspb.Progress) error
 }
 
 // JobResultsReporter is an interface for reporting the results of the job execution.
