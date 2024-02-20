@@ -742,7 +742,7 @@ go_test(
     ],
     embed = [":sql"],
     exec_properties = {
-        "test.Pool": "heavy",
+        "Pool": "heavy",
     },
     shard_count = 16,
     deps = [
