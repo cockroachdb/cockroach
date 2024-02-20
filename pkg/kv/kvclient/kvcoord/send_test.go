@@ -193,6 +193,10 @@ func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) bool {
 	return true
 }
 
+func (f *firstNErrorTransport) Reset() {
+	f.numSent = 0
+}
+
 // TestComplexScenarios verifies various complex success/failure scenarios by
 // mocking sendOne.
 func TestComplexScenarios(t *testing.T) {
