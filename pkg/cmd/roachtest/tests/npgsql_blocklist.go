@@ -790,4 +790,5 @@ var npgsqlIgnoreList = blocklist{
 	`Npgsql.Tests.TransactionTests(NonMultiplexing).CommitAsync(Prepared)`:                                 "flaky",
 	`Npgsql.Tests.TransactionTests(NonMultiplexing).Rollback(Prepared)`:                                    "flaky",
 	`Npgsql.Tests.TransactionTests(NonMultiplexing).RollbackAsync(NotPrepared)`:                            "flaky",
+	`Npgsql.Tests.CommandTests(Multiplexing).Batched_big_statements_do_not_deadlock`:                       "flaky",
 }
