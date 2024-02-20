@@ -648,6 +648,13 @@ func (rq *replicateQueue) shouldQueue(
 func (rq *replicateQueue) process(
 	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
+	if tokenErr := repl.allocatorToken.Acquire(ctx, rq.name, func(ctx context.Context) {
+		rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
+	}); tokenErr != nil {
+		return false, tokenErr
+	}
+	defer repl.allocatorToken.Release(ctx)
+
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
