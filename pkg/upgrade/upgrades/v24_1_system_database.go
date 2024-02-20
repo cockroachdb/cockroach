@@ -15,7 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
@@ -39,9 +41,45 @@ func alterSystemDatabaseSurvivalGoal(
 			sessiondata.NodeUserSessionDataOverride, `
 ALTER DATABASE system SURVIVE REGION FAILURE;
 `)
-		return err
+		if err != nil {
+			return err
+		}
+		return nil
 	}); err != nil {
 		return err
+	}
+	// A subset of tables are missing zone config inheritance, so repair their
+	// zone config values.
+	if deps.Codec.ForSystemTenant() {
+		if err := deps.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			ba := txn.KV().NewBatch()
+			for _, descID := range []descpb.ID{systemschema.ReplicationConstraintStatsTable.GetID(),
+				systemschema.ReplicationStatsTable.GetID(),
+				systemschema.TenantUsageTable.GetID()} {
+				zoneCfg, err := txn.Descriptors().GetZoneConfig(ctx, txn.KV(), descID)
+				if err != nil {
+					return err
+				}
+				if zoneCfg == nil {
+					continue
+				}
+				// Write the update zone config out with inheritance set to the
+				// defaults.
+				zoneCfg.ZoneConfigProto().InheritedConstraints = true
+				zoneCfg.ZoneConfigProto().InheritedLeasePreferences = true
+				if err := txn.Descriptors().WriteZoneConfigToBatch(ctx,
+					false, /*kvTrace*/
+					ba,
+					descID,
+					zoneCfg); err != nil {
+					return err
+				}
+			}
+			return txn.KV().Run(ctx, ba)
+		}); err != nil {
+			return err
+		}
+		return nil
 	}
 	return bumpSystemDatabaseSchemaVersion(ctx, cv, deps)
 }
