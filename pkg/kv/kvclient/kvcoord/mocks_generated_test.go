@@ -106,6 +106,18 @@ func (mr *MockTransportMockRecorder) Release() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Release", reflect.TypeOf((*MockTransport)(nil).Release))
 }
 
+// Reset mocks base method.
+func (m *MockTransport) Reset() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Reset")
+}
+
+// Reset indicates an expected call of Reset.
+func (mr *MockTransportMockRecorder) Reset() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reset", reflect.TypeOf((*MockTransport)(nil).Reset))
+}
+
 // SendNext mocks base method.
 func (m *MockTransport) SendNext(arg0 context.Context, arg1 *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 	m.ctrl.T.Helper()
