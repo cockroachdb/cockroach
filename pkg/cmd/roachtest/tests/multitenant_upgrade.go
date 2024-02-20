@@ -368,8 +368,8 @@ func runMultiTenantUpgrade(
 			withResults([][]string{{"true"}}))
 
 	t.Status("restarting the tenant 14 server to check it works after a restart")
-	tenant13.stop(ctx, t, c)
-	tenant13.start(ctx, t, c, currentBinary)
+	tenant14.stop(ctx, t, c)
+	tenant14.start(ctx, t, c, currentBinary)
 
 	t.Status("verifying the post-upgrade tenant works and has the proper version")
 	verifySQL(t, tenant14.pgURL,
@@ -377,6 +377,19 @@ func runMultiTenantUpgrade(
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SELECT version = crdb_internal.node_executable_version() FROM [SHOW CLUSTER SETTING version]").
 			withResults([][]string{{"true"}}))
+
+	t.Status("restarting the tenant 14 server to check it works with preserve downgrade option as an override")
+	runner.Exec(
+		t,
+		`ALTER TENANT [14] SET CLUSTER SETTING cluster.preserve_downgrade_option = crdb_internal.node_executable_version()`)
+	tenant14.stop(ctx, t, c)
+	tenant14.start(ctx, t, c, currentBinary)
+
+	t.Status("restarting the tenant 13 server to check it works with preserve downgrade option in the tenant")
+	verifySQL(t, tenant13.pgURL,
+		mkStmt("SET CLUSTER SETTING cluster.preserve_downgrade_option = crdb_internal.node_executable_version()"))
+	tenant13.stop(ctx, t, c)
+	tenant13.start(ctx, t, c, currentBinary)
 }
 
 type sqlVerificationStmt struct {
