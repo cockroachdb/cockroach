@@ -486,6 +486,10 @@ type Provider interface {
 	// GetPreemptedSpotVMs returns a list of Spot VMs that were preempted since the time specified.
 	// Returns nil, nil when SupportsSpotVMs() is false.
 	GetPreemptedSpotVMs(l *logger.Logger, vms List, since time.Time) ([]PreemptedVM, error)
+
+	// CreateLoadBalancer creates a load balancer, for a specific port, that
+	// delegates to the given cluster.
+	CreateLoadBalancer(l *logger.Logger, vms List, port int) error
 }
 
 // DeleteCluster is an optional capability for a Provider which can
