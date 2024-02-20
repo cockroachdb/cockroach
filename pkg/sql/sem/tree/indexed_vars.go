@@ -155,18 +155,10 @@ func (h *IndexedVarHelper) GetIndexedVars() []IndexedVar {
 	return h.vars
 }
 
-// Rebind collects all the IndexedVars in the given expression and re-binds them
-// to this helper.
-func (h *IndexedVarHelper) Rebind(expr Expr) Expr {
-	if expr == nil {
-		return nil
-	}
-	ret, _ := WalkExpr(h, expr)
-	return ret
-}
-
 // RebindTyped collects all the IndexedVars in the given typed expression and
 // re-binds them to this helper.
+// TODO(mgartner): Rename this "Rebind".
+// TODO(mgartner): Audit usages of this method. Are they necessary?
 func (h *IndexedVarHelper) RebindTyped(expr TypedExpr) TypedExpr {
 	if expr == nil {
 		return nil

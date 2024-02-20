@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,13 +33,13 @@ func DeserializeExpr(
 	expr string,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
-	vars *tree.IndexedVarHelper,
+	iVarContainer tree.IndexedVarContainer,
 ) (tree.TypedExpr, error) {
 	if expr == "" {
 		return nil, nil
 	}
 
-	deserializedExpr, err := processExpression(ctx, Expression{Expr: expr}, evalCtx, semaCtx, vars)
+	deserializedExpr, err := processExpression(ctx, Expression{Expr: expr}, evalCtx, semaCtx, iVarContainer)
 	if err != nil {
 		return deserializedExpr, err
 	}
@@ -65,8 +64,7 @@ func DeserializeExprWithTypes(
 	}
 	var eh exprHelper
 	eh.types = typs
-	tempVars := tree.MakeIndexedVarHelper(&eh, len(typs))
-	return DeserializeExpr(ctx, expr, semaCtx, evalCtx, &tempVars)
+	return DeserializeExpr(ctx, expr, semaCtx, evalCtx, &eh)
 }
 
 // RunFilter runs a filter expression and returns whether the filter passes.
@@ -92,42 +90,31 @@ func processExpression(
 	exprSpec Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
-	h *tree.IndexedVarHelper,
+	iVarContainer tree.IndexedVarContainer,
 ) (tree.TypedExpr, error) {
 	if exprSpec.Expr == "" {
 		return nil, nil
 	}
 	expr, err := parser.ParseExprWithInt(
 		exprSpec.Expr,
+		// TODO(mgartner): It would be nice avoid plumbing evalCtx here. Can we
+		// serialize all integer types unambiguously to avoid this? For example,
+		// always use INT8, INT4, and INT2 instead of INT.
 		parser.NakedIntTypeFromDefaultIntSize(evalCtx.SessionData().DefaultIntSize),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	// Bind IndexedVars to h.
-	expr = h.Rebind(expr)
-
-	semaCtx.IVarContainer = h.Container()
-	// Convert to a fully typed expression.
-	typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
-	if err != nil {
-		// Type checking must succeed by now.
-		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "%s", expr)
-	}
-
-	// Pre-evaluate constant expressions. This is necessary to avoid repeatedly
-	// re-evaluating constant values every time the expression is applied.
-	//
-	// TODO(solon): It would be preferable to enhance our expression serialization
-	// format so this wouldn't be necessary.
-	c := normalize.MakeConstantEvalVisitor(ctx, evalCtx)
-	expr, _ = tree.WalkExpr(&c, typedExpr)
-	if err := c.Err(); err != nil {
-		return nil, err
-	}
-
-	return expr.(tree.TypedExpr), nil
+	// Set the iVarContainer for semaCtx so that indexed vars can be
+	// type-checked.
+	originalIVarContainer := semaCtx.IVarContainer
+	semaCtx.IVarContainer = iVarContainer
+	defer func() {
+		semaCtx.IVarContainer = originalIVarContainer
+	}()
+	// Type-check the expression.
+	return tree.TypeCheck(ctx, expr, semaCtx, types.Any)
 }
 
 // ExprHelper implements the common logic around evaluating an expression that
@@ -267,10 +254,6 @@ type exprHelper struct {
 	semaCtx    *tree.SemaContext
 	datumAlloc *tree.DatumAlloc
 
-	// vars is used to generate IndexedVars that are "backed" by the values in
-	// row.
-	vars tree.IndexedVarHelper
-
 	types []*types.T
 	row   rowenc.EncDatumRow
 }
@@ -301,7 +284,6 @@ func (eh *exprHelper) init(
 	eh.evalCtx = evalCtx
 	eh.semaCtx = semaCtx
 	eh.types = types
-	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
 	eh.datumAlloc = &tree.DatumAlloc{}
 	if semaCtx.TypeResolver != nil {
 		for _, t := range types {
@@ -320,10 +302,9 @@ func (eh *exprHelper) prepareExpr(ctx context.Context, expr Expression) (tree.Ty
 		return nil, nil
 	}
 	if expr.LocalExpr != nil {
-		eh.vars.RebindTyped(expr.LocalExpr)
 		return expr.LocalExpr, nil
 	}
-	return DeserializeExpr(ctx, expr.Expr, eh.semaCtx, eh.evalCtx, &eh.vars)
+	return DeserializeExpr(ctx, expr.Expr, eh.semaCtx, eh.evalCtx, eh)
 }
 
 // evalFilter is used for filter expressions; it evaluates the expression and

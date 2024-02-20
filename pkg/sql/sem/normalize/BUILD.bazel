@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "normalize",
     srcs = [
-        "constant.go",
         "normalize_exprs.go",
         "visitor.go",
     ],
@@ -21,10 +20,7 @@ go_library(
 
 go_test(
     name = "normalize_test",
-    srcs = [
-        "constant_eval_test.go",
-        "normalize_test.go",
-    ],
+    srcs = ["normalize_test.go"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
         "//conditions:default": {"test.Pool": "default"},
@@ -36,7 +32,6 @@ go_test(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",
         "//pkg/util/leaktest",
         "//pkg/util/log",
