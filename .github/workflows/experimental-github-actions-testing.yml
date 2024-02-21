@@ -106,3 +106,19 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
+  docker_image_amd64:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: run docker tests
+        run: ./build/github/docker-image.sh amd64
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
