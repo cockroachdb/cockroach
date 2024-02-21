@@ -372,13 +372,13 @@ vectorized: true
         │       │           │ equality: (oid) = (relnamespace)
         │       │           │
         │       │           ├── • filter
-        │       │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
+        │       │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', __more1_10__, 'pg_extension')
         │       │           │   │
         │       │           │   └── • virtual table
         │       │           │         table: pg_namespace@primary
         │       │           │
         │       │           └── • filter
-        │       │               │ filter: relkind IN ('S', 'm', 'r', 'v')
+        │       │               │ filter: relkind IN ('S', 'm', __more1_10__, 'v')
         │       │               │
         │       │               └── • virtual table
         │       │                     table: pg_class@primary
@@ -422,7 +422,7 @@ vectorized: true
         │       │           │ equality: (oid) = (relnamespace)
         │       │           │
         │       │           ├── • filter
-        │       │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
+        │       │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', __more1_10__, 'pg_extension')
         │       │           │   │
         │       │           │   └── • virtual table
         │       │           │         table: pg_namespace@primary
@@ -431,7 +431,7 @@ vectorized: true
         │       │               │ equality: (oid) = (objoid)
         │       │               │
         │       │               ├── • filter
-        │       │               │   │ filter: relkind IN ('S', 'm', 'r', 'v')
+        │       │               │   │ filter: relkind IN ('S', 'm', __more1_10__, 'v')
         │       │               │   │
         │       │               │   └── • virtual table
         │       │               │         table: pg_class@pg_class_oid_idx
