@@ -192,12 +192,12 @@ func (r *Replica) canUnquiesceRLocked() bool {
 // nil, then the missing node ID is treated as live and will prevent the range
 // from quiescing.
 func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
-	ctx context.Context, leaseStatus kvserverpb.LeaseStatus, livenessMap livenesspb.IsLiveMap,
+	ctx context.Context, leaseStatus kvserverpb.LeaseStatus,
 ) bool {
 	if r.store.cfg.TestingKnobs.DisableQuiescence {
 		return false
 	}
-	status, lagging, ok := shouldReplicaQuiesce(ctx, r, leaseStatus, livenessMap, r.mu.pausedFollowers)
+	status, lagging, ok := shouldReplicaQuiesce(ctx, r, leaseStatus, r.store.cfg.NodeLiveness, r.mu.pausedFollowers)
 	if !ok {
 		return false
 	}
@@ -241,13 +241,11 @@ func (s laggingReplicaSet) MemberStale(l livenesspb.Liveness) bool {
 }
 
 // AnyMemberStale returns whether any liveness information in the set is older
-// than liveness information contained in the IsLiveMap.
-func (s laggingReplicaSet) AnyMemberStale(livenessMap livenesspb.IsLiveMap) bool {
+// than liveness information contained in the NodeVitalityMap.
+func (s laggingReplicaSet) AnyMemberStale(liveness livenesspb.NodeVitalityInterface) bool {
 	for _, laggingL := range s {
-		if l, ok := livenessMap[laggingL.NodeID]; ok {
-			if laggingL.Compare(l.Liveness) < 0 {
-				return true
-			}
+		if laggingL.Compare(liveness.GetNodeVitalityFromCache(laggingL.NodeID).GetInternalLiveness()) < 0 {
+			return true
 		}
 	}
 	return false
@@ -290,7 +288,7 @@ func shouldReplicaQuiesce(
 	ctx context.Context,
 	q quiescer,
 	leaseStatus kvserverpb.LeaseStatus,
-	livenessMap livenesspb.IsLiveMap,
+	nv livenesspb.NodeVitalityInterface,
 	pausedFollowers map[roachpb.ReplicaID]struct{},
 ) (*raftSparseStatus, laggingReplicaSet, bool) {
 	if !q.isRaftLeaderRLocked() { // fast path
@@ -423,12 +421,12 @@ func shouldReplicaQuiesce(
 		} else if progress.Match != status.Applied || progress.State != tracker.StateReplicate {
 			// Skip any node in the descriptor which is not live. Instead, add
 			// the node to the set of replicas lagging the quiescence index.
-			if l, ok := livenessMap[rep.NodeID]; ok && !l.IsLive {
+			if v := nv.GetNodeVitalityFromCache(rep.NodeID); !v.IsLive(livenesspb.RangeQuiesience) {
 				if log.V(4) {
 					log.Infof(ctx, "skipping node %d because not live. Progress=%+v",
 						rep.NodeID, progress)
 				}
-				lagging = append(lagging, l.Liveness)
+				lagging = append(lagging, v.GetInternalLiveness())
 				continue
 			}
 			if log.V(4) {
@@ -513,7 +511,7 @@ func shouldFollowerQuiesceOnNotify(
 	q quiescer,
 	msg raftpb.Message,
 	lagging laggingReplicaSet,
-	livenessMap livenesspb.IsLiveMap,
+	liveness livenesspb.NodeVitalityInterface,
 ) bool {
 	// If another replica tells us to quiesce, we verify that according to
 	// it, we are fully caught up, and that we believe it to be the leader.
@@ -578,7 +576,7 @@ func shouldFollowerQuiesceOnNotify(
 	// new information, it would never unquiesce the range, so it is
 	// important that we don't quiesce so we are ready to campaign, if
 	// necessary.
-	if lagging.AnyMemberStale(livenessMap) {
+	if lagging.AnyMemberStale(liveness) {
 		if log.V(3) {
 			log.Infof(ctx, "not quiescing: liveness info about lagging replica stale")
 		}
@@ -593,11 +591,7 @@ func (r *Replica) maybeQuiesceOnNotify(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// NOTE: it is important that we grab the livenessMap under lock so
-	// that we properly synchronize with Store.nodeIsLiveCallback, which
-	// updates the map and then tries to unquiesce.
-	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
-	if !shouldFollowerQuiesceOnNotify(ctx, r, msg, lagging, livenessMap) {
+	if !shouldFollowerQuiesceOnNotify(ctx, r, msg, lagging, r.store.cfg.NodeLiveness) {
 		return false
 	}
 
