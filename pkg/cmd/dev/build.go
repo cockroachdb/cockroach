@@ -87,6 +87,7 @@ var buildTargetMapping = map[string]string{
 	"dev":                  devTarget,
 	"docgen":               "//pkg/cmd/docgen:docgen",
 	"docs-issue-gen":       "//pkg/cmd/docs-issue-generation:docs-issue-generation",
+	"drt-run":              "//pkg/cmd/drt-run:drt-run",
 	"execgen":              "//pkg/sql/colexec/execgen/cmd/execgen:execgen",
 	"gofmt":                "@com_github_cockroachdb_gostdlib//cmd/gofmt:gofmt",
 	"goimports":            "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports:goimports",

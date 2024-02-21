@@ -1,0 +1,20 @@
+workloads:
+  - name: tpcc-main
+    type: tpcc
+    steps:
+      - fixtures import
+        args:
+          warehouses: 15000
+          db: tpcc-main
+      - run
+        args:
+          ramp: 10m
+          warehouses: 15000
+          db: tpcc-main
+operations:
+  cadence: 5m
+  parallelism: 4
+  timeout: 48h
+  set:
+    - add-column
+    - add-index

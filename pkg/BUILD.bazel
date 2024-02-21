@@ -1093,6 +1093,8 @@ GO_TARGETS = [
     "//pkg/cmd/docs-issue-generation:docs-issue-generation",
     "//pkg/cmd/docs-issue-generation:docs-issue-generation_lib",
     "//pkg/cmd/docs-issue-generation:docs-issue-generation_test",
+    "//pkg/cmd/drt-run:drt-run",
+    "//pkg/cmd/drt-run:drt_run_lib",
     "//pkg/cmd/fuzz:fuzz",
     "//pkg/cmd/fuzz:fuzz_lib",
     "//pkg/cmd/generate-acceptance-tests:generate-acceptance-tests",
