@@ -501,6 +501,21 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
+var _ sstable.BlockIntervalSyntheticReplacer = MVCCBlockIntervalSyntheticReplacer{}
+
+type MVCCBlockIntervalSyntheticReplacer struct{}
+
+func (mbsr MVCCBlockIntervalSyntheticReplacer) AdjustIntervalWithSyntheticSuffix(
+	lower uint64, upper uint64, suffix []byte,
+) (adjustedLower uint64, adjustedUpper uint64, err error) {
+	// Remove the sentinel byte.
+	synthDecoded, _ := binary.Uvarint(suffix[1:])
+	if upper >= synthDecoded {
+		return 0, 0, errors.AssertionFailedf("the synthetic suffix %d is less than or equal to the original upper bound %d", synthDecoded, upper)
+	}
+	return synthDecoded, synthDecoded + 1, nil
+}
+
 // pebbleDataBlockMVCCTimeIntervalPointCollector implements
 // pebble.DataBlockIntervalCollector for point keys.
 type pebbleDataBlockMVCCTimeIntervalPointCollector struct {
