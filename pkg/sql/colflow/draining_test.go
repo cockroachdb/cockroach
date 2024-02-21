@@ -75,6 +75,9 @@ func TestDrainingAfterRemoteError(t *testing.T) {
 	// Make sure that the query is fully distributed (i.e. all execution happens
 	// on node 2).
 	sqlDB.Exec(t, "SET distsql = always;")
+	// Disable the streamer to prevent this test from triggering the known race
+	// #119201.
+	sqlDB.Exec(t, "SET streamer_enabled = false;")
 
 	// Sanity check that, indeed, node 2 is part of the physical plan.
 	rows, err := conn.Query("EXPLAIN (VEC) SELECT sum(length(v)) FROM large, small WHERE small.k = large.k GROUP BY large.k;")
