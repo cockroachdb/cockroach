@@ -1251,6 +1251,7 @@ func runMVCCDeleteRangeUsingTombstone(
 				rightPeekBound,
 				false, // idempotent
 				0,
+				0,
 				msCovered,
 			); err != nil {
 				b.Fatal(err)
@@ -1298,6 +1299,7 @@ func runMVCCDeleteRangeWithPredicate(
 				0,
 				math.MaxInt64,
 				rangeTombstoneThreshold,
+				0,
 				0,
 			)
 			b.StopTimer()
@@ -1480,7 +1482,7 @@ func runMVCCGarbageCollect(
 					}
 				}
 				if err := MVCCDeleteRangeUsingTombstone(ctx, batch, nil, startKey, endKey,
-					rts, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
+					rts, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -1639,9 +1641,9 @@ func runMVCCAcquireLockCommon(
 				txn = &txn2
 			}
 			// Acquire a shared and an exclusive lock on the key.
-			err := MVCCAcquireLock(ctx, eng, txn, lock.Shared, key, nil, 0)
+			err := MVCCAcquireLock(ctx, eng, txn, lock.Shared, key, nil, 0, 0)
 			require.NoError(b, err)
-			err = MVCCAcquireLock(ctx, eng, txn, lock.Exclusive, key, nil, 0)
+			err = MVCCAcquireLock(ctx, eng, txn, lock.Exclusive, key, nil, 0, 0)
 			require.NoError(b, err)
 		}
 	}
@@ -1661,9 +1663,9 @@ func runMVCCAcquireLockCommon(
 		txn := &txn1
 		var err error
 		if checkFor {
-			err = MVCCCheckForAcquireLock(ctx, rw, txn, strength, key, 0)
+			err = MVCCCheckForAcquireLock(ctx, rw, txn, strength, key, 0, 0)
 		} else {
-			err = MVCCAcquireLock(ctx, rw, txn, strength, key, ms, 0)
+			err = MVCCAcquireLock(ctx, rw, txn, strength, key, ms, 0, 0)
 		}
 		if heldOtherTxn {
 			require.Error(b, err)
@@ -1727,7 +1729,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 			startKey := mkKey(start)
 			endKey := mkKey(end)
 			require.NoError(b, MVCCDeleteRangeUsingTombstone(
-				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
+				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil))
 		}
 		require.NoError(b, batch.Commit(false /* sync */))
 	}()
@@ -1908,7 +1910,7 @@ func runCheckSSTConflicts(
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, sstStart.Key, sstEnd.Key.Next(), false, hlc.Timestamp{}, hlc.Timestamp{}, math.MaxInt64, usePrefixSeek)
+		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, sstStart.Key, sstEnd.Key.Next(), false, hlc.Timestamp{}, hlc.Timestamp{}, math.MaxInt64, 0, usePrefixSeek)
 		require.NoError(b, err)
 	}
 }

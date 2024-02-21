@@ -273,7 +273,7 @@ func (d mvccBenchData) Build(ctx context.Context, b *testing.B, eng Engine) erro
 			startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(start)))
 			endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(end)))
 			require.NoError(b, MVCCDeleteRangeUsingTombstone(
-				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
+				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil))
 		}
 		require.NoError(b, batch.Commit(false /* sync */))
 	}
