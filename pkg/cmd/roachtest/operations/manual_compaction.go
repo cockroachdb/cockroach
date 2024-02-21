@@ -54,11 +54,12 @@ func runManualCompaction(
 
 func registerManualCompaction(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:             "manual-compaction",
-		Owner:            registry.OwnerStorage,
-		Timeout:          24 * time.Hour,
-		CompatibleClouds: registry.OnlyGCE,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnavailableRanges},
-		Run:              runManualCompaction,
+		Name:               "manual-compaction",
+		Owner:              registry.OwnerStorage,
+		Timeout:            24 * time.Hour,
+		CompatibleClouds:   registry.OnlyGCE,
+		CanRunConcurrently: registry.OperationCanRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnavailableRanges},
+		Run:                runManualCompaction,
 	})
 }

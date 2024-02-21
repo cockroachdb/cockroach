@@ -94,19 +94,21 @@ func createNetworkFullPartition(
 // partition operations.
 func registerNetworkPartition(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:             "network-partition/full",
-		Owner:            registry.OwnerKV,
-		Timeout:          1 * time.Minute,
-		CompatibleClouds: registry.AllClouds,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:              createNetworkFullPartition,
+		Name:               "network-partition/full",
+		Owner:              registry.OwnerKV,
+		Timeout:            1 * time.Minute,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
+		Run:                createNetworkFullPartition,
 	})
 	r.AddOperation(registry.OperationSpec{
-		Name:             "network-partition/partial",
-		Owner:            registry.OwnerKV,
-		Timeout:          1 * time.Minute,
-		CompatibleClouds: registry.AllClouds,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:              createNetworkPartialPartition,
+		Name:               "network-partition/partial",
+		Owner:              registry.OwnerKV,
+		Timeout:            1 * time.Minute,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
+		Run:                createNetworkPartialPartition,
 	})
 }

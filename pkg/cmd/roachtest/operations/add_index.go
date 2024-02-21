@@ -81,11 +81,12 @@ func runAddIndex(
 
 func registerAddIndex(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:             "add-index",
-		Owner:            registry.OwnerSQLFoundations,
-		Timeout:          24 * time.Hour,
-		CompatibleClouds: registry.AllClouds,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase},
-		Run:              runAddIndex,
+		Name:               "add-index",
+		Owner:              registry.OwnerSQLFoundations,
+		Timeout:            24 * time.Hour,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCanRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase},
+		Run:                runAddIndex,
 	})
 }

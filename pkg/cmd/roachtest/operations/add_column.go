@@ -80,11 +80,12 @@ func runAddColumn(
 
 func registerAddColumn(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:             "add-column",
-		Owner:            registry.OwnerSQLFoundations,
-		Timeout:          24 * time.Hour,
-		CompatibleClouds: registry.AllClouds,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase},
-		Run:              runAddColumn,
+		Name:               "add-column",
+		Owner:              registry.OwnerSQLFoundations,
+		Timeout:            24 * time.Hour,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCanRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase},
+		Run:                runAddColumn,
 	})
 }

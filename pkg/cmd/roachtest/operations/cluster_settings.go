@@ -107,11 +107,12 @@ func registerClusterSettings(r registry.Registry) {
 	}
 	for _, op := range ops {
 		r.AddOperation(registry.OperationSpec{
-			Name:             "cluster-settings/scheduled/" + sanitizeOpName(op.Name),
-			Owner:            op.Owner,
-			Timeout:          5 * time.Minute,
-			CompatibleClouds: registry.AllClouds,
-			Dependencies:     []registry.OperationDependency{registry.OperationRequiresNodes},
+			Name:               "cluster-settings/scheduled/" + sanitizeOpName(op.Name),
+			Owner:              op.Owner,
+			Timeout:            5 * time.Minute,
+			CompatibleClouds:   registry.AllClouds,
+			CanRunConcurrently: registry.OperationCannotRunConcurrentlyWithItself,
+			Dependencies:       []registry.OperationDependency{registry.OperationRequiresNodes},
 			Run: func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
 				return setClusterSetting(ctx, o, c, op)
 			},
