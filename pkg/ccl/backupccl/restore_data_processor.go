@@ -9,7 +9,6 @@
 package backupccl
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"runtime"
@@ -551,16 +550,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	if rd.spec.ValidateOnly {
 		batcher = &sstBatcherNoop{}
 	} else {
-		// If the system tenant is restoring a guest tenant span, we don't want to
-		// forward all the restored data to now, as there may be importing tables in
-		// that span, that depend on the difference in timestamps on restored existing
-		// vs importing keys to rollback.
-		writeAtBatchTS := true
-		if writeAtBatchTS && kr.fromSystemTenant &&
-			(bytes.HasPrefix(entry.Span.Key, keys.TenantPrefix) || bytes.HasPrefix(entry.Span.EndKey, keys.TenantPrefix)) {
-			log.Warningf(ctx, "restoring span %s at its original timestamps because it is a tenant span", entry.Span)
-			writeAtBatchTS = false
-		}
+		writeAtBatchTS := writeAtBatchTS(ctx, entry.Span, kr.fromSystemTenant)
 
 		// disallowShadowingBelow is set to an empty hlc.Timestamp in release builds
 		// i.e. allow all shadowing without AddSSTable having to check for
