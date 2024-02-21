@@ -783,6 +783,7 @@ func wrapFilesystemMiddleware(opts *pebble.Options) (vfs.FS, io.Closer) {
 	// wraps the filesystem with a layer that times all write-oriented
 	// operations.
 	fs, closer := vfs.WithDiskHealthChecks(opts.FS, diskHealthCheckInterval,
+		nil, /* statsCollector */
 		func(info vfs.DiskSlowInfo) {
 			opts.EventListener.DiskSlow(pebble.DiskSlowInfo{
 				Path:      info.Path,
