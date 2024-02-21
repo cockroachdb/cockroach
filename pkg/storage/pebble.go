@@ -2491,6 +2491,7 @@ var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
 	clusterversion.V23_1: pebble.FormatFlushableIngest,
 	clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete: pebble.FormatDeleteSizedAndObsolete,
 	clusterversion.V23_2_PebbleFormatVirtualSSTables:        pebble.FormatVirtualSSTables,
+	clusterversion.V24_1_PebbleFormatSyntheticPrefixSuffix:  pebble.FormatSyntheticPrefixSuffix,
 }
 
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
