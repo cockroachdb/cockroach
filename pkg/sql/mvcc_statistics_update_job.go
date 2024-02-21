@@ -31,8 +31,8 @@ import (
 )
 
 // TenantGlobalMetricsExporterInterval is the interval at which an external
-// tenant's process in the cluster will update the global metrics. This is
-// exported for testing purposes.
+// tenant's process in the cluster will update the global metrics, and is
+// measured from the *last update*. This is exported for testing purposes.
 var TenantGlobalMetricsExporterInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"tenant_global_metrics_exporter_interval",
@@ -143,10 +143,10 @@ func (j *mvccStatisticsUpdateJob) runTenantGlobalMetricsExporter(
 			return ctx.Err()
 		case <-timer.C:
 			timer.Read = true
-			timer.Reset(TenantGlobalMetricsExporterInterval.Get(&execCtx.ExecCfg().Settings.SV))
 			if err := runTask(); err != nil {
 				log.Errorf(ctx, "mvcc statistics update job error: %v", err)
 			}
+			timer.Reset(TenantGlobalMetricsExporterInterval.Get(&execCtx.ExecCfg().Settings.SV))
 		}
 	}
 }
