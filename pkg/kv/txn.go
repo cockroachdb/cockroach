@@ -13,12 +13,14 @@ package kv
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -45,6 +47,21 @@ import (
 // path for some reason), and the async pool is full (i.e. the system is
 // under load), then it makes sense to abandon the cleanup before too long.
 const asyncRollbackTimeout = time.Minute
+
+// MaxInternalTxnAutoRetries controls the maximum number of auto-retries a call
+// to kv.DB.Txn will perform before aborting the transaction and returning an
+// error. This is used to prevent infinite retry loops where a transaction has
+// little chance of succeeding in the future but continues to hold locks from
+// earlier epochs.
+var MaxInternalTxnAutoRetries = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"kv.transaction.internal.max_auto_retries",
+	"controls the maximum number of auto-retries an internal KV transaction will "+
+		"perform before aborting and returning an error. Can be set to 0 to disable any "+
+		"retry attempt.",
+	100,
+	settings.NonNegativeInt,
+)
 
 // Txn is an in-progress distributed database transaction. A Txn is safe for
 // concurrent use by multiple goroutines.
@@ -1083,6 +1100,26 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		}
 
 		if !retryable {
+			break
+		}
+
+		// Determine whether the transaction has exceeded the maximum number of
+		// automatic retries. We check this after each failed attempt to allow the
+		// cluster setting to be changed while a transaction is stuck in a retry
+		// loop.
+		maxRetries := math.MaxInt64
+		if txn.db.ctx.Settings != nil {
+			maxRetries = int(MaxInternalTxnAutoRetries.Get(&txn.db.ctx.Settings.SV))
+		}
+		if attempt > maxRetries {
+			// If the retries limit has been exceeded, rollback and return an error.
+			rollbackErr := txn.Rollback(ctx)
+			// NOTE: we don't errors.Wrap the most recent retry error because we want
+			// to terminate it here. Instead, we just include it in the error text.
+			err = errors.Errorf("have retried transaction: %s %d times, most recently because of the "+
+				"retryable error: %s. Terminating retry loop and returning error due to cluster setting %s (%d). "+
+				"Rollback error: %v.", txn.DebugName(), attempt, err, MaxInternalTxnAutoRetries.Name(), maxRetries, rollbackErr)
+			log.Warningf(ctx, "%v", err)
 			break
 		}
 
