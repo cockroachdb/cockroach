@@ -286,10 +286,9 @@ BEGIN; SELECT * FROM t LIMIT 4; SELECT * FROM t LIMIT 5; COMMIT
 
 subtest end
 
-subtest txn_retry_is_sampled
+subtest no_sampling_reset_on_txn_retry
 
-# If a transaction restarts, we should redo the sampling logic. This test ensures
-# that even if the first attempt of a txn is not sampled, a retry may be sampled.
+# This test ensures that if a transaction is retried, the sampling decision is not reset.
 
 exec-sql
 CREATE SEQUENCE seq START WITH 1
@@ -298,7 +297,9 @@ CREATE SEQUENCE seq START WITH 1
 reset-last-sampled
 ----
 
-# Execute a query at time=1 so that the first attempt of the next txn is not sampled.
+# Execute a query at time=1 so that the the next txn is not sampled.
+# Retries of that txn should also not be sampled, even if those executions meet
+# the sampling criteria.
 spy-sql unixSecs=1
 SELECT 1, 2, 3
 ----
@@ -331,15 +332,55 @@ SELECT 1, 2, 3
 	"User": "root"
 }
 
-# The stub time will only be advanced in the retry.
-# Note that the crdb_internal.force_retry will always appear in the logs due to
-# it not being a DML statement.
+# The stub time be advanced in the retry - even though enough time has elapsed for the
+# retried execution, it should not be sampled due to the sampling decision from the
+# first attempt.
 spy-sql unixSecs=1 restartUnixSecs=2
 BEGIN;
 SELECT 'hello';
 SELECT CASE nextval('seq') WHEN 1 THEN crdb_internal.force_retry('1s') ELSE 2 END;
 COMMIT;
 ----
+
+
+# This is the reverse scenario to the above - the first txn is sampled, and the retry
+# should also be sampled even though not enough time has elapsed.
+spy-sql unixSecs=2 restartUnixSecs=2
+BEGIN;
+SELECT 'hello';
+SELECT CASE nextval('seq') WHEN 3 THEN crdb_internal.force_retry('1s') ELSE 2 END;
+COMMIT;
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"SkippedQueries": 7,
+	"Statement": "SELECT ‹'hello'›",
+	"StatementFingerprintID": 15578946620736494000,
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"ErrorText": "crdb_internal.force_retry(): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()",
+	"EventType": "sampled_query",
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"SQLSTATE": "40001",
+	"Statement": "SELECT CASE nextval(‹'seq'›) WHEN ‹3› THEN crdb_internal.force_retry(‹'00:00:01'›) ELSE ‹2› END",
+	"StatementFingerprintID": 17115235937825139000,
+	"StmtPosInTxn": 2,
+	"Tag": "SELECT",
+	"User": "root"
+}
 {
 	"ApplicationName": "telemetry-logging-datadriven",
 	"Database": "defaultdb",
@@ -349,7 +390,6 @@ COMMIT;
 	"NumRows": 1,
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICAgYC",
-	"SkippedQueries": 3,
 	"Statement": "SELECT ‹'hello'›",
 	"StatementFingerprintID": 15578946620736494000,
 	"StmtPosInTxn": 1,
@@ -365,7 +405,7 @@ COMMIT;
 	"NumRows": 1,
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICAgYC",
-	"Statement": "SELECT CASE nextval(‹'seq'›) WHEN ‹1› THEN crdb_internal.force_retry(‹'00:00:01'›) ELSE ‹2› END",
+	"Statement": "SELECT CASE nextval(‹'seq'›) WHEN ‹3› THEN crdb_internal.force_retry(‹'00:00:01'›) ELSE ‹2› END",
 	"StatementFingerprintID": 9891387630896048000,
 	"StmtPosInTxn": 2,
 	"Tag": "SELECT",
