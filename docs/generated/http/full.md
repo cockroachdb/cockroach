@@ -3416,6 +3416,7 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#cockroach.server.serverpb.DownloadSpanRequest-string) |  |  | [reserved](#support-status) |
 | spans | [cockroach.roachpb.Span](#cockroach.server.serverpb.DownloadSpanRequest-cockroach.roachpb.Span) | repeated |  | [reserved](#support-status) |
+| via_backing_file_download | [bool](#cockroach.server.serverpb.DownloadSpanRequest-bool) |  |  | [reserved](#support-status) |
 
 
 
