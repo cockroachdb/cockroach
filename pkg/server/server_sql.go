@@ -1447,6 +1447,24 @@ func (s *SQLServer) preStart(
 		}
 	}
 
+	// Initialize the version cluster setting from storage.
+	//
+	// NB: In the context of the system tenant, we may not have
+	// the version setting in SQL yet even though the in memory
+	// setting has been initialized in.
+	currentVersion := s.execCfg.Settings.Version.ActiveVersionOrEmpty(ctx).Version
+	if currentVersion.Equal(roachpb.Version{}) {
+		if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			v, err := s.settingsWatcher.GetClusterVersionFromStorage(ctx, txn)
+			if err != nil {
+				return err
+			}
+			return clusterversion.Initialize(ctx, v.Version, &s.execCfg.Settings.SV)
+		}); err != nil {
+			return errors.Wrap(err, "initializing cluster version")
+		}
+	}
+
 	// Initialize the settings watcher early in sql server startup. Settings
 	// values are meaningless before the watcher is initialized and most sub
 	// systems depend on system settings.
