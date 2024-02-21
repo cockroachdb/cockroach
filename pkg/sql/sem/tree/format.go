@@ -73,7 +73,7 @@ const (
 
 	// FmtHideConstants instructs the pretty-printer to produce a
 	// representation that does not disclose query-specific data. It
-	// also shorten long lists in tuples, VALUES and array expressions.
+	// also shortens long lists in tuples, VALUES and array expressions.
 	FmtHideConstants
 
 	// FmtAnonymize instructs the pretty-printer to remove any name.
@@ -168,6 +168,10 @@ const (
 	// FmtTagDollarQuotes instructs tags to be kept intact in tagged dollar
 	// quotes. It also applies tags when formatting UDFs.
 	FmtTagDollarQuotes
+
+	// FmtShortenConstants shortens long lists in tuples, VALUES and array
+	// expressions. FmtHideConstants takes precedence over it.
+	FmtShortenConstants
 )
 
 // PasswordSubstitution is the string that replaces
@@ -436,7 +440,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			if f.HasFlags(FmtMarkRedactionNode) {
 				ctx.formatNodeMaybeMarkRedaction(n)
 			} else {
-				ctx.formatNodeOrHideConstants(n)
+				ctx.formatNodeOrAdjustConstants(n)
 			}
 
 			ctx.WriteString(")[")
@@ -468,7 +472,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 	if f.HasFlags(FmtMarkRedactionNode) {
 		ctx.formatNodeMaybeMarkRedaction(n)
 	} else {
-		ctx.formatNodeOrHideConstants(n)
+		ctx.formatNodeOrAdjustConstants(n)
 	}
 
 	if f.HasFlags(FmtAlwaysGroupExprs) {

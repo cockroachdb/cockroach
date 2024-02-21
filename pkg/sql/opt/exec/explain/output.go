@@ -145,7 +145,7 @@ func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns colinf
 	if expr == nil {
 		return
 	}
-	flags := tree.FmtSymbolicSubqueries
+	flags := tree.FmtSymbolicSubqueries | tree.FmtShortenConstants
 	if ob.flags.ShowTypes {
 		flags |= tree.FmtShowTypes
 	}
