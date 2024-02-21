@@ -261,7 +261,7 @@ func (p *pebbleIterator) setOptions(
 		p.rangeKeyMaskingBuf = encodeMVCCTimestampSuffixToBuf(
 			p.rangeKeyMaskingBuf, opts.RangeKeyMaskingBelow)
 		p.options.RangeKeyMasking.Suffix = p.rangeKeyMaskingBuf
-		p.maskFilter.BlockIntervalFilter.Init(mvccWallTimeIntervalCollector, 0, math.MaxUint64)
+		p.maskFilter.BlockIntervalFilter.Init(mvccWallTimeIntervalCollector, 0, math.MaxUint64, nil /* syntheticReplacer */)
 		p.options.RangeKeyMasking.Filter = p.getBlockPropertyFilterMask
 	}
 
@@ -316,7 +316,8 @@ func (p *pebbleIterator) setOptions(
 		pkf := [2]pebble.BlockPropertyFilter{
 			sstable.NewBlockIntervalFilter(mvccWallTimeIntervalCollector,
 				uint64(opts.MinTimestamp.WallTime),
-				uint64(opts.MaxTimestamp.WallTime)+1),
+				uint64(opts.MaxTimestamp.WallTime)+1,
+				nil /* syntheticReplacer */),
 		}
 		p.options.PointKeyFilters = pkf[:1:2]
 		// NB: We disable range key block filtering because of complications in
