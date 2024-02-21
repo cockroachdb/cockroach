@@ -2042,6 +2042,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	start, end roachpb.Key,
 	intents *[]roachpb.Intent,
 	maxLockConflicts int64,
+	targetLockConflictBytes int64,
 ) (needIntentHistory bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -2078,9 +2079,15 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 
 	var meta enginepb.MVCCMetadata
 	var ok bool
+	intentSize := int64(0)
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
 		if maxLockConflicts != 0 && int64(len(*intents)) >= maxLockConflicts {
 			// Return early if we're done accumulating intents; make no claims about
+			// not needing intent history.
+			return true /* needsIntentHistory */, nil
+		}
+		if targetLockConflictBytes != 0 && intentSize >= targetLockConflictBytes {
+			// Return early if we're exceed intent byte limits; make no claims about
 			// not needing intent history.
 			return true /* needsIntentHistory */, nil
 		}
@@ -2125,7 +2132,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 			needIntentHistory = true
 			continue
 		}
-		if conflictingIntent := meta.Timestamp.ToTimestamp().LessEq(ts); !conflictingIntent {
+		if intentConflicts := meta.Timestamp.ToTimestamp().LessEq(ts); !intentConflicts {
 			continue
 		}
 		key, err := iter.EngineKey()
@@ -2139,7 +2146,9 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		if ltKey.Strength != lock.Intent {
 			return false, errors.AssertionFailedf("unexpected strength for LockTableKey %s", ltKey.Strength)
 		}
-		*intents = append(*intents, roachpb.MakeIntent(meta.Txn, ltKey.Key))
+		conflictingIntent := roachpb.MakeIntent(meta.Txn, ltKey.Key)
+		intentSize += int64(conflictingIntent.Size())
+		*intents = append(*intents, conflictingIntent)
 	}
 	if err != nil {
 		return false, err

@@ -103,6 +103,12 @@ export k=a end=z maxLockConflicts=3
 ----
 error: (*kvpb.LockConflictError:) conflicting locks on "a", "d", "j"
 
+# Each intent here has the size of 3 bytes.
+run error
+export k=a end=z targetLockConflictBytes=10
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "a", "d", "j", "l"
+
 # Export the entire dataset below the intents, with full revision history.
 run ok
 export k=a end=z ts=6 allRevisions
