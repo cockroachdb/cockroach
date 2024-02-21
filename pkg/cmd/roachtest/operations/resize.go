@@ -93,11 +93,12 @@ func resizeCluster(
 
 func registerResize(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:             "resize/grow=3",
-		Owner:            registry.OwnerStorage,
-		Timeout:          30 * time.Minute,
-		CompatibleClouds: registry.OnlyGCE,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresNodes},
+		Name:               "resize/grow=3",
+		Owner:              registry.OwnerStorage,
+		Timeout:            30 * time.Minute,
+		CompatibleClouds:   registry.OnlyGCE,
+		CanRunConcurrently: registry.OperationCannotRunConcurrentlyWithItself,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresNodes},
 		Run: func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
 			return resizeCluster(ctx, o, c, 3)
 		},
