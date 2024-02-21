@@ -297,18 +297,7 @@ func TestCreatePostRequest(t *testing.T) {
 				"coverageBuild":    "true",
 			}),
 		},
-		// 9. Verify preemption failure are routed to test-eng and marked as infra-flake,
-		// even if the first failure is another handled error.
-		{
-			nonReleaseBlocker:     true,
-			failures:              []failure{createFailure(gce.ErrDNSOperation), createFailure(vmPreemptionError("my_VM"))},
-			expectedPost:          true,
-			expectedName:          "vm_preemption",
-			expectedTeam:          "@cockroachdb/test-eng",
-			expectedMessagePrefix: testName + " failed",
-			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
-		},
-		// 10. Verify preemption failure are routed to test-eng and marked as infra-flake, when the
+		// 9. Verify preemption failure are routed to test-eng and marked as infra-flake, when the
 		// first failure is a non-handled error.
 		{
 			nonReleaseBlocker:     true,
@@ -319,7 +308,7 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 11. Verify preemption failure are routed to test-eng and marked as infra-flake, when the only error is
+		// 10. Verify preemption failure are routed to test-eng and marked as infra-flake, when the only error is
 		// preemption failure
 		{
 			nonReleaseBlocker: true,
@@ -329,6 +318,21 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedPost:          true,
 			expectedTeam:          "@cockroachdb/test-eng",
 			expectedName:          "vm_preemption",
+			expectedMessagePrefix: testName + " failed",
+			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
+		},
+		// 11. Errors with ownership that happen as a result of roachprod
+		// errors are ignored -- roachprod errors are routed directly to
+		// test-eng.
+		{
+			nonReleaseBlocker: true,
+			failures: []failure{
+				createFailure(gce.ErrDNSOperation),
+				createFailure(registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.New("oops"))),
+			},
+			expectedPost:          true,
+			expectedTeam:          "@cockroachdb/test-eng",
+			expectedName:          "dns_problem",
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
