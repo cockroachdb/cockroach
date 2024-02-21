@@ -2039,11 +2039,6 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 		ex.state.mu.Lock()
 		defer ex.state.mu.Unlock()
 		ex.state.mu.stmtCount = 0
-		isTracing := ex.planner.ExtendedEvalContext().Tracing.Enabled()
-		ex.extraTxnState.shouldLogToTelemetry, ex.extraTxnState.telemetrySkippedTxns =
-			ex.server.TelemetryLoggingMetrics.shouldEmitTransactionLog(isTracing,
-				ex.executorType == executorTypeInternal,
-				ex.applicationName.Load().(string))
 	}
 
 	// NOTE: on txnRestart we don't need to muck with the savepoints stack. It's either a
