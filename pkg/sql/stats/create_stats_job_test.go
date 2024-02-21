@@ -325,6 +325,75 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	<-errCh
 }
 
+func TestStatsJobRunningTooLong(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var allowRequest chan struct{}
+
+	filter, setTableID := createStatsRequestFilter(&allowRequest)
+	var serverArgs base.TestServerArgs
+	serverArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	serverArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: filter,
+	}
+
+	ctx := context.Background()
+	s, conn, _ := serverutils.StartServer(t, serverArgs)
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TABLE d.u (x INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
+	sqlDB.Exec(t, `INSERT INTO d.u SELECT generate_series(1,1000)`)
+	var tID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
+	setTableID(tID)
+
+	// Set the replaceable after duration to something small so that we quickly
+	// exceed it.
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.job_replaceable_after_duration = '0.1 ms'`)
+
+	// Start a CREATE STATISTICS run and wait until it's done one scan.
+	allowRequest = make(chan struct{})
+	errCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS s1 FROM d.t`)
+		errCh <- err
+	}()
+	select {
+	case allowRequest <- struct{}{}:
+	case err := <-errCh:
+		if err == nil {
+			t.Fatal("query unexpectedly finished")
+		} else {
+			t.Fatal(err)
+		}
+	}
+
+	// Sleep so we exceed the max job duration.
+	time.Sleep(time.Millisecond)
+
+	// Attempt to start an automatic stats run on a different table. It should succeed.
+	if _, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.u`); err != nil {
+		t.Fatalf("the auto stats job should have succeeded but it failed. err:%v", err)
+	}
+
+	// Verify that the first job failed with the expected error.
+	close(allowRequest)
+	if err := <-errCh; err == nil {
+		t.Fatalf("create stats job should have failed but it succeeded")
+	} else {
+		expected := "stats job has been running for too long"
+		if !testutils.IsError(err, expected) {
+			t.Fatalf("expected '%s' error, but got %v", expected, err)
+		}
+	}
+}
+
 func TestDeleteFailedJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
