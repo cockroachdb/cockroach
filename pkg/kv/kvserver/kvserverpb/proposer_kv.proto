@@ -221,6 +221,7 @@ message ReplicatedEvalResult {
     string remote_file_path = 6;
     uint64 backing_file_size = 7;
     uint64 approximate_physical_size = 8;
+    util.hlc.Timestamp remote_rewrite_timestamp = 9 [(gogoproto.nullable) = false];
   }
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
 

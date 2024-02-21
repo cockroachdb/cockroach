@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -74,10 +75,12 @@ func sendAddRemoteSSTs(
 	grp.GoCtx(func(ctx context.Context) error {
 		return genSpan(ctx, restoreSpanEntriesCh)
 	})
+	fromSystemTenant := isFromSystemTenant(dataToRestore.getTenantRekeys())
+	writeAtBatchTimestamp := writeAtBatchTS(ctx, dataToRestore.getSpans()[0], fromSystemTenant)
 
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh))
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh, writeAtBatchTimestamp))
 	}
 
 	if err := grp.Wait(); err != nil {
@@ -106,6 +109,7 @@ func sendAddRemoteSSTWorker(
 	execCtx sql.JobExecContext,
 	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
 	requestFinishedCh chan<- struct{},
+	writeAtBatchTimestamp bool,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		var toAdd []execinfrapb.RestoreFileSpec
@@ -156,10 +160,14 @@ func sendAddRemoteSSTWorker(
 					KeyCount:          counts.Rows + counts.IndexEntries,
 					LiveCount:         counts.Rows + counts.IndexEntries,
 				}
+				var batchTimestamp hlc.Timestamp
+				if writeAtBatchTimestamp {
+					batchTimestamp = execCtx.ExecCfg().DB.Clock().Now()
+				}
 				var err error
 				_, _, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx,
 					file.BackupFileEntrySpan, loc,
-					fileStats)
+					fileStats, batchTimestamp)
 				if err != nil {
 					return err
 				}

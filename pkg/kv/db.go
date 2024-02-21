@@ -807,9 +807,10 @@ func (db *DB) AddRemoteSSTable(
 	span roachpb.Span,
 	file kvpb.AddSSTableRequest_RemoteFile,
 	stats *enginepb.MVCCStats,
+	batchTimestamp hlc.Timestamp,
 ) (roachpb.Span, int64, error) {
-	b := &Batch{}
-	b.addSSTable(span.Key, span.EndKey, nil, file, false, false, hlc.Timestamp{}, stats, false, hlc.Timestamp{})
+	b := &Batch{Header: kvpb.Header{Timestamp: batchTimestamp}}
+	b.addSSTable(span.Key, span.EndKey, nil, file, false, false, hlc.Timestamp{}, stats, false, batchTimestamp)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
 		return roachpb.Span{}, 0, err
