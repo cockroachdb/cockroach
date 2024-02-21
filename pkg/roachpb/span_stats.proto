@@ -38,6 +38,7 @@ message SpanStatsRequest {
 message SpanStats {
   // TotalStats are the logical MVCC stats for the requested span.
   cockroach.storage.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
+
   // range_count measures the number of ranges that the request span falls within.
   // A SpanStatsResponse for a span that lies within a range, and whose start
   // key sorts after the range start, and whose end key sorts before the
@@ -61,7 +62,13 @@ message SpanStats {
   // It represents a physical value across all replicas.
   uint64 external_file_bytes = 6;
 
-  // NEXT ID: 7.
+  // ApproximateTotalStats is the approximate, post-replicated MVCC stats for
+  // the requested span. This is an approximate value as it is constructed by
+  // querying all replicas, which includes followers, and the value can be
+  // stale.
+  cockroach.storage.enginepb.MVCCStats approximate_total_stats = 7 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 8.
 }
 
 message SpanStatsResponse {

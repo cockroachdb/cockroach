@@ -1199,10 +1199,11 @@ type NodeInfo struct {
 	PGURL func(*url.Userinfo) (*pgurl.URL, error)
 }
 
-// nodeStatusGenerator is a limited portion of the status.MetricsRecorder
+// limitedMetricsRecorder is a limited portion of the status.MetricsRecorder
 // struct, to avoid having to import all of status in sql.
-type nodeStatusGenerator interface {
+type limitedMetricsRecorder interface {
 	GenerateNodeStatus(ctx context.Context) *statuspb.NodeStatus
+	AppRegistry() *metric.Registry
 }
 
 // SystemTenantOnly wraps an object in the ExecutorConfig that is only
@@ -1271,7 +1272,7 @@ type ExecutorConfig struct {
 	// available when not running as a system tenant.
 	SQLStatusServer    serverpb.SQLStatusServer
 	TenantStatusServer serverpb.TenantStatusServer
-	MetricsRecorder    nodeStatusGenerator
+	MetricsRecorder    limitedMetricsRecorder
 	SessionRegistry    *SessionRegistry
 	ClosedSessionCache *ClosedSessionCache
 	SQLLiveness        sqlliveness.Provider

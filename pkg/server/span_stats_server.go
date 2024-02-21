@@ -104,13 +104,16 @@ func (s *systemStatusServer) spanStatsFanOut(
 
 		nodeResponse := resp.(*roachpb.SpanStatsResponse)
 
-		// Values of ApproximateDiskBytes, RemoteFileBytes, and ExternalFileBytes should be physical values, but
-		// TotalStats (MVCC stats) should be the logical, pre-replicated value.
+		// Values of ApproximateTotalStats, ApproximateDiskBytes,
+		// RemoteFileBytes, and ExternalFileBytes should be physical values, but
+		// TotalStats should be the logical, pre-replicated value.
+		//
 		// Note: This implementation can return arbitrarily stale values, because instead of getting
 		// MVCC stats from the leaseholder, MVCC stats are taken from the node that responded first.
 		// See #108779.
 		for spanStr, spanStats := range nodeResponse.SpanToStats {
 			// Accumulate physical values across all replicas:
+			res.SpanToStats[spanStr].ApproximateTotalStats.Add(spanStats.TotalStats)
 			res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
 			res.SpanToStats[spanStr].RemoteFileBytes += spanStats.RemoteFileBytes
 			res.SpanToStats[spanStr].ExternalFileBytes += spanStats.ExternalFileBytes

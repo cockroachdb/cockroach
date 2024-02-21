@@ -186,6 +186,17 @@ func TestSpanStatsFanOut(t *testing.T) {
 					spanStats.TotalStats.LiveCount,
 				)
 			}
+
+			approxKeys := numNodes * tcase.expectedKeys
+			if approxKeys != spanStats.ApproximateTotalStats.LiveCount {
+				return errors.Newf(
+					"Multi-span: expected %d post-replicated keys in span [%s - %s], found %d",
+					approxKeys,
+					rSpan.Key.String(),
+					rSpan.EndKey.String(),
+					spanStats.TotalStats.LiveCount,
+				)
+			}
 		}
 
 		return nil
