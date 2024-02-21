@@ -288,6 +288,16 @@ const (
 	// to be only session based.
 	V24_1_SessionBasedLeasingUpgradeDescriptor
 
+	// V24_1_PebbleFormatSyntheticPrefixSuffix upgrades Pebble's format major version to
+	// FormatSyntheticPrefixSuffix, allowing use of virtual sstables in Pebble.
+	V24_1_PebbleFormatSyntheticPrefixSuffix
+
+	// V23_2_EnablePebbleFormatSyntheticPrefixSuffix enables the Pebble
+	// FormatMajorVersion for synthetic prefix and suffix replacement. Note that
+	// the ratcheting for the format major version in Pebble should have happened
+	// with V24_1_PebbleFormatSyntheticPrefixSuffix above.
+	V24_1_EnablePebbleFormatSyntheticPrefixSuffix
+
 	numKeys
 )
 
@@ -347,10 +357,12 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V24_1_MigrateOldStylePTSRecords: {Major: 23, Minor: 2, Internal: 6},
 
-	V24_1_SessionBasedLeasingDualWrite:         {Major: 23, Minor: 2, Internal: 8},
-	V24_1_SessionBasedLeasingDrain:             {Major: 23, Minor: 2, Internal: 10},
-	V24_1_SessionBasedLeasingOnly:              {Major: 23, Minor: 2, Internal: 12},
-	V24_1_SessionBasedLeasingUpgradeDescriptor: {Major: 23, Minor: 2, Internal: 14},
+	V24_1_SessionBasedLeasingDualWrite:            {Major: 23, Minor: 2, Internal: 8},
+	V24_1_SessionBasedLeasingDrain:                {Major: 23, Minor: 2, Internal: 10},
+	V24_1_SessionBasedLeasingOnly:                 {Major: 23, Minor: 2, Internal: 12},
+	V24_1_SessionBasedLeasingUpgradeDescriptor:    {Major: 23, Minor: 2, Internal: 14},
+	V24_1_PebbleFormatSyntheticPrefixSuffix:       {Major: 23, Minor: 2, Internal: 16},
+	V24_1_EnablePebbleFormatSyntheticPrefixSuffix: {Major: 23, Minor: 2, Internal: 18},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster
