@@ -902,7 +902,7 @@ type Store struct {
 	// TODO(bdarnell,tschottdorf): Would look better inside of `mu`, which at
 	// the time of its creation was riddled with deadlock (but that situation
 	// has likely improved).
-	draining atomic.Value
+	draining atomic.Bool
 
 	// Locking notes: To avoid deadlocks, the following lock order must be
 	// obeyed: baseQueue.mu < Replica.raftMu < Replica.readOnlyCmdMu < Store.mu
@@ -1476,7 +1476,6 @@ func NewStore(
 		cfg.RangeLogWriter,
 	)
 
-	s.draining.Store(false)
 	// NB: buffer up to RaftElectionTimeoutTicks in Raft scheduler to avoid
 	// unnecessary elections when ticks are temporarily delayed and piled up.
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s,
@@ -2815,9 +2814,7 @@ func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.cfg.TestingKnobs }
 
 // IsDraining accessor.
-func (s *Store) IsDraining() bool {
-	return s.draining.Load().(bool)
-}
+func (s *Store) IsDraining() bool { return s.draining.Load() }
 
 // AllocateRangeID allocates a new RangeID from the cluster-wide RangeID allocator.
 func (s *Store) AllocateRangeID(ctx context.Context) (roachpb.RangeID, error) {
