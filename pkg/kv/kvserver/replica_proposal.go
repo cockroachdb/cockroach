@@ -435,11 +435,6 @@ func (r *Replica) leasePostApplyLocked(
 		}
 		applyReadSummaryToTimestampCache(ctx, r.store.tsCache, r.descRLocked(), sum)
 
-		// Reset the request counts used to make lease placement decisions and
-		// load-based splitting/merging decisions whenever starting a new lease.
-		if r.loadStats != nil {
-			r.loadStats.Reset()
-		}
 		r.loadBasedSplitter.Reset(r.Clock().PhysicalTime())
 	}
 
@@ -508,6 +503,8 @@ func (r *Replica) leasePostApplyLocked(
 		} else if prevOwner {
 			r.store.storeGossip.MaybeGossipOnCapacityChange(ctx, LeaseRemoveEvent)
 		}
+		// Reset the request counts used to make lease placement decisions and
+		// load-based splitting/merging decisions whenever starting a new lease.
 		if r.loadStats != nil {
 			r.loadStats.Reset()
 		}
