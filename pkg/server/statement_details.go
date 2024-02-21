@@ -209,10 +209,10 @@ func getTotalStatementDetails(
 	const expectedNumDatums = 4
 	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
 	const queryFormat = `
-SELECT crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
-       array_agg(app_name)                                        AS app_names,
-       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-       encode(fingerprint_id, 'hex')                              AS fingerprint_id
+SELECT merge_stats_metadata(metadata)    AS metadata,
+       array_agg(app_name)               AS app_names,
+       merge_statement_stats(statistics) AS statistics,
+       encode(fingerprint_id, 'hex')     AS fingerprint_id
 FROM %s %s
 GROUP BY
     fingerprint_id
@@ -224,10 +224,10 @@ LIMIT 1`
 	if activityTableHasAllData {
 		row, err = ie.QueryRowEx(ctx, "combined-stmts-activity-details-total", nil,
 			sessiondata.NodeUserSessionDataOverride, fmt.Sprintf(`
-SELECT crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata)) AS metadata,
-       array_agg(app_name)                                               AS app_names,
-       crdb_internal.merge_statement_stats(array_agg(statistics))        AS statistics,
-       encode(fingerprint_id, 'hex')                                     AS fingerprint_id
+SELECT merge_aggregated_stmt_metadata(metadata) AS metadata,
+       array_agg(app_name)                      AS app_names,
+       merge_statement_stats(statistics)        AS statistics,
+       encode(fingerprint_id, 'hex')            AS fingerprint_id
 FROM crdb_internal.statement_activity %s
 GROUP BY
     fingerprint_id
@@ -314,8 +314,8 @@ func getStatementDetailsPerAggregatedTs(
 	const expectedNumDatums = 3
 	const queryFormat = `
 SELECT aggregated_ts,
-       crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
-       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
+       merge_stats_metadata(metadata)    AS metadata,
+       merge_statement_stats(statistics) AS statistics
 FROM %s %s
 GROUP BY
     aggregated_ts
@@ -333,8 +333,8 @@ LIMIT $%d`
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(`
 SELECT aggregated_ts,
-       crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata)) AS metadata,
-       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
+       merge_aggregated_stmt_metadata(metadata) AS metadata,
+       merge_statement_stats(statistics) AS statistics
 FROM crdb_internal.statement_activity %s
 GROUP BY
     aggregated_ts
@@ -501,9 +501,9 @@ func getStatementDetailsPerPlanHash(
 	expectedNumDatums := 5
 	const queryFormat = `
 SELECT plan_hash,
-       (statistics -> 'statistics' -> 'planGists' ->> 0)          AS plan_gist,
-       crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
-       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
+       (statistics -> 'statistics' -> 'planGists' ->> 0)   AS plan_gist,
+       merge_stats_metadata(metadata)                      AS metadata,
+       merge_statement_stats(statistics)                   AS statistics,
        index_recommendations
 FROM %s %s
 GROUP BY
@@ -529,9 +529,9 @@ LIMIT $%d`
 		it, iterErr = ie.QueryIteratorEx(ctx, "console-combined-stmts-activity-details-by-plan-hash", nil,
 			sessiondata.NodeUserSessionDataOverride, fmt.Sprintf(`
 SELECT plan_hash,
-       (statistics -> 'statistics' -> 'planGists' ->> 0)                 AS plan_gist,
-       crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata)) AS metadata,
-       crdb_internal.merge_statement_stats(array_agg(statistics))        AS statistics,
+       (statistics -> 'statistics' -> 'planGists' ->> 0)   AS plan_gist,
+       merge_aggregated_stmt_metadata(metadata)            AS metadata,
+       merge_statement_stats(statistics)                   AS statistics,
        index_recommendations
 FROM crdb_internal.statement_activity %s
 GROUP BY
