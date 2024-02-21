@@ -1902,9 +1902,6 @@ func (r *raft) restore(s pb.Snapshot) bool {
 
 	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, trk))
 
-	pr := r.trk.Progress[r.id]
-	pr.MaybeUpdate(pr.Next - 1) // TODO(tbg): this is untested and likely unneeded
-
 	last := r.raftLog.lastEntryID()
 	r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] restored snapshot [index: %d, term: %d]",
 		r.id, r.raftLog.committed, last.index, last.term, id.index, id.term)
