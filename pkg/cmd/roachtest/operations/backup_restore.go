@@ -126,11 +126,12 @@ outer:
 
 func registerBackupRestore(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:             "backup-restore/tpcc/district",
-		Owner:            registry.OwnerDisasterRecovery,
-		Timeout:          24 * time.Hour,
-		CompatibleClouds: registry.AllClouds,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase},
-		Run:              runBackupRestore,
+		Name:               "backup-restore/tpcc/district",
+		Owner:              registry.OwnerDisasterRecovery,
+		Timeout:            24 * time.Hour,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCanRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase},
+		Run:                runBackupRestore,
 	})
 }
