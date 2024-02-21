@@ -9,11 +9,15 @@
 package backupccl
 
 import (
+	"bytes"
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // restorationData specifies the data that is to be restored in a restoration flow.
@@ -150,4 +154,30 @@ func checkForMigratedData(details jobspb.RestoreDetails, dataToRestore restorati
 	}
 
 	return false
+}
+
+// isFromSystemTenant inspects the tenant rekeying data to determine if the
+// system tenant is running  the restore.
+func isFromSystemTenant(tenants []execinfrapb.TenantRekey) bool {
+	for i := range tenants {
+		if tenants[i] == isBackupFromSystemTenantRekey {
+			return true
+		}
+	}
+	return false
+}
+
+// writeAtBatchTS determines if the span should be restored at the batch
+// timestamp.
+func writeAtBatchTS(ctx context.Context, span roachpb.Span, fromSystemTenant bool) bool {
+	// If the system tenant is restoring a guest tenant span, we don't want to
+	// forward all the restored data to now, as there may be importing tables in
+	// that span, that depend on the difference in timestamps on restored existing
+	// vs importing keys to rollback.
+	if fromSystemTenant &&
+		(bytes.HasPrefix(span.Key, keys.TenantPrefix) || bytes.HasPrefix(span.EndKey, keys.TenantPrefix)) {
+		log.Warningf(ctx, "restoring span %s at its original timestamps because it is a tenant span", span)
+		return false
+	}
+	return true
 }
