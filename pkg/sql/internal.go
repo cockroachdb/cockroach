@@ -826,7 +826,7 @@ func applyInternalExecutorSessionExceptions(sd *sessiondata.SessionData) {
 	// At the moment, we disable the usage of the Streamer API in the internal
 	// executor to avoid possible concurrency with the "outer" query (which
 	// might be using the RootTxn).
-	sd.LocalOnlySessionData.StreamerEnabled = false
+	sd.SessionData.StreamerEnabled = false
 	// If the internal executor creates a new transaction, then it runs in
 	// SERIALIZABLE. If it's used in an existing transaction, then it inherits the
 	// isolation level of the existing transaction.
