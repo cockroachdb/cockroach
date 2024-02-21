@@ -448,33 +448,38 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			return
 		}
 		subscriptions[id] = sub
-		sip.subscriptionGroup.GoCtx(sub.Subscribe)
+		sip.subscriptionGroup.GoCtx(func(ctx context.Context) error {
+			if err := sub.Subscribe(ctx); err != nil {
+				sip.sendError(errors.Wrap(err, "subscription"))
+			}
+			return nil
+		})
 	}
 
 	sip.mergedSubscription = mergeSubscriptions(sip.Ctx(), subscriptions)
 	sip.workerGroup.GoCtx(func(ctx context.Context) error {
 		if err := sip.mergedSubscription.Run(); err != nil {
-			sip.sendError(err)
+			sip.sendError(errors.Wrap(err, "merge subscription"))
 		}
 		return nil
 	})
 	sip.workerGroup.GoCtx(func(ctx context.Context) error {
 		if err := sip.checkForCutoverSignal(ctx); err != nil {
-			sip.sendError(err)
+			sip.sendError(errors.Wrap(err, "cutover signal check"))
 		}
 		return nil
 	})
 	sip.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(sip.flushCh)
 		if err := sip.consumeEvents(ctx); err != nil {
-			sip.sendError(err)
+			sip.sendError(errors.Wrap(err, "consume events"))
 		}
 		return nil
 	})
 	sip.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(sip.checkpointCh)
 		if err := sip.flushLoop(ctx); err != nil {
-			sip.sendError(err)
+			sip.sendError(errors.Wrap(err, "flush loop"))
 		}
 		return nil
 	})
@@ -519,7 +524,9 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 }
 
 func (sip *streamIngestionProcessor) MoveToDrainingAndLogError(err error) {
-	log.Infof(sip.Ctx(), "gracefully draining with error %s", err)
+	if err != nil {
+		log.Infof(sip.Ctx(), "gracefully draining with error %s", err)
+	}
 	sip.MoveToDraining(err)
 }
 
