@@ -259,8 +259,8 @@ func (c Changer) initProgress(cfg *tracker.Config, trk tracker.ProgressMap, id u
 		// at all (and will thus likely need a snapshot), though the app may
 		// have applied a snapshot out of band before adding the replica (thus
 		// making the first index the better choice).
-		Next:      c.LastIndex,
 		Match:     0,
+		Next:      max(c.LastIndex, 1), // invariant: Match < Next
 		Inflights: tracker.NewInflights(c.Tracker.MaxInflight, c.Tracker.MaxInflightBytes),
 		IsLearner: isLearner,
 		// When a node is first added, we should mark it as recently active.
