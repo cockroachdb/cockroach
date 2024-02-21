@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -1061,18 +1062,18 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 // admission.StoreMetrics.
 type diskStatsMap struct {
 	provisionedRate   map[roachpb.StoreID]base.ProvisionedRateSpec
-	diskNameToStoreID map[string]roachpb.StoreID
+	diskPathToStoreID map[string]roachpb.StoreID
+	diskMonitors      map[string]disk.Monitor
 }
 
 func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
-	ctx context.Context,
 	clusterProvisionedBandwidth int64,
-	diskStatsFunc func(context.Context) ([]status.DiskStats, error),
+	diskStatsFunc func(map[string]disk.Monitor) (map[string]status.DiskStats, error),
 ) (stats map[roachpb.StoreID]admission.DiskStats, err error) {
 	if dsm.empty() {
 		return stats, nil
 	}
-	diskStats, err := diskStatsFunc(ctx)
+	diskStats, err := diskStatsFunc(dsm.diskMonitors)
 	if err != nil {
 		return stats, err
 	}
@@ -1084,11 +1085,11 @@ func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
 		}
 		stats[id] = s
 	}
-	for i := range diskStats {
-		if id, ok := dsm.diskNameToStoreID[diskStats[i].Name]; ok {
+	for storePath, diskStat := range diskStats {
+		if id, ok := dsm.diskPathToStoreID[storePath]; ok {
 			s := stats[id]
-			s.BytesRead = uint64(diskStats[i].ReadBytes)
-			s.BytesWritten = uint64(diskStats[i].WriteBytes)
+			s.BytesRead = uint64(diskStat.ReadBytes)
+			s.BytesWritten = uint64(diskStat.WriteBytes)
 			stats[id] = s
 		}
 	}
@@ -1099,28 +1100,43 @@ func (dsm *diskStatsMap) empty() bool {
 	return len(dsm.provisionedRate) == 0
 }
 
-func (dsm *diskStatsMap) initDiskStatsMap(specs []base.StoreSpec, engines []storage.Engine) error {
+func (dsm *diskStatsMap) initDiskStatsMap(
+	specs []base.StoreSpec, engines []storage.Engine, diskMonitorManager *disk.MonitorManager,
+) error {
 	*dsm = diskStatsMap{
 		provisionedRate:   make(map[roachpb.StoreID]base.ProvisionedRateSpec),
-		diskNameToStoreID: make(map[string]roachpb.StoreID),
+		diskPathToStoreID: make(map[string]roachpb.StoreID),
+		diskMonitors:      make(map[string]disk.Monitor),
 	}
 	for i := range engines {
+		if specs[i].Path == "" || specs[i].InMemory {
+			continue
+		}
 		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i])
 		if err != nil {
 			return err
 		}
-		if len(specs[i].ProvisionedRateSpec.DiskName) > 0 {
-			dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
-			dsm.diskNameToStoreID[specs[i].ProvisionedRateSpec.DiskName] = id.StoreID
+		monitor, err := diskMonitorManager.Monitor(specs[i].Path)
+		if err != nil {
+			return err
 		}
+		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
+		dsm.diskPathToStoreID[specs[i].Path] = id.StoreID
+		dsm.diskMonitors[specs[i].Path] = *monitor
 	}
 	return nil
 }
 
+func (dsm *diskStatsMap) closeDiskMonitors() {
+	for _, monitor := range dsm.diskMonitors {
+		monitor.Close()
+	}
+}
+
 func (n *Node) registerEnginesForDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine,
+	specs []base.StoreSpec, engines []storage.Engine, diskMonitorManager *disk.MonitorManager,
 ) error {
-	return n.diskStatsMap.initDiskStatsMap(specs, engines)
+	return n.diskStatsMap.initDiskStatsMap(specs, engines, diskMonitorManager)
 }
 
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
@@ -1128,7 +1144,7 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 	clusterProvisionedBandwidth := kvadmission.ProvisionedBandwidth.Get(
 		&n.storeCfg.Settings.SV)
 	storeIDToDiskStats, err := n.diskStatsMap.tryPopulateAdmissionDiskStats(
-		context.Background(), clusterProvisionedBandwidth, status.GetDiskCounters)
+		clusterProvisionedBandwidth, status.GetDiskCounters)
 	if err != nil {
 		log.Warningf(context.Background(), "%v",
 			errors.Wrapf(err, "unable to populate disk stats"))

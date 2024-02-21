@@ -14,21 +14,21 @@
 package status
 
 import (
-	"context"
-
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/lufia/iostat"
 )
 
 // GetDiskCounters returns DiskStats for all disks.
-func GetDiskCounters(context.Context) ([]DiskStats, error) {
+// TODO(cheranm): Map device path to disk stats for Darwin builds.
+func GetDiskCounters(diskMonitors map[string]disk.Monitor) (map[string]DiskStats, error) {
 	driveStats, err := iostat.ReadDriveStats()
 	if err != nil {
 		return nil, err
 	}
 
-	output := make([]DiskStats, len(driveStats))
-	for i, counters := range driveStats {
-		output[i] = DiskStats{
+	output := make(map[string]DiskStats, len(driveStats))
+	for _, counters := range driveStats {
+		output[counters.Name] = DiskStats{
 			Name:           counters.Name,
 			ReadBytes:      counters.BytesRead,
 			readCount:      counters.NumRead,

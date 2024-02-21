@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:build !darwin
-// +build !darwin
+//go:build windows
+// +build windows
 
 package status
 
@@ -17,20 +17,20 @@ import (
 	"context"
 	"time"
 
-	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
+	gopsutil "github.com/shirou/gopsutil/v3/disk"
 )
 
 // GetDiskCounters returns DiskStats for all disks.
-func GetDiskCounters(ctx context.Context) ([]DiskStats, error) {
-	driveStats, err := disk.IOCountersWithContext(ctx)
+func GetDiskCounters(diskMonitors map[string]disk.Monitor) (map[string]DiskStats, error) {
+	driveStats, err := gopsutil.IOCountersWithContext(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
-	output := make([]DiskStats, len(driveStats))
-	i := 0
+	output := make(map[string]DiskStats, len(driveStats))
 	for _, counters := range driveStats {
-		output[i] = DiskStats{
+		output[counters.Name] = DiskStats{
 			Name:           counters.Name,
 			ReadBytes:      int64(counters.ReadBytes),
 			readCount:      int64(counters.ReadCount),
@@ -42,7 +42,6 @@ func GetDiskCounters(ctx context.Context) ([]DiskStats, error) {
 			weightedIOTime: time.Duration(counters.WeightedIO) * time.Millisecond,
 			iopsInProgress: int64(counters.IopsInProgress),
 		}
-		i++
 	}
 
 	return output, nil

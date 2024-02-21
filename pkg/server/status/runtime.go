@@ -14,21 +14,23 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"regexp"
 	"runtime"
 	"runtime/debug"
 	"runtime/metrics"
+	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/elastic/gosigar"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/net"
@@ -285,13 +287,6 @@ var (
 	}
 )
 
-// diskMetricsIgnoredDevices is a regex that matches any block devices that must be
-// ignored for disk metrics (eg. sys.host.disk.write.bytes), as those devices
-// have likely been counted elsewhere. This prevents us from double-counting,
-// for instance, RAID volumes under both the logical volume and under the
-// physical volume(s).
-var diskMetricsIgnoredDevices = envutil.EnvOrDefaultString("COCKROACH_DISK_METRICS_IGNORED_DEVICES", getDefaultIgnoredDevices())
-
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
 // We will not necessarily have implementations for all builds, so check for nil first.
 // Returns the following:
@@ -402,18 +397,22 @@ type RuntimeStatSampler struct {
 		cgoCall     int64
 		gcCount     int64
 		gcPauseTime uint64
-		disk        DiskStats
+		disk        map[string]DiskStats
 		net         net.IOCountersStat
 		runnableSum float64
 	}
 
-	initialDiskCounters DiskStats
+	initialDiskCounters map[string]DiskStats
 	initialNetCounters  net.IOCountersStat
 
 	// Only show "not implemented" errors once, we don't need the log spam.
 	fdUsageNotImplemented bool
 
 	goRuntimeSampler *GoRuntimeSampler
+
+	diskMonitors map[string]disk.Monitor
+
+	registry *metric.Registry
 
 	// Metric gauges maintained by the sampler.
 	// Go runtime stats.
@@ -453,6 +452,7 @@ type RuntimeStatSampler struct {
 	HostDiskIOTime         *metric.Gauge
 	HostDiskWeightedIOTime *metric.Gauge
 	IopsInProgress         *metric.Gauge
+	storeDiskMetrics       storeDiskMetricsContainer
 	HostNetRecvBytes       *metric.Gauge
 	HostNetRecvPackets     *metric.Gauge
 	HostNetRecvErr         *metric.Gauge
@@ -467,7 +467,12 @@ type RuntimeStatSampler struct {
 }
 
 // NewRuntimeStatSampler constructs a new RuntimeStatSampler object.
-func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeStatSampler {
+func NewRuntimeStatSampler(
+	ctx context.Context,
+	clock hlc.WallClock,
+	storeSpecs []base.StoreSpec,
+	diskMonitorManager *disk.MonitorManager,
+) *RuntimeStatSampler {
 	// Construct the build info metric. It is constant.
 	// We first build set the labels on the metadata.
 	info := build.GetInfo()
@@ -490,14 +495,28 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	buildTimestamp := metric.NewGauge(metaBuildTimestamp)
 	buildTimestamp.Update(timestamp)
 
-	diskCounters, err := getSummedDiskCounters(ctx)
+	diskMonitors := make(map[string]disk.Monitor)
+	for _, spec := range storeSpecs {
+		if spec.InMemory || spec.Path == "" {
+			continue
+		}
+		diskMonitor, err := diskMonitorManager.Monitor(spec.Path)
+		if err != nil {
+			panic(errors.Wrapf(err, "Unable to create disk monitor for device at path %s", spec.Path))
+		}
+		diskMonitors[spec.Path] = *diskMonitor
+	}
+	diskCounters, err := GetDiskCounters(diskMonitors)
 	if err != nil {
 		log.Ops.Errorf(ctx, "could not get initial disk IO counters: %v", err)
 	}
+
 	netCounters, err := getSummedNetStats(ctx)
 	if err != nil {
 		log.Ops.Errorf(ctx, "could not get initial network stat counters: %v", err)
 	}
+
+	runtimeStatsRegistry := metric.NewRegistry()
 
 	rsr := &RuntimeStatSampler{
 		clock:                    clock,
@@ -505,6 +524,8 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		initialNetCounters:       netCounters,
 		initialDiskCounters:      diskCounters,
 		goRuntimeSampler:         NewGoRuntimeSampler(runtimeMetrics),
+		diskMonitors:             diskMonitors,
+		registry:                 runtimeStatsRegistry,
 		CgoCalls:                 metric.NewGauge(metaCgoCalls),
 		Goroutines:               metric.NewGauge(metaGoroutines),
 		RunnableGoroutinesPerCPU: metric.NewGaugeFloat64(metaRunnableGoroutinesPerCPU),
@@ -537,18 +558,21 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		HostDiskIOTime:         metric.NewGauge(metaHostDiskIOTime),
 		HostDiskWeightedIOTime: metric.NewGauge(metaHostDiskWeightedIOTime),
 		IopsInProgress:         metric.NewGauge(metaHostIopsInProgress),
-		HostNetRecvBytes:       metric.NewGauge(metaHostNetRecvBytes),
-		HostNetRecvPackets:     metric.NewGauge(metaHostNetRecvPackets),
-		HostNetRecvErr:         metric.NewGauge(metaHostNetRecvErr),
-		HostNetRecvDrop:        metric.NewGauge(metaHostNetRecvDrop),
-		HostNetSendBytes:       metric.NewGauge(metaHostNetSendBytes),
-		HostNetSendPackets:     metric.NewGauge(metaHostNetSendPackets),
-		HostNetSendErr:         metric.NewGauge(metaHostNetSendErr),
-		HostNetSendDrop:        metric.NewGauge(metaHostNetSendDrop),
-		FDOpen:                 metric.NewGauge(metaFDOpen),
-		FDSoftLimit:            metric.NewGauge(metaFDSoftLimit),
-		Uptime:                 metric.NewGauge(metaUptime),
-		BuildTimestamp:         buildTimestamp,
+		storeDiskMetrics: storeDiskMetricsContainer{
+			registry: runtimeStatsRegistry,
+		},
+		HostNetRecvBytes:   metric.NewGauge(metaHostNetRecvBytes),
+		HostNetRecvPackets: metric.NewGauge(metaHostNetRecvPackets),
+		HostNetRecvErr:     metric.NewGauge(metaHostNetRecvErr),
+		HostNetRecvDrop:    metric.NewGauge(metaHostNetRecvDrop),
+		HostNetSendBytes:   metric.NewGauge(metaHostNetSendBytes),
+		HostNetSendPackets: metric.NewGauge(metaHostNetSendPackets),
+		HostNetSendErr:     metric.NewGauge(metaHostNetSendErr),
+		HostNetSendDrop:    metric.NewGauge(metaHostNetSendDrop),
+		FDOpen:             metric.NewGauge(metaFDOpen),
+		FDSoftLimit:        metric.NewGauge(metaFDSoftLimit),
+		Uptime:             metric.NewGauge(metaUptime),
+		BuildTimestamp:     buildTimestamp,
 	}
 	rsr.last.disk = rsr.initialDiskCounters
 	rsr.last.net = rsr.initialNetCounters
@@ -645,25 +669,25 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		}
 	}
 
-	var deltaDisk DiskStats
-	diskCounters, err := getSummedDiskCounters(ctx)
+	diskCounters, err := GetDiskCounters(rsr.diskMonitors)
 	if err != nil {
 		log.Ops.Warningf(ctx, "problem fetching disk stats: %s; disk stats will be empty.", err)
 	} else {
-		deltaDisk = diskCounters
-		subtractDiskCounters(&deltaDisk, rsr.last.disk)
 		rsr.last.disk = diskCounters
-		subtractDiskCounters(&diskCounters, rsr.initialDiskCounters)
+		deltaDisk := subtractDiskCounters(diskCounters, rsr.initialDiskCounters)
 
-		rsr.HostDiskReadBytes.Update(diskCounters.ReadBytes)
-		rsr.HostDiskReadCount.Update(diskCounters.readCount)
-		rsr.HostDiskReadTime.Update(int64(diskCounters.readTime))
-		rsr.HostDiskWriteBytes.Update(diskCounters.WriteBytes)
-		rsr.HostDiskWriteCount.Update(diskCounters.writeCount)
-		rsr.HostDiskWriteTime.Update(int64(diskCounters.writeTime))
-		rsr.HostDiskIOTime.Update(int64(diskCounters.ioTime))
-		rsr.HostDiskWeightedIOTime.Update(int64(diskCounters.weightedIOTime))
-		rsr.IopsInProgress.Update(diskCounters.iopsInProgress)
+		rsr.storeDiskMetrics.update(deltaDisk)
+
+		summedDiskCounters := getSummedDiskCounters(deltaDisk)
+		rsr.HostDiskReadBytes.Update(summedDiskCounters.ReadBytes)
+		rsr.HostDiskReadCount.Update(summedDiskCounters.readCount)
+		rsr.HostDiskReadTime.Update(int64(summedDiskCounters.readTime))
+		rsr.HostDiskWriteBytes.Update(summedDiskCounters.WriteBytes)
+		rsr.HostDiskWriteCount.Update(summedDiskCounters.writeCount)
+		rsr.HostDiskWriteTime.Update(int64(summedDiskCounters.writeTime))
+		rsr.HostDiskIOTime.Update(int64(summedDiskCounters.ioTime))
+		rsr.HostDiskWeightedIOTime.Update(int64(summedDiskCounters.weightedIOTime))
+		rsr.IopsInProgress.Update(summedDiskCounters.iopsInProgress)
 	}
 
 	var deltaNet net.IOCountersStat
@@ -787,6 +811,13 @@ func (rsr *RuntimeStatSampler) GetCPUCombinedPercentNorm() float64 {
 	return rsr.CPUCombinedPercentNorm.Value()
 }
 
+// CloseDiskMonitors removes references from all monitored disks.
+func (rsr *RuntimeStatSampler) CloseDiskMonitors() {
+	for _, monitor := range rsr.diskMonitors {
+		monitor.Close()
+	}
+}
+
 // DiskStats contains the disk statistics returned by the operating
 // system. Interpretation of some of these stats varies by platform,
 // although as much as possible they are normalized to the semantics
@@ -824,44 +855,10 @@ type DiskStats struct {
 	iopsInProgress int64
 }
 
-func getSummedDiskCounters(ctx context.Context) (DiskStats, error) {
-	diskCounters, err := GetDiskCounters(ctx)
-	if err != nil {
-		return DiskStats{}, err
-	}
-
-	return sumAndFilterDiskCounters(diskCounters)
-}
-
-func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
-	netCounters, err := net.IOCountersWithContext(ctx, true /* per NIC */)
-	if err != nil {
-		return net.IOCountersStat{}, err
-	}
-
-	return sumNetworkCounters(netCounters), nil
-}
-
-// sumAndFilterDiskCounters returns a new disk.IOCountersStat whose values are
-// the sum of the values in the slice of disk.IOCountersStats passed in. It
-// filters out any disk counters that are likely reflecting values already
-// counted elsewhere, eg. md* logical volumes that are created out of RAIDing
-// underlying drives. The filtering regex defaults to a platform-dependent one.
-func sumAndFilterDiskCounters(disksStats []DiskStats) (DiskStats, error) {
+// getSummedDiskCounters aggregates disk stats across all monitored disks.
+func getSummedDiskCounters(diskCounters map[string]DiskStats) DiskStats {
 	output := DiskStats{}
-	var ignored *regexp.Regexp
-	if diskMetricsIgnoredDevices != "" {
-		var err error
-		ignored, err = regexp.Compile(diskMetricsIgnoredDevices)
-		if err != nil {
-			return output, err
-		}
-	}
-
-	for _, stats := range disksStats {
-		if ignored != nil && ignored.MatchString(stats.Name) {
-			continue
-		}
+	for _, stats := range diskCounters {
 		output.ReadBytes += stats.ReadBytes
 		output.readCount += stats.readCount
 		output.readTime += stats.readTime
@@ -875,22 +872,45 @@ func sumAndFilterDiskCounters(disksStats []DiskStats) (DiskStats, error) {
 
 		output.iopsInProgress += stats.iopsInProgress
 	}
-	return output, nil
+	return output
+}
+
+func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
+	netCounters, err := net.IOCountersWithContext(ctx, true /* per NIC */)
+	if err != nil {
+		return net.IOCountersStat{}, err
+	}
+
+	return sumNetworkCounters(netCounters), nil
 }
 
 // subtractDiskCounters subtracts the counters in `sub` from the counters in `from`,
 // saving the results in `from`.
-func subtractDiskCounters(from *DiskStats, sub DiskStats) {
-	from.writeCount -= sub.writeCount
-	from.WriteBytes -= sub.WriteBytes
-	from.writeTime -= sub.writeTime
+func subtractDiskCounters(
+	from map[string]DiskStats, sub map[string]DiskStats,
+) map[string]DiskStats {
+	output := make(map[string]DiskStats, len(from))
+	for storePath, stats := range from {
+		if subStats, ok := sub[storePath]; ok {
+			output[storePath] = DiskStats{
+				writeCount: stats.writeCount - subStats.writeCount,
+				WriteBytes: stats.WriteBytes - subStats.WriteBytes,
+				writeTime:  stats.writeTime - subStats.writeTime,
 
-	from.readCount -= sub.readCount
-	from.ReadBytes -= sub.ReadBytes
-	from.readTime -= sub.readTime
+				readCount: stats.readCount - subStats.readCount,
+				ReadBytes: stats.ReadBytes - subStats.ReadBytes,
+				readTime:  stats.readTime - subStats.readTime,
 
-	from.ioTime -= sub.ioTime
-	from.weightedIOTime -= sub.weightedIOTime
+				ioTime:         stats.ioTime - subStats.ioTime,
+				weightedIOTime: stats.weightedIOTime - subStats.weightedIOTime,
+				// We do not modify iopsInProgress since it is a gauge.
+				iopsInProgress: stats.iopsInProgress,
+			}
+		} else {
+			output[storePath] = stats
+		}
+	}
+	return output
 }
 
 // sumNetworkCounters returns a new net.IOCountersStat whose values are the sum of the
@@ -952,4 +972,119 @@ func getCPUCapacity() float64 {
 		return numProcs
 	}
 	return cpuShare
+}
+
+type StoreDiskMetrics struct {
+	StoreDiskReadCount      *metric.Gauge
+	StoreDiskReadBytes      *metric.Gauge
+	StoreDiskReadTime       *metric.Gauge
+	StoreDiskWriteCount     *metric.Gauge
+	StoreDiskWriteBytes     *metric.Gauge
+	StoreDiskWriteTime      *metric.Gauge
+	StoreDiskIOTime         *metric.Gauge
+	StoreDiskWeightedIOTime *metric.Gauge
+	StoreIopsInProgress     *metric.Gauge
+}
+
+func makeStoreDiskMetrics(storePath string) *StoreDiskMetrics {
+	metaHostDiskReadCount = metric.Metadata{
+		Name:        fmt.Sprintf("sys.host.store-%s.disk.read.count", storePath),
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        fmt.Sprintf("Disk read operations on store %s since this process started (as reported by the OS)", storePath),
+	}
+	metaHostDiskReadBytes = metric.Metadata{
+		Name:        fmt.Sprintf("sys.host.store-%s.disk.read.bytes", storePath),
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Bytes",
+		Help:        fmt.Sprintf("Bytes read from disk on store %s since this process started (as reported by the OS)", storePath),
+	}
+	metaHostDiskReadTime = metric.Metadata{
+		Name:        fmt.Sprintf("sys.host.store-%s.disk.read.time", storePath),
+		Unit:        metric.Unit_NANOSECONDS,
+		Measurement: "Time",
+		Help:        fmt.Sprintf("Time spent reading from disk on store %s since this process started (as reported by the OS)", storePath),
+	}
+	metaHostDiskWriteCount = metric.Metadata{
+		Name:        fmt.Sprintf("sys.host.store-%s.disk.write.count", storePath),
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        fmt.Sprintf("Disk write operations on store %s since this process started (as reported by the OS)", storePath),
+	}
+	metaHostDiskWriteBytes = metric.Metadata{
+		Name:        fmt.Sprintf("sys.host.store-%s.disk.write.bytes", storePath),
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Bytes",
+		Help:        fmt.Sprintf("Bytes written to disk on store %s since this process started (as reported by the OS)", storePath),
+	}
+	metaHostDiskWriteTime = metric.Metadata{
+		Name:        fmt.Sprintf("sys.host.store-%s.disk.write.time", storePath),
+		Unit:        metric.Unit_NANOSECONDS,
+		Measurement: "Time",
+		Help:        fmt.Sprintf("Time spent writing to disk on store %s since this process started (as reported by the OS)", storePath),
+	}
+	metaHostDiskIOTime = metric.Metadata{
+		Name:        fmt.Sprintf("sys.host.store-%s.disk.io.time", storePath),
+		Unit:        metric.Unit_NANOSECONDS,
+		Measurement: "Time",
+		Help:        fmt.Sprintf("Time spent reading from or writing to disk on store %s since this process started (as reported by the OS)", storePath),
+	}
+	metaHostDiskWeightedIOTime = metric.Metadata{
+		Name:        "sys.host.disk.weightedio.time",
+		Unit:        metric.Unit_NANOSECONDS,
+		Measurement: "Time",
+		Help:        fmt.Sprintf("Weighted time spent reading from or writing to disk on store %s since this process started (as reported by the OS)", storePath),
+	}
+	metaHostIopsInProgress = metric.Metadata{
+		Name:        "sys.host.disk.iopsinprogress",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        fmt.Sprintf("IO operations currently in progress on store %s (as reported by the OS)", storePath),
+	}
+	return &StoreDiskMetrics{
+		StoreDiskReadCount:      metric.NewGauge(metaHostDiskReadCount),
+		StoreDiskReadBytes:      metric.NewGauge(metaHostDiskReadBytes),
+		StoreDiskReadTime:       metric.NewGauge(metaHostDiskReadTime),
+		StoreDiskWriteCount:     metric.NewGauge(metaHostDiskWriteCount),
+		StoreDiskWriteBytes:     metric.NewGauge(metaHostDiskWriteBytes),
+		StoreDiskWriteTime:      metric.NewGauge(metaHostDiskWriteTime),
+		StoreDiskIOTime:         metric.NewGauge(metaHostDiskIOTime),
+		StoreDiskWeightedIOTime: metric.NewGauge(metaHostDiskWeightedIOTime),
+		StoreIopsInProgress:     metric.NewGauge(metaHostIopsInProgress),
+	}
+}
+
+// MetricStruct implements the metric.Struct interface.
+func (m *StoreDiskMetrics) MetricStruct() {}
+
+func (m *StoreDiskMetrics) update(stats DiskStats) {
+	m.StoreDiskReadCount.Update(stats.readCount)
+	m.StoreDiskReadBytes.Update(stats.ReadBytes)
+	m.StoreDiskReadTime.Update(int64(stats.readTime))
+	m.StoreDiskWriteCount.Update(stats.writeCount)
+	m.StoreDiskWriteBytes.Update(stats.WriteBytes)
+	m.StoreDiskWriteTime.Update(int64(stats.writeTime))
+	m.StoreDiskIOTime.Update(int64(stats.ioTime))
+	m.StoreDiskWeightedIOTime.Update(int64(stats.weightedIOTime))
+	m.StoreIopsInProgress.Update(stats.iopsInProgress)
+}
+
+type storeDiskMetricsContainer struct {
+	registry *metric.Registry
+	// StoreSpec.Path => *StoreDiskMetrics
+	metricsMap sync.Map
+}
+
+func (m *storeDiskMetricsContainer) update(diskCounters map[string]DiskStats) {
+	for storePath, stats := range diskCounters {
+		val, ok := m.metricsMap.Load(storePath)
+		if !ok {
+			val, ok = m.metricsMap.LoadOrStore(storePath, makeStoreDiskMetrics(storePath))
+			if !ok {
+				m.registry.AddMetricStruct(val)
+			}
+		}
+		sm := val.(*StoreDiskMetrics)
+		sm.update(stats)
+	}
 }

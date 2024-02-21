@@ -18,18 +18,18 @@ import (
 	"github.com/shirou/gopsutil/v3/net"
 )
 
-func TestSumAndFilterDiskCounters(t *testing.T) {
+func TestSumDiskCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	counters := []DiskStats{
-		{
+	counters := map[string]DiskStats{
+		"test1": {
 			ReadBytes:      1,
 			readCount:      1,
 			iopsInProgress: 1,
 			WriteBytes:     1,
 			writeCount:     1,
 		},
-		{
+		"test2": {
 			ReadBytes:      1,
 			readCount:      1,
 			iopsInProgress: 1,
@@ -37,10 +37,7 @@ func TestSumAndFilterDiskCounters(t *testing.T) {
 			writeCount:     1,
 		},
 	}
-	summed, err := sumAndFilterDiskCounters(counters)
-	if err != nil {
-		t.Fatalf("error: %s", err.Error())
-	}
+	summed := getSummedDiskCounters(counters)
 	expected := DiskStats{
 		ReadBytes:      2,
 		readCount:      2,
@@ -103,31 +100,37 @@ func TestSumNetCounters(t *testing.T) {
 func TestSubtractDiskCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	from := DiskStats{
-		ReadBytes:      3,
-		readCount:      3,
-		WriteBytes:     3,
-		writeCount:     3,
-		iopsInProgress: 3,
+	from := map[string]DiskStats{
+		"test": {
+			ReadBytes:      3,
+			readCount:      3,
+			WriteBytes:     3,
+			writeCount:     3,
+			iopsInProgress: 3,
+		},
 	}
-	sub := DiskStats{
-		ReadBytes:      1,
-		readCount:      1,
-		iopsInProgress: 1,
-		WriteBytes:     1,
-		writeCount:     1,
+	sub := map[string]DiskStats{
+		"test": {
+			ReadBytes:      1,
+			readCount:      1,
+			WriteBytes:     1,
+			writeCount:     1,
+			iopsInProgress: 1,
+		},
 	}
-	expected := DiskStats{
-		ReadBytes:  2,
-		readCount:  2,
-		WriteBytes: 2,
-		writeCount: 2,
-		// Don't touch iops in progress; it is a gauge, not a counter.
-		iopsInProgress: 3,
+	expected := map[string]DiskStats{
+		"test": {
+			ReadBytes:  2,
+			readCount:  2,
+			WriteBytes: 2,
+			writeCount: 2,
+			// Don't touch iops in progress; it is a gauge, not a counter.
+			iopsInProgress: 3,
+		},
 	}
-	subtractDiskCounters(&from, sub)
-	if !reflect.DeepEqual(from, expected) {
-		t.Fatalf("expected %+v; got %+v", expected, from)
+	gotCounters := subtractDiskCounters(from, sub)
+	if !reflect.DeepEqual(gotCounters, expected) {
+		t.Fatalf("expected %+v; got %+v", expected, gotCounters)
 	}
 }
 

@@ -140,6 +140,7 @@ func startSampleEnvironment(
 		}
 	}
 
+	cfg.stopper.AddCloser(stop.CloserFn(func() { cfg.runtime.CloseDiskMonitors() }))
 	return cfg.stopper.RunAsyncTaskEx(ctx,
 		stop.TaskOpts{TaskName: "mem-logger", SpanOpt: stop.SterileRootSpan},
 		func(ctx context.Context) {

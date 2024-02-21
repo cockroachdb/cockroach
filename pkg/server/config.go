@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -271,6 +272,9 @@ type BaseConfig struct {
 	// listeners. This is set by in-memory tenants if the user has
 	// specified port range preferences.
 	RPCListenerFactory RPCListenerFactory
+
+	// DiskMonitorManager provides metrics for individual disks.
+	DiskMonitorManager *disk.MonitorManager
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -319,6 +323,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.Config.InitDefaults()
 	cfg.InitTestingKnobs()
 	cfg.EarlyBootExternalStorageAccessor = cloud.NewEarlyBootExternalStorageAccessor(st, cfg.ExternalIODirConfig)
+	cfg.DiskMonitorManager = disk.NewMonitorManager(vfs.Default)
 }
 
 // InitTestingKnobs sets up any testing knobs based on e.g. envvars.

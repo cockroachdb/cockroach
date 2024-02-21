@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -75,7 +76,7 @@ func Test_loadEndpoint(t *testing.T) {
 	ctx := context.Background()
 
 	clock := timeutil.NewTestTimeSource()
-	rss := status.NewRuntimeStatSampler(ctx, clock)
+	rss := status.NewRuntimeStatSampler(ctx, clock, []base.StoreSpec{}, nil)
 	metricSource := testMetricSource{}
 	le, err := newLoadEndpoint(rss, metricSource)
 	require.NoError(t, err)

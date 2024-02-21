@@ -3,15 +3,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "status",
     srcs = [
-        "disk_counters.go",
         "disk_counters_darwin.go",
+        "disk_counters_linux.go",
+        "disk_counters_windows.go",
         "health_check.go",
         "recorder.go",
         "runtime.go",
         "runtime_generic.go",
         "runtime_jemalloc.go",
         "runtime_jemalloc_darwin.go",
-        "runtime_linux.go",
         "runtime_log.go",
     ],
     # keep
@@ -42,6 +42,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/server/status",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/build",
         "//pkg/keys",
         "//pkg/kv",
@@ -56,6 +57,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/sem/catconstants",
+        "//pkg/storage/disk",
         "//pkg/ts/tspb",
         "//pkg/ts/tsutil",
         "//pkg/util/cgroups",
@@ -79,44 +81,11 @@ go_library(
         "@com_github_shirou_gopsutil_v3//cpu",
         "@com_github_shirou_gopsutil_v3//net",
     ] + select({
-        "@io_bazel_rules_go//go/platform:aix": [
-            "@com_github_shirou_gopsutil_v3//disk",
-        ],
-        "@io_bazel_rules_go//go/platform:android": [
-            "@com_github_shirou_gopsutil_v3//disk",
-        ],
         "@io_bazel_rules_go//go/platform:darwin": [
             "@com_github_lufia_iostat//:iostat",
         ],
-        "@io_bazel_rules_go//go/platform:dragonfly": [
-            "@com_github_shirou_gopsutil_v3//disk",
-        ],
-        "@io_bazel_rules_go//go/platform:freebsd": [
-            "@com_github_shirou_gopsutil_v3//disk",
-        ],
-        "@io_bazel_rules_go//go/platform:illumos": [
-            "@com_github_shirou_gopsutil_v3//disk",
-        ],
         "@io_bazel_rules_go//go/platform:ios": [
             "@com_github_lufia_iostat//:iostat",
-        ],
-        "@io_bazel_rules_go//go/platform:js": [
-            "@com_github_shirou_gopsutil_v3//disk",
-        ],
-        "@io_bazel_rules_go//go/platform:linux": [
-            "@com_github_shirou_gopsutil_v3//disk",
-        ],
-        "@io_bazel_rules_go//go/platform:netbsd": [
-            "@com_github_shirou_gopsutil_v3//disk",
-        ],
-        "@io_bazel_rules_go//go/platform:openbsd": [
-            "@com_github_shirou_gopsutil_v3//disk",
-        ],
-        "@io_bazel_rules_go//go/platform:plan9": [
-            "@com_github_shirou_gopsutil_v3//disk",
-        ],
-        "@io_bazel_rules_go//go/platform:solaris": [
-            "@com_github_shirou_gopsutil_v3//disk",
         ],
         "@io_bazel_rules_go//go/platform:windows": [
             "@com_github_shirou_gopsutil_v3//disk",
@@ -133,7 +102,6 @@ go_test(
         "jemalloc_test.go",
         "main_test.go",
         "recorder_test.go",
-        "runtime_linux_test.go",
         "runtime_stats_test.go",
         "runtime_test.go",
     ],
