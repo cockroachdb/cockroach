@@ -1025,15 +1025,21 @@ func (p *Pebble) GetStoreID() (int32, error) {
 	return storeID, nil
 }
 
-func (p *Pebble) Download(ctx context.Context, span roachpb.Span) error {
-	ctx, sp := tracing.ChildSpan(ctx, "pebble.Download")
+func (p *Pebble) Download(ctx context.Context, span roachpb.Span, copy bool) error {
+	const copySpanName, rewriteSpanName = "pebble.Download", "pebble.DownloadRewrite"
+	spanName := rewriteSpanName
+	if copy {
+		spanName = copySpanName
+	}
+	ctx, sp := tracing.ChildSpan(ctx, spanName)
 	defer sp.Finish()
 	if p == nil {
 		return nil
 	}
 	downloadSpan := pebble.DownloadSpan{
-		StartKey: span.Key,
-		EndKey:   span.EndKey,
+		StartKey:               span.Key,
+		EndKey:                 span.EndKey,
+		ViaBackingFileDownload: copy,
 	}
 	return p.db.Download(ctx, []pebble.DownloadSpan{downloadSpan})
 }
