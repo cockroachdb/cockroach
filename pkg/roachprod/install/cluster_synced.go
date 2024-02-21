@@ -955,6 +955,7 @@ wait
 				for {
 					line, _, err := r.ReadLine()
 					if err == io.EOF {
+						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
 						return
 					}
 					if err != nil {
