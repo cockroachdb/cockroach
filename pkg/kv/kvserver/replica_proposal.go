@@ -371,7 +371,7 @@ func (r *Replica) leasePostApplyLocked(
 		// Log lease acquisitions loudly when verbose logging is enabled or when the
 		// new leaseholder is draining, in which case it should be shedding leases.
 		// Otherwise, log a trace event.
-		if log.V(1) || r.store.IsDraining() {
+		if log.V(1) || (leaseChangingHands && r.store.IsDraining()) {
 			log.Infof(ctx, "new range lease %s following %s", newLease, prevLease)
 		} else {
 			log.Eventf(ctx, "new range lease %s following %s", newLease, prevLease)
