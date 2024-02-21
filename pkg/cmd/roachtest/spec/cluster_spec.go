@@ -190,6 +190,9 @@ func getAWSOpts(
 	}
 	if ebsThroughput != 0 {
 		opts.DefaultEBSVolume.Disk.Throughput = ebsThroughput
+		if opts.DefaultEBSVolume.Disk.IOPs < opts.DefaultEBSVolume.Disk.Throughput*4 {
+			opts.DefaultEBSVolume.Disk.IOPs = opts.DefaultEBSVolume.Disk.Throughput * 6
+		}
 	}
 	if localSSD {
 		opts.SSDMachineType = machineType
