@@ -15,10 +15,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,14 +41,29 @@ func TestReplicaUnavailableError(t *testing.T) {
 	lm := livenesspb.IsLiveMap{
 		1: livenesspb.IsLiveMapEntry{IsLive: true},
 	}
-	ts, err := time.Parse("2006-01-02 15:04:05", "2006-01-02 15:04:05")
-	require.NoError(t, err)
+	ts := hlc.Timestamp{WallTime: time.Date(2006, 1, 2, 15, 4, 5, 0, time.UTC).UnixNano()}
 	wrappedErr := errors.New("probe failed")
 	rs := raft.Status{}
 	ctx := context.Background()
-	err = errors.DecodeError(ctx, errors.EncodeError(ctx, replicaUnavailableError(
-		wrappedErr, desc, desc.Replicas().AsProto()[0], lm, &rs, hlc.Timestamp{WallTime: ts.UnixNano()}),
-	))
+
+	rue := errors.Mark(
+		replicaUnavailableError(wrappedErr, desc, desc.Replicas().AsProto()[0], lm, &rs, ts),
+		circuit.ErrBreakerOpen)
+
+	// A Protobuf roundtrip retains the error details.
+	err := errors.DecodeError(ctx, errors.EncodeError(ctx, rue))
 	require.True(t, errors.Is(err, wrappedErr), "%+v", err)
+	require.True(t, errors.Is(err, circuit.ErrBreakerOpen))
 	echotest.Require(t, string(redact.Sprint(err)), datapathutils.TestDataPath(t, "replica_unavailable_error.txt"))
+
+	// When wrapped as a kvpb.NewError(), GetDetail() does not retain the error
+	// mark, but GoError() does.
+	pErr := kvpb.NewError(rue)
+	err = pErr.GetDetail().(*kvpb.ReplicaUnavailableError)
+	require.True(t, errors.Is(err, wrappedErr), "%+v", err)
+	require.False(t, errors.Is(err, circuit.ErrBreakerOpen))
+
+	err = pErr.GoError()
+	require.True(t, errors.Is(err, wrappedErr), "%+v", err)
+	require.True(t, errors.Is(err, circuit.ErrBreakerOpen))
 }
