@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -76,9 +77,11 @@ func sendAddRemoteSSTs(
 		return genSpan(ctx, restoreSpanEntriesCh)
 	})
 
+	fromSystemTenant := isFromSystemTenant(dataToRestore.getTenantRekeys())
+
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh))
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh, fromSystemTenant))
 	}
 
 	if err := grp.Wait(); err != nil {
@@ -107,6 +110,7 @@ func sendAddRemoteSSTWorker(
 	execCtx sql.JobExecContext,
 	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
 	requestFinishedCh chan<- struct{},
+	fromSystemTenant bool,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		var toAdd []execinfrapb.RestoreFileSpec
@@ -125,7 +129,7 @@ func sendAddRemoteSSTWorker(
 			}
 
 			for _, file := range toAdd {
-				if err := sendRemoteAddSSTable(ctx, execCtx, file); err != nil {
+				if err := sendRemoteAddSSTable(ctx, execCtx, file, fromSystemTenant); err != nil {
 					return err
 				}
 			}
@@ -210,7 +214,10 @@ func sendAdminScatter(
 }
 
 func sendRemoteAddSSTable(
-	ctx context.Context, execCtx sql.JobExecContext, file execinfrapb.RestoreFileSpec,
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	file execinfrapb.RestoreFileSpec,
+	fromSystemTenant bool,
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "backupccl.sendRemoteAddSSTable")
 	defer sp.Finish()
@@ -248,8 +255,14 @@ func sendRemoteAddSSTable(
 		KeyCount:          counts.Rows + counts.IndexEntries,
 		LiveCount:         counts.Rows + counts.IndexEntries,
 	}
+
+	var batchTimestamp hlc.Timestamp
+	if writeAtBatchTS(ctx, file.BackupFileEntrySpan, fromSystemTenant) {
+		batchTimestamp = execCtx.ExecCfg().DB.Clock().Now()
+	}
+
 	_, _, err := execCtx.ExecCfg().DB.AddRemoteSSTable(
-		ctx, file.BackupFileEntrySpan, loc, fileStats)
+		ctx, file.BackupFileEntrySpan, loc, fileStats, batchTimestamp)
 	return err
 }
 

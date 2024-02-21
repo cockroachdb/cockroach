@@ -167,6 +167,7 @@ func EvalAddSSTable(
 					ApproximatePhysicalSize: args.RemoteFile.ApproximatePhysicalSize,
 					BackingFileSize:         args.RemoteFile.BackingFileSize,
 					Span:                    roachpb.Span{Key: start.Key, EndKey: end.Key},
+					RemoteRewriteTimestamp:  sstToReqTS,
 				},
 				// Since the remote SST could contain keys at any timestamp, consider it
 				// a history mutation.
