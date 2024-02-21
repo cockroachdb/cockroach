@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"sync/atomic"
 
@@ -168,16 +169,28 @@ func (m *monitorImpl) startNodeMonitor() {
 			}
 
 			for info := range eventsCh {
-				_, isDeath := info.Event.(install.MonitorProcessDead)
-				isExpectedDeath := isDeath && atomic.AddInt32(&m.expDeaths, -1) >= 0
 				var expectedDeathStr string
-				if isExpectedDeath {
-					expectedDeathStr = ": expected"
-				}
-				m.l.Printf("Monitor event: %s%s", info, expectedDeathStr)
+				var retErr error
 
-				if isDeath && !isExpectedDeath {
-					return fmt.Errorf("unexpected node event: %s", info)
+				switch e := info.Event.(type) {
+				case install.MonitorError:
+					if e.Err == io.EOF {
+						retErr = errors.New("monitor unexpectedly terminated")
+					}
+				case install.MonitorProcessDead:
+					isExpectedDeath := atomic.AddInt32(&m.expDeaths, -1) >= 0
+					if isExpectedDeath {
+						expectedDeathStr = ": expected"
+					}
+
+					if !isExpectedDeath {
+						retErr = fmt.Errorf("unexpected node event: %s", info)
+					}
+				}
+
+				m.l.Printf("Monitor event: %s%s", info, expectedDeathStr)
+				if retErr != nil {
+					return retErr
 				}
 			}
 

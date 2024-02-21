@@ -1660,7 +1660,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 			rd.main(ctx)
 			return nil
 		})
-		defer m.Wait()
+		defer m.Wait
 
 		// Dont begin node disconnecion until c2c job is setup.
 		<-shutdownSetupDone
