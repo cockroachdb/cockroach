@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -168,16 +169,35 @@ func (m *monitorImpl) startNodeMonitor() {
 			}
 
 			for info := range eventsCh {
-				_, isDeath := info.Event.(install.MonitorProcessDead)
-				isExpectedDeath := isDeath && atomic.AddInt32(&m.expDeaths, -1) >= 0
 				var expectedDeathStr string
-				if isExpectedDeath {
-					expectedDeathStr = ": expected"
-				}
-				m.l.Printf("Monitor event: %s%s", info, expectedDeathStr)
+				var retErr error
 
-				if isDeath && !isExpectedDeath {
-					return fmt.Errorf("unexpected node event: %s", info)
+				switch e := info.Event.(type) {
+				case install.MonitorError:
+					// Monitor errors should only occur when something went
+					// wrong in the monitor logic itself or test infrastructure
+					// (SSH flakes, VM preemption, etc). These should be sent
+					// directly to TestEng.
+					retErr = registry.ErrorWithOwner(
+						registry.OwnerTestEng,
+						e.Err,
+						registry.WithTitleOverride("monitor_failure"),
+						registry.InfraFlake,
+					)
+				case install.MonitorProcessDead:
+					isExpectedDeath := atomic.AddInt32(&m.expDeaths, -1) >= 0
+					if isExpectedDeath {
+						expectedDeathStr = ": expected"
+					}
+
+					if !isExpectedDeath {
+						retErr = fmt.Errorf("unexpected node event: %s", info)
+					}
+				}
+
+				m.l.Printf("Monitor event: %s%s", info, expectedDeathStr)
+				if retErr != nil {
+					return retErr
 				}
 			}
 
