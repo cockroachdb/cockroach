@@ -17,22 +17,20 @@ WHERE
 distribution: local
 vectorized: true
 
-• render
+• group (hash)
+│ group by: aggregated_ts, fingerprint_id, app_name, aggregation_interval
 │
-└── • group (hash)
-    │ group by: aggregated_ts, fingerprint_id, app_name, aggregation_interval
+└── • union all
     │
-    └── • union all
-        │
-        ├── • filter
-        │   │ filter: (aggregated_ts >= '2022-01-18 00:00:00+00') AND (aggregated_ts <= '2022-01-20 00:00:00+00')
-        │   │
-        │   └── • virtual table
-        │         table: cluster_transaction_statistics@primary
-        │
-        └── • scan
-              missing stats
-              table: transaction_statistics@primary
-              spans: [/0/'2022-01-18 00:00:00+00' - /0/'2022-01-20 00:00:00+00'] [/1/'2022-01-18 00:00:00+00' - /1/'2022-01-20 00:00:00+00'] [/2/'2022-01-18 00:00:00+00' - /2/'2022-01-20 00:00:00+00'] [/3/'2022-01-18 00:00:00+00' - /3/'2022-01-20 00:00:00+00'] … (4 more)
+    ├── • filter
+    │   │ filter: (aggregated_ts >= '2022-01-18 00:00:00+00') AND (aggregated_ts <= '2022-01-20 00:00:00+00')
+    │   │
+    │   └── • virtual table
+    │         table: cluster_transaction_statistics@primary
+    │
+    └── • scan
+          missing stats
+          table: transaction_statistics@primary
+          spans: [/0/'2022-01-18 00:00:00+00' - /0/'2022-01-20 00:00:00+00'] [/1/'2022-01-18 00:00:00+00' - /1/'2022-01-20 00:00:00+00'] [/2/'2022-01-18 00:00:00+00' - /2/'2022-01-20 00:00:00+00'] [/3/'2022-01-18 00:00:00+00' - /3/'2022-01-20 00:00:00+00'] … (4 more)
 ----
 ----
