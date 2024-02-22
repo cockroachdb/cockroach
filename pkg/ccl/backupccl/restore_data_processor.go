@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -511,6 +512,8 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 				ctx := logtags.AddTag(ctx, "restore-span", entry.ProgressIdx)
 				ctx, undo := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 				defer undo()
+				ctx, sp := tracing.ChildSpan(ctx, "restore.processRestoreSpanEntry")
+				defer sp.Finish()
 
 				var res *resumeEntry
 				for {
