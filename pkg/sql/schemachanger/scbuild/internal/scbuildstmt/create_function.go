@@ -200,11 +200,10 @@ func validateFunctionRelationReferences(
 	for _, id := range refProvider.ReferencedRelationIDs().Ordered() {
 		_, _, namespace := scpb.FindNamespace(b.QueryByID(id))
 		if namespace.DatabaseID != parentDBID {
-			name := tree.MakeTypeNameWithPrefix(b.NamePrefix(namespace), namespace.Name)
 			panic(pgerror.Newf(
 				pgcode.FeatureNotSupported,
-				"the function cannot refer to other databases",
-				name.String()))
+				"dependent relation %s cannot be from another database",
+				namespace.Name))
 		}
 	}
 }
