@@ -399,6 +399,16 @@ func (k Key) Version() roachpb.Version {
 	return maybeApplyDevOffset(k, version)
 }
 
+// FenceVersion is the fence version -- the internal immediately prior -- for
+// the named version, if it is Internal.
+func (k Key) FenceVersion() roachpb.Version {
+	v := k.Version()
+	if v.Internal > 0 {
+		v.Internal -= 1
+	}
+	return v
+}
+
 // IsFinal returns true if the key corresponds to a final version (as opposed to
 // a transitional internal version during upgrade).
 func (k Key) IsFinal() bool {
