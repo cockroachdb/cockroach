@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -25,7 +26,11 @@ import (
 // CountLeases returns the number of unexpired leases for a number of descriptors
 // each at a particular version at a particular time.
 func CountLeases(
-	ctx context.Context, executor isql.Executor, versions []IDVersion, at hlc.Timestamp,
+	ctx context.Context,
+	executor isql.Executor,
+	isMultiRegion bool,
+	versions []IDVersion,
+	at hlc.Timestamp,
 ) (int, error) {
 	var whereClauses []string
 	for _, t := range versions {
@@ -35,14 +40,22 @@ func CountLeases(
 		)
 	}
 
+	// If the system database is single region, then optimize our query
+	// to use the default region.
+	querySingleRegion := " AND crdb_region=$2"
+	if !isMultiRegion {
+		querySingleRegion = ""
+	}
+
 	stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE `,
 		at.AsOfSystemTime()) +
-		strings.Join(whereClauses, " OR ")
+		strings.Join(whereClauses, " OR ") +
+		querySingleRegion
 
 	values, err := executor.QueryRowEx(
 		ctx, "count-leases", nil, /* txn */
 		sessiondata.RootUserSessionDataOverride,
-		stmt, at.GoTime(),
+		stmt, at.GoTime(), enum.One,
 	)
 	if err != nil {
 		return 0, err

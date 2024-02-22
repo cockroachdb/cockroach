@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -66,6 +67,14 @@ func CheckTwoVersionInvariant(
 		panic("transaction has already committed")
 	}
 
+	// Get a lease on the system database descriptor to determine if we
+	// should to multi-region leasing queries.
+	sysDBDesc, err := descsCol.ByIDWithLeased(txn).Get().Database(ctx, keys.SystemDatabaseID)
+	if err != nil {
+		return err
+	}
+	isMultiRegion := sysDBDesc.IsMultiRegion()
+
 	// We potentially hold leases for descriptors which we've modified which
 	// we need to drop. Say we're updating descriptors at version V. All leases
 	// for version V-2 need to be dropped immediately, otherwise the check
@@ -88,7 +97,7 @@ func CheckTwoVersionInvariant(
 	// transaction ends up committing then there won't have been any created
 	// in the meantime.
 	count, err := lease.CountLeases(
-		ctx, noTxnExec, withNewVersion, txn.ProvisionalCommitTimestamp(),
+		ctx, noTxnExec, isMultiRegion, withNewVersion, txn.ProvisionalCommitTimestamp(),
 	)
 	if err != nil {
 		return err
@@ -115,7 +124,7 @@ func CheckTwoVersionInvariant(
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// Use the current clock time.
 		now := clock.Now()
-		count, err := lease.CountLeases(ctx, noTxnExec, withNewVersion, now)
+		count, err := lease.CountLeases(ctx, noTxnExec, isMultiRegion, withNewVersion, now)
 		if err != nil {
 			return err
 		}
