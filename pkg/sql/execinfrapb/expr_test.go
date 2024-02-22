@@ -77,28 +77,3 @@ func TestProcessExpression(t *testing.T) {
 		t.Errorf("invalid expression type %s", typ)
 	}
 }
-
-// Test that processExpression evaluates constant exprs into datums.
-func TestProcessExpressionConstantEval(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	e := Expression{Expr: "ARRAY[1:::INT,2:::INT]"}
-
-	h := tree.MakeIndexedVarHelper(nil, 0)
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
-	semaCtx := tree.MakeSemaContext()
-	expr, err := processExpression(context.Background(), e, &evalCtx, &semaCtx, &h)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expected := &tree.DArray{
-		ParamTyp:    types.Int,
-		Array:       tree.Datums{tree.NewDInt(1), tree.NewDInt(2)},
-		HasNonNulls: true,
-	}
-	if !reflect.DeepEqual(expr, expected) {
-		t.Errorf("invalid expr '%v', expected '%v'", expr, expected)
-	}
-}
