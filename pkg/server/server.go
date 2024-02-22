@@ -480,9 +480,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
-	dbCtx := kv.DefaultDBContext(stopper)
+	dbCtx := kv.DefaultDBContext(st, stopper)
 	dbCtx.NodeID = idContainer
-	dbCtx.Stopper = stopper
 	db := kv.NewDBWithContext(cfg.AmbientCtx, tcsFactory, clock, dbCtx)
 
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
@@ -591,7 +590,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
 	db.AdmissionPacerFactory = gcoords.Elastic
-	db.SettingsValues = &cfg.Settings.SV
 	cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
 	stopper.AddCloser(stop.CloserFn(func() {
 		goschedstats.UnregisterRunnableCountCallback(cbID)

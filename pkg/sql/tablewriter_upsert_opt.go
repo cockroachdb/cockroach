@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -98,10 +97,8 @@ type optTableUpserter struct {
 var _ tableWriter = &optTableUpserter{}
 
 // init is part of the tableWriter interface.
-func (tu *optTableUpserter) init(
-	ctx context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
-) error {
-	if err := tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx, sv); err != nil {
+func (tu *optTableUpserter) init(ctx context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
+	if err := tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx); err != nil {
 		return err
 	}
 

@@ -687,6 +687,7 @@ func (b *Builder) buildExistsSubquery(
 			params,
 			stmts,
 			stmtProps,
+			nil,  /* stmtStr */
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
 		)
@@ -807,6 +808,7 @@ func (b *Builder) buildSubquery(
 			params,
 			stmts,
 			stmtProps,
+			nil,  /* stmtStr */
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
 		)
@@ -863,7 +865,7 @@ func (b *Builder) buildSubquery(
 			if err != nil {
 				return err
 			}
-			err = fn(plan, true /* isFinalPlan */)
+			err = fn(plan, "" /* stmtForDistSQLDiagram */, true /* isFinalPlan */)
 			if err != nil {
 				return err
 			}
@@ -963,6 +965,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.Params,
 		udf.Def.Body,
 		udf.Def.BodyProps,
+		udf.Def.BodyStmts,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 	)
@@ -985,6 +988,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 				action.Params,
 				action.Body,
 				action.BodyProps,
+				action.BodyStmts,
 				false, /* allowOuterWithRefs */
 				nil,   /* wrapRootExpr */
 			)
@@ -1042,6 +1046,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.Params,
 			action.Body,
 			action.BodyProps,
+			action.BodyStmts,
 			false, /* allowOuterWithRefs */
 			nil,   /* wrapRootExpr */
 		)
@@ -1081,6 +1086,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	params opt.ColList,
 	stmts []memo.RelExpr,
 	stmtProps []*physical.Required,
+	stmtStr []string,
 	allowOuterWithRefs bool,
 	wrapRootExpr wrapRootExprFn,
 ) tree.RoutinePlanGenerator {
@@ -1217,7 +1223,11 @@ func (b *Builder) buildRoutinePlanGenerator(
 				return expectedLazyRoutineError("subquery")
 			}
 			isFinalPlan := i == len(stmts)-1
-			err = fn(plan, isFinalPlan)
+			var stmtForDistSQLDiagram string
+			if i < len(stmtStr) {
+				stmtForDistSQLDiagram = stmtStr[i]
+			}
+			err = fn(plan, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err
 			}
