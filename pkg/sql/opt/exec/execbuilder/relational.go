@@ -122,18 +122,6 @@ func (ep *execPlan) getNodeColumnOrdinal(col opt.ColumnID) (exec.NodeColumnOrdin
 	return exec.NodeColumnOrdinal(ord), nil
 }
 
-func (ep *execPlan) getNodeColumnOrdinalSet(cols opt.ColSet) (exec.NodeColumnOrdinalSet, error) {
-	var res exec.NodeColumnOrdinalSet
-	for colID, ok := cols.Next(0); ok; colID, ok = cols.Next(colID + 1) {
-		colOrd, err := ep.getNodeColumnOrdinal(colID)
-		if err != nil {
-			return exec.NodeColumnOrdinalSet{}, err
-		}
-		res.Add(int(colOrd))
-	}
-	return res, nil
-}
-
 // reqOrdering converts the provided ordering of a relational expression to an
 // OutputOrdering (according to the outputCols map).
 func (ep *execPlan) reqOrdering(expr memo.RelExpr) (exec.OutputOrdering, error) {
@@ -1674,10 +1662,15 @@ func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	distinctCols, err := input.getNodeColumnOrdinalSet(private.GroupingCols)
-	if err != nil {
-		return execPlan{}, err
+	var distinctCols exec.NodeColumnOrdinalSet
+	for col, ok := private.GroupingCols.Next(0); ok; col, ok = private.GroupingCols.Next(col + 1) {
+		ord, err := input.getNodeColumnOrdinal(col)
+		if err != nil {
+			return execPlan{}, err
+		}
+		distinctCols.Add(int(ord))
 	}
+
 	var orderedCols exec.NodeColumnOrdinalSet
 	ordering := ordering.StreamingGroupingColOrdering(
 		private, &distinct.RequiredPhysical().Ordering,
