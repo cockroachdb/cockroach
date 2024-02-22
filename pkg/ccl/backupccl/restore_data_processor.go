@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -325,6 +326,10 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 	ctx context.Context, entries chan execinfrapb.RestoreSpanEntry,
 ) error {
 	return ctxgroup.GroupWorkers(ctx, rd.numWorkers, func(ctx context.Context, worker int) error {
+		ctx = logtags.AddTag(ctx, "restore-worker", worker)
+		ctx, undo := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+		defer undo()
+
 		kr, err := MakeKeyRewriterFromRekeys(rd.FlowCtx.Codec(), rd.spec.TableRekeys, rd.spec.TenantRekeys,
 			false /* restoreTenantFromStream */)
 		if err != nil {
@@ -342,6 +347,10 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 					done = true
 					return done, nil
 				}
+
+				ctx := logtags.AddTag(ctx, "restore-span", entry.ProgressIdx)
+				ctx, undo := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+				defer undo()
 
 				sstIter, err := rd.openSSTs(ctx, entry)
 				if err != nil {
