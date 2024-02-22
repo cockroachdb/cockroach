@@ -84,6 +84,7 @@ type fieldInfo struct {
 	Inherited           bool
 	IsEnum              bool
 	AllowZeroValue      bool
+	Nullable            bool
 }
 
 var (
@@ -380,6 +381,8 @@ func readInput(
 				return errors.Newf("unknown field definition syntax: %q", line)
 			}
 
+			notNullable := notNullableRe.MatchString(line)
+
 			// Allow zero values if the field is annotated with 'includeempty'.
 			allowZeroValue := strings.Contains(line, "includeempty")
 
@@ -389,6 +392,12 @@ func readInput(
 				typ = "timestamp"
 			case "cockroach.sql.sqlbase.Descriptor":
 				typ = "protobuf"
+			case "MVCCIteratorStats":
+				fallthrough
+			case "SampledExecStats":
+				// This is necessary so that the fields in the
+				// message doesn't get inlined.
+				typ = "nestedMessage"
 			}
 
 			if otherMsg, ok := infos[typ]; ok {
@@ -455,6 +464,7 @@ func readInput(
 					MixedRedactable:     mixed,
 					IsEnum:              isEnum,
 					AllowZeroValue:      allowZeroValue,
+					Nullable:            !notNullable,
 				}
 				curMsg.Fields = append(curMsg.Fields, fi)
 				curMsg.AllFields = append(curMsg.AllFields, fi)
@@ -485,6 +495,8 @@ var fieldDefRe = regexp.MustCompile(`\s*(?P<typ>[a-z._A-Z0-9]+)` +
 	`).*$`)
 
 var reservedDefRe = regexp.MustCompile(`\s*(reserved ([1-9][0-9]*);)`)
+
+var notNullableRe = regexp.MustCompile(`\s*\(\s*gogoproto\.nullable\s*\)\s*=\s*false`)
 
 func camelToSnake(typeName string) string {
 	var res strings.Builder
@@ -595,7 +607,8 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
    if m.{{.FieldName}} {
    {{- end }}
      if printComma { b = append(b, ',')}; printComma = true
-     b = append(b, "\"{{.FieldName}}\":true"...)
+     b = append(b, "\"{{.FieldName}}\":"...)
+     b = strconv.AppendBool(b, m.{{.FieldName}})
    {{ if not .AllowZeroValue -}}
    }
    {{- end }}
@@ -659,6 +672,16 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      }
      b = append(b, ']')
    }
+   {{- else if eq .FieldType "array_of_uint64" -}}
+   if len(m.{{.FieldName}}) > 0 {
+     if printComma { b = append(b, ',')}; printComma = true
+     b = append(b, "\"{{.FieldName}}\":["...)
+     for i, v := range m.{{.FieldName}} {
+       if i > 0 { b = append(b, ',') }
+       b = strconv.AppendUint(b, uint64(v), 10)
+     }
+     b = append(b, ']')
+   }
    {{- else if .IsEnum }}
    {{ if not .AllowZeroValue -}}
    if m.{{.FieldName}} != 0 {
@@ -694,6 +717,18 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
        b = append(b, []byte(str)...)
      }
    }
+   {{- else if eq .FieldType "nestedMessage"}}
+   {{ if .Nullable -}}
+   if m.{{.FieldName}} != nil {
+   {{- end }}
+     if printComma { b = append(b, ',')}; printComma = true
+     b = append(b, "\"{{.FieldName}}\":"...)
+     b = append(b, '{')
+     printComma, b = m.{{.FieldName}}.AppendJSONFields(false, b)
+     b = append(b, '}')
+   {{ if .Nullable -}}
+   }
+   {{- end }}
    {{- else}}
    {{ error  .FieldType }}
    {{- end}}
