@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -161,42 +162,39 @@ func TestStreamerTightBudget(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		SQLMemoryPoolSize: 1 << 30, /* 1GiB */
 	})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer s.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	const blobSize = 1 << 20
 	const numRows = 5
 
-	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob STRING, INDEX (k))")
-	require.NoError(t, err)
+	sqlDB.Exec(t, "CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob STRING, INDEX (k))")
 	for i := 0; i < numRows; i++ {
 		if i > 0 {
 			// Create a new range for this row.
-			_, err = db.Exec(fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES(%d)", i))
-			require.NoError(t, err)
+			sqlDB.Exec(t, fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES(%d)", i))
 		}
-		_, err = db.Exec(fmt.Sprintf("INSERT INTO t SELECT %d, 1, repeat('a', %d)", i, blobSize))
-		require.NoError(t, err)
+		sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t SELECT %d, 1, repeat('a', %d)", i, blobSize))
 	}
 
 	// Populate the range cache.
-	_, err = db.Exec("SELECT count(*) from t")
-	require.NoError(t, err)
+	sqlDB.Exec(t, "SELECT count(*) from t")
 
 	// Set the workmem limit to a low value such that it will allow the Streamer
 	// to have at most one request to be "in progress".
-	_, err = db.Exec(fmt.Sprintf("SET distsql_workmem = '%dB'", blobSize))
-	require.NoError(t, err)
+	sqlDB.Exec(t, fmt.Sprintf("SET distsql_workmem = '%dB'", blobSize))
 
 	// Perform an index join to read the blobs.
 	query := "EXPLAIN ANALYZE SELECT sum(length(blob)) FROM t@t_k_idx WHERE k = 1"
 	maximumMemoryUsageRegex := regexp.MustCompile(`maximum memory usage: (\d+\.\d+) MiB`)
-	rows, err := db.QueryContext(ctx, query)
-	require.NoError(t, err)
-	for rows.Next() {
-		var res string
-		require.NoError(t, rows.Scan(&res))
-		if matches := maximumMemoryUsageRegex.FindStringSubmatch(res); len(matches) > 0 {
+	rows := sqlDB.QueryStr(t, query)
+	// Build pretty output for an error message in case we need it.
+	var sb strings.Builder
+	for _, row := range rows {
+		sb.WriteString(row[0] + "\n")
+	}
+	for _, row := range rows {
+		if matches := maximumMemoryUsageRegex.FindStringSubmatch(row[0]); len(matches) > 0 {
 			usage, err := strconv.ParseFloat(matches[1], 64)
 			require.NoError(t, err)
 			// We expect that the maximum memory usage is about 2MiB (1MiB is
@@ -204,7 +202,7 @@ func TestStreamerTightBudget(t *testing.T) {
 			// by the ColIndexJoin when the blob is copied into the columnar
 			// batch). We allow for 0.1MiB for other memory usage in the query.
 			maxAllowed := 2.1
-			require.GreaterOrEqual(t, maxAllowed, usage, "unexpectedly high memory usage")
+			require.GreaterOrEqualf(t, maxAllowed, usage, "unexpectedly high memory usage\n----\n%s", sb.String())
 			return
 		}
 	}
