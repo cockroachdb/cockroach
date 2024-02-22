@@ -142,6 +142,15 @@ CREATE TABLE virtual (
 )
 ----
 
+exec-ddl
+CREATE TABLE singleton_check(
+  singleton BOOL DEFAULT TRUE,
+  count INT NOT NULL,
+  PRIMARY KEY (singleton),
+  CHECK (singleton)
+)
+----
+
 # --------------------------------------------------
 # GeneratePartialIndexScans
 # --------------------------------------------------
@@ -2689,6 +2698,43 @@ project
  │    └── distribution: ap-southeast-2
  └── projections
       └── col2:4::INT2 [as=col1:3, outer=(4), immutable]
+
+# Regression test for #114250 - don't generate a trivial constrained scan that
+# scans the whole table using the table's check constraints.
+exec-ddl
+CREATE TABLE t114250 (x INT, y INT, z INT NOT NULL, PRIMARY KEY (x, y), CHECK (x > 0 AND x < 5));
+----
+
+opt
+SELECT x FROM t114250 WHERE z = 5;
+----
+project
+ ├── columns: x:1!null
+ └── select
+      ├── columns: x:1!null z:3!null
+      ├── fd: ()-->(3)
+      ├── scan t114250
+      │    ├── columns: x:1!null z:3!null
+      │    └── check constraint expressions
+      │         └── (x:1 > 0) AND (x:1 < 5) [outer=(1), constraints=(/1: [/1 - /4]; tight)]
+      └── filters
+           └── z:3 = 5 [outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
+
+# Regression test for #114470 - allow a non-selective constraint for singleton
+# tables.
+#
+# This is a simplified version of an internal query performed on the
+# system.span_count table, which is vulnerable to the small increase in latency
+# caused by performing a KV Scan instead of a Get.
+opt expect=GenerateConstrainedScans
+SELECT * FROM singleton_check WHERE singleton;
+----
+scan singleton_check
+ ├── columns: singleton:1!null count:2!null
+ ├── constraint: /1: [/true - /true]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1,2)
 
 # --------------------------------------------------
 # GenerateInvertedIndexScans
