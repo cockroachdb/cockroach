@@ -11,6 +11,7 @@ package backupccl
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"runtime"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -324,6 +326,10 @@ func (rd *restoreDataProcessor) openSSTs(
 func (rd *restoreDataProcessor) runRestoreWorkers(
 	ctx context.Context, entries chan execinfrapb.RestoreSpanEntry,
 ) error {
+	ctx = logtags.AddTag(ctx, "restore-worker", nil)
+	ctx, undo := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+	defer undo()
+
 	return ctxgroup.GroupWorkers(ctx, rd.numWorkers, func(ctx context.Context, worker int) error {
 		kr, err := MakeKeyRewriterFromRekeys(rd.FlowCtx.Codec(), rd.spec.TableRekeys, rd.spec.TenantRekeys,
 			false /* restoreTenantFromStream */)
@@ -342,6 +348,10 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 					done = true
 					return done, nil
 				}
+
+				ctx := logtags.AddTag(ctx, "restore-span", fmt.Sprintf("%s", hex.EncodeToString(entry.Span.Key)))
+				ctx, undo := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+				defer undo()
 
 				sstIter, err := rd.openSSTs(ctx, entry)
 				if err != nil {
