@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
@@ -1651,4 +1652,102 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 	// Now cancel it and wait for it to shut down.
 	rangeFeedCancel()
 
+}
+
+// TestRangefeedTxnPusherBarrierRangeKeyMismatch is a regression test for
+// https://github.com/cockroachdb/cockroach/issues/119333
+//
+// Specifically, it tests that a Barrier call that encounters a
+// RangeKeyMismatchError will eagerly attempt to refresh the DistSender range
+// cache. The DistSender does not do this itself for unsplittable requests, so
+// it might otherwise continually fail.
+func TestRangefeedTxnPusherBarrierRangeKeyMismatch(t *testing.T) {
+
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t) // too slow, times out
+	skip.UnderDeadlock(t)
+
+	// Use a timeout, to prevent a hung test.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Start a cluster with 3 nodes.
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	defer cancel()
+
+	n1 := tc.Server(0)
+	n3 := tc.Server(2)
+	db1 := n1.ApplicationLayer().DB()
+	db3 := n3.ApplicationLayer().DB()
+
+	// Split off a range and upreplicate it, with leaseholder on n1. This is the
+	// range we'll run the barrier across.
+	prefix := append(n1.ApplicationLayer().Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	_, _, err := n1.StorageLayer().SplitRange(prefix)
+	require.NoError(t, err)
+	desc := tc.AddVotersOrFatal(t, prefix, tc.Targets(1, 2)...)
+	t.Logf("split off range %s", desc)
+
+	rspan := desc.RSpan()
+	span := rspan.AsRawSpanWithNoLocals()
+
+	// Split off three other ranges.
+	splitKeys := []roachpb.Key{
+		append(prefix.Clone(), roachpb.Key("/a")...),
+		append(prefix.Clone(), roachpb.Key("/b")...),
+		append(prefix.Clone(), roachpb.Key("/c")...),
+	}
+	for _, key := range splitKeys {
+		_, desc, err = n1.StorageLayer().SplitRange(key)
+		require.NoError(t, err)
+		t.Logf("split off range %s", desc)
+	}
+
+	// Scan the ranges on n3 to update the range caches, then run a barrier
+	// request which should fail with RangeKeyMismatchError.
+	_, err = db3.Scan(ctx, span.Key, span.EndKey, 0)
+	require.NoError(t, err)
+
+	_, _, err = db3.BarrierWithLAI(ctx, span.Key, span.EndKey)
+	require.Error(t, err)
+	require.IsType(t, &kvpb.RangeKeyMismatchError{}, err)
+	t.Logf("n3 barrier returned %s", err)
+
+	// Merge the ranges on n1. n3 will still have stale range descriptors, and
+	// fail the barrier request.
+	for range splitKeys {
+		desc, err = n1.StorageLayer().MergeRanges(span.Key)
+		require.NoError(t, err)
+		t.Logf("merged range %s", desc)
+	}
+
+	// Barriers should now succeed on n1, which have an updated range cache, but
+	// fail on n3 which doesn't.
+	lai, _, err := db1.BarrierWithLAI(ctx, span.Key, span.EndKey)
+	require.NoError(t, err)
+	t.Logf("n1 barrier returned LAI %d", lai)
+
+	_, _, err = db3.BarrierWithLAI(ctx, span.Key, span.EndKey)
+	require.Error(t, err)
+	require.IsType(t, &kvpb.RangeKeyMismatchError{}, err)
+	t.Logf("n3 barrier returned %s", err)
+
+	// However, rangefeedTxnPusher.Barrier() will refresh the cache and
+	// successfully apply the barrier.
+	s3 := tc.GetFirstStoreFromServer(t, 2)
+	repl3 := s3.LookupReplica(roachpb.RKey(span.Key))
+	t.Logf("repl3 desc: %s", repl3.Desc())
+	txnPusher := kvserver.NewRangefeedTxnPusher(nil, repl3, rspan)
+	require.NoError(t, txnPusher.Barrier(ctx))
+	t.Logf("n3 txnPusher barrier succeeded")
 }
