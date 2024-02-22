@@ -393,7 +393,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		ctx, db.KV(), rc, evalCtx.Settings, sip.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
 		sip.flowCtx.Cfg.BulkSenderLimiter, sip.onFlushUpdateMetricUpdate)
 	if err != nil {
-		sip.MoveToDraining(errors.Wrap(err, "creating stream sst batcher"))
+		sip.MoveToDrainingAndLogError(errors.Wrap(err, "creating stream sst batcher"))
 		return
 	}
 
@@ -413,6 +413,10 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		id := partitionSpec.PartitionID
 		token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
 		addr := partitionSpec.Address
+		redactedAddr, redactedErr := streamclient.RedactSourceURI(addr)
+		if redactedErr != nil {
+			log.Warning(sip.Ctx(), "could not redact stream address")
+		}
 		var streamClient streamclient.Client
 		if sip.forceClientForTests != nil {
 			streamClient = sip.forceClientForTests
@@ -421,7 +425,8 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			streamClient, err = streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(addr), db,
 				streamclient.WithStreamID(streampb.StreamID(sip.spec.StreamID)))
 			if err != nil {
-				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", token, addr))
+
+				sip.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, redactedAddr))
 				return
 			}
 			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
@@ -439,7 +444,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			sip.spec.InitialScanTimestamp, previousReplicatedTimestamp)
 
 		if err != nil {
-			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
+			sip.MoveToDrainingAndLogError(errors.Wrapf(err, "consuming partition %v", redactedAddr))
 			return
 		}
 		subscriptions[id] = sub
@@ -486,7 +491,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		if ok {
 			progressBytes, err := protoutil.Marshal(progressUpdate)
 			if err != nil {
-				sip.MoveToDraining(err)
+				sip.MoveToDrainingAndLogError(err)
 				return nil, sip.DrainHelper()
 			}
 			row := rowenc.EncDatumRow{
@@ -500,17 +505,22 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(sip.Ctx(),
 			sip.flowCtx.NodeID.SQLInstanceID(), sip.flowCtx.ID, sip.agg)
 	case err := <-sip.errCh:
-		sip.MoveToDraining(err)
+		sip.MoveToDrainingAndLogError(err)
 		return nil, sip.DrainHelper()
 	}
 	select {
 	case err := <-sip.errCh:
-		sip.MoveToDraining(err)
+		sip.MoveToDrainingAndLogError(err)
 		return nil, sip.DrainHelper()
 	default:
-		sip.MoveToDraining(nil /* error */)
+		sip.MoveToDrainingAndLogError(nil /* error */)
 		return nil, sip.DrainHelper()
 	}
+}
+
+func (sip *streamIngestionProcessor) MoveToDrainingAndLogError(err error) {
+	log.Infof(sip.Ctx(), "gracefully draining with error %s", err)
+	sip.MoveToDraining(err)
 }
 
 // MustBeStreaming implements the Processor interface.

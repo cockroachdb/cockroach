@@ -26,7 +26,6 @@ go_library(
         "//pkg/ccl/streamingccl/replicationutils",
         "//pkg/ccl/streamingccl/streamclient",
         "//pkg/ccl/utilccl",
-        "//pkg/cloud",
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/jobs",
