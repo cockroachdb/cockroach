@@ -377,11 +377,8 @@ func registerRestore(r registry.Registry) {
 				workload:          tpceRestore{customers: 2000000},
 				numBackupsInChain: 400,
 			}),
-			timeout: 30 * time.Hour,
-			suites:  registry.Suites(registry.Weekly),
-			extraArgs: []string{
-				"--max-disk-temp-storage", "128GiB",
-			},
+			timeout:                30 * time.Hour,
+			suites:                 registry.Suites(registry.Weekly),
 			restoreUptoIncremental: 400,
 		},
 		{
@@ -393,11 +390,8 @@ func registerRestore(r registry.Registry) {
 				cloud:             spec.GCE,
 				numBackupsInChain: 400,
 			}),
-			timeout: 30 * time.Hour,
-			suites:  registry.Suites(registry.Weekly),
-			extraArgs: []string{
-				"--max-disk-temp-storage", "128GiB",
-			},
+			timeout:                30 * time.Hour,
+			suites:                 registry.Suites(registry.Weekly),
 			restoreUptoIncremental: 400,
 			skip:                   "a recent gcp pricing policy makes this test very expensive. unskip after #111371 is addressed",
 		},
