@@ -276,6 +276,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		readAsOfIter := storage.NewReadAsOfIterator(iter, rd.spec.RestoreTime)
 
 		cleanup := func() {
+			log.VInfof(ctx, 1, "finished with and closing %d files in span [%s-%s)", len(entry.Files), entry.Span.Key, entry.Span.EndKey)
 			readAsOfIter.Close()
 
 			for _, dir := range dirsToSend {
@@ -295,7 +296,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		return mSST, nil
 	}
 
-	log.VEventf(ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
+	log.VEventf(ctx, 1, "ingesting %d files in span [%s-%s)", len(entry.Files), entry.Span.Key, entry.Span.EndKey)
 
 	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
 	for _, file := range entry.Files {
