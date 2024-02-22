@@ -197,6 +197,11 @@ func DatumToEncDatum(ctyp *types.T, d tree.Datum) EncDatum {
 	return EncDatum{Datum: d}
 }
 
+// NullEncDatum initializes an EncDatum with the NULL value.
+func NullEncDatum() EncDatum {
+	return EncDatum{Datum: tree.DNull}
+}
+
 // UnsetDatum ensures subsequent IsUnset() calls return false.
 func (ed *EncDatum) UnsetDatum() {
 	ed.encoded = nil
