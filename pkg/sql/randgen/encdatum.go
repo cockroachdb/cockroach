@@ -26,7 +26,7 @@ func RandDatumEncoding(rng *rand.Rand) catenumpb.DatumEncoding {
 
 // RandEncDatum generates a random EncDatum (of a random type).
 func RandEncDatum(rng *rand.Rand) (rowenc.EncDatum, *types.T) {
-	typ := RandEncodableType(rng)
+	typ := RandType(rng)
 	datum := RandDatum(rng, typ, true /* nullOk */)
 	return rowenc.DatumToEncDatum(typ, datum), typ
 }
@@ -69,7 +69,7 @@ func RandEncDatumRowOfTypes(rng *rand.Rand, types []*types.T) rowenc.EncDatumRow
 // RandEncDatumRows generates EncDatumRows where all rows follow the same random
 // []ColumnType structure.
 func RandEncDatumRows(rng *rand.Rand, numRows, numCols int) (rowenc.EncDatumRows, []*types.T) {
-	types := RandEncodableColumnTypes(rng, numCols)
+	types := RandColumnTypes(rng, numCols)
 	return RandEncDatumRowsOfTypes(rng, numRows, types), types
 }
 

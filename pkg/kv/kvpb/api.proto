@@ -2122,7 +2122,6 @@ message AddSSTableRequest {
   // checking, write-at-request-timestamp, or ingest-as-writes are unsupported.
   //
   // TODO(dt, msbutler, bilal): This is unsupported.
-  // TODO(dt, msbutler, bilal): support sst_timestamp_to_request_timestamp.
   // TODO(msbutler): rename to ExternalFile.
   message  RemoteFile {
     string locator = 1;
@@ -2132,7 +2131,7 @@ message AddSSTableRequest {
   }
   RemoteFile remote_file = 10 [(gogoproto.nullable) = false];
 
-  // AddSSTableRequest_PrefixReplacement is used to represent a prefix to be
+  // AddSStableRequest_PrefixReplacement is used to represent a prefix to be
   // replaced and the prefix with which to replace it.
   message PrefixReplacement {
     bytes from = 1;

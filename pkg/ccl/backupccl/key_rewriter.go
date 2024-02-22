@@ -179,14 +179,15 @@ func makeKeyRewriter(
 	sort.Slice(prefixes.rewrites, func(i, j int) bool {
 		return bytes.Compare(prefixes.rewrites[i].OldPrefix, prefixes.rewrites[j].OldPrefix) < 0
 	})
-	fromSystemTenant := false
-	// Only system tenant can restore a tenant from replication stream
+
+	fromSystemTenant := isFromSystemTenant(tenants)
 	if restoreTenantFromStream {
+		// Only the system tenant can restore a tenant from replication stream
 		fromSystemTenant = true
 	}
+	// Only system tenant can restore a tenant from replication stream
 	for i := range tenants {
 		if tenants[i] == isBackupFromSystemTenantRekey {
-			fromSystemTenant = true
 			continue
 		}
 		from, to := keys.MakeSQLCodec(tenants[i].OldID).TenantPrefix(), keys.MakeSQLCodec(tenants[i].NewID).TenantPrefix()

@@ -1852,7 +1852,6 @@ func doRestorePlan(
 			backupdest.DeprecatedResolveBackupManifestsExplicitIncrementals(ctx, &mem, mkStore, from,
 				endTime, encryption, &kmsEnv, p.User())
 	}
-
 	if err != nil {
 		return err
 	}
@@ -1877,6 +1876,10 @@ func doRestorePlan(
 	if restoreStmt.Options.ExperimentalOnline {
 		if err := checkManifestsForOnlineCompat(ctx, mainBackupManifests); err != nil {
 			return err
+		}
+		currentClusterVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version
+		if currentClusterVersion.Less(clusterversion.V24_1.Version()) {
+			return errors.Newf("cluster must fully upgrade to version %s to run online restore", clusterversion.V24_1.String())
 		}
 	}
 
