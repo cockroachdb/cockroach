@@ -27,10 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -661,4 +663,14 @@ func getMapsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[stri
 		}
 	}
 	return diffMap
+}
+
+func NewRangefeedTxnPusher(
+	ir *intentresolver.IntentResolver, r *Replica, span roachpb.RSpan,
+) rangefeed.TxnPusher {
+	return &rangefeedTxnPusher{
+		ir:   ir,
+		r:    r,
+		span: span,
+	}
 }
