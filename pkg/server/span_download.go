@@ -98,7 +98,7 @@ func (s *systemStatusServer) localDownloadSpan(
 			// Download until downloadSpansCh closes, then close stopTuningCh.
 			func(ctx context.Context) error {
 				defer close(stopTuningCh)
-				return downloadSpans(ctx, store.StateEngine(), downloadSpansCh)
+				return downloadSpans(ctx, store.StateEngine(), downloadSpansCh, req.ViaBackingFileDownload)
 			},
 			// Send spans to downloadSpansCh.
 			func(ctx context.Context) error {
@@ -125,11 +125,11 @@ func sendDownloadSpans(ctx context.Context, spans roachpb.Spans, out chan roachp
 
 // downloadSpans instructs the passed engine, in parallel, to downloads spans
 // received on the passed ch until it closes.
-func downloadSpans(ctx context.Context, eng storage.Engine, spans chan roachpb.Span) error {
+func downloadSpans(ctx context.Context, e storage.Engine, spans chan roachpb.Span, cp bool) error {
 	const downloadWaiters = 16
 	return ctxgroup.GroupWorkers(ctx, downloadWaiters, func(ctx context.Context, _ int) error {
 		for sp := range spans {
-			if err := eng.Download(ctx, sp); err != nil {
+			if err := e.Download(ctx, sp, cp); err != nil {
 				return err
 			}
 		}
