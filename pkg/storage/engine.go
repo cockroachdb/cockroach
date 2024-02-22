@@ -1101,8 +1101,10 @@ type Engine interface {
 	GetStoreID() (int32, error)
 
 	// Download informs the engine to download remote files corresponding to the
-	// given span.
-	Download(ctx context.Context, span roachpb.Span) error
+	// given span. The parameter copy controls how it is downloaded -- i.e. if it
+	// just copies the backing bytes to a local file of if it rewrites the file
+	// key-by-key to a new file.
+	Download(ctx context.Context, span roachpb.Span, copy bool) error
 }
 
 // Batch is the interface for batch specific operations.

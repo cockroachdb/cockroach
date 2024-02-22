@@ -603,6 +603,7 @@ message EngineStatsResponse {
 message DownloadSpanRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
   repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+  bool via_backing_file_download = 3;
 }
 
 message DownloadSpanResponse {

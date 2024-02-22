@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -311,6 +312,8 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 	return total, nil
 }
 
+var useCopy = envutil.EnvOrDefaultBool("COCKROACH_DOWNLOAD_COPY", true)
+
 func (r *restoreResumer) sendDownloadWorker(
 	execCtx sql.JobExecContext, spans roachpb.Spans, completionPoller chan struct{},
 ) func(context.Context) error {
@@ -328,7 +331,8 @@ func (r *restoreResumer) sendDownloadWorker(
 			var resp *serverpb.DownloadSpanResponse
 			var err error
 			if resp, err = execCtx.ExecCfg().TenantStatusServer.DownloadSpan(ctx, &serverpb.DownloadSpanRequest{
-				Spans: spans,
+				Spans:                  spans,
+				ViaBackingFileDownload: useCopy,
 			}); err != nil {
 				return err
 			}
