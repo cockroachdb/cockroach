@@ -319,7 +319,11 @@ func slurpScanResponse(
 	return nil
 }
 
-// AllRangeSpans returns the list of all ranges that for the specified list of spans.
+// AllRangeSpans returns a list of spans equivalent to the input list of spans
+// where each returned span represents all the keys in a range.
+//
+// For example, if the input span is {1-8} and the ranges are
+// {0-2}{2-4}{4-6}{6-8}{8-10}, then the output is {1-2}{2-4}{4-6}{6-8}{8-9}.
 func AllRangeSpans(
 	ctx context.Context, ds *kvcoord.DistSender, spans []roachpb.Span,
 ) ([]roachpb.Span, error) {
@@ -337,8 +341,19 @@ func AllRangeSpans(
 			if !it.Valid() {
 				return nil, it.Error()
 			}
+
+			// If the range boundaries are outside the original span, trim
+			// the range.
+			startKey := it.Desc().StartKey
+			if startKey.Compare(rSpan.Key) == -1 {
+				startKey = rSpan.Key
+			}
+			endKey := it.Desc().EndKey
+			if endKey.Compare(rSpan.EndKey) == 1 {
+				endKey = rSpan.EndKey
+			}
 			ranges = append(ranges, roachpb.Span{
-				Key: it.Desc().StartKey.AsRawKey(), EndKey: it.Desc().EndKey.AsRawKey(),
+				Key: startKey.AsRawKey(), EndKey: endKey.AsRawKey(),
 			})
 			if !it.NeedAnother(rSpan) {
 				break
