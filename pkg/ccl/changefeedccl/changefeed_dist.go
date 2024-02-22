@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -388,10 +389,16 @@ func makePlan(
 				sender := execCtx.ExecCfg().DB.NonTransactionalSender()
 				distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 
+				if log.ExpensiveLogEnabled(ctx, 2) {
+					log.Infof(ctx, "spans before rebalancing: %s", spanPartitions)
+				}
 				spanPartitions, err = rebalanceSpanPartitions(
 					ctx, &distResolver{distSender}, rebalanceThreshold.Get(sv), spanPartitions)
 				if err != nil {
 					return nil, nil, err
+				}
+				if log.ExpensiveLogEnabled(ctx, 2) {
+					log.Infof(ctx, "spans after rebalancing: %s", spanPartitions)
 				}
 			}
 		}
