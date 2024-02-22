@@ -81,6 +81,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			})
 			m.Wait()
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 
@@ -336,6 +337,7 @@ func makeIndexAddTpccTest(
 				SetupType: usingImport,
 			})
 		},
+		RequiresDeprecatedWorkload: true,
 	}
 }
 

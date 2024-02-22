@@ -38,6 +38,7 @@ func registerQueue(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runQueue(ctx, t, c)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

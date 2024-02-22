@@ -53,6 +53,7 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 			}
 			runSchemaChangeRandomLoad(ctx, t, c, maxOps, concurrency)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

@@ -34,6 +34,7 @@ func registerSchemaChangeInvertedIndex(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeInvertedIndex(ctx, t, c)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

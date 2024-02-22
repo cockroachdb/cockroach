@@ -117,8 +117,9 @@ func registerYCSB(r registry.Registry) {
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus, false /* readCommitted */, false /* rangeTombstone */)
 				},
-				CompatibleClouds: registry.AllClouds,
-				Suites:           registry.Suites(registry.Nightly),
+				RequiresDeprecatedWorkload: true,
+				CompatibleClouds:           registry.AllClouds,
+				Suites:                     registry.Suites(registry.Nightly),
 			})
 
 			if wl == "A" {
@@ -130,8 +131,9 @@ func registerYCSB(r registry.Registry) {
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, false /* readCommitted */, false /* rangeTombstone */)
 					},
-					CompatibleClouds: registry.AllExceptAWS,
-					Suites:           registry.Suites(registry.Nightly),
+					RequiresDeprecatedWorkload: true,
+					CompatibleClouds:           registry.AllExceptAWS,
+					Suites:                     registry.Suites(registry.Nightly),
 				})
 			}
 
@@ -144,8 +146,9 @@ func registerYCSB(r registry.Registry) {
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, true /* readCommitted */, false /* rangeTombstone */)
 					},
-					CompatibleClouds: registry.AllClouds,
-					Suites:           registry.Suites(registry.Nightly),
+					RequiresDeprecatedWorkload: true,
+					CompatibleClouds:           registry.AllClouds,
+					Suites:                     registry.Suites(registry.Nightly),
 				})
 			}
 
@@ -158,8 +161,9 @@ func registerYCSB(r registry.Registry) {
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, false /* readCommitted */, true /* rangeTombstone */)
 					},
-					CompatibleClouds: registry.AllClouds,
-					Suites:           registry.Suites(registry.Nightly),
+					RequiresDeprecatedWorkload: true,
+					CompatibleClouds:           registry.AllClouds,
+					Suites:                     registry.Suites(registry.Nightly),
 				})
 			}
 		}

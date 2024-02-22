@@ -163,6 +163,7 @@ func registerMultiTenantTPCH(r registry.Registry) {
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runMultiTenantTPCH(ctx, t, c, enableDirectScans, sharedProcess)
 				},
+				RequiresDeprecatedWorkload: true,
 			})
 		}
 	}

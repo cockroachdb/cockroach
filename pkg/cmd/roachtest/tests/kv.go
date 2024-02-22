@@ -342,9 +342,10 @@ func registerKV(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},
-			CompatibleClouds:  clouds,
-			Suites:            suites,
-			EncryptionSupport: encryption,
+			CompatibleClouds:           clouds,
+			Suites:                     suites,
+			EncryptionSupport:          encryption,
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 }

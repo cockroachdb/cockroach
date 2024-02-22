@@ -267,6 +267,7 @@ func registerAllocationBenchSpec(r registry.Registry, allocSpec allocationBenchS
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocationBench(ctx, t, c, allocSpec)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

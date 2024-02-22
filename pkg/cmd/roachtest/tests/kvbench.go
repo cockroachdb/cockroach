@@ -100,6 +100,7 @@ func registerKVBenchSpec(r registry.Registry, b kvBenchSpec) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKVBench(ctx, t, c, b)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

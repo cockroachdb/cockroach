@@ -194,6 +194,7 @@ func registerLoadSplits(r registry.Registry) {
 					waitDuration: 10 * time.Minute,
 				}})
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("splits/load/uniform/nodes=%d/obj=cpu", numRoachNodes),
@@ -216,6 +217,7 @@ func registerLoadSplits(r registry.Registry) {
 					waitDuration: 10 * time.Minute,
 				}})
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("splits/load/sequential/nodes=%d", numRoachNodes),
@@ -240,6 +242,7 @@ func registerLoadSplits(r registry.Registry) {
 					waitDuration: 60 * time.Second,
 				}})
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("splits/load/sequential/nodes=%d/obj=cpu", numRoachNodes),
@@ -267,6 +270,7 @@ func registerLoadSplits(r registry.Registry) {
 					waitDuration: 60 * time.Second,
 				}})
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("splits/load/spanning/nodes=%d", numRoachNodes),
@@ -288,6 +292,7 @@ func registerLoadSplits(r registry.Registry) {
 					waitDuration: 60 * time.Second,
 				}})
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("splits/load/spanning/nodes=%d/obj=cpu", numRoachNodes),
@@ -318,6 +323,7 @@ func registerLoadSplits(r registry.Registry) {
 					waitDuration: 10 * time.Minute,
 				}})
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("splits/load/ycsb/a/nodes=%d/obj=cpu", numRoachNodes),
@@ -343,6 +349,7 @@ func registerLoadSplits(r registry.Registry) {
 					waitDuration: 10 * time.Minute,
 				}})
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("splits/load/ycsb/b/nodes=%d/obj=cpu", numRoachNodes),
@@ -367,6 +374,7 @@ func registerLoadSplits(r registry.Registry) {
 					waitDuration: 10 * time.Minute,
 				}})
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("splits/load/ycsb/d/nodes=%d/obj=cpu", numRoachNodes),
@@ -392,6 +400,7 @@ func registerLoadSplits(r registry.Registry) {
 					waitDuration: 10 * time.Minute,
 				}})
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("splits/load/ycsb/e/nodes=%d/obj=cpu", numRoachNodes),
@@ -416,6 +425,7 @@ func registerLoadSplits(r registry.Registry) {
 					waitDuration: 10 * time.Minute,
 				}})
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

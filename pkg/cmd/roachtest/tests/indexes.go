@@ -141,6 +141,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 			})
 			m.Wait()
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

@@ -162,16 +162,17 @@ func registerTPCCOverload(r registry.Registry) {
 		name := fmt.Sprintf("admission-control/tpcc-olap/nodes=%d/cpu=%d/w=%d/c=%d",
 			s.Nodes, s.CPUs, s.Warehouses, s.Concurrency)
 		r.Add(registry.TestSpec{
-			Name:              name,
-			Owner:             registry.OwnerAdmissionControl,
-			Benchmark:         true,
-			CompatibleClouds:  registry.AllExceptAWS,
-			Suites:            registry.Suites(registry.Weekly),
-			Cluster:           r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
-			Run:               s.run,
-			EncryptionSupport: registry.EncryptionMetamorphic,
-			Leases:            registry.MetamorphicLeases,
-			Timeout:           20 * time.Minute,
+			Name:                       name,
+			Owner:                      registry.OwnerAdmissionControl,
+			Benchmark:                  true,
+			CompatibleClouds:           registry.AllExceptAWS,
+			Suites:                     registry.Suites(registry.Weekly),
+			Cluster:                    r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
+			Run:                        s.run,
+			EncryptionSupport:          registry.EncryptionMetamorphic,
+			Leases:                     registry.MetamorphicLeases,
+			Timeout:                    20 * time.Minute,
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 }
@@ -210,5 +211,6 @@ func registerTPCCSevereOverload(r registry.Registry) {
 			t.Status("running workload (fails in ~3-4 hours)")
 			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload run tpcc --ramp=6h --tolerate-errors --warehouses=10000 '{pgurl:1-6}'")
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }

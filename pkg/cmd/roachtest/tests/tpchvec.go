@@ -571,6 +571,7 @@ func registerTPCHVec(r registry.Registry) {
 				false,                    /* sharedProcessMT */
 			))
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 
 	r.Add(registry.TestSpec{
@@ -598,6 +599,7 @@ func registerTPCHVec(r registry.Registry) {
 				false,                              /* sharedProcessMT */
 			))
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 
 	r.Add(registry.TestSpec{
@@ -614,6 +616,7 @@ func registerTPCHVec(r registry.Registry) {
 				false, /* sharedProcessMT */
 			))
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 
 	r.Add(registry.TestSpec{
@@ -630,6 +633,7 @@ func registerTPCHVec(r registry.Registry) {
 				true, /* sharedProcessMT */
 			))
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 
 	r.Add(registry.TestSpec{
@@ -662,5 +666,6 @@ func registerTPCHVec(r registry.Registry) {
 			)
 			runTPCHVec(ctx, t, c, benchTest)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }

@@ -204,6 +204,7 @@ func registerCopy(r registry.Registry) {
 				}
 				runCopy(ctx, t, c, tc.rows, tc.txn)
 			},
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 }

@@ -140,5 +140,6 @@ func registerElasticIO(r registry.Registry) {
 			})
 			m.Wait()
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }

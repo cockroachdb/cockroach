@@ -58,5 +58,6 @@ func registerLedger(r registry.Registry) {
 			})
 			m.Wait()
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }

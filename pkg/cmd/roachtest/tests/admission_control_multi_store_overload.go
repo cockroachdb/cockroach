@@ -101,5 +101,6 @@ func registerMultiStoreOverload(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKV(ctx, t, c)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
