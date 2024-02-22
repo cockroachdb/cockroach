@@ -127,7 +127,7 @@ func (s *lockedRangefeedStream) Send(e *kvpb.RangeFeedEvent) error {
 type rangefeedTxnPusher struct {
 	ir   *intentresolver.IntentResolver
 	r    *Replica
-	span roachpb.RSpan
+	desc roachpb.RangeDescriptor
 }
 
 // PushTxns is part of the rangefeed.TxnPusher interface. It performs a
@@ -193,10 +193,19 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 
 	// Execute a Barrier on the leaseholder, and obtain its LAI. Error out on any
 	// range changes (e.g. splits/merges) that we haven't applied yet.
-	lai, desc, err := tp.r.store.db.BarrierWithLAI(ctx, tp.span.Key, tp.span.EndKey)
+	lai, desc, err := tp.r.store.db.BarrierWithLAI(ctx, tp.desc.StartKey, tp.desc.EndKey)
 	if err != nil {
 		if errors.HasType(err, &kvpb.RangeKeyMismatchError{}) {
-			return errors.Wrap(err, "range barrier failed, range split")
+			// The DistSender may have a stale range descriptor following a merge.
+			// Evict it in that case.
+			if rangeCache := tp.r.store.GetStoreConfig().RangeDescriptorCache; rangeCache != nil {
+				rangeInfo, err := rangeCache.Lookup(ctx, tp.desc.StartKey)
+				if err == nil && rangeInfo.Desc.RangeID == tp.desc.RangeID {
+					if rangeInfo.Desc.Generation < tp.desc.Generation {
+						rangeCache.EvictByKey(ctx, tp.desc.StartKey)
+					}
+				}
+			}
 		}
 		return errors.Wrap(err, "range barrier failed")
 	}
@@ -210,11 +219,11 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 		}
 		return errors.AssertionFailedf("barrier response without LeaseAppliedIndex")
 	}
-	if desc.RangeID != tp.r.RangeID {
-		return errors.Errorf("range barrier failed, range ID changed: %d -> %s", tp.r.RangeID, desc)
+	if desc.RangeID != tp.desc.RangeID {
+		return errors.Errorf("range barrier failed, range ID changed: %d -> %s", tp.desc.RangeID, desc)
 	}
-	if !desc.RSpan().Equal(tp.span) {
-		return errors.Errorf("range barrier failed, range span changed: %s -> %s", tp.span, desc)
+	if !desc.RSpan().Equal(tp.desc.RSpan()) {
+		return errors.Errorf("range barrier failed, range span changed: %s -> %s", tp.desc, desc)
 	}
 
 	// Wait for the local replica to apply it. In the common case where we are the
@@ -467,7 +476,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(isSystemSpan)
 
 	desc := r.Desc()
-	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r, span: desc.RSpan()}
+	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r, desc: *desc}
 	cfg := rangefeed.Config{
 		AmbientContext:   r.AmbientContext,
 		Clock:            r.Clock(),
