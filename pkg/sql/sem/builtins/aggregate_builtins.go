@@ -4007,7 +4007,7 @@ func (a *floatSqrDiffAggregate) Result() (tree.Datum, error) {
 	if a.count < 1 {
 		return tree.DNull, nil
 	}
-	return tree.NewDFloat(tree.DFloat(a.sqrDiff)), nil
+	return tree.NewDFloat(tree.DFloat(ensureNonNegativeFloatResult(a.sqrDiff))), nil
 }
 
 // Reset implements eval.AggregateFunc interface.
@@ -4201,7 +4201,7 @@ func (a *floatSumSqrDiffsAggregate) Result() (tree.Datum, error) {
 	if a.count < 1 {
 		return tree.DNull, nil
 	}
-	return tree.NewDFloat(tree.DFloat(a.sqrDiff)), nil
+	return tree.NewDFloat(tree.DFloat(ensureNonNegativeFloatResult(a.sqrDiff))), nil
 }
 
 // Reset implements eval.AggregateFunc interface.
@@ -4424,7 +4424,8 @@ func (a *floatVarianceAggregate) Result() (tree.Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tree.NewDFloat(tree.DFloat(float64(*sqrDiff.(*tree.DFloat)) / (float64(a.agg.Count()) - 1))), nil
+	res := float64(*sqrDiff.(*tree.DFloat)) / (float64(a.agg.Count()) - 1)
+	return tree.NewDFloat(tree.DFloat(ensureNonNegativeFloatResult(res))), nil
 }
 
 func (a *decimalVarianceAggregate) intermediateResult() (tree.Datum, error) {
@@ -4544,7 +4545,8 @@ func (a *floatVarPopAggregate) Result() (tree.Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tree.NewDFloat(tree.DFloat(float64(*sqrDiff.(*tree.DFloat)) / (float64(a.agg.Count())))), nil
+	res := float64(*sqrDiff.(*tree.DFloat)) / (float64(a.agg.Count()))
+	return tree.NewDFloat(tree.DFloat(ensureNonNegativeFloatResult(res))), nil
 }
 
 func (a *decimalVarPopAggregate) intermediateResult() (tree.Datum, error) {
@@ -4712,7 +4714,8 @@ func (a *floatStdDevAggregate) Result() (tree.Datum, error) {
 	if variance == tree.DNull {
 		return variance, nil
 	}
-	return tree.NewDFloat(tree.DFloat(math.Sqrt(float64(*variance.(*tree.DFloat))))), nil
+	res := math.Sqrt(float64(*variance.(*tree.DFloat)))
+	return tree.NewDFloat(tree.DFloat(ensureNonNegativeFloatResult(res))), nil
 }
 
 // Result computes the square root of the variance aggregator.
@@ -4757,6 +4760,16 @@ func (a *decimalStdDevAggregate) Close(ctx context.Context) {
 // Size is part of the eval.AggregateFunc interface.
 func (a *decimalStdDevAggregate) Size() int64 {
 	return sizeOfDecimalStdDevAggregate
+}
+
+// ensureNonNegativeFloatResult returns the given value if it is non-negative,
+// and otherwise returns zero. This is used to normalize results for aggregates
+// that cannot be less than zero.
+func ensureNonNegativeFloatResult(res float64) float64 {
+	if res < 0 {
+		return 0
+	}
+	return res
 }
 
 type bytesXorAggregate struct {
