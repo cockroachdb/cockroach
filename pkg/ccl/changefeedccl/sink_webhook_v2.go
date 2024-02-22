@@ -213,6 +213,11 @@ func (sc *webhookSinkClient) FlushResolvedPayload(
 // Flush implements the SinkClient interface
 func (sc *webhookSinkClient) Flush(ctx context.Context, batch SinkPayload) error {
 	req := batch.(*http.Request)
+	b, err := req.GetBody()
+	if err != nil {
+		return err
+	}
+	req.Body = b
 	res, err := sc.client.Do(req)
 	if err != nil {
 		return err
