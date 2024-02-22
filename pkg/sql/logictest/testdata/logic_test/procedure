@@ -118,7 +118,7 @@ CREATE OR REPLACE PROCEDURE p2() LANGUAGE SQL AS $$
   CALL p();
 $$
 
-statement error pgcode 42883 unknown function: p\(\)
+statement error pgcode 42809 p\(\) is a procedure
 CREATE FUNCTION err(i INT) RETURNS VOID LANGUAGE SQL AS 'SELECT p()'
 
 statement error pgcode 0A000 unimplemented: CALL usage inside a function definition

@@ -41,11 +41,11 @@ subtest disallow_udf_in_views_and_udf
 statement ok
 CREATE FUNCTION test_vf_f() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
 
-statement error pgcode 42883 pq: unknown function: test_vf_f\(\)\nHINT:.*intention was to use a user-defined function in the function body, which is currently not supported.
+statement ok
 CREATE FUNCTION test_vf_g() RETURNS STRING LANGUAGE SQL AS $$ SELECT test_vf_f() $$;
 
 statement ok
-CREATE FUNCTION test_vf_g() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
+CREATE FUNCTION test_vf_g_2() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
 
 statement error pgcode 42883 pq: unknown function: test_vf_f\(\)\nHINT:.*intention was to use a user-defined function in the view query, which is currently not supported.
 CREATE VIEW v AS SELECT test_vf_f();
@@ -139,7 +139,7 @@ CREATE FUNCTION rec(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT CASE i WHEN 0 THE
 statement ok
 CREATE FUNCTION other_udf() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 
-statement error pgcode 42883 unknown function: other_udf()
+statement ok
 CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT other_udf()'
 
 subtest end

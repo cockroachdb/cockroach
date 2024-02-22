@@ -97,17 +97,16 @@ CREATE FUNCTION f_in_udf() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 let $fn_oid
 SELECT oid FROM pg_catalog.pg_proc WHERE proname = 'f_in_udf'
 
-# TODO(chengxiong,mgartner): Fix this test when we enable support of calling UDFs from UDFs.
-statement error pgcode 42883 pq: function \d+ not found
+statement ok
 CREATE FUNCTION f_using_udf() RETURNS INT LANGUAGE SQL AS $$ SELECT [FUNCTION $fn_oid]() $$;
 
 # 814 is the OID of builtin function "length" with signature, and it's ok to
 # call it from a UDF.
 statement ok
-CREATE FUNCTION f_using_udf() RETURNS INT LANGUAGE SQL AS $$ SELECT [FUNCTION 814]('abc') $$;
+CREATE FUNCTION f_using_udf_2() RETURNS INT LANGUAGE SQL AS $$ SELECT [FUNCTION 814]('abc') $$;
 
 query I
-SELECT f_using_udf();
+SELECT f_using_udf_2();
 ----
 3
 
