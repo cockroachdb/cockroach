@@ -186,10 +186,7 @@ type Registry struct {
 func (r *Registry) UpdateJobWithTxn(
 	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, updateFunc UpdateFn,
 ) error {
-	job, err := r.LoadJobWithTxn(ctx, jobID, txn)
-	if err != nil {
-		return err
-	}
+	job := Job{registry: r, id: jobID}
 	return job.WithTxn(txn).Update(ctx, updateFunc)
 }
 
@@ -798,7 +795,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 	if err != nil {
 		return err
 	}
-	resumer, err := r.createResumer(j, r.settings)
+	resumer, err := r.createResumer(j)
 	if err != nil {
 		return err
 	}
@@ -1292,7 +1289,7 @@ func (r *Registry) getJobFn(
 	if err != nil {
 		return nil, nil, err
 	}
-	resumer, err := r.createResumer(job, r.settings)
+	resumer, err := r.createResumer(job)
 	if err != nil {
 		return job, nil, errors.Errorf("job %d is not controllable", id)
 	}
@@ -1312,15 +1309,12 @@ func (r *Registry) cancelRequested(ctx context.Context, txn isql.Txn, id jobspb.
 func (r *Registry) PauseRequested(
 	ctx context.Context, txn isql.Txn, id jobspb.JobID, reason string,
 ) error {
-	job, resumer, err := r.getJobFn(ctx, txn, id)
+	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
 	}
-	var onPauseRequested onPauseRequestFunc
-	if pr, ok := resumer.(PauseRequester); ok {
-		onPauseRequested = pr.OnPauseRequest
-	}
-	return job.WithTxn(txn).PauseRequestedWithFunc(ctx, onPauseRequested, reason)
+
+	return job.WithTxn(txn).PauseRequestedWithFunc(ctx, nil, reason)
 }
 
 // Succeeded marks the job with id as succeeded.
@@ -1450,17 +1444,6 @@ type registerOptions struct {
 	metrics metric.Struct
 }
 
-// PauseRequester is an extension of Resumer which allows job implementers to inject
-// logic during the transaction which moves a job to PauseRequested.
-type PauseRequester interface {
-	Resumer
-
-	// OnPauseRequest is called in the transaction that moves a job to PauseRequested.
-	// If an error is returned, the pause request will fail. execCtx is a
-	// sql.JobExecCtx.
-	OnPauseRequest(ctx context.Context, execCtx interface{}, txn isql.Txn, details *jobspb.Progress) error
-}
-
 // JobResultsReporter is an interface for reporting the results of the job execution.
 // Resumer implementations may also implement this interface if they wish to return
 // data to the user upon successful completion.
@@ -1546,8 +1529,16 @@ func RegisterConstructor(typ jobspb.Type, fn Constructor, opts ...RegisterOption
 	globalMu.options[typ] = resOpts
 }
 
-func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer, error) {
+func (r *Registry) createResumer(job *Job) (Resumer, error) {
 	payload := job.Payload()
+	fn, err := r.resumerConstructorForPayload(&payload)
+	if err != nil {
+		return nil, err
+	}
+	return fn(job, r.settings), nil
+}
+
+func (r *Registry) resumerConstructorForPayload(payload *jobspb.Payload) (Constructor, error) {
 	fn := func() Constructor {
 		globalMu.Lock()
 		defer globalMu.Unlock()
@@ -1558,9 +1549,11 @@ func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer,
 	}
 	if v, ok := r.creationKnobs.Load(payload.Type()); ok {
 		wrapper := v.(func(Resumer) Resumer)
-		return wrapper(fn(job, settings)), nil
+		return func(job *Job, settings *cluster.Settings) Resumer {
+			return wrapper(fn(job, settings))
+		}, nil
 	}
-	return fn(job, settings), nil
+	return fn, nil
 }
 
 // stepThroughStateMachine implements the state machine of the job lifecycle.

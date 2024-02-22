@@ -70,7 +70,7 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 	var runStats *RunStats
 	j := u.j
 	defer func() {
-		if retErr != nil {
+		if retErr != nil && !HasJobNotFoundError(retErr) {
 			retErr = errors.Wrapf(retErr, "job %d", j.id)
 			return
 		}
@@ -120,7 +120,7 @@ WHERE id = $1
 		return err
 	}
 	if row == nil {
-		return errors.Errorf("not found in system.jobs table")
+		return &JobNotFoundError{jobID: j.ID()}
 	}
 
 	if status, err = unmarshalStatus(row[0]); err != nil {
@@ -340,6 +340,80 @@ func (ju *JobUpdater) UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobM
 		HighWater: &highWater,
 	}
 	ju.UpdateProgress(md.Progress)
+	return nil
+}
+
+func (ju *JobUpdater) PauseRequested(
+	ctx context.Context, txn isql.Txn, md JobMetadata, reason string,
+) error {
+	return ju.PauseRequestedWithFunc(ctx, txn, md, nil /* fn */, reason)
+}
+
+func (ju *JobUpdater) PauseRequestedWithFunc(
+	ctx context.Context, txn isql.Txn, md JobMetadata, fn onPauseRequestFunc, reason string,
+) error {
+	if md.Status == StatusPauseRequested || md.Status == StatusPaused {
+		return nil
+	}
+	if md.Status != StatusPending && md.Status != StatusRunning && md.Status != StatusReverting {
+		return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
+	}
+	if fn != nil {
+		if err := fn(ctx, md, ju); err != nil {
+			return err
+		}
+	}
+	ju.UpdateStatus(StatusPauseRequested)
+	md.Payload.PauseReason = reason
+	ju.UpdatePayload(md.Payload)
+	log.Infof(ctx, "job %d: pause requested recorded with reason %s", md.ID, reason)
+	return nil
+}
+
+func (ju *JobUpdater) Unpaused(_ context.Context, md JobMetadata) error {
+	if md.Status == StatusRunning || md.Status == StatusReverting {
+		// Already resumed - do nothing.
+		return nil
+	}
+	if md.Status != StatusPaused {
+		return fmt.Errorf("job with status %s cannot be resumed", md.Status)
+	}
+	// We use the absence of error to determine what state we should
+	// resume into.
+	if md.Payload.FinalResumeError == nil {
+		ju.UpdateStatus(StatusRunning)
+	} else {
+		ju.UpdateStatus(StatusReverting)
+	}
+	return nil
+}
+
+func (ju *JobUpdater) CancelRequested(ctx context.Context, md JobMetadata) error {
+	return ju.CancelRequestedWithReason(ctx, md, errJobCanceled)
+}
+
+func (ju *JobUpdater) CancelRequestedWithReason(
+	ctx context.Context, md JobMetadata, reason error,
+) error {
+	if md.Payload.Noncancelable {
+		return errors.Newf("job %d: not cancelable", md.ID)
+	}
+	if md.Status == StatusCancelRequested || md.Status == StatusCanceled {
+		return nil
+	}
+	if md.Status != StatusPending && md.Status != StatusRunning && md.Status != StatusPaused {
+		return fmt.Errorf("job with status %s cannot be requested to be canceled", md.Status)
+	}
+	if md.Status == StatusPaused && md.Payload.FinalResumeError != nil {
+		decodedErr := errors.DecodeError(ctx, *md.Payload.FinalResumeError)
+		return errors.Wrapf(decodedErr, "job %d is paused and has non-nil FinalResumeError "+
+			"hence cannot be canceled and should be reverted", md.ID)
+	}
+	if !errors.Is(reason, errJobCanceled) {
+		md.Payload.Error = reason.Error()
+		ju.UpdatePayload(md.Payload)
+	}
+	ju.UpdateStatus(StatusCancelRequested)
 	return nil
 }
 

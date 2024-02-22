@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -375,22 +374,7 @@ func (u Updater) paused(ctx context.Context, fn func(context.Context, isql.Txn) 
 // resumes it.
 func (u Updater) Unpaused(ctx context.Context) error {
 	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status == StatusRunning || md.Status == StatusReverting {
-			// Already resumed - do nothing.
-			return nil
-		}
-		if md.Status != StatusPaused {
-			return fmt.Errorf("job with status %s cannot be resumed", md.Status)
-		}
-		// We use the absence of error to determine what state we should
-		// resume into.
-		if md.Payload.FinalResumeError == nil {
-			ju.UpdateStatus(StatusRunning)
-		} else {
-			ju.UpdateStatus(StatusReverting)
-		}
-		ju.UpdatePayload(md.Payload)
-		return nil
+		return ju.Unpaused(ctx, md)
 	})
 }
 
@@ -412,34 +396,19 @@ func (u Updater) CancelRequested(ctx context.Context) error {
 // StatusReverting.
 func (u Updater) CancelRequestedWithReason(ctx context.Context, reason error) error {
 	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Payload.Noncancelable {
-			return errors.Newf("job %d: not cancelable", md.ID)
-		}
-		if md.Status == StatusCancelRequested || md.Status == StatusCanceled {
-			return nil
-		}
-		if md.Status != StatusPending && md.Status != StatusRunning && md.Status != StatusPaused {
-			return fmt.Errorf("job with status %s cannot be requested to be canceled", md.Status)
-		}
-		if md.Status == StatusPaused && md.Payload.FinalResumeError != nil {
-			decodedErr := errors.DecodeError(ctx, *md.Payload.FinalResumeError)
-			return errors.Wrapf(decodedErr, "job %d is paused and has non-nil FinalResumeError "+
-				"hence cannot be canceled and should be reverted", md.ID)
-		}
-		if !errors.Is(reason, errJobCanceled) {
-			md.Payload.Error = reason.Error()
-			ju.UpdatePayload(md.Payload)
-		}
-		ju.UpdateStatus(StatusCancelRequested)
-		return nil
+		return ju.CancelRequestedWithReason(ctx, md, reason)
 	})
 }
 
 // onPauseRequestFunc is a function used to perform action on behalf of a job
 // implementation when a pause is requested.
-type onPauseRequestFunc func(
-	ctx context.Context, planHookState interface{}, txn isql.Txn, progress *jobspb.Progress,
-) error
+type onPauseRequestFunc func(ctx context.Context, md JobMetadata, ju *JobUpdater) error
+
+// PauseRequested is like PausedRequestedWithFunc but with no customer
+// job updater function.
+func (u Updater) PauseRequested(ctx context.Context, reason string) error {
+	return u.PauseRequestedWithFunc(ctx, nil /* fn */, reason)
+}
 
 // PauseRequestedWithFunc sets the status of the tracked job to pause-requested.
 // It does not directly pause the job; it expects the node that runs the job will
@@ -451,41 +420,8 @@ func (u Updater) PauseRequestedWithFunc(
 	ctx context.Context, fn onPauseRequestFunc, reason string,
 ) error {
 	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status == StatusPauseRequested || md.Status == StatusPaused {
-			return nil
-		}
-		if md.Status != StatusPending && md.Status != StatusRunning && md.Status != StatusReverting {
-			return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
-		}
-		if fn != nil {
-			execCtx, cleanup := u.j.registry.execCtx(ctx, "pause request", md.Payload.UsernameProto.Decode())
-			defer cleanup()
-			if err := fn(ctx, execCtx, txn, md.Progress); err != nil {
-				return err
-			}
-			ju.UpdateProgress(md.Progress)
-		}
-		ju.UpdateStatus(StatusPauseRequested)
-		md.Payload.PauseReason = reason
-		ju.UpdatePayload(md.Payload)
-		log.Infof(ctx, "job %d: pause requested recorded with reason %s", md.ID, reason)
-		return nil
+		return ju.PauseRequestedWithFunc(ctx, txn, md, fn, reason)
 	})
-}
-
-// PauseRequested is like PausedRequestedWithFunc but uses the default
-// implementation of OnPauseRequested if the underlying job is a
-// PauseRequester.
-func (u Updater) PauseRequested(ctx context.Context, reason string) error {
-	resumer, err := u.j.registry.createResumer(u.j, u.j.registry.settings)
-	if err != nil {
-		return err
-	}
-	var fn onPauseRequestFunc
-	if pr, ok := resumer.(PauseRequester); ok {
-		fn = pr.OnPauseRequest
-	}
-	return u.PauseRequestedWithFunc(ctx, fn, reason)
 }
 
 // reverted sets the status of the tracked job to reverted.

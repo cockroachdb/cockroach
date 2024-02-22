@@ -61,6 +61,9 @@ exp,benchmark
 23,Grant/grant_all_on_3_tables
 19,GrantRole/grant_1_role
 25,GrantRole/grant_2_roles
+6,Jobs/cancel_job
+8,Jobs/pause_job
+6,Jobs/resume_job
 3,Jobs/show_job
 3,ORMQueries/activerecord_type_introspection_query
 0,ORMQueries/asyncpg_types
