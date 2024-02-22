@@ -251,7 +251,7 @@ func ingestWithRetries(
 		// permanent job error in which case we pause the job.
 		// We also stop the job when this is a context cancellation error
 		// as requested pause or cancel will trigger a context cancellation.
-		if jobs.IsPermanentJobError(err) || errors.Is(err, context.Canceled) {
+		if jobs.IsPermanentJobError(err) || ctx.Err() != nil {
 			break
 		}
 		// If we're retrying repeatedly, update the status to reflect the error we
