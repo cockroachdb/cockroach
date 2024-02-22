@@ -2450,8 +2450,10 @@ message BarrierRequest {
   // caller can detect any unexpected range changes.
   //
   // When enabled, the barrier request can no longer span multiple ranges, and
-  // will instead return RangeKeyMismatchError. The caller must be prepared to
-  // handle this.
+  // will instead return an error. The caller must be prepared to handle this.
+  // Note that this does not return RangeKeyMismatchError in this case, and does
+  // not use the isUnsplittable flag, since this prevents the DistSender from
+  // refreshing its range cache.
   //
   // NB: This field was added in a patch release. Nodes prior to 24.1 are not
   // guaranteed to support it, returning a zero LeaseAppliedIndex instead.

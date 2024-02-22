@@ -191,13 +191,10 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 	// seems very unlikely, but it doesn't really cost us anything.
 	isV24_1 := tp.r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start)
 
-	// Execute a Barrier on the leaseholder, and obtain its LAI. Error out on any
-	// range changes (e.g. splits/merges) that we haven't applied yet.
+	// Execute a Barrier on the leaseholder, and obtain its LAI. This will error
+	// on any range changes (e.g. splits/merges) that we haven't applied yet.
 	lai, desc, err := tp.r.store.db.BarrierWithLAI(ctx, tp.span.Key, tp.span.EndKey)
 	if err != nil {
-		if errors.HasType(err, &kvpb.RangeKeyMismatchError{}) {
-			return errors.Wrap(err, "range barrier failed, range split")
-		}
 		return errors.Wrap(err, "range barrier failed")
 	}
 	if lai == 0 {

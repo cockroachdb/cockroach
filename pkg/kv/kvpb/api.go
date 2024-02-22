@@ -656,18 +656,24 @@ func (r *QueryResolvedTimestampResponse) combine(
 var _ combinable = &QueryResolvedTimestampResponse{}
 
 // combine implements the combinable interface.
-func (r *BarrierResponse) combine(_ context.Context, c combinable, _ *BatchRequest) error {
+func (r *BarrierResponse) combine(ctx context.Context, c combinable, ba *BatchRequest) error {
 	otherR := c.(*BarrierResponse)
 	if r != nil {
 		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
 			return err
 		}
 		r.Timestamp.Forward(otherR.Timestamp)
-		if r.LeaseAppliedIndex != 0 || otherR.LeaseAppliedIndex != 0 {
-			return errors.AssertionFailedf("can't combine BarrierResponses with LeaseAppliedIndex")
-		}
-		if r.RangeDesc.NextReplicaID != 0 || otherR.RangeDesc.NextReplicaID != 0 {
-			return errors.AssertionFailedf("can't combine BarrierResponses with RangeDesc")
+		if r.RangeDesc.RangeID == 0 && otherR.RangeDesc.RangeID == 0 {
+			// WithLeaseAppliedIndex == false.
+		} else if r.RangeDesc.RangeID == otherR.RangeDesc.RangeID {
+			// WithLeaseAppliedIndex == true and hit same range.
+			if otherR.LeaseAppliedIndex > r.LeaseAppliedIndex {
+				r.LeaseAppliedIndex = otherR.LeaseAppliedIndex
+				r.RangeDesc = otherR.RangeDesc
+			}
+		} else {
+			return errors.Errorf("can't use barrier across range boundary r%d and r%d",
+				r.RangeDesc.RangeID, otherR.RangeDesc.RangeID)
 		}
 	}
 	return nil
@@ -1774,11 +1780,11 @@ func (*QueryResolvedTimestampRequest) flags() flag {
 	return isRead | isRange | requiresClosedTSOlderThanStorageSnapshot
 }
 func (r *BarrierRequest) flags() flag {
-	flags := isWrite | isRange | isAlone
-	if r.WithLeaseAppliedIndex {
-		flags |= isUnsplittable // the LAI is only valid for a single range
-	}
-	return flags
+	// NB: we don't set isUnsplittable on WithLeaseAppliedIndex, because this
+	// prevents the DistSender from refreshing its range cache. Instead, we
+	// optimistically split it anyway, and error out when combining responses from
+	// multiple ranges.
+	return isWrite | isRange | isAlone
 }
 func (*IsSpanEmptyRequest) flags() flag { return isRead | isRange }
 

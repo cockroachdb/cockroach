@@ -906,7 +906,7 @@ func (db *DB) Barrier(ctx context.Context, begin, end interface{}) (hlc.Timestam
 
 // BarrierWithLAI is like Barrier, but also returns the lease applied index and
 // range descriptor at which the barrier was applied. In this case, the barrier
-// can't span multiple ranges, otherwise a RangeKeyMismatchError is returned.
+// can't span multiple ranges, otherwise an error is returned.
 //
 // NB: the protocol support for this was added in a patch release, and is not
 // guaranteed to be present with nodes prior to 24.1. In this case, the request

@@ -118,11 +118,10 @@ func TestBarrier(t *testing.T) {
 			}
 			respI, pErr := kv.SendWrapped(ctx, sender, &req)
 
-			// WithLeaseAppliedIndex should return RangeKeyMismatchError when across
-			// multiple ranges.
+			// WithLeaseAppliedIndex should error when across multiple ranges.
 			if withLAI && crossRange {
 				require.Error(t, pErr.GoError())
-				require.IsType(t, &kvpb.RangeKeyMismatchError{}, pErr.GoError())
+				require.ErrorContains(t, pErr.GoError(), "can't use barrier across range boundary")
 				return
 			}
 

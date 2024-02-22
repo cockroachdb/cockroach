@@ -710,7 +710,7 @@ func (v *validator) processOp(op Operation) {
 	case *BarrierOperation:
 		execTimestampStrictlyOptional = true
 		if op.Barrier.WithLeaseAppliedIndex &&
-			resultHasErrorType(t.Result, &kvpb.RangeKeyMismatchError{}) {
+			resultIsErrorStr(t.Result, "can't use barrier across range boundary") {
 			// Barriers requesting LAIs can't span ranges. The generator will
 			// optimistically try to fit the barrier inside one of the current ranges,
 			// but this may race with a split, so we ignore the error in this case and
