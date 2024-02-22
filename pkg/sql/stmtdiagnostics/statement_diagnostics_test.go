@@ -82,7 +82,15 @@ func TestDiagnosticsRequest(t *testing.T) {
 		require.False(t, diagnosticsID.Valid) // diagnosticsID should be NULL
 	}
 	checkCompleted := func(reqID int64) {
-		completed, diagnosticsID := isCompleted(reqID)
+		var completed bool
+		var diagnosticsID gosql.NullInt64
+		testutils.SucceedsSoon(t, func() error {
+			completed, diagnosticsID = isCompleted(reqID)
+			if !completed {
+				return errors.New("request not completed")
+			}
+			return nil
+		})
 		require.True(t, completed)
 		require.True(t, diagnosticsID.Valid)
 	}
