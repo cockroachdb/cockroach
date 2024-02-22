@@ -108,7 +108,14 @@ func alterChangefeedPlanHook(
 
 		jobPayload := job.Payload()
 
-		if err := jobsauth.Authorize(ctx, p, jobID, &jobPayload, jobsauth.ControlAccess); err != nil {
+		globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(ctx, p)
+		if err != nil {
+			return err
+		}
+		err = jobsauth.Authorize(
+			ctx, p, jobID, &jobPayload, jobsauth.ControlAccess, globalPrivileges,
+		)
+		if err != nil {
 			return err
 		}
 

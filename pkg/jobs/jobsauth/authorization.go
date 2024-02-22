@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 )
 
 // An AccessLevel is used to indicate how strict an authorization check should
@@ -80,6 +79,32 @@ type AuthorizationAccessor interface {
 	User() username.SQLUsername
 }
 
+// GlobalJobPrivileges is used in conjunction with GetGlobalJobPrivileges to
+// avoid unnecessary work in Authorize.
+type GlobalJobPrivileges struct {
+	// hasControl and hasView indicate whether the current user has the global
+	// CONTROLJOB and VIEWJOB privileges respectively.
+	hasControl, hasView bool
+}
+
+// GetGlobalJobPrivileges is a helper used to check whether the current user
+// has the global CONTROLJOB and VIEWJOB privileges respectively. It is separate
+// from Authorize so that it can be called once, and its result repeatedly
+// passed to Authorize.
+func GetGlobalJobPrivileges(
+	ctx context.Context, a AuthorizationAccessor,
+) (GlobalJobPrivileges, error) {
+	hasControlJob, err := a.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CONTROLJOB)
+	if err != nil {
+		return GlobalJobPrivileges{}, err
+	}
+	hasViewJob, err := a.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWJOB)
+	if err != nil {
+		return GlobalJobPrivileges{}, err
+	}
+	return GlobalJobPrivileges{hasControl: hasControlJob, hasView: hasViewJob}, nil
+}
+
 // Authorize returns nil if the user is authorized to access the job.
 // If the user is not authorized, then a pgcode.InsufficientPrivilege
 // error will be returned.
@@ -98,6 +123,7 @@ func Authorize(
 	jobID jobspb.JobID,
 	payload *jobspb.Payload,
 	accessLevel AccessLevel,
+	global GlobalJobPrivileges,
 ) error {
 	userIsAdmin, err := a.HasAdminRole(ctx)
 	if err != nil {
@@ -107,22 +133,10 @@ func Authorize(
 		return nil
 	}
 
-	hasControlJob, err := a.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CONTROLJOB)
-	if err != nil {
-		return err
-	}
-
 	jobOwnerUser := payload.UsernameProto.Decode()
 
 	if accessLevel == ViewAccess {
-		if a.User() == jobOwnerUser || hasControlJob {
-			return nil
-		}
-		hasViewJob, err := a.HasPrivilege(ctx, &syntheticprivilege.GlobalPrivilege{}, privilege.VIEWJOB, a.User())
-		if err != nil {
-			return err
-		}
-		if hasViewJob {
+		if global.hasControl || global.hasView || a.User() == jobOwnerUser {
 			return nil
 		}
 	}
@@ -135,7 +149,7 @@ func Authorize(
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only admins can control jobs owned by other admins")
 	}
-	if hasControlJob {
+	if global.hasControl {
 		return nil
 	}
 

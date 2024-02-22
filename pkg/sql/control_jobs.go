@@ -47,6 +47,10 @@ func (n *controlJobsNode) startExec(params runParams) error {
 	}
 
 	reg := params.p.ExecCfg().JobRegistry
+	globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(params.ctx, params.p)
+	if err != nil {
+		return err
+	}
 	for {
 		ok, err := n.rows.Next(params)
 		if err != nil {
@@ -73,7 +77,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 
 		payload := job.Payload()
 		if err := jobsauth.Authorize(params.ctx, params.p,
-			job.ID(), &payload, jobsauth.ControlAccess); err != nil {
+			job.ID(), &payload, jobsauth.ControlAccess, globalPrivileges); err != nil {
 			return err
 		}
 		ctrl := job.WithTxn(params.p.InternalSQLTxn())
