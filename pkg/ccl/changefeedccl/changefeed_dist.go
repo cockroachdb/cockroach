@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -239,6 +240,9 @@ func startDistChangefeed(
 	if err != nil {
 		return err
 	}
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.Infof(ctx, "tracked spans: %s", trackedSpans)
+	}
 	localState.trackedSpans = trackedSpans
 
 	// Changefeed flows handle transactional consistency themselves.
@@ -355,6 +359,9 @@ func makePlan(
 		if err != nil {
 			return nil, nil, err
 		}
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.Infof(ctx, "spans returned by DistSQL: %s", spanPartitions)
+		}
 
 		cfKnobs := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed
 		if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil &&
@@ -375,6 +382,9 @@ func makePlan(
 			// Currently, balanced range distribution supported only in export mode.
 			// TODO(yevgeniy): Consider lifting this restriction.
 			if scanType == changefeedbase.OnlyInitialScan {
+				if log.ExpensiveLogEnabled(ctx, 2) {
+					log.Infof(ctx, "rebalancing ranges using balanced simple distribution")
+				}
 				sender := execCtx.ExecCfg().DB.NonTransactionalSender()
 				distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 
@@ -382,6 +392,9 @@ func makePlan(
 					ctx, &distResolver{distSender}, rebalanceThreshold.Get(sv), spanPartitions)
 				if err != nil {
 					return nil, nil, err
+				}
+				if log.ExpensiveLogEnabled(ctx, 2) {
+					log.Infof(ctx, "spans after balanced simple distribution rebalancing: %s", spanPartitions)
 				}
 			}
 		}
@@ -400,6 +413,9 @@ func makePlan(
 
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 		for i, sp := range spanPartitions {
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.Infof(ctx, "watched spans for node %d: %s", sp.SQLInstanceID, sp)
+			}
 			watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
 			for watchIdx, nodeSpan := range sp.Spans {
 				initialResolved := initialHighWater
