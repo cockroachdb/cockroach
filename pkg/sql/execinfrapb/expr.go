@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -115,19 +114,8 @@ func processExpression(
 		// Type checking must succeed by now.
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "%s", expr)
 	}
+	return typedExpr, err
 
-	// Pre-evaluate constant expressions. This is necessary to avoid repeatedly
-	// re-evaluating constant values every time the expression is applied.
-	//
-	// TODO(solon): It would be preferable to enhance our expression serialization
-	// format so this wouldn't be necessary.
-	c := normalize.MakeConstantEvalVisitor(ctx, evalCtx)
-	expr, _ = tree.WalkExpr(&c, typedExpr)
-	if err := c.Err(); err != nil {
-		return nil, err
-	}
-
-	return expr.(tree.TypedExpr), nil
 }
 
 // ExprHelper implements the common logic around evaluating an expression that
