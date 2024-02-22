@@ -29,6 +29,11 @@ type Metrics struct {
 	ReadBytes *metric.Counter
 	// WriteBytes counts the bytes written to cloud storage.
 	WriteBytes *metric.Counter
+
+	// OpenReaders is the number of current open cloud readers.
+	OpenReaders *metric.Gauge
+	// OpenReaders is the number of current open cloud writers.
+	OpenWriters *metric.Gauge
 }
 
 // MakeMetrics returns a new instance of Metrics.
@@ -47,9 +52,25 @@ func MakeMetrics() metric.Struct {
 		Unit:        metric.Unit_BYTES,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
+	cloudOpenReaders := metric.Metadata{
+		Name:        "cloud.open_readers",
+		Help:        "Currently open readers for cloud IO",
+		Measurement: "Readers",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+	cloudOpenWriters := metric.Metadata{
+		Name:        "cloud.open_writers",
+		Help:        "Currently open writers for cloud IO",
+		Measurement: "Writers",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
 	return &Metrics{
-		ReadBytes:  metric.NewCounter(cloudReadBytes),
-		WriteBytes: metric.NewCounter(cloudWriteBytes),
+		ReadBytes:   metric.NewCounter(cloudReadBytes),
+		WriteBytes:  metric.NewCounter(cloudWriteBytes),
+		OpenReaders: metric.NewGauge(cloudOpenReaders),
+		OpenWriters: metric.NewGauge(cloudOpenWriters),
 	}
 }
 
@@ -65,6 +86,14 @@ type MetricsRecorder interface {
 	RecordReadBytes(int64)
 	// RecordWriteBytes records the bytes written.
 	RecordWriteBytes(int64)
+	// RecordReaderOpened records a reader opening.
+	RecordReaderOpened()
+	// RecordReaderClosed records a reader closing.
+	RecordReaderClosed()
+	// RecordWriterOpened records a writer opening.
+	RecordWriterOpened()
+	// RecordWriterClosed records a writer closing.
+	RecordWriterClosed()
 	// Metrics returns the underlying Metrics struct.
 	Metrics() *Metrics
 }
@@ -87,6 +116,38 @@ func (m *Metrics) RecordWriteBytes(bytes int64) {
 	m.WriteBytes.Inc(bytes)
 }
 
+// RecordReaderOpened implements the MetricsRecorder interface.
+func (m *Metrics) RecordReaderOpened() {
+	if m == nil {
+		return
+	}
+	m.OpenReaders.Inc(1)
+}
+
+// RecordReaderClosed implements the MetricsRecorder interface.
+func (m *Metrics) RecordReaderClosed() {
+	if m == nil {
+		return
+	}
+	m.OpenReaders.Dec(1)
+}
+
+// RecordWriterOpened implements the MetricsRecorder interface.
+func (m *Metrics) RecordWriterOpened() {
+	if m == nil {
+		return
+	}
+	m.OpenWriters.Inc(1)
+}
+
+// RecordWriterClosed implements the MetricsRecorder interface.
+func (m *Metrics) RecordWriterClosed() {
+	if m == nil {
+		return
+	}
+	m.OpenWriters.Dec(1)
+}
+
 // Metrics implements the MetricsRecorder interface.
 func (m *Metrics) Metrics() *Metrics {
 	return m
@@ -104,6 +165,7 @@ func newMetricsReadWriter(m MetricsRecorder) ReadWriterInterceptor {
 func (m *metricsReadWriter) Reader(
 	_ context.Context, _ ExternalStorage, r ioctx.ReadCloserCtx,
 ) ioctx.ReadCloserCtx {
+	m.metricsRecorder.RecordReaderOpened()
 	return &metricsReader{
 		inner:           r,
 		metricsRecorder: m.metricsRecorder,
@@ -114,6 +176,7 @@ func (m *metricsReadWriter) Reader(
 func (m *metricsReadWriter) Writer(
 	_ context.Context, _ ExternalStorage, w io.WriteCloser,
 ) io.WriteCloser {
+	m.metricsRecorder.RecordWriterOpened()
 	return &metricsWriter{
 		w:               w,
 		metricsRecorder: m.metricsRecorder,
@@ -136,6 +199,7 @@ func (mr *metricsReader) Read(ctx context.Context, p []byte) (int, error) {
 
 // Close implements the ioctx.ReadCloserCtx interface.
 func (mr *metricsReader) Close(ctx context.Context) error {
+	mr.metricsRecorder.RecordReaderClosed()
 	return mr.inner.Close(ctx)
 }
 
@@ -153,6 +217,7 @@ func (mw *metricsWriter) Write(p []byte) (int, error) {
 
 // Close implements the WriteCloser interface.
 func (mw *metricsWriter) Close() error {
+	mw.metricsRecorder.RecordWriterClosed()
 	return mw.w.Close()
 }
 
