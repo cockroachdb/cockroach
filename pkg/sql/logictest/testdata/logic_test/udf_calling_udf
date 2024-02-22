@@ -1,0 +1,20 @@
+statement ok
+CREATE FUNCTION lower_hello() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
+
+statement ok
+CREATE FUNCTION upper_hello() RETURNS STRING LANGUAGE SQL AS $$ SELECT upper(lower_hello()) $$;
+
+statement ok
+CREATE FUNCTION nested_udf_for_from() RETURNS STRING LANGUAGE SQL AS $$ SELECT * FROM upper_hello()$$;
+
+statement ok
+CREATE FUNCTION concat_hello() RETURNS STRING LANGUAGE SQL AS $$ SELECT upper(lower_hello()) || upper_hello() || lower_hello() $$;
+
+query TTTT
+SELECT upper_hello(), nested_udf_for_from(), lower_hello(), concat_hello()
+----
+HELLO  HELLO  hello  HELLOHELLOhello
+
+# Validate recursion doesn't work today.
+statement error pgcode 42883 unknown function: recursion_check\(\)
+CREATE FUNCTION recursion_check() RETURNS STRING  LANGUAGE SQL AS $$ SELECT recursion_check() $$;

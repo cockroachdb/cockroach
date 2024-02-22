@@ -50,11 +50,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.Name.ObjectNamePrefix = resName
 
-	// TODO(#88198): this is a hack to disallow UDF usage in UDF and we will
-	// need to lift this hack when we plan to allow it.
-	preFuncResolver := b.semaCtx.FunctionResolver
-	b.semaCtx.FunctionResolver = nil
-
 	b.insideFuncDef = true
 	b.trackSchemaDeps = true
 	// Make sure datasource names are qualified.
@@ -70,7 +65,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		b.evalCtx.Annotations = oldEvalCtxAnn
 		b.semaCtx.Annotations = oldSemaCtxAnn
 
-		b.semaCtx.FunctionResolver = preFuncResolver
 		switch recErr := recover().(type) {
 		case nil:
 			// No error.
