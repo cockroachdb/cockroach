@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -22,10 +23,25 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// getSingleRegionClause returns an extra clause if the system database is in
+// a single region to optimize scans on the system.leases table.
+func getSingleRegionClause(isMultiRegion bool) (query string, queryParam []byte) {
+	query, queryParam = "", nil
+	if !isMultiRegion {
+		query = " AND crdb_region=$2"
+		queryParam = enum.One
+	}
+	return query, queryParam
+}
+
 // CountLeases returns the number of unexpired leases for a number of descriptors
 // each at a particular version at a particular time.
 func CountLeases(
-	ctx context.Context, executor isql.Executor, versions []IDVersion, at hlc.Timestamp,
+	ctx context.Context,
+	executor isql.Executor,
+	isMultiRegion bool,
+	versions []IDVersion,
+	at hlc.Timestamp,
 ) (int, error) {
 	var whereClauses []string
 	for _, t := range versions {
@@ -35,14 +51,16 @@ func CountLeases(
 		)
 	}
 
+	singleRegionClause, singleRegionParam := getSingleRegionClause(isMultiRegion)
 	stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE `,
 		at.AsOfSystemTime()) +
-		strings.Join(whereClauses, " OR ")
+		strings.Join(whereClauses, " OR ") +
+		singleRegionClause
 
 	values, err := executor.QueryRowEx(
 		ctx, "count-leases", nil, /* txn */
 		sessiondata.RootUserSessionDataOverride,
-		stmt, at.GoTime(),
+		stmt, at.GoTime(), singleRegionParam,
 	)
 	if err != nil {
 		return 0, err
