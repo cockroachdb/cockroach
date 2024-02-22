@@ -1495,12 +1495,15 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		return resp.reply, resp.pErr
 	}
 
-	// The batch spans ranges (according to our cached range descriptors).
-	// Verify that this is ok.
-	// TODO(tschottdorf): we should have a mechanism for discovering range
-	// merges (descriptor staleness will mostly go unnoticed), or we'll be
-	// turning single-range queries into multi-range queries for no good
-	// reason.
+	// The batch spans ranges (according to our cached range descriptors). Either
+	// the client has an outdated view of the range descriptor and didn't see a
+	// split, or we have an outdated view of the range descriptor and didn't see a
+	// merge. Evict the descriptor in case it's the latter. This case should be
+	// fairly rare.
+	//
+	// TODO(tschottdorf): we should have a mechanism for discovering range merges
+	// (descriptor staleness will mostly go unnoticed), or we'll be evicting the
+	// cache for no good reason.
 	if ba.IsUnsplittable() {
 		mismatch := kvpb.NewRangeKeyMismatchErrorWithCTPolicy(ctx,
 			rs.Key.AsRawKey(),
@@ -1509,6 +1512,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			nil, /* lease */
 			ri.ClosedTimestampPolicy(),
 		)
+		// Evict the cached descriptor after constructing the error.
+		tok := ri.Token()
+		tok.Evict(ctx)
 		return nil, kvpb.NewError(mismatch)
 	}
 	// If there's no transaction and ba spans ranges, possibly re-run as part of
