@@ -1009,12 +1009,24 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 	})
 }
 
+// updateNodeRangeCount updates the internal counter of the total ranges across
+// all stores. This value is used to make a decision on whether the node should
+// use expiration leases (see Replica.shouldUseExpirationLeaseRLocked).
+func (n *Node) updateNodeRangeCount() {
+	var count int64
+	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
+		count += store.Metrics().RangeCount.Value()
+		return nil
+	})
+	n.storeCfg.RangeCount.Store(count)
+}
+
 // computeMetricsPeriodically instructs each store to compute the value of
 // complicated metrics.
 func (n *Node) computeMetricsPeriodically(
 	ctx context.Context, storeToMetrics map[*kvserver.Store]*storage.MetricsForInterval, tick int,
 ) error {
-	return n.stores.VisitStores(func(store *kvserver.Store) error {
+	err := n.stores.VisitStores(func(store *kvserver.Store) error {
 		if newMetrics, err := store.ComputeMetricsPeriodically(ctx, storeToMetrics[store], tick); err != nil {
 			log.Warningf(ctx, "%s: unable to compute metrics: %s", store, err)
 		} else {
@@ -1031,6 +1043,8 @@ func (n *Node) computeMetricsPeriodically(
 		}
 		return nil
 	})
+	n.updateNodeRangeCount()
+	return err
 }
 
 // UpdateIOThreshold relays the supplied IOThreshold to the same method on the
