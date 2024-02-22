@@ -375,7 +375,13 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 		// that it won't get wedged.
 		err := timeutil.RunWithTimeout(ctx, "pushtxns barrier", time.Minute, a.pusher.Barrier)
 		if err != nil {
-			return err
+			// If the barrier fails, let's do best-effort intent resolution anyway.
+			// If the intents get resolved we might not need the barrier at all.
+			//
+			// TODO(erikgrinaker): verify that this is actually safe for an ambiguous
+			// abort. There doesn't seem to be any protection for this when resolving
+			// intents.
+			return errors.Join(err, a.pusher.ResolveIntents(ctx, intentsToCleanup))
 		}
 	}
 
