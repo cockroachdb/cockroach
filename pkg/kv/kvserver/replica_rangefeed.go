@@ -191,13 +191,32 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 	// seems very unlikely, but it doesn't really cost us anything.
 	isV24_1 := tp.r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start)
 
+	// The DistSender may have a stale range descriptor, e.g. following a merge.
+	// Unsplittable requests don't trigger a refresh, so we have to attempt to
+	// refresh it by sending a Get request to the start key. We eagerly do this
+	// instead of waiting for a RangeKeyMismatchError, to avoid spurious errors.
+	//
+	// TODO(erikgrinaker): the DistSender should refresh its cache instead.
+	if _, err := tp.r.store.db.Get(ctx, tp.span.Key); err != nil {
+		return errors.Wrap(err, "range barrier failed: range descriptor refresh failed")
+	}
+
 	// Execute a Barrier on the leaseholder, and obtain its LAI. Error out on any
 	// range changes (e.g. splits/merges) that we haven't applied yet.
 	lai, desc, err := tp.r.store.db.BarrierWithLAI(ctx, tp.span.Key, tp.span.EndKey)
-	if err != nil {
-		if errors.HasType(err, &kvpb.RangeKeyMismatchError{}) {
-			return errors.Wrap(err, "range barrier failed, range split")
+	if err != nil && errors.HasType(err, &kvpb.RangeKeyMismatchError{}) {
+		// The DistSender may have a stale range descriptor, e.g. following a merge.
+		// Failed unsplittable requests don't trigger a refresh, so we have to
+		// attempt to refresh it by sending a Get request to the start key.
+		//
+		// TODO(erikgrinaker): the DistSender should refresh its cache instead.
+		if _, err := tp.r.store.db.Get(ctx, tp.span.Key); err != nil {
+			return errors.Wrap(err, "range barrier failed: range descriptor refresh failed")
 		}
+		// Retry the Barrier.
+		lai, desc, err = tp.r.store.db.BarrierWithLAI(ctx, tp.span.Key, tp.span.EndKey)
+	}
+	if err != nil {
 		return errors.Wrap(err, "range barrier failed")
 	}
 	if lai == 0 {
