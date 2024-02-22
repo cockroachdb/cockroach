@@ -339,6 +339,11 @@ func getJobTelemetryMetricsArray() [jobspb.NumJobTypes]*JobTelemetryMetrics {
 	return metrics
 }
 
-// TelemetryMetrics contains telemetry metrics for different
-// job types.
-var TelemetryMetrics = getJobTelemetryMetricsArray()
+var (
+	// TelemetryMetrics contains telemetry metrics for different
+	// job types.
+	TelemetryMetrics = getJobTelemetryMetricsArray()
+	// AbandonedInfoRowsFound is how many times our cleanup
+	// routine found abandoned rows.
+	AbandonedInfoRowsFound = telemetry.GetCounterOnce("job.registry.cleanup_found_abandoned_rows")
+)

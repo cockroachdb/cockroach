@@ -608,6 +608,7 @@ func init() {
 
 	clientCmds := []*cobra.Command{
 		debugJobTraceFromClusterCmd,
+		debugJobCleanupInfoRows,
 		debugGossipValuesCmd,
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
@@ -728,6 +729,7 @@ func init() {
 		sqlShellCmd,
 		demoCmd,
 		debugJobTraceFromClusterCmd,
+		debugJobCleanupInfoRows,
 		doctorExamineClusterCmd,
 		doctorExamineFallbackClusterCmd,
 		doctorRecreateClusterCmd,

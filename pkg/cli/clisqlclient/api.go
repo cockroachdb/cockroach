@@ -29,6 +29,10 @@ type Conn interface {
 	// Exec executes a statement.
 	Exec(ctx context.Context, query string, args ...interface{}) error
 
+	// ExecWithRowsAffected is like Exec but returns the number of
+	// affected rows.
+	ExecWithRowsAffected(ctx context.Context, query string, args ...interface{}) (int64, error)
+
 	// Query returns one or more SQL statements and returns the
 	// corresponding result set(s).
 	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)
@@ -199,6 +203,7 @@ type TxBoundConn interface {
 type DriverConn interface {
 	Query(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
 	Exec(ctx context.Context, query string, args ...interface{}) error
+	ExecWithRowsAffected(ctx context.Context, query string, args ...interface{}) (int64, error)
 	CopyFrom(ctx context.Context, reader io.Reader, query string) (int64, error)
 	CopyTo(ctx context.Context, w io.Writer, query string) error
 }
@@ -218,6 +223,12 @@ func (d *driverConnAdapter) Query(
 
 func (d *driverConnAdapter) Exec(ctx context.Context, query string, args ...interface{}) error {
 	return d.c.Exec(ctx, query, args...)
+}
+
+func (d *driverConnAdapter) ExecWithRowsAffected(
+	ctx context.Context, query string, args ...interface{},
+) (int64, error) {
+	return d.c.ExecWithRowsAffected(ctx, query, args...)
 }
 
 func (d *driverConnAdapter) CopyFrom(
