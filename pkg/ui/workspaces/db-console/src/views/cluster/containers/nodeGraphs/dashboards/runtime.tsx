@@ -139,6 +139,23 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="GC Assist Time"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`Estimated total CPU time user goroutines spent performing GC tasks on processors
+        ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Duration} label="gc assist time">
+        <Metric
+          name="cr.node.sys.gc.assist.ns"
+          title="GC Assist Time"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="CPU Time"
       sources={nodeSources}
       tenantSource={tenantSource}
