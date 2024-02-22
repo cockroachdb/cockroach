@@ -8,3 +8,16 @@ WITH cte AS (EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM t) SELE
 
 statement ok
 WITH cte AS (EXPORT INTO PARQUET 'nodelocal://1/export1/' FROM SELECT * FROM t) SELECT filename FROM cte;
+
+# Regression test for #115290. Correctly handle the case where the Export's
+# input expression has NOT NULL columns that are not part of the presentation of
+# the expression.
+statement ok
+CREATE TABLE t115290 (
+  id INT PRIMARY KEY,
+  a INT NOT NULL,
+  b INT
+);
+
+statement ok
+EXPORT INTO PARQUET 'nodelocal://1/export1/' FROM SELECT b FROM t115290 ORDER BY a;
