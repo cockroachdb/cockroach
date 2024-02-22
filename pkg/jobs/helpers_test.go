@@ -19,9 +19,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// OnPauseRequestFunc forwards the definition for use in tests.
-type OnPauseRequestFunc = onPauseRequestFunc
-
 func (r *Registry) CancelRequested(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
 	return r.cancelRequested(ctx, txn, id)
 }
