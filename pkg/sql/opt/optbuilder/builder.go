@@ -94,11 +94,14 @@ type Builder struct {
 	factory *norm.Factory
 	stmt    tree.Statement
 
-	ctx        context.Context
-	semaCtx    *tree.SemaContext
-	evalCtx    *eval.Context
-	catalog    cat.Catalog
-	scopeAlloc []scope
+	ctx context.Context
+	// verboseTracing is set if expensive logging is enabled on ctx. If false,
+	// then some work can be omitted.
+	verboseTracing bool
+	semaCtx        *tree.SemaContext
+	evalCtx        *eval.Context
+	catalog        cat.Catalog
+	scopeAlloc     []scope
 
 	// stmtTree tracks the hierarchy of statements to ensure that multiple
 	// modifications to the same table cannot corrupt indexes (see #70731).
@@ -189,12 +192,13 @@ func New(
 	stmt tree.Statement,
 ) *Builder {
 	return &Builder{
-		factory: factory,
-		stmt:    stmt,
-		ctx:     ctx,
-		semaCtx: semaCtx,
-		evalCtx: evalCtx,
-		catalog: catalog,
+		factory:        factory,
+		stmt:           stmt,
+		ctx:            ctx,
+		verboseTracing: log.ExpensiveLogEnabled(ctx, 2),
+		semaCtx:        semaCtx,
+		evalCtx:        evalCtx,
+		catalog:        catalog,
 	}
 }
 

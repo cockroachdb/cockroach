@@ -729,6 +729,10 @@ type UDFDefinition struct {
 	// at the same position in Body.
 	BodyProps []*physical.Required
 
+	// BodyStmts, if set, is the string representation of each statement in
+	// Body. It is only populated when verbose tracing is enabled.
+	BodyStmts []string
+
 	// ExceptionBlock contains information needed for exception-handling when the
 	// body of this routine returns an error. It can be unset.
 	ExceptionBlock *ExceptionBlock

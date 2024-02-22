@@ -135,7 +135,7 @@ func (u *updateNode) startExec(params runParams) error {
 			colinfo.ColTypeInfoFromResCols(u.columns),
 		)
 	}
-	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
+	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but
