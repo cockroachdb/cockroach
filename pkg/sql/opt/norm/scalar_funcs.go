@@ -300,20 +300,6 @@ func (c *CustomFuncs) MakeArrayAggCol(typ *types.T) opt.ColumnID {
 	return c.mem.Metadata().AddColumn("array_agg", typ)
 }
 
-// IsLimited indicates whether a limit was pushed under the subquery
-// already. See e.g. the rule IntroduceExistsLimit.
-func (c *CustomFuncs) IsLimited(ex *memo.ExistsPrivate) bool {
-	return ex.WasLimited
-}
-
-// MakeLimited specifies that the Exists subquery has a limit set already. This
-// prevents e.g. the rule IntroduceExistsLimit from applying twice.
-func (c *CustomFuncs) MakeLimited(ex *memo.ExistsPrivate) *memo.ExistsPrivate {
-	newEx := *ex
-	newEx.WasLimited = true
-	return &newEx
-}
-
 // InlineValues converts a Values operator to a tuple. If there are
 // multiple columns, the result is a tuple of tuples.
 func (c *CustomFuncs) InlineValues(v memo.RelExpr) *memo.TupleExpr {

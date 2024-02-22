@@ -95,11 +95,6 @@ define ExistsPrivate {
     # execbuilder-time, so all Exists expressions are assigned a column during
     # optimization.
     LazyEvalProjectionCol ColumnID
-
-    # WasLimited indicates a limit was applied "under" the subquery to
-    # restrict how many rows are fetched to determine the result.  See
-    # e.g. the rule IntroduceExistsLimit.
-    WasLimited bool
     _ SubqueryPrivate
 }
 
