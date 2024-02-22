@@ -28,9 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -562,5 +564,15 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 				t.Fatalf("r%d disappeared from Store.mu.replicas map", k)
 			}
 		}
+	}
+}
+
+func NewRangefeedTxnPusher(
+	ir *intentresolver.IntentResolver, r *Replica, span roachpb.RSpan,
+) rangefeed.TxnPusher {
+	return &rangefeedTxnPusher{
+		ir:   ir,
+		r:    r,
+		span: span,
 	}
 }
