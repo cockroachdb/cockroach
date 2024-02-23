@@ -115,6 +115,7 @@ func (e *columnEncoder) init(typs []*types.T, keyCols columns, encodeNull bool) 
 // If the row contains any NULLs and encodeNull is false, hasNull is true and
 // no encoding is returned. If encodeNull is true, hasNull is never set.
 func encodeColumnsOfRow(
+	ctx context.Context,
 	da *tree.DatumAlloc,
 	appendTo []byte,
 	row rowenc.EncDatumRow,
@@ -126,12 +127,25 @@ func encodeColumnsOfRow(
 		if row[colIdx].IsNull() && !encodeNull {
 			return nil, true, nil
 		}
-		// Note: we cannot compare VALUE encodings because they contain column IDs
-		// which can vary.
-		// TODO(radu): we should figure out what encoding is readily available and
-		// use that (though it needs to be consistent across all rows). We could add
-		// functionality to compare VALUE encodings ignoring the column ID.
-		appendTo, err = row[colIdx].Encode(colTypes[i], da, catenumpb.DatumEncoding_ASCENDING_KEY, appendTo)
+		ed := row[colIdx]
+		if t := colTypes[i]; t.Family() == types.JsonFamily {
+			// JSON type is special because for historical reasons it uses value
+			// encoding in Fingerprint, yet we do have key encoding available
+			// (and this is what will be used by the disk row container if we
+			// happen to spill to disk).
+			appendTo, err = row[colIdx].Encode(t, da, catenumpb.DatumEncoding_ASCENDING_KEY, appendTo)
+		} else {
+			// Fingerprint internally might decode the EncDatum and will attempt
+			// to update the memory account accordingly. We don't have a
+			// suitable memory account in scope, so we will ensure to lose the
+			// reference to the decoded datum if it wasn't already present, and
+			// then we can pass nil acc argument.
+			hadDecodedDatum := ed.Datum != nil
+			appendTo, err = ed.Fingerprint(ctx, t, da, appendTo, nil /* acc */)
+			if !hadDecodedDatum {
+				ed.Datum = nil
+			}
+		}
 		if err != nil {
 			return appendTo, false, err
 		}
@@ -146,7 +160,7 @@ func (e *columnEncoder) encodeEqualityCols(
 	ctx context.Context, row rowenc.EncDatumRow, eqCols columns,
 ) ([]byte, error) {
 	encoded, hasNull, err := encodeColumnsOfRow(
-		&e.datumAlloc, e.scratch, row, eqCols, e.keyTypes, e.encodeNull,
+		ctx, &e.datumAlloc, e.scratch, row, eqCols, e.keyTypes, e.encodeNull,
 	)
 	if err != nil {
 		return nil, err
@@ -158,6 +172,8 @@ func (e *columnEncoder) encodeEqualityCols(
 	return encoded, nil
 }
 
+var hashKeyEncodingDirection = encoding.Ascending
+
 // storedEqColsToOrdering returns an ordering based on storedEqCols to be used
 // by the row containers (this will result in rows with the same equality
 // columns occurring contiguously in the keyspace).
@@ -166,7 +182,7 @@ func storedEqColsToOrdering(storedEqCols columns) colinfo.ColumnOrdering {
 	for i := range ordering {
 		ordering[i] = colinfo.ColumnOrderInfo{
 			ColIdx:    int(storedEqCols[i]),
-			Direction: encoding.Ascending,
+			Direction: hashKeyEncodingDirection,
 		}
 	}
 	return ordering
@@ -459,7 +475,7 @@ func (i *hashMemRowIterator) computeKey() error {
 		i.curKey, err = i.scratchEncRow[col].Encode(
 			i.container.types[col],
 			&i.container.columnEncoder.datumAlloc,
-			catenumpb.DatumEncoding_ASCENDING_KEY,
+			rowenc.EncodingDirToDatumEncoding(hashKeyEncodingDirection),
 			i.curKey,
 		)
 		if err != nil {
@@ -548,8 +564,9 @@ func (h *HashDiskRowContainer) Init(
 		)
 	}
 
-	h.DiskRowContainer = MakeDiskRowContainer(h.diskMonitor, storedTypes, storedEqColsToOrdering(storedEqCols), h.engine)
-	return nil
+	var err error
+	h.DiskRowContainer, err = MakeDiskRowContainer(h.diskMonitor, storedTypes, storedEqColsToOrdering(storedEqCols), h.engine)
+	return err
 }
 
 // AddRow adds a row to the HashDiskRowContainer. This row is unmarked by
