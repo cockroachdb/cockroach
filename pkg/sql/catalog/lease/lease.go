@@ -179,6 +179,10 @@ func (m *Manager) WaitForNoVersion(
 			Version: 0, // Unused any version flag used below.
 		},
 	}
+	// Increment the long wait gauge for wait for no version, if this function
+	// takes longer than the lease duration.
+	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForNoVersion)
+	defer decAfterWait()
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		now := m.storage.clock.Now()
 		count, err := CountLeases(ctx, m.storage.db, m.Codec(), cachedDatabaseRegions, m.settings, versions, now, true /*forAnyVersion*/)
@@ -220,6 +224,10 @@ func (m *Manager) WaitForOneVersion(
 	regions regionliveness.CachedDatabaseRegions,
 	retryOpts retry.Options,
 ) (desc catalog.Descriptor, _ error) {
+	// Increment the long wait gauge for wait for one version, if this function
+	// takes longer than the lease duration.
+	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForOneVersion)
+	defer decAfterWait()
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		if err := m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			// Use the lower-level MaybeGetDescriptorByIDUnvalidated to avoid
@@ -910,24 +918,44 @@ func NewLeaseManager(
 			sysDBCache:       catkv.NewSystemDatabaseCache(codec, settings),
 			group:            singleflight.NewGroup("acquire-lease", "descriptor ID"),
 			testingKnobs:     testingKnobs.LeaseStoreTestingKnobs,
-			outstandingLeases: metric.NewGauge(metric.Metadata{
-				Name:        "sql.leases.active",
-				Help:        "The number of outstanding SQL schema leases.",
-				Measurement: "Outstanding leases",
-				Unit:        metric.Unit_COUNT,
-			}),
-			sessionBasedLeasesWaitingToExpire: metric.NewGauge(metric.Metadata{
-				Name:        "sql.leases.waiting_to_expire",
-				Help:        "The number of outstanding session based SQL schema leases with expiry.",
-				Measurement: "Outstanding Leases Waiting to Expire",
-				Unit:        metric.Unit_COUNT,
-			}),
-			sessionBasedLeasesExpired: metric.NewGauge(metric.Metadata{
-				Name:        "sql.leases.expired",
-				Help:        "The number of outstanding session based SQL schema leases expired.",
-				Measurement: "Leases expired because of a new version",
-				Unit:        metric.Unit_COUNT,
-			}),
+			leasingMetrics: leasingMetrics{
+				outstandingLeases: metric.NewGauge(metric.Metadata{
+					Name:        "sql.leases.active",
+					Help:        "The number of outstanding SQL schema leases.",
+					Measurement: "Outstanding leases",
+					Unit:        metric.Unit_COUNT,
+				}),
+				sessionBasedLeasesWaitingToExpire: metric.NewGauge(metric.Metadata{
+					Name:        "sql.leases.waiting_to_expire",
+					Help:        "The number of outstanding session based SQL schema leases with expiry.",
+					Measurement: "Outstanding Leases Waiting to Expire",
+					Unit:        metric.Unit_COUNT,
+				}),
+				sessionBasedLeasesExpired: metric.NewGauge(metric.Metadata{
+					Name:        "sql.leases.expired",
+					Help:        "The number of outstanding session based SQL schema leases expired.",
+					Measurement: "Leases expired because of a new version",
+					Unit:        metric.Unit_COUNT,
+				}),
+				longWaitForNoVersionsActive: metric.NewGauge(metric.Metadata{
+					Name:        "sql.leases.long_wait_for_no_version",
+					Help:        "The number of wait for no versions that are taking more than the lease duration.",
+					Measurement: "Number of wait for long wait for no version routines executing",
+					Unit:        metric.Unit_COUNT,
+				}),
+				longWaitForOneVersionsActive: metric.NewGauge(metric.Metadata{
+					Name:        "sql.leases.long_wait_for_one_version",
+					Help:        "The number of wait for one versions that are taking more than the lease duration.",
+					Measurement: "Number of wait for long wait for one version routines executing",
+					Unit:        metric.Unit_COUNT,
+				}),
+				longTwoVersionInvariantViolationWaitActive: metric.NewGauge(metric.Metadata{
+					Name:        "sql.leases.long_wait_for_two_version_invariant",
+					Help:        "The number of two version invariant waits that are taking more than the lease duration.",
+					Measurement: "Number of two version invariant wait routines executing",
+					Unit:        metric.Unit_COUNT,
+				}),
+			},
 		},
 		settings:         settings,
 		rangeFeedFactory: rangeFeedFactory,
@@ -1734,17 +1762,23 @@ func (m *Manager) SystemDatabaseCache() *catkv.SystemDatabaseCache {
 // Metrics contains a pointer to all relevant lease.Manager metrics, for
 // registration.
 type Metrics struct {
-	OutstandingLeases                 *metric.Gauge
-	SessionBasedLeasesWaitingToExpire *metric.Gauge
-	SessionBasedLeasesExpired         *metric.Gauge
+	OutstandingLeases                    *metric.Gauge
+	SessionBasedLeasesWaitingToExpire    *metric.Gauge
+	SessionBasedLeasesExpired            *metric.Gauge
+	LongWaitForOneVersionsActive         *metric.Gauge
+	LongWaitForNoVersionsActive          *metric.Gauge
+	LongWaitForTwoVersionInvariantActive *metric.Gauge
 }
 
 // MetricsStruct returns a struct containing all of this Manager's metrics.
 func (m *Manager) MetricsStruct() Metrics {
 	return Metrics{
-		OutstandingLeases:                 m.storage.outstandingLeases,
-		SessionBasedLeasesExpired:         m.storage.sessionBasedLeasesExpired,
-		SessionBasedLeasesWaitingToExpire: m.storage.sessionBasedLeasesWaitingToExpire,
+		OutstandingLeases:                    m.storage.outstandingLeases,
+		SessionBasedLeasesExpired:            m.storage.sessionBasedLeasesExpired,
+		SessionBasedLeasesWaitingToExpire:    m.storage.sessionBasedLeasesWaitingToExpire,
+		LongWaitForNoVersionsActive:          m.storage.longWaitForNoVersionsActive,
+		LongWaitForOneVersionsActive:         m.storage.longWaitForOneVersionsActive,
+		LongWaitForTwoVersionInvariantActive: m.storage.longTwoVersionInvariantViolationWaitActive,
 	}
 }
 
@@ -1783,6 +1817,46 @@ func (m *Manager) VisitLeases(
 		}
 		if !visitor() {
 			return
+		}
+	}
+}
+
+// AfterLeaseDurationGauge metric to increment after a long wait.
+type AfterLeaseDurationGauge int
+
+const (
+	_ AfterLeaseDurationGauge = iota
+	// GaugeWaitForOneVersion gauge for WaitForOneVersion.
+	GaugeWaitForOneVersion
+	// GaugeWaitForNoVersion gauge for WaitForNoVersion.
+	GaugeWaitForNoVersion
+	// GaugeWaitForTwoVersionViolation gauge for CheckTwoVersionInvariant.
+	GaugeWaitForTwoVersionViolation
+)
+
+// IncGaugeAfterLeaseDuration increments a wait metric after the lease duration
+// has passed. A function is returned to decrement the same metric after.
+func (m *Manager) IncGaugeAfterLeaseDuration(
+	gaugeType AfterLeaseDurationGauge,
+) (decrAfterWait func()) {
+	var gauge *metric.Gauge
+	switch gaugeType {
+	case GaugeWaitForOneVersion:
+		gauge = m.storage.longWaitForOneVersionsActive
+	case GaugeWaitForNoVersion:
+		gauge = m.storage.longWaitForNoVersionsActive
+	case GaugeWaitForTwoVersionViolation:
+		gauge = m.storage.longTwoVersionInvariantViolationWaitActive
+	default:
+		panic(errors.Newf("unknown gauge type %d", gaugeType))
+	}
+	leaseDuration := LeaseDuration.Get(&m.settings.SV)
+	timer := time.AfterFunc(leaseDuration, func() {
+		gauge.Inc(1)
+	})
+	return func() {
+		if !timer.Stop() {
+			gauge.Dec(1)
 		}
 	}
 }
