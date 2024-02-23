@@ -687,7 +687,7 @@ func (b *Builder) scanParams(
 		}
 		if !valid {
 			return exec.ScanParams{}, opt.ColMap{}, unimplemented.NewWithIssuef(67562,
-				"cannot use bounded staleness for queries that may touch more than one range or require an index join",
+				"cannot use bounded staleness for queries that may touch more than one row or require an index join",
 			)
 		}
 		b.containsBoundedStalenessScan = true

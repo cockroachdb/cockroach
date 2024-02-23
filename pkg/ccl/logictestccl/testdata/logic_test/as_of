@@ -138,10 +138,10 @@ SELECT with_max_staleness(-'1s')
 # Tests for optimizer bounded staleness checks.
 #
 
-statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one row or require an index join
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
 
-statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one row or require an index join
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms')
 
 statement error unimplemented: cannot use bounded staleness for MERGE JOIN
@@ -182,7 +182,7 @@ statement ok
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k = 2
 
 # Scan from a secondary index is not supported if it requires an index join.
-statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one row or require an index join
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE j = 2
 
 # No index join or zigzag join is produced.
@@ -231,11 +231,11 @@ select
       └── j = 2
 
 # Scan may produce multiple rows.
-statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one row or require an index join
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k IS NULL
 
 # Scan may produce multiple rows.
-statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one row or require an index join
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k IS NULL LIMIT 10
 
 # Even though the scan is limited to 1 row, from KV's perspective, this is a
@@ -243,7 +243,7 @@ SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k IS NULL LIMI
 # ranges, but we expect it to short-circuit once it hits the first row. In
 # practice, we expect that to very often be in the first range we hit, but
 # there's no guarantee of that - we could have empty ranges.
-statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one row or require an index join
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k IS NULL LIMIT 1
 
 # Subquery contains the only scan, so it succeeds.
@@ -255,7 +255,7 @@ statement ok
 SELECT (SELECT random()) FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k = 1
 
 # Subqueries that perform an additional scan are not supported.
-statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one row or require an index join
 SELECT (SELECT k FROM t WHERE i = 1) FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE k = 1
 
 # Bounded staleness function must match outer query if used in subquery.
@@ -330,13 +330,13 @@ EXECUTE with_max_staleness_prep
 statement ok
 PREPARE bad_max_staleness_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
 
-statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one row or require an index join
 EXECUTE bad_max_staleness_stmt
 
 statement ok
 PREPARE bad_min_timestamp_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms')
 
-statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one row or require an index join
 EXECUTE bad_min_timestamp_stmt
 
 statement error expected timestamptz argument for min_timestamp
