@@ -17,6 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -65,7 +67,16 @@ func init() {
 	}
 
 	cleanupQuery := "DELETE FROM system.jobs WHERE id >= 1000 AND id <= 4000; DELETE FROM system.job_info WHERE job_id >= 1000 AND job_id <= 4000"
-
+	defaultJobsQuery := server.BuildJobQueryFromRequest(&serverpb.JobsRequest{})
+	limitJobsQuery := server.BuildJobQueryFromRequest(&serverpb.JobsRequest{
+		Limit: 50,
+	})
+	typeFilteredJobQueryNoRows := server.BuildJobQueryFromRequest(&serverpb.JobsRequest{
+		Type: jobspb.TypeRestore,
+	})
+	typeFilteredJobQueryManyRows := server.BuildJobQueryFromRequest(&serverpb.JobsRequest{
+		Type: jobspb.TypeImport,
+	})
 	reg.Register("Jobs", []RoundTripBenchTestCase{
 		{
 			SetupEx: setupQueries,
@@ -90,6 +101,46 @@ func init() {
 			Reset:   cleanupQuery,
 			Name:    "resume job",
 			Stmt:    "RESUME JOB 3002",
+		},
+		{
+			SetupEx: setupQueries,
+			Reset:   cleanupQuery,
+			Name:    "show jobs",
+			Stmt:    "SHOW JOBS",
+		},
+		{
+			SetupEx:  setupQueries,
+			Reset:    cleanupQuery,
+			Name:     "jobs page default",
+			Stmt:     defaultJobsQuery.String(),
+			StmtArgs: defaultJobsQuery.QueryArguments(),
+		},
+		{
+			SetupEx:  setupQueries,
+			Reset:    cleanupQuery,
+			Name:     "jobs page latest 50",
+			Stmt:     limitJobsQuery.String(),
+			StmtArgs: limitJobsQuery.QueryArguments(),
+		},
+		{
+			SetupEx:  setupQueries,
+			Reset:    cleanupQuery,
+			Name:     "jobs page type filtered",
+			Stmt:     typeFilteredJobQueryManyRows.String(),
+			StmtArgs: typeFilteredJobQueryManyRows.QueryArguments(),
+		},
+		{
+			SetupEx:  setupQueries,
+			Reset:    cleanupQuery,
+			Name:     "jobs page type filtered no matches",
+			Stmt:     typeFilteredJobQueryNoRows.String(),
+			StmtArgs: typeFilteredJobQueryNoRows.QueryArguments(),
+		},
+		{
+			SetupEx: setupQueries,
+			Reset:   cleanupQuery,
+			Name:    "crdb_internal.system_jobs",
+			Stmt:    "SELECT * FROM crdb_internal.system_jobs",
 		},
 	})
 }

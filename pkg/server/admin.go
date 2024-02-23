@@ -1026,8 +1026,8 @@ func (s *adminServer) tableDetailsHelper(
 				SELECT
 					sum((d->>'live_bytes')::INT8) AS live,
 					sum(
-						(d->>'key_bytes')::INT8 + 
-						(d->>'val_bytes')::INT8 + 
+						(d->>'key_bytes')::INT8 +
+						(d->>'val_bytes')::INT8 +
 						COALESCE((d->>'range_key_bytes')::INT8, 0) +
 						COALESCE((d->>'range_val_bytes')::INT8, 0) +
 						(d->>'sys_bytes')::INT8) AS total
@@ -2252,17 +2252,9 @@ func (s *adminServer) Jobs(
 	return j, nil
 }
 
-// Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to srverrors.ServerErrors.
-func jobsHelper(
-	ctx context.Context,
-	req *serverpb.JobsRequest,
-	userName username.SQLUsername,
-	sqlServer *SQLServer,
-	cfg *BaseConfig,
-	sv *settings.Values,
-) (_ *serverpb.JobsResponse, retErr error) {
-
+// BuildJobQueryFromRequest builds the SQL query for the given
+// JobsRequest. This is exported for testing purposes only.
+func BuildJobQueryFromRequest(req *serverpb.JobsRequest) *safesql.Query {
 	q := safesql.NewQuery()
 	q.Append(`
 SELECT
@@ -2308,6 +2300,20 @@ WHERE true`) // Simplifies filter construction below.
 	if req.Limit > 0 {
 		q.Append(" LIMIT $", tree.DInt(req.Limit))
 	}
+	return q
+}
+
+// Note that the function returns plain errors, and it is the caller's
+// responsibility to convert them to srverrors.ServerErrors.
+func jobsHelper(
+	ctx context.Context,
+	req *serverpb.JobsRequest,
+	userName username.SQLUsername,
+	sqlServer *SQLServer,
+	cfg *BaseConfig,
+	sv *settings.Values,
+) (_ *serverpb.JobsResponse, retErr error) {
+	q := BuildJobQueryFromRequest(req)
 	it, err := sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-jobs", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
