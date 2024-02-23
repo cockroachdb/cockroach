@@ -591,6 +591,15 @@ func (h *hasher) HashUniqueOrdinals(val cat.UniqueOrdinals) {
 	h.hash = hash
 }
 
+func (h *hasher) HashSchemaFunctionDeps(val opt.SchemaFunctionDeps) {
+	hash := h.hash
+	val.ForEach(func(i int) {
+		hash ^= internHash(i)
+		hash *= prime64
+	})
+	h.hash = hash
+}
+
 func (h *hasher) HashSchemaDeps(val opt.SchemaDeps) {
 	// Hash the length and address of the first element.
 	h.HashInt(len(val))
@@ -1044,6 +1053,10 @@ func (h *hasher) IsUniqueOrdinalsEqual(l, r cat.UniqueOrdinals) bool {
 		}
 	}
 	return true
+}
+
+func (h *hasher) IsSchemaFunctionDepsEqual(l, r opt.SchemaFunctionDeps) bool {
+	return l.Equals(r)
 }
 
 func (h *hasher) IsSchemaDepsEqual(l, r opt.SchemaDeps) bool {

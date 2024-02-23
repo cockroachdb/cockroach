@@ -93,6 +93,10 @@ func (b *Builder) buildUDF(
 		}
 	}
 
+	if b.trackSchemaDeps {
+		b.schemaFunctionDeps.Add(int(o.Oid))
+	}
+
 	return b.finishBuildScalar(f, routine, inScope, outScope, outCol)
 }
 
@@ -219,7 +223,6 @@ func (b *Builder) buildRoutine(
 			)
 		}
 	}
-
 	// Create a new scope for building the statements in the function body. We
 	// start with an empty scope because a statement in the function body cannot
 	// refer to anything from the outer expression. If there are function
@@ -246,10 +249,20 @@ func (b *Builder) buildRoutine(
 		}
 	}
 
-	// TODO(mgartner): Once other UDFs can be referenced from within a UDF, a
-	// boolean will not be sufficient to track whether or not we are in a UDF.
-	// We'll need to track the depth of the UDFs we are building expressions
-	// within.
+	if b.trackSchemaDeps {
+		b.schemaFunctionDeps.Add(int(o.Oid))
+	}
+	// Do not track any other routine invocations inside this routine, since
+	// for the schema changer we only need depth 1. Also keep track of when
+	// we have are executing inside a UDF (this could be nested so we need to
+	// track the previous state).
+	oldTrackingSchemaDeps := b.trackSchemaDeps
+	oldInsideUDF := b.insideUDF
+	defer func() {
+		b.trackSchemaDeps = oldTrackingSchemaDeps
+		b.insideUDF = oldInsideUDF
+	}()
+	b.trackSchemaDeps = false
 	b.insideUDF = true
 	isSetReturning := o.Class == tree.GeneratorClass
 	isMultiColDataSource = false
@@ -338,8 +351,6 @@ func (b *Builder) buildRoutine(
 	default:
 		panic(errors.AssertionFailedf("unexpected language: %v", o.Language))
 	}
-
-	b.insideUDF = false
 
 	routine := b.factory.ConstructUDFCall(
 		args,

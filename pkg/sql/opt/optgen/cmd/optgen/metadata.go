@@ -243,6 +243,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"UniqueOrdinals":       {fullName: "cat.UniqueOrdinals", passByVal: true},
 		"SchemaDeps":           {fullName: "opt.SchemaDeps", passByVal: true},
 		"SchemaTypeDeps":       {fullName: "opt.SchemaTypeDeps", passByVal: true},
+		"SchemaFunctionDeps":   {fullName: "opt.SchemaFunctionDeps", passByVal: true},
 		"Locking":              {fullName: "opt.Locking", passByVal: true},
 		"CTEMaterializeClause": {fullName: "tree.CTEMaterializeClause", passByVal: true},
 		"SpanExpression":       {fullName: "inverted.SpanExpression", isPointer: true, usePointerIntern: true},
