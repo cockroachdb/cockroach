@@ -23,7 +23,8 @@ CREATE MATERIALIZED VIEW mv AS SELECT 1;
 # - The user created table, sequence, and materialized view.
 full-translate
 ----
-/{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
+/M{in-eta2}                                ttl_seconds=3600 num_replicas=5
+/{Meta2-System/NodeLiveness}               ttl_seconds=3600 num_replicas=5
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
 /System/{NodeLivenessMax-tsd}              range system
 /System{/tsd-tse}                          range default
