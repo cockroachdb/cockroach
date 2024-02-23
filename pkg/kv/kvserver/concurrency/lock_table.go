@@ -49,14 +49,6 @@ const (
 	// request will likely want to eventually push the conflicting transaction.
 	waitFor
 
-	// waitForDistinguished is a sub-case of waitFor. It implies everything that
-	// waitFor does and additionally indicates that the request is currently the
-	// "distinguished waiter". A distinguished waiter is responsible for taking
-	// extra actions, e.g. immediately pushing the transaction it is waiting
-	// for. If there are multiple requests in the waitFor state waiting on the
-	// same transaction, at least one will be a distinguished waiter.
-	waitForDistinguished
-
 	// waitElsewhere is used when the lockTable is under memory pressure and is
 	// clearing its internal queue state. Like the waitFor* states, it informs
 	// the request who it is waiting for so that deadlock detection works.
@@ -118,14 +110,13 @@ func (s waitingState) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s waitingState) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch s.kind {
-	case waitFor, waitForDistinguished:
-		distinguished := redact.SafeString("")
+	case waitFor:
 		target := redact.SafeString("holding lock")
 		if !s.held {
 			target = "running request"
 		}
-		w.Printf("wait for%s txn %s %s @ key %s (queuedLockingRequests: %d, queuedReaders: %d)",
-			distinguished, s.txn.Short(), target, s.key, s.queuedLockingRequests, s.queuedReaders)
+		w.Printf("wait for txn %s %s @ key %s (queuedLockingRequests: %d, queuedReaders: %d)",
+			s.txn.Short(), target, s.key, s.queuedLockingRequests, s.queuedReaders)
 	case waitSelf:
 		w.Printf("wait self @ key %s", s.key)
 	case waitElsewhere:
@@ -336,27 +327,8 @@ func (t *lockTableImpl) setMaxKeysLocked(maxKeysLocked int64) {
 // transitions where the transitions are notified via newState() and the current
 // state can be read using CurState().
 //
-//   - The waitFor* states provide information on who the request is waiting for.
-//     The waitForDistinguished state is a sub-case -- a distinguished waiter is
-//     responsible for taking extra actions e.g. immediately pushing the transaction
-//     it is waiting for. The implementation ensures that if there are multiple
-//     requests in waitFor state waiting on the same transaction at least one will
-//     be a distinguished waiter.
-//
-//     TODO(sbhola): investigate removing the waitForDistinguished state which
-//     will simplify the code here. All waitFor requests would wait (currently
-//     50ms) before pushing the transaction (for deadlock detection) they are
-//     waiting on, say T. Typically T will be done before 50ms which is considered
-//     ok: the one exception we will need to make is if T has the min priority or
-//     the waiting transaction has max priority -- in both cases it will push
-//     immediately. The bad case is if T is ABORTED: the push will succeed after,
-//     and if T left N intents, each push would wait for 50ms, incurring a latency
-//     of 50*N ms. A cache of recently encountered ABORTED transactions on each
-//     Store should mitigate this latency increase. Whenever a transaction sees a
-//     waitFor state, it will consult this cache and if T is found, push
-//     immediately (if there isn't already a push in-flight) -- even if T is not
-//     initially in the cache, the first push will place it in the cache, so the
-//     maximum latency increase is 50ms.
+//   - The waitFor* states provide information on who the request is waiting
+//     for.
 //
 //   - The waitElsewhere state is a rare state that is used when the lockTable is
 //     under memory pressure and is clearing its internal queue state. Like the
@@ -1659,7 +1631,6 @@ type lockWaitQueue struct {
 	//
 	// queuedLockingRequests:
 	// - to find all active queued locking requests.
-	// - to find the first active locking request to make it distinguished.
 	// - to find a particular guard.
 	// - to find the position, based on seqNum, for inserting a particular guard.
 	// - to find all waiting locking requests with a particular txn ID.
@@ -1779,10 +1750,6 @@ type lockWaitQueue struct {
 	// another request from their transaction already holds a lock on the key,
 	// they are allowed to proceed.
 	waitingReaders list.List[*lockTableGuardImpl]
-
-	// If there is a non-empty set of active waiters that are not waitSelf, then
-	// at least one must be distinguished.
-	distinguishedWaiter *lockTableGuardImpl
 }
 
 //go:generate ../../../util/interval/generic/gen.sh *keyLocks concurrency
@@ -2022,8 +1989,7 @@ func (kl *keyLocks) addToMetrics(m *LockTableMetrics, now time.Time) {
 
 // informActiveWaiters informs active waiters about the transaction that has
 // claimed the lock. The claimant transaction may have changed, so there may be
-// inconsistencies with waitSelf and waitForDistinguished states that need
-// changing.
+// inconsistencies with waitFor and waitSelf states that need fixing.
 //
 // REQUIRES: kl.mu is locked.
 func (kl *keyLocks) informActiveWaiters() {
@@ -2044,34 +2010,6 @@ func (kl *keyLocks) informActiveWaiters() {
 	// either sit tight (because its waiting for itself) or, worse yet, push a
 	// transaction it's actually compatible with!
 	waitForState.txn, waitForState.held = kl.claimantTxn()
-	findDistinguished := false
-	// We need to find a (possibly new) distinguished waiter if either:
-	//   There isn't one for this lock.
-	if kl.distinguishedWaiter == nil ||
-		// OR it belongs to the claimant transaction, because a transaction doesn't
-		// push itself (it just sits tight in the waitSelf state).
-		//
-		// NB: Note that if the distinguished waiter belongs to the same transaction
-		// as the claimant, then the lock must not be held. That's because:
-		// 1. Lock holders are preferred to inactive waiters by claimantTxn().
-		// 2. AND a request (in this case the distinguished waiter) does not wait in
-		// a lock's wait queue if its transaction already holds the lock.
-		//
-		// TODO(arul): The second point above won't hold once we enable lock
-		// promotions from Shared to Exclusive. The assertion below, and some
-		// concepts here, should be revisited then.
-		kl.distinguishedWaiter.isSameTxn(waitForState.txn) {
-		// Ensure that if we're trying to find a new distinguished waiter because
-		// all waiters on the lock are waiting on the (old) distinguished waiter,
-		// the lock is not held.
-		assert(
-			kl.distinguishedWaiter == nil || !kl.isLocked(),
-			"unexpected distinguished waiter for unlocked key",
-		)
-
-		findDistinguished = true
-		kl.distinguishedWaiter = nil // we'll find a new one
-	}
 
 	for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
 		state := waitForState
@@ -2081,13 +2019,6 @@ func (kl *keyLocks) informActiveWaiters() {
 		// locking requests.
 		assert(state.held, "waiting readers should be empty if the lock isn't held")
 		g := e.Value
-		if findDistinguished {
-			kl.distinguishedWaiter = g
-			findDistinguished = false
-		}
-		if kl.distinguishedWaiter == g {
-			state.kind = waitForDistinguished
-		}
 		g.mu.Lock()
 		// NB: The waiter is actively waiting on this lock, so it's likely taking
 		// some action based on the previous state (e.g. it may be pushing someone).
@@ -2108,14 +2039,6 @@ func (kl *keyLocks) informActiveWaiters() {
 				panic("request from the lock holder txn should not be waiting in a wait queue")
 			}
 			state.kind = waitSelf
-		} else {
-			if findDistinguished {
-				kl.distinguishedWaiter = g
-				findDistinguished = false
-			}
-			if kl.distinguishedWaiter == g {
-				state.kind = waitForDistinguished
-			}
 		}
 		g.mu.Lock()
 		// NB: The waiter is actively waiting on this lock, so it's likely taking
@@ -2178,46 +2101,6 @@ func (kl *keyLocks) releaseLockingRequestsFromTxn(txn *enginepb.TxnMeta) {
 		if g.isSameTxn(txn) {
 			kl.removeLockingRequest(curr)
 		}
-	}
-}
-
-// When the active waiters have shrunk and the distinguished waiter has gone,
-// try to make a new distinguished waiter if there is at least 1 active
-// waiter.
-//
-// This function should only be called if the claimant transaction has
-// not changed. This is asserted below. If the claimant transaction has changed,
-// we not only need to find a new distinguished waiter, we also need to update
-// the waiting state for other actively waiting requests as well; as such,
-// informActiveWaiters is more appropriate.
-//
-// REQUIRES: kl.mu is locked.
-func (kl *keyLocks) tryMakeNewDistinguished() {
-	var g *lockTableGuardImpl
-	claimantTxn, _ := kl.claimantTxn()
-	if kl.waitingReaders.Len() > 0 {
-		g = kl.waitingReaders.Front().Value
-	} else if kl.queuedLockingRequests.Len() > 0 {
-		for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
-			qg := e.Value
-			// Only requests actively waiting at this lock should be considered for
-			// the distinguished distinction.
-			if qg.active && !qg.guard.isSameTxn(claimantTxn) {
-				g = qg.guard
-				break
-			}
-		}
-	}
-	if g != nil {
-		kl.distinguishedWaiter = g
-		g.mu.Lock()
-		assert(
-			g.mu.state.txn.ID == claimantTxn.ID, "tryMakeNewDistinguished called with new claimant txn",
-		)
-		g.mu.state.kind = waitForDistinguished
-		// The rest of g.state is already up-to-date.
-		g.notify()
-		g.mu.Unlock()
 	}
 }
 
@@ -2496,8 +2379,6 @@ func (kl *keyLocks) constructWaitingState(g *lockTableGuardImpl) waitingState {
 	waitForState.txn = txn
 	if g.isSameTxn(waitForState.txn) {
 		waitForState.kind = waitSelf
-	} else if kl.distinguishedWaiter == g {
-		waitForState.kind = waitForDistinguished
 	}
 	return waitForState
 }
@@ -2687,9 +2568,6 @@ func (kl *keyLocks) maybeEnqueueNonLockingReadRequest(g *lockTableGuardImpl) (co
 		return false // no conflict, no need to enqueue
 	}
 	kl.waitingReaders.PushFront(g)
-	// This request may be a candidate to become a distinguished waiter if one
-	// doesn't exist yet; try making it such.
-	kl.maybeMakeDistinguishedWaiter(g)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.maybeAddToLocksMap(kl, lock.None)
@@ -2724,10 +2602,6 @@ func (kl *keyLocks) enqueueLockingRequest(
 			qqg := e.Value
 			if qqg.guard == g {
 				qqg.active = true // set the active status as true, in case it wasn't before
-				// Now that this request is actively waiting in the lock's wait queue,
-				// it may be a candidate for becoming the distinguished waiter (if one
-				// doesn't exist already).
-				kl.maybeMakeDistinguishedWaiter(g)
 				return false /* maxQueueLengthExceeded */, nil
 			}
 		}
@@ -2748,9 +2622,6 @@ func (kl *keyLocks) enqueueLockingRequest(
 	if _, err := kl.insertLockingRequest(g, g.curStrength()); err != nil {
 		return false, err
 	}
-	// This request may be a candidate to become a distinguished waiter if one
-	// doesn't exist yet; try making it such.
-	kl.maybeMakeDistinguishedWaiter(g)
 	return false /* maxQueueLengthExceeded */, nil
 }
 
@@ -2811,27 +2682,6 @@ func (kl *keyLocks) insertLockingRequest(
 	return qg, nil
 }
 
-// maybeMakeDistinguishedWaiter designates the supplied request as the
-// distinguished waiter if no distinguished waiter. If there is a distinguished
-// waiter, or the supplied request is not a candidate for becoming one[1], the
-// function is a no-op.
-//
-// [1] A request that belongs to the lock's claimant transaction is not eligible
-// to become a distinguished waiter.
-//
-// REQUIRES: kl.mu to be locked.
-func (kl *keyLocks) maybeMakeDistinguishedWaiter(g *lockTableGuardImpl) {
-	if kl.distinguishedWaiter != nil {
-		return
-	}
-	claimantTxn, _ := kl.claimantTxn()
-	if !g.isSameTxn(claimantTxn) {
-		// We only want to make this request the distinguished waiter if a
-		// different request from its transaction isn't the claimant.
-		kl.distinguishedWaiter = g
-	}
-}
-
 // shouldRequestActivelyWait returns true iff the supplied request needs to
 // actively wait on the receiver.
 //
@@ -2882,13 +2732,6 @@ func (kl *keyLocks) shouldRequestActivelyWait(g *lockTableGuardImpl) bool {
 // supplied request lays a claim[1] on it before proceeding[2]. This method
 // should only be called by locking requests.
 //
-// Note that the request acquiring the claim may be a distinguished waiter at
-// this lock. In such cases, the distinguished status is cleared to allow the
-// request to proceed (inactive waiters cannot be distinguished waiters).
-// However, a new distinguished waiter is not chosen -- it's the caller's
-// responsibility to detect this case and actually choose one. Typically, this
-// is done using a call to informActiveWaiters.
-//
 // [1] Only transactional, locking requests can establish claims.
 // Non-transactional writers cannot.
 // [2] While non-transactional writers cannot establish claims, they do need to
@@ -2919,13 +2762,6 @@ func (kl *keyLocks) claimBeforeProceeding(g *lockTableGuardImpl) {
 	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qqg := e.Value
 		if qqg.guard == g {
-			// If the request was previously marked as a distinguished waiter, and is
-			// now able to claim the lock and proceed, clear the designation. Note
-			// that we're not choosing a new one to replace it; the responsibility of
-			// doing so is the caller's.
-			if g == kl.distinguishedWaiter {
-				kl.distinguishedWaiter = nil
-			}
 			if g.txn == nil {
 				// Non-transactional writer.
 				g.mu.Lock()
@@ -3252,9 +3088,6 @@ func (kl *keyLocks) tryClearLock(force bool) bool {
 		g.mu.Unlock()
 	}
 
-	// Clear distinguishedWaiter.
-	kl.distinguishedWaiter = nil
-
 	// The keyLocks struct must now be empty.
 	kl.assertEmptyLock()
 	return true
@@ -3477,10 +3310,6 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 			// do so, but before it can proceed, it must acquire a (possibly joint)
 			// claim. It does so by marking itself as inactive.
 			qlr.active = false // mark as inactive
-			if qlr.guard == kl.distinguishedWaiter {
-				// A new distinguished waiter will be selected by informActiveWaiters.
-				kl.distinguishedWaiter = nil
-			}
 			qlr.guard.mu.Lock()
 			qlr.guard.doneActivelyWaitingAtLock()
 			qlr.guard.mu.Unlock()
@@ -3498,11 +3327,10 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 
 // removeLockingRequest removes the locking request (or non-transactional
 // writer), referenced by the supplied list.Element, from the lock's
-// queuedLockingRequests list. Returns whether the request was the distinguished
-// waiter or not.
+// queuedLockingRequests list.
 //
 // REQUIRES: kl.mu to be locked.
-func (kl *keyLocks) removeLockingRequest(e *list.Element[*queuedGuard]) bool {
+func (kl *keyLocks) removeLockingRequest(e *list.Element[*queuedGuard]) {
 	qg := e.Value
 	g := qg.guard
 	kl.queuedLockingRequests.Remove(e)
@@ -3512,29 +3340,19 @@ func (kl *keyLocks) removeLockingRequest(e *list.Element[*queuedGuard]) bool {
 	if qg.active {
 		g.doneActivelyWaitingAtLock()
 	}
-	if g == kl.distinguishedWaiter {
-		assert(qg.active, "distinguished waiter should be active")
-		kl.distinguishedWaiter = nil
-		return true
-	}
-	return false
 }
 
 // removeReader removes the reader, referenced by the supplied list.Element,
-// from the lock's queuedReaders list. Returns whether the reader was the
-// distinguished waiter or not.
-func (kl *keyLocks) removeReader(e *list.Element[*lockTableGuardImpl]) bool {
+// from the lock's queuedReaders list.
+//
+// REQUIRES: kl.mu to be locked.
+func (kl *keyLocks) removeReader(e *list.Element[*lockTableGuardImpl]) {
 	g := e.Value
 	kl.waitingReaders.Remove(e)
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	delete(g.mu.locks, kl)
 	g.doneActivelyWaitingAtLock()
-	g.mu.Unlock()
-	if g == kl.distinguishedWaiter {
-		kl.distinguishedWaiter = nil
-		return true
-	}
-	return false
 }
 
 // A request known to the receiver is done. The request could be a locking or
@@ -3549,6 +3367,9 @@ func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
 	defer kl.mu.Unlock()
 
 	g.mu.Lock()
+	// TODO(arul): Now that we're storing the strength in g.mu.locks, we don't
+	// have to look at both queuedLockingRequests and waitingReaders below -- we
+	// should decide based off the strength instead.
 	if _, present := g.mu.locks[kl]; !present {
 		g.mu.Unlock()
 		return false
@@ -3557,16 +3378,11 @@ func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
 	g.mu.Unlock()
 
 	// May be in queuedLockingRequests or waitingReaders.
-	distinguishedRemoved := false
 	doneRemoval := false
 	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qg := e.Value
 		if qg.guard == g {
 			kl.queuedLockingRequests.Remove(e)
-			if qg.guard == kl.distinguishedWaiter {
-				distinguishedRemoved = true
-				kl.distinguishedWaiter = nil
-			}
 			doneRemoval = true
 			break
 		}
@@ -3589,10 +3405,6 @@ func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
 			gg := e.Value
 			if gg == g {
 				kl.waitingReaders.Remove(e)
-				if g == kl.distinguishedWaiter {
-					distinguishedRemoved = true
-					kl.distinguishedWaiter = nil
-				}
 				doneRemoval = true
 				break
 			}
@@ -3600,9 +3412,6 @@ func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
 	}
 	if !doneRemoval {
 		panic("lockTable bug")
-	}
-	if distinguishedRemoved {
-		kl.tryMakeNewDistinguished()
 	}
 	return kl.isEmptyLock()
 }
@@ -3826,11 +3635,6 @@ func (kl *keyLocks) maybeReleaseCompatibleLockingRequests() {
 
 		if qg.active {
 			qg.active = false // mark as inactive
-			if g == kl.distinguishedWaiter {
-				// We're only clearing the distinguishedWaiter for now; a new one will be
-				// selected below in the call to informActiveWaiters.
-				kl.distinguishedWaiter = nil
-			}
 			g.mu.Lock()
 			g.doneActivelyWaitingAtLock()
 			g.mu.Unlock()
@@ -4006,67 +3810,7 @@ func (kl *keyLocks) verify(st *cluster.Settings) error {
 		//}
 	}
 
-	// 4. Ensure invariants around distinguished waiters hold.
-	distinguishedCandidateFound := false
-	if kl.waitingReaders.Len() > 0 {
-		// Any reader waiting at a lock should be a suitable candidate for being a
-		// distinguished waiter, as readers only wait actively and wait for locks
-		// held by other transactions (i.e they cannot be in waitSelf state).
-		distinguishedCandidateFound = true
-	}
-	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
-		claimantTxn, _ := kl.claimantTxn()
-		// Distinguished waiters must actively wait in a lock's wait queue...
-		if e.Value.active &&
-			// ...AND they must not belong to the claimant transaction, as
-			// transactions don't push themselves.
-			!e.Value.guard.isSameTxn(claimantTxn) {
-			distinguishedCandidateFound = true
-		}
-	}
-
-	if distinguishedCandidateFound {
-		if kl.distinguishedWaiter == nil {
-			return errors.AssertionFailedf(
-				"suitable candidate for distinguished waiter exists, but none selected",
-			)
-		}
-		// Ensure the distinguishedWaiter is actually in the wait queues.
-		distinguishedFound := false
-		for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
-			if e.Value == kl.distinguishedWaiter {
-				distinguishedFound = true
-				e.Value.mu.Lock()
-				if e.Value.mu.state.kind != waitForDistinguished {
-					return errors.AssertionFailedf("unexpected waiting state for distinguished waiter")
-				}
-				e.Value.mu.Unlock()
-			}
-		}
-		for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
-			if e.Value.guard == kl.distinguishedWaiter {
-				distinguishedFound = true
-				e.Value.guard.mu.Lock()
-				if e.Value.guard.mu.state.kind != waitForDistinguished {
-					return errors.AssertionFailedf("unexpected waiting state for distinguished waiter")
-				}
-				e.Value.guard.mu.Unlock()
-				if !e.Value.active {
-					return errors.AssertionFailedf("distinguished waiter should be actively waiting")
-				}
-			}
-		}
-		if !distinguishedFound {
-			return errors.AssertionFailedf("distinguished waiter not found in wait queue")
-		}
-	} else {
-		if kl.distinguishedWaiter != nil {
-			return errors.AssertionFailedf(
-				"no suitable candidate for distinguished waiter found, but one exists",
-			)
-		}
-	}
-
+	// TODO(arul): renumber.
 	// 5. Assert some invariants around the queuedLockingRequests wait queue if
 	// the lock isn't held.
 	if !kl.isLocked() {

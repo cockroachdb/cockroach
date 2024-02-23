@@ -101,7 +101,6 @@ num=1
    queued locking requests:
     active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 4
 
 # For good measure, create a new request from txn3 that comes after req5, and
 # ensure it sorts after req5 in the wait queue.
@@ -122,7 +121,6 @@ num=1
     active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
-   distinguished req: 4
 
 # ------------------------------------------------------------------------------
 # Ensure a request trying to promote from Exclusive -> Intent does not conflict
@@ -147,4 +145,3 @@ num=1
     active: false req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
-   distinguished req: 4
