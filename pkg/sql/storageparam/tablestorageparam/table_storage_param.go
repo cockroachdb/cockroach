@@ -439,6 +439,23 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	`ttl_disable_changefeed_replication`: {
+		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			b, err := boolFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.DisableChangefeedReplication = b
+			return nil
+		},
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.DisableChangefeedReplication = false
+			}
+			return nil
+		},
+	},
 	`exclude_data_from_backup`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext,
 			evalCtx *eval.Context, key string, datum tree.Datum) error {

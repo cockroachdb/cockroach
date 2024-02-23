@@ -205,7 +205,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 		deleteBatchSize := ttlbase.GetDeleteBatchSize(settingsValues, rowLevelTTL)
 		selectRateLimit := ttlbase.GetSelectRateLimit(settingsValues, rowLevelTTL)
 		deleteRateLimit := ttlbase.GetDeleteRateLimit(settingsValues, rowLevelTTL)
-		disableChangefeedReplication := ttlbase.GetChangefeedReplicationDisabled(settingsValues)
+		disableChangefeedReplication := ttlbase.GetChangefeedReplicationDisabled(settingsValues, rowLevelTTL)
 		newTTLSpec := func(spans []roachpb.Span) *execinfrapb.TTLSpec {
 			return &execinfrapb.TTLSpec{
 				JobID:                        jobID,
