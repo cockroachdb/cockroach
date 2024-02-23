@@ -358,4 +358,76 @@ CREATE OR REPLACE FUNCTION f(n INT) RETURNS RECORD AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+# Test errors related to a UDF called with a column-definition list.
+subtest column_definition_errors
+
+statement ok
+CREATE TYPE one_typ AS (x INT);
+CREATE TYPE foo_typ AS (x INT, y INT);
+CREATE TYPE bar_typ AS (x INT, y INT);
+
+# Column-definition list cannot be used with a composite UDT.
+statement ok
+DROP FUNCTION f(INT);
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS foo_typ LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(1, 2); END $$;
+
+statement error pgcode 42601 pq: a column definition list is redundant for a function returning a named composite type
+SELECT * FROM f() AS g(bar bar_typ);
+
+# Column-definition list cannot be used with a scalar type.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN 1; END $$;
+
+statement error pgcode 42601 pq: a column definition list is only allowed for functions returning \"record\"
+SELECT * FROM f() AS g(bar FLOAT);
+
+# Column-definition list cannot be used with OUT-parameters.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(OUT x INT, OUT y INT) RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN x := 1; y := 2; RETURN; END $$;
+
+statement error pgcode 42601 pq: a column definition list is redundant for a function with OUT parameters
+SELECT * FROM f() AS g(bar bar_typ);
+
+# The number of result columns must match the number of entries in the column
+# definition list.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN (1, 2); END $$;
+
+statement error pgcode 42804 pq: returned record type does not match expected record type
+SELECT * FROM f() AS g(bar INT);
+
+statement error pgcode 42804 pq: returned record type does not match expected record type
+SELECT * FROM f() AS g(foo INT, bar INT, baz INT);
+
+# RECORD-returning UDF requires a column-definition list.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(1, 2); END $$;
+
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f();
+
+# A column alias list is insufficient.
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f() AS g(bar, baz);
+
+# The result column(s) must be assignment-cast compatible with the
+# column-definition list.
+statement ok
+DROP FUNCTION f;
+
+# Note: postgres doesn't throw this error until executing the UDF.
+statement error pgcode 42804 pq: cannot return non-composite value from function returning composite type
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN True; END $$;
+
+statement ok
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(True); END $$;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+SELECT * FROM f() AS g(bar one_typ);
+
 subtest end
