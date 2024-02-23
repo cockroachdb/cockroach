@@ -1672,7 +1672,6 @@ if [[ $VERSION = v22.2 ]]; then
 fi
 %[1]s cert create-ca --certs-dir=%[2]s --ca-key=%[2]s/ca.key
 %[1]s cert create-client root --certs-dir=%[2]s --ca-key=%[2]s/ca.key $TENANT_SCOPE_OPT
-%[1]s cert create-client testuser --certs-dir=%[2]s --ca-key=%[2]s/ca.key $TENANT_SCOPE_OPT
 %[1]s cert create-client %[3]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key $TENANT_SCOPE_OPT
 %[1]s cert create-node %[4]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key
 tar cvf %[5]s %[2]s
@@ -1763,7 +1762,6 @@ fi
 %[2]s cert create-node %[3]s $SHARED_ARGS
 %[2]s cert create-tenant-client %[4]d %[3]s $SHARED_ARGS
 %[2]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
-%[2]s cert create-client testuser $TENANT_SCOPE_OPT $SHARED_ARGS
 tar cvf %[5]s $CERT_DIR
 `,
 				CockroachNodeCertsDir,
