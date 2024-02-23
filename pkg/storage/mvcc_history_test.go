@@ -2579,10 +2579,10 @@ func (e *evalCtx) getTxn(opt optArg) *roachpb.Transaction {
 // newReader returns a new (metamorphic) reader for use by a single command. The
 // caller must call Close on the reader when done.
 func (e *evalCtx) newReader() storage.Reader {
-	switch mvccHistoriesReader {
+	switch strings.ToLower(mvccHistoriesReader) {
 	case "engine":
 		return noopCloseReader{e.engine}
-	case "reader", "readOnly":
+	case "reader", "readonly":
 		return e.engine.NewReader(storage.StandardDurability)
 	case "batch":
 		return e.engine.NewBatch()
