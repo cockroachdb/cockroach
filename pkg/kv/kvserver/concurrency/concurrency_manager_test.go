@@ -1002,13 +1002,11 @@ func (c *cluster) detectDeadlocks() {
 }
 
 func (c *cluster) enableTxnPushes() {
-	concurrency.LockTableLivenessPushDelay.Override(context.Background(), &c.st.SV, 0*time.Millisecond)
-	concurrency.LockTableDeadlockDetectionPushDelay.Override(context.Background(), &c.st.SV, 0*time.Millisecond)
+	concurrency.LockTableDeadlockOrLivenessDetectionPushDelay.Override(context.Background(), &c.st.SV, 0*time.Millisecond)
 }
 
 func (c *cluster) disableTxnPushes() {
-	concurrency.LockTableLivenessPushDelay.Override(context.Background(), &c.st.SV, time.Hour)
-	concurrency.LockTableDeadlockDetectionPushDelay.Override(context.Background(), &c.st.SV, time.Hour)
+	concurrency.LockTableDeadlockOrLivenessDetectionPushDelay.Override(context.Background(), &c.st.SV, time.Hour)
 }
 
 func (c *cluster) setDiscoveredLocksThresholdToConsultTxnStatusCache(n int) {
