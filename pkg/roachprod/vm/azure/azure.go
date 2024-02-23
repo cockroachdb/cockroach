@@ -138,6 +138,10 @@ func (p *Provider) AttachVolume(*logger.Logger, vm.Volume, *vm.VM) (string, erro
 	panic("unimplemented")
 }
 
+func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
+	panic("unimplemented")
+}
+
 // New constructs a new Provider instance.
 func New() *Provider {
 	p := &Provider{}

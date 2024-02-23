@@ -99,6 +99,11 @@ func (p *provider) Create(
 	return errors.Newf("%s", p.unimplemented)
 }
 
+// Grow implements vm.Provider and returns Unimplemented.
+func (p *provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names []string) error {
+	return errors.Newf("%s", p.unimplemented)
+}
+
 // Delete implements vm.Provider and returns Unimplemented.
 func (p *provider) Delete(l *logger.Logger, vms vm.List) error {
 	return errors.Newf("%s", p.unimplemented)
