@@ -11466,8 +11466,8 @@ true, then any plan other then the specified gist will be used`
 		Types:      typs,
 		ReturnType: tree.FixedReturnType(types.Bool),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			hasViewActivity, err := evalCtx.SessionAccessor.HasRoleOption(
-				ctx, roleoption.VIEWACTIVITY)
+			hasViewActivity, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(
+				ctx, privilege.VIEWACTIVITY)
 			if err != nil {
 				return nil, err
 			}
@@ -11482,8 +11482,8 @@ true, then any plan other then the specified gist will be used`
 				return nil, err
 			}
 
-			hasViewActivityRedacted, err := evalCtx.SessionAccessor.HasRoleOption(
-				ctx, roleoption.VIEWACTIVITYREDACTED)
+			hasViewActivityRedacted, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(
+				ctx, privilege.VIEWACTIVITYREDACTED)
 			if err != nil {
 				return nil, err
 			}
