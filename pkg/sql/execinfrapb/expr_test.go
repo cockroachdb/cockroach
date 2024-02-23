@@ -19,23 +19,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-type testVarContainer struct{}
-
-var _ tree.IndexedVarContainer = &testVarContainer{}
-
-func (d *testVarContainer) IndexedVarResolvedType(idx int) *types.T {
-	return types.Int
-}
-
-func TestProcessExpression(t *testing.T) {
+func TestDeserializeExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	e := Expression{Expr: "@1 * (@2 + @3) + @1"}
 
-	var c testVarContainer
-	h := tree.MakeIndexedVarHelper(&c, 4)
 	semaCtx := tree.MakeSemaContext()
-	expr, err := processExpression(context.Background(), e, &semaCtx, &h)
+	expr, err := DeserializeExpr(
+		context.Background(),
+		e,
+		[]*types.T{types.Int, types.Int, types.Int},
+		&semaCtx,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +49,12 @@ func TestProcessExpression(t *testing.T) {
 
 	// We can process a new expression with the same tree.IndexedVarHelper.
 	e = Expression{Expr: "@4 - @1"}
-	expr, err = processExpression(context.Background(), e, &semaCtx, &h)
+	expr, err = DeserializeExpr(
+		context.Background(),
+		e,
+		[]*types.T{types.Int, types.Int, types.Int, types.Int},
+		&semaCtx,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

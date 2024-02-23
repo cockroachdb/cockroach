@@ -1921,7 +1921,7 @@ func (r *postProcessResult) planPostProcessSpec(
 		exprs := make([]tree.TypedExpr, len(post.RenderExprs))
 		var err error
 		for i := range exprs {
-			exprs[i], err = args.ExprHelper.ProcessExpr(ctx, post.RenderExprs[i], flowCtx.EvalCtx, r.ColumnTypes)
+			exprs[i], err = args.ExprHelper.ProcessExpr(ctx, post.RenderExprs[i], r.ColumnTypes)
 			if err != nil {
 				return err
 			}
@@ -2027,7 +2027,7 @@ func (r opResult) planFilterExpr(
 	factory coldata.ColumnFactory,
 	helper *colexecargs.ExprHelper,
 ) error {
-	expr, err := helper.ProcessExpr(ctx, filter, flowCtx.EvalCtx, r.ColumnTypes)
+	expr, err := helper.ProcessExpr(ctx, filter, r.ColumnTypes)
 	if err != nil {
 		return err
 	}

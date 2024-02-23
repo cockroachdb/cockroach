@@ -15,7 +15,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -42,10 +41,10 @@ type ExprHelper struct {
 //
 // evalCtx will not be mutated.
 func (h *ExprHelper) ProcessExpr(
-	ctx context.Context, expr execinfrapb.Expression, evalCtx *eval.Context, typs []*types.T,
+	ctx context.Context, expr execinfrapb.Expression, typs []*types.T,
 ) (tree.TypedExpr, error) {
 	if expr.LocalExpr != nil {
 		return expr.LocalExpr, nil
 	}
-	return execinfrapb.DeserializeExprWithTypes(ctx, expr.Expr, typs, h.SemaCtx, evalCtx)
+	return execinfrapb.DeserializeExpr(ctx, expr, typs, h.SemaCtx)
 }
