@@ -557,6 +557,27 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 				info = multiSpanGeneratorValuesColInfo{constVals: values}
 				g.spansCount *= len(values)
 
+			case *tree.Tuple:
+				// A tuple expression that has been serialized and re-parsed
+				// since optimization, will be a *tree.Tuple instead of a
+				// tree.DTuple. It should contain only tree.Datums.
+				values := make(tree.Datums, len(t.Exprs))
+				for i := range values {
+					if d, ok := t.Exprs[i].(tree.Datum); ok {
+						values[i] = d
+						continue
+					}
+					return nil, errors.AssertionFailedf(
+						"expected tuple to contain only tree.Datums, found %T", t.Exprs[i],
+					)
+				}
+				// Every time there are multiple possible values, we multiply
+				// the spansCount by the number of possibilities. We will need
+				// to create spans representing the cartesian product of
+				// possible values for each column.
+				info = multiSpanGeneratorValuesColInfo{constVals: values}
+				g.spansCount *= len(values)
+
 			default:
 				return nil, errors.AssertionFailedf("unhandled comparison argument type %T", t)
 			}
