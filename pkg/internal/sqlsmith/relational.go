@@ -1042,7 +1042,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 				stmt = expr.(*tree.StatementSource).Statement
 				// If the rtype isn't a RECORD, change it to rrefs or RECORD depending
 				// how many columns there are to avoid return type mismatch errors.
-				if rtyp != types.AnyTuple {
+				if !rtyp.Identical(types.AnyTuple) {
 					if len(rrefs) == 1 && s.coin() && rrefs[0].typ.Family() != types.CollatedStringFamily {
 						rtyp = rrefs[0].typ
 					} else {

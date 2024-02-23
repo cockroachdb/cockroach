@@ -449,7 +449,7 @@ func initNonArrayToNonArrayConcatenation() {
 	for _, t := range append([]*types.T{types.AnyTuple}, types.Scalar...) {
 		// Do not re-add String+String or String+Bytes, as they already exist
 		// and have predefined correct behavior.
-		if t != types.String && t != types.Bytes {
+		if !t.Identical(types.String) && !t.Identical(types.Bytes) {
 			addConcat(t, types.String, fromTypeToVolatility[t.Oid()])
 			addConcat(types.String, t, fromTypeToVolatility[t.Oid()])
 		}

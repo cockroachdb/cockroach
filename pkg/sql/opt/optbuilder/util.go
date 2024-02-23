@@ -246,7 +246,7 @@ func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
 // default label for a function expression. Returns true if the function's
 // return type is not an empty tuple and doesn't declare any tuple labels.
 func (b *Builder) shouldCreateDefaultColumn(texpr tree.TypedExpr) bool {
-	if texpr.ResolvedType() == types.EmptyTuple {
+	if texpr.ResolvedType().Identical(types.EmptyTuple) {
 		// This is only to support crdb_internal.unary_table().
 		return false
 	}

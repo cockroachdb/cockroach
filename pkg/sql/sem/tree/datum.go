@@ -5964,7 +5964,7 @@ func NewDRefCursor(d string) Datum {
 // initialized from an existing *DArray, with the special oid for IntVector.
 func NewDIntVectorFromDArray(d *DArray) Datum {
 	// Sanity: Validate the type of the array, since it should be int2.
-	if d.ParamTyp != types.Int2 {
+	if !d.ParamTyp.Identical(types.Int2) {
 		panic(errors.AssertionFailedf("int2vector can only be made from int2 not %s", d.ParamTyp.SQLStringForError()))
 	}
 	ret := new(DArray)

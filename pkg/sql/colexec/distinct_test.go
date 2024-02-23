@@ -491,9 +491,9 @@ func runDistinctBenchmarks(
 	}
 	bytesValueScratch := make([]byte, bytesValueLength)
 	setFirstValue := func(vec coldata.Vec) {
-		if typ := vec.Type(); typ == types.Int {
+		if typ := vec.Type(); typ.Identical(types.Int) {
 			vec.Int64()[0] = 0
-		} else if typ == types.Bytes {
+		} else if typ.Identical(types.Bytes) {
 			vec.Bytes().Set(0, bytesValueScratch)
 		} else {
 			colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", typ))
@@ -503,13 +503,13 @@ func runDistinctBenchmarks(
 		if i == 0 {
 			colexecerror.InternalError(errors.New("setIthValue called with i == 0"))
 		}
-		if typ := vec.Type(); typ == types.Int {
+		if typ := vec.Type(); typ.Identical(types.Int) {
 			col := vec.Int64()
 			col[i] = col[i-1]
 			if rng.Float64() < newValueProbability {
 				col[i]++
 			}
-		} else if typ == types.Bytes {
+		} else if typ.Identical(types.Bytes) {
 			if rng.Float64() < newValueProbability {
 				copy(bytesValueScratch, vec.Bytes().Get(i-1))
 				for pos := 0; pos < bytesValueLength; pos++ {
@@ -569,13 +569,13 @@ func runDistinctBenchmarks(
 						})
 						for colIdx, oldCol := range cols {
 							cols[colIdx] = testAllocator.NewMemColumn(typs[colIdx], nRows)
-							if typs[colIdx] == types.Int {
+							if typs[colIdx].Identical(types.Int) {
 								oldInt64s := oldCol.Int64()
 								newInt64s := cols[colIdx].Int64()
 								for i := 0; i < nRows; i++ {
 									newInt64s[i] = oldInt64s[order[i]]
 								}
-							} else if typs[colIdx] == types.Bytes {
+							} else if typs[colIdx].Identical(types.Bytes) {
 								oldBytes := oldCol.Bytes()
 								newBytes := cols[colIdx].Bytes()
 								for i := 0; i < nRows; i++ {

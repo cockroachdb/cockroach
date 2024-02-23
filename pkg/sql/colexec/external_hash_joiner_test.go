@@ -239,7 +239,7 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 					continue
 				}
 				var cols []coldata.Vec
-				if typ == types.Int {
+				if typ.Identical(types.Int) {
 					cols = newIntColumns(nCols, nRows, 1 /* dupCount */)
 				} else {
 					cols = newBytesColumns(nCols, nRows, 1 /* dupCount */)

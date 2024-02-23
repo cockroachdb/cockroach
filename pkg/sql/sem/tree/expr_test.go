@@ -85,7 +85,7 @@ func TestStringConcat(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	for _, typ := range append([]*types.T{types.AnyTuple}, types.Scalar...) {
 		// Strings and Bytes are handled specially.
-		if typ == types.String || typ == types.Bytes {
+		if typ.Identical(types.String) || typ.Identical(types.Bytes) {
 			continue
 		}
 		d := randgen.RandDatum(rng, typ, false /* nullOk */)
