@@ -287,10 +287,10 @@ func decodeJSONObject(containerHeader uint32, b []byte) ([]byte, JSON, error) {
 	return b, result, nil
 }
 
-func decodeJSONNumber(b []byte) ([]byte, JSON, error) {
+func decodeJSONNumber(b []byte) ([]byte, jsonNumber, error) {
 	b, d, err := encoding.DecodeUntaggedDecimalValue(b)
 	if err != nil {
-		return b, nil, err
+		return b, jsonNumber{}, err
 	}
 	return b, jsonNumber(d), nil
 }

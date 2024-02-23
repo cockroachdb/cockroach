@@ -306,7 +306,7 @@ func (j *errJSON) Format(buf *bytes.Buffer) {
 		t.Format(buf)
 		if j.injectErr() {
 			// Drop terminating quote.
-			buf.Truncate(1)
+			buf.Truncate(buf.Len() - 1)
 		}
 	case jsonNumber:
 		if j.injectErr() {
