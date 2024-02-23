@@ -97,10 +97,7 @@ func processExpression(
 	if exprSpec.Expr == "" {
 		return nil, nil
 	}
-	expr, err := parser.ParseExprWithInt(
-		exprSpec.Expr,
-		parser.NakedIntTypeFromDefaultIntSize(evalCtx.SessionData().DefaultIntSize),
-	)
+	expr, err := parser.ParseExpr(exprSpec.Expr)
 	if err != nil {
 		return nil, err
 	}
