@@ -19,54 +19,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
-// DeserializeExpr deserializes expr, binds the indexed variables to the
-// provided IndexedVarHelper, and evaluates any constants in the expression.
-//
-// evalCtx will not be mutated.
+// DeserializeExpr deserializes expr and binds the indexed variables to the
+// provided IndexedVarHelper.
 func DeserializeExpr(
 	ctx context.Context,
-	expr string,
-	semaCtx *tree.SemaContext,
-	evalCtx *eval.Context,
-	vars *tree.IndexedVarHelper,
-) (tree.TypedExpr, error) {
-	if expr == "" {
-		return nil, nil
-	}
-
-	deserializedExpr, err := processExpression(ctx, Expression{Expr: expr}, evalCtx, semaCtx, vars)
-	if err != nil {
-		return deserializedExpr, err
-	}
-	var t transform.ExprTransformContext
-	if t.AggregateInExpr(ctx, deserializedExpr, evalCtx.SessionData().SearchPath) {
-		return nil, errors.Errorf("expression '%s' has aggregate", deserializedExpr)
-	}
-	return deserializedExpr, nil
-}
-
-// DeserializeExprWithTypes is similar to Deserialize. It can be used when the
-// types of indexed vars are available, but a tree.IndexedVarHelper is not.
-func DeserializeExprWithTypes(
-	ctx context.Context,
-	expr string,
+	expr Expression,
 	typs []*types.T,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
 ) (tree.TypedExpr, error) {
-	if expr == "" {
+	if expr.Expr == "" {
 		return nil, nil
 	}
 	var eh exprHelper
 	eh.types = typs
 	tempVars := tree.MakeIndexedVarHelper(&eh, len(typs))
-	return DeserializeExpr(ctx, expr, semaCtx, evalCtx, &tempVars)
+	return deserializeExpr(ctx, expr, evalCtx, semaCtx, &tempVars)
 }
 
 // RunFilter runs a filter expression and returns whether the filter passes.
@@ -83,11 +56,7 @@ func RunFilter(ctx context.Context, filter tree.TypedExpr, evalCtx *eval.Context
 	return d == tree.DBoolTrue, nil
 }
 
-// processExpression parses the string expression inside an Expression,
-// and associates ordinal references (@1, @2, etc) with the given helper.
-//
-// evalCtx will not be mutated.
-func processExpression(
+func deserializeExpr(
 	ctx context.Context,
 	exprSpec Expression,
 	evalCtx *eval.Context,
@@ -320,7 +289,7 @@ func (eh *exprHelper) prepareExpr(ctx context.Context, expr Expression) (tree.Ty
 		eh.vars.RebindTyped(expr.LocalExpr)
 		return expr.LocalExpr, nil
 	}
-	return DeserializeExpr(ctx, expr.Expr, eh.semaCtx, eh.evalCtx, &eh.vars)
+	return deserializeExpr(ctx, expr, eh.evalCtx, eh.semaCtx, &eh.vars)
 }
 
 // evalFilter is used for filter expressions; it evaluates the expression and
