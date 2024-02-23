@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
 	"github.com/jordanlewis/gcassert"
@@ -46,11 +47,14 @@ var rawGcassertPaths string
 
 func init() {
 	if bazel.BuiltWithBazel() {
-		gobin, err := bazel.Runfile("bin/go")
-		if err != nil {
+		goSdk := os.Getenv("GO_SDK")
+		if goSdk == "" {
+			panic("expected GO_SDK")
+		}
+		if err := os.Setenv("PATH", fmt.Sprintf("%s%c%s", filepath.Join(goSdk, "bin"), os.PathListSeparator, os.Getenv("PATH"))); err != nil {
 			panic(err)
 		}
-		if err := os.Setenv("PATH", fmt.Sprintf("%s%c%s", filepath.Dir(gobin), os.PathListSeparator, os.Getenv("PATH"))); err != nil {
+		if err := os.Setenv("GOROOT", goSdk); err != nil {
 			panic(err)
 		}
 	}
@@ -120,7 +124,14 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 // should be marked with t.Parallel().
 func TestLint(t *testing.T) {
 	var crdbDir, pkgDir string
-	{
+	if bazel.BuiltWithBazel() {
+		var set bool
+		crdbDir, set = envutil.EnvString("COCKROACH_WORKSPACE", 0)
+		if !set || crdbDir == "" {
+			t.Fatal("must supply COCKROACH_WORKSPACE variable (./dev lint does this for you automatically)")
+		}
+		pkgDir = filepath.Join(crdbDir, "pkg")
+	} else {
 		cwd, err := os.Getwd()
 		if err != nil {
 			t.Fatal(err)
@@ -135,10 +146,24 @@ func TestLint(t *testing.T) {
 	pkgVar, pkgSpecified := os.LookupEnv("PKG")
 
 	var nogoConfig map[string]any
-	nogoJSON, err := os.ReadFile(filepath.Join(crdbDir, "build", "bazelutil", "nogo_config.json"))
-	if err != nil {
-		t.Fatal(err)
+	var nogoJSON []byte
+	if bazel.BuiltWithBazel() {
+		nogoJSONPath, err := bazel.Runfile("build/bazelutil/nogo_config.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		nogoJSON, err = os.ReadFile(nogoJSONPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		var err error
+		nogoJSON, err = os.ReadFile(filepath.Join(crdbDir, "build", "bazelutil", "nogo_config.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
+
 	if err := json.Unmarshal(nogoJSON, &nogoConfig); err != nil {
 		t.Error(err)
 	}
@@ -393,6 +418,16 @@ func TestLint(t *testing.T) {
 			skip.IgnoreLint(t, "PKG specified")
 		}
 
+		// If run outside of Bazel, we assume this binary must be in the PATH.
+		optfmt := "optfmt"
+		if bazel.BuiltWithBazel() {
+			var err error
+			optfmt, err = bazel.Runfile("pkg/sql/opt/optgen/cmd/optfmt/optfmt_/optfmt")
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.opt", ":!*/testdata/*")
 		if err != nil {
 			t.Fatal(err)
@@ -409,7 +444,7 @@ func TestLint(t *testing.T) {
 				stream.Map(func(s string) string {
 					return filepath.Join(pkgDir, s)
 				}),
-				stream.Xargs("optfmt", "-l"),
+				stream.Xargs(optfmt, "-l"),
 			), func(s string) {
 				fmt.Fprintln(&buf, s)
 			}); err != nil {
@@ -1538,8 +1573,18 @@ func TestLint(t *testing.T) {
 		if pkgSpecified {
 			skip.IgnoreLint(t, "PKG specified")
 		}
+		// If run outside of Bazel, we assume this binary must be in the PATH.
+		crlfmt := "crlfmt"
+		if bazel.BuiltWithBazel() {
+			var err error
+			crlfmt, err = bazel.Runfile("external/com_github_cockroachdb_crlfmt/crlfmt_/crlfmt")
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		ignore := `zcgo*|\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/|^sql/parser/sql\.go$|(_)?generated(_test)?\.go$|^sql/pgrepl/pgreplparser/pgrepl\.go$|^sql/plpgsql/parser/plpgsql\.go$`
-		cmd, stderr, filter, err := dirCmd(pkgDir, "crlfmt", "-fast", "-ignore", ignore, "-tab", "2", ".")
+		cmd, stderr, filter, err := dirCmd(pkgDir, crlfmt, "-fast", "-ignore", ignore, "-tab", "2", ".")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2139,15 +2184,13 @@ func TestLint(t *testing.T) {
 	t.Run("TestGCAssert", func(t *testing.T) {
 		skip.UnderShort(t)
 
-		t.Parallel()
-
 		var gcassertPaths []string
 		for _, path := range strings.Split(rawGcassertPaths, "\n") {
 			path = strings.TrimSpace(path)
 			if path == "" {
 				continue
 			}
-			gcassertPaths = append(gcassertPaths, fmt.Sprintf("../../%s", path))
+			gcassertPaths = append(gcassertPaths, filepath.Join(crdbDir, "pkg", path))
 		}
 
 		// Ensure that all packages that have '//gcassert' or '// gcassert'
@@ -2181,7 +2224,7 @@ func TestLint(t *testing.T) {
 				// and we want to extract the package path.
 				filePath := s[:strings.Index(s, ":")]                  // up to the line number
 				pkgPath := filePath[:strings.LastIndex(filePath, "/")] // up to the file name
-				gcassertPath := "../../" + pkgPath
+				gcassertPath := filepath.Join(crdbDir, "pkg", pkgPath)
 				for i := range gcassertPaths {
 					if gcassertPath == gcassertPaths[i] {
 						return
@@ -2200,10 +2243,10 @@ func TestLint(t *testing.T) {
 		})
 
 		var buf strings.Builder
-		if err := gcassert.GCAssert(&buf, gcassertPaths...); err != nil {
-			t.Fatal(err)
-		}
 		output := buf.String()
+		if err := gcassert.GCAssertCwd(&buf, crdbDir, gcassertPaths...); err != nil {
+			t.Fatalf("failed gcassert (%+v):\n%s", err, buf.String())
+		}
 		if len(output) > 0 {
 			t.Fatalf("failed gcassert:\n%s", output)
 		}
@@ -2505,7 +2548,6 @@ func TestLint(t *testing.T) {
 		co, err := codeowners.DefaultLoadCodeOwners()
 		require.NoError(t, err)
 		const verbose = false
-		repoRoot := filepath.Join("../../../")
-		codeowners.LintEverythingIsOwned(t, verbose, co, repoRoot, "pkg")
+		codeowners.LintEverythingIsOwned(t, verbose, co, crdbDir, "pkg")
 	})
 }
