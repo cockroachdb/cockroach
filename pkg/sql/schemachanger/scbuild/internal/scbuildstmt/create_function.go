@@ -68,7 +68,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	setof := false
 	if n.ReturnType != nil {
 		typ = n.ReturnType.Type
-		if returnType := b.ResolveTypeRef(typ); types.IsRecordType(returnType.Type) {
+		if returnType := b.ResolveTypeRef(typ); types.IsRecordReturnTypeNoOutParams(returnType.Type) {
 			// If the function returns a RECORD type, then we need to check
 			// whether its OUT parameters specify labels for the return type.
 			//

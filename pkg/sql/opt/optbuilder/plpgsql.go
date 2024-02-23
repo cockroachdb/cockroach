@@ -269,7 +269,7 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 			if err != nil {
 				panic(err)
 			}
-			if types.IsRecordType(typ) {
+			if types.IsRecordParamType(typ) {
 				panic(recordVarErr)
 			}
 			b.addVariable(dec.Var, typ)
@@ -295,7 +295,7 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 	// Perform type-checking for RECORD-returning routines. This happens after
 	// building the variable declarations, so that expressions that reference
 	// those variables can be type-checked.
-	if types.IsRecordType(b.returnType) {
+	if types.IsRecordReturnTypeNoOutParams(b.returnType) {
 		// Infer the concrete type by examining the RETURN statements. This has to
 		// happen after building the declaration block because RETURN statements can
 		// reference declared variables.

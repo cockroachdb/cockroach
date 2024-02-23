@@ -393,7 +393,7 @@ func (b *Builder) finishBuildLastStmt(
 			expr = b.constructProject(expr, elems)
 			physProps = stmtScope.makePhysicalProps()
 		}
-	} else if len(cols) > 1 || (types.IsRecordType(rtyp) && !isSingleTupleResult) {
+	} else if len(cols) > 1 || (types.IsRecordReturnTypeNoOutParams(rtyp) && !isSingleTupleResult) {
 		// Only a single column can be returned from a UDF, unless it is used as a
 		// data source (see comment above). If there are multiple columns, combine
 		// them into a tuple. If the last statement is already returning a tuple
@@ -420,7 +420,8 @@ func (b *Builder) finishBuildLastStmt(
 	if len(cols) > 0 {
 		returnCol := physProps.Presentation[0].ID
 		returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
-		if !types.IsRecordType(rtyp) && !isMultiColDataSource && !returnColMeta.Type.Identical(rtyp) {
+		if !types.IsRecordReturnTypeNoOutParams(rtyp) && !isMultiColDataSource &&
+			!returnColMeta.Type.Identical(rtyp) {
 			if !cast.ValidCast(returnColMeta.Type, rtyp, cast.ContextAssignment) {
 				panic(sqlerrors.NewInvalidAssignmentCastError(
 					returnColMeta.Type, rtyp, returnColMeta.Alias))

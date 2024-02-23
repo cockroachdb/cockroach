@@ -737,7 +737,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		}
 	}
 	returnType := desc.ReturnType.Type
-	if types.IsRecordType(returnType) {
+	if types.IsRecordReturnTypeNoOutParams(returnType) {
 		ret.ReturnsRecordType = true
 		returnType = types.MakeLabeledTuple(returnType.TupleContents(), outParamNames)
 	}

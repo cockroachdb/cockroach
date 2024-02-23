@@ -2836,11 +2836,20 @@ func IsWildcardTupleType(t *T) bool {
 	return len(t.TupleContents()) == 1 && t.TupleContents()[0].Family() == AnyFamily
 }
 
-// IsRecordType returns true if this is a RECORD type. This should only be used
-// when processing UDFs. A record differs from AnyTuple in that the tuple
-// contents may contain types other than Any.
-func IsRecordType(typ *T) bool {
-	return typ.Family() == TupleFamily && typ.Oid() == oid.T_record
+// IsRecordReturnTypeNoOutParams returns true for the return-type of a routine
+// declared using RETURNS RECORD syntax, with no OUT parameters.
+//
+// This should only be used when processing routines.
+func IsRecordReturnTypeNoOutParams(typ *T) bool {
+	return typ.Family() == TupleFamily && typ.Oid() == oid.T_record && IsWildcardTupleType(typ)
+}
+
+// IsRecordParamType returns true if a routine parameter or variable was
+// declared as having type RECORD.
+//
+// This should only be used when processing routines.
+func IsRecordParamType(typ *T) bool {
+  return typ.Family() == TupleFamily && typ.Oid() == oid.T_record && IsWildcardTupleType(typ)
 }
 
 // collatedStringTypeSQL returns the string representation of a COLLATEDSTRING

@@ -177,7 +177,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 		// The parameter type must be supported by the current cluster version.
 		checkUnsupportedType(b.ctx, b.semaCtx, typ)
-		if types.IsRecordType(typ) {
+		if types.IsRecordParamType(typ) {
 			if language == tree.RoutineLangSQL {
 				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
 					"SQL functions cannot have arguments of type record"))
@@ -408,7 +408,7 @@ func validateReturnType(
 	// parameters, any column types are valid. This is the case when we have
 	// RETURNS RECORD without OUT params - we don't need to check the types
 	// below.
-	if types.IsRecordType(expected) && types.IsWildcardTupleType(expected) {
+	if types.IsRecordReturnTypeNoOutParams(expected) {
 		return nil
 	}
 
