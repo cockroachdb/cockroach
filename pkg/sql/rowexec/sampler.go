@@ -368,7 +368,7 @@ func (s *samplerProcessor) mainLoop(
 	outRow := make(rowenc.EncDatumRow, len(s.outTypes))
 	// Emit the sampled rows.
 	for i := range outRow {
-		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		outRow[i] = rowenc.NullEncDatum()
 	}
 	// Reuse the numRows column for the capacity of the sample reservoir.
 	outRow[s.numRowsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(s.sr.Cap()))}
@@ -381,7 +381,7 @@ func (s *samplerProcessor) mainLoop(
 	}
 	// Emit the inverted sample rows.
 	for i := range outRow {
-		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		outRow[i] = rowenc.NullEncDatum()
 	}
 	for col, invSr := range s.invSr {
 		// Reuse the numRows column for the capacity of the sample reservoir.
@@ -402,7 +402,7 @@ func (s *samplerProcessor) mainLoop(
 
 	// Emit the sketch rows.
 	for i := range outRow {
-		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		outRow[i] = rowenc.NullEncDatum()
 	}
 	for i, si := range s.sketches {
 		outRow[s.sketchIdxCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
@@ -413,7 +413,7 @@ func (s *samplerProcessor) mainLoop(
 
 	// Emit the inverted sketch rows.
 	for i := range outRow {
-		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		outRow[i] = rowenc.NullEncDatum()
 	}
 	for col, invSketch := range s.invSketch {
 		outRow[s.invColIdxCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(col))}
