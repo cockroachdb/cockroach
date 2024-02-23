@@ -2582,8 +2582,8 @@ func (e *evalCtx) newReader() storage.Reader {
 	switch mvccHistoriesReader {
 	case "engine":
 		return noopCloseReader{e.engine}
-	case "readonly":
-		return e.engine.NewReadOnly(storage.StandardDurability)
+	case "reader", "readOnly":
+		return e.engine.NewReader(storage.StandardDurability)
 	case "batch":
 		return e.engine.NewBatch()
 	case "snapshot":

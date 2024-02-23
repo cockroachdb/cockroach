@@ -799,7 +799,7 @@ func TestEngineScan1(t *testing.T) {
 	}
 
 	// Test iterator stats.
-	ro := engine.NewReadOnly(StandardDurability)
+	ro := engine.NewReader(StandardDurability)
 	iter, err := ro.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
 	require.NoError(t, err)
 	iter.SeekGE(MVCCKey{Key: roachpb.Key("cat")})
@@ -1950,6 +1950,11 @@ func TestEngineIteratorVisibility(t *testing.T) {
 			expectConsistent: true,
 			canWrite:         true,
 			readOwnWrites:    false,
+		},
+		"Reader": {
+			makeReader:       func(e Engine) Reader { return e.NewReader(StandardDurability) },
+			expectConsistent: true,
+			canWrite:         false,
 		},
 		"ReadOnly": {
 			makeReader:       func(e Engine) Reader { return e.NewReadOnly(StandardDurability) },
