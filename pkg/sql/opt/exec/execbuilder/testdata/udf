@@ -378,7 +378,7 @@ vectorized: true
 • project set
 │ columns: (f1 decimal, f2 string)
 │ estimated row count: 1
-│ render 0: (array_to_set((ARRAY[('one')[string],('two')[string]])[string[]]))[tuple{int AS index, string AS value}]
+│ render 0: (array_to_set((ARRAY[('one')[string],('two')[string]])[string[]]))[tuple{decimal AS f1, string AS f2}]
 │
 └── • emptyrow
       columns: ()

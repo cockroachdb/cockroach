@@ -1123,15 +1123,15 @@ build
 SELECT * FROM t95615, LATERAL ROWS FROM (f95615(), f95615()) WITH ORDINALITY
 ----
 project
- ├── columns: c1:1!null f95615:6 f95615:6 ordinality:9!null
+ ├── columns: c1:1!null f95615:5 f95615:5 ordinality:7!null
  └── inner-join-apply
-      ├── columns: c1:1!null crdb_internal_mvcc_timestamp:2 tableoid:3 f95615:6 ordinality:9!null
+      ├── columns: c1:1!null crdb_internal_mvcc_timestamp:2 tableoid:3 f95615:5 ordinality:7!null
       ├── scan t95615
       │    └── columns: c1:1!null crdb_internal_mvcc_timestamp:2 tableoid:3
       ├── ordinality
-      │    ├── columns: f95615:6 ordinality:9!null
+      │    ├── columns: f95615:5 ordinality:7!null
       │    └── project-set
-      │         ├── columns: f95615:6
+      │         ├── columns: f95615:5
       │         ├── values
       │         │    └── ()
       │         └── zip

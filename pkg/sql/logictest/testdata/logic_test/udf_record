@@ -211,7 +211,7 @@ $$
 $$ LANGUAGE SQL;
 
 query T
-SELECT * FROM f_udt() AS foo(u udt);
+SELECT * FROM f_udt();
 ----
 a
 
@@ -465,20 +465,24 @@ CREATE FUNCTION imp() RETURNS imp LANGUAGE SQL AS $$
   SELECT k, a, b FROM imp
 $$
 
-query TBT
-SELECT imp(), (1,2,'a')::imp = imp(), pg_typeof(imp())
+# TODO(#58252): pg_typeof(imp_tup_ordered()) is omitted because we get
+# different results for different configurations.
+query TB
+SELECT imp(), (1,2,'a')::imp = imp()
 ----
-(1,2,a)  true  imp
+(1,2,a)  true
 
 statement ok
 CREATE FUNCTION imp_star() RETURNS imp LANGUAGE SQL AS $$
   SELECT * FROM imp
 $$
 
-query TBT
-SELECT imp_star(), (1,2,'a')::imp = imp_star(), pg_typeof(imp_star())
+# TODO(#58252): pg_typeof(imp_tup_ordered()) is omitted because we get
+# different results for different configurations.
+query TB
+SELECT imp_star(), (1,2,'a')::imp = imp_star()
 ----
-(1,2,a)  true  imp
+(1,2,a)  true
 
 statement ok
 INSERT INTO imp VALUES (100, 200, 'z')
@@ -488,8 +492,8 @@ CREATE FUNCTION imp_tup_ordered() RETURNS imp LANGUAGE SQL AS $$
   SELECT (k, a, b) FROM imp ORDER BY b DESC
 $$
 
-# TODO(mgartner): pg_typeof(imp_tup_ordered()) is omitted because we get
-# different results for different configurations, due to #58252.
+# TODO(#58252): pg_typeof(imp_tup_ordered()) is omitted because we get
+# different results for different configurations.
 query TB
 SELECT imp_tup_ordered(), (100,200,'z')::imp = imp_tup_ordered()
 ----
@@ -500,10 +504,12 @@ CREATE FUNCTION imp_ordered() RETURNS imp LANGUAGE SQL AS $$
   SELECT k, a, b FROM imp ORDER BY b DESC
 $$
 
-query TBT
-SELECT imp_ordered(), (100,200,'z')::imp = imp_ordered(), pg_typeof(imp_ordered())
+# TODO(#58252): pg_typeof(imp_ordered()) is omitted because we get
+# different results for different configurations.
+query TB
+SELECT imp_ordered(), (100,200,'z')::imp = imp_ordered()
 ----
-(100,200,z)  true  imp
+(100,200,z)  true
 
 statement ok
 CREATE FUNCTION imp_identity(i imp) RETURNS imp LANGUAGE SQL AS $$
@@ -558,5 +564,68 @@ statement error pgcode 42P13 return type mismatch in function declared to return
 CREATE FUNCTION err(i imp) RETURNS INT LANGUAGE SQL AS $$
   SELECT i
 $$
+
+# Test errors related to a UDF called with a column-definition list.
+subtest column_definition_errors
+
+statement ok
+CREATE TYPE foo_typ AS (x INT, y INT);
+CREATE TYPE bar_typ AS (x INT, y INT);
+
+# Column-definition list cannot be used with a composite UDT.
+statement ok
+CREATE FUNCTION f() RETURNS foo_typ LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
+
+statement error pgcode 42601 pq: a column definition list is redundant for a function returning a named composite type
+SELECT * FROM f() AS g(bar bar_typ);
+
+# Column-definition list cannot be used with a scalar type.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement error pgcode 42601 pq: a column definition list is only allowed for functions returning \"record\"
+SELECT * FROM f() AS g(bar FLOAT);
+
+# Column-definition list cannot be used with OUT-parameters.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(OUT x INT, OUT y INT) RETURNS RECORD LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
+
+statement error pgcode 42601 pq: a column definition list is redundant for a function with OUT parameters
+SELECT * FROM f() AS g(bar bar_typ);
+
+# The number of result columns must match the number of entries in the column
+# definition list.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE SQL AS $$ SELECT 1, 2; $$;
+
+statement error pgcode 42804 pq: function return row and query-specified return row do not match
+SELECT * FROM f() AS g(bar INT);
+
+statement error pgcode 42804 pq: function return row and query-specified return row do not match
+SELECT * FROM f() AS g(foo INT, bar INT, baz INT);
+
+# RECORD-returning UDF requires a column-definition list.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
+
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f();
+
+# A column alias list is insufficient.
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f() AS g(bar, baz);
+
+# The result column(s) must be assignment-cast compatible with the
+# column-definition list.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE SQL AS $$ SELECT True; $$;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+SELECT * FROM f() AS g(bar INT);
 
 subtest end
