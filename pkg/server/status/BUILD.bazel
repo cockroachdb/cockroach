@@ -69,7 +69,6 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "//pkg/util/system",
-        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
