@@ -150,34 +150,6 @@ func (h *IndexedVarHelper) IndexedVarWithType(idx int, typ *types.T) *IndexedVar
 	return v
 }
 
-// GetIndexedVars returns the indexed var array of this helper.
-func (h *IndexedVarHelper) GetIndexedVars() []IndexedVar {
-	return h.vars
-}
-
-// RebindTyped collects all the IndexedVars in the given typed expression and
-// re-binds them to this helper.
-func (h *IndexedVarHelper) RebindTyped(expr TypedExpr) TypedExpr {
-	if expr == nil {
-		return nil
-	}
-	ret, _ := WalkExpr(h, expr)
-	return ret.(TypedExpr)
-}
-
-var _ Visitor = &IndexedVarHelper{}
-
-// VisitPre implements the Visitor interface.
-func (h *IndexedVarHelper) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	if iv, ok := expr.(*IndexedVar); ok {
-		return false, h.IndexedVar(iv.Idx)
-	}
-	return true, expr
-}
-
-// VisitPost implements the Visitor interface.
-func (*IndexedVarHelper) VisitPost(expr Expr) Expr { return expr }
-
 type typeContainer struct {
 	types []*types.T
 }
@@ -190,8 +162,7 @@ func (tc *typeContainer) IndexedVarResolvedType(idx int) *types.T {
 }
 
 // MakeIndexedVarHelperWithTypes creates an IndexedVarHelper which provides
-// the given types for indexed vars. It does not support evaluation, unless
-// RebindTyped is used with another container which supports evaluation.
+// the given types for indexed vars.
 func MakeIndexedVarHelperWithTypes(types []*types.T) IndexedVarHelper {
 	c := &typeContainer{types: types}
 	return MakeIndexedVarHelper(c, len(types))

@@ -24,7 +24,6 @@ import (
 type filterNode struct {
 	source      planDataSource
 	filter      tree.TypedExpr
-	ivarHelper  tree.IndexedVarHelper
 	reqOrdering ReqOrdering
 }
 
@@ -35,7 +34,7 @@ var _ eval.IndexedVarContainer = &filterNode{}
 func (f *filterNode) IndexedVarEval(
 	ctx context.Context, idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
-	return f.source.plan.Values()[idx].Eval(ctx, e)
+	return f.source.plan.Values()[idx], nil
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.

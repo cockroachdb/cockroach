@@ -227,12 +227,7 @@ func (ef *execFactory) ConstructFilter(
 	f := &filterNode{
 		source: src,
 	}
-	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.columns))
-	f.filter = f.ivarHelper.RebindTyped(filter)
-	if f.filter == nil {
-		// Filter statically evaluates to true. Just return the input plan.
-		return n, nil
-	}
+	f.filter = filter
 	f.reqOrdering = ReqOrdering(reqOrdering)
 
 	// If there's a spool, pull it up.
@@ -298,9 +293,14 @@ func constructSimpleProjectForPlanNode(
 	var rb renderBuilder
 	rb.init(n, reqOrdering)
 
+	// TODO(mgartner): With an indexed var helper we are potentially allocating
+	// more indexed variables than we need. We only need len(cols) indexed vars
+	// but we have to allocate len(inputCols) to make sure there is an indexed
+	// variable for all possible input ordinals.
+	ivh := tree.MakeIndexedVarHelper(rb.r, len(inputCols))
 	exprs := make(tree.TypedExprs, len(cols))
 	for i, col := range cols {
-		exprs[i] = rb.r.ivarHelper.IndexedVar(int(col))
+		exprs[i] = ivh.IndexedVar(int(col))
 	}
 	var resultTypes []*types.T
 	if colNames != nil {
@@ -384,9 +384,6 @@ func (ef *execFactory) ConstructRender(
 ) (exec.Node, error) {
 	var rb renderBuilder
 	rb.init(n, reqOrdering)
-	for i, expr := range exprs {
-		exprs[i] = rb.r.ivarHelper.RebindTyped(expr)
-	}
 	rb.setOutput(exprs, columns)
 	return rb.res, nil
 }
@@ -402,7 +399,7 @@ func (ef *execFactory) ConstructHashJoin(
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
-	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
+	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns, extraOnCond)
 
 	numEqCols := len(leftEqCols)
 	pred.leftEqualityIndices = leftEqCols
@@ -418,8 +415,6 @@ func (ef *execFactory) ConstructHashJoin(
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
 
-	pred.onCond = pred.iVarHelper.RebindTyped(extraOnCond)
-
 	return p.makeJoinNode(leftSrc, rightSrc, pred), nil
 }
 
@@ -432,8 +427,7 @@ func (ef *execFactory) ConstructApplyJoin(
 	planRightSideFn exec.ApplyJoinPlanRightSideFn,
 ) (exec.Node, error) {
 	leftSrc := asDataSource(left)
-	pred := makePredicate(joinType, leftSrc.columns, rightColumns)
-	pred.onCond = pred.iVarHelper.RebindTyped(onCond)
+	pred := makePredicate(joinType, leftSrc.columns, rightColumns, onCond)
 	return newApplyJoinNode(joinType, leftSrc, rightColumns, pred, planRightSideFn)
 }
 
@@ -450,8 +444,7 @@ func (ef *execFactory) ConstructMergeJoin(
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
-	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
-	pred.onCond = pred.iVarHelper.RebindTyped(onCond)
+	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns, onCond)
 	node := p.makeJoinNode(leftSrc, rightSrc, pred)
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
@@ -759,15 +752,11 @@ func (ef *execFactory) ConstructLookupJoin(
 	for i, c := range eqCols {
 		n.eqCols[i] = int(c)
 	}
-	pred := makePredicate(joinType, planColumns(input.(planNode)), planColumns(tableScan))
-	if lookupExpr != nil {
-		n.lookupExpr = pred.iVarHelper.RebindTyped(lookupExpr)
-	}
-	if remoteLookupExpr != nil {
-		n.remoteLookupExpr = pred.iVarHelper.RebindTyped(remoteLookupExpr)
-	}
-	if onCond != nil && onCond != tree.DBoolTrue {
-		n.onCond = pred.iVarHelper.RebindTyped(onCond)
+	pred := makePredicate(joinType, planColumns(input.(planNode)), planColumns(tableScan), nil /* onCond */)
+	n.lookupExpr = lookupExpr
+	n.remoteLookupExpr = remoteLookupExpr
+	if onCond != tree.DBoolTrue {
+		n.onCond = onCond
 	}
 	n.columns = pred.cols
 	if isFirstJoinInPairedJoiner {
@@ -832,8 +821,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	default:
 		return nil, errors.AssertionFailedf("unexpected join type for virtual lookup join: %s", joinType.String())
 	}
-	pred := makePredicate(joinType, inputCols, projectedVtableCols)
-	pred.onCond = pred.iVarHelper.RebindTyped(onCond)
+	pred := makePredicate(joinType, inputCols, projectedVtableCols, onCond)
 	n := &vTableLookupJoinNode{
 		input:             input.(planNode),
 		joinType:          joinType,
@@ -2220,7 +2208,6 @@ func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering) {
 	rb.r = &renderNode{
 		source: src,
 	}
-	rb.r.ivarHelper = tree.MakeIndexedVarHelper(rb.r, len(src.columns))
 	rb.r.reqOrdering = ReqOrdering(reqOrdering)
 
 	// If there's a spool, pull it up.
