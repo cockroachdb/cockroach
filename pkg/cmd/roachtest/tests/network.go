@@ -83,7 +83,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	c.Start(ctx, t.L(), startOpts, settings, c.Range(2, n-1))
 
 	t.L().Printf("retrieving server addresses...")
-	serverAddrs, err := c.InternalAddr(ctx, t.L(), serverNodes)
+	serverUrls, err := c.InternalPGUrl(ctx, t.L(), serverNodes, roachprod.PGURLOptions{Auth: install.AuthUserPassword})
 	require.NoError(t, err)
 
 	t.L().Printf("fetching certs...")
@@ -110,12 +110,6 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 
 	// Wait for up-replication. This will also print a progress message.
 	err = WaitFor3XReplication(ctx, t, t.L(), db)
-	require.NoError(t, err)
-
-	t.L().Printf("creating test user...")
-	_, err = db.Exec(`CREATE USER testuser WITH PASSWORD 'password' VALID UNTIL '2060-01-01'`)
-	require.NoError(t, err)
-	_, err = db.Exec(`GRANT admin TO testuser`)
 	require.NoError(t, err)
 
 	const expectedLeaseholder = 1
@@ -209,7 +203,7 @@ SELECT $1::INT = ALL (
 				}
 
 				// Construct a connection URL to server i.
-				url := fmt.Sprintf("postgres://testuser:password@%s/defaultdb?sslmode=require", serverAddrs[server-1])
+				url := serverUrls[server-1]
 
 				// Attempt a client connection to that server.
 				t.L().Printf("server %d, attempt %d; url: %s\n", server, attempt, url)
