@@ -2476,3 +2476,120 @@ insert child
                 │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:90 = parent.p:91
+
+exec-ddl
+CREATE TABLE t1 (
+  k INT PRIMARY KEY,
+  r STRING NOT NULL,
+  a INT,
+  b INT AS (a % 9) STORED,
+  c INT,
+  INDEX (b, a),
+  INDEX (r, c),
+  UNIQUE WITHOUT INDEX (a),
+  UNIQUE WITHOUT INDEX (c),
+  CHECK (r IN ('east', 'west'))
+)
+----
+
+# Index hints do not propagate to the uniqueness checks.
+build
+INSERT INTO t1@t1_b_a_idx (k, r, a, c) VALUES (2, 'east', 10, 20)
+----
+insert t1
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => t1.k:1
+ │    ├── column2:9 => t1.r:2
+ │    ├── column3:10 => t1.a:3
+ │    ├── b_comp:12 => t1.b:4
+ │    └── column4:11 => t1.c:5
+ ├── check columns: check1:13
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:13!null column1:8!null column2:9!null column3:10!null column4:11!null b_comp:12!null
+ │    ├── project
+ │    │    ├── columns: b_comp:12!null column1:8!null column2:9!null column3:10!null column4:11!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
+ │    │    │    └── (2, 'east', 10, 20)
+ │    │    └── projections
+ │    │         └── column3:10 % 9 [as=b_comp:12]
+ │    └── projections
+ │         └── column2:9 IN ('east', 'west') [as=check1:13]
+ ├── unique-checks
+ │    ├── unique-checks-item: t1(a)
+ │    │    └── project
+ │    │         ├── columns: a:23!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: k:21!null r:22!null a:23!null b:24!null c:25!null
+ │    │              ├── with-scan &1
+ │    │              │    ├── columns: k:21!null r:22!null a:23!null b:24!null c:25!null
+ │    │              │    └── mapping:
+ │    │              │         ├──  column1:8 => k:21
+ │    │              │         ├──  column2:9 => r:22
+ │    │              │         ├──  column3:10 => a:23
+ │    │              │         ├──  b_comp:12 => b:24
+ │    │              │         └──  column4:11 => c:25
+ │    │              ├── scan t1
+ │    │              │    ├── columns: t1.k:14!null t1.r:15!null t1.a:16 t1.b:17 t1.c:18
+ │    │              │    ├── check constraint expressions
+ │    │              │    │    └── t1.r:15 IN ('east', 'west')
+ │    │              │    ├── computed column expressions
+ │    │              │    │    └── t1.b:17
+ │    │              │    │         └── t1.a:16 % 9
+ │    │              │    └── flags: disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── a:23 = t1.a:16
+ │    │                   └── k:21 != t1.k:14
+ │    └── unique-checks-item: t1(c)
+ │         └── project
+ │              ├── columns: c:44!null
+ │              └── semi-join (hash)
+ │                   ├── columns: k:40!null r:41!null a:42!null b:43!null c:44!null
+ │                   ├── with-scan &1
+ │                   │    ├── columns: k:40!null r:41!null a:42!null b:43!null c:44!null
+ │                   │    └── mapping:
+ │                   │         ├──  column1:8 => k:40
+ │                   │         ├──  column2:9 => r:41
+ │                   │         ├──  column3:10 => a:42
+ │                   │         ├──  b_comp:12 => b:43
+ │                   │         └──  column4:11 => c:44
+ │                   ├── scan t1
+ │                   │    ├── columns: t1.k:33!null t1.r:34!null t1.a:35 t1.b:36 t1.c:37
+ │                   │    ├── check constraint expressions
+ │                   │    │    └── t1.r:34 IN ('east', 'west')
+ │                   │    ├── computed column expressions
+ │                   │    │    └── t1.b:36
+ │                   │    │         └── t1.a:35 % 9
+ │                   │    └── flags: disabled not visible index feature
+ │                   └── filters
+ │                        ├── c:44 = t1.c:37
+ │                        └── k:40 != t1.k:33
+ └── fast-path-unique-checks
+      ├── fast-path-unique-checks-item: t1(a)
+      │    └── select
+      │         ├── columns: t1.k:26!null t1.r:27!null t1.a:28!null t1.b:29 t1.c:30
+      │         ├── scan t1
+      │         │    ├── columns: t1.k:26!null t1.r:27!null t1.a:28 t1.b:29 t1.c:30
+      │         │    ├── check constraint expressions
+      │         │    │    └── t1.r:27 IN ('east', 'west')
+      │         │    ├── computed column expressions
+      │         │    │    └── t1.b:29
+      │         │    │         └── t1.a:28 % 9
+      │         │    └── flags: disabled not visible index feature
+      │         └── filters
+      │              └── t1.a:28 = 10
+      └── fast-path-unique-checks-item: t1(c)
+           └── select
+                ├── columns: t1.k:45!null t1.r:46!null t1.a:47 t1.b:48 t1.c:49!null
+                ├── scan t1
+                │    ├── columns: t1.k:45!null t1.r:46!null t1.a:47 t1.b:48 t1.c:49
+                │    ├── check constraint expressions
+                │    │    └── t1.r:46 IN ('east', 'west')
+                │    ├── computed column expressions
+                │    │    └── t1.b:48
+                │    │         └── t1.a:47 % 9
+                │    └── flags: disabled not visible index feature
+                └── filters
+                     └── t1.c:49 = 20
