@@ -24,7 +24,6 @@ import (
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -62,12 +61,12 @@ func (b *Builder) buildUDF(
 	}
 
 	// Build the routine.
-	routine, isMultiColDataSource := b.buildRoutine(f, def, inScope, outScope, colRefs)
+	routine := b.buildRoutine(f, def, inScope, outScope, colRefs)
 
 	// Synthesize an output columns if necessary.
 	if outCol == nil {
-		if isMultiColDataSource {
-			return b.finishBuildGeneratorFunction(f, o, routine, inScope, outScope, outCol)
+		if b.insideDataSource && len(f.ResolvedType().TupleContents()) > 0 {
+			return b.finishBuildGeneratorFunction(f, routine, inScope, outScope, outCol)
 		}
 		if outScope != nil {
 			outCol = b.synthesizeColumn(outScope, scopeColName(""), f.ResolvedType(), nil /* expr */, routine)
@@ -129,7 +128,7 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	}
 
 	// Build the routine.
-	routine, _ := b.buildRoutine(proc, def, inScope, outScope, nil /* colRefs */)
+	routine := b.buildRoutine(proc, def, inScope, outScope, nil /* colRefs */)
 	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
 		nil /* outScope */, nil /* outCol */)
 
@@ -202,7 +201,7 @@ func (b *Builder) buildRoutine(
 	def *tree.ResolvedFunctionDefinition,
 	inScope, outScope *scope,
 	colRefs *opt.ColSet,
-) (out opt.ScalarExpr, isMultiColDataSource bool) {
+) opt.ScalarExpr {
 	o := f.ResolvedOverload()
 	isProc := o.Type == tree.ProcedureRoutine
 	invocationTypes := make([]*types.T, len(f.Exprs))
@@ -218,42 +217,18 @@ func (b *Builder) buildRoutine(
 	// Validate that the return types match the original return types defined in
 	// the function. Return types like user defined return types may change
 	// since the function was first created.
-	rtyp := f.ResolvedType()
-	if rtyp.UserDefined() {
+	originalReturnType := f.ResolvedType()
+	if originalReturnType.UserDefined() {
 		funcReturnType, err := tree.ResolveType(b.ctx,
-			&tree.OIDTypeReference{OID: rtyp.Oid()}, b.semaCtx.TypeResolver)
+			&tree.OIDTypeReference{OID: originalReturnType.Oid()}, b.semaCtx.TypeResolver)
 		if err != nil {
 			panic(err)
 		}
-		if !funcReturnType.Identical(rtyp) {
+		if !funcReturnType.Identical(originalReturnType) {
 			panic(pgerror.Newf(
 				pgcode.InvalidFunctionDefinition,
-				"return type mismatch in function declared to return %s", rtyp.Name()))
-		}
-	}
-	// If returning a RECORD type, the function return type needs to be modified
-	// because when we first parse the CREATE FUNCTION, the RECORD is
-	// represented as a tuple with any types and execution requires the types to
-	// be concrete in order to decode them correctly. We can determine the types
-	// from the result columns or tuple of the last statement.
-	finishResolveType := func(lastStmtScope *scope) {
-		if rtyp.Identical(types.AnyTuple) {
-			if len(lastStmtScope.cols) == 1 &&
-				lastStmtScope.cols[0].typ.Family() == types.TupleFamily {
-				// When the final statement returns a single tuple, we can use
-				// the tuple's types as the function return type.
-				f.SetTypeAnnotation(lastStmtScope.cols[0].typ)
-			} else {
-				// Get the types from the individual columns of the last
-				// statement.
-				tc := make([]*types.T, len(lastStmtScope.cols))
-				tl := make([]string, len(lastStmtScope.cols))
-				for i, col := range lastStmtScope.cols {
-					tc[i] = col.typ
-					tl[i] = col.name.MetadataName()
-				}
-				f.SetTypeAnnotation(types.MakeLabeledTuple(tc, tl))
-			}
+				"return type mismatch in function declared to return %s", originalReturnType.Name(),
+			))
 		}
 	}
 
@@ -387,7 +362,6 @@ func (b *Builder) buildRoutine(
 	b.trackSchemaDeps = false
 	b.insideUDF = true
 	isSetReturning := o.Class == tree.GeneratorClass
-	isMultiColDataSource = false
 
 	// Build an expression for each statement in the function body.
 	var body []memo.RelExpr
@@ -406,7 +380,7 @@ func (b *Builder) buildRoutine(
 		// not be executed.
 		// TODO(mgartner): This will add some planning overhead for every
 		// invocation of the function. Is there a more efficient way to do this?
-		if rtyp.Family() == types.VoidFamily {
+		if originalReturnType.Family() == types.VoidFamily {
 			stmts = append(stmts, statements.Statement[tree.Statement]{
 				AST: &tree.Select{
 					Select: &tree.ValuesClause{
@@ -425,9 +399,9 @@ func (b *Builder) buildRoutine(
 
 				// The last statement produces the output of the UDF.
 				if i == len(stmts)-1 {
-					finishResolveType(stmtScope)
-					expr, physProps, isMultiColDataSource =
-						b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, oldInsideDataSource, f)
+					expr, physProps = b.finishBuildLastStmt(
+						stmtScope, bodyScope, inScope, isSetReturning, oldInsideDataSource, f,
+					)
 				}
 				body[i] = expr
 				bodyProps[i] = physProps
@@ -462,12 +436,12 @@ func (b *Builder) buildRoutine(
 		var expr memo.RelExpr
 		var physProps *physical.Required
 		plBuilder := newPLpgSQLBuilder(
-			b, def.Name, stmt.AST.Label, colRefs, routineParams, rtyp, isProc, outScope,
+			b, def.Name, stmt.AST.Label, colRefs, routineParams, originalReturnType, isProc, outScope,
 		)
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
-		finishResolveType(stmtScope)
-		expr, physProps, isMultiColDataSource =
-			b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, oldInsideDataSource, f)
+		expr, physProps = b.finishBuildLastStmt(
+			stmtScope, bodyScope, inScope, isSetReturning, oldInsideDataSource, f,
+		)
 		body = []memo.RelExpr{expr}
 		bodyProps = []*physical.Required{physProps}
 		if b.verboseTracing {
@@ -477,16 +451,20 @@ func (b *Builder) buildRoutine(
 		panic(errors.AssertionFailedf("unexpected language: %v", o.Language))
 	}
 
+	// NOTE: originalReturnType may not be up-to-date after the last statement is
+	// built, so we call f.ResolvedType() again here.
+	rTyp := f.ResolvedType()
+	multiColDataSource := len(rTyp.TupleContents()) > 0 && oldInsideDataSource
 	routine := b.factory.ConstructUDFCall(
 		args,
 		&memo.UDFCallPrivate{
 			Def: &memo.UDFDefinition{
 				Name:               def.Name,
-				Typ:                f.ResolvedType(),
+				Typ:                rTyp,
 				Volatility:         o.Volatility,
 				SetReturning:       isSetReturning,
 				CalledOnNullInput:  o.CalledOnNullInput,
-				MultiColDataSource: isMultiColDataSource,
+				MultiColDataSource: multiColDataSource,
 				RoutineType:        o.Type,
 				RoutineLang:        o.Language,
 				Body:               body,
@@ -496,26 +474,29 @@ func (b *Builder) buildRoutine(
 			},
 		},
 	)
-	return routine, isMultiColDataSource
+	return routine
 }
 
 // finishBuildLastStmt manages the columns returned by the last statement of a
-// UDF. Depending on the context and return type of the UDF, this may mean
-// expanding a tuple into multiple columns, or combining multiple columns into
-// a tuple.
+// routine. Depending on the context and return type of the routine, this may
+// mean expanding a tuple into multiple columns, or combining multiple columns
+// into a tuple.
 //
-// insideDataSource indicates whether the routine is used as a data source. It
-// is passed in rather than using b.insideDataSource because b.insideDataSource
-// is reset while building the body of the routine.
+// finishBuildLastStmt also determines the final return type for the routine
+// based on the last statement's result columns, and updates the type annotation
+// for the FuncExpr accordingly.
 func (b *Builder) finishBuildLastStmt(
-	stmtScope *scope, bodyScope *scope, isSetReturning, insideDataSource bool, f *tree.FuncExpr,
-) (expr memo.RelExpr, physProps *physical.Required, isMultiColDataSource bool) {
+	stmtScope, bodyScope, inScope *scope, isSetReturning, insideDataSource bool, f *tree.FuncExpr,
+) (expr memo.RelExpr, physProps *physical.Required) {
+	// After this call to finalizeRoutineReturnType, the type annotation will
+	// reflect the final resolved type of the function.
+	//
+	// NOTE: the result columns of the last statement may not reflect this type
+	// until after the call to maybeAddRoutineAssignmentCasts. Therefore, the
+	// logic below must take care in distinguishing the resolved return type from
+	// the result column type(s).
+	b.finalizeRoutineReturnType(f, stmtScope, inScope, insideDataSource)
 	expr, physProps = stmtScope.expr, stmtScope.makePhysicalProps()
-	rtyp := f.ResolvedType()
-
-	// Note: since the final return type has already been resolved by this point,
-	// we can't check if this is a RECORD-returning routine by examining rTyp.
-	isRecordReturning := f.ResolvedOverload().ReturnsRecordType
 
 	// Add a LIMIT 1 to the last statement if the UDF is not
 	// set-returning. This is valid because any other rows after the
@@ -530,32 +511,18 @@ func (b *Builder) finishBuildLastStmt(
 		physProps.Ordering = props.OrderingChoice{}
 	}
 
-	// Only a single column can be returned from a UDF, unless it is used as a
-	// data source. Data sources may output multiple columns, and if the
-	// statement body produces a tuple it needs to be expanded into columns.
-	// When not used as a data source, combine statements producing multiple
-	// columns into a tuple. If the last statement is already returning a
-	// tuple and the function has a record return type, then we do not need to
-	// wrap the output in another tuple.
+	// Depending on the context in which the UDF was called, it may be necessary
+	// to either combine multiple result columns into a tuple, or to expand a
+	// tuple result column into multiple columns.
 	cols := physProps.Presentation
-	isSingleTupleResult := len(stmtScope.cols) == 1 &&
-		stmtScope.cols[0].typ.Family() == types.TupleFamily
-	if insideDataSource && rtyp.Family() == types.TupleFamily {
-		// When the UDF is used as a data source and expects to output a tuple
-		// type, its output needs to be a row of columns instead of the usual
-		// tuple. If the last statement output a tuple, we need to expand the
-		// tuple into individual columns.
-		isMultiColDataSource = true
-		if isSingleTupleResult {
-			stmtScope = bodyScope.push()
-			elems := make([]scopeColumn, len(rtyp.TupleContents()))
-			for i := range rtyp.TupleContents() {
-				e := b.factory.ConstructColumnAccess(b.factory.ConstructVariable(cols[0].ID), memo.TupleOrdinal(i))
-				col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp.TupleContents()[i], nil, e)
-				elems[i] = *col
-			}
-			expr = b.constructProject(expr, elems)
-			physProps = stmtScope.makePhysicalProps()
+	scopeCols := stmtScope.cols
+	isSingleTupleResult := len(scopeCols) == 1 && scopeCols[0].typ.Family() == types.TupleFamily
+	if insideDataSource {
+		// The UDF is a data source. If it returns a composite type and the last
+		// statement returns a single tuple column, the elements of the column
+		// should be expanded into individual columns.
+		if f.ResolvedType().Family() == types.TupleFamily && isSingleTupleResult {
+			expr, physProps = b.expandRoutineTupleIntoCols(cols[0].ID, bodyScope.push(), expr)
 		}
 	} else {
 		// Only a single column can be returned from a routine, unless it is a UDF
@@ -569,49 +536,154 @@ func (b *Builder) finishBuildLastStmt(
 		overload := f.ResolvedOverload()
 		mustWrapColsInTuple := len(cols) > 1
 		if len(cols) == 1 && !isSingleTupleResult {
-			mustWrapColsInTuple = mustWrapColsInTuple || isRecordReturning ||
-				(rtyp.Family() != types.VoidFamily && overload.Type == tree.ProcedureRoutine)
+			mustWrapColsInTuple = mustWrapColsInTuple || overload.ReturnsRecordType ||
+				(f.ResolvedType().Family() != types.VoidFamily && overload.Type == tree.ProcedureRoutine)
 		}
 		if mustWrapColsInTuple {
-			elems := make(memo.ScalarListExpr, len(cols))
-			for i := range cols {
-				elems[i] = b.factory.ConstructVariable(cols[i].ID)
-			}
-			tup := b.factory.ConstructTuple(elems, rtyp)
-			stmtScope = bodyScope.push()
-			col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, tup)
-			expr = b.constructProject(expr, []scopeColumn{*col})
-			physProps = stmtScope.makePhysicalProps()
+			expr, physProps = b.combineRoutineColsIntoTuple(cols, bodyScope.push(), expr)
 		}
 	}
 
-	// We must preserve the presentation of columns as physical
-	// properties to prevent the optimizer from pruning the output
-	// column. If necessary, we add an assignment cast to the result
-	// column so that its type matches the function return type. Record return
-	// types do not need an assignment cast, since at this point the return
-	// column is already a tuple.
+	if b.insideFuncDef {
+		// During function creation, the number and types of columns will be checked
+		// later, so don't add casts here.
+		return expr, physProps
+	}
+
+	// We must preserve the presentation of columns as physical properties to
+	// prevent the optimizer from pruning the output column(s). If necessary, we
+	// add an assignment cast to the result column(s) so that its type matches the
+	// function return type.
 	cols = physProps.Presentation
-	if len(cols) > 0 {
-		returnCol := physProps.Presentation[0].ID
-		returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
-		if !isRecordReturning && !isMultiColDataSource &&
-			!returnColMeta.Type.Identical(rtyp) {
-			if !cast.ValidCast(returnColMeta.Type, rtyp, cast.ContextAssignment) {
-				panic(sqlerrors.NewInvalidAssignmentCastError(
-					returnColMeta.Type, rtyp, returnColMeta.Alias))
+	return b.maybeAddRoutineAssignmentCasts(
+		cols, bodyScope, f.ResolvedType(), expr, physProps, insideDataSource,
+	)
+}
+
+// finalizeRoutineReturnType updates the routine's return type, taking into
+// account the result columns of the last statement, as well as the column
+// definition list if one was specified.
+func (b *Builder) finalizeRoutineReturnType(
+	f *tree.FuncExpr, stmtScope, inScope *scope, insideDataSource bool,
+) {
+	// If the function was defined using the wildcard RETURNS RECORD option with
+	// no OUT-parameters, its actual return type is inferred either from a
+	// column-definition list or from the types of the columns in the last
+	// statement. This is necessary because wildcard types are only valid during
+	// type-checking; the execution engine cannot handle them.
+	rTyp := f.ResolvedType()
+	if rTyp.Identical(types.AnyTuple) {
+		if len(stmtScope.cols) == 1 && stmtScope.cols[0].typ.Family() == types.TupleFamily {
+			// When the final statement returns a single tuple column, the column's
+			// type becomes the routine's return type.
+			rTyp = stmtScope.cols[0].typ
+		} else {
+			// Get the types from the columns of the last statement.
+			tc := make([]*types.T, len(stmtScope.cols))
+			tl := make([]string, len(stmtScope.cols))
+			for i, col := range stmtScope.cols {
+				tc[i] = col.typ
+				tl[i] = col.name.MetadataName()
 			}
-			assignCast := b.factory.ConstructAssignmentCast(
-				b.factory.ConstructVariable(physProps.Presentation[0].ID),
-				rtyp,
-			)
-			stmtScope = bodyScope.push()
-			col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, assignCast)
-			expr = b.constructProject(expr, []scopeColumn{*col})
-			physProps = stmtScope.makePhysicalProps()
+			rTyp = types.MakeLabeledTuple(tc, tl)
 		}
 	}
-	return expr, physProps, isMultiColDataSource
+	if insideDataSource {
+		// If the routine is used as a data source, there must be a column
+		// definition list, which must be compatible with the last statement's
+		// columns.
+		b.validateGeneratorFunctionReturnType(f.ResolvedOverload(), rTyp, inScope)
+		if f.ResolvedOverload().ReturnsRecordType {
+			// The validation happens for every routine used as a data source, but we
+			// only update the type using the column definition list for
+			// RECORD-returning routines.
+			rTyp = b.getColumnDefinitionListTypes(inScope)
+		}
+	}
+	f.SetTypeAnnotation(rTyp)
+}
+
+// combineRoutineColsIntoTuple is a helper to combine individual result columns
+// into a single tuple column.
+func (b *Builder) combineRoutineColsIntoTuple(
+	cols physical.Presentation, stmtScope *scope, inputExpr memo.RelExpr,
+) (memo.RelExpr, *physical.Required) {
+	elems := make(memo.ScalarListExpr, len(cols))
+	typContents := make([]*types.T, len(cols))
+	for i := range cols {
+		elems[i] = b.factory.ConstructVariable(cols[i].ID)
+		typContents[i] = b.factory.Metadata().ColumnMeta(cols[i].ID).Type
+	}
+	colTyp := types.MakeTuple(typContents)
+	tup := b.factory.ConstructTuple(elems, colTyp)
+	col := b.synthesizeColumn(stmtScope, scopeColName(""), colTyp, nil /* expr */, tup)
+	return b.constructProject(inputExpr, []scopeColumn{*col}), stmtScope.makePhysicalProps()
+}
+
+// expandRoutineTupleIntoCols is a helper to expand the elements of a single
+// tuple result column into individual result columns.
+func (b *Builder) expandRoutineTupleIntoCols(
+	tupleColID opt.ColumnID, stmtScope *scope, inputExpr memo.RelExpr,
+) (memo.RelExpr, *physical.Required) {
+	colTyp := b.factory.Metadata().ColumnMeta(tupleColID).Type
+	elems := make([]scopeColumn, len(colTyp.TupleContents()))
+	for i := range colTyp.TupleContents() {
+		varExpr := b.factory.ConstructVariable(tupleColID)
+		e := b.factory.ConstructColumnAccess(varExpr, memo.TupleOrdinal(i))
+		col := b.synthesizeColumn(stmtScope, scopeColName(""), colTyp.TupleContents()[i], nil, e)
+		elems[i] = *col
+	}
+	return b.constructProject(inputExpr, elems), stmtScope.makePhysicalProps()
+}
+
+// maybeAddRoutineAssignmentCasts checks whether the result columns of the last
+// statement in a routine match up with the return type. If not, it attempts to
+// assignment-cast the columns to the correct type.
+func (b *Builder) maybeAddRoutineAssignmentCasts(
+	cols physical.Presentation,
+	bodyScope *scope,
+	rTyp *types.T,
+	expr memo.RelExpr,
+	physProps *physical.Required,
+	insideDataSource bool,
+) (memo.RelExpr, *physical.Required) {
+	if insideDataSource {
+		// TODO: handle this case.
+		return expr, physProps
+	}
+	if rTyp.Family() == types.VoidFamily {
+		// Void routines don't return a result, so a cast is not necessary.
+		return expr, physProps
+	}
+	desiredTypes := []*types.T{rTyp}
+	if len(desiredTypes) != len(cols) {
+		panic(errors.AssertionFailedf("expected types and cols to be the same length"))
+	}
+	needCast := false
+	md := b.factory.Metadata()
+	for i, col := range cols {
+		colTyp, expectedTyp := md.ColumnMeta(col.ID).Type, desiredTypes[i]
+		if !colTyp.Identical(expectedTyp) {
+			needCast = true
+			break
+		}
+	}
+	if !needCast {
+		return expr, physProps
+	}
+	stmtScope := bodyScope.push()
+	for i, col := range cols {
+		colTyp, expectedTyp := md.ColumnMeta(col.ID).Type, desiredTypes[i]
+		scalar := b.factory.ConstructVariable(cols[i].ID)
+		if !colTyp.Identical(expectedTyp) {
+			if !cast.ValidCast(colTyp, expectedTyp, cast.ContextAssignment) {
+				panic(errors.AssertionFailedf("invalid cast should have been caught earlier"))
+			}
+			scalar = b.factory.ConstructAssignmentCast(scalar, expectedTyp)
+		}
+		b.synthesizeColumn(stmtScope, scopeColName(""), expectedTyp, nil /* expr */, scalar)
+	}
+	return b.constructProject(expr, stmtScope.cols), stmtScope.makePhysicalProps()
 }
 
 func (b *Builder) withinSQLRoutine(fn func()) {

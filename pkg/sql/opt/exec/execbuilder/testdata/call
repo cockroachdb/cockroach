@@ -72,11 +72,11 @@ call
            │    ├── fd: ()-->(3)
            │    └── (2,)
            └── values
-                ├── columns: column5:5
+                ├── columns: column1:4
                 ├── cardinality: [1 - 1]
                 ├── stats: [rows=1]
                 ├── key: ()
-                ├── fd: ()-->(5)
+                ├── fd: ()-->(4)
                 └── (NULL,)
 
 query T
@@ -110,13 +110,13 @@ call
            │    └── tuple [type=tuple{int}]
            │         └── const: 2 [type=int]
            └── values
-                ├── columns: column5:5(void)
+                ├── columns: column1:4(unknown)
                 ├── cardinality: [1 - 1]
                 ├── stats: [rows=1]
                 ├── key: ()
-                ├── fd: ()-->(5)
-                └── tuple [type=tuple{void}]
-                     └── null [type=void]
+                ├── fd: ()-->(4)
+                └── tuple [type=tuple{unknown}]
+                     └── null [type=unknown]
 
 query T
 EXPLAIN (DISTSQL) CALL foo(3);

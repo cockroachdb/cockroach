@@ -38,18 +38,13 @@ call
            │              ├── const: 1
            │              ├── const: 2
            │              └── const: 3
-           └── project
-                ├── columns: column10:10
-                ├── limit
+           └── limit
+                ├── columns: column1:9
+                ├── values
                 │    ├── columns: column1:9
-                │    ├── values
-                │    │    ├── columns: column1:9
-                │    │    └── tuple
-                │    │         └── null
-                │    └── const: 1
-                └── projections
-                     └── assignment-cast: VOID [as=column10:10]
-                          └── variable: column1:9
+                │    └── tuple
+                │         └── null
+                └── const: 1
 
 exec-ddl
 CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS $$
@@ -92,18 +87,13 @@ call
            │              ├── const: 7
            │              ├── const: 8
            │              └── const: 9
-           └── project
-                ├── columns: column18:18
-                ├── limit
+           └── limit
+                ├── columns: column1:17
+                ├── values
                 │    ├── columns: column1:17
-                │    ├── values
-                │    │    ├── columns: column1:17
-                │    │    └── tuple
-                │    │         └── null
-                │    └── const: 1
-                └── projections
-                     └── assignment-cast: VOID [as=column18:18]
-                          └── variable: column1:17
+                │    └── tuple
+                │         └── null
+                └── const: 1
 
 # Procedure with arguments.
 exec-ddl
@@ -142,15 +132,10 @@ call
            │         └── projections
            │              └── assignment-cast: INT8 [as=c_cast:12]
            │                   └── variable: column3:11
-           └── project
-                ├── columns: column14:14
-                ├── limit
+           └── limit
+                ├── columns: column1:13
+                ├── values
                 │    ├── columns: column1:13
-                │    ├── values
-                │    │    ├── columns: column1:13
-                │    │    └── tuple
-                │    │         └── null
-                │    └── const: 1
-                └── projections
-                     └── assignment-cast: VOID [as=column14:14]
-                          └── variable: column1:13
+                │    └── tuple
+                │         └── null
+                └── const: 1
