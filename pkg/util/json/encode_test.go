@@ -31,21 +31,34 @@ var rewriteResultsInTestfiles = flag.Bool(
 )
 
 func assertEncodeRoundTrip(t *testing.T, j JSON) {
-	encoded, err := EncodeJSON(nil, j)
+	beforeStr := j.String()
+	encoding, err := EncodeJSON(nil, j)
 	if err != nil {
 		t.Fatal(j, err)
 	}
-	_, decoded, err := DecodeJSON(encoded)
+	encoded, err := newEncodedFromRoot(encoding)
 	if err != nil {
 		t.Fatal(j, err)
 	}
+	encodedStr := encoded.String()
+	_, decoded, err := DecodeJSON(encoding)
+	if err != nil {
+		t.Fatal(j, err)
+	}
+	afterStr := decoded.String()
 
 	c, err := j.Compare(decoded)
 	if err != nil {
 		t.Fatal(j, err)
 	}
 	if c != 0 {
-		t.Fatalf("expected %s, got %s (encoding %v)", j, decoded, encoded)
+		t.Fatalf("expected %s, got %s (encoding %v)", j, decoded, encoding)
+	}
+	if beforeStr != encodedStr {
+		t.Fatalf("expected %s, got %s (encoding %v)", beforeStr, encodedStr, encoding)
+	}
+	if beforeStr != afterStr {
+		t.Fatalf("expected %s, got %s (encoding %v)", beforeStr, afterStr, encoding)
 	}
 }
 
