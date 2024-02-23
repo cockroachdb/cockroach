@@ -55,11 +55,16 @@ type Timer struct {
 	// the timer has been initialized (via Reset).
 	C    <-chan time.Time
 	Read bool
+	// fromPool indicates whether this Timer came from timerPool. If false, then
+	// it won't be put into the timerPool on Stop.
+	fromPool bool
 }
 
 // NewTimer allocates a new timer.
 func NewTimer() *Timer {
-	return timerPool.Get().(*Timer)
+	t := timerPool.Get().(*Timer)
+	t.fromPool = true
+	return t
 }
 
 // Reset changes the timer to expire after duration d and returns
@@ -101,6 +106,9 @@ func (t *Timer) Stop() bool {
 			// it. Otherwise, we'd have to read from the channel if !t.Read.
 			timeTimerPool.Put(t.timer)
 		}
+	}
+	if !t.fromPool {
+		return res
 	}
 	*t = Timer{}
 	timerPool.Put(t)
