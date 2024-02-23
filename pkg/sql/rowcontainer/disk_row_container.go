@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -97,15 +98,15 @@ var _ DeDupingRowContainer = &DiskRowContainer{}
 //   - e is the underlying store that rows are stored on.
 func MakeDiskRowContainer(
 	diskMonitor *mon.BytesMonitor,
-	types []*types.T,
+	typs []*types.T,
 	ordering colinfo.ColumnOrdering,
 	e diskmap.Factory,
-) DiskRowContainer {
+) (DiskRowContainer, error) {
 	diskMap := e.NewSortedDiskMap()
 	d := DiskRowContainer{
 		diskMap:     diskMap,
 		diskAcc:     diskMonitor.MakeBoundAccount(),
-		types:       types,
+		types:       typs,
 		ordering:    ordering,
 		diskMonitor: diskMonitor,
 		engine:      e,
@@ -140,9 +141,15 @@ func MakeDiskRowContainer(
 	d.encodings = make([]catenumpb.DatumEncoding, len(d.ordering))
 	for i, orderInfo := range ordering {
 		d.encodings[i] = rowenc.EncodingDirToDatumEncoding(orderInfo.Direction)
+		switch t := typs[orderInfo.ColIdx]; t.Family() {
+		case types.TSQueryFamily, types.TSVectorFamily:
+			return DiskRowContainer{}, unimplemented.NewWithIssueDetailf(
+				92165, "", "can't order by column type %s", t.SQLStringForError(),
+			)
+		}
 	}
 
-	return d
+	return d, nil
 }
 
 // DoDeDuplicate causes DiskRowContainer to behave as an implementation of
@@ -326,7 +333,10 @@ func (d *DiskRowContainer) Sort(context.Context) {}
 func (d *DiskRowContainer) Reorder(ctx context.Context, ordering colinfo.ColumnOrdering) error {
 	// We need to create a new DiskRowContainer since its ordering can only be
 	// changed at initialization.
-	newContainer := MakeDiskRowContainer(d.diskMonitor, d.types, ordering, d.engine)
+	newContainer, err := MakeDiskRowContainer(d.diskMonitor, d.types, ordering, d.engine)
+	if err != nil {
+		return err
+	}
 	i := d.NewFinalIterator(ctx)
 	defer i.Close()
 	for i.Rewind(); ; i.Next() {

@@ -164,7 +164,7 @@ func TestDiskRowContainer(t *testing.T) {
 				}
 				row := randgen.RandEncDatumRowOfTypes(rng, typs)
 				func() {
-					d := MakeDiskRowContainer(diskMonitor, typs, ordering, tempEngine)
+					d, _ := MakeDiskRowContainer(diskMonitor, typs, ordering, tempEngine)
 					defer d.Close(ctx)
 					if err := d.AddRow(ctx, row); err != nil {
 						t.Fatal(err)
@@ -227,7 +227,7 @@ func TestDiskRowContainer(t *testing.T) {
 			types := randgen.RandSortingTypes(rng, numCols)
 			rows := randgen.RandEncDatumRowsOfTypes(rng, numRows, types)
 			func() {
-				d := MakeDiskRowContainer(diskMonitor, types, ordering, tempEngine)
+				d, _ := MakeDiskRowContainer(diskMonitor, types, ordering, tempEngine)
 				defer d.Close(ctx)
 				for i := 0; i < len(rows); i++ {
 					if err := d.AddRow(ctx, rows[i]); err != nil {
@@ -309,7 +309,7 @@ func TestDiskRowContainer(t *testing.T) {
 		// Use random types and random rows.
 		types := randgen.RandSortingTypes(rng, numCols)
 		numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
-		d := MakeDiskRowContainer(diskMonitor, types, ordering, tempEngine)
+		d, _ := MakeDiskRowContainer(diskMonitor, types, ordering, tempEngine)
 		defer d.Close(ctx)
 		d.DoDeDuplicate()
 		addRowsRepeatedly := func() {
@@ -351,7 +351,7 @@ func TestDiskRowContainer(t *testing.T) {
 		types := randgen.RandSortingTypes(rng, numCols)
 		rows := randgen.RandEncDatumRowsOfTypes(rng, numRows, types)
 		// There are no ordering columns when using the numberedRowIterator.
-		d := MakeDiskRowContainer(diskMonitor, types, nil, tempEngine)
+		d, _ := MakeDiskRowContainer(diskMonitor, types, nil, tempEngine)
 		defer d.Close(ctx)
 		for i := 0; i < numRows; i++ {
 			require.NoError(t, d.AddRow(ctx, rows[i]))
@@ -439,7 +439,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(0 /* capacity */))
 
-	d := MakeDiskRowContainer(
+	d, _ := MakeDiskRowContainer(
 		monitor,
 		[]*types.T{types.Int},
 		colinfo.ColumnOrdering{colinfo.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
@@ -480,7 +480,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
-	d := MakeDiskRowContainer(diskMonitor, types.OneIntCol, nil /* ordering */, tempEngine)
+	d, _ := MakeDiskRowContainer(diskMonitor, types.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const numCols = 1
@@ -608,7 +608,7 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 
-	d := MakeDiskRowContainer(monitor, types.OneIntCol, nil /* ordering */, tempEngine)
+	d, _ := MakeDiskRowContainer(monitor, types.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const (
