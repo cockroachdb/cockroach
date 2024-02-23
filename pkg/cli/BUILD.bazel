@@ -395,6 +395,7 @@ go_test(
         "//pkg/server/status",
         "//pkg/server/status/statuspb",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/isql",

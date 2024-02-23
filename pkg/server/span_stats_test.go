@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -37,7 +38,18 @@ func TestSpanStatsMetaScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					// We're asserting on range counts below, which will be thrown off if
+					// span configurations get reconciled and ranges are split as a
+					// result.
+					ManagerDisableJobCreation: true,
+				},
+			},
+		},
+	})
 	defer testCluster.Stopper().Stop(context.Background())
 	s := testCluster.Server(0)
 

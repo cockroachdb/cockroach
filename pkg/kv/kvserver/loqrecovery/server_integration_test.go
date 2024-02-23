@@ -57,6 +57,12 @@ func TestReplicaCollection(t *testing.T) {
 			StoreSpecs: []base.StoreSpec{{InMemory: true}},
 			Insecure:   true,
 			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					// We're asserting on range counts below, which will be thrown off if
+					// span configurations get reconciled and ranges are split as a
+					// result.
+					ManagerDisableJobCreation: true,
+				},
 				LOQRecovery: &loqrecovery.TestingKnobs{
 					MetadataScanTimeout: 15 * time.Second,
 				},
@@ -126,6 +132,12 @@ func TestStreamRestart(t *testing.T) {
 			StoreSpecs: []base.StoreSpec{{InMemory: true}},
 			Insecure:   true,
 			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					// We're asserting on range counts below, which will be thrown off if
+					// span configurations get reconciled and ranges are split as a
+					// result.
+					ManagerDisableJobCreation: true,
+				},
 				LOQRecovery: &loqrecovery.TestingKnobs{
 					MetadataScanTimeout: 15 * time.Second,
 					ForwardReplicaFilter: func(response *serverpb.RecoveryCollectLocalReplicaInfoResponse) error {

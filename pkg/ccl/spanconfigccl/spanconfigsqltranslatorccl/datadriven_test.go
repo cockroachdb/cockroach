@@ -20,9 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -117,12 +119,20 @@ func TestDataDriven(t *testing.T) {
 		sqlExecutorKnobs := &sql.ExecutorTestingKnobs{
 			UseTransactionalDescIDGenerator: true,
 		}
+		serverKnobs := &server.TestingKnobs{}
+		if strings.Contains(path, "23_2_24_1_mixed_version") {
+			serverKnobs = &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				BinaryVersionOverride:          (clusterversion.V24_1_InstallMeta2StaticSplitPoint - 1).Version(),
+			}
+		}
 		tsArgs := func(attr string) base.TestServerArgs {
 			return base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					GCJob:       gcTestingKnobs,
 					SpanConfig:  scKnobs,
 					SQLExecutor: sqlExecutorKnobs,
+					Server:      serverKnobs,
 				},
 				StoreSpecs: []base.StoreSpec{
 					{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
