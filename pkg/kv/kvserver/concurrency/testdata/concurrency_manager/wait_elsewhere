@@ -61,7 +61,7 @@ sequence req=reqWaiter
 [4] sequence reqWaiter: scanning lock table for conflicting locks
 [4] sequence reqWaiter: waiting in lock wait-queues
 [4] sequence reqWaiter: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
-[4] sequence reqWaiter: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[4] sequence reqWaiter: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence reqWaiter: pushing txn 00000001 to abort
 [4] sequence reqWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -203,7 +203,7 @@ sequence req=reqTwoKeyWaiter
 [10] sequence reqTwoKeyWaiter: scanning lock table for conflicting locks
 [10] sequence reqTwoKeyWaiter: waiting in lock wait-queues
 [10] sequence reqTwoKeyWaiter: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"k1"› (queuedLockingRequests: 0, queuedReaders: 1)
-[10] sequence reqTwoKeyWaiter: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[10] sequence reqTwoKeyWaiter: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [10] sequence reqTwoKeyWaiter: pushing timestamp of txn 00000003 above 20.000000000,1
 [10] sequence reqTwoKeyWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -234,7 +234,7 @@ sequence req=reqThreeKeyWaiter
 [12] sequence reqThreeKeyWaiter: scanning lock table for conflicting locks
 [12] sequence reqThreeKeyWaiter: waiting in lock wait-queues
 [12] sequence reqThreeKeyWaiter: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"k1"› (queuedLockingRequests: 0, queuedReaders: 2)
-[12] sequence reqThreeKeyWaiter: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[12] sequence reqThreeKeyWaiter: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [12] sequence reqThreeKeyWaiter: pushing timestamp of txn 00000003 above 20.000000000,1
 [12] sequence reqThreeKeyWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
 
