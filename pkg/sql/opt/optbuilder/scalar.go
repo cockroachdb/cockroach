@@ -167,7 +167,7 @@ func (b *Builder) buildScalar(
 			OriginalExpr: s.Subquery,
 			Ordering:     s.ordering,
 			RequestedCol: inCol,
-			WithinUDF:    b.insideUDF,
+			WithinUDF:    b.insideUDF > 0,
 		}
 		out = b.factory.ConstructArrayFlatten(s.node, &subqueryPrivate)
 

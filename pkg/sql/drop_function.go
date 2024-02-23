@@ -226,6 +226,20 @@ func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Muta
 		}
 	}
 
+	// Remove this function from the dependencies
+	for _, id := range fnMutable.DependsOnFunctions {
+		refMutable, err := p.Descriptors().MutableByID(p.txn).Function(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := refMutable.RemoveFunctionReference(fnMutable.ID); err != nil {
+			return err
+		}
+		if err := p.writeFuncDesc(ctx, refMutable); err != nil {
+			return err
+		}
+	}
+
 	// Remove backreference from types referenced by this UDF.
 	jobDesc := fmt.Sprintf(
 		"updating type backreference %v for function %s(%d)",

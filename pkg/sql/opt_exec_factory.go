@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 type execFactory struct {
@@ -1866,7 +1868,7 @@ func (ef *execFactory) ConstructCreateView(
 		return nil, err
 	}
 
-	planDeps, typeDepSet, err := toPlanDependencies(deps, typeDeps)
+	planDeps, typeDepSet, _, err := toPlanDependencies(deps, typeDeps, intsets.Fast{} /* funcDeps */)
 	if err != nil {
 		return nil, err
 	}
@@ -1883,7 +1885,11 @@ func (ef *execFactory) ConstructCreateView(
 
 // ConstructCreateFunction is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateFunction(
-	schema cat.Schema, cf *tree.CreateRoutine, deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
+	schema cat.Schema,
+	cf *tree.CreateRoutine,
+	deps opt.SchemaDeps,
+	typeDeps opt.SchemaTypeDeps,
+	functionDeps opt.SchemaFunctionDeps,
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
@@ -1902,28 +1908,29 @@ func (ef *execFactory) ConstructCreateFunction(
 		return plan, nil
 	}
 
-	planDeps, typeDepSet, err := toPlanDependencies(deps, typeDeps)
+	planDeps, typeDepSet, funcDepList, err := toPlanDependencies(deps, typeDeps, functionDeps)
 	if err != nil {
 		return nil, err
 	}
 
 	return &createFunctionNode{
-		cf:       cf,
-		dbDesc:   schema.(*optSchema).database,
-		scDesc:   schema.(*optSchema).schema,
-		planDeps: planDeps,
-		typeDeps: typeDepSet,
+		cf:           cf,
+		dbDesc:       schema.(*optSchema).database,
+		scDesc:       schema.(*optSchema).schema,
+		planDeps:     planDeps,
+		typeDeps:     typeDepSet,
+		functionDeps: funcDepList,
 	}, nil
 }
 
 func toPlanDependencies(
-	deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
-) (planDependencies, typeDependencies, error) {
+	deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps, funcDeps opt.SchemaFunctionDeps,
+) (planDependencies, typeDependencies, functionDependencies, error) {
 	planDeps := make(planDependencies, len(deps))
 	for _, d := range deps {
 		desc, err := getDescForDataSource(d.DataSource)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		var ref descpb.TableDescriptor_Reference
 		if d.SpecificIndex {
@@ -1947,7 +1954,12 @@ func toPlanDependencies(
 		typeDepSet[descpb.ID(id)] = struct{}{}
 	})
 
-	return planDeps, typeDepSet, nil
+	funcDepList := make(functionDependencies, funcDeps.Len())
+	funcDeps.ForEach(func(i int) {
+		descID := funcdesc.UserDefinedFunctionOIDToID(oid.Oid(i))
+		funcDepList[descID] = struct{}{}
+	})
+	return planDeps, typeDepSet, funcDepList, nil
 }
 
 // ConstructSequenceSelect is part of the exec.Factory interface.

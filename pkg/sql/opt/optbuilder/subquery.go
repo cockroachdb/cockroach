@@ -404,7 +404,7 @@ func (b *Builder) buildMultiRowSubquery(
 		))
 	}
 
-	if b.insideUDF {
+	if b.insideUDF != 0 {
 		// Any expressions cannot be built by the optimizer within a UDF, so
 		// build them as subqueries with ScalarGroupBy expressions instead.
 		sub := b.factory.CustomFuncs().ConstructGroupByAny(scalar, cmp, input)
