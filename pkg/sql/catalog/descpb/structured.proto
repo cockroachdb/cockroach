@@ -1676,7 +1676,11 @@ message FunctionDescriptor {
   // IsProcedure is true if the descriptor represents a procedure.
   optional bool is_procedure = 21 [(gogoproto.nullable) = false];
 
-  // Next field id is 22
+  // DependsOnFunctions are the user defined functions that this function
+  // depends on.
+  repeated uint32 depends_on_functions = 22  [(gogoproto.casttype) = "ID"];
+
+  // Next field id is 23
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,

@@ -110,7 +110,7 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 	// For the time being this is only used for CREATE FUNCTION. We need to handle
 	// CREATE VIEW when it's needed.
 	createFnExpr := optFactory.Memo().RootExpr().(*memo.CreateFunctionExpr)
-	tableReferences, typeReferences, err := toPlanDependencies(createFnExpr.Deps, createFnExpr.TypeDeps)
+	tableReferences, typeReferences, _, err := toPlanDependencies(createFnExpr.Deps, createFnExpr.TypeDeps, createFnExpr.FuncDeps)
 	if err != nil {
 		return nil, err
 	}

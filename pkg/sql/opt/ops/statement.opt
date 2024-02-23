@@ -74,11 +74,14 @@ define CreateFunctionPrivate {
     # Syntax is the CREATE FUNCTION AST node.
     Syntax CreateRoutine
 
-    # Deps contains the data source dependencies of the view.
+    # Deps contains the data source dependencies of the function.
     Deps SchemaDeps
 
-    # TypeDeps contains the type dependencies of the view.
+    # TypeDeps contains the type dependencies of the function.
     TypeDeps SchemaTypeDeps
+
+    # FuncDeps contains the function dependencies of the function.
+    FuncDeps SchemaFunctionDeps
 }
 
 # Explain returns information about the execution plan of the "input"

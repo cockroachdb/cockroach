@@ -775,6 +775,7 @@ define CreateFunction {
     Cr *tree.CreateRoutine
     Deps opt.SchemaDeps
     TypeDeps opt.SchemaTypeDeps
+    FunctionDeps opt.SchemaFunctionDeps
 }
 
 # LiteralValues allows datums to be planned directly that are type checked
