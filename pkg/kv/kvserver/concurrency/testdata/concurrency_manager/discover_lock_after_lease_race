@@ -146,7 +146,7 @@ sequence req=req4
 [5] sequence req4: acquiring latches
 [5] sequence req4: scanning lock table for conflicting locks
 [5] sequence req4: waiting in lock wait-queues
-[5] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[5] sequence req4: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
 [5] sequence req4: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req4: pushing timestamp of txn 00000003 above 10.000000000,0
 [5] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -164,7 +164,6 @@ num=1
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
    waiting readers:
     req: 3, txn: 00000004-0000-0000-0000-000000000000
-   distinguished req: 3
 
 sequence req=req2
 ----

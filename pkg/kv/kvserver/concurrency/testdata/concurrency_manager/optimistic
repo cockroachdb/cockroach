@@ -89,7 +89,7 @@ sequence req=req3 eval-kind=pess-after-opt
 [4] sequence req3: optimistic failed, so waiting for latches
 [4] sequence req3: scanning lock table for conflicting locks
 [4] sequence req3: waiting in lock wait-queues
-[4] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"d"› (queuedLockingRequests: 0, queuedReaders: 1)
+[4] sequence req3: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"d"› (queuedLockingRequests: 0, queuedReaders: 1)
 [4] sequence req3: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence req3: pushing timestamp of txn 00000001 above 12.000000000,1
 [4] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction

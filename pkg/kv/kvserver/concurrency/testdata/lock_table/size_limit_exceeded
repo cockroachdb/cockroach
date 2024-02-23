@@ -71,7 +71,6 @@ num=3
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 2, strength: Intent, txn: none
-   distinguished req: 2
 
 dequeue r=reqContend
 ----
@@ -115,7 +114,6 @@ num=3
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 4, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
@@ -135,7 +133,7 @@ num=3
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn1 key="b" held=true guard-strength=Intent
+new: state=waitFor txn=txn1 key="b" held=true guard-strength=Intent
 
 guard-state r=req3
 ----
@@ -152,7 +150,6 @@ num=3
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
 
@@ -202,12 +199,10 @@ num=4
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 7
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
    queued locking requests:
@@ -256,4 +251,4 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitForDistinguished txn=txn1 key="d" held=true guard-strength=Intent
+new: state=waitFor txn=txn1 key="d" held=true guard-strength=Intent

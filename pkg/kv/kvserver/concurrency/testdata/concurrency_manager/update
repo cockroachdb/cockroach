@@ -49,7 +49,7 @@ sequence req=req2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
-[2] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
 [2] sequence req2: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [2] sequence req2: pushing timestamp of txn 00000001 above 12.000000000,1
 [2] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -61,7 +61,6 @@ num=1
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 2, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 2
 
 # --------------------------------
 # Setup complete, test starts here
@@ -168,7 +167,7 @@ sequence req=req2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
-[2] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
 [2] sequence req2: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [2] sequence req2: pushing timestamp of txn 00000001 above 12.000000000,1
 [2] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -180,7 +179,6 @@ num=1
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 5, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 5
 
 # --------------------------------
 # Setup complete, test starts here
@@ -296,7 +294,7 @@ sequence req=req2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
-[2] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
 [2] sequence req2: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [2] sequence req2: pushing timestamp of txn 00000001 above 12.000000000,1
 [2] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -308,7 +306,6 @@ num=1
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 8, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 8
 
 # --------------------------------
 # Setup complete, test starts here
@@ -353,7 +350,7 @@ sequence req=req4
 [3] sequence req4: acquiring latches
 [3] sequence req4: scanning lock table for conflicting locks
 [3] sequence req4: waiting in lock wait-queues
-[3] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[3] sequence req4: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
 [3] sequence req4: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req4: pushing txn 00000001 to abort
 [3] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -384,7 +381,6 @@ num=1
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 9, strength: Intent, txn: none
-   distinguished req: 9
 
 # Finish off txn1. Not needed once we can get rid of req4.
 on-txn-updated txn=txn1 status=committed

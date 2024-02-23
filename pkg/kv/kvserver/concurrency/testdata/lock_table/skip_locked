@@ -235,7 +235,6 @@ num=7
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 7
 
 # ---------------------------------------------------------------------------------
 # req8 will scan the lock table with a Skip wait policy. It will not need to wait.
@@ -382,7 +381,6 @@ num=7
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 7
 
 # ---------------------------------------------------------------------------------
 # req9 is the same as req8, except is has a timestamp equal to txn1's to
@@ -456,7 +454,6 @@ num=7
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 7
 
 # ---------------------------------------------------------------------------------
 # Ensure the case where a locking skip locked request finds another request from

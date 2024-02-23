@@ -70,7 +70,7 @@ sequence req=req3
 [3] sequence req3: acquiring latches
 [3] sequence req3: scanning lock table for conflicting locks
 [3] sequence req3: waiting in lock wait-queues
-[3] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k2"› (queuedLockingRequests: 1, queuedReaders: 0)
+[3] sequence req3: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k2"› (queuedLockingRequests: 1, queuedReaders: 0)
 [3] sequence req3: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req3: pushing txn 00000001 to abort
 [3] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -84,7 +84,6 @@ num=3
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
-   distinguished req: 3
  lock: "k3"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
 
@@ -103,7 +102,7 @@ sequence req=reqNoWait1
 [4] sequence reqNoWait1: acquiring latches
 [4] sequence reqNoWait1: scanning lock table for conflicting locks
 [4] sequence reqNoWait1: waiting in lock wait-queues
-[4] sequence reqNoWait1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[4] sequence reqNoWait1: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
 [4] sequence reqNoWait1: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = true
 [4] sequence reqNoWait1: pushing txn 00000001 to check if abandoned
 [4] sequence reqNoWait1: pushee not abandoned
@@ -122,7 +121,7 @@ on-txn-updated txn=txn1 status=committed
 ----
 [-] update txn: committing txn1
 [3] sequence req3: resolving intent ‹"k2"› for txn 00000001 with COMMITTED status
-[3] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"k3"› (queuedLockingRequests: 1, queuedReaders: 0)
+[3] sequence req3: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"k3"› (queuedLockingRequests: 1, queuedReaders: 0)
 [3] sequence req3: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k2"› for 123.000s
 [3] sequence req3: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req3: pushing txn 00000002 to abort
@@ -149,7 +148,6 @@ num=2
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
-   distinguished req: 3
 
 # -------------------------------------------------------------
 # Read-write request with WaitPolicy_Error hits reservation
@@ -167,7 +165,7 @@ sequence req=reqNoWait2
 [6] sequence reqNoWait2: acquiring latches
 [6] sequence reqNoWait2: scanning lock table for conflicting locks
 [6] sequence reqNoWait2: waiting in lock wait-queues
-[6] sequence reqNoWait2: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key ‹"k2"› (queuedLockingRequests: 2, queuedReaders: 0)
+[6] sequence reqNoWait2: lock wait-queue event: wait for txn 00000003 running request @ key ‹"k2"› (queuedLockingRequests: 2, queuedReaders: 0)
 [6] sequence reqNoWait2: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = true
 [6] sequence reqNoWait2: pushing txn 00000003 to check if abandoned
 [6] sequence reqNoWait2: pushee not abandoned
@@ -201,7 +199,7 @@ sequence req=reqNoWait3
 [9] sequence reqNoWait3: acquiring latches
 [9] sequence reqNoWait3: scanning lock table for conflicting locks
 [9] sequence reqNoWait3: waiting in lock wait-queues
-[9] sequence reqNoWait3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"k4"› (queuedLockingRequests: 0, queuedReaders: 1)
+[9] sequence reqNoWait3: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"k4"› (queuedLockingRequests: 0, queuedReaders: 1)
 [9] sequence reqNoWait3: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = true
 [9] sequence reqNoWait3: pushing txn 00000002 to check if abandoned
 [9] sequence reqNoWait3: pushee not abandoned
@@ -218,7 +216,6 @@ num=3
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
-   distinguished req: 3
  lock: "k4"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
 

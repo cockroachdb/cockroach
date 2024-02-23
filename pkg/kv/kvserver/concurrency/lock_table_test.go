@@ -572,9 +572,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				var typeStr string
 				switch state.kind {
-				case waitForDistinguished:
-					typeStr = "waitForDistinguished"
-				case waitFor:
+				case waitFor, waitForDistinguished:
 					typeStr = "waitFor"
 				case waitElsewhere:
 					typeStr = "waitElsewhere"

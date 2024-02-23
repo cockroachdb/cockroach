@@ -87,7 +87,6 @@ num=3
    queued locking requests:
     active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 2
 
 scan r=req1
 ----
@@ -95,7 +94,7 @@ start-waiting: true
 
 guard-state r=req1
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=true guard-strength=Intent
+new: state=waitFor txn=txn2 key="a" held=true guard-strength=Intent
 
 print
 ----
@@ -104,7 +103,6 @@ num=3
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
    queued locking requests:
     active: true req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 1
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
  lock: "c"
@@ -112,7 +110,6 @@ num=3
    queued locking requests:
     active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 2
 
 # req1 waits at "c" but not as distinguished waiter.
 release txn=txn2 span=a
@@ -128,7 +125,6 @@ num=3
    queued locking requests:
     active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 2
 
 guard-state r=req1
 ----
@@ -147,7 +143,6 @@ num=3
    queued locking requests:
     active: true req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 2
 
 # req1 waits at "b" as reader.
 
@@ -166,7 +161,7 @@ num=3
 
 guard-state r=req1
 ----
-new: state=waitForDistinguished txn=txn2 key="b" held=true guard-strength=None
+new: state=waitFor txn=txn2 key="b" held=true guard-strength=None
 
 guard-state r=req2
 ----
@@ -182,7 +177,6 @@ num=3
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
    waiting readers:
     req: 1, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 1
  lock: "c"
    queued locking requests:
     active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001

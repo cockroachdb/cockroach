@@ -88,7 +88,7 @@ sequence req=req4
 [4] sequence req4: acquiring latches
 [4] sequence req4: scanning lock table for conflicting locks
 [4] sequence req4: waiting in lock wait-queues
-[4] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"k4"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence req4: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"k4"› (queuedLockingRequests: 1, queuedReaders: 0)
 [4] sequence req4: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence req4: pushing txn 00000003 to abort
 [4] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction

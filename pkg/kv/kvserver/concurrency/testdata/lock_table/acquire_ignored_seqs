@@ -118,7 +118,6 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 1)]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
 
 # However, unreplicated lock acquisition with the same ignored sequence number
 # (8) will result in the list of sequence numbers getting pruned.
@@ -132,7 +131,6 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 1)]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
 
 # ------------------------------------------------------------------------------
 # Ensure ignoring a range of sequence numbers works as expected.
@@ -151,7 +149,6 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 11)]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
 
 # ------------------------------------------------------------------------------
 # Ensure acquiring a replicated lock at a higher epoch than the one with which
@@ -173,4 +170,3 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3

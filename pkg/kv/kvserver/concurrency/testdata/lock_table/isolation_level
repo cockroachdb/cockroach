@@ -125,7 +125,7 @@ start-waiting: true
 
 guard-state r=req6
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=true guard-strength=None
+new: state=waitFor txn=txn2 key="a" held=true guard-strength=None
 
 scan r=req7
 ----
@@ -133,7 +133,7 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitForDistinguished txn=txn2 key="b" held=true guard-strength=None
+new: state=waitFor txn=txn2 key="b" held=true guard-strength=None
 
 # ------------------------------------------------------------------------------
 # Test that exclusive locks held by {RC,snapshot} transactions do not block
