@@ -931,7 +931,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			procTyp := proc.ResolvedType()
 			colName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_call"))
 			col := b.ob.synthesizeColumn(callScope, colName, procTyp, nil /* expr */, nil /* scalar */)
-			procScalar, _ := b.ob.buildRoutine(proc, def, callCon.s, callScope, b.colRefs)
+			procScalar := b.ob.buildRoutine(proc, def, callCon.s, callScope, b.colRefs)
 			col.scalar = procScalar
 			b.ob.constructProjectForScope(callCon.s, callScope)
 
