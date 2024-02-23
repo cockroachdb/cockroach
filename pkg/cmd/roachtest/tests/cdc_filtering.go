@@ -44,13 +44,22 @@ func registerCDCFiltering(r registry.Registry) {
 		Run:              runCDCSessionFiltering,
 	})
 	r.Add(registry.TestSpec{
-		Name:             "cdc/filtering/ttl",
+		Name:             "cdc/filtering/ttl/cluster",
 		Owner:            registry.OwnerCDC,
 		Cluster:          r.MakeClusterSpec(3),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
-		Run:              runCDCTTLFiltering,
+		Run:              runCDCTTLFiltering(ttlFilteringClusterSetting),
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/filtering/ttl/table",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run:              runCDCTTLFiltering(ttlFilteringTableStorageParam),
 	})
 }
 
@@ -283,98 +292,124 @@ func checkCDCEvents[S any](
 	return nil
 }
 
-func runCDCTTLFiltering(ctx context.Context, t test.Test, c cluster.Cluster) {
-	t.Status("starting cluster")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-	conn := c.Conn(ctx, t.L(), 1)
-	defer conn.Close()
+// ttlFilteringType is the type of TTL filtering to use in the test function
+// returned by runCDCTTLFiltering.
+type ttlFilteringType bool
 
-	// kv.rangefeed.enabled is required for changefeeds to run
-	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	require.NoError(t, err)
+const (
+	// ttlFilteringClusterSetting denotes TTL filtering enabled via setting the
+	// sql.ttl.changefeed_replication.disabled cluster setting.
+	ttlFilteringClusterSetting = false
+	// ttlFilteringTableStorageParam denotes TTL filtering enabled via setting the
+	// ttl_disable_changefeed_replication storage parameter on the table.
+	ttlFilteringTableStorageParam = true
+)
 
-	t.Status("creating table with TTL")
-	_, err = conn.ExecContext(ctx, `CREATE TABLE events (
+func runCDCTTLFiltering(
+	filteringType ttlFilteringType,
+) func(ctx context.Context, t test.Test, c cluster.Cluster) {
+	return func(ctx context.Context, t test.Test, c cluster.Cluster) {
+		t.Status("starting cluster")
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+		conn := c.Conn(ctx, t.L(), 1)
+		defer conn.Close()
+
+		// kv.rangefeed.enabled is required for changefeeds to run
+		_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+		require.NoError(t, err)
+
+		t.Status("creating table with TTL")
+		_, err = conn.ExecContext(ctx, `CREATE TABLE events (
 	id STRING PRIMARY KEY,
 	expired_at TIMESTAMPTZ
 ) WITH (ttl_expiration_expression = 'expired_at', ttl_job_cron = '* * * * *')`)
-	require.NoError(t, err)
+		require.NoError(t, err)
 
-	t.Status("creating changefeed")
-	var jobID int
-	err = conn.QueryRowContext(ctx, `CREATE CHANGEFEED FOR TABLE events
+		t.Status("creating changefeed")
+		var jobID int
+		err = conn.QueryRowContext(ctx, `CREATE CHANGEFEED FOR TABLE events
 INTO 'nodelocal://1/events'
 WITH diff, updated, min_checkpoint_frequency = '1s'`).Scan(&jobID)
-	require.NoError(t, err)
+		require.NoError(t, err)
 
-	const (
-		expiredTime    = "2000-01-01"
-		notExpiredTime = "2200-01-01"
-	)
+		const (
+			expiredTime    = "2000-01-01"
+			notExpiredTime = "2200-01-01"
+		)
 
-	t.Status("insert initial table data")
-	_, err = conn.Exec(`INSERT INTO events VALUES ('A', $1), ('B', $2)`, expiredTime, notExpiredTime)
-	require.NoError(t, err)
+		t.Status("insert initial table data")
+		_, err = conn.Exec(`INSERT INTO events VALUES ('A', $1), ('B', $2)`, expiredTime, notExpiredTime)
+		require.NoError(t, err)
 
-	t.Status("wait for TTL to run and delete rows")
-	err = waitForTTL(ctx, conn, "defaultdb.public.events", timeutil.Now())
-	require.NoError(t, err)
+		t.Status("wait for TTL to run and delete rows")
+		err = waitForTTL(ctx, conn, "defaultdb.public.events", timeutil.Now())
+		require.NoError(t, err)
 
-	t.Status("check that rows are deleted")
-	var countA int
-	err = conn.QueryRow(`SELECT count(*) FROM events WHERE id = 'A'`).Scan(&countA)
-	require.NoError(t, err)
-	require.Equal(t, countA, 0)
+		t.Status("check that rows are deleted")
+		var countA int
+		err = conn.QueryRow(`SELECT count(*) FROM events WHERE id = 'A'`).Scan(&countA)
+		require.NoError(t, err)
+		require.Equal(t, countA, 0)
 
-	t.Status("set sql.ttl.changefeed_replication.disabled")
-	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING sql.ttl.changefeed_replication.disabled = true`)
-	require.NoError(t, err)
+		switch filteringType {
+		case ttlFilteringClusterSetting:
+			t.Status("set sql.ttl.changefeed_replication.disabled")
+			_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING sql.ttl.changefeed_replication.disabled = true`)
+			require.NoError(t, err)
+		case ttlFilteringTableStorageParam:
+			t.Status("set ttl_disable_changefeed_replication")
+			_, err := conn.ExecContext(ctx, `ALTER TABLE events SET (ttl_disable_changefeed_replication = true)`)
+			require.NoError(t, err)
+		default:
+			panic("unknown TTL filtering type")
+		}
 
-	t.Status("update remaining rows to be expired")
-	_, err = conn.Exec(`UPDATE events SET expired_at = $1 WHERE id = 'B'`, expiredTime)
-	require.NoError(t, err)
+		t.Status("update remaining rows to be expired")
+		_, err = conn.Exec(`UPDATE events SET expired_at = $1 WHERE id = 'B'`, expiredTime)
+		require.NoError(t, err)
 
-	t.Status("wait for TTL to run and delete rows")
-	err = waitForTTL(ctx, conn, "defaultdb.public.events", timeutil.Now().Add(time.Minute))
-	require.NoError(t, err)
+		t.Status("wait for TTL to run and delete rows")
+		err = waitForTTL(ctx, conn, "defaultdb.public.events", timeutil.Now().Add(time.Minute))
+		require.NoError(t, err)
 
-	t.Status("check that rows are deleted")
-	var countB int
-	err = conn.QueryRow(`SELECT count(*) FROM events WHERE id = 'B'`).Scan(&countB)
-	require.NoError(t, err)
-	require.Equal(t, countB, 0)
+		t.Status("check that rows are deleted")
+		var countB int
+		err = conn.QueryRow(`SELECT count(*) FROM events WHERE id = 'B'`).Scan(&countB)
+		require.NoError(t, err)
+		require.Equal(t, countB, 0)
 
-	expectedEvents := []string{
-		// initial
-		"A@2000-01-01T00:00:00Z", "B@2200-01-01T00:00:00Z",
-		// TTL deletes A
-		"<deleted> (before: A@2000-01-01T00:00:00Z)",
-		// update B to be expired
-		"B@2000-01-01T00:00:00Z (before: B@2200-01-01T00:00:00Z)",
-		// TTL deletes B (no events)
+		expectedEvents := []string{
+			// initial
+			"A@2000-01-01T00:00:00Z", "B@2200-01-01T00:00:00Z",
+			// TTL deletes A
+			"<deleted> (before: A@2000-01-01T00:00:00Z)",
+			// update B to be expired
+			"B@2000-01-01T00:00:00Z (before: B@2200-01-01T00:00:00Z)",
+			// TTL deletes B (no events)
+		}
+		type state struct {
+			ID        string `json:"id"`
+			ExpiredAt string `json:"expired_at"`
+		}
+		err = checkCDCEvents[state](ctx, t, c, conn, jobID, "events",
+			// Produce a canonical format that we can assert on. The format is of the
+			// form: id@exp_at (before: id@exp_at)[, id@exp_at (before: id@exp_at), ...]
+			func(before *state, after *state) string {
+				var s string
+				if after == nil {
+					s += "<deleted>"
+				} else {
+					s += fmt.Sprintf("%s@%s", after.ID, after.ExpiredAt)
+				}
+				if before != nil {
+					s += fmt.Sprintf(" (before: %s@%s)", before.ID, before.ExpiredAt)
+				}
+				return s
+			},
+			expectedEvents,
+		)
+		require.NoError(t, err)
 	}
-	type state struct {
-		ID        string `json:"id"`
-		ExpiredAt string `json:"expired_at"`
-	}
-	err = checkCDCEvents[state](ctx, t, c, conn, jobID, "events",
-		// Produce a canonical format that we can assert on. The format is of the
-		// form: id@exp_at (before: id@exp_at)[, id@exp_at (before: id@exp_at), ...]
-		func(before *state, after *state) string {
-			var s string
-			if after == nil {
-				s += "<deleted>"
-			} else {
-				s += fmt.Sprintf("%s@%s", after.ID, after.ExpiredAt)
-			}
-			if before != nil {
-				s += fmt.Sprintf(" (before: %s@%s)", before.ID, before.ExpiredAt)
-			}
-			return s
-		},
-		expectedEvents,
-	)
-	require.NoError(t, err)
 }
 
 // waitForTTL waits until the row-level TTL job for a given table has run
