@@ -954,6 +954,14 @@ type Engine interface {
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
 	NewBatch() Batch
+	// NewReader returns a new instance of a Reader that wraps this engine, and
+	// with the given durability requirement. This wrapper caches iterators to
+	// avoid the overhead of creating multiple iterators for batched reads.
+	//
+	// All iterators created from a read-only engine are guaranteed to provide a
+	// consistent snapshot of the underlying engine. See the comment on the
+	// Reader interface and the Reader.ConsistentIterators method.
+	NewReader(durability DurabilityRequirement) Reader
 	// NewReadOnly returns a new instance of a ReadWriter that wraps this
 	// engine, and with the given durability requirement. This wrapper panics
 	// when unexpected operations (e.g., write operations) are executed on it
@@ -963,6 +971,9 @@ type Engine interface {
 	// All iterators created from a read-only engine are guaranteed to provide a
 	// consistent snapshot of the underlying engine. See the comment on the
 	// Reader interface and the Reader.ConsistentIterators method.
+	//
+	// TODO(sumeer,jackson): Remove this method and force the caller to operate
+	// explicitly with a separate WriteBatch and Reader.
 	NewReadOnly(durability DurabilityRequirement) ReadWriter
 	// NewUnindexedBatch returns a new instance of a batched engine which wraps
 	// this engine. It is unindexed, in that writes to the batch are not

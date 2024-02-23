@@ -205,7 +205,7 @@ func TestTxnBoundReplicatedLockTableView(t *testing.T) {
 	err = storage.MVCCAcquireLock(ctx, engine, &txn1, lock.Shared, keyB, nil, 0, 0)
 	require.NoError(t, err)
 
-	reader := engine.NewReadOnly(storage.StandardDurability)
+	reader := engine.NewReader(storage.StandardDurability)
 	defer reader.Close()
 
 	txn1LTView := newTxnBoundReplicatedLockTableView(reader, &txn1)

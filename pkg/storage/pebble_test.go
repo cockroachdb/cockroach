@@ -304,9 +304,9 @@ func TestPebbleIterConsistency(t *testing.T) {
 	require.NoError(t, eng.PutMVCC(k1, v1))
 
 	var (
-		roEngine  = eng.NewReadOnly(StandardDurability)
+		roEngine  = eng.NewReader(StandardDurability)
 		batch     = eng.NewBatch()
-		roEngine2 = eng.NewReadOnly(StandardDurability)
+		roEngine2 = eng.NewReader(StandardDurability)
 		batch2    = eng.NewBatch()
 	)
 	defer roEngine.Close()
@@ -988,11 +988,11 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	eng.RegisterFlushCompletedCallback(func() {
 		atomic.AddInt32(&cbCount, 1)
 	})
-	roStandard := eng.NewReadOnly(StandardDurability)
+	roStandard := eng.NewReader(StandardDurability)
 	defer roStandard.Close()
-	roGuaranteed := eng.NewReadOnly(GuaranteedDurability)
+	roGuaranteed := eng.NewReader(GuaranteedDurability)
 	defer roGuaranteed.Close()
-	roGuaranteedPinned := eng.NewReadOnly(GuaranteedDurability)
+	roGuaranteedPinned := eng.NewReader(GuaranteedDurability)
 	defer roGuaranteedPinned.Close()
 	require.NoError(t, roGuaranteedPinned.PinEngineStateForIterators(UnknownReadCategory))
 	// Returns the value found or nil.
@@ -1029,7 +1029,7 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	})
 	// Write is visible to new guaranteed reader. We need to use a new reader
 	// due to iterator caching.
-	roGuaranteed2 := eng.NewReadOnly(GuaranteedDurability)
+	roGuaranteed2 := eng.NewReader(GuaranteedDurability)
 	defer roGuaranteed2.Close()
 	require.Equal(t, v.Value.RawBytes, checkGetAndIter(roGuaranteed2))
 }
@@ -1062,7 +1062,7 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 	require.NoError(t, eng.PutMVCC(b1, v2))
 	require.NoError(t, eng.PutMVCC(c1, v3))
 
-	readOnly := eng.NewReadOnly(StandardDurability)
+	readOnly := eng.NewReader(StandardDurability)
 	defer readOnly.Close()
 	require.NoError(t, readOnly.PinEngineStateForIterators(UnknownReadCategory))
 
