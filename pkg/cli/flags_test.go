@@ -1222,6 +1222,7 @@ Available Commands:
   debug             debugging commands
   sqlfmt            format SQL statements
   workload          generators for data and query loads
+  encode-uri        encode a CRDB connection URL
   help              Help about any command
 
 Flags:
