@@ -119,9 +119,6 @@ func (s waitingState) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch s.kind {
 	case waitFor, waitForDistinguished:
 		distinguished := redact.SafeString("")
-		if s.kind == waitForDistinguished {
-			distinguished = " (distinguished)"
-		}
 		target := redact.SafeString("holding lock")
 		if !s.held {
 			target = "running request"
@@ -1886,9 +1883,6 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 				sb.Printf("%v\n", redact.Safe(g.txn.ID))
 			}
 		}
-	}
-	if kl.distinguishedWaiter != nil {
-		sb.Printf("   distinguished req: %d\n", redact.Safe(kl.distinguishedWaiter.seqNum))
 	}
 }
 

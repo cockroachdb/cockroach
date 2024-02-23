@@ -114,7 +114,7 @@ start-waiting: true
 
 guard-state r=req1
 ----
-new: state=waitForDistinguished txn=txn4 key="d" held=true guard-strength=Intent
+new: state=waitFor txn=txn4 key="d" held=true guard-strength=Intent
 
 dequeue r=req1
 ----
@@ -202,7 +202,7 @@ start-waiting: true
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn7 key="g" held=true guard-strength=None
+new: state=waitFor txn=txn7 key="g" held=true guard-strength=None
 
 dequeue r=req2
 ----

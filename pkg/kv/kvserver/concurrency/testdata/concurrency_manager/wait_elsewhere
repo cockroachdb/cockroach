@@ -60,7 +60,7 @@ sequence req=reqWaiter
 [4] sequence reqWaiter: acquiring latches
 [4] sequence reqWaiter: scanning lock table for conflicting locks
 [4] sequence reqWaiter: waiting in lock wait-queues
-[4] sequence reqWaiter: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence reqWaiter: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
 [4] sequence reqWaiter: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence reqWaiter: pushing txn 00000001 to abort
 [4] sequence reqWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -72,7 +72,6 @@ num=1
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
    queued locking requests:
     active: true req: 2, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 2
 
 sequence req=reqSecondLock
 ----
@@ -202,7 +201,7 @@ sequence req=reqTwoKeyWaiter
 [10] sequence reqTwoKeyWaiter: acquiring latches
 [10] sequence reqTwoKeyWaiter: scanning lock table for conflicting locks
 [10] sequence reqTwoKeyWaiter: waiting in lock wait-queues
-[10] sequence reqTwoKeyWaiter: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"k1"› (queuedLockingRequests: 0, queuedReaders: 1)
+[10] sequence reqTwoKeyWaiter: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"k1"› (queuedLockingRequests: 0, queuedReaders: 1)
 [10] sequence reqTwoKeyWaiter: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [10] sequence reqTwoKeyWaiter: pushing timestamp of txn 00000003 above 20.000000000,1
 [10] sequence reqTwoKeyWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -214,7 +213,6 @@ num=2
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
    waiting readers:
     req: 5, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 5
  lock: "k2"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
@@ -246,7 +244,6 @@ num=1
    waiting readers:
     req: 6, txn: 00000002-0000-0000-0000-000000000000
     req: 5, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 5
 
 # Before #99635 was fixed, reqTwoKeyWaiter would move on to waiting on key k2
 # and get stuck in lockTableWaiterImpl.WaitOn. Even after it resolved the intent

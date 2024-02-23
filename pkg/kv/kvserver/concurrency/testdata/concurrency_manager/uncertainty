@@ -39,7 +39,7 @@ sequence req=req1
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: waiting in lock wait-queues
-[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence req1: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
 [3] sequence req1: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req1: pushing timestamp of txn 00000001 above 15.000000000,1
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -105,7 +105,7 @@ sequence req=req1
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: waiting in lock wait-queues
-[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence req1: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
 [3] sequence req1: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req1: pushing timestamp of txn 00000001 above 135.000000000,0
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -180,7 +180,7 @@ sequence req=req1
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: waiting in lock wait-queues
-[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence req1: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
 [3] sequence req1: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req1: pushing timestamp of txn 00000001 above 15.000000000,1
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction

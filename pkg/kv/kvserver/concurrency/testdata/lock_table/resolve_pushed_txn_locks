@@ -102,17 +102,14 @@ num=3
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 3, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 3
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 4, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 4
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
    waiting readers:
     req: 5, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 5
 
 pushed-txn-updated txn=txn2 status=pending ts=11,1
 ----
@@ -130,12 +127,10 @@ num=3
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 4, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 4
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
    waiting readers:
     req: 5, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 5
 
 guard-state r=req1
 ----
@@ -143,11 +138,11 @@ new: state=doneWaiting
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn2 key="b" held=true guard-strength=None
+new: state=waitFor txn=txn2 key="b" held=true guard-strength=None
 
 guard-state r=req3
 ----
-new: state=waitForDistinguished txn=txn2 key="c" held=true guard-strength=None
+new: state=waitFor txn=txn2 key="c" held=true guard-strength=None
 
 guard-state r=req4
 ----
@@ -167,7 +162,6 @@ num=3
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
    waiting readers:
     req: 5, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 5
 
 update txn=txn2 ts=11,1 epoch=0 span=c
 ----
