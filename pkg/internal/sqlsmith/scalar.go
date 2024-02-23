@@ -781,7 +781,7 @@ func (v *replaceDatumPlaceholderVisitor) VisitPre(
 ) (recurse bool, newExpr tree.Expr) {
 	switch t := expr.(type) {
 	case tree.Datum:
-		if t.ResolvedType().IsNumeric() || t.ResolvedType() == types.Bool {
+		if t.ResolvedType().IsNumeric() || t.ResolvedType().Identical(types.Bool) {
 			v.Args = append(v.Args, expr)
 			placeholder, _ := tree.NewPlaceholder(strconv.Itoa(len(v.Args)))
 			return false, placeholder

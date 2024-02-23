@@ -203,7 +203,7 @@ func RandColumnTypes(rng *rand.Rand, numCols int) []*types.T {
 // RandSortingType returns a column type which can be key-encoded.
 func RandSortingType(rng *rand.Rand) *types.T {
 	typ := RandType(rng)
-	for colinfo.MustBeValueEncoded(typ) || typ == types.Void {
+	for colinfo.MustBeValueEncoded(typ) || typ.Family() == types.VoidFamily {
 		typ = RandType(rng)
 	}
 	return typ

@@ -891,7 +891,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			return err
 		}
 		s.typedExprs[i] = typ
-		if typ.ResolvedType() == types.AnyCollatedString {
+		if typ.ResolvedType().Identical(types.AnyCollatedString) {
 			ambiguousCollatedTypes = true
 		}
 		rt := typ.ResolvedType()
@@ -910,14 +910,14 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		var concreteType *types.T
 		for i, ok := typeableIdxs.Next(0); ok; i, ok = typeableIdxs.Next(i + 1) {
 			typ := s.typedExprs[i].ResolvedType()
-			if typ != types.AnyCollatedString {
+			if !typ.Identical(types.AnyCollatedString) {
 				concreteType = typ
 				break
 			}
 		}
 		if concreteType != nil {
 			for i, ok := typeableIdxs.Next(0); ok; i, ok = typeableIdxs.Next(i + 1) {
-				if s.typedExprs[i].ResolvedType() == types.AnyCollatedString {
+				if s.typedExprs[i].ResolvedType().Identical(types.AnyCollatedString) {
 					typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, concreteType)
 					if err != nil {
 						return err

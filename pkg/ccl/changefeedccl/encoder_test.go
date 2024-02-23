@@ -1121,7 +1121,7 @@ func TestJsonRountrip(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 
 	isFloatOrDecimal := func(typ *types.T) bool {
-		return typ == types.Float4 || typ == types.Float || typ == types.Decimal
+		return typ.Identical(types.Float4) || typ.Identical(types.Float) || typ.Identical(types.Decimal)
 	}
 
 	type test struct {
