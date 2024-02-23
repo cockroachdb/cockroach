@@ -115,8 +115,7 @@ func setupLockTableWaiterTest() (
 ) {
 	ir := &mockIntentResolver{}
 	st := cluster.MakeTestingClusterSettings()
-	LockTableLivenessPushDelay.Override(context.Background(), &st.SV, 0)
-	LockTableDeadlockDetectionPushDelay.Override(context.Background(), &st.SV, 0)
+	LockTableDeadlockOrLivenessDetectionPushDelay.Override(context.Background(), &st.SV, 0)
 	manual := timeutil.NewManualTime(lockTableWaiterTestClock.GoTime())
 	guard := &mockLockTableGuard{
 		signal: make(chan struct{}, 1),
@@ -246,8 +245,7 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 
 	t.Run("state", func(t *testing.T) {
 		t.Run("waitFor", func(t *testing.T) {
-			t.Log("waitFor does not cause non-transactional requests to push")
-			testWaitNoopUntilDone(t, waitFor, makeReq)
+			testWaitPush(t, waitFor, makeReq, reqHeaderTS)
 		})
 
 		t.Run("waitForDistinguished", func(t *testing.T) {
