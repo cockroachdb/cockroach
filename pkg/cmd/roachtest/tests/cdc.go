@@ -1607,7 +1607,7 @@ func registerCDC(r registry.Registry) {
 			defer ct.Close()
 
 			// Run minimal level of tpcc workload and changefeed.
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30s"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "5m"})
 
 			kafka, cleanup := setupKafka(ctx, t, c, c.Node(c.Spec().NodeCount))
 			defer cleanup()
