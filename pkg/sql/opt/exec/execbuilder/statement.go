@@ -84,6 +84,7 @@ func (b *Builder) buildCreateFunction(
 		cf.Syntax,
 		cf.Deps,
 		cf.TypeDeps,
+		cf.FuncDeps,
 	)
 	return execPlan{root: root}, colOrdMap{}, err
 }

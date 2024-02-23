@@ -132,13 +132,16 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	// the function body.
 	var deps opt.SchemaDeps
 	var typeDeps opt.SchemaTypeDeps
+	var functionDeps opt.SchemaFunctionDeps
 
 	afterBuildStmt := func() {
+		functionDeps.UnionWith(b.schemaFunctionDeps)
 		deps = append(deps, b.schemaDeps...)
 		typeDeps.UnionWith(b.schemaTypeDeps)
 		// Reset the tracked dependencies for next statement.
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
+		b.schemaFunctionDeps = intsets.Fast{}
 
 		// Reset the annotations to the original values
 		b.evalCtx.Annotations = oldEvalCtxAnn
@@ -383,6 +386,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			Syntax:   cf,
 			Deps:     deps,
 			TypeDeps: typeDeps,
+			FuncDeps: functionDeps,
 		},
 	)
 	return outScope
