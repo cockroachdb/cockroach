@@ -1607,7 +1607,7 @@ func registerCDC(r registry.Registry) {
 			defer ct.Close()
 
 			// Run minimal level of tpcc workload and changefeed.
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30s"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "5m"})
 
 			kafka, cleanup := setupKafka(ctx, t, c, c.Node(c.Spec().NodeCount))
 			defer cleanup()
@@ -1631,6 +1631,7 @@ func registerCDC(r registry.Registry) {
 				opts:     map[string]string{"initial_scan": "'only'"},
 			})
 			feed.waitForCompletion()
+			ct.waitForWorkload()
 
 			// Check logs on cockroach nodes (skip the last node running workload and
 			// kafka). This test verifies that sarama does mot fetch metadata for all
