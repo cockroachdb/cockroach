@@ -1654,6 +1654,7 @@ message FunctionDescriptor {
   // argument type, then type `T`'s descriptor id will be in this list.
   repeated uint32 depends_on_types = 14 [(gogoproto.casttype) = "ID"];
 
+
   // All references to this UDF.
   repeated Reference depended_on_by = 15 [(gogoproto.nullable) = false];
 
@@ -1669,6 +1670,9 @@ message FunctionDescriptor {
   // IsProcedure is true if the descriptor represents a procedure.
   optional bool is_procedure = 21 [(gogoproto.nullable) = false];
 
+  // DependsOnFunctions are the user defined functions that this function
+  // qdepends on.
+  repeated uint32 depends_on_functions = 22  [(gogoproto.casttype) = "ID"];
   // Next field id is 22
 }
 

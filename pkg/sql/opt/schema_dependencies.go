@@ -14,8 +14,15 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
+
+type SchemaFunctionDeps = intsets.Fast
+
+type SchemaFunctionDep struct {
+	FunctionDefinition *tree.ResolvedFunctionDefinition
+}
 
 // SchemaDeps contains information about the dependencies of objects in a
 // schema, like a view or function.

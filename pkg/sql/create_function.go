@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -36,13 +37,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type functionDependencies map[catid.DescID]struct{}
+
 type createFunctionNode struct {
 	cf *tree.CreateRoutine
 
-	dbDesc   catalog.DatabaseDescriptor
-	scDesc   catalog.SchemaDescriptor
-	planDeps planDependencies
-	typeDeps typeDependencies
+	dbDesc       catalog.DatabaseDescriptor
+	scDesc       catalog.SchemaDescriptor
+	planDeps     planDependencies
+	typeDeps     typeDependencies
+	functionDeps functionDependencies
 }
 
 func (n *createFunctionNode) ReadingOwnWrites() {}
@@ -60,6 +64,16 @@ func (n *createFunctionNode) startExec(params runParams) error {
 
 	for _, dep := range n.planDeps {
 		if dbID := dep.desc.GetParentID(); dbID != n.dbDesc.GetID() && dbID != keys.SystemDatabaseID {
+			return pgerror.Newf(pgcode.FeatureNotSupported, "the function cannot refer to other databases")
+		}
+	}
+
+	for funcRef := range n.functionDeps {
+		funcDesc, err := params.p.Descriptors().ByIDWithLeased(params.p.Txn()).Get().Function(params.ctx, funcRef)
+		if err != nil {
+			return err
+		}
+		if dbID := funcDesc.GetParentID(); dbID != n.dbDesc.GetID() && dbID != keys.SystemDatabaseID {
 			return pgerror.Newf(pgcode.FeatureNotSupported, "the function cannot refer to other databases")
 		}
 	}
@@ -245,6 +259,18 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	if err := params.p.removeTypeBackReferences(params.ctx, udfDesc.DependsOnTypes, udfDesc.ID, jobDesc); err != nil {
 		return err
 	}
+	for _, id := range udfDesc.DependsOnFunctions {
+		backRefMutable, err := params.p.Descriptors().MutableByID(params.p.txn).Function(params.ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := backRefMutable.RemoveFunctionReference(udfDesc.ID); err != nil {
+			return err
+		}
+		if err := params.p.writeFuncSchemaChange(params.ctx, backRefMutable); err != nil {
+			return err
+		}
+	}
 	// Add all new references.
 	if err := n.addUDFReferences(udfDesc, params); err != nil {
 		return err
@@ -407,8 +433,26 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 		}
 	}
 
+	udfDesc.DependsOnFunctions = make([]descpb.ID, 0, len(n.functionDeps))
+	for id := range n.functionDeps {
+		// Add a back reference.
+		backRefDesc, err := params.p.Descriptors().MutableByID(params.p.Txn()).Function(params.ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := backRefDesc.AddFunctionReference(udfDesc.ID); err != nil {
+			return err
+		}
+		if err := params.p.writeFuncSchemaChange(params.ctx, backRefDesc); err != nil {
+			return err
+		}
+		// Add a reference to the dependency in here.
+		udfDesc.DependsOnFunctions = append(udfDesc.DependsOnFunctions, id)
+	}
+
 	// Add forward references to UDF descriptor.
 	udfDesc.DependsOn = backrefTblIDs.Ordered()
+	//udfDesc.DependsOnFunction =
 
 	typeDepIDs := catalog.DescriptorIDSet{}
 	for id := range n.typeDeps {

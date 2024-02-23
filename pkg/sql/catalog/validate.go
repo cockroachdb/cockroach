@@ -121,6 +121,20 @@ type ValidationDescGetter interface {
 	GetDescriptor(id descpb.ID) (Descriptor, error)
 }
 
+// ValidateOutboundFunctionRef validates outbound reference to a function descriptor
+// depID from descriptor selfID.
+func ValidateOutboundFunctionRef(depID descpb.ID, vdg ValidationDescGetter) error {
+	referencedFunction, err := vdg.GetFunctionDescriptor(depID)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on function reference")
+	}
+	if referencedFunction.Dropped() {
+		return errors.AssertionFailedf("depends-on function %q (%d) is dropped",
+			referencedFunction.GetName(), referencedFunction.GetID())
+	}
+	return nil
+}
+
 // ValidateOutboundTableRef validates outbound reference to relation descriptor
 // depID from descriptor selfID.
 func ValidateOutboundTableRef(depID descpb.ID, vdg ValidationDescGetter) error {

@@ -162,8 +162,9 @@ type Builder struct {
 	// inner view/function).
 	trackSchemaDeps bool
 
-	schemaDeps     opt.SchemaDeps
-	schemaTypeDeps opt.SchemaTypeDeps
+	schemaDeps         opt.SchemaDeps
+	schemaFunctionDeps opt.SchemaFunctionDeps
+	schemaTypeDeps     opt.SchemaTypeDeps
 
 	// If set, the data source names in the AST are rewritten to the fully
 	// qualified version (after resolution). Used to construct the strings for

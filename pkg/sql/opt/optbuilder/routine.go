@@ -94,6 +94,10 @@ func (b *Builder) buildUDF(
 		}
 	}
 
+	if b.trackSchemaDeps {
+		b.schemaFunctionDeps.Add(int(o.Oid))
+	}
+
 	return b.finishBuildScalar(f, routine, inScope, outScope, outCol)
 }
 
