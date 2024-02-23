@@ -17,10 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // srf represents an srf expression in an expression tree
@@ -189,55 +191,97 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 // (SRF) such as generate_series() or unnest(). It synthesizes new columns in
 // outScope for each of the SRF's output columns.
 func (b *Builder) finishBuildGeneratorFunction(
-	f *tree.FuncExpr,
-	def *tree.Overload,
-	fn opt.ScalarExpr,
-	inScope, outScope *scope,
-	outCol *scopeColumn,
+	f *tree.FuncExpr, fn opt.ScalarExpr, inScope, outScope *scope, outCol *scopeColumn,
 ) (out opt.ScalarExpr) {
-	lastAlias := inScope.alias
-	if def.ReturnsRecordType {
-		if lastAlias == nil && !def.HasNamedReturnColumns {
-			panic(pgerror.New(pgcode.Syntax, "a column definition list is required for functions returning \"record\""))
-		}
-	} else if lastAlias != nil {
-		// Non-record type return with a table alias that includes types is not
-		// permitted.
-		for _, c := range lastAlias.Cols {
-			if c.Type != nil {
-				panic(pgerror.Newf(pgcode.Syntax, "a column definition list is only allowed for functions returning \"record\""))
-			}
-		}
-	}
+	rTyp := f.ResolvedType()
+	b.validateGeneratorFunctionReturnType(f.ResolvedOverload(), rTyp, inScope)
+
 	// Add scope columns.
 	if outCol != nil {
 		// Single-column return type.
 		b.populateSynthesizedColumn(outCol, fn)
-	} else if def.ReturnsRecordType && lastAlias != nil && len(lastAlias.Cols) > 0 {
-		// If we're building a generator function that returns a record type, like
-		// json_to_record, we need to know the alias that was assigned to the
-		// generator function - without that, we won't know the list of columns
-		// to output.
-		for _, c := range lastAlias.Cols {
-			if c.Type == nil {
-				panic(pgerror.Newf(pgcode.Syntax, "a column definition list is required for functions returning \"record\""))
-			}
-			typ, err := tree.ResolveType(b.ctx, c.Type, b.semaCtx.TypeResolver)
-			if err != nil {
-				panic(err)
-			}
-			b.synthesizeColumn(outScope, scopeColName(c.Name), typ, nil, fn)
-		}
 	} else {
-		// Multi-column return type. Use the tuple labels in the SRF's return type
-		// as column aliases.
-		typ := f.ResolvedType()
-		for i := range typ.TupleContents() {
-			b.synthesizeColumn(outScope, scopeColName(tree.Name(typ.TupleLabels()[i])), typ.TupleContents()[i], nil, fn)
+		// Multi-column return type. Note that we already reconciled the function's
+		// return type with the column definition list (if it exists).
+		for i := range rTyp.TupleContents() {
+			colName := scopeColName(tree.Name(rTyp.TupleLabels()[i]))
+			b.synthesizeColumn(outScope, colName, rTyp.TupleContents()[i], nil, fn)
 		}
 	}
-
 	return fn
+}
+
+// validateGeneratorFunctionReturnType checks for various errors that result
+// from the presence or absence of a column definition list and its
+// compatibility with the actual function return type. This logic mirrors that
+// in postgres.
+func (b *Builder) validateGeneratorFunctionReturnType(
+	overload *tree.Overload, rTyp *types.T, inScope *scope,
+) {
+	lastAlias := inScope.alias
+	hasColumnDefinitionList := false
+	if lastAlias != nil {
+		for _, c := range lastAlias.Cols {
+			if c.Type != nil {
+				hasColumnDefinitionList = true
+				break
+			}
+		}
+	}
+	// Validate the column definition list against the concrete return type of the
+	// function.
+	if hasColumnDefinitionList {
+		if !overload.ReturnsRecordType {
+			// Non-record type return with a table alias that includes types is not
+			// permitted.
+			if rTyp.Family() == types.TupleFamily {
+				panic(pgerror.New(pgcode.Syntax,
+					"a column definition list is redundant for a function returning a named composite type",
+				))
+			} else {
+				panic(pgerror.Newf(pgcode.Syntax,
+					"a column definition list is only allowed for functions returning \"record\"",
+				))
+			}
+		}
+		if overload.HasNamedReturnColumns {
+			panic(pgerror.New(pgcode.Syntax,
+				"a column definition list is redundant for a function with OUT parameters",
+			))
+		}
+		if len(rTyp.TupleContents()) != len(lastAlias.Cols) {
+			qualifier := "many"
+			if len(rTyp.TupleContents()) < len(lastAlias.Cols) {
+				qualifier = "few"
+			}
+			err := pgerror.New(pgcode.DuplicateColumn,
+				"return type mismatch in function declared to return record",
+			)
+			panic(errors.WithDetailf(err,
+				"Final statement returns too %s columns.",
+				redact.SafeString(qualifier),
+			))
+		}
+	} else if overload.ReturnsRecordType && !overload.HasNamedReturnColumns {
+		panic(pgerror.New(pgcode.Syntax,
+			"a column definition list is required for functions returning \"record\"",
+		))
+	}
+
+	// Verify that the function return type can be assignment-casted to the
+	// column definition list type.
+	if hasColumnDefinitionList {
+		colDefListTypes := b.getColumnDefinitionListTypes(inScope)
+		for i := range colDefListTypes.TupleContents() {
+			colTyp, defTyp := rTyp.TupleContents()[i], colDefListTypes.TupleContents()[i]
+			if !colTyp.Identical(defTyp) && !cast.ValidCast(colTyp, defTyp, cast.ContextAssignment) {
+				panic(errors.WithDetailf(pgerror.New(pgcode.InvalidFunctionDefinition,
+					"return type mismatch in function declared to return record",
+				), "Final statement returns %v instead of %v at column %d.",
+					colTyp.SQLStringForError(), defTyp.SQLStringForError(), i+1))
+			}
+		}
+	}
 }
 
 // buildProjectSet builds a ProjectSet, which is a lateral cross join
