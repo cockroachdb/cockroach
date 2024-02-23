@@ -59,7 +59,7 @@ func DefaultStartSingleNodeOpts() StartOpts {
 // DefaultStartVirtualClusterOpts returns StartOpts for starting an external
 // process virtual cluster with the given tenant name and SQL instance.
 func DefaultStartVirtualClusterOpts(tenantName string, sqlInstance int) StartOpts {
-	startOpts := StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
+	startOpts := DefaultStartOpts()
 	startOpts.RoachprodOpts.Target = install.StartServiceForVirtualCluster
 	startOpts.RoachprodOpts.VirtualClusterName = tenantName
 	startOpts.RoachprodOpts.SQLInstance = sqlInstance
