@@ -278,3 +278,28 @@ func BenchmarkDecodeJSON(b *testing.B) {
 		_, _, _ = DecodeJSON(bytes)
 	}
 }
+
+func BenchmarkFormatJSON(b *testing.B) {
+	j := parseJSON(b, sampleJSON)
+
+	b.Run("decoded", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_ = j.String()
+		}
+	})
+
+	b.Run("encoded", func(b *testing.B) {
+		encoding, err := EncodeJSON(nil, j)
+		if err != nil {
+			b.Fatal(err)
+		}
+		encoded, err := newEncodedFromRoot(encoding)
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = encoded.String()
+		}
+	})
+}
