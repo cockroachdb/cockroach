@@ -38,11 +38,6 @@ type renderNode struct {
 	// potentially modified by index selection.
 	source planDataSource
 
-	// Helper for indexed vars. This holds the actual instances of
-	// IndexedVars replaced in Exprs. The indexed vars contain indices
-	// to the array of source columns.
-	ivarHelper tree.IndexedVarHelper
-
 	// Rendering expressions for rows and corresponding output columns.
 	render []tree.TypedExpr
 
