@@ -389,6 +389,95 @@ upsert uniq
                           ├── y:49 = uniq.y:42
                           └── k:45 != uniq.k:38
 
+# Index hints do not propagate to the uniqueness checks.
+build
+UPSERT INTO uniq@uniq_v_key VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2)
+----
+upsert uniq
+ ├── arbiter indexes: uniq_pkey
+ ├── columns: <none>
+ ├── canary column: uniq.k:13
+ ├── fetch columns: uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ ├── insert-mapping:
+ │    ├── column1:8 => uniq.k:1
+ │    ├── column2:9 => uniq.v:2
+ │    ├── column3:10 => uniq.w:3
+ │    ├── column4:11 => uniq.x:4
+ │    └── column5:12 => uniq.y:5
+ ├── update-mapping:
+ │    ├── column2:9 => uniq.v:2
+ │    ├── column3:10 => uniq.w:3
+ │    ├── column4:11 => uniq.x:4
+ │    └── column5:12 => uniq.y:5
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: upsert_k:20 column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
+ │    ├── left-join (hash)
+ │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
+ │    │    ├── ensure-upsert-distinct-on
+ │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    │    │    ├── grouping columns: column1:8!null
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    │    │    │    ├── (1, 1, 1, 1, 1)
+ │    │    │    │    └── (2, 2, 2, 2, 2)
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [as=column2:9]
+ │    │    │         │    └── column2:9
+ │    │    │         ├── first-agg [as=column3:10]
+ │    │    │         │    └── column3:10
+ │    │    │         ├── first-agg [as=column4:11]
+ │    │    │         │    └── column4:11
+ │    │    │         └── first-agg [as=column5:12]
+ │    │    │              └── column5:12
+ │    │    ├── scan uniq
+ │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
+ │    │    │    └── flags: force-index=uniq_v_key disabled not visible index feature
+ │    │    └── filters
+ │    │         └── column1:8 = uniq.k:13
+ │    └── projections
+ │         └── CASE WHEN uniq.k:13 IS NULL THEN column1:8 ELSE uniq.k:13 END [as=upsert_k:20]
+ └── unique-checks
+      ├── unique-checks-item: uniq(w)
+      │    └── project
+      │         ├── columns: w:30!null
+      │         └── semi-join (hash)
+      │              ├── columns: k:28 v:29!null w:30!null x:31!null y:32!null
+      │              ├── with-scan &1
+      │              │    ├── columns: k:28 v:29!null w:30!null x:31!null y:32!null
+      │              │    └── mapping:
+      │              │         ├──  upsert_k:20 => k:28
+      │              │         ├──  column2:9 => v:29
+      │              │         ├──  column3:10 => w:30
+      │              │         ├──  column4:11 => x:31
+      │              │         └──  column5:12 => y:32
+      │              ├── scan uniq
+      │              │    ├── columns: uniq.k:21!null uniq.v:22 uniq.w:23 uniq.x:24 uniq.y:25
+      │              │    └── flags: disabled not visible index feature
+      │              └── filters
+      │                   ├── w:30 = uniq.w:23
+      │                   └── k:28 != uniq.k:21
+      └── unique-checks-item: uniq(x,y)
+           └── project
+                ├── columns: x:43!null y:44!null
+                └── semi-join (hash)
+                     ├── columns: k:40 v:41!null w:42!null x:43!null y:44!null
+                     ├── with-scan &1
+                     │    ├── columns: k:40 v:41!null w:42!null x:43!null y:44!null
+                     │    └── mapping:
+                     │         ├──  upsert_k:20 => k:40
+                     │         ├──  column2:9 => v:41
+                     │         ├──  column3:10 => w:42
+                     │         ├──  column4:11 => x:43
+                     │         └──  column5:12 => y:44
+                     ├── scan uniq
+                     │    ├── columns: uniq.k:33!null uniq.v:34 uniq.w:35 uniq.x:36 uniq.y:37
+                     │    └── flags: disabled not visible index feature
+                     └── filters
+                          ├── x:43 = uniq.x:36
+                          ├── y:44 = uniq.y:37
+                          └── k:40 != uniq.k:33
+
 # On conflict do update with constant input.
 # TODO(rytaft): The default value for x is NULL, and we're not updating either
 # x or y. Therefore, we could avoid planning checks for (x,y). w is also NULL

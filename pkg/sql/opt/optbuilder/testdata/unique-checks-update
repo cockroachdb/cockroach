@@ -211,6 +211,66 @@ update uniq
            ├── 1 [as=k_new:15]
            └── 2 [as=v_new:16]
 
+# Index hints do not propagate to the uniqueness checks.
+build
+UPDATE uniq@uniq_v_key SET w = 1, x = 2
+----
+update uniq
+ ├── columns: <none>
+ ├── fetch columns: uniq.k:8 uniq.v:9 uniq.w:10 uniq.x:11 uniq.y:12
+ ├── update-mapping:
+ │    ├── w_new:15 => uniq.w:3
+ │    └── x_new:16 => uniq.x:4
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: w_new:15!null x_new:16!null uniq.k:8!null uniq.v:9 uniq.w:10 uniq.x:11 uniq.y:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+ │    ├── scan uniq
+ │    │    ├── columns: uniq.k:8!null uniq.v:9 uniq.w:10 uniq.x:11 uniq.y:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+ │    │    └── flags: force-index=uniq_v_key
+ │    └── projections
+ │         ├── 1 [as=w_new:15]
+ │         └── 2 [as=x_new:16]
+ └── unique-checks
+      ├── unique-checks-item: uniq(w)
+      │    └── project
+      │         ├── columns: w:26!null
+      │         └── semi-join (hash)
+      │              ├── columns: k:24!null v:25 w:26!null x:27!null y:28
+      │              ├── with-scan &1
+      │              │    ├── columns: k:24!null v:25 w:26!null x:27!null y:28
+      │              │    └── mapping:
+      │              │         ├──  uniq.k:8 => k:24
+      │              │         ├──  uniq.v:9 => v:25
+      │              │         ├──  w_new:15 => w:26
+      │              │         ├──  x_new:16 => x:27
+      │              │         └──  uniq.y:12 => y:28
+      │              ├── scan uniq
+      │              │    ├── columns: uniq.k:17!null uniq.v:18 uniq.w:19 uniq.x:20 uniq.y:21
+      │              │    └── flags: disabled not visible index feature
+      │              └── filters
+      │                   ├── w:26 = uniq.w:19
+      │                   └── k:24 != uniq.k:17
+      └── unique-checks-item: uniq(x,y)
+           └── project
+                ├── columns: x:39!null y:40
+                └── semi-join (hash)
+                     ├── columns: k:36!null v:37 w:38!null x:39!null y:40
+                     ├── with-scan &1
+                     │    ├── columns: k:36!null v:37 w:38!null x:39!null y:40
+                     │    └── mapping:
+                     │         ├──  uniq.k:8 => k:36
+                     │         ├──  uniq.v:9 => v:37
+                     │         ├──  w_new:15 => w:38
+                     │         ├──  x_new:16 => x:39
+                     │         └──  uniq.y:12 => y:40
+                     ├── scan uniq
+                     │    ├── columns: uniq.k:29!null uniq.v:30 uniq.w:31 uniq.x:32 uniq.y:33
+                     │    └── flags: disabled not visible index feature
+                     └── filters
+                          ├── x:39 = uniq.x:32
+                          ├── y:40 = uniq.y:33
+                          └── k:36 != uniq.k:29
+
 exec-ddl
 CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
 ----
