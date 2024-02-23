@@ -3907,6 +3907,13 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Open Files",
+				Metrics: []string{
+					"cloud.open_readers",
+					"cloud.open_writers",
+				},
+			},
+			{
 				Title: "Connections",
 				Metrics: []string{
 					"cloud.conns_opened",

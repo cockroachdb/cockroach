@@ -26,17 +26,24 @@ var NilMetrics = (*Metrics)(nil)
 // providers.
 type Metrics struct {
 	// Readers counts the cloud storage readers opened.
-	Readers *metric.Counter
+	CreatedReaders *metric.Counter
+	// OpenReaders is the number of currently open cloud readers.
+	OpenReaders *metric.Gauge
 	// ReadBytes counts the bytes read from cloud storage.
 	ReadBytes *metric.Counter
+
 	// Writers counts the cloud storage writers opened.
-	Writers *metric.Counter
+	CreatedWriters *metric.Counter
+	// OpenReaders is the number of currently open cloud writers.
+	OpenWriters *metric.Gauge
 	// WriteBytes counts the bytes written to cloud storage.
 	WriteBytes *metric.Counter
+
 	// Listings counts the listing calls made to cloud storage.
 	Listings *metric.Counter
 	// ListingResults counts the listing results from cloud storage.
 	ListingResults *metric.Counter
+
 	// ConnsOpened, ConnsReused and TLSHandhakes track connection http info for cloud
 	// storage when collecting this info is enabled.
 	ConnsOpened, ConnsReused, TLSHandhakes *metric.Counter
@@ -107,10 +114,26 @@ func MakeMetrics() metric.Struct {
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
+	cloudOpenReaders := metric.Metadata{
+		Name:        "cloud.open_readers",
+		Help:        "Currently open readers for cloud IO",
+		Measurement: "Files",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+	cloudOpenWriters := metric.Metadata{
+		Name:        "cloud.open_writers",
+		Help:        "Currently open writers for cloud IO",
+		Measurement: "Files",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
 	return &Metrics{
-		Readers:        metric.NewCounter(cloudReaders),
+		CreatedReaders: metric.NewCounter(cloudReaders),
+		OpenReaders:    metric.NewGauge(cloudOpenReaders),
 		ReadBytes:      metric.NewCounter(cloudReadBytes),
-		Writers:        metric.NewCounter(cloudWriters),
+		CreatedWriters: metric.NewCounter(cloudWriters),
+		OpenWriters:    metric.NewGauge(cloudOpenWriters),
 		WriteBytes:     metric.NewCounter(cloudWriteBytes),
 		Listings:       metric.NewCounter(listings),
 		ListingResults: metric.NewCounter(listingResults),
@@ -132,7 +155,8 @@ func (m *Metrics) Reader(
 	if m == nil {
 		return r
 	}
-	m.Readers.Inc(1)
+	m.CreatedReaders.Inc(1)
+	m.OpenReaders.Inc(1)
 	return &metricsReader{
 		inner: r,
 		m:     m,
@@ -144,7 +168,8 @@ func (m *Metrics) Writer(_ context.Context, _ ExternalStorage, w io.WriteCloser)
 	if m == nil {
 		return w
 	}
-	m.Writers.Inc(1)
+	m.CreatedWriters.Inc(1)
+	m.OpenWriters.Inc(1)
 	return &metricsWriter{
 		w: w,
 		m: m,
@@ -165,6 +190,7 @@ func (mr *metricsReader) Read(ctx context.Context, p []byte) (int, error) {
 
 // Close implements the ioctx.ReadCloserCtx interface.
 func (mr *metricsReader) Close(ctx context.Context) error {
+	mr.m.OpenReaders.Dec(1)
 	return mr.inner.Close(ctx)
 }
 
@@ -182,6 +208,7 @@ func (mw *metricsWriter) Write(p []byte) (int, error) {
 
 // Close implements the WriteCloser interface.
 func (mw *metricsWriter) Close() error {
+	mw.m.OpenWriters.Dec(1)
 	return mw.w.Close()
 }
 
