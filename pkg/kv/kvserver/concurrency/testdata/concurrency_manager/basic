@@ -113,7 +113,7 @@ sequence req=req3
 [2] sequence req3: acquiring latches
 [2] sequence req3: scanning lock table for conflicting locks
 [2] sequence req3: waiting in lock wait-queues
-[2] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[2] sequence req3: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
 [2] sequence req3: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [2] sequence req3: pushing timestamp of txn 00000002 above 14.000000000,1
 [2] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -200,7 +200,7 @@ sequence req=req5
 [2] sequence req5: acquiring latches
 [2] sequence req5: scanning lock table for conflicting locks
 [2] sequence req5: waiting in lock wait-queues
-[2] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[2] sequence req5: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
 [2] sequence req5: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [2] sequence req5: pushing timestamp of txn 00000002 above 14.000000000,1
 [2] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -261,7 +261,7 @@ finish req=req6
 [-] finish req6: finishing request
 [4] sequence req7: scanning lock table for conflicting locks
 [4] sequence req7: waiting in lock wait-queues
-[4] sequence req7: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence req7: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
 [4] sequence req7: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence req7: pushing txn 00000002 to abort
 [4] sequence req7: blocked on select in concurrency_test.(*cluster).PushTransaction

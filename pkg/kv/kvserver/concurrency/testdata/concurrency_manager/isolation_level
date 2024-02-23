@@ -269,7 +269,7 @@ sequence req=req5
 [7] sequence req5: acquiring latches
 [7] sequence req5: scanning lock table for conflicting locks
 [7] sequence req5: waiting in lock wait-queues
-[7] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal1"› (queuedLockingRequests: 0, queuedReaders: 1)
+[7] sequence req5: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"kSSINormal1"› (queuedLockingRequests: 0, queuedReaders: 1)
 [7] sequence req5: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [7] sequence req5: pushing timestamp of txn 00000001 above 10.000000000,1
 [7] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -299,7 +299,7 @@ sequence req=req6
 [8] sequence req6: acquiring latches
 [8] sequence req6: scanning lock table for conflicting locks
 [8] sequence req6: waiting in lock wait-queues
-[8] sequence req6: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal2"› (queuedLockingRequests: 0, queuedReaders: 1)
+[8] sequence req6: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"kSSINormal2"› (queuedLockingRequests: 0, queuedReaders: 1)
 [8] sequence req6: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [8] sequence req6: pushing timestamp of txn 00000001 above 11.000000000,1
 [8] sequence req6: pusher pushed pushee to 11.000000000,2
@@ -336,7 +336,7 @@ sequence req=req7
 [9] sequence req7: acquiring latches
 [9] sequence req7: scanning lock table for conflicting locks
 [9] sequence req7: waiting in lock wait-queues
-[9] sequence req7: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal3"› (queuedLockingRequests: 0, queuedReaders: 1)
+[9] sequence req7: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"kSSINormal3"› (queuedLockingRequests: 0, queuedReaders: 1)
 [9] sequence req7: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [9] sequence req7: pushing timestamp of txn 00000001 above 12.000000000,1
 [9] sequence req7: pusher pushed pushee to 12.000000000,2
@@ -369,7 +369,7 @@ sequence req=req8
 [10] sequence req8: acquiring latches
 [10] sequence req8: scanning lock table for conflicting locks
 [10] sequence req8: waiting in lock wait-queues
-[10] sequence req8: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal4"› (queuedLockingRequests: 0, queuedReaders: 1)
+[10] sequence req8: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"kSSINormal4"› (queuedLockingRequests: 0, queuedReaders: 1)
 [10] sequence req8: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [10] sequence req8: pushing timestamp of txn 00000001 above 13.000000000,1
 [10] sequence req8: pusher pushed pushee to 13.000000000,2
@@ -432,7 +432,7 @@ sequence req=req9
 [11] sequence req9: acquiring latches
 [11] sequence req9: scanning lock table for conflicting locks
 [11] sequence req9: waiting in lock wait-queues
-[11] sequence req9: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh1"› (queuedLockingRequests: 0, queuedReaders: 1)
+[11] sequence req9: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"kSSIHigh1"› (queuedLockingRequests: 0, queuedReaders: 1)
 [11] sequence req9: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [11] sequence req9: pushing timestamp of txn 00000002 above 10.000000000,1
 [11] sequence req9: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -455,7 +455,7 @@ sequence req=req10
 [12] sequence req10: acquiring latches
 [12] sequence req10: scanning lock table for conflicting locks
 [12] sequence req10: waiting in lock wait-queues
-[12] sequence req10: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh2"› (queuedLockingRequests: 0, queuedReaders: 1)
+[12] sequence req10: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"kSSIHigh2"› (queuedLockingRequests: 0, queuedReaders: 1)
 [12] sequence req10: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [12] sequence req10: pushing timestamp of txn 00000002 above 11.000000000,1
 [12] sequence req10: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -478,7 +478,7 @@ sequence req=req11
 [13] sequence req11: acquiring latches
 [13] sequence req11: scanning lock table for conflicting locks
 [13] sequence req11: waiting in lock wait-queues
-[13] sequence req11: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh3"› (queuedLockingRequests: 0, queuedReaders: 1)
+[13] sequence req11: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"kSSIHigh3"› (queuedLockingRequests: 0, queuedReaders: 1)
 [13] sequence req11: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [13] sequence req11: pushing timestamp of txn 00000002 above 12.000000000,1
 [13] sequence req11: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -520,7 +520,7 @@ sequence req=req12
 [14] sequence req12: acquiring latches
 [14] sequence req12: scanning lock table for conflicting locks
 [14] sequence req12: waiting in lock wait-queues
-[14] sequence req12: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh4"› (queuedLockingRequests: 0, queuedReaders: 1)
+[14] sequence req12: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"kSSIHigh4"› (queuedLockingRequests: 0, queuedReaders: 1)
 [14] sequence req12: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [14] sequence req12: pushing timestamp of txn 00000002 above 13.000000000,1
 [14] sequence req12: pusher pushed pushee to 13.000000000,2
@@ -584,7 +584,7 @@ sequence req=req13
 [15] sequence req13: acquiring latches
 [15] sequence req13: scanning lock table for conflicting locks
 [15] sequence req13: waiting in lock wait-queues
-[15] sequence req13: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal1"› (queuedLockingRequests: 0, queuedReaders: 1)
+[15] sequence req13: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"kRCNormal1"› (queuedLockingRequests: 0, queuedReaders: 1)
 [15] sequence req13: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [15] sequence req13: pushing timestamp of txn 00000003 above 10.000000000,1
 [15] sequence req13: pusher pushed pushee to 10.000000000,2
@@ -616,7 +616,7 @@ sequence req=req14
 [16] sequence req14: acquiring latches
 [16] sequence req14: scanning lock table for conflicting locks
 [16] sequence req14: waiting in lock wait-queues
-[16] sequence req14: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal2"› (queuedLockingRequests: 0, queuedReaders: 1)
+[16] sequence req14: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"kRCNormal2"› (queuedLockingRequests: 0, queuedReaders: 1)
 [16] sequence req14: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [16] sequence req14: pushing timestamp of txn 00000003 above 11.000000000,1
 [16] sequence req14: pusher pushed pushee to 11.000000000,2
@@ -648,7 +648,7 @@ sequence req=req15
 [17] sequence req15: acquiring latches
 [17] sequence req15: scanning lock table for conflicting locks
 [17] sequence req15: waiting in lock wait-queues
-[17] sequence req15: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal3"› (queuedLockingRequests: 0, queuedReaders: 1)
+[17] sequence req15: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"kRCNormal3"› (queuedLockingRequests: 0, queuedReaders: 1)
 [17] sequence req15: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [17] sequence req15: pushing timestamp of txn 00000003 above 12.000000000,1
 [17] sequence req15: pusher pushed pushee to 12.000000000,2
@@ -680,7 +680,7 @@ sequence req=req16
 [18] sequence req16: acquiring latches
 [18] sequence req16: scanning lock table for conflicting locks
 [18] sequence req16: waiting in lock wait-queues
-[18] sequence req16: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal4"› (queuedLockingRequests: 0, queuedReaders: 1)
+[18] sequence req16: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"kRCNormal4"› (queuedLockingRequests: 0, queuedReaders: 1)
 [18] sequence req16: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [18] sequence req16: pushing timestamp of txn 00000003 above 13.000000000,1
 [18] sequence req16: pusher pushed pushee to 13.000000000,2
@@ -724,7 +724,7 @@ sequence req=req17
 [19] sequence req17: acquiring latches
 [19] sequence req17: scanning lock table for conflicting locks
 [19] sequence req17: waiting in lock wait-queues
-[19] sequence req17: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh1"› (queuedLockingRequests: 0, queuedReaders: 1)
+[19] sequence req17: lock wait-queue event: wait for txn 00000004 holding lock @ key ‹"kRCHigh1"› (queuedLockingRequests: 0, queuedReaders: 1)
 [19] sequence req17: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [19] sequence req17: pushing timestamp of txn 00000004 above 10.000000000,1
 [19] sequence req17: pusher pushed pushee to 10.000000000,2
@@ -756,7 +756,7 @@ sequence req=req18
 [20] sequence req18: acquiring latches
 [20] sequence req18: scanning lock table for conflicting locks
 [20] sequence req18: waiting in lock wait-queues
-[20] sequence req18: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh2"› (queuedLockingRequests: 0, queuedReaders: 1)
+[20] sequence req18: lock wait-queue event: wait for txn 00000004 holding lock @ key ‹"kRCHigh2"› (queuedLockingRequests: 0, queuedReaders: 1)
 [20] sequence req18: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [20] sequence req18: pushing timestamp of txn 00000004 above 11.000000000,1
 [20] sequence req18: pusher pushed pushee to 11.000000000,2
@@ -788,7 +788,7 @@ sequence req=req19
 [21] sequence req19: acquiring latches
 [21] sequence req19: scanning lock table for conflicting locks
 [21] sequence req19: waiting in lock wait-queues
-[21] sequence req19: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh3"› (queuedLockingRequests: 0, queuedReaders: 1)
+[21] sequence req19: lock wait-queue event: wait for txn 00000004 holding lock @ key ‹"kRCHigh3"› (queuedLockingRequests: 0, queuedReaders: 1)
 [21] sequence req19: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [21] sequence req19: pushing timestamp of txn 00000004 above 12.000000000,1
 [21] sequence req19: pusher pushed pushee to 12.000000000,2
@@ -820,7 +820,7 @@ sequence req=req20
 [22] sequence req20: acquiring latches
 [22] sequence req20: scanning lock table for conflicting locks
 [22] sequence req20: waiting in lock wait-queues
-[22] sequence req20: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh4"› (queuedLockingRequests: 0, queuedReaders: 1)
+[22] sequence req20: lock wait-queue event: wait for txn 00000004 holding lock @ key ‹"kRCHigh4"› (queuedLockingRequests: 0, queuedReaders: 1)
 [22] sequence req20: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [22] sequence req20: pushing timestamp of txn 00000004 above 13.000000000,1
 [22] sequence req20: pusher pushed pushee to 13.000000000,2
