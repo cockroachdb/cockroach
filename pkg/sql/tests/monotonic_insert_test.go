@@ -114,7 +114,7 @@ func testMonotonicInserts(t *testing.T, distSQLMode sessiondatapb.DistSQLExecMod
 		// Let transactions push immediately to detect deadlocks. The test creates a
 		// large amount of contention and dependency cycles, and could take a long
 		// time to complete without this.
-		concurrency.LockTableDeadlockDetectionPushDelay.Override(ctx,
+		concurrency.LockTableDeadlockOrLivenessDetectionPushDelay.Override(ctx,
 			&server.SystemLayer().ClusterSettings().SV, 0)
 	}
 

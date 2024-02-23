@@ -955,7 +955,7 @@ func checkConcurrency(
 	defer s.Stop()
 	// Reduce the deadlock detection push delay so that txns that encounter locks
 	// begin deadlock detection immediately. This speeds up tests significantly.
-	concurrency.LockTableDeadlockDetectionPushDelay.Override(context.Background(), &s.Cfg.Settings.SV, 0)
+	concurrency.LockTableDeadlockOrLivenessDetectionPushDelay.Override(context.Background(), &s.Cfg.Settings.SV, 0)
 	verifier.run(isoLevels, s.DB, t)
 }
 

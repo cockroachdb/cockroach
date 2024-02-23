@@ -11134,10 +11134,10 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
 
-	// Disable txn liveness pushes. See below for why.
+	// Disable txn liveness/deadlock pushes. See below for why.
 	st := tc.store.cfg.Settings
 	st.Manual.Store(true)
-	concurrency.LockTableLivenessPushDelay.Override(ctx, &st.SV, 24*time.Hour)
+	concurrency.LockTableDeadlockOrLivenessDetectionPushDelay.Override(ctx, &st.SV, 24*time.Hour)
 
 	// Write a value to a key A.
 	key := roachpb.Key("a")
@@ -11157,14 +11157,16 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 	}
 
 	// Try to write to the key outside of this transaction. Should wait on the
-	// "for update" lock in a lock wait-queue in the concurrency manager until
-	// the lock is released. If we don't notify the lock-table when the first
-	// txn eventually commits, this will wait for much longer than it needs to.
-	// It will eventually push the first txn and notice that it has committed.
-	// However, we've disabled liveness pushes in this test, so the test will
-	// block forever without the lock-table notification. We didn't need to
-	// disable deadlock detection pushes because this is a non-transactional
-	// write, so it never performs them.
+	// "for update" lock in a lock wait-queue in the concurrency manager until the
+	// lock is released. If we don't notify the lock-table when the first txn
+	// eventually commits, this will wait for much longer than it needs to. It
+	// will eventually push the first txn and notice that it has committed.
+	// However, we've disabled liveness and deadlock pushes[*] in this test, so the
+	// test will block forever without the lock-table notification.
+	//
+	// [*] The operating push here being the liveness one, as non-transactional
+	// requests can't be part of deadlock cycles. However, both of these are
+	// controlled by a single cluster setting.
 	pErrC := make(chan *kvpb.Error, 1)
 	go func() {
 		otherWrite := incrementArgs(key, 1)
