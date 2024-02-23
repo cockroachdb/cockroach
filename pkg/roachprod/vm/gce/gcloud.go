@@ -1447,7 +1447,86 @@ func (p *Provider) Create(
 			return err
 		}
 	}
-	return propagateDiskLabels(l, project, labels, zoneToHostNames, &opts)
+	return propagateDiskLabels(l, project, labels, zoneToHostNames, opts.SSDOpts.UseLocalSSD)
+}
+
+// computeGrowDistribution computes the distribution of new nodes across the
+// existing instance groups. Groups must be sorted by size from smallest to
+// largest before passing to this function. The distribution is computed
+// naively, for simplicity, by growing the instance group with the smallest
+// size, and then the next smallest, and so on.
+func computeGrowDistribution(groups []jsonManagedInstanceGroup, newNodeCount int) []int {
+	addCount := make([]int, len(groups))
+	curIndex := 0
+	for i := 0; i < newNodeCount; i++ {
+		nextIndex := (curIndex + 1) % len(groups)
+		if groups[curIndex].Size+addCount[curIndex] >
+			groups[nextIndex].Size+addCount[nextIndex] {
+			curIndex = nextIndex
+		} else {
+			curIndex = 0
+		}
+		addCount[curIndex]++
+	}
+	return addCount
+}
+
+func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names []string) error {
+	project := vms[0].Project
+	groupName := instanceGroupName(clusterName)
+	groups, err := listManagedInstanceGroups(project, groupName)
+	if err != nil {
+		return err
+	}
+
+	newNodeCount := len(names)
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].Size < groups[j].Size
+	})
+	addCounts := computeGrowDistribution(groups, newNodeCount)
+
+	zoneToHostNames := make(map[string][]string)
+	var g errgroup.Group
+	for idx, group := range groups {
+		addCount := addCounts[idx]
+		if addCount == 0 {
+			continue
+		}
+		createArgs := []string{"compute", "instance-groups", "managed", "create-instance", "--zone", group.Zone, groupName}
+		for i := 0; i < addCount; i++ {
+			name := names[0]
+			names = names[1:]
+			argsWithName := append(createArgs[:len(createArgs):len(createArgs)], []string{"--instance", name}...)
+			zoneToHostNames[group.Zone] = append(zoneToHostNames[group.Zone], name)
+			g.Go(func() error {
+				cmd := exec.Command("gcloud", argsWithName...)
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithName, output)
+				}
+				return nil
+			})
+		}
+	}
+
+	err = g.Wait()
+	if err != nil {
+		return err
+	}
+
+	err = waitForGroupStability(project, groupName, maps.Keys(zoneToHostNames))
+	if err != nil {
+		return err
+	}
+
+	var labelsJoined string
+	for key, value := range vms[0].Labels {
+		if labelsJoined != "" {
+			labelsJoined += ","
+		}
+		labelsJoined += fmt.Sprintf("%s=%s", key, value)
+	}
+	return propagateDiskLabels(l, project, labelsJoined, zoneToHostNames, len(vms[0].LocalDisks) != 0)
 }
 
 // Given a machine type, return the allowed number (> 0) of local SSDs, sorted in ascending order.
@@ -1509,7 +1588,7 @@ func propagateDiskLabels(
 	project string,
 	labels string,
 	zoneToHostNames map[string][]string,
-	opts *vm.CreateOpts,
+	useLocalSSD bool,
 ) error {
 	var g errgroup.Group
 
@@ -1538,7 +1617,7 @@ func propagateDiskLabels(
 				return nil
 			})
 
-			if !opts.SSDOpts.UseLocalSSD {
+			if !useLocalSSD {
 				g.Go(func() error {
 					persistentDiskArgs := append([]string(nil), argsPrefix...)
 					persistentDiskArgs = append(persistentDiskArgs, zoneArg...)
@@ -1579,6 +1658,7 @@ func listInstanceTemplates(project string) ([]jsonInstanceTemplate, error) {
 type jsonManagedInstanceGroup struct {
 	Name string `json:"name"`
 	Zone string `json:"zone"`
+	Size int    `json:"size"`
 }
 
 // listManagedInstanceGroups returns a list of managed instance groups for a

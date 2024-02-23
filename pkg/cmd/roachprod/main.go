@@ -138,6 +138,28 @@ Local Clusters
 	}),
 }
 
+var growCmd = &cobra.Command{
+	Use:   `grow <cluster> <num-nodes>`,
+	Short: `grow a cluster by adding nodes`,
+	Long: `grow a cluster by adding the specified number of nodes to it.
+
+The cluster has to be a managed cluster (i.e., a cluster created with the
+gce-managed flag). Only Google Cloud clusters currently support adding nodes.
+The new nodes will use the instance template that was used to create the cluster
+originally (Nodes will be created in the same zone as the existing nodes, or if
+the cluster is geographically distributed, the nodes will be fairly distributed
+across the zones of the cluster).
+`,
+	Args: cobra.ExactArgs(2),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		count, err := strconv.ParseInt(args[1], 10, 8)
+		if err != nil || count < 1 {
+			return errors.Wrapf(err, "invalid num-nodes argument")
+		}
+		return roachprod.Grow(context.Background(), config.Logger, args[0], int(count))
+	}),
+}
+
 var setupSSHCmd = &cobra.Command{
 	Use:   "setup-ssh <cluster>",
 	Short: "set up ssh for a cluster",
@@ -1437,6 +1459,7 @@ func main() {
 	cobra.EnableCommandSorting = false
 	rootCmd.AddCommand(
 		createCmd,
+		growCmd,
 		resetCmd,
 		destroyCmd,
 		extendCmd,

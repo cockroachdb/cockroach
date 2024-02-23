@@ -36,6 +36,7 @@ go_test(
     }),
     deps = [
         "//pkg/roachprod/vm",
+        "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
