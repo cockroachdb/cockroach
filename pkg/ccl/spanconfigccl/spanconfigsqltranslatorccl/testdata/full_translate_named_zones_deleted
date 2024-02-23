@@ -46,7 +46,8 @@ SELECT id FROM system.zones
 
 full-translate
 ----
-/{Min-System/NodeLiveness}                 range default
+/M{in-eta2}                                range default
+/{Meta2-System/NodeLiveness}               range default
 /System/NodeLiveness{-Max}                 range default
 /System/{NodeLivenessMax-tsd}              range default
 /System{/tsd-tse}                          range default

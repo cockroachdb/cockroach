@@ -254,7 +254,12 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 	switch name {
 	case zonepb.DefaultZoneName: // nothing to do.
 	case zonepb.MetaZoneName:
-		spans = append(spans, roachpb.Span{Key: keys.Meta1Span.Key, EndKey: keys.NodeLivenessSpan.Key})
+		// Meta1 is not allowed to split, whereas meta2 is. We always install a
+		// split point at the start of meta2 to ensure load based splitting can
+		// apply to meta2. See
+		// https://github.com/cockroachdb/cockroach/issues/119421.
+		spans = append(spans, keys.Meta1Span)
+		spans = append(spans, roachpb.Span{Key: keys.Meta2Prefix, EndKey: keys.NodeLivenessSpan.Key})
 	case zonepb.LivenessZoneName:
 		spans = append(spans, keys.NodeLivenessSpan)
 	case zonepb.TimeseriesZoneName:

@@ -7,9 +7,10 @@ reconcile
 mutations discard
 ----
 
-state limit=5
+state limit=6
 ----
-/{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
+/M{in-eta2}                                ttl_seconds=3600 num_replicas=5
+/{Meta2-System/NodeLiveness}               ttl_seconds=3600 num_replicas=5
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
 /System/{NodeLivenessMax-tsd}              range system
 /System{/tsd-tse}                          range default
@@ -51,9 +52,10 @@ upsert /System/{NodeLivenessMax-tsd}       range default
 delete /System{tse-/SystemSpanConfigKeys}
 upsert /System{tse-/SystemSpanConfigKeys}  range default
 
-state limit=5
+state limit=6
 ----
-/{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
+/M{in-eta2}                                ttl_seconds=3600 num_replicas=5
+/{Meta2-System/NodeLiveness}               ttl_seconds=3600 num_replicas=5
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
 /System/{NodeLivenessMax-tsd}              range default
 /System{/tsd-tse}                          ttl_seconds=42
@@ -69,14 +71,17 @@ ALTER RANGE timeseries CONFIGURE ZONE DISCARD;
 
 mutations
 ----
-delete /{Min-System/NodeLiveness}
-upsert /{Min-System/NodeLiveness}          range default
+delete /M{in-eta2}
+upsert /M{in-eta2}                         range default
+delete /{Meta2-System/NodeLiveness}
+upsert /{Meta2-System/NodeLiveness}        range default
 delete /System{/tsd-tse}
 upsert /System{/tsd-tse}                   range default
 
-state limit=5
+state limit=6
 ----
-/{Min-System/NodeLiveness}                 range default
+/M{in-eta2}                                range default
+/{Meta2-System/NodeLiveness}               range default
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
 /System/{NodeLivenessMax-tsd}              range default
 /System{/tsd-tse}                          range default
@@ -100,8 +105,10 @@ ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 50;
 
 mutations
 ----
-delete /{Min-System/NodeLiveness}
-upsert /{Min-System/NodeLiveness}          ttl_seconds=50
+delete /M{in-eta2}
+upsert /M{in-eta2}                         ttl_seconds=50
+delete /{Meta2-System/NodeLiveness}
+upsert /{Meta2-System/NodeLiveness}        ttl_seconds=50
 delete /System/{NodeLivenessMax-tsd}
 upsert /System/{NodeLivenessMax-tsd}       ttl_seconds=50
 delete /System{/tsd-tse}
@@ -111,16 +118,17 @@ upsert /System{tse-/SystemSpanConfigKeys}  ttl_seconds=50
 delete /Table/10{6-7}
 upsert /Table/10{6-7}                      ttl_seconds=50
 
-state limit=5
+state limit=6
 ----
-/{Min-System/NodeLiveness}                 ttl_seconds=50
+/M{in-eta2}                                ttl_seconds=50
+/{Meta2-System/NodeLiveness}               ttl_seconds=50
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
 /System/{NodeLivenessMax-tsd}              ttl_seconds=50
 /System{/tsd-tse}                          ttl_seconds=50
 /System{tse-/SystemSpanConfigKeys}         ttl_seconds=50
 ...
 
-state offset=46
+state offset=47
 ----
 ...
 /Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
@@ -154,7 +162,7 @@ mutations
 ----
 upsert /Table/10{7-8}                      ttl_seconds=50
 
-state offset=46
+state offset=47
 ----
 ...
 /Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
@@ -191,9 +199,10 @@ upsert /System/{NodeLivenessMax-tsd}       ttl_seconds=100
 delete /System{tse-/SystemSpanConfigKeys}
 upsert /System{tse-/SystemSpanConfigKeys}  ttl_seconds=100
 
-state limit=5
+state limit=6
 ----
-/{Min-System/NodeLiveness}                 ttl_seconds=50
+/M{in-eta2}                                ttl_seconds=50
+/{Meta2-System/NodeLiveness}               ttl_seconds=50
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
 /System/{NodeLivenessMax-tsd}              ttl_seconds=100
 /System{/tsd-tse}                          ttl_seconds=50

@@ -18,7 +18,7 @@ mutations
 ----
 upsert /Table/10{6-7}                      range default
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -58,7 +58,7 @@ delete /Table/10{6-7}
 upsert /Table/106/{2-3}                    num_replicas=7 num_voters=5
 upsert /Table/10{6/3-7}                    num_replicas=7
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -100,7 +100,7 @@ upsert /Table/106/{2-3}                    ttl_seconds=25 num_replicas=7 num_vot
 delete /Table/10{6/3-7}
 upsert /Table/10{6/3-7}                    ttl_seconds=3600 num_replicas=7
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -132,7 +132,7 @@ exec-sql
 ALTER TABLE db.t CONFIGURE ZONE USING num_replicas = 9
 ----
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -177,7 +177,7 @@ delete /Table/106{-/2}
 delete /Table/106/{2-3}
 delete /Table/10{6/3-7}
 
-state offset=46
+state offset=47
 ----
 ...
 /Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
