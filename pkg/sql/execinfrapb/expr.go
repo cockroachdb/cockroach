@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -42,10 +41,6 @@ func DeserializeExpr(
 	deserializedExpr, err := processExpression(ctx, Expression{Expr: expr}, semaCtx, vars)
 	if err != nil {
 		return deserializedExpr, err
-	}
-	var t transform.ExprTransformContext
-	if t.AggregateInExpr(ctx, deserializedExpr, evalCtx.SessionData().SearchPath) {
-		return nil, errors.Errorf("expression '%s' has aggregate", deserializedExpr)
 	}
 	return deserializedExpr, nil
 }
