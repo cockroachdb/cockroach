@@ -170,10 +170,6 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 			testWaitPush(t, waitFor, makeReq, expPushTS())
 		})
 
-		t.Run("waitForDistinguished", func(t *testing.T) {
-			testWaitPush(t, waitForDistinguished, makeReq, expPushTS())
-		})
-
 		t.Run("waitElsewhere", func(t *testing.T) {
 			testWaitPush(t, waitElsewhere, makeReq, expPushTS())
 		})
@@ -246,10 +242,6 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 	t.Run("state", func(t *testing.T) {
 		t.Run("waitFor", func(t *testing.T) {
 			testWaitPush(t, waitFor, makeReq, reqHeaderTS)
-		})
-
-		t.Run("waitForDistinguished", func(t *testing.T) {
-			testWaitPush(t, waitForDistinguished, makeReq, reqHeaderTS)
 		})
 
 		t.Run("waitElsewhere", func(t *testing.T) {
@@ -465,10 +457,6 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 			testErrorWaitPush(t, waitFor, makeHighPriReq, expPushTS, reasonWaitPolicy)
 		})
 
-		t.Run("waitForDistinguished", func(t *testing.T) {
-			testErrorWaitPush(t, waitForDistinguished, makeReq, expPushTS, reasonWaitPolicy)
-		})
-
 		t.Run("waitElsewhere", func(t *testing.T) {
 			testErrorWaitPush(t, waitElsewhere, makeReq, expPushTS, reasonWaitPolicy)
 		})
@@ -635,10 +623,6 @@ func TestLockTableWaiterWithLockTimeout(t *testing.T) {
 		t.Run("state", func(t *testing.T) {
 			t.Run("waitFor", func(t *testing.T) {
 				testWaitPushWithTimeout(t, waitFor, makeReq)
-			})
-
-			t.Run("waitForDistinguished", func(t *testing.T) {
-				testWaitPushWithTimeout(t, waitForDistinguished, makeReq)
 			})
 
 			t.Run("waitElsewhere", func(t *testing.T) {
@@ -818,7 +802,7 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 		pusheeTxn := makeTxnProto("pushee")
 		lockHeld := sync
 		g.state = waitingState{
-			kind:          waitForDistinguished,
+			kind:          waitFor,
 			txn:           &pusheeTxn.TxnMeta,
 			key:           keyA,
 			held:          lockHeld,
@@ -1009,7 +993,7 @@ func TestContentionEventTracer(t *testing.T) {
 		events = append(events, ev)
 	})
 	h.notify(ctx, waitingState{
-		kind: waitForDistinguished,
+		kind: waitFor,
 		key:  roachpb.Key("a"),
 		txn:  &txn1.TxnMeta,
 	})
@@ -1066,7 +1050,7 @@ func TestContentionEventTracer(t *testing.T) {
 	// emit an event.
 	manual.Advance(12)
 	h.notify(ctx, waitingState{
-		kind: waitForDistinguished,
+		kind: waitFor,
 		key:  roachpb.Key("b"),
 		txn:  &txn2.TxnMeta,
 	})

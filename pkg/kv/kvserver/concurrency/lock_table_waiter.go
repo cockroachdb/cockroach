@@ -149,7 +149,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			log.VEventf(ctx, 3, "lock wait-queue event: %s", state)
 			tracer.notify(ctx, state)
 			switch state.kind {
-			case waitFor, waitForDistinguished:
+			case waitFor:
 				// waitFor indicates that the request is waiting on another
 				// transaction. This transaction may be the lock holder of a
 				// conflicting lock or the head of a lock-wait queue that the
@@ -304,11 +304,10 @@ func (w *lockTableWaiterImpl) WaitOn(
 			}
 
 		case <-timerC:
-			// If the request was in the waitFor or waitForDistinguished states
-			// and did not observe any update to its state for the entire delay,
-			// it should push. It may be the case that the transaction is part
-			// of a dependency cycle or that the lock holder's coordinator node
-			// has crashed.
+			// If the request was in the waitFor state and did not observe any update
+			// to its state for the entire delay, it should push. It may be the case
+			// that the transaction is part of a dependency cycle or that the lock
+			// holder's coordinator node has crashed.
 			timerC = nil
 			if timer != nil {
 				timer.Read = true
@@ -1129,7 +1128,7 @@ func (tag *contentionTag) notify(ctx context.Context, s waitingState) *kvpb.Cont
 	// on a different key than we were previously. If we're now waiting on a
 	// different key, we'll return an event corresponding to the previous key.
 	switch s.kind {
-	case waitFor, waitForDistinguished, waitSelf, waitElsewhere:
+	case waitFor, waitSelf, waitElsewhere:
 		// If we're tracking an event and see a different txn/key, the event is
 		// done and we initialize the new event tracking the new txn/key.
 		//
