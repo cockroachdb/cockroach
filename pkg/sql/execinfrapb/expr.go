@@ -31,10 +31,8 @@ func DeserializeExpr(
 	if expr.Expr == "" {
 		return nil, nil
 	}
-	var eh exprHelper
-	eh.types = typs
-	tempVars := tree.MakeIndexedVarHelper(&eh, len(typs))
-	return deserializeExpr(ctx, expr, semaCtx, &tempVars)
+	eh := exprHelper{semaCtx: semaCtx, types: typs}
+	return eh.deserializeExpr(ctx, expr)
 }
 
 // RunFilter runs a filter expression and returns whether the filter passes.
@@ -42,37 +40,11 @@ func RunFilter(ctx context.Context, filter tree.TypedExpr, evalCtx *eval.Context
 	if filter == nil {
 		return true, nil
 	}
-
 	d, err := eval.Expr(ctx, evalCtx, filter)
 	if err != nil {
 		return false, err
 	}
-
 	return d == tree.DBoolTrue, nil
-}
-
-func deserializeExpr(
-	ctx context.Context, exprSpec Expression, semaCtx *tree.SemaContext, h *tree.IndexedVarHelper,
-) (tree.TypedExpr, error) {
-	if exprSpec.Expr == "" {
-		return nil, nil
-	}
-	expr, err := parser.ParseExpr(exprSpec.Expr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Bind IndexedVars to h.
-	expr = h.Rebind(expr)
-
-	semaCtx.IVarContainer = h.Container()
-	// Convert to a fully typed expression.
-	typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
-	if err != nil {
-		// Type checking must succeed by now.
-		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "%s", expr)
-	}
-	return typedExpr, err
 }
 
 // ExprHelper implements the common logic around evaluating an expression that
@@ -212,10 +184,6 @@ type exprHelper struct {
 	semaCtx    *tree.SemaContext
 	datumAlloc *tree.DatumAlloc
 
-	// vars is used to generate IndexedVars that are "backed" by the values in
-	// row.
-	vars tree.IndexedVarHelper
-
 	types []*types.T
 	row   rowenc.EncDatumRow
 }
@@ -243,11 +211,12 @@ func (eh *exprHelper) IndexedVarEval(
 func (eh *exprHelper) init(
 	ctx context.Context, types []*types.T, semaCtx *tree.SemaContext, evalCtx *eval.Context,
 ) error {
-	eh.evalCtx = evalCtx
-	eh.semaCtx = semaCtx
-	eh.types = types
-	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
-	eh.datumAlloc = &tree.DatumAlloc{}
+	*eh = exprHelper{
+		evalCtx:    evalCtx,
+		semaCtx:    semaCtx,
+		types:      types,
+		datumAlloc: &tree.DatumAlloc{},
+	}
 	if semaCtx.TypeResolver != nil {
 		for _, t := range types {
 			if err := typedesc.EnsureTypeIsHydrated(ctx, t, semaCtx.TypeResolver.(catalog.TypeDescriptorResolver)); err != nil {
@@ -265,10 +234,36 @@ func (eh *exprHelper) prepareExpr(ctx context.Context, expr Expression) (tree.Ty
 		return nil, nil
 	}
 	if expr.LocalExpr != nil {
-		eh.vars.RebindTyped(expr.LocalExpr)
 		return expr.LocalExpr, nil
 	}
-	return deserializeExpr(ctx, expr, eh.semaCtx, &eh.vars)
+	return eh.deserializeExpr(ctx, expr)
+}
+
+// deserializeExpr converts the given expression's string representation into a
+// tree.TypedExpr and returns it.
+func (eh *exprHelper) deserializeExpr(ctx context.Context, e Expression) (tree.TypedExpr, error) {
+	if e.Expr == "" {
+		return nil, nil
+	}
+
+	expr, err := parser.ParseExpr(e.Expr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the iVarContainer for semaCtx so that indexed vars can be
+	// type-checked.
+	originalIVarContainer := eh.semaCtx.IVarContainer
+	eh.semaCtx.IVarContainer = eh
+	defer func() { eh.semaCtx.IVarContainer = originalIVarContainer }()
+
+	// Type-check the expression.
+	typedExpr, err := tree.TypeCheck(ctx, expr, eh.semaCtx, types.Any)
+	if err != nil {
+		// Type checking must succeed.
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "%s", expr)
+	}
+	return typedExpr, err
 }
 
 // evalFilter is used for filter expressions; it evaluates the expression and
