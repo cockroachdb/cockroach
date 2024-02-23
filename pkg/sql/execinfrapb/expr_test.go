@@ -14,8 +14,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -36,10 +34,8 @@ func TestProcessExpression(t *testing.T) {
 
 	var c testVarContainer
 	h := tree.MakeIndexedVarHelper(&c, 4)
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
 	semaCtx := tree.MakeSemaContext()
-	expr, err := processExpression(context.Background(), e, &evalCtx, &semaCtx, &h)
+	expr, err := processExpression(context.Background(), e, &semaCtx, &h)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +54,7 @@ func TestProcessExpression(t *testing.T) {
 
 	// We can process a new expression with the same tree.IndexedVarHelper.
 	e = Expression{Expr: "@4 - @1"}
-	expr, err = processExpression(context.Background(), e, &evalCtx, &semaCtx, &h)
+	expr, err = processExpression(context.Background(), e, &semaCtx, &h)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -39,7 +39,7 @@ func DeserializeExpr(
 		return nil, nil
 	}
 
-	deserializedExpr, err := processExpression(ctx, Expression{Expr: expr}, evalCtx, semaCtx, vars)
+	deserializedExpr, err := processExpression(ctx, Expression{Expr: expr}, semaCtx, vars)
 	if err != nil {
 		return deserializedExpr, err
 	}
@@ -87,19 +87,12 @@ func RunFilter(ctx context.Context, filter tree.TypedExpr, evalCtx *eval.Context
 //
 // evalCtx will not be mutated.
 func processExpression(
-	ctx context.Context,
-	exprSpec Expression,
-	evalCtx *eval.Context,
-	semaCtx *tree.SemaContext,
-	h *tree.IndexedVarHelper,
+	ctx context.Context, exprSpec Expression, semaCtx *tree.SemaContext, h *tree.IndexedVarHelper,
 ) (tree.TypedExpr, error) {
 	if exprSpec.Expr == "" {
 		return nil, nil
 	}
-	expr, err := parser.ParseExprWithInt(
-		exprSpec.Expr,
-		parser.NakedIntTypeFromDefaultIntSize(evalCtx.SessionData().DefaultIntSize),
-	)
+	expr, err := parser.ParseExpr(exprSpec.Expr)
 	if err != nil {
 		return nil, err
 	}
