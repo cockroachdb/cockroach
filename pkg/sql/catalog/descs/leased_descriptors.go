@@ -36,6 +36,8 @@ type LeaseManager interface {
 	Acquire(
 		ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
 	) (lease.LeasedDescriptor, error)
+
+	IncTwoVersionWaitGaugeAfterLeaseDuration() func()
 }
 
 type deadlineHolder interface {

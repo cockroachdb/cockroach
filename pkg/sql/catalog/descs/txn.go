@@ -117,6 +117,8 @@ func CheckTwoVersionInvariant(
 	// up schema changes there and potentially create a deadlock.
 	descsCol.ReleaseLeases(ctx)
 
+	decAfterWait := descsCol.leased.lm.IncTwoVersionWaitGaugeAfterLeaseDuration()
+	defer decAfterWait()
 	// Wait until all older version leases have been released or expired.
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// Use the current clock time.

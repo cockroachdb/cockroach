@@ -60,10 +60,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -3794,4 +3796,116 @@ FROM
 	joined_count, system_count_tbl, kv_session_count_tbl;
 `)
 	require.Equal(t, [][]string{{"true", "true"}}, res)
+}
+
+// TestLongLeaseWaitMetrics validates metrics that can be used to detect if
+// the lease manager is stuck waiting for old versions to expire. These are added
+// to help us diagnose if the session based leasing migration runs into issues.
+// These work by detecting active routines in any of the wait functions past
+// the lease duration (intentionally set to 0 for these tests).
+func TestLongLeaseWaitMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.MinSupported.Version(), false)
+	// Force dual writes and instantly expire any leases.
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, int64(lease.SessionBasedDualWrite))
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings:          st,
+		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				BinaryVersionOverride:          clusterversion.V23_2.Version(),
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "CREATE TABLE t1(n int)")
+	descIDRow := runner.QueryRow(t, "SELECT 't1'::REGCLASS::INT")
+	var descID int
+	descIDRow.Scan(&descID)
+	grp := ctxgroup.WithContext(ctx)
+
+	startWaiters := make(chan struct{})
+	cachedDatabaseRegions, err := regions.NewCachedDatabaseRegions(ctx, srv.DB(), srv.LeaseManager().(*lease.Manager))
+	require.NoError(t, err)
+
+	grp.GoCtx(func(ctx context.Context) error {
+		tx, err := sqlDB.Begin()
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec("SELECT * FROM t1")
+		if err != nil {
+			return err
+		}
+		// Intentionally cause false positives on the metric
+		// by forcing a lower duration.
+		lease.LeaseDuration.Override(ctx, &st.SV, 0)
+		close(startWaiters)
+
+		r := retry.StartWithCtx(ctx, retry.Options{})
+		// Wait until long waits are detected in our metrics.
+		for r.Next() {
+			if srv.MustGetSQLCounter("sql.leases.long_wait_for_no_version") == 0 {
+				continue
+			}
+			if srv.MustGetSQLCounter("sql.leases.long_wait_for_two_version_invariant") == 0 {
+				continue
+			}
+			if srv.MustGetSQLCounter("sql.leases.long_wait_for_one_version") == 0 {
+				continue
+			}
+			break
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		return err
+	})
+
+	// Waits for the two version invariant inside the job.
+	grp.GoCtx(func(ctx context.Context) error {
+		<-startWaiters
+		_, err = sqlDB.Exec("ALTER TABLE t1 ADD COLUMN j INT")
+		if err != nil {
+			return err
+		}
+		_, err = sqlDB.Exec("DROP TABLE t1")
+		return err
+	})
+
+	// Waits for one version of the descriptor to exist.
+	grp.GoCtx(func(ctx context.Context) error {
+		<-startWaiters
+		r := retry.StartWithCtx(ctx, retry.Options{})
+		for r.Next() {
+			// Wait for the two versions to exist.
+			if srv.MustGetSQLCounter("sql.leases.long_wait_for_two_version_invariant") == 0 {
+				continue
+			}
+			// Wait for there to be a single version.
+			lm := srv.ApplicationLayer().LeaseManager().(*lease.Manager)
+			_, err := lm.WaitForOneVersion(ctx, descpb.ID(descID), cachedDatabaseRegions, retry.Options{})
+			return err
+		}
+		return nil
+	})
+
+	// Waits for no version of the descriptor to exist.
+	grp.GoCtx(func(ctx context.Context) error {
+		<-startWaiters
+		lm := srv.ApplicationLayer().LeaseManager().(*lease.Manager)
+		return lm.WaitForNoVersion(ctx, descpb.ID(descID), cachedDatabaseRegions, retry.Options{})
+	})
+
+	require.NoError(t, grp.Wait())
+
+	// Validate the metrics are 0 again.
+	require.Equal(t, int64(0), srv.MustGetSQLCounter("sql.leases.long_wait_for_no_version"))
+	require.Equal(t, int64(0), srv.MustGetSQLCounter("sql.leases.long_wait_for_two_version_invariant"))
+	require.Equal(t, int64(0), srv.MustGetSQLCounter("sql.leases.long_wait_for_one_version"))
 }

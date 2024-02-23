@@ -211,6 +211,10 @@ func (f fakeLeaseManager) Acquire(
 	return ld, nil
 }
 
+func (f fakeLeaseManager) IncTwoVersionWaitGaugeAfterLeaseDuration() func() {
+	return func() {}
+}
+
 var _ descs.LeaseManager = (*fakeLeaseManager)(nil)
 
 type fakeSystemDatabase struct {

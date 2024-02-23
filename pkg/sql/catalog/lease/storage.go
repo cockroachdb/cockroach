@@ -62,11 +62,18 @@ type storage struct {
 	// concurrent lease acquisitions from the store.
 	group *singleflight.Group
 
-	outstandingLeases                 *metric.Gauge
-	sessionBasedLeasesWaitingToExpire *metric.Gauge
-	sessionBasedLeasesExpired         *metric.Gauge
-	testingKnobs                      StorageTestingKnobs
-	writer                            writer
+	leasingMetrics
+	testingKnobs StorageTestingKnobs
+	writer       writer
+}
+
+type leasingMetrics struct {
+	outstandingLeases                          *metric.Gauge
+	sessionBasedLeasesWaitingToExpire          *metric.Gauge
+	sessionBasedLeasesExpired                  *metric.Gauge
+	longWaitForOneVersionsActive               *metric.Gauge
+	longWaitForNoVersionsActive                *metric.Gauge
+	longTwoVersionInvariantViolationWaitActive *metric.Gauge
 }
 
 type leaseFields struct {
@@ -371,4 +378,18 @@ func (s storage) mustGetDescriptorByID(
 
 func (s storage) getRegionPrefix() []byte {
 	return s.regionPrefix.Load().([]byte)
+}
+
+// incGaugeAfterLeaseDuration increments any wait metric after the lease duration
+// has passed. A function is returned to decrement the same metric after.
+func (s storage) incGaugeAfterLeaseDuration(gauge *metric.Gauge) func() {
+	leaseDuration := LeaseDuration.Get(&s.settings.SV)
+	timer := time.AfterFunc(leaseDuration, func() {
+		gauge.Inc(1)
+	})
+	return func() {
+		if !timer.Stop() {
+			gauge.Dec(1)
+		}
+	}
 }
