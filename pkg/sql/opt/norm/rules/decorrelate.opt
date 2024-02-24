@@ -1008,7 +1008,7 @@
                     )
                 ]
             )
-            $anyPrivate
+            (ConvertSubToExistsPrivate $anyPrivate)
         )
     )
 )
@@ -1048,7 +1048,7 @@
                     )
                 ]
             )
-            $anyPrivate
+            (ConvertSubToExistsPrivate $anyPrivate)
         )
     )
     $private
@@ -1097,7 +1097,7 @@
                         )
                     ]
                 )
-                $anyPrivate
+                (ConvertSubToExistsPrivate $anyPrivate)
             )
         )
     )
@@ -1143,7 +1143,7 @@
                         )
                     ]
                 )
-                $anyPrivate
+                (ConvertSubToExistsPrivate $anyPrivate)
             )
         )
     )

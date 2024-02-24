@@ -1958,10 +1958,10 @@ select
       └── coalesce [subquery]
            ├── subquery
            │    └── project
-           │         ├── columns: column39:39!null
+           │         ├── columns: column40:40!null
            │         ├── cardinality: [0 - 1]
            │         ├── key: ()
-           │         ├── fd: ()-->(39)
+           │         ├── fd: ()-->(40)
            │         ├── select
            │         │    ├── columns: a.k:32!null
            │         │    ├── cardinality: [0 - 1]
@@ -1973,7 +1973,7 @@ select
            │         │    └── filters
            │         │         └── a.k:32 = 1 [outer=(32), constraints=(/32: [/1 - /1]; tight), fd=()-->(32)]
            │         └── projections
-           │              └── true [as=column39:39]
+           │              └── true [as=column40:40]
            └── false
 
 # No-op case because the filter references outer columns.

@@ -3321,13 +3321,13 @@ limit
  │    │    └── semi-join (lookup regional_by_row_table_virt_partial)
  │    │         ├── lookup columns are key
  │    │         ├── scan regional_by_row_table [as=t1]
- │    │         │    └── constraint: /93/88: [/'ap-southeast-2' - /'ap-southeast-2']
+ │    │         │    └── constraint: /94/89: [/'ap-southeast-2' - /'ap-southeast-2']
  │    │         └── filters (true)
  │    └── project
  │         └── semi-join (lookup regional_by_row_table_virt_partial)
  │              ├── lookup columns are key
  │              ├── scan regional_by_row_table [as=t1]
- │              │    └── constraint: /102/97: [/'ca-central-1' - /'us-east-1']
+ │              │    └── constraint: /103/98: [/'ca-central-1' - /'us-east-1']
  │              └── filters (true)
  └── 1
 

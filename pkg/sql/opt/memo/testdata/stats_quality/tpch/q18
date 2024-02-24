@@ -53,21 +53,21 @@ LIMIT 100;
 ----
 limit
  ├── save-table-name: q18_limit_1
- ├── columns: c_name:2(varchar!null) c_custkey:1(int!null) o_orderkey:11(int!null) o_orderdate:15(date!null) o_totalprice:14(float!null) sum:59(float!null)
+ ├── columns: c_name:2(varchar!null) c_custkey:1(int!null) o_orderkey:11(int!null) o_orderdate:15(date!null) o_totalprice:14(float!null) sum:60(float!null)
  ├── internal-ordering: -14,+15
  ├── cardinality: [0 - 100]
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=100, null(2)=0, distinct(11)=100, null(11)=0, distinct(14)=100, null(14)=0, distinct(15)=100, null(15)=0, distinct(59)=100, null(59)=0]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=100, null(2)=0, distinct(11)=100, null(11)=0, distinct(14)=100, null(14)=0, distinct(15)=100, null(15)=0, distinct(60)=100, null(60)=0]
  ├── key: (11)
- ├── fd: (1)-->(2), (11)-->(1,2,14,15,59)
+ ├── fd: (1)-->(2), (11)-->(1,2,14,15,60)
  ├── ordering: -14,+15
  ├── group-by (partial streaming)
  │    ├── save-table-name: q18_group_by_2
- │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:11(int!null) o_totalprice:14(float!null) o_orderdate:15(date!null) sum:59(float!null)
+ │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:11(int!null) o_totalprice:14(float!null) o_orderdate:15(date!null) sum:60(float!null)
  │    ├── grouping columns: o_orderkey:11(int!null) o_totalprice:14(float!null) o_orderdate:15(date!null)
  │    ├── internal-ordering: -14,+15
- │    ├── stats: [rows=499392.2, distinct(1)=499392, null(1)=0, distinct(2)=499392, null(2)=0, distinct(11)=499392, null(11)=0, distinct(14)=488044, null(14)=0, distinct(15)=2406, null(15)=0, distinct(59)=499392, null(59)=0, distinct(11,14,15)=499392, null(11,14,15)=0]
+ │    ├── stats: [rows=499392.2, distinct(1)=499392, null(1)=0, distinct(2)=499392, null(2)=0, distinct(11)=499392, null(11)=0, distinct(14)=488044, null(14)=0, distinct(15)=2406, null(15)=0, distinct(60)=499392, null(60)=0, distinct(11,14,15)=499392, null(11,14,15)=0]
  │    ├── key: (11)
- │    ├── fd: (1)-->(2), (11)-->(1,2,14,15,59)
+ │    ├── fd: (1)-->(2), (11)-->(1,2,14,15,60)
  │    ├── ordering: -14,+15
  │    ├── limit hint: 100.00
  │    ├── inner-join (lookup lineitem)
@@ -152,7 +152,7 @@ limit
  │    │    │    └── filters (true)
  │    │    └── filters (true)
  │    └── aggregations
- │         ├── sum [as=sum:59, type=float, outer=(26)]
+ │         ├── sum [as=sum:60, type=float, outer=(26)]
  │         │    └── l_quantity:26 [type=float]
  │         ├── const-agg [as=c_custkey:1, type=int, outer=(1)]
  │         │    └── c_custkey:1 [type=int]

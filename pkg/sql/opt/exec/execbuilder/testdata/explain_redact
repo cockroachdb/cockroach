@@ -3103,9 +3103,9 @@ anti-join-apply
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
 ----
-memo (optimized, ~21KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~21KB, required=[presentation: info:11] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1] [distribution: test])
- │    └── [presentation: info:10] [distribution: test]
+ │    └── [presentation: info:11] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1] [distribution: test]" [presentation: a:1] [distribution: test])
  │         └── cost: 5525.49
  ├── G2: (anti-join-apply G3 G4 G5)

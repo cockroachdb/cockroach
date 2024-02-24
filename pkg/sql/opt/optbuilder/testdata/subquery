@@ -655,11 +655,11 @@ build
 SELECT EXISTS (SELECT a FROM abc)
 ----
 project
- ├── columns: exists:6
+ ├── columns: exists:7
  ├── values
  │    └── ()
  └── projections
-      └── exists [as=exists:6]
+      └── exists [as=exists:7]
            └── project
                 ├── columns: a:1!null
                 └── scan abc
@@ -669,11 +669,11 @@ build
 SELECT true = EXISTS (SELECT 1)
 ----
 project
- ├── columns: "?column?":2
+ ├── columns: "?column?":3
  ├── values
  │    └── ()
  └── projections
-      └── eq [as="?column?":2]
+      └── eq [as="?column?":3]
            ├── true
            └── exists
                 └── project
@@ -855,11 +855,11 @@ build
 SELECT EXISTS(SELECT 1 r FROM kv AS x WHERE x.k = 1)
 ----
 project
- ├── columns: exists:6
+ ├── columns: exists:7
  ├── values
  │    └── ()
  └── projections
-      └── exists [as=exists:6]
+      └── exists [as=exists:7]
            └── project
                 ├── columns: r:5!null
                 ├── select
@@ -875,11 +875,11 @@ build
 SELECT EXISTS(SELECT 1 r FROM kv WHERE k = 2)
 ----
 project
- ├── columns: exists:6
+ ├── columns: exists:7
  ├── values
  │    └── ()
  └── projections
-      └── exists [as=exists:6]
+      └── exists [as=exists:7]
            └── project
                 ├── columns: r:5!null
                 ├── select

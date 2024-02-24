@@ -1715,9 +1715,9 @@ SELECT (SELECT m FROM
 ) FROM uv
 ----
 with &1
- ├── columns: m:29(int)
+ ├── columns: m:30(int)
  ├── volatile, mutations
- ├── prune: (29)
+ ├── prune: (30)
  ├── project
  │    ├── columns: uv.u:6(int!null) uv.v:7(int!null)
  │    ├── cardinality: [1 - 1]
@@ -1751,11 +1751,11 @@ with &1
  │                   ├── const: 2 [type=int]
  │                   └── function: unique_rowid [type=int]
  └── project
-      ├── columns: m:29(int)
-      ├── prune: (29)
+      ├── columns: m:30(int)
+      ├── prune: (30)
       ├── scan uv
       └── projections
-           └── subquery [as=m:29, type=int, subquery]
+           └── subquery [as=m:30, type=int, subquery]
                 └── values
                      ├── columns: mn.m:21(int!null)
                      ├── cardinality: [0 - 0]
@@ -1770,11 +1770,11 @@ FROM uv
 WHERE NOT EXISTS(SELECT uv.u);
 ----
 values
- ├── columns: "?column?":7(unknown!null)
+ ├── columns: "?column?":8(unknown!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
- ├── fd: ()-->(7)
- └── prune: (7)
+ ├── fd: ()-->(8)
+ └── prune: (8)
 
 # Regression test #43651: outer join with empty key.
 opt
@@ -3067,19 +3067,19 @@ project
  ├── fd: ()-->(1,2)
  ├── prune: (1,2)
  └── semi-join (hash)
-      ├── columns: m:1(int!null) n:2(int) column12:12(float)
+      ├── columns: m:1(int!null) n:2(int) column13:13(float)
       ├── cardinality: [0 - 0]
       ├── immutable
       ├── key: ()
-      ├── fd: ()-->(1,2,12)
+      ├── fd: ()-->(1,2,13)
       ├── prune: (1,2)
       ├── project
-      │    ├── columns: column12:12(float) m:1(int!null) n:2(int)
+      │    ├── columns: column13:13(float) m:1(int!null) n:2(int)
       │    ├── cardinality: [0 - 1]
       │    ├── immutable
       │    ├── key: ()
-      │    ├── fd: ()-->(1,2,12)
-      │    ├── prune: (1,2,12)
+      │    ├── fd: ()-->(1,2,13)
+      │    ├── prune: (1,2,13)
       │    ├── select
       │    │    ├── columns: m:1(int!null) n:2(int)
       │    │    ├── cardinality: [0 - 1]
@@ -3097,7 +3097,7 @@ project
       │    │              ├── variable: m:1 [type=int]
       │    │              └── const: 5 [type=int]
       │    └── projections
-      │         └── cast: FLOAT8 [as=column12:12, type=float, outer=(2), immutable]
+      │         └── cast: FLOAT8 [as=column13:13, type=float, outer=(2), immutable]
       │              └── variable: n:2 [type=int]
       ├── project
       │    ├── columns: x:11(float!null)
@@ -3116,8 +3116,8 @@ project
       │         └── cast: FLOAT8 [as=x:11, type=float, outer=(5), immutable]
       │              └── variable: xysd.x:5 [type=int]
       └── filters
-           └── eq [type=bool, outer=(11,12), constraints=(/11: (/NULL - ]; /12: (/NULL - ]), fd=(11)==(12), (12)==(11)]
-                ├── variable: column12:12 [type=float]
+           └── eq [type=bool, outer=(11,13), constraints=(/11: (/NULL - ]; /13: (/NULL - ]), fd=(11)==(13), (13)==(11)]
+                ├── variable: column13:13 [type=float]
                 └── variable: x:11 [type=float]
 
 # Anti-joins with right side cardinality of 0 have cardinality equal to left side cardinality.

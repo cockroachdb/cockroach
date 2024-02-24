@@ -1348,10 +1348,10 @@ with &1 (cte)
       ├── fetch columns: a:14 b:15 c:16 d:17 e:18 rowid:19
       ├── update-mapping:
       │    ├── b:15 => a:6
-      │    ├── d_comp:23 => d:9
+      │    ├── d_comp:24 => d:9
       │    └── b:15 => e:10
       └── project
-           ├── columns: d_comp:23 a:14!null b:15 c:16 d:17 e:18 rowid:19!null abcde.crdb_internal_mvcc_timestamp:20 abcde.tableoid:21
+           ├── columns: d_comp:24 a:14!null b:15 c:16 d:17 e:18 rowid:19!null abcde.crdb_internal_mvcc_timestamp:20 abcde.tableoid:21
            ├── select
            │    ├── columns: a:14!null b:15 c:16 d:17 e:18 rowid:19!null abcde.crdb_internal_mvcc_timestamp:20 abcde.tableoid:21
            │    ├── scan abcde
@@ -1368,7 +1368,7 @@ with &1 (cte)
            │                   └── mapping:
            │                        └──  xyz.x:1 => x:22
            └── projections
-                └── (b:15 + c:16) + 1 [as=d_comp:23]
+                └── (b:15 + c:16) + 1 [as=d_comp:24]
 
 # Use CTE within SET expression.
 build

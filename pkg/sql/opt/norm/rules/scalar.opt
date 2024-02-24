@@ -145,9 +145,9 @@ $input
 # Project operator never changes the row cardinality of its input, and row
 # cardinality is the only thing that Exists cares about, so Project is a no-op.
 [EliminateExistsProject, Normalize]
-(Exists (Project $input:*) $subqueryPrivate:*)
+(Exists (Project $input:*) $existsPrivate:*)
 =>
-(Exists $input $subqueryPrivate)
+(Exists $input $existsPrivate)
 
 # EliminateExistsGroupBy discards a non-scalar GroupBy input to the Exists
 # operator. While non-scalar GroupBy (or DistinctOn) can change row cardinality,
@@ -158,9 +158,9 @@ $input
 # NOTE: EnsureDistinctOn has the side effect of error'ing if the input has
 # duplicates, so do not eliminate it.
 [EliminateExistsGroupBy, Normalize]
-(Exists (GroupBy | DistinctOn $input:*) $subqueryPrivate:*)
+(Exists (GroupBy | DistinctOn $input:*) $existsPrivate:*)
 =>
-(Exists $input $subqueryPrivate)
+(Exists $input $existsPrivate)
 
 # InlineExistsSelectTuple splits a tuple equality filter into multiple
 # (per-column) equalities, in the case where the tuple on one side is being
@@ -202,7 +202,7 @@ $input
             ...
         ]
     )
-    $subqueryPrivate:*
+    $existsPrivate:*
 )
 =>
 (Exists
@@ -213,7 +213,7 @@ $input
             (SplitTupleEq $tuple $rhs)
         )
     )
-    $subqueryPrivate
+    $existsPrivate
 )
 
 # ConvertUncorrelatedExistsToCoalesceSubquery converts an uncorrelated Exists
@@ -234,7 +234,7 @@ $input
 # Note: We can use an empty ordering for the Limit because Exists never have an
 # ordering.
 [ConvertUncorrelatedExistsToCoalesceSubquery, Normalize]
-(Exists $input:* & ^(HasOuterCols $input) $subqueryPrivate:*)
+(Exists $input:* & ^(HasOuterCols $input) $existsPrivate:*)
 =>
 (Coalesce
     [
@@ -244,37 +244,10 @@ $input
                 [ (ProjectionsItem (True) (MakeBoolCol)) ]
                 (MakeEmptyColSet)
             )
-            $subqueryPrivate
+            (EmbeddedSubqueryPrivate $existsPrivate)
         )
         (False)
     ]
-)
-
-# IntroduceExistsLimit inserts a LIMIT 1 "under" Exists so as to save resources
-# to make the EXISTS determination.
-#
-# This rule uses and sets a boolean "WasLimited" on the Exists
-# node to ensure the rule is only applied once. This is because the
-# rule expands to an Exists pattern that's also a valid input pattern
-# and it would recurse otherwise.
-#
-# We avoid this rule if the query is correlated because the decorrelation rules
-# get confused by the presence of a limit. (It will be worth re-considering this
-# when a general-purpose apply operator is supported - in that case it can be
-# definitely worthwhile pushing down a LIMIT 1 to limit the amount of work done
-# on every row.)
-#
-# TODO(mgartner): This rule should never be triggered because
-# ConvertUncorrelatedExistsToCoalesceSubquery should apply first. Remove it.
-[IntroduceExistsLimit, Normalize]
-(Exists
-    $input:* & ^(HasOuterCols $input) & ^(HasZeroOrOneRow $input)
-    $subqueryPrivate:* & ^(IsLimited $subqueryPrivate)
-)
-=>
-(Exists
-    (Limit $input (IntConst 1) (EmptyOrdering))
-    (MakeLimited $subqueryPrivate)
 )
 
 # EliminateExistsLimit discards a Limit operator with a positive limit inside an
@@ -287,17 +260,18 @@ $input
 # Note that this rule uses HasOuterCols to ensure that it only matches
 # correlated Exists subqueries. There is no need to discard limits from
 # non-correlated Exists subqueries. Limits are preferred for non-correlated
-# Exists subqueries. See IntroduceExistsLimit above for details.
+# Exists subqueries. See ConvertUncorrelatedExistsToCoalesceSubquery above for
+# details.
 [EliminateExistsLimit, Normalize]
 (Exists
     (Limit
         $input:* & (HasOuterCols $input)
         (Const $limit:*) & (IsPositiveInt $limit)
     )
-    $subqueryPrivate:*
+    $existsPrivate:*
 )
 =>
-(Exists $input $subqueryPrivate)
+(Exists $input $existsPrivate)
 
 # EliminateConstValuesSubquery replaces a subquery with a constant value if the
 # subquery's input is a single-row, single-column Values expression with a

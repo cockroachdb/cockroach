@@ -2387,13 +2387,13 @@ Joins Considered: 26
 Final Plan
 ================================================================================
 inner-join (hash)
- ├── columns: a:1!null b:2 c:3 d:4 b:7!null x:8!null d:15!null z:16!null
- ├── key: (7,15)
- ├── fd: (1)-->(2-4), (7)-->(8), (1)==(8,16), (8)==(1,16), (15)-->(16), (16)==(1,8)
+ ├── columns: a:1!null b:2 c:3 d:4 b:7!null x:8!null d:16!null z:17!null
+ ├── key: (7,16)
+ ├── fd: (1)-->(2-4), (7)-->(8), (1)==(8,17), (8)==(1,17), (16)-->(17), (17)==(1,8)
  ├── scan dz
- │    ├── columns: dz.d:15!null z:16
- │    ├── key: (15)
- │    └── fd: (15)-->(16)
+ │    ├── columns: dz.d:16!null z:17
+ │    ├── key: (16)
+ │    └── fd: (16)-->(17)
  ├── project
  │    ├── columns: a:1!null abc.b:2 abc.c:3 abc.d:4 bx.b:7!null x:8!null
  │    ├── key: (7)
@@ -2429,7 +2429,7 @@ inner-join (hash)
  │         └── filters
  │              └── a:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  └── filters
-      └── a:1 = z:16 [outer=(1,16), constraints=(/1: (/NULL - ]; /16: (/NULL - ]), fd=(1)==(16), (16)==(1)]
+      └── a:1 = z:17 [outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
 
 
 # Special case for reordering inner-joins and left-joins: One inner-join

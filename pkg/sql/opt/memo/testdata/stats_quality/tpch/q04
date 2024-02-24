@@ -41,18 +41,18 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q4_sort_1
- ├── columns: o_orderpriority:6(char!null) order_count:30(int!null)
- ├── stats: [rows=5, distinct(6)=5, null(6)=0, distinct(30)=5, null(30)=0]
+ ├── columns: o_orderpriority:6(char!null) order_count:31(int!null)
+ ├── stats: [rows=5, distinct(6)=5, null(6)=0, distinct(31)=5, null(31)=0]
  ├── key: (6)
- ├── fd: (6)-->(30)
+ ├── fd: (6)-->(31)
  ├── ordering: +6
  └── group-by (hash)
       ├── save-table-name: q4_group_by_2
-      ├── columns: o_orderpriority:6(char!null) count_rows:30(int!null)
+      ├── columns: o_orderpriority:6(char!null) count_rows:31(int!null)
       ├── grouping columns: o_orderpriority:6(char!null)
-      ├── stats: [rows=5, distinct(6)=5, null(6)=0, distinct(30)=5, null(30)=0]
+      ├── stats: [rows=5, distinct(6)=5, null(6)=0, distinct(31)=5, null(31)=0]
       ├── key: (6)
-      ├── fd: (6)-->(30)
+      ├── fd: (6)-->(31)
       ├── semi-join (lookup lineitem)
       │    ├── save-table-name: q4_lookup_join_3
       │    ├── columns: o_orderkey:1(int!null) o_orderdate:5(date!null) o_orderpriority:6(char!null)
@@ -82,7 +82,7 @@ sort
       │    └── filters
       │         └── l_commitdate:23 < l_receiptdate:24 [type=bool, outer=(23,24), constraints=(/23: (/NULL - ]; /24: (/NULL - ])]
       └── aggregations
-           └── count-rows [as=count_rows:30, type=int]
+           └── count-rows [as=count_rows:31, type=int]
 
 ----Stats for q4_sort_1----
 column_names       row_count  distinct_count  null_count
