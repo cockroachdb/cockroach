@@ -476,4 +476,36 @@ CREATE PROCEDURE p() AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+# Regression test for the internal error in #119492.
+subtest regression_119492
+
+statement ok
+CREATE FUNCTION somefunc() RETURNS integer AS $$
+DECLARE
+    outer_quantity integer := 30;
+BEGIN
+    RAISE NOTICE 'Quantity here is %', outer_quantity;  -- Prints 30
+    outer_quantity := 50;
+    --
+    -- Create a subblock
+    --
+    DECLARE
+        inner_quantity integer := 80;
+    BEGIN
+        RAISE NOTICE 'Quantity here is %', inner_quantity;  -- Prints 80
+        RAISE NOTICE 'Outer quantity here is %', outer_quantity;  -- Prints 50
+    END;
+    RAISE NOTICE 'Quantity here is %', outer_quantity;  -- Prints 50
+    RETURN outer_quantity;
+END;
+$$ LANGUAGE plpgsql;
+
+query T noticetrace
+SELECT somefunc();
+----
+NOTICE: Quantity here is 30
+NOTICE: Quantity here is 80
+NOTICE: Outer quantity here is 50
+NOTICE: Quantity here is 50
+
 subtest end
