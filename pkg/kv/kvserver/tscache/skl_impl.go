@@ -34,7 +34,7 @@ type sklImpl struct {
 
 var _ Cache = &sklImpl{}
 
-// newSklImpl returns a new treeImpl with the supplied hybrid clock.
+// newSklImpl returns a new sklImpl with the supplied hybrid clock.
 func newSklImpl(clock *hlc.Clock) *sklImpl {
 	tc := sklImpl{clock: clock, metrics: makeMetrics()}
 	tc.clear(clock.Now())

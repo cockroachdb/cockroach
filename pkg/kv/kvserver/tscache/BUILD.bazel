@@ -7,7 +7,6 @@ go_library(
         "interval_skl.go",
         "metrics.go",
         "skl_impl.go",
-        "tree_impl.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache",
     visibility = ["//visibility:public"],
@@ -37,7 +36,6 @@ go_test(
     srcs = [
         "cache_test.go",
         "interval_skl_test.go",
-        "tree_impl_test.go",
     ],
     embed = [":tscache"],
     exec_properties = select({
