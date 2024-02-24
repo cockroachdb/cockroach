@@ -1530,6 +1530,24 @@ func (c *consumer) Send(e *kvpb.RangeFeedEvent) error {
 	return nil
 }
 
+func (c *consumer) BufferedSend(e *REventWithAlloc) {
+	ev, alloc, cb := e.Detatch()
+	defer alloc.Release(c.ctx)
+	if ev.Val != nil {
+		v := int(atomic.AddInt32(&c.sentValues, 1))
+		if v == c.blockAfter {
+			// Resume test if it was waiting for stream to block.
+			close(c.blocked)
+			// Wait for resume signal with an optional error.
+			// TODO: handle error
+			err, ok := <-c.resume
+			if ok {
+				cb(err)
+			}
+		}
+	}
+}
+
 func (c *consumer) Context() context.Context {
 	return c.ctx
 }

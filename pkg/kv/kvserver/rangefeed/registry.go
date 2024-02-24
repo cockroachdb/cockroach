@@ -35,31 +35,46 @@ type Stream interface {
 	// Send blocks until it sends m, the stream is done, or the stream breaks.
 	// Send must be safe to call on the same stream in different goroutines.
 	Send(*kvpb.RangeFeedEvent) error
+
+	BufferedSend(*REventWithAlloc)
 }
 
-// Shared event is an entry stored in registration channel. Each entry is
+// REventWithAlloc is an entry stored in registration channel. Each entry is
 // specific to registration but allocation is shared between all registrations
 // to track memory budgets. event itself could either be shared or not in case
 // we optimized unused fields in it based on registration options.
-type sharedEvent struct {
-	event *kvpb.RangeFeedEvent
-	alloc *SharedBudgetAllocation
+type REventWithAlloc struct {
+	event    *kvpb.RangeFeedEvent
+	alloc    *SharedBudgetAllocation
+	callback func(error)
+}
+
+func (e *REventWithAlloc) Detatch() (
+	event *kvpb.RangeFeedEvent,
+	alloc *SharedBudgetAllocation,
+	callback func(error),
+) {
+	event = e.event
+	alloc = e.alloc
+	callback = e.callback
+	putPooledSharedEvent(e)
+	return
 }
 
 var sharedEventSyncPool = sync.Pool{
 	New: func() interface{} {
-		return new(sharedEvent)
+		return new(REventWithAlloc)
 	},
 }
 
-func getPooledSharedEvent(e sharedEvent) *sharedEvent {
-	ev := sharedEventSyncPool.Get().(*sharedEvent)
+func getPooledSharedEvent(e REventWithAlloc) *REventWithAlloc {
+	ev := sharedEventSyncPool.Get().(*REventWithAlloc)
 	*ev = e
 	return ev
 }
 
-func putPooledSharedEvent(e *sharedEvent) {
-	*e = sharedEvent{}
+func putPooledSharedEvent(e *REventWithAlloc) {
+	*e = REventWithAlloc{}
 	sharedEventSyncPool.Put(e)
 }
 
@@ -89,11 +104,12 @@ type registration struct {
 	// Internal.
 	id            int64
 	keys          interval.Range
-	buf           chan *sharedEvent
+	buf           chan *REventWithAlloc
 	blockWhenFull bool // if true, block when buf is full (for tests)
 
 	mu struct {
 		sync.Locker
+
 		// True if this registration buffer has overflowed, dropping a live event.
 		// This will cause the registration to exit with an error once the buffer
 		// has been emptied.
@@ -135,7 +151,7 @@ func newRegistration(
 		stream:           stream,
 		done:             done,
 		unreg:            unregisterFn,
-		buf:              make(chan *sharedEvent, bufferSz),
+		buf:              make(chan *REventWithAlloc, bufferSz),
 		blockWhenFull:    blockWhenFull,
 	}
 	r.mu.Locker = &syncutil.Mutex{}
@@ -152,8 +168,8 @@ func newRegistration(
 func (r *registration) publish(
 	ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) {
-	r.assertEvent(ctx, event)
-	e := getPooledSharedEvent(sharedEvent{event: r.maybeStripEvent(ctx, event), alloc: alloc})
+	assertEvent(ctx, event)
+	e := getPooledSharedEvent(REventWithAlloc{event: r.maybeStripEvent(ctx, event), alloc: alloc, callback: r.sendCallback})
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -189,7 +205,7 @@ func (r *registration) publish(
 }
 
 // assertEvent asserts that the event contains the necessary data.
-func (r *registration) assertEvent(ctx context.Context, event *kvpb.RangeFeedEvent) {
+func assertEvent(ctx context.Context, event *kvpb.RangeFeedEvent) {
 	switch t := event.GetValue().(type) {
 	case *kvpb.RangeFeedValue:
 		if t.Key == nil {
@@ -301,6 +317,12 @@ func (r *registration) disconnect(pErr *kvpb.Error) {
 		}
 		r.mu.disconnected = true
 		r.done.Set(pErr.GoError())
+	}
+}
+
+func (r *registration) sendCallback(err error) {
+	if err != nil {
+		r.disconnect(kvpb.NewError(err))
 	}
 }
 
