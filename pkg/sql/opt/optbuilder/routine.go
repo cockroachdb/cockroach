@@ -474,11 +474,16 @@ func (b *Builder) maybeAddRoutineAssignmentCasts(
 	expr memo.RelExpr,
 	physProps *physical.Required,
 ) (memo.RelExpr, *physical.Required) {
-	if b.insideDataSource {
-		// TODO: handle this case.
-		return expr, physProps
+	var desiredTypes []*types.T
+	if b.insideDataSource && rTyp.Family() == types.TupleFamily {
+		// The result column(s) should match the elements of the composite return
+		// type.
+		desiredTypes = rTyp.TupleContents()
+	} else {
+		// There should be a single result column that directly matches the return
+		// type.
+		desiredTypes = []*types.T{rTyp}
 	}
-	desiredTypes := []*types.T{rTyp}
 	if len(desiredTypes) != len(cols) {
 		panic(errors.AssertionFailedf("expected types and cols to be the same length"))
 	}
