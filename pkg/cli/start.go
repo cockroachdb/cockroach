@@ -489,8 +489,10 @@ func runStartInternal(
 	// GOMAXPROCS(0) by now.
 	cgroups.AdjustMaxProcs(ctx)
 
+	fs := cliflagcfg.FlagSetForCmd(cmd)
+
 	// Check the --join flag.
-	if fl := cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.Join.Name); fl != nil && !fl.Changed {
+	if fl := fs.Lookup(cliflags.Join.Name); fl != nil && !fl.Changed {
 		err := errors.WithHint(
 			errors.New("no --join flags provided to 'cockroach start'"),
 			"Consider using 'cockroach init' or 'cockroach start-single-node' instead")
@@ -498,7 +500,7 @@ func runStartInternal(
 	}
 
 	// Check the --tenant-id-file flag.
-	if fl := cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.TenantIDFile.Name); fl != nil && fl.Changed {
+	if fl := fs.Lookup(cliflags.TenantIDFile.Name); fl != nil && fl.Changed {
 		fileName := fl.Value.String()
 		serverCfg.DelayedSetTenantID = func(ctx context.Context) (roachpb.TenantID, error) {
 			return tenantIDFromFile(ctx, fileName, nil, nil, nil)
@@ -550,6 +552,42 @@ func runStartInternal(
 			log.Ops.Infof(ctx, "soft memory limit of Go runtime is set to %s", humanizeutil.IBytes(goMemLimit))
 		}
 		debug.SetMemoryLimit(goMemLimit)
+		return nil
+	}(); err != nil {
+		return err
+	}
+
+	// Set the GC target percent on the Go runtime.
+	if err := func() error {
+		var goGCPercent int
+		if fs.Changed(cliflags.GoGCPercent.Name) {
+			goGCPercent = startCtx.goGCPercent
+		} else {
+			if _, envVarSet := envutil.ExternalEnvString("GOGC", 1); envVarSet {
+				// When --go-gc-percent is not specified but the env var is, we defer to
+				// the env var.
+				return nil
+			}
+			// When neither the --go-gc-percent flag nor the GOGC env var is set,
+			// increase the GC target percent to 300% (default 100%) to reduce the
+			// frequency of GC cycles. However, only do so if a soft memory limit is
+			// also configured, to avoid introducing OOMs.
+			goMemLimit := debug.SetMemoryLimit(-1 /* get without adjusting */)
+			if goMemLimit == math.MaxInt64 {
+				// If the soft memory limit is disabled, don't adjust the GC percent.
+				// Leave it at the default 100%.
+				return nil
+			}
+			goGCPercent = 300
+		}
+		var goGCPercentStr redact.RedactableString
+		if goGCPercent < 0 {
+			goGCPercentStr = `"off"`
+		} else {
+			goGCPercentStr = redact.Sprintf("%d%%", goGCPercent)
+		}
+		log.Ops.Infof(ctx, "GC target percentage of Go runtime is set to %s", goGCPercentStr)
+		debug.SetGCPercent(goGCPercent)
 		return nil
 	}(); err != nil {
 		return err

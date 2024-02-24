@@ -519,6 +519,10 @@ var startCtx struct {
 	goMemLimitValue          bytesOrPercentageValue
 	diskTempStorageSizeValue bytesOrPercentageValue
 	tsdbSizeValue            bytesOrPercentageValue
+
+	// goGCPercent is used to specify the runtime garbage collection target
+	// percentage. Also configurable with the GOGC environment variable.
+	goGCPercent int
 }
 
 // setStartContextDefaults set the default values in startCtx.  This
@@ -541,6 +545,7 @@ func setStartContextDefaults() {
 	startCtx.goMemLimitValue = makeBytesOrPercentageValue(&goMemLimit, memoryPercentResolver)
 	startCtx.diskTempStorageSizeValue = makeBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 	startCtx.tsdbSizeValue = makeBytesOrPercentageValue(&serverCfg.TimeSeriesServerConfig.QueryMemoryMax, memoryPercentResolver)
+	startCtx.goGCPercent = 0
 }
 
 // drainCtx captures the command-line parameters of the `node drain`
