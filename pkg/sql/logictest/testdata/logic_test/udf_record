@@ -559,4 +559,42 @@ CREATE FUNCTION err(i imp) RETURNS INT LANGUAGE SQL AS $$
   SELECT i
 $$
 
+subtest regression_113186
+
+# Check whether the actual function result types are identical to the types in
+# the column definition, and correctly resolve differences.
+statement ok
+CREATE FUNCTION f113186() RETURNS RECORD LANGUAGE SQL AS $$ SELECT 1.99; $$;
+
+query R colnames
+SELECT * FROM f113186() AS foo(x FLOAT);
+----
+x
+1.99
+
+query I colnames
+SELECT * FROM f113186() AS foo(x INT);
+----
+x
+2
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+SELECT * FROM f113186() AS foo(x TIMESTAMP);
+
+subtest regression_114846
+
+# Function creation and execution should succeed without internal error due to
+# mismatched types.
+statement ok
+CREATE FUNCTION array_to_set(ANYARRAY) RETURNS SETOF RECORD AS $$
+  SELECT i AS "index", $1[i] AS "value" FROM generate_subscripts($1, 1) i;
+$$ LANGUAGE SQL STRICT IMMUTABLE;
+
+query RT colnames,rowsort
+SELECT * FROM array_to_set(ARRAY['one', 'two']) AS t(f1 NUMERIC(4,2), f2 TEXT);
+----
+f1    f2
+1.00  one
+2.00  two
+
 subtest end
