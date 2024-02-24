@@ -315,7 +315,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			plBuilder := newPLpgSQLBuilder(
 				b, cf.Name.Object(), nil /* colRefs */, paramTypes, funcReturnType,
 			)
-			stmtScope = plBuilder.buildBlock(stmt.AST, bodyScope)
+			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope)
 		})
 		checkStmtVolatility(targetVolatility, stmtScope, stmt)
 
