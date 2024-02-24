@@ -355,11 +355,14 @@ locked: true, holder: 00000000-0000-0000-0000-000000000001
 
 is-key-locked-by-conflicting-txn r=req8 k=h strength=exclusive
 ----
-lock promotion from Shared to Exclusive is not allowed
+locked: false
 
 is-key-locked-by-conflicting-txn r=req8 k=i strength=exclusive
 ----
-lock promotion from Shared to Exclusive is not allowed
+locked: false
+
+# TODO(arul): add a test where there are 2 shared locks and one of them is trying
+# to promote using the SKIP LOCKED wait policy.
 
 dequeue r=req8
 ----
