@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	rangefeedServer "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -1550,5 +1551,17 @@ func (c *channelSink) Send(e *kvpb.RangeFeedEvent) error {
 		return nil
 	case <-c.ctx.Done():
 		return c.ctx.Err()
+	}
+}
+
+func (c *channelSink) BufferedSend(e *rangefeedServer.REventWithAlloc) {
+	ev, alloc, cb := e.Detatch()
+	defer alloc.Release(c.ctx)
+	cb(nil)
+	select {
+	case c.ch <- ev:
+		return
+	case <-c.ctx.Done():
+		return
 	}
 }
