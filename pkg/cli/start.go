@@ -555,6 +555,39 @@ func runStartInternal(
 		return err
 	}
 
+	// Set the GC target percent on the Go runtime.
+	if err := func() error {
+		var goGCPercent int
+		if startCtx.goGCPercent != 0 {
+			if startCtx.goGCPercent < 0 {
+				return errors.New("--go-gc-percent must be non-negative")
+			}
+			goGCPercent = startCtx.goGCPercent
+		} else {
+			if _, envVarSet := envutil.ExternalEnvString("GOGC", 1); envVarSet {
+				// When --go-gc-percent is not specified but the env var is, we defer to
+				// the env var.
+				return nil
+			}
+			// When neither the --go-gc-percent flag nor the GOGC env var is set,
+			// increase the GC target percent to 300% (default 100%) to reduce the
+			// frequency of GC cycles. However, only do so if a soft memory limit is
+			// also configured, to avoid introducing OOMs.
+			goMemLimit := debug.SetMemoryLimit(-1 /* get without adjusting */)
+			if goMemLimit == math.MaxInt64 {
+				// If the soft memory limit is disabled, don't adjust the GC percent.
+				// Leave it at the default 100%.
+				return nil
+			}
+			goGCPercent = 300
+		}
+		log.Ops.Infof(ctx, "GC target percentage of Go runtime is set to %d", goGCPercent)
+		debug.SetGCPercent(goGCPercent)
+		return nil
+	}(); err != nil {
+		return err
+	}
+
 	// Initialize the node's configuration from startup parameters.
 	// This also reads the part of the configuration that comes from
 	// environment variables.

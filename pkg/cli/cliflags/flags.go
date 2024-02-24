@@ -191,6 +191,16 @@ metrics for the entire cluster. This capacity constraint does not affect
 SQL query execution.`,
 	}
 
+	GoGCPercent = FlagInfo{
+		Name: "go-gc-percent",
+		Description: `
+Garbage collection target percentage set on the Go runtime (which is also
+configurable via the GOGC environment variable, but --go-gc-percent has higher
+precedence if both are set). A garbage collection is triggered when the ratio of
+freshly allocated data to live data remaining after the previous collection
+reaches this percentage. If left unspecified, defaults to 300%.`,
+	}
+
 	SQLTempStorage = FlagInfo{
 		Name: "max-disk-temp-storage",
 		Description: `

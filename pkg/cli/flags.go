@@ -517,6 +517,7 @@ func init() {
 		cliflagcfg.VarFlag(f, &startCtx.sqlSizeValue, cliflags.SQLMem)
 		cliflagcfg.VarFlag(f, &startCtx.goMemLimitValue, cliflags.GoMemLimit)
 		cliflagcfg.VarFlag(f, &startCtx.tsdbSizeValue, cliflags.TSDBMem)
+		cliflagcfg.IntFlag(f, &startCtx.goGCPercent, cliflags.GoGCPercent)
 		// N.B. diskTempStorageSizeValue.Resolve() will be called after the
 		// stores flag has been parsed and the storage device that a
 		// percentage refers to becomes known.
