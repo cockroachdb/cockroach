@@ -430,4 +430,25 @@ CREATE FUNCTION f() RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(True)
 statement error pgcode 42P13 pq: return type mismatch in function declared to return record
 SELECT * FROM f() AS g(bar one_typ);
 
+subtest regression_113186
+
+# Check whether the actual function result types are identical to the types in
+# the column definition, and correctly resolve differences.
+# Regression test for #113186.
+statement ok
+CREATE FUNCTION f113186() RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(1.99); END; $$;
+
+query R
+SELECT * FROM f113186() AS foo(x FLOAT);
+----
+1.99
+
+query I
+SELECT * FROM f113186() AS foo(x INT);
+----
+2
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+SELECT * FROM f113186() AS foo(x TIMESTAMP);
+
 subtest end
