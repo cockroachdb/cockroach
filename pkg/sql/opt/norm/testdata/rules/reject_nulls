@@ -547,31 +547,31 @@ norm
 SELECT 1 FROM a AS ref_0 LEFT JOIN a AS ref_1 ON EXISTS(SELECT 1 FROM a WHERE a.s = ref_0.s)
 ----
 project
- ├── columns: "?column?":23!null
- ├── fd: ()-->(23)
+ ├── columns: "?column?":24!null
+ ├── fd: ()-->(24)
  ├── left-join-apply
- │    ├── columns: ref_0.s:4 exists:22
+ │    ├── columns: ref_0.s:4 exists:23
  │    ├── scan a [as=ref_0]
  │    │    └── columns: ref_0.s:4
  │    ├── project
- │    │    ├── columns: exists:22!null
+ │    │    ├── columns: exists:23!null
  │    │    ├── outer: (4)
  │    │    ├── group-by (hash)
- │    │    │    ├── columns: ref_1.k:7!null true_agg:21
+ │    │    │    ├── columns: ref_1.k:7!null true_agg:22
  │    │    │    ├── grouping columns: ref_1.k:7!null
  │    │    │    ├── outer: (4)
  │    │    │    ├── key: (7)
- │    │    │    ├── fd: (7)-->(21)
+ │    │    │    ├── fd: (7)-->(22)
  │    │    │    ├── left-join (cross)
- │    │    │    │    ├── columns: ref_1.k:7!null true:20
+ │    │    │    │    ├── columns: ref_1.k:7!null true:21
  │    │    │    │    ├── outer: (4)
  │    │    │    │    ├── scan a [as=ref_1]
  │    │    │    │    │    ├── columns: ref_1.k:7!null
  │    │    │    │    │    └── key: (7)
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: true:20!null
+ │    │    │    │    │    ├── columns: true:21!null
  │    │    │    │    │    ├── outer: (4)
- │    │    │    │    │    ├── fd: ()-->(20)
+ │    │    │    │    │    ├── fd: ()-->(21)
  │    │    │    │    │    ├── select
  │    │    │    │    │    │    ├── columns: a.s:16!null
  │    │    │    │    │    │    ├── outer: (4)
@@ -581,17 +581,17 @@ project
  │    │    │    │    │    │    └── filters
  │    │    │    │    │    │         └── a.s:16 = ref_0.s:4 [outer=(4,16), constraints=(/4: (/NULL - ]; /16: (/NULL - ]), fd=(4)==(16), (16)==(4)]
  │    │    │    │    │    └── projections
- │    │    │    │    │         └── true [as=true:20]
+ │    │    │    │    │         └── true [as=true:21]
  │    │    │    │    └── filters (true)
  │    │    │    └── aggregations
- │    │    │         └── const-not-null-agg [as=true_agg:21, outer=(20)]
- │    │    │              └── true:20
+ │    │    │         └── const-not-null-agg [as=true_agg:22, outer=(21)]
+ │    │    │              └── true:21
  │    │    └── projections
- │    │         └── true_agg:21 IS NOT NULL [as=exists:22, outer=(21)]
+ │    │         └── true_agg:22 IS NOT NULL [as=exists:23, outer=(22)]
  │    └── filters
- │         └── exists:22 [outer=(22), constraints=(/22: [/true - /true]; tight), fd=()-->(22)]
+ │         └── exists:23 [outer=(23), constraints=(/23: [/true - /true]; tight), fd=()-->(23)]
  └── projections
-      └── 1 [as="?column?":23]
+      └── 1 [as="?column?":24]
 
 # Use with multi-argument aggregate function.
 norm expect=RejectNullsGroupBy
@@ -1678,9 +1678,9 @@ SELECT tab_3663.col2_3,
  ORDER BY tab_3663.crdb_internal_mvcc_timestamp DESC, tab_3663.tableoid DESC, tab_3663.col2_5
 ----
 project
- ├── columns: col2_3:2 "?column?":66!null "?column?":67!null col_12038:68!null col2_6:5!null "?column?":66!null  [hidden: tab_3663.col2_5:4 tab_3663.crdb_internal_mvcc_timestamp:11 tab_3663.tableoid:12]
- ├── fd: ()-->(66-68)
- ├── ordering: -11,-12,+4 opt(66-68) [actual: -11,-12,+4]
+ ├── columns: col2_3:2 "?column?":67!null "?column?":68!null col_12038:69!null col2_6:5!null "?column?":67!null  [hidden: tab_3663.col2_5:4 tab_3663.crdb_internal_mvcc_timestamp:11 tab_3663.tableoid:12]
+ ├── fd: ()-->(67-69)
+ ├── ordering: -11,-12,+4 opt(67-69) [actual: -11,-12,+4]
  ├── sort
  │    ├── columns: tab_3663.col2_3:2 tab_3663.col2_5:4 tab_3663.col2_6:5!null tab_3663.col2_9:6 tab_3663.crdb_internal_mvcc_timestamp:11 tab_3663.tableoid:12
  │    ├── ordering: -11,-12,+4
@@ -1724,9 +1724,9 @@ project
  │         │         └── tab_3664.col2_12:21 = col1_3:28 [outer=(21,28), constraints=(/21: (/NULL - ]; /28: (/NULL - ]), fd=(21)==(28), (28)==(21)]
  │         └── filters (true)
  └── projections
-      ├── 0 [as="?column?":66]
-      ├── '23:43:20-08:00:00' [as="?column?":67]
-      └── '2026-09-17 11:54:13.000946' [as=col_12038:68]
+      ├── 0 [as="?column?":67]
+      ├── '23:43:20-08:00:00' [as="?column?":68]
+      └── '2026-09-17 11:54:13.000946' [as=col_12038:69]
 
 # Regression test for #100559 - don't panic when exploration uncovers possible
 # null-rejection that normalization failed to find.

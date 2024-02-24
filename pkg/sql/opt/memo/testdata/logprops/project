@@ -268,10 +268,10 @@ build
 SELECT k, EXISTS(SELECT EXISTS(SELECT y FROM xysd WHERE x=k) FROM xysd) FROM kuv
 ----
 project
- ├── columns: k:1(int!null) exists:19(bool)
+ ├── columns: k:1(int!null) exists:21(bool)
  ├── key: (1)
- ├── fd: (1)-->(19)
- ├── prune: (1,19)
+ ├── fd: (1)-->(21)
+ ├── prune: (1,21)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string) kuv.crdb_internal_mvcc_timestamp:4(decimal) kuv.tableoid:5(oid)
@@ -280,11 +280,11 @@ project
  │    ├── prune: (1-5)
  │    └── interesting orderings: (+1)
  └── projections
-      └── exists [as=exists:19, type=bool, outer=(1), correlated-subquery]
+      └── exists [as=exists:21, type=bool, outer=(1), correlated-subquery]
            └── project
-                ├── columns: exists:18(bool)
+                ├── columns: exists:19(bool)
                 ├── outer: (1)
-                ├── prune: (18)
+                ├── prune: (19)
                 ├── scan xysd
                 │    ├── columns: x:6(int!null) y:7(int) s:8(string) d:9(decimal!null) xysd.crdb_internal_mvcc_timestamp:10(decimal) xysd.tableoid:11(oid)
                 │    ├── key: (6)
@@ -292,7 +292,7 @@ project
                 │    ├── prune: (6-11)
                 │    └── interesting orderings: (+6) (-8,+9,+6)
                 └── projections
-                     └── exists [as=exists:18, type=bool, outer=(1), correlated-subquery]
+                     └── exists [as=exists:19, type=bool, outer=(1), correlated-subquery]
                           └── project
                                ├── columns: y:13(int)
                                ├── outer: (1)

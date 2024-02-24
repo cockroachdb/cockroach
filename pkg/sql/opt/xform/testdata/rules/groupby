@@ -1142,10 +1142,10 @@ WHERE a IN (
 GROUP BY a
 ----
 project
- ├── columns: a:1!null min:10!null
+ ├── columns: a:1!null min:11!null
  ├── cardinality: [0 - 1]
  ├── key: (1)
- ├── fd: (1)-->(10)
+ ├── fd: (1)-->(11)
  ├── inner-join (lookup t112131)
  │    ├── columns: a:1!null b:2!null min:9!null
  │    ├── key columns: [9] = [1]
@@ -1165,7 +1165,7 @@ project
  │    │              └── b:6
  │    └── filters (true)
  └── projections
-      └── b:2 [as=min:10, outer=(2)]
+      └── b:2 [as=min:11, outer=(2)]
 
 # Regression test for #112131. ReplaceMaxWithLimit should project constant
 # grouping columns.
@@ -1177,10 +1177,10 @@ WHERE a IN (
 GROUP BY a
 ----
 project
- ├── columns: a:1!null max:10!null
+ ├── columns: a:1!null max:11!null
  ├── cardinality: [0 - 1]
  ├── key: (1)
- ├── fd: (1)-->(10)
+ ├── fd: (1)-->(11)
  ├── inner-join (lookup t112131)
  │    ├── columns: a:1!null b:2!null max:9!null
  │    ├── key columns: [9] = [1]
@@ -1200,7 +1200,7 @@ project
  │    │              └── b:6
  │    └── filters (true)
  └── projections
-      └── b:2 [as=max:10, outer=(2)]
+      └── b:2 [as=max:11, outer=(2)]
 
 # --------------------------------------------------
 # ReplaceScalarMinMaxWithScalarSubqueries
