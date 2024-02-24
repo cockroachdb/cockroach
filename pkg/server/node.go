@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
@@ -1754,7 +1755,16 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 	n.metrics.ActiveRangeFeed.Inc(1)
 	defer n.metrics.ActiveRangeFeed.Inc(-1)
 
-	if err := errors.CombineErrors(future.Wait(ctx, n.stores.RangeFeed(args, stream))); err != nil {
+	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
+	defer cancel()
+
+	bufferedSender, err := rangefeed.NewBufferedSender(ctx, (rangefeed.GenericStream[*kvpb.RangeFeedEvent])(stream))
+	if err != nil {
+		return err
+	}
+	defer bufferedSender.Close()
+	passThrough := &passThroughSender{wrapped: bufferedSender}
+	if err := errors.CombineErrors(future.Wait(ctx, n.stores.RangeFeed(args, passThrough))); err != nil {
 		// Got stream context error, probably won't be able to propagate it to the stream,
 		// but give it a try anyway.
 		var event kvpb.RangeFeedEvent
@@ -1767,23 +1777,60 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 	return nil
 }
 
-// setRangeIDEventSink annotates each response with range and stream IDs.
+// setRangeIDEventSender annotates each response with range and stream IDs.
 // This is used by MuxRangeFeed.
 // TODO: This code can be removed in 22.2 once MuxRangeFeed is the default, and
 // the old style RangeFeed deprecated.
-type setRangeIDEventSink struct {
+type passThroughSender struct {
+	wrapped *rangefeed.BufferedSender[*kvpb.RangeFeedEvent]
+}
+
+var _ rangefeed.Stream = (*passThroughSender)(nil)
+
+func (s *passThroughSender) Context() context.Context {
+	return s.wrapped.Context()
+}
+
+func (s *passThroughSender) BufferedSend(e *rangefeed.REventWithAlloc) {
+	s.wrapped.BufferedSend(e)
+}
+
+func (s *passThroughSender) Send(e *kvpb.RangeFeedEvent) error {
+	return s.wrapped.Send(e)
+}
+
+// setRangeIDEventSender annotates each response with range and stream IDs.
+// This is used by MuxRangeFeed.
+// TODO: This code can be removed in 22.2 once MuxRangeFeed is the default, and
+// the old style RangeFeed deprecated.
+type setRangeIDEventSender struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	rangeID  roachpb.RangeID
 	streamID int64
-	wrapped  *lockedMuxStream
+	wrapped  *rangefeed.BufferedSender[*kvpb.MuxRangeFeedEvent]
 }
 
-func (s *setRangeIDEventSink) Context() context.Context {
+var _ rangefeed.Stream = (*setRangeIDEventSender)(nil)
+
+func (s *setRangeIDEventSender) Context() context.Context {
 	return s.ctx
 }
 
-func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
+func (s *setRangeIDEventSender) BufferedSend(e *rangefeed.REventWithAlloc) {
+	event, alloc, callback := e.Detatch()
+	alloc.Use(s.Context())
+	response := rangefeed.NewMuxEventWithAlloc(
+		&kvpb.MuxRangeFeedEvent{
+			RangeFeedEvent: *event,
+			RangeID:        s.rangeID,
+			StreamID:       s.streamID,
+		}, alloc, callback)
+
+	s.wrapped.BufferedSend(response)
+}
+
+func (s *setRangeIDEventSender) Send(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		RangeID:        s.rangeID,
@@ -1792,8 +1839,6 @@ func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	return s.wrapped.Send(response)
 }
 
-var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
-
 // lockedMuxStream provides support for concurrent calls to Send.
 // The underlying MuxRangeFeedServer is not safe for concurrent calls to Send.
 type lockedMuxStream struct {
@@ -1801,6 +1846,9 @@ type lockedMuxStream struct {
 	sendMu  syncutil.Mutex
 }
 
+func (s *lockedMuxStream) Context() context.Context {
+	return s.wrapped.Context()
+}
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
@@ -1876,12 +1924,17 @@ func newMuxRangeFeedCompletionWatcher(
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
-	muxStream := &lockedMuxStream{wrapped: stream}
-
+	muxStream := rangefeed.GenericStream[*kvpb.MuxRangeFeedEvent](&lockedMuxStream{wrapped: stream})
 	// All context created below should derive from this context, which is
 	// cancelled once MuxRangeFeed exits.
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 	defer cancel()
+
+	bufferedSender, err := rangefeed.NewBufferedSender(ctx, muxStream)
+	if err != nil {
+		return err
+	}
+	defer bufferedSender.Close()
 
 	rangefeedCompleted, cleanup, err := newMuxRangeFeedCompletionWatcher(ctx, n.stopper, muxStream.Send)
 	if err != nil {
@@ -1904,7 +1957,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		if req.CloseStream {
 			// Client issued a request to close previously established stream.
 			if v, loaded := activeStreams.LoadAndDelete(req.StreamID); loaded {
-				s := v.(*setRangeIDEventSink)
+				s := v.(*setRangeIDEventSender)
 				s.cancel()
 			} else {
 				// This is a bit strange, but it could happen if this stream completes
@@ -1921,12 +1974,12 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
 		streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
-		streamSink := &setRangeIDEventSink{
+		streamSink := &setRangeIDEventSender{
 			ctx:      streamCtx,
 			cancel:   cancel,
 			rangeID:  req.RangeID,
 			streamID: req.StreamID,
-			wrapped:  muxStream,
+			wrapped:  bufferedSender,
 		}
 		activeStreams.Store(req.StreamID, streamSink)
 
