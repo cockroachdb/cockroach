@@ -1,0 +1,150 @@
+new-lock-table maxlocks=1000
+----
+
+new-txn txn=txn1 ts=10 epoch=0 seq=0
+----
+
+new-txn txn=txn2 ts=10 epoch=0 seq=0
+----
+
+new-txn txn=txn3 ts=10 epoch=0 seq=0
+----
+
+new-txn txn=txn4 ts=10 epoch=0 seq=0
+----
+
+# ------------------------------------------------------------------------------
+# Basic test from Exclusive -> Intent lock promotion when there are no waiters
+# at the lock. The request shouldn't wait at the lock, but should add itself as
+# an inactive waiter.
+# ------------------------------------------------------------------------------
+
+new-request r=req1 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req1
+----
+start-waiting: false
+
+acquire r=req1 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req2 txn=txn1 ts=10 spans=intent@a
+----
+
+scan r=req2
+----
+start-waiting: false
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+
+# Replicated lock acquisition will cause us to forget the unreplicated lock.
+acquire r=req2 k=a durability=r strength=intent
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+
+dequeue r=req2
+----
+num=0
+
+# ------------------------------------------------------------------------------
+# Basic test from Exclusive -> Intent lock promotion when there are waiters
+# at the lock. The request shouldn't wait at the lock, but it should add itself
+# as an inactive waiter. Moreover, it should sort before other waiters,
+# regardless of arrival order.
+# ------------------------------------------------------------------------------
+
+new-request r=req3 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req3
+----
+start-waiting: false
+
+acquire r=req3 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req4 txn=txn2 ts=10 spans=exclusive@a
+----
+
+scan r=req4
+----
+start-waiting: true
+
+new-request r=req5 txn=txn1 ts=10 spans=intent@a
+----
+
+scan r=req5
+----
+start-waiting: false
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 4
+
+# For good measure, create a new request from txn3 that comes after req5, and
+# ensure it sorts after req5 in the wait queue.
+
+new-request r=req6 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req6
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 6, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 4
+
+# ------------------------------------------------------------------------------
+# Ensure a request trying to promote from Exclusive -> Intent does not conflict
+# with any requests in the wait queue that belong to its own transaction. (If
+# they're already there they'll sort before it).
+# ------------------------------------------------------------------------------
+
+new-request r=req7 txn=txn1 ts=10 spans=intent@a
+----
+
+scan r=req7
+----
+start-waiting: false
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 6, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 4
