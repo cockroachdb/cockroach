@@ -9,6 +9,7 @@ go_library(
         "contains_testers.go",
         "encode.go",
         "encoded.go",
+        "encoded_format.go",
         "iterator.go",
         "jentry.go",
         "json.go",

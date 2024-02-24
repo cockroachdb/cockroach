@@ -23,6 +23,8 @@ const jEntryIsOffFlag = 0x80000000
 const jEntryTypeMask = 0x70000000
 const jEntryOffLenMask = 0x0FFFFFFF
 
+const jEntrySize = 4
+
 // jEntry is a header for a particular JSON value. See the JSONB encoding RFC
 // for an explanation of its purpose and format:
 // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20171005_jsonb_encoding.md
