@@ -532,16 +532,21 @@ func generateAndSendImportSpans(
 	if err != nil {
 		return err
 	}
+	defer startKeyIt.Close()
 
 	var key roachpb.Key
 
 	fileIterByLayer := make([]bulk.Iterator[*backuppb.BackupManifest_File], 0, len(backups))
+	defer func() {
+		for _, i := range fileIterByLayer {
+			i.Close()
+		}
+	}()
 	for layer := range backups {
 		iter, err := layerToBackupManifestFileIterFactory[layer].NewFileIter(ctx)
 		if err != nil {
 			return err
 		}
-
 		fileIterByLayer = append(fileIterByLayer, iter)
 	}
 
@@ -722,6 +727,12 @@ func newFileSpanStartKeyIterator(
 	}
 	it.reset()
 	return it, nil
+}
+
+func (i *fileSpanStartKeyIterator) Close() {
+	for _, iter := range i.allIters {
+		iter.Close()
+	}
 }
 
 func (i *fileSpanStartKeyIterator) next() {
