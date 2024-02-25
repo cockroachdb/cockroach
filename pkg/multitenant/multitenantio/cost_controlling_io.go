@@ -58,7 +58,7 @@ func NewReadWriteAccounter(
 }
 
 func (a *readWriteAccounter) Writer(
-	ctx context.Context, s cloud.ExternalStorage, w io.WriteCloser,
+	ctx context.Context, s cloud.ExternalStorage, w io.WriteCloser, _ string,
 ) io.WriteCloser {
 	if !s.RequiresExternalIOAccounting() {
 		return w
@@ -72,7 +72,7 @@ func (a *readWriteAccounter) Writer(
 }
 
 func (a *readWriteAccounter) Reader(
-	_ context.Context, s cloud.ExternalStorage, r ioctx.ReadCloserCtx,
+	_ context.Context, s cloud.ExternalStorage, r ioctx.ReadCloserCtx, _ string,
 ) ioctx.ReadCloserCtx {
 	if !s.RequiresExternalIOAccounting() {
 		return r

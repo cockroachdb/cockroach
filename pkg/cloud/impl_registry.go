@@ -323,27 +323,27 @@ type esWrapper struct {
 	httpTracer *httptrace.ClientTrace
 }
 
-func (e *esWrapper) wrapReader(ctx context.Context, r ioctx.ReadCloserCtx) ioctx.ReadCloserCtx {
+func (e *esWrapper) wrapReader(ctx context.Context, r ioctx.ReadCloserCtx, name string) ioctx.ReadCloserCtx {
 	if e.lim.read != nil {
 		r = &limitedReader{r: r, lim: e.lim.read}
 	}
 	if e.ioRecorder != nil {
-		r = e.ioRecorder.Reader(ctx, e.ExternalStorage, r)
+		r = e.ioRecorder.Reader(ctx, e.ExternalStorage, r, name)
 	}
 
-	r = e.metrics.Reader(ctx, e.ExternalStorage, r)
+	r = e.metrics.Reader(ctx, e.ExternalStorage, r, name)
 	return r
 }
 
-func (e *esWrapper) wrapWriter(ctx context.Context, w io.WriteCloser) io.WriteCloser {
+func (e *esWrapper) wrapWriter(ctx context.Context, w io.WriteCloser, name string) io.WriteCloser {
 	if e.lim.write != nil {
 		w = &limitedWriter{w: w, ctx: ctx, lim: e.lim.write}
 	}
 	if e.ioRecorder != nil {
-		w = e.ioRecorder.Writer(ctx, e.ExternalStorage, w)
+		w = e.ioRecorder.Writer(ctx, e.ExternalStorage, w, name)
 	}
 
-	w = e.metrics.Writer(ctx, e.ExternalStorage, w)
+	w = e.metrics.Writer(ctx, e.ExternalStorage, w, name)
 	return w
 }
 
@@ -357,7 +357,7 @@ func (e *esWrapper) ReadFile(ctx context.Context, basename string) (ioctx.ReadCl
 		return r, err
 	}
 
-	return e.wrapReader(ctx, r), nil
+	return e.wrapReader(ctx, r, basename), nil
 }
 
 func (e *esWrapper) ReadFileAt(
@@ -371,7 +371,7 @@ func (e *esWrapper) ReadFileAt(
 		return r, s, err
 	}
 
-	return e.wrapReader(ctx, r), s, nil
+	return e.wrapReader(ctx, r, basename), s, nil
 }
 
 func (e *esWrapper) List(ctx context.Context, prefix, delimiter string, fn ListingFn) error {
@@ -400,7 +400,7 @@ func (e *esWrapper) Writer(ctx context.Context, basename string) (io.WriteCloser
 		return nil, err
 	}
 
-	return e.wrapWriter(ctx, w), nil
+	return e.wrapWriter(ctx, w, basename), nil
 }
 
 type limitedReader struct {
@@ -467,6 +467,6 @@ func (l *limitedWriter) Close() error {
 // A ReadWriterInterceptor providers methods that construct Readers and Writers from given Readers
 // and Writers.
 type ReadWriterInterceptor interface {
-	Reader(context.Context, ExternalStorage, ioctx.ReadCloserCtx) ioctx.ReadCloserCtx
-	Writer(context.Context, ExternalStorage, io.WriteCloser) io.WriteCloser
+	Reader(context.Context, ExternalStorage, ioctx.ReadCloserCtx, string) ioctx.ReadCloserCtx
+	Writer(context.Context, ExternalStorage, io.WriteCloser, string) io.WriteCloser
 }

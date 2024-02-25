@@ -15,6 +15,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -150,29 +151,33 @@ func (m *Metrics) MetricStruct() {}
 
 // Reader implements the ReadWriterInterceptor interface.
 func (m *Metrics) Reader(
-	_ context.Context, _ ExternalStorage, r ioctx.ReadCloserCtx,
+	ctx context.Context, _ ExternalStorage, r ioctx.ReadCloserCtx, name string,
 ) ioctx.ReadCloserCtx {
 	if m == nil {
 		return r
 	}
 	m.CreatedReaders.Inc(1)
 	m.OpenReaders.Inc(1)
+	log.VInfof(ctx, 1, "%s reader opened", name)
 	return &metricsReader{
 		inner: r,
 		m:     m,
+		name:  name,
 	}
 }
 
 // Writer implements the ReadWriterInterceptor interface.
-func (m *Metrics) Writer(_ context.Context, _ ExternalStorage, w io.WriteCloser) io.WriteCloser {
+func (m *Metrics) Writer(ctx context.Context, _ ExternalStorage, w io.WriteCloser, name string) io.WriteCloser {
 	if m == nil {
 		return w
 	}
 	m.CreatedWriters.Inc(1)
 	m.OpenWriters.Inc(1)
+	log.VInfof(ctx, 1, "%s writer opened", name)
 	return &metricsWriter{
-		w: w,
-		m: m,
+		w:    w,
+		m:    m,
+		name: name,
 	}
 }
 
@@ -180,6 +185,7 @@ type metricsReader struct {
 	inner  ioctx.ReadCloserCtx
 	m      *Metrics
 	closed bool
+	name   string
 }
 
 // Read implements the ioctx.ReadCloserCtx interface.
@@ -194,8 +200,8 @@ func (mr *metricsReader) Close(ctx context.Context) error {
 	if !mr.closed {
 		mr.m.OpenReaders.Dec(1)
 		mr.closed = true
+		log.Infof(ctx, "%s reader closed", mr.name)
 	}
-
 	return mr.inner.Close(ctx)
 }
 
@@ -203,6 +209,7 @@ type metricsWriter struct {
 	w      io.WriteCloser
 	m      *Metrics
 	closed bool
+	name   string
 }
 
 // Write implements the WriteCloser interface.
@@ -217,6 +224,7 @@ func (mw *metricsWriter) Close() error {
 	if !mw.closed {
 		mw.m.OpenWriters.Dec(1)
 		mw.closed = true
+		log.VInfof(context.Background(), 1, "%s writer closed", mw.name)
 	}
 	return mw.w.Close()
 }
