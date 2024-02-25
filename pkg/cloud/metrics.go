@@ -177,8 +177,9 @@ func (m *Metrics) Writer(_ context.Context, _ ExternalStorage, w io.WriteCloser)
 }
 
 type metricsReader struct {
-	inner ioctx.ReadCloserCtx
-	m     *Metrics
+	inner  ioctx.ReadCloserCtx
+	m      *Metrics
+	closed bool
 }
 
 // Read implements the ioctx.ReadCloserCtx interface.
@@ -190,13 +191,18 @@ func (mr *metricsReader) Read(ctx context.Context, p []byte) (int, error) {
 
 // Close implements the ioctx.ReadCloserCtx interface.
 func (mr *metricsReader) Close(ctx context.Context) error {
-	mr.m.OpenReaders.Dec(1)
+	if !mr.closed {
+		mr.m.OpenReaders.Dec(1)
+		mr.closed = true
+	}
+
 	return mr.inner.Close(ctx)
 }
 
 type metricsWriter struct {
-	w io.WriteCloser
-	m *Metrics
+	w      io.WriteCloser
+	m      *Metrics
+	closed bool
 }
 
 // Write implements the WriteCloser interface.
@@ -208,7 +214,10 @@ func (mw *metricsWriter) Write(p []byte) (int, error) {
 
 // Close implements the WriteCloser interface.
 func (mw *metricsWriter) Close() error {
-	mw.m.OpenWriters.Dec(1)
+	if !mw.closed {
+		mw.m.OpenWriters.Dec(1)
+		mw.closed = true
+	}
 	return mw.w.Close()
 }
 
