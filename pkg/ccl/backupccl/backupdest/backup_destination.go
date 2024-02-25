@@ -280,13 +280,14 @@ func ReadLatestFile(
 	defer collection.Close()
 
 	latestFile, err := FindLatestFile(ctx, collection)
-
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return "", pgerror.Wrapf(err, pgcode.UndefinedFile, "path does not contain a completed latest backup")
 		}
 		return "", pgerror.WithCandidateCode(err, pgcode.Io)
 	}
+	defer latestFile.Close(ctx)
+
 	latest, err := ioctx.ReadAll(ctx, latestFile)
 	if err != nil {
 		return "", err
