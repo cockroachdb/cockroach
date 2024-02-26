@@ -303,7 +303,93 @@ func TestMrSystemDatabase(t *testing.T) {
 			}
 			return nil
 		})
+	})
+}
 
+func TestMRSystemDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3, base.TestingKnobs{},
+	)
+	defer cleanup()
+
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.multiregion.preview_multiregion_system_database.enabled = true`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`ALTER DATABASE system ADD REGION "us-east2"`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`ALTER DATABASE system ADD REGION "us-east3"`)
+	require.NoError(t, err)
+
+	t.Run("Sqlliveness", func(t *testing.T) {
+		row := sqlDB.QueryRow(`SELECT crdb_region, session_id, expiration FROM system.sqlliveness LIMIT 1`)
+		var sessionID string
+		var crdbRegion string
+		var rawExpiration apd.Decimal
+		require.NoError(t, row.Scan(&crdbRegion, &sessionID, &rawExpiration))
+		require.Equal(t, "us-east1", crdbRegion)
+	})
+
+	t.Run("Sqlinstances", func(t *testing.T) {
+		t.Run("InUse", func(t *testing.T) {
+			query := `
+                SELECT id, addr, session_id, locality, crdb_region
+                FROM system.sql_instances
+                WHERE session_id IS NOT NULL
+            `
+			rows, _ := sqlDB.Query(query)
+			require.True(t, rows.Next())
+			for {
+				var id base.SQLInstanceID
+				var addr, locality string
+				var crdb_region string
+				var session sqlliveness.SessionID
+
+				require.NoError(t, rows.Scan(&id, &addr, &session, &locality, &crdb_region))
+
+				require.True(t, 0 < id)
+				require.NotEmpty(t, addr)
+				require.NotEmpty(t, locality)
+				require.NotEmpty(t, session)
+				require.NotEmpty(t, crdb_region)
+
+				require.Equal(t, "us-east1", crdb_region)
+
+				if !rows.Next() {
+					break
+				}
+			}
+			require.NoError(t, rows.Close())
+		})
+	})
+
+	t.Run("Reclaim", func(t *testing.T) {
+		id := uuid.MakeV4()
+		s1, err := slstorage.MakeSessionID(make([]byte, 100), id)
+		require.NoError(t, err)
+		s2, err := slstorage.MakeSessionID(make([]byte, 200), id)
+		require.NoError(t, err)
+
+		// Insert expired entries into sql_instances.
+		_, err = sqlDB.Exec(`INSERT INTO system.sql_instances (id, addr, session_id, locality, crdb_region) VALUES
+		   		(100, NULL, $1, NULL, 'us-east2'),
+		   		(200, NULL, $2, NULL, 'us-east3')`, s1.UnsafeBytes(), s2.UnsafeBytes())
+		require.NoError(t, err)
+
+		query := `SELECT count(*) FROM system.sql_instances WHERE id = 42`
+
+		// Wait until expired entries get removed.
+		testutils.SucceedsSoon(t, func() error {
+			var rowCount int
+			require.NoError(t, sqlDB.QueryRow(query).Scan(&rowCount))
+			if rowCount != 0 {
+				return errors.New("some regions have not been reclaimed")
+			}
+			return nil
+		})
 	})
 }
 

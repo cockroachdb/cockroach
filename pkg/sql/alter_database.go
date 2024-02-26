@@ -586,10 +586,14 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 	// multi-region primitives in the system database. For now, we also allow
 	// root to perform the various operations to enable testing.
 	if desc.GetID() == keys.SystemDatabaseID {
-		if p.execCfg.Codec.ForSystemTenant() {
+		if multiRegionSystemDatabase := sqlclustersettings.MultiRegionSystemDatabaseEnabled.Get(&p.execCfg.Settings.SV); !multiRegionSystemDatabase &&
+			p.execCfg.Codec.ForSystemTenant() {
 			return pgerror.Newf(
 				pgcode.FeatureNotSupported,
-				"modifying the regions of system database is not supported",
+				"Modifying the regions of system database is not supported. "+
+					"Set up your system database as multi-region using the cluster setting "+
+					"`sql.multiregion.preview_multiregion_system_database.enabled` "+
+					"https://www.cockroachlabs.com/docs/stable/cluster-settings.",
 			)
 		}
 		if u := p.SessionData().User(); !u.IsNodeUser() && !u.IsRootUser() {
