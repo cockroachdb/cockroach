@@ -28,7 +28,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_region", ColumnID: 2 (crdb_region-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnFamilyID: 0 (primary-), ColumnID: 2 (crdb_region-)}
  │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 0}
- │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnID: 2 (crdb_region-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnID: 2 (crdb_region-), Expr: default_to_database_primary_region(gateway_region())::@100106}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
@@ -99,7 +99,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_region", ColumnID: 2 (crdb_region-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnFamilyID: 0 (primary-), ColumnID: 2 (crdb_region-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnNotNull:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 0}
- │    │    │    ├── ABSENT  → PUBLIC ColumnDefaultExpression:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnID: 2 (crdb_region-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnDefaultExpression:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnID: 2 (crdb_region-), Expr: default_to_database_primary_region(gateway_region())::@100106}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
@@ -132,7 +132,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_region", ColumnID: 2 (crdb_region-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnFamilyID: 0 (primary-), ColumnID: 2 (crdb_region-)}
  │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 0}
- │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnID: 2 (crdb_region-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnID: 2 (crdb_region-), Expr: default_to_database_primary_region(gateway_region())::@100106}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}

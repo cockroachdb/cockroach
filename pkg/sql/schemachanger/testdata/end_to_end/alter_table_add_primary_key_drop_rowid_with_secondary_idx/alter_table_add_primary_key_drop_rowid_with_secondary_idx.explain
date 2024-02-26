@@ -345,7 +345,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
            ├── 5 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY           → ABSENT           Column:{DescID: 104 (t), ColumnID: 3 (rowid-)}
            │    ├── PUBLIC                → ABSENT           ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (rowid-)}
-           │    ├── PUBLIC                → ABSENT           ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 3 (rowid-)}
+           │    ├── PUBLIC                → ABSENT           ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 3 (rowid-), Expr: unique_rowid()}
            │    ├── PUBLIC                → ABSENT           IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
            │    └── PUBLIC                → ABSENT           IndexData:{DescID: 104 (t), IndexID: 2 (idx_b-)}
            └── 11 Mutation operations

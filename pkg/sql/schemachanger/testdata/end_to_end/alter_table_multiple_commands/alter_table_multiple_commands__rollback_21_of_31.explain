@@ -109,7 +109,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
            │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 9}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 4 (p-)}
            │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (p-)}
-           │    └── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (p-)}
+           │    └── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (p-), Expr: 30:::INT8}
            └── 11 Mutation operations
                 ├── CreateGCJobForIndex {"IndexID":4,"TableID":104}
                 ├── CreateGCJobForIndex {"IndexID":5,"TableID":104}

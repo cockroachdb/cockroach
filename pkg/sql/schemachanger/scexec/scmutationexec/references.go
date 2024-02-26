@@ -335,6 +335,37 @@ func (i *immediateVisitor) RemoveTableConstraintBackReferencesFromFunctions(
 	return nil
 }
 
+func (i *immediateVisitor) AddTableColumnBackReferencesInFunctions(
+	ctx context.Context, op scop.AddTableColumnBackReferencesInFunctions,
+) error {
+	tblDesc, err := i.checkOutTable(ctx, op.BackReferencedTableID)
+	if err != nil {
+		return err
+	}
+	var fnIDsInUse catalog.DescriptorIDSet
+	if !tblDesc.Dropped() {
+		// If table is dropped then there is no functions in use.
+		fnIDsInUse, err = tblDesc.GetAllReferencedFunctionIDsInColumnExprs(op.BackReferencedColumnID)
+		if err != nil {
+			return err
+		}
+	}
+	for _, id := range op.FunctionIDs {
+		// If the fnIDSInUse are functions that we are not "adding" back in, do nothing.
+		if !fnIDsInUse.Contains(id) {
+			continue
+		}
+		fnDesc, err := i.checkOutFunction(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err = fnDesc.AddColumnReference(op.BackReferencedTableID, op.BackReferencedColumnID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (i *immediateVisitor) RemoveTableColumnBackReferencesInFunctions(
 	ctx context.Context, op scop.RemoveTableColumnBackReferencesInFunctions,
 ) error {

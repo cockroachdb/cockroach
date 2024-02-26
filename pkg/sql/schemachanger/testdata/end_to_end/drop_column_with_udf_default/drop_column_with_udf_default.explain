@@ -155,7 +155,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
            ├── 5 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT           Column:{DescID: 105 (t), ColumnID: 2 (b-)}
            │    ├── PUBLIC      → ABSENT           ColumnType:{DescID: 105 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (b-)}
-           │    ├── PUBLIC      → ABSENT           ColumnDefaultExpression:{DescID: 105 (t), ColumnID: 2 (b-), ReferencedFunctionIDs: [104 (f)]}
+           │    ├── PUBLIC      → ABSENT           ColumnDefaultExpression:{DescID: 105 (t), ColumnID: 2 (b-), Expr: [FUNCTION 100104](), ReferencedFunctionIDs: [104 (f)]}
            │    ├── DELETE_ONLY → ABSENT           PrimaryIndex:{DescID: 105 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
            │    └── PUBLIC      → ABSENT           IndexData:{DescID: 105 (t), IndexID: 1 (t_pkey-)}
            └── 9 Mutation operations

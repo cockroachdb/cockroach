@@ -3316,3 +3316,17 @@ func (p *planner) CanCreateCrossDBSequenceOwnerRef() error {
 	}
 	return nil
 }
+
+// CanCreateCrossDBSequenceRef returns if cross database sequence
+// references are allowed.
+func (p *planner) CanCreateCrossDBSequenceRef() error {
+	if !allowCrossDatabaseSeqReferences.Get(&p.execCfg.Settings.SV) {
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.FeatureNotSupported,
+				"sequence references cannot come from other databases; (see the '%s' cluster setting)",
+				allowCrossDatabaseSeqReferencesSetting),
+			crossDBReferenceDeprecationHint(),
+		)
+	}
+	return nil
+}
