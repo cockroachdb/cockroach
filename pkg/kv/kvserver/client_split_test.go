@@ -873,6 +873,103 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	require.Equal(t, ms, msMerged, "post-merge stats differ from pre-split")
 }
 
+// TestStoreRangeSplitWithConcurrentWrites tests the behavior of splits with
+// concurrent writes; in particular, it ensures that the MVCC stats for the two
+// new ranges are correct.
+//
+// The test writes some data, then initiates a split and pauses it before the
+// EndTxn request with the split trigger is evaluated. Then, it writes some more
+// data, and unpauses the split. The MVCC stats for the two new ranges should
+// agree with a re-computation.
+func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	splitKey := roachpb.Key("b")
+	splitBlocked := make(chan struct{})
+	filter := func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+		if req, ok := request.GetArg(kvpb.EndTxn); ok {
+			et := req.(*kvpb.EndTxnRequest)
+			if tr := et.InternalCommitTrigger.GetSplitTrigger(); tr != nil {
+				if tr.RightDesc.StartKey.Equal(splitKey) {
+					// Signal that the split is blocked.
+					splitBlocked <- struct{}{}
+					// Wait for split to be unblocked.
+					<-splitBlocked
+				}
+			}
+		}
+		return nil
+	}
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableMergeQueue:    true,
+				DisableSplitQueue:    true,
+				TestingRequestFilter: filter,
+			},
+		},
+	})
+
+	defer s.Stopper().Stop(ctx)
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	// Write some initial data to the future LHS.
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("a"), []byte("foo")))
+	require.NoError(t, pErr.GoError())
+	// Write some initial data to the future RHS.
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("c"), []byte("bar")))
+	require.NoError(t, pErr.GoError())
+
+	splitKeyAddr, err := keys.Addr(splitKey)
+	require.NoError(t, err)
+	lhsRepl := store.LookupReplica(splitKeyAddr)
+
+	// Split the range.
+	gSplit := ctxgroup.WithContext(ctx)
+	gSplit.GoCtx(func(ctx context.Context) error {
+		_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKey))
+		return pErr.GoError()
+	})
+
+	// Wait until split is underway.
+	<-splitBlocked
+
+	// Write some more data to both sides.
+	gWrites := ctxgroup.WithContext(ctx)
+	gWrites.GoCtx(func(ctx context.Context) error {
+		_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("aa"), []byte("foo")))
+		return pErr.GoError()
+	})
+	gWrites.GoCtx(func(ctx context.Context) error {
+		_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("cc"), []byte("bar")))
+		return pErr.GoError()
+	})
+	// Wait for the writes to complete.
+	require.Nil(t, gWrites.Wait())
+
+	// Unblock the split.
+	splitBlocked <- struct{}{}
+
+	// Wait for the split to complete.
+	require.Nil(t, gSplit.Wait())
+
+	snap := store.TODOEngine().NewSnapshot()
+	defer snap.Close()
+	lhsStats, err := stateloader.Make(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+	require.NoError(t, err)
+	rhsRepl := store.LookupReplica(splitKeyAddr)
+	rhsStats, err := stateloader.Make(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+	require.NoError(t, err)
+
+	// Stats should agree with re-computation.
+	assertRecomputedStats(t, "LHS after split", snap, lhsRepl.Desc(), lhsStats, s.Clock().PhysicalNow())
+	assertRecomputedStats(t, "RHS after split", snap, rhsRepl.Desc(), rhsStats, s.Clock().PhysicalNow())
+}
+
 // RaftMessageHandlerInterceptor wraps a storage.IncomingRaftMessageHandler. It
 // delegates all methods to the underlying storage.IncomingRaftMessageHandler,
 // except that HandleSnapshot calls receiveSnapshotFilter with the snapshot
