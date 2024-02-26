@@ -1111,7 +1111,7 @@ func rankedCandidateListForAllocation(
 			!options.getIOOverloadOptions().allocateReplicaToCheck(
 				ctx,
 				s,
-				candidateStores.CandidateIOOverloadScores.Mean,
+				candidateStores,
 			) {
 			continue
 		}
@@ -1761,7 +1761,7 @@ func rankedCandidateListForRebalancing(
 				s,
 				// We only wish to compare the IO overload to the
 				// comparable stores average and not the cluster.
-				comparable.candidateSL.CandidateIOOverloadScores.Mean,
+				comparable.candidateSL,
 			)
 			cand.balanceScore = options.balanceScore(comparable.candidateSL, s.Capacity)
 			cand.convergesScore = options.rebalanceToConvergesScore(comparable, s)
@@ -2381,6 +2381,11 @@ type IOOverloadOptions struct {
 	ReplicaEnforcementLevel IOOverloadEnforcementLevel
 	LeaseEnforcementLevel   IOOverloadEnforcementLevel
 
+	// TODO(kvoli): Remove this max protection check after 25.1. In mixed version
+	// clusters, the max IO score is not populated on pre v24.1 nodes. Use the
+	// instantaneous value.
+	UseIOThresholdScoreMax bool
+
 	ReplicaIOOverloadThreshold   float64
 	LeaseIOOverloadThreshold     float64
 	LeaseIOOverloadShedThreshold float64
@@ -2411,13 +2416,29 @@ func ioOverloadCheck(
 	return true, ""
 }
 
+func (o IOOverloadOptions) storeScore(store roachpb.StoreDescriptor) float64 {
+	if o.UseIOThresholdScoreMax {
+		return store.Capacity.IOThresholdScoreMax
+	}
+	score, _ := store.Capacity.IOThreshold.Score()
+	return score
+}
+
+func (o IOOverloadOptions) storeListAvgScore(storeList storepool.StoreList) float64 {
+	if o.UseIOThresholdScoreMax {
+		return storeList.CandidateMaxIOOverloadScores.Mean
+	}
+	return storeList.CandidateIOOverloadScores.Mean
+}
+
 // allocateReplicaToCheck returns true if the store IO overload does not exceed
 // the cluster threshold and mean, or the enforcement level does not prevent
 // replica allocation to IO overloaded stores.
 func (o IOOverloadOptions) allocateReplicaToCheck(
-	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
+	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score, _ := store.Capacity.IOThreshold.Score()
+	score := o.storeScore(store)
+	avg := o.storeListAvgScore(storeList)
 
 	if ok, reason := ioOverloadCheck(score, avg,
 		o.ReplicaIOOverloadThreshold, IOOverloadMeanThreshold,
@@ -2435,9 +2456,10 @@ func (o IOOverloadOptions) allocateReplicaToCheck(
 // exceed the cluster threshold and mean, or the enforcement level does not
 // prevent replica rebalancing to IO overloaded stores.
 func (o IOOverloadOptions) rebalanceReplicaToCheck(
-	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
+	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score, _ := store.Capacity.IOThreshold.Score()
+	score := o.storeScore(store)
+	avg := o.storeListAvgScore(storeList)
 
 	if ok, reason := ioOverloadCheck(score, avg,
 		o.ReplicaIOOverloadThreshold, IOOverloadMeanThreshold,
@@ -2454,9 +2476,10 @@ func (o IOOverloadOptions) rebalanceReplicaToCheck(
 // the cluster threshold and mean, or the enforcement level does not prevent
 // lease transfers to IO overloaded stores.
 func (o IOOverloadOptions) transferLeaseToCheck(
-	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
+	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score, _ := store.Capacity.IOThreshold.Score()
+	score := o.storeScore(store)
+	avg := o.storeListAvgScore(storeList)
 
 	if ok, reason := ioOverloadCheck(score, avg,
 		o.LeaseIOOverloadThreshold, IOOverloadMeanThreshold,
@@ -2474,9 +2497,10 @@ func (o IOOverloadOptions) transferLeaseToCheck(
 // the cluster threshold and mean, or the enforcement level does not prevent
 // existing stores from holidng leases whilst being IO overloaded.
 func (o IOOverloadOptions) existingLeaseCheck(
-	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
+	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score, _ := store.Capacity.IOThreshold.Score()
+	score := o.storeScore(store)
+	avg := o.storeListAvgScore(storeList)
 
 	if ok, reason := ioOverloadCheck(score, avg,
 		o.LeaseIOOverloadShedThreshold, IOOverloadMeanThreshold,

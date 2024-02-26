@@ -68,6 +68,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 					L0NumFiles:              5,
 					L0NumFilesThreshold:     1000,
 				},
+				IOThresholdScoreMax: 0.25,
 			},
 		},
 		{
@@ -87,6 +88,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 					L0NumFiles:              10,
 					L0NumFilesThreshold:     1000,
 				},
+				IOThresholdScoreMax: 0.5,
 			},
 		},
 	}
@@ -145,6 +147,9 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	if expectedNumL0Sublevels := int64(5); desc.Capacity.IOThreshold.L0NumSubLevels != expectedNumL0Sublevels {
 		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedNumL0Sublevels, desc.Capacity.IOThreshold.L0NumFiles)
 	}
+	if expectedIOThresholdScoreMax := 0.25; desc.Capacity.IOThresholdScoreMax != expectedIOThresholdScoreMax {
+		t.Errorf("expected IOThresholdScoreMax %f, but got %f", expectedIOThresholdScoreMax, desc.Capacity.IOThresholdScoreMax)
+	}
 
 	sp.UpdateLocalStoreAfterRebalance(roachpb.StoreID(2), rangeUsageInfo, roachpb.REMOVE_VOTER)
 	desc, ok = sp.GetStoreDescriptor(roachpb.StoreID(2))
@@ -165,6 +170,9 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	}
 	if expectedNumL0Sublevels := int64(10); desc.Capacity.IOThreshold.L0NumSubLevels != expectedNumL0Sublevels {
 		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedNumL0Sublevels, desc.Capacity.IOThreshold.L0NumFiles)
+	}
+	if expectedIOThresholdScoreMax := 0.5; desc.Capacity.IOThresholdScoreMax != expectedIOThresholdScoreMax {
+		t.Errorf("expected IOThresholdScoreMax %f, but got %f", expectedIOThresholdScoreMax, desc.Capacity.IOThresholdScoreMax)
 	}
 
 	sp.UpdateLocalStoresAfterLeaseTransfer(roachpb.StoreID(1), roachpb.StoreID(2), rangeUsageInfo)
