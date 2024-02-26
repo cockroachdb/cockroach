@@ -1025,7 +1025,7 @@ func attachToExistingCluster(
 		}
 		if !opt.skipWipe {
 			if roachtestflags.ClusterWipe {
-				if err := c.WipeE(ctx, l, false /* preserveCerts */, c.All()); err != nil {
+				if err := roachprod.Wipe(ctx, l, c.MakeNodes(c.All()), false /* preserveCerts */); err != nil {
 					return nil, err
 				}
 			} else {
@@ -2292,8 +2292,8 @@ func (c *clusterImpl) Signal(
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
 func (c *clusterImpl) WipeE(
-	ctx context.Context, l *logger.Logger, preserveCerts bool, nodes ...option.Option,
-) error {
+	ctx context.Context, l *logger.Logger, nodes ...option.Option,
+) (retErr error) {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.WipeE")
 	}
@@ -2303,16 +2303,16 @@ func (c *clusterImpl) WipeE(
 	}
 	c.setStatusForClusterOpt("wiping", false, nodes...)
 	defer c.clearStatusForClusterOpt(false)
-	return roachprod.Wipe(ctx, l, c.MakeNodes(nodes...), preserveCerts)
+	return roachprod.Wipe(ctx, l, c.MakeNodes(nodes...), c.IsSecure())
 }
 
 // Wipe is like WipeE, except instead of returning an error, it does
 // c.t.Fatal(). c.t needs to be set.
-func (c *clusterImpl) Wipe(ctx context.Context, preserveCerts bool, nodes ...option.Option) {
+func (c *clusterImpl) Wipe(ctx context.Context, nodes ...option.Option) {
 	if ctx.Err() != nil {
 		return
 	}
-	if err := c.WipeE(ctx, c.l, preserveCerts, nodes...); err != nil {
+	if err := c.WipeE(ctx, c.l, nodes...); err != nil {
 		c.t.Fatal(err)
 	}
 }
@@ -2850,7 +2850,7 @@ func (c *clusterImpl) WipeForReuse(
 		return errors.New("cluster reuse is disabled for local clusters to guarantee a clean slate for each test")
 	}
 	l.PrintfCtx(ctx, "Using existing cluster: %s (arch=%q). Wiping", c.name, c.arch)
-	if err := c.WipeE(ctx, l, false /* preserveCerts */); err != nil {
+	if err := roachprod.Wipe(ctx, l, c.MakeNodes(c.All()), false /* preserveCerts */); err != nil {
 		return err
 	}
 	// We remove the entire shared user directory between tests to ensure we aren't
