@@ -257,7 +257,7 @@ func (og *operationGenerator) valuesViolateUniqueConstraints(
 	ctx context.Context,
 	tx pgx.Tx,
 	tableName *tree.TableName,
-	columns []string,
+	nonGeneratedColNames []string,
 	colInfo []column,
 	rows [][]string,
 ) (bool, codesWithConditions, error) {
@@ -276,8 +276,8 @@ func (og *operationGenerator) valuesViolateUniqueConstraints(
 		hasGenerationError := false
 		// Put values to be inserted into a column name to value map to simplify lookups.
 		columnsToValues := map[string]string{}
-		for i := 0; i < len(columns); i++ {
-			columnsToValues[columns[i]] = row[i]
+		for i := 0; i < len(nonGeneratedColNames); i++ {
+			columnsToValues[nonGeneratedColNames[i]] = row[i]
 		}
 		newCols := make(map[string]string)
 		// Resolve any generated expressions, which have been validated earlier.
@@ -533,7 +533,7 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 	ctx context.Context,
 	tx pgx.Tx,
 	tableName *tree.TableName,
-	columns []string,
+	nonGeneratedColNames []string,
 	colInfos []column,
 	row []string,
 ) (
@@ -544,8 +544,8 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 ) {
 	// Put values to be inserted into a column name to value map to simplify lookups.
 	columnsToValues := map[string]string{}
-	for i := 0; i < len(columns); i++ {
-		columnsToValues[columns[i]] = row[i]
+	for i := 0; i < len(nonGeneratedColNames); i++ {
+		columnsToValues[nonGeneratedColNames[i]] = row[i]
 	}
 	nullViolationAdded := false
 	validateExpression := func(expr string, typ string, isNullable bool, addGenerated bool) error {
@@ -1059,21 +1059,25 @@ func (og *operationGenerator) checkAndAdjustForUnknownSchemaErrors(err error) er
 
 // violatesFkConstraints checks if the rows to be inserted will result in a foreign key violation.
 func (og *operationGenerator) violatesFkConstraints(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columns []string, rows [][]string,
+	ctx context.Context,
+	tx pgx.Tx,
+	tableName *tree.TableName,
+	nonGeneratedColNames []string,
+	rows [][]string,
 ) (bool, error) {
+	// TODO(annie): readd the join on active constraints once #120702 is resolved.
+	//
+	// N.B. We add random noise to column names that makes it hard to just directly call on these names. This is
+	// not the case with table/schema names; thus, only column names are quote_ident'ed to ensure that they get
+	// referenced properly.
 	fkConstraints, err := og.scanStringArrayRows(ctx, tx, fmt.Sprintf(`
-		SELECT array[parent.table_schema, parent.table_name, parent.column_name, child.column_name]
+		SELECT array[parent.table_schema, parent.table_name, quote_ident(parent.column_name), quote_ident(child.column_name)]
 		  FROM (
 		        SELECT conname, conkey, confkey, conrelid, confrelid
 		          FROM pg_constraint
 		         WHERE contype = 'f'
 		           AND conrelid = '%s'::REGCLASS::INT8
 		       ) AS con
-			JOIN ( SELECT CONSTRAINT_NAME from information_schema.table_constraints 
-				      WHERE table_schema ='%s' AND
-								    table_name='%s' AND
-										(crdb_internal.is_constraint_active('%s', constraint_name) = true)
-           ) AS tc ON conname = tc.CONSTRAINT_NAME
 		  JOIN (
 		        SELECT column_name, ordinal_position, column_default
 		          FROM information_schema.columns
@@ -1094,7 +1098,7 @@ func (og *operationGenerator) violatesFkConstraints(
 		                       AND con.confrelid = parent.oid
 		                      )
 		 WHERE child.column_name != 'rowid';
-`, tableName.String(), tableName.Schema(), tableName.Object(), tableName.String(), tableName.Schema(), tableName.Object()))
+`, tableName.String(), tableName.Schema(), tableName.Object()))
 	if err != nil {
 		return false, og.checkAndAdjustForUnknownSchemaErrors(err)
 	}
@@ -1102,9 +1106,11 @@ func (og *operationGenerator) violatesFkConstraints(
 	// Maps a column name to its index. This way, the value of a column in a row can be looked up
 	// using row[colToIndexMap["columnName"]] = "valueForColumn"
 	columnNameToIndexMap := map[string]int{}
-	for i, name := range columns {
+
+	for i, name := range nonGeneratedColNames {
 		columnNameToIndexMap[name] = i
 	}
+
 	for _, row := range rows {
 		for _, constraint := range fkConstraints {
 			parentTableSchema := constraint[0]
@@ -1142,12 +1148,16 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	parentTableSchema, parentTableName, parentColumn, childColumn string,
 	childTableName *tree.TableName,
 	parentAndChildAreSameTable bool,
-	row []string,
+	rowToInsert []string,
 	allRows [][]string,
 ) (bool, error) {
 
+	childIndex, ok := columnNameToIndexMap[childColumn]
+	if !ok {
+		return false, errors.Newf("child column %s does not exist in table %s", childColumn, childTableName)
+	}
+	childValue := rowToInsert[childIndex]
 	// If the value to insert in the child column is NULL and the column default is NULL, then it is not possible to have a fk violation.
-	childValue := row[columnNameToIndexMap[childColumn]]
 	if childValue == "NULL" {
 		return false, nil
 	}
@@ -1159,28 +1169,38 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 		if err != nil {
 			return false, err
 		}
-		// Put values to be inserted into a column name to value map to simplify lookups.
-		columnsToValues := map[string]string{}
-		for name, idx := range columnNameToIndexMap {
-			columnsToValues[name] = row[idx]
-		}
-		colIdx := 0
-		for idx, colInfo := range colsInfo {
+
+		var parentColInfo *column
+		for _, colInfo := range colsInfo {
 			if colInfo.name == parentColumn {
-				colIdx = idx
+				parentColInfo = &colInfo
 				break
 			}
 		}
+		if parentColInfo == nil {
+			return false, errors.Newf("column %s not found in columns for %s", parentColumn, childTableName)
+		}
+
 		for _, otherRow := range allRows {
-			parentValueInSameInsert := otherRow[columnNameToIndexMap[parentColumn]]
-			// If the parent column is generated, spend time to generate the value.
-			if colsInfo[colIdx].generated {
-				var err error
-				parentValueInSameInsert, err = og.generateColumn(ctx, tx, colsInfo[colIdx], columnsToValues)
+			var parentValueInSameInsert string
+			if parentColInfo.generated {
+				// If the parent column is a computed column, spend time to generate the value.
+				columnsToValues := map[string]string{}
+				for name, idx := range columnNameToIndexMap {
+					columnsToValues[name] = rowToInsert[idx]
+				}
+				parentValueInSameInsert, err = og.generateColumn(ctx, tx, colsInfo[parentColInfo.ordinal], columnsToValues)
 				if err != nil {
 					return false, err
 				}
+			} else {
+				parentIdx, ok := columnNameToIndexMap[parentColumn]
+				if !ok {
+					return false, errors.Newf("parent column %s does not exist in table %s", parentColumn, childTableName)
+				}
+				parentValueInSameInsert = otherRow[parentIdx]
 			}
+
 			// Skip over NULL values.
 			if parentValueInSameInsert == "NULL" {
 				continue
@@ -1198,7 +1218,7 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	    SELECT %s count(*) = 0 from %s.%s
 	    WHERE %s = (%s)
 	`,
-		checkSharedParentChildRows, parentTableSchema, parentTableName, tree.NameString(parentColumn), childValue)
+		checkSharedParentChildRows, parentTableSchema, parentTableName, parentColumn, childValue)
 	return og.scanBool(ctx, tx, q)
 }
 
