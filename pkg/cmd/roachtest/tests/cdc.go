@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1606,8 +1607,17 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
+			// cdc/kafka-topics tests that sarama clients only fetches metadata for
+			// topics that changefeeds need but not for all topics on the kafka
+			// cluster. The test verifies the work by 1. creating lots of random kafka
+			// topics on the kafka cluster 2. running some tpcc workload with a
+			// changefeed configured to watch all tpcc tables (note that cdc creates
+			// kafka topics for every target tables internally) 3. assert that
+			// changefeed only fetches metadata for tpcc tables but not for other
+			// random topics created in 1.
+
 			// Run minimal level of tpcc workload and changefeed.
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30s"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "1m"})
 
 			kafka, cleanup := setupKafka(ctx, t, c, c.Node(c.Spec().NodeCount))
 			defer cleanup()
@@ -1616,8 +1626,7 @@ func registerCDC(r registry.Registry) {
 			defer stopFeeds(db)
 			const ignoreTopicPrefix = "ignore_topic_do_not_fetch"
 
-			// Create lots of topics and make sure that sarama client is not fetching
-			// metadata for all.
+			// Create random topics on kafka cluster.
 			t.Status("creating kafka topics")
 			for i := 0; i < 100; i++ {
 				if err := kafka.createTopic(ctx, ignoreTopicPrefix+fmt.Sprintf("%d", i)); err != nil {
@@ -1625,44 +1634,61 @@ func registerCDC(r registry.Registry) {
 				}
 			}
 
+			// Run changefeed configured to watch all tpcc tables.
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
 				targets:  allTpccTargets,
-				opts:     map[string]string{"initial_scan": "'only'"},
 			})
 			feed.waitForCompletion()
+			ct.waitForWorkload()
 
-			// Check logs on cockroach nodes (skip the last node running workload and
-			// kafka). This test verifies that sarama does mot fetch metadata for all
-			// topics but fetch metadata only for a minimal set of necessary topics.
-			// client/metadata fetching metadata for all topics from broker
-			results, err := ct.cluster.RunWithDetails(ct.ctx, t.L(),
-				option.WithNodes(ct.cluster.Range(1, c.Spec().NodeCount-1)),
-				"grep \"client/metadata fetching metadata for\" logs/cockroach.log")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(results) != 3 {
-				t.Fatal("expected three nodes")
-			}
+			testutils.SucceedsWithin(t, func() error {
+				// Check logs on cockroach nodes (skip the last node running workload
+				// and kafka). We are looking for logs that begin with "client/metadata
+				// fetching metadata for". This is a log line outputted from
+				// sarama/client.go.tryRefreshMetadata which tells us what topics are
+				// being fetched for metadata. We expect to see logs for tpcc tables but
+				// not for random topics.
+				results, err := ct.cluster.RunWithDetails(ct.ctx, t.L(),
+					option.WithNodes(ct.cluster.Range(1, c.Spec().NodeCount-1)),
+					"grep \"client/metadata fetching metadata for\" logs/cockroach.log")
+				if err != nil {
+					t.Fatal(err)
+				}
 
-			// This test verifies that sarama is not fetching metadata for all topics
-			// or fetching metadata for topics with ignore_topic_do_not_fetch prefix
-			// but fetching metadata for tpcc target tables.
-			for _, res := range results {
-				if strings.Contains(res.Stdout, ignoreTopicPrefix) {
-					t.Fatalf("did not expect to fetch metadata for %s", ignoreTopicPrefix)
+				pass := func(str string) error {
+					// We do not expect to see fetching metadata for any topics with
+					// ignoreTopicPrefix.
+					if strings.Contains(str, ignoreTopicPrefix) {
+						return errors.Newf("did not expect to fetch metadata for %s", ignoreTopicPrefix)
+					}
+
+					// We do not expect to see fetching metadata for all topics.
+					if strings.Contains(str, "all topics") {
+						return errors.New("did not expect to fetch metadata for all topics")
+					}
+					for _, target := range allTpccTargets {
+						trimmedTargetName := strings.TrimPrefix(target, `tpcc.`)
+						// Make sure we are actually fetching metadata for tpcc topics.
+						if !strings.Contains(str, trimmedTargetName) {
+							return errors.Newf("expected fetching metadata for %s but did not", trimmedTargetName)
+						}
+					}
+					return nil
 				}
-				if strings.Contains(res.Stdout, "all topics") {
-					t.Fatal("did not expect to fetch metadata for all topics")
+
+				if len(results) != 3 {
+					t.Fatal("expected three nodes")
 				}
-				for _, target := range allTpccTargets {
-					trimmedTargetName := strings.TrimPrefix(target, `tpcc.`)
-					if !strings.Contains(res.Stdout, trimmedTargetName) {
-						t.Fatalf("expected fetching metadata for %s but did not", trimmedTargetName)
+				for _, res := range results {
+					// Note that we are not sure which node is running the changefeed, so
+					// we assert that at least one node passes the check.
+					if err = pass(res.Stdout); err == nil {
+						return nil
 					}
 				}
-			}
+				return err
+			}, time.Minute)
 		},
 	})
 	r.Add(registry.TestSpec{
