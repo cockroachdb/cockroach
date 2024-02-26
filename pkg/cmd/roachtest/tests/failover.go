@@ -207,6 +207,9 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	// Create cluster, and set up failers for all failure modes.
 	opts := option.DefaultStartOpts()
 	opts.RoachprodOpts.ScheduleBackups = false
+	restartOpts := option.DefaultStartOpts()
+	restartOpts.RoachprodOpts.ScheduleBackups = false
+	restartOpts.RoachprodOpts.SkipInit = true
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
@@ -215,7 +218,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	failers := []Failer{}
 	for _, failureMode := range allFailureModes {
-		failer := makeFailerWithoutLocalNoop(t, c, m, failureMode, opts, settings, rng)
+		failer := makeFailerWithoutLocalNoop(t, c, m, failureMode, restartOpts, settings, rng)
 		if c.IsLocal() && !failer.CanUseLocal() {
 			t.L().Printf("skipping failure mode %q on local cluster", failureMode)
 			continue
