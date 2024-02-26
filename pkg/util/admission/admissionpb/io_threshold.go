@@ -30,6 +30,10 @@ import (
 // to compactions falling behind (though that may change if we increase the
 // max number of compactions). And we will need to incorporate overload due to
 // disk bandwidth bottleneck.
+//
+// NOTE: Future updates to the scoring function should be version gated as the
+// threshold is gossiped and used to determine lease/replica placement via the
+// allocator.
 func (iot *IOThreshold) Score() (float64, bool) {
 	// iot.L0NumFilesThreshold and iot.L0NumSubLevelsThreshold are initialized to
 	// 0 by default, and there appears to be a period of time before we update

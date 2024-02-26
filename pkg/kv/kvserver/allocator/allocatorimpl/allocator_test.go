@@ -349,22 +349,22 @@ var oneStoreHighIOOverload = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
 		Node:     roachpb.NodeDescriptor{NodeID: 1},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
 	},
 	{
 		StoreID:  2,
 		Node:     roachpb.NodeDescriptor{NodeID: 2},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1800, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1800, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
 	},
 	{
 		StoreID:  3,
 		Node:     roachpb.NodeDescriptor{NodeID: 3},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 5)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 5)},
 	},
 	{
 		StoreID:  4,
 		Node:     roachpb.NodeDescriptor{NodeID: 4},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
 	},
 }
 
@@ -372,17 +372,17 @@ var allStoresHighIOOverload = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
 		Node:     roachpb.NodeDescriptor{NodeID: 1},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
 	},
 	{
 		StoreID:  2,
 		Node:     roachpb.NodeDescriptor{NodeID: 2},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
 	},
 	{
 		StoreID:  3,
 		Node:     roachpb.NodeDescriptor{NodeID: 3},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
 	},
 }
 
@@ -390,17 +390,17 @@ var allStoresHighIOOverloadSkewed = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
 		Node:     roachpb.NodeDescriptor{NodeID: 1},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
 	},
 	{
 		StoreID:  2,
 		Node:     roachpb.NodeDescriptor{NodeID: 2},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 50)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 50)},
 	},
 	{
 		StoreID:  3,
 		Node:     roachpb.NodeDescriptor{NodeID: 3},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 55)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 55)},
 	},
 }
 
@@ -408,27 +408,27 @@ var threeStoresHighIOOverloadAscRangeCount = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
 		Node:     roachpb.NodeDescriptor{NodeID: 1},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 100, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 100, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
 	},
 	{
 		StoreID:  2,
 		Node:     roachpb.NodeDescriptor{NodeID: 2},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 400, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 400, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
 	},
 	{
 		StoreID:  3,
 		Node:     roachpb.NodeDescriptor{NodeID: 3},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1600, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
 	},
 	{
 		StoreID:  4,
 		Node:     roachpb.NodeDescriptor{NodeID: 4},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 6400, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 6400, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 10)},
 	},
 	{
 		StoreID:  5,
 		Node:     roachpb.NodeDescriptor{NodeID: 5},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 25000, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 25000, IOThresholdMax: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 10)},
 	},
 }
 
@@ -2081,8 +2081,8 @@ func TestAllocatorTransferLeaseTargetIOOverloadCheck(t *testing.T) {
 					StoreID: roachpb.StoreID(i + 1),
 					Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)},
 					Capacity: roachpb.StoreCapacity{
-						LeaseCount:  int32(tc.leaseCounts[i]),
-						IOThreshold: TestingIOThresholdWithScore(tc.IOScores[i]),
+						LeaseCount:     int32(tc.leaseCounts[i]),
+						IOThresholdMax: TestingIOThresholdWithScore(tc.IOScores[i]),
 					},
 				}
 			}
@@ -2912,8 +2912,8 @@ func TestAllocatorShouldTransferLeaseIOOverload(t *testing.T) {
 					StoreID: roachpb.StoreID(i + 1),
 					Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)},
 					Capacity: roachpb.StoreCapacity{
-						LeaseCount:  int32(tc.leaseCounts[i]),
-						IOThreshold: TestingIOThresholdWithScore(tc.IOScores[i]),
+						LeaseCount:     int32(tc.leaseCounts[i]),
+						IOThresholdMax: TestingIOThresholdWithScore(tc.IOScores[i]),
 					},
 				}
 			}
@@ -4698,7 +4698,11 @@ func TestAllocatorRebalanceIOOverloadCheck(t *testing.T) {
 			sg.GossipStores(test.stores, t)
 			// Enable read disk health checking in candidate exclusion.
 			options := a.ScorerOptions(ctx)
-			options.IOOverloadOptions = IOOverloadOptions{ReplicaEnforcementLevel: test.enforcement, ReplicaIOOverloadThreshold: 1}
+			options.IOOverloadOptions = IOOverloadOptions{
+				ReplicaEnforcementLevel:    test.enforcement,
+				ReplicaIOOverloadThreshold: 1,
+				UseIOThresholdMax:          true,
+			}
 			add, remove, _, ok := a.RebalanceVoter(
 				ctx,
 				sp,

@@ -319,7 +319,7 @@ func TestDataDriven(t *testing.T) {
 				capacityOverride.Capacity = capacity
 				capacityOverride.Available = available
 				if ioThreshold != -1 {
-					capacityOverride.IOThreshold = allocatorimpl.TestingIOThresholdWithScore(ioThreshold)
+					capacityOverride.IOThresholdMax = allocatorimpl.TestingIOThresholdWithScore(ioThreshold)
 				}
 				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetCapacityOverrideEvent{
 					StoreID:          state.StoreID(store),
