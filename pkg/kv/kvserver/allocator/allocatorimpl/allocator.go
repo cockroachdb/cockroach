@@ -2120,7 +2120,7 @@ func (a *Allocator) nonIOOverloadedLeaseTargets(
 		// Instead, we create a buffer between the two to avoid leases moving back
 		// and forth.
 		if (replDesc.StoreID == leaseStoreID) &&
-			(!ok || !ioOverloadOptions.existingLeaseCheck(ctx, store, sl)) {
+			(!ok || !ioOverloadOptions.ExistingLeaseCheck(ctx, store, sl)) {
 			continue
 		}
 
@@ -2156,7 +2156,7 @@ func (a *Allocator) leaseholderShouldMoveDueToIOOverload(
 	// overloaded.
 	for _, replDesc := range existingReplicas {
 		if store, ok := sl.FindStoreByID(replDesc.StoreID); ok && replDesc.StoreID == leaseStoreID {
-			return !ioOverloadOptions.existingLeaseCheck(ctx, store, sl)
+			return !ioOverloadOptions.ExistingLeaseCheck(ctx, store, sl)
 		}
 	}
 
