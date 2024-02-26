@@ -2295,7 +2295,7 @@ func (u *CommonTestUtils) resetCluster(
 ) error {
 	l.Printf("resetting cluster using version %q", version.String())
 	expectDeathsFn(len(u.roachNodes))
-	if err := u.cluster.WipeE(ctx, l, true /* preserveCerts */, u.roachNodes); err != nil {
+	if err := u.cluster.WipeE(ctx, l, u.roachNodes); err != nil {
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
 

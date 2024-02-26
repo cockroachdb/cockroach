@@ -82,7 +82,7 @@ func runMultiTenantTPCH(
 
 	// Restart and wipe the cluster to remove advantage of the second TPCH run.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts())
-	c.Wipe(ctx, secure)
+	c.Wipe(ctx)
 	start()
 	singleTenantConn = c.Conn(ctx, t.L(), 1)
 	// Disable merge queue in the system tenant.

@@ -247,7 +247,7 @@ func registerAutoUpgrade(r registry.Registry) {
 
 		// Wipe n3 to exclude it from the dead node check the roachtest harness
 		// will perform after the test.
-		c.Wipe(ctx, false /* preserveCerts */, c.Node(nodeDecommissioned))
+		c.Wipe(ctx, c.Node(nodeDecommissioned))
 	}
 
 	r.Add(registry.TestSpec{
