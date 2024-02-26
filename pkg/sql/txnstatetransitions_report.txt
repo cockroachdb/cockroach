@@ -14,6 +14,8 @@ Aborted{WasUpgraded:false}
 	missing events:
 		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
+		TxnFinishAbortedPLpgSQL{}
+		TxnFinishCommittedPLpgSQL{}
 		TxnFinishCommitted{}
 		TxnReleased{}
 		TxnStart{ImplicitTxn:false}
@@ -33,6 +35,8 @@ Aborted{WasUpgraded:true}
 	missing events:
 		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
+		TxnFinishAbortedPLpgSQL{}
+		TxnFinishCommittedPLpgSQL{}
 		TxnFinishCommitted{}
 		TxnReleased{}
 		TxnStart{ImplicitTxn:false}
@@ -51,7 +55,9 @@ CommitWait{}
 		SavepointRollback{}
 		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
+		TxnFinishAbortedPLpgSQL{}
 		TxnFinishAborted{}
+		TxnFinishCommittedPLpgSQL{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnStart{ImplicitTxn:false}
@@ -71,7 +77,9 @@ NoTxn{}
 		SavepointRollback{}
 		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
+		TxnFinishAbortedPLpgSQL{}
 		TxnFinishAborted{}
+		TxnFinishCommittedPLpgSQL{}
 		TxnFinishCommitted{}
 		TxnReleased{}
 		TxnRestart{}
@@ -92,6 +100,8 @@ Open{ImplicitTxn:false, WasUpgraded:false}
 		TxnRestart{}
 	missing events:
 		SavepointRollback{}
+		TxnFinishAbortedPLpgSQL{}
+		TxnFinishCommittedPLpgSQL{}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
 		TxnUpgradeToExplicit{}
@@ -111,6 +121,8 @@ Open{ImplicitTxn:false, WasUpgraded:true}
 		TxnRestart{}
 	missing events:
 		SavepointRollback{}
+		TxnFinishAbortedPLpgSQL{}
+		TxnFinishCommittedPLpgSQL{}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
 		TxnUpgradeToExplicit{}
@@ -123,7 +135,9 @@ Open{ImplicitTxn:true, WasUpgraded:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		TxnCommittedDueToDDL{}
+		TxnFinishAbortedPLpgSQL{}
 		TxnFinishAborted{}
+		TxnFinishCommittedPLpgSQL{}
 		TxnFinishCommitted{}
 		TxnUpgradeToExplicit{}
 	missing events:
@@ -148,6 +162,8 @@ Open{ImplicitTxn:true, WasUpgraded:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
 		TxnCommittedWithShowCommitTimestamp{}
+		TxnFinishAbortedPLpgSQL{}
+		TxnFinishCommittedPLpgSQL{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnStart{ImplicitTxn:false}

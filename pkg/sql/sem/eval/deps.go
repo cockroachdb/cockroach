@@ -233,6 +233,13 @@ type Planner interface {
 		ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 	) ValueGenerator
 
+	// EvalTxnControlExpr produces the side effects of a COMMIT or ROLLBACK
+	// statement within a PL/pgSQL stored procedure. See the sql.planner
+	// implementation for details.
+	EvalTxnControlExpr(
+		ctx context.Context, expr *tree.TxnControlExpr, args tree.Datums,
+	) (tree.Datum, error)
+
 	// GenerateTestObjects is used to generate a large number of
 	// objets quickly.
 	// Note: we pass parameters as a string to avoid a package
