@@ -7,6 +7,10 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT);
 ----
 
 exec-ddl
+CREATE TABLE txn_timestamps (ts TIMESTAMP);
+----
+
+exec-ddl
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
     RETURN a;
@@ -6256,3 +6260,110 @@ project
                      │                                                                                                        └── projections
                      │                                                                                                             └── variable: outer_quantity:6 [as=stmt_return_6:8]
                      └── const: 1
+
+# Use TxnControlExpr to COMMIT or ROLLBACK the current transaction, then
+# continue from the new transaction.
+exec-ddl
+CREATE OR REPLACE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO txn_timestamps VALUES (now());
+    COMMIT;
+    INSERT INTO txn_timestamps VALUES (now());
+    ROLLBACK;
+    INSERT INTO txn_timestamps VALUES (now());
+  END;
+$$;
+----
+
+build format=show-scalars
+CALL p();
+----
+call
+ └── procedure: p
+      └── body
+           └── limit
+                ├── columns: "_stmt_exec_1":24
+                ├── project
+                │    ├── columns: "_stmt_exec_1":24
+                │    ├── values
+                │    │    └── tuple
+                │    └── projections
+                │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":24]
+                │              └── body
+                │                   ├── insert txn_timestamps
+                │                   │    ├── columns: <none>
+                │                   │    ├── insert-mapping:
+                │                   │    │    ├── column1:5 => ts:1
+                │                   │    │    └── rowid_default:6 => rowid:2
+                │                   │    └── project
+                │                   │         ├── columns: rowid_default:6 column1:5
+                │                   │         ├── values
+                │                   │         │    ├── columns: column1:5
+                │                   │         │    └── tuple
+                │                   │         │         └── function: now
+                │                   │         └── projections
+                │                   │              └── function: unique_rowid [as=rowid_default:6]
+                │                   └── project
+                │                        ├── columns: "_stmt_commit_2":23
+                │                        ├── barrier
+                │                        │    └── values
+                │                        │         └── tuple
+                │                        └── projections
+                │                             └── COMMIT; CALL _stmt_commit_2 [as="_stmt_commit_2":23]
+                │                                  └── body
+                │                                       └── project
+                │                                            ├── columns: "_stmt_exec_3":22
+                │                                            ├── values
+                │                                            │    └── tuple
+                │                                            └── projections
+                │                                                 └── udf: _stmt_exec_3 [as="_stmt_exec_3":22]
+                │                                                      └── body
+                │                                                           ├── insert txn_timestamps
+                │                                                           │    ├── columns: <none>
+                │                                                           │    ├── insert-mapping:
+                │                                                           │    │    ├── column1:11 => ts:7
+                │                                                           │    │    └── rowid_default:12 => rowid:8
+                │                                                           │    └── project
+                │                                                           │         ├── columns: rowid_default:12 column1:11
+                │                                                           │         ├── values
+                │                                                           │         │    ├── columns: column1:11
+                │                                                           │         │    └── tuple
+                │                                                           │         │         └── function: now
+                │                                                           │         └── projections
+                │                                                           │              └── function: unique_rowid [as=rowid_default:12]
+                │                                                           └── project
+                │                                                                ├── columns: "_stmt_rollback_4":21
+                │                                                                ├── barrier
+                │                                                                │    └── values
+                │                                                                │         └── tuple
+                │                                                                └── projections
+                │                                                                     └── ROLLBACK; CALL _stmt_rollback_4 [as="_stmt_rollback_4":21]
+                │                                                                          └── body
+                │                                                                               └── project
+                │                                                                                    ├── columns: "_stmt_exec_5":20
+                │                                                                                    ├── values
+                │                                                                                    │    └── tuple
+                │                                                                                    └── projections
+                │                                                                                         └── udf: _stmt_exec_5 [as="_stmt_exec_5":20]
+                │                                                                                              └── body
+                │                                                                                                   ├── insert txn_timestamps
+                │                                                                                                   │    ├── columns: <none>
+                │                                                                                                   │    ├── insert-mapping:
+                │                                                                                                   │    │    ├── column1:17 => ts:13
+                │                                                                                                   │    │    └── rowid_default:18 => rowid:14
+                │                                                                                                   │    └── project
+                │                                                                                                   │         ├── columns: rowid_default:18 column1:17
+                │                                                                                                   │         ├── values
+                │                                                                                                   │         │    ├── columns: column1:17
+                │                                                                                                   │         │    └── tuple
+                │                                                                                                   │         │         └── function: now
+                │                                                                                                   │         └── projections
+                │                                                                                                   │              └── function: unique_rowid [as=rowid_default:18]
+                │                                                                                                   └── project
+                │                                                                                                        ├── columns: stmt_return_6:19
+                │                                                                                                        ├── values
+                │                                                                                                        │    └── tuple
+                │                                                                                                        └── projections
+                │                                                                                                             └── cast: VOID [as=stmt_return_6:19]
+                │                                                                                                                  └── null
+                └── const: 1
