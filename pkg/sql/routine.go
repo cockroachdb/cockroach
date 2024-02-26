@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -605,4 +606,54 @@ func (h *plpgsqlCursorHelper) Types() colinfo.ResultColumns {
 // HasResults implements the isql.Rows interface.
 func (h *plpgsqlCursorHelper) HasResults() bool {
 	return h.lastRow != nil
+}
+
+// storedProcTxnStateAccessor provides a method for stored procedures to request
+// that the current transaction be committed or aborted and supply a
+// continuation stored procedure to resume execution in the new transaction.
+type storedProcTxnStateAccessor struct {
+	ex *connExecutor
+}
+
+func (a *storedProcTxnStateAccessor) setStoredProcTxnState(
+	txnOp tree.StoredProcTxnOp, resumeProc *memo.Memo,
+) {
+	if a.ex == nil {
+		panic(errors.AssertionFailedf("setStoredProcTxnState is not supported without connExecutor"))
+	}
+	a.ex.extraTxnState.storedProcTxnState.txnOp = txnOp
+	a.ex.extraTxnState.storedProcTxnState.resumeProc = resumeProc
+}
+
+func (a *storedProcTxnStateAccessor) getResumeProc() *memo.Memo {
+	if a.ex == nil {
+		return nil
+	}
+	return a.ex.extraTxnState.storedProcTxnState.resumeProc
+}
+
+// EvalTxnControlExpr produces the side effects of a COMMIT or ROLLBACK
+// statement within a PL/pgSQL stored procedure. It directs the connExecutor to
+// either commit or abort the current transaction, and provides a plan for a
+// "continuation" stored procedure which will resume execution in the new
+// transaction.
+//
+// EvalTxnControlExpr returns NULL, but this result is simply discarded without
+// being examined or modified when the transaction finishes.
+func (p *planner) EvalTxnControlExpr(
+	ctx context.Context, expr *tree.TxnControlExpr, args tree.Datums,
+) (tree.Datum, error) {
+	if !p.EvalContext().TxnImplicit {
+		// Transaction control statements are not allowed in explicit transactions.
+		return nil, errors.WithDetail(
+			pgerror.Newf(pgcode.InvalidTransactionTermination, "invalid transaction termination"),
+			"PL/pgSQL COMMIT/ROLLBACK is not allowed in an explicit transaction",
+		)
+	}
+	resumeProc, err := expr.Gen(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	p.storedProcTxnState.setStoredProcTxnState(expr.Op, resumeProc.(*memo.Memo))
+	return tree.DNull, nil
 }
