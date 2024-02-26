@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
@@ -319,7 +318,7 @@ func TestDataDriven(t *testing.T) {
 				capacityOverride.Capacity = capacity
 				capacityOverride.Available = available
 				if ioThreshold != -1 {
-					capacityOverride.IOThreshold = allocatorimpl.TestingIOThresholdWithScore(ioThreshold)
+					capacityOverride.IOThresholdScoreMax = ioThreshold
 				}
 				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetCapacityOverrideEvent{
 					StoreID:          state.StoreID(store),
