@@ -139,15 +139,6 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 	for _, cancel := range cancels {
 		cancel()
 	}
-	// We should be able to assert on the throughput not dropping beyond a
-	// certain % of the throughput prior to limiting a node's capacity.
-	//
-	// TODO(kvoli): Currently this test will fail an assertion that the final QPS
-	// will be >50% of the pre-limit QPS. Once we begin shedding leases off the
-	// limited node, this assertion would pass. Add in these assertions once
-	// shedding is done, or alternatively enable the test weekly and export the
-	// relative QPS to roachperf. Two potential assertions are:
-	//
-	//   (a) expect throughput to not drop by more than X%
-	//   (b) measure the throughput at set marks (10s, 30s, 1m, 5m) and assert.
+	// Expect that the relative QPS is at least 90% of the starting QPS.
+	require.GreaterOrEqual(t, qpsRelative, 0.9)
 }
