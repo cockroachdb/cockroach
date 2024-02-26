@@ -714,7 +714,7 @@ func registerKVScalability(r registry.Registry) {
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
 			i := i // capture loop variable
-			c.Wipe(ctx, false /* preserveCerts */, c.Range(1, nodes))
+			c.Wipe(ctx, c.Range(1, nodes))
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 			t.Status("running workload")

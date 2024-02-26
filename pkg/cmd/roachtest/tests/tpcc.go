@@ -1351,7 +1351,7 @@ func loadTPCCBench(
 
 		// If the dataset exists but is not large enough, wipe the cluster
 		// before restoring.
-		c.Wipe(ctx, false /* preserveCerts */, roachNodes)
+		c.Wipe(ctx, roachNodes)
 		startOpts, settings := b.startOpts()
 		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&

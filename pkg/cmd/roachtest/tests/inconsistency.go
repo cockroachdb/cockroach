@@ -161,5 +161,5 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// roachtest checks that no nodes are down when the test finishes, but in this
 	// case we have a down node that we can't restart. Remove the data dir, which
 	// tells roachtest to ignore this node.
-	c.Wipe(ctx, false /* preserveCerts */, c.Node(1))
+	c.Wipe(ctx, c.Node(1))
 }
