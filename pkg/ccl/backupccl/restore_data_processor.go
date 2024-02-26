@@ -40,9 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -382,6 +384,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		readAsOfIter := storage.NewReadAsOfIterator(iter, rd.spec.RestoreTime)
 
 		cleanup := func() {
+			log.VInfof(ctx, 1, "finished with and closing %d files in span %d [%s-%s)", len(entry.Files), entry.ProgressIdx, entry.Span.Key, entry.Span.EndKey)
 			readAsOfIter.Close()
 			rd.qp.Release(iterAllocs...)
 
@@ -403,7 +406,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		return mSST, nil
 	}
 
-	log.VEventf(ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
+	log.VEventf(ctx, 1, "ingesting %d files in span %d [%s-%s)", len(entry.Files), entry.ProgressIdx, entry.Span.Key, entry.Span.EndKey)
 
 	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
 	iterAllocs := make([]*quotapool.IntAlloc, 0, len(entry.Files))
@@ -494,6 +497,10 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 	ctx context.Context, entries chan execinfrapb.RestoreSpanEntry,
 ) error {
 	return ctxgroup.GroupWorkers(ctx, rd.numWorkers, func(ctx context.Context, worker int) error {
+		ctx = logtags.AddTag(ctx, "restore-worker", worker)
+		ctx, undo := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+		defer undo()
+
 		kr, err := MakeKeyRewriterFromRekeys(rd.FlowCtx.Codec(), rd.spec.TableRekeys, rd.spec.TenantRekeys,
 			false /* restoreTenantFromStream */)
 		if err != nil {
@@ -508,6 +515,12 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 					done = true
 					return done, nil
 				}
+
+				ctx := logtags.AddTag(ctx, "restore-span", entry.ProgressIdx)
+				ctx, undo := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+				defer undo()
+				ctx, sp := tracing.ChildSpan(ctx, "restore.processRestoreSpanEntry")
+				defer sp.Finish()
 
 				var res *resumeEntry
 				for {
