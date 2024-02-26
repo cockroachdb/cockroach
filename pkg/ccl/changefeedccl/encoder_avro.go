@@ -147,8 +147,10 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 	v, ok := e.keyCache.Get(cacheKey)
 	if ok {
 		registered = v.(confluentRegisteredKeySchema)
-		if err := registered.schema.refreshTypeMetadata(row); err != nil {
-			return nil, err
+		if registered.schema != nil {
+			if err := registered.schema.refreshTypeMetadata(row); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		var err error
@@ -220,11 +222,18 @@ func (e *confluentAvroEncoder) EncodeValue(
 	v, ok := e.valueCache.Get(cacheKey)
 	if ok {
 		registered = v.(confluentRegisteredEnvelopeSchema)
-		if err := registered.schema.after.refreshTypeMetadata(updatedRow); err != nil {
-			return nil, err
-		}
 		if prevRow.IsInitialized() && registered.schema.before != nil {
 			if err := registered.schema.before.refreshTypeMetadata(prevRow); err != nil {
+				return nil, err
+			}
+		}
+		if registered.schema.after != nil {
+			if err := registered.schema.after.refreshTypeMetadata(updatedRow); err != nil {
+				return nil, err
+			}
+		}
+		if registered.schema.record != nil {
+			if err := registered.schema.record.refreshTypeMetadata(updatedRow); err != nil {
 				return nil, err
 			}
 		}
