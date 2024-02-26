@@ -219,6 +219,11 @@ func (s *TestState) CanCreateCrossDBSequenceOwnerRef() error {
 	return nil
 }
 
+// CanCreateCrossDBSequenceRef implements scbuild.SchemaFeatureCheck.
+func (s *TestState) CanCreateCrossDBSequenceRef() error {
+	return nil
+}
+
 // FeatureChecker implements scbuild.Dependencies
 func (s *TestState) FeatureChecker() scbuild.FeatureChecker {
 	return s

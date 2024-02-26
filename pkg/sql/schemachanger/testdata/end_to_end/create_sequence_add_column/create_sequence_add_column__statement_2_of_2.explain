@@ -12,7 +12,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104 (t), ColumnID: 2 (j+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+)}
- │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j+), ReferencedSequenceIDs: [105 (sq1+)]}
+ │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j+), ReferencedSequenceIDs: [105 (sq1+)], Expr: nextval(105:::REGCLASS)}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 2 (t_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey+)}
@@ -54,7 +54,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │    │    │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 104 (t), ColumnID: 2 (j+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+)}
- │    │    │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j+), ReferencedSequenceIDs: [105 (sq1+)]}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j+), ReferencedSequenceIDs: [105 (sq1+)], Expr: nextval(105:::REGCLASS)}
  │    │    │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 2 (t_pkey+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey+)}
@@ -84,7 +84,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │         │    ├── ABSENT → DELETE_ONLY      Column:{DescID: 104 (t), ColumnID: 2 (j+)}
  │         │    ├── ABSENT → PUBLIC           ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
  │         │    ├── ABSENT → PUBLIC           ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+)}
- │         │    ├── ABSENT → PUBLIC           ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j+), ReferencedSequenceIDs: [105 (sq1+)]}
+ │         │    ├── ABSENT → PUBLIC           ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j+), ReferencedSequenceIDs: [105 (sq1+)], Expr: nextval(105:::REGCLASS)}
  │         │    ├── ABSENT → BACKFILL_ONLY    PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 2 (t_pkey+)}
  │         │    ├── ABSENT → PUBLIC           IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey+)}

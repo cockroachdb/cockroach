@@ -53,7 +53,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   {columnId: 1, elementCreationMetadata: {in231OrLater: true}, tableId: 109, type: {family: UuidFamily, oid: 2950}}
 - [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC]
   {columnId: 1, tableId: 109}
-- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 1, Expr: gen_random_uuid()}, ABSENT], PUBLIC]
   {columnId: 1, expr: gen_random_uuid(), tableId: 109}
 - [[ColumnComment:{DescID: 109, ColumnID: 1, Comment: tracking_number is good}, ABSENT], PUBLIC]
   {columnId: 1, comment: tracking_number is good, pgAttributeNum: 1, tableId: 109}
@@ -83,7 +83,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   {columnId: 5, name: randcol, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 5}, ABSENT], PUBLIC]
   {columnId: 5, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 109, type: {family: IntFamily, oid: 20, width: 64}}
-- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 5, ReferencedSequenceIDs: [106]}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 5, ReferencedSequenceIDs: [106], Expr: nextval(106:::REGCLASS)}, ABSENT], PUBLIC]
   {columnId: 5, expr: 'nextval(106:::REGCLASS)', tableId: 109, usesSequenceIds: [106]}
 - [[Column:{DescID: 109, ColumnID: 6}, ABSENT], PUBLIC]
   {columnId: 6, tableId: 109}

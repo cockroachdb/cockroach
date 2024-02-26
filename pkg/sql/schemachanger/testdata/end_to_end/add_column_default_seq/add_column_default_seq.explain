@@ -13,7 +13,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 106 (tbl), ColumnID: 2 (l+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 106 (tbl), Name: "l", ColumnID: 2 (l+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (l+)}
- │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (l+), ReferencedSequenceIDs: [107 (sq1)]}
+ │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (l+), ReferencedSequenceIDs: [107 (sq1)], Expr: nextval(107:::REGCLASS)}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+)}
@@ -40,7 +40,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │    │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 106 (tbl), ColumnID: 2 (l+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 106 (tbl), Name: "l", ColumnID: 2 (l+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (l+)}
- │    │    │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (l+), ReferencedSequenceIDs: [107 (sq1)]}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (l+), ReferencedSequenceIDs: [107 (sq1)], Expr: nextval(107:::REGCLASS)}
  │    │    │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+)}
@@ -56,7 +56,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 106 (tbl), ColumnID: 2 (l+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 106 (tbl), Name: "l", ColumnID: 2 (l+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (l+)}
- │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (l+), ReferencedSequenceIDs: [107 (sq1)]}
+ │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (l+), ReferencedSequenceIDs: [107 (sq1)], Expr: nextval(107:::REGCLASS)}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+)}

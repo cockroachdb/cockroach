@@ -643,6 +643,7 @@ func newTypeT(t *types.T) scpb.TypeT {
 }
 
 // WrapExpression implements the scbuildstmt.TableHelpers interface.
+// N.B. The user should ensure that the input expression has UDF names replaced with OID references.
 func (b *builderState) WrapExpression(tableID catid.DescID, expr tree.Expr) *scpb.Expression {
 	// We will serialize and reparse the expression, so that type information
 	// annotations are directly embedded inside, otherwise while parsing the
@@ -723,7 +724,7 @@ func (b *builderState) WrapExpression(tableID catid.DescID, expr tree.Expr) *scp
 			}
 		}
 	}
-	// Collect function IDs
+	// Collect function IDs, assuming that the UDF names has been replaced with OID references.
 	fnIDs, err := schemaexpr.GetUDFIDs(expr)
 	if err != nil {
 		panic(err)

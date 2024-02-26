@@ -45,6 +45,16 @@ func init() {
 						BackReferencedColumnID: this.ColumnID,
 					}
 				}),
+				emit(func(this *scpb.ColumnDefaultExpression) *scop.AddTableColumnBackReferencesInFunctions {
+					if len(this.UsesFunctionIDs) == 0 {
+						return nil
+					}
+					return &scop.AddTableColumnBackReferencesInFunctions{
+						FunctionIDs:            this.UsesFunctionIDs,
+						BackReferencedTableID:  this.TableID,
+						BackReferencedColumnID: this.ColumnID,
+					}
+				}),
 			),
 		),
 		toAbsent(

@@ -204,6 +204,10 @@ type SchemaFeatureChecker interface {
 	// CanCreateCrossDBSequenceOwnerRef returns if cross database sequence
 	// owner references are allowed.
 	CanCreateCrossDBSequenceOwnerRef() error
+
+	// CanCreateCrossDBSequenceRef returns if cross database sequence
+	// references are allowed.
+	CanCreateCrossDBSequenceRef() error
 }
 
 // PrivilegeChecker checks an element's privileges.
