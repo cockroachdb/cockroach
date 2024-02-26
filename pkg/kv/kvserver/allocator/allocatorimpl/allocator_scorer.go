@@ -2496,10 +2496,10 @@ func (o IOOverloadOptions) transferLeaseToCheck(
 	return true
 }
 
-// transferLeaseToCheck returns true if the store IO overload does not exceed
-// the cluster threshold and mean, or the enforcement level does not prevent
-// existing stores from holidng leases whilst being IO overloaded.
-func (o IOOverloadOptions) existingLeaseCheck(
+// ExistingLeaseCheck returns true if the store IO overload does not exceed the
+// cluster threshold and mean, or the enforcement level does not prevent
+// existing stores from holding leases whilst being IO overloaded.
+func (o IOOverloadOptions) ExistingLeaseCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
 	score := o.storeScore(store)

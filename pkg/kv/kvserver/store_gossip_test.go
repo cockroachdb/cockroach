@@ -13,6 +13,7 @@ package kvserver
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -62,6 +63,27 @@ func TestStoreGossipDeltaTrigger(t *testing.T) {
 			lastGossiped:   roachpb.StoreCapacity{QueriesPerSecond: 100, WritesPerSecond: 100, RangeCount: 10, LeaseCount: 10},
 			cached:         roachpb.StoreCapacity{QueriesPerSecond: 200, WritesPerSecond: 0, RangeCount: 15, LeaseCount: 5},
 			expectedReason: "queries-per-second(100.0) writes-per-second(-100.0) range-count(5.0) lease-count(-5.0) change",
+			expectedShould: true,
+		},
+		{
+			desc:           "no delta: IO overload <= minimum",
+			lastGossiped:   roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(0)},
+			cached:         roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(gossipMinMaxIOOverloadScore - 1e9)},
+			expectedReason: "",
+			expectedShould: false,
+		},
+		{
+			desc:           "no delta: IO overload unchanged",
+			lastGossiped:   roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(gossipMinMaxIOOverloadScore)},
+			cached:         roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(gossipMinMaxIOOverloadScore)},
+			expectedReason: "",
+			expectedShould: false,
+		},
+		{
+			desc:           "should gossip on IO overload increase greater than min",
+			lastGossiped:   roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(0)},
+			cached:         roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(gossipMinMaxIOOverloadScore)},
+			expectedReason: "io-overload(0.2) change",
 			expectedShould: true,
 		},
 	}
