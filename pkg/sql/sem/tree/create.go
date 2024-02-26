@@ -2186,6 +2186,7 @@ type CreateTenant struct {
 	IfNotExists bool
 	TenantSpec  *TenantSpec
 	Like        *LikeTenantSpec
+	Options     TenantCreationOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -2196,6 +2197,10 @@ func (node *CreateTenant) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(node.TenantSpec)
 	ctx.FormatNode(node.Like)
+	if !node.Options.IsDefault() {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(&node.Options)
+	}
 }
 
 // LikeTenantSpec represents a LIKE clause in CREATE VIRTUAL CLUSTER.
@@ -2209,6 +2214,58 @@ func (node *LikeTenantSpec) Format(ctx *FmtCtx) {
 	}
 	ctx.WriteString(" LIKE ")
 	ctx.FormatNode(node.OtherTenant)
+}
+
+// TenantCreationOptions  options for the CREATE/ALTER VIRTUAL CLUSTER FROM REPLICATION command.
+type TenantCreationOptions struct {
+	Service TenantServiceMode
+}
+
+// TenantServiceCmd represents a parameter to ALTER VIRTUAL CLUSTER.
+type TenantServiceMode int8
+
+const (
+	// TenantServiceNone encodes a lack of service mode specification.
+	TenantServiceUnspecified TenantServiceMode = 0
+	// TenantServiceNone encodes SERVICE NONE.
+	TenantServiceNone TenantServiceMode = 1
+	// TenantServiceShared encodes SERVICE SHARED.
+	TenantServiceShared TenantServiceMode = 2
+	// TenantServiceExternal encodes SERVICE EXTERNAL.
+	TenantServiceExternal TenantServiceMode = 3
+)
+
+var _ NodeFormatter = &TenantCreationOptions{}
+
+// Format implements the NodeFormatter interface
+func (o *TenantCreationOptions) Format(ctx *FmtCtx) {
+	switch o.Service {
+	case TenantServiceNone:
+		ctx.WriteString("SERVICE NONE")
+	case TenantServiceShared:
+		ctx.WriteString("SERVICE SHARED")
+	case TenantServiceExternal:
+		ctx.WriteString("SERVICE EXTERNAL")
+	}
+}
+
+// CombineWith merges other TenantCreationOptions into this struct.
+// An error is returned if the same option merged multiple times.
+func (o *TenantCreationOptions) CombineWith(other *TenantCreationOptions) error {
+	if o.Service != TenantServiceUnspecified {
+		if other.Service != TenantServiceUnspecified {
+			return errors.New("SERVICE option specified multiple times")
+		}
+	} else {
+		o.Service = other.Service
+	}
+	return nil
+}
+
+// IsDefault returns true if this options struct has default value.
+func (o TenantCreationOptions) IsDefault() bool {
+	options := TenantCreationOptions{}
+	return o.Service == options.Service
 }
 
 // CreateTenantFromReplication represents a CREATE VIRTUAL CLUSTER...FROM REPLICATION

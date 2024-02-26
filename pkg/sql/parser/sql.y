@@ -862,6 +862,9 @@ func (u *sqlSymUnion) functionObj() tree.RoutineObj {
 func (u *sqlSymUnion) routineObjs() tree.RoutineObjs {
     return u.val.(tree.RoutineObjs)
 }
+func (u *sqlSymUnion) tenantCreationOptions() *tree.TenantCreationOptions {
+  return u.val.(*tree.TenantCreationOptions)
+}
 func (u *sqlSymUnion) tenantReplicationOptions() *tree.TenantReplicationOptions {
   return u.val.(*tree.TenantReplicationOptions)
 }
@@ -1209,6 +1212,8 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %type <tree.Statement> create_proc_stmt
 
 %type <*tree.LikeTenantSpec> opt_like_virtual_cluster
+%type <*tree.TenantCreationOptions> opt_with_tenant_options tenant_options_list tenant_option
+
 
 %type <tree.Statement> create_stats_stmt
 %type <*tree.CreateStatsOptions> opt_create_stats_options
@@ -4509,21 +4514,23 @@ create_stmt:
 // Replication option:
 //    FROM REPLICATION OF <virtual_cluster_spec> ON <location> [ WITH OPTIONS ... ]
 create_virtual_cluster_stmt:
-  CREATE virtual_cluster d_expr opt_like_virtual_cluster
+  CREATE virtual_cluster d_expr opt_like_virtual_cluster opt_with_tenant_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
       Like: $4.likeTenantSpec(),
+      Options: *$5.tenantCreationOptions(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_virtual_cluster
+| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_virtual_cluster opt_with_tenant_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       IfNotExists: true,
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
       Like: $7.likeTenantSpec(),
+      Options: *$8.tenantCreationOptions(),
     }
   }
 | CREATE virtual_cluster d_expr opt_like_virtual_cluster FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
@@ -4567,6 +4574,50 @@ opt_like_virtual_cluster:
   {
       $$.val = &tree.LikeTenantSpec{OtherTenant: $2.tenantSpec()}
   }
+
+// Optional tenant creation options.
+opt_with_tenant_options:
+  WITH tenant_options_list
+  {
+    $$.val = $2.tenantCreationOptions()
+  }
+| WITH OPTIONS '(' tenant_options_list ')'
+  {
+    $$.val = $4.tenantCreationOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.TenantCreationOptions{}
+  }
+
+tenant_options_list:
+  // Require at least one option
+  tenant_option
+  {
+    $$.val = $1.tenantCreationOptions()
+  }
+| tenant_options_list ',' tenant_option
+  {
+    if err := $1.tenantCreationOptions().CombineWith($3.tenantCreationOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+// List of valid tenant replication options.
+tenant_option:
+  SERVICE NONE
+  {
+    $$.val = &tree.TenantCreationOptions{Service: tree.TenantServiceNone}
+  }
+| SERVICE SHARED
+  {
+    $$.val = &tree.TenantCreationOptions{Service: tree.TenantServiceShared}
+  }
+| SERVICE EXTERNAL
+  {
+    $$.val = &tree.TenantCreationOptions{Service: tree.TenantServiceExternal}
+  }
+
 
 // Optional tenant replication options.
 opt_with_replication_options:
