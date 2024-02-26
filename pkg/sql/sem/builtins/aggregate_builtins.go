@@ -1625,10 +1625,13 @@ type aggStatementStatistics struct {
 	singleDatumAggregateBase
 
 	stats appstatspb.StatementStatistics
+
+	// tmpStats is used as scratch space between iterations.
+	tmpStats appstatspb.StatementStatistics
 }
 
 func newAggStatementStatistics(
-	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &aggStatementStatistics{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
@@ -1641,15 +1644,14 @@ func (a *aggStatementStatistics) Add(ctx context.Context, datum tree.Datum, _ ..
 		return nil
 	}
 
-	// Rather than try to figure out how the size of a.stats object changes with
-	// each addition, we'll approximate its final memory usage as equal to the
-	// size of the last datum.
-	datumSize := int64(datum.Size())
-	if err := a.updateMemoryUsage(ctx, datumSize); err != nil {
+	err := mergeStatementStatsHelper(&a.stats, &a.tmpStats, datum)
+
+	size := int64(a.tmpStats.Size()) + int64(a.stats.Size())
+	if err := a.updateMemoryUsage(ctx, size); err != nil {
 		return err
 	}
 
-	return mergeStatementStatsHelper(&a.stats, datum)
+	return err
 }
 
 // Result returns a copy of aggregated JSON object.
@@ -1683,10 +1685,13 @@ type aggStatementMetadata struct {
 	singleDatumAggregateBase
 
 	stats appstatspb.AggregatedStatementMetadata
+
+	// tmpStats is used as scratch space between iterations.
+	tmpStats appstatspb.CollectedStatementStatistics
 }
 
 func newAggStatementMetadata(
-	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &aggStatementMetadata{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
@@ -1700,15 +1705,13 @@ func (a *aggStatementMetadata) Add(ctx context.Context, datum tree.Datum, _ ...t
 		return nil
 	}
 
-	// Rather than try to figure out how the size of a.stats object changes with
-	// each addition, we'll approximate its final memory usage as equal to the
-	// size of the last datum.
-	datumSize := int64(datum.Size())
-	if err := a.updateMemoryUsage(ctx, datumSize); err != nil {
+	err := mergeStatsMetadataHelper(&a.stats, &a.tmpStats, datum)
+
+	size := int64(a.tmpStats.Size()) + int64(a.stats.Size())
+	if err := a.updateMemoryUsage(ctx, size); err != nil {
 		return err
 	}
-
-	return mergeStatsMetadataHelper(&a.stats, datum)
+	return err
 }
 
 // Result returns a copy of the aggregated json object.
@@ -1739,13 +1742,20 @@ func (a *aggStatementMetadata) Size() int64 {
 }
 
 type aggTransactionStatistics struct {
+	singleDatumAggregateBase
+
 	stats appstatspb.TransactionStatistics
+
+	// tmpStats is used as scratch space between iterations.
+	tmpStats appstatspb.TransactionStatistics
 }
 
 func newAggTransactionStatistics(
-	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
-	return &aggTransactionStatistics{}
+	return &aggTransactionStatistics{
+		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+	}
 }
 
 // Add the statistics to a single aggregated object.
@@ -1756,7 +1766,14 @@ func (a *aggTransactionStatistics) Add(
 		return nil
 	}
 
-	return mergeTransactionStatsHelper(&a.stats, datum)
+	err := mergeTransactionStatsHelper(&a.stats, &a.tmpStats, datum)
+
+	size := int64(a.tmpStats.Size()) + int64(a.stats.Size())
+	if err := a.updateMemoryUsage(ctx, size); err != nil {
+		return err
+	}
+
+	return err
 }
 
 // Result returns a copy of aggregated JSON object.
@@ -1787,8 +1804,14 @@ func (a *aggTransactionStatistics) Size() int64 {
 	return sizeOfTransactionStatistics
 }
 
+// mergeStatsMetadataHelper merges the statement metadata from the provided
+// datum into the aggregated statistics. statsTmp is the pre-allocated
+// metadata object used to store the decoded datum. It is reset prior to
+// decoding to clear any previous state.
 func mergeStatsMetadataHelper(
-	metadata *appstatspb.AggregatedStatementMetadata, metadataDatum tree.Datum,
+	metadata *appstatspb.AggregatedStatementMetadata,
+	tmpStats *appstatspb.CollectedStatementStatistics,
+	metadataDatum tree.Datum,
 ) error {
 	if metadataDatum == tree.DNull {
 		return nil
@@ -1799,29 +1822,37 @@ func mergeStatsMetadataHelper(
 		return nil
 	}
 
-	var statistics appstatspb.CollectedStatementStatistics
-
+	tmpStats.Reset()
 	// Only decode and set the query info if it was not previously set. Avoid the
 	// overhead of parsing the query string which can be large.
 	if metadata.Query == "" || metadata.QuerySummary == "" {
-		err := sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON.JSON, &statistics)
+		err := sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON.JSON, tmpStats)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := sqlstatsutil.DecodeStmtStatsMetadataFlagsOnlyJSON(metadataJSON.JSON, &statistics)
+		err := sqlstatsutil.DecodeStmtStatsMetadataFlagsOnlyJSON(metadataJSON.JSON, tmpStats)
 		if err != nil {
 			return err
 		}
 	}
 
-	metadata.Add(&statistics)
+	metadata.Add(tmpStats)
 	return nil
 }
 
+// mergeStatementStatsHelper merges the statement statistics from the
+// provided datum into the aggregated statistics. statsTmp is the pre-allocated
+// statistics object used to store the decoded datum. It is reset prior to
+// decoding to clear any previous state.
 func mergeStatementStatsHelper(
-	aggregatedStats *appstatspb.StatementStatistics, statsDatum tree.Datum,
+	aggregatedStats *appstatspb.StatementStatistics,
+	tmpStats *appstatspb.StatementStatistics,
+	statsDatum tree.Datum,
 ) error {
+	if tmpStats == nil {
+		return errors.AssertionFailedf("tmpStats must be non-nil")
+	}
 	if statsDatum == tree.DNull {
 		return nil
 	}
@@ -1831,18 +1862,27 @@ func mergeStatementStatsHelper(
 		return nil
 	}
 
-	var stats appstatspb.StatementStatistics
-	if err := sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON.JSON, &stats); err != nil {
+	tmpStats.Reset()
+	if err := sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON.JSON, tmpStats); err != nil {
 		return err
 	}
 
-	aggregatedStats.Add(&stats)
+	aggregatedStats.Add(tmpStats)
 	return nil
 }
 
+// mergeTransactionStatsHelper merges the transaction statistics from the
+// provided datum into the aggregated statistics. statsTmp is the pre-allocated
+// statistics object used to store the decoded datum. It is reset prior to
+// decoding to clear any previous state.
 func mergeTransactionStatsHelper(
-	aggregatedStats *appstatspb.TransactionStatistics, statsDatum tree.Datum,
+	aggregatedStats *appstatspb.TransactionStatistics,
+	statsTmp *appstatspb.TransactionStatistics,
+	statsDatum tree.Datum,
 ) error {
+	if statsTmp == nil {
+		return errors.AssertionFailedf("statsTmp must be non-nil")
+	}
 	if statsDatum == tree.DNull {
 		return nil
 	}
@@ -1852,12 +1892,12 @@ func mergeTransactionStatsHelper(
 		return nil
 	}
 
-	var stats appstatspb.TransactionStatistics
-	if err := sqlstatsutil.DecodeTxnStatsStatisticsJSON(statsJSON.JSON, &stats); err != nil {
+	statsTmp.Reset()
+	if err := sqlstatsutil.DecodeTxnStatsStatisticsJSON(statsJSON.JSON, statsTmp); err != nil {
 		return err
 	}
 
-	aggregatedStats.Add(&stats)
+	aggregatedStats.Add(statsTmp)
 	return nil
 }
 

@@ -4453,9 +4453,9 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
-				var aggregatedStats appstatspb.StatementStatistics
+				var aggregatedStats, tmpStats appstatspb.StatementStatistics
 				for _, statsDatum := range arr.Array {
-					err := mergeStatementStatsHelper(&aggregatedStats, statsDatum)
+					err := mergeStatementStatsHelper(&aggregatedStats, &tmpStats, statsDatum)
 					if err != nil {
 						return nil, err
 					}
@@ -4478,12 +4478,12 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
-				var aggregatedStats appstatspb.TransactionStatistics
+				var aggregatedStats, otherStats appstatspb.TransactionStatistics
 				for _, statsDatum := range arr.Array {
 					if statsDatum == tree.DNull {
 						continue
 					}
-					err := mergeTransactionStatsHelper(&aggregatedStats, statsDatum)
+					err := mergeTransactionStatsHelper(&aggregatedStats, &otherStats, statsDatum)
 					if err != nil {
 						return nil, err
 					}
@@ -4510,13 +4510,13 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
 				metadata := &appstatspb.AggregatedStatementMetadata{}
-
+				tmpStats := &appstatspb.CollectedStatementStatistics{}
 				for _, metadataDatum := range arr.Array {
 					if metadataDatum == tree.DNull {
 						continue
 					}
 
-					err := mergeStatsMetadataHelper(metadata, metadataDatum)
+					err := mergeStatsMetadataHelper(metadata, tmpStats, metadataDatum)
 					if err != nil {
 						return nil, err
 					}
