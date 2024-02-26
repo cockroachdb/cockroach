@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -320,29 +321,41 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 				nodeFailers[node] = failer
 			}
 
+			// Run the failers on different goroutines. Otherwise, they can interact
+			// by having certain failures in place preventing other failures from
+			// recovering.
+			var wg sync.WaitGroup
 			for node, failer := range nodeFailers {
-				// If the failer supports partial failures (e.g. partial partitions), do
-				// one with 50% probability against a random node (including SQL
-				// gateways).
-				if partialFailer, ok := failer.(PartialFailer); ok && rng.Float64() < 0.5 {
-					var partialPeer int
-					for partialPeer == 0 || partialPeer == node {
-						partialPeer = 1 + rng.Intn(9)
+				node := node
+				failer := failer
+				wg.Add(1)
+				m.Go(func(ctx context.Context) error {
+					defer wg.Done()
+					// If the failer supports partial failures (e.g. partial partitions), do
+					// one with 50% probability against a random node (including SQL
+					// gateways).
+					if partialFailer, ok := failer.(PartialFailer); ok && rng.Float64() < 0.5 {
+						var partialPeer int
+						for partialPeer == 0 || partialPeer == node {
+							partialPeer = 1 + rng.Intn(9)
+						}
+						t.L().Printf("failing n%d to n%d (%s)", node, partialPeer, failer)
+						partialFailer.FailPartial(ctx, node, []int{partialPeer})
+					} else {
+						t.L().Printf("failing n%d (%s)", node, failer)
+						failer.Fail(ctx, node)
 					}
-					t.L().Printf("failing n%d to n%d (%s)", node, partialPeer, failer)
-					partialFailer.FailPartial(ctx, node, []int{partialPeer})
-				} else {
-					t.L().Printf("failing n%d (%s)", node, failer)
-					failer.Fail(ctx, node)
-				}
-			}
 
-			sleepFor(ctx, t, time.Minute)
+					// Maintain the failure for up to 90 seconds before recovering.
+					sleepFor(ctx, t, randutil.RandDuration(rng, 90*time.Second))
 
-			for node, failer := range nodeFailers {
-				t.L().Printf("recovering n%d (%s)", node, failer)
-				failer.Recover(ctx, node)
+					t.L().Printf("recovering n%d (%s)", node, failer)
+					failer.Recover(ctx, node)
+
+					return nil
+				})
 			}
+			wg.Wait()
 		}
 
 		sleepFor(ctx, t, time.Minute) // let cluster recover
