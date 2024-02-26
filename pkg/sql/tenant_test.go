@@ -102,8 +102,8 @@ func TestGetTenantIds(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Create 2 tenants in addition to the system tenant.
-	tdb.Exec(t, "CREATE TENANT t1")
-	tdb.Exec(t, "CREATE TENANT t2")
+	tdb.Exec(t, "CREATE TENANT t1 WITH SERVICE NONE")
+	tdb.Exec(t, "CREATE TENANT t2 WITH SERVICE NONE")
 
 	var ids []roachpb.TenantID
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {

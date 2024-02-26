@@ -9,10 +9,10 @@ id  active  length  name
 # Create a few tenants.
 
 statement ok
-CREATE TENANT "tenant-one"
+CREATE TENANT "tenant-one" WITH SERVICE NONE
 
 statement ok
-CREATE TENANT "two"
+CREATE TENANT "two" WITH SERVICE NONE
 
 statement error invalid tenant name
 CREATE TENANT "ABC"
@@ -31,7 +31,7 @@ statement error invalid tenant name
 CREATE TENANT "invalid.name"
 
 statement ok
-CREATE TENANT three
+CREATE TENANT three WITH SERVICE NONE
 
 query IBT colnames
 SELECT id, active, name
@@ -155,7 +155,7 @@ statement ok
 DROP TENANT IF EXISTS dne
 
 statement ok
-CREATE TENANT four
+CREATE TENANT four WITH SERVICE NONE
 
 query IBT colnames
 SELECT id, active, name
@@ -179,7 +179,7 @@ statement error tenant "four" does not exist
 SHOW TENANT four
 
 statement ok
-CREATE TENANT "five-requiring-quotes"
+CREATE TENANT "five-requiring-quotes" WITH SERVICE NONE
 
 statement ok
 DROP TENANT "five-requiring-quotes"
@@ -266,13 +266,13 @@ SET default_transaction_read_only = false
 subtest reclaim_name
 
 statement ok
-CREATE TENANT "to-be-reclaimed"
+CREATE TENANT "to-be-reclaimed" WITH SERVICE NONE
 
 statement ok
 DROP TENANT "to-be-reclaimed"
 
 statement ok
-CREATE TENANT "to-be-reclaimed"
+CREATE TENANT "to-be-reclaimed" WITH SERVICE NONE
 
 query IBTTT colnames
 SELECT
@@ -296,9 +296,9 @@ id  active  name             deprecated_data_state  dropped_name
 
 # More valid tenant names.
 statement ok
-CREATE TENANT "1";
-CREATE TENANT "a-b";
-CREATE TENANT "hello-100"
+CREATE TENANT "1" WITH SERVICE NONE;
+CREATE TENANT "a-b" WITH SERVICE NONE;
+CREATE TENANT "hello-100" WITH SERVICE NONE
 
 query ITTT colnames,rowsort
 SHOW TENANTS
@@ -446,7 +446,7 @@ ALTER TENANT tmpl START SERVICE SHARED; -- will not be copied.
 
 # Use it to create a new tenant.
 statement ok
-CREATE TENANT othertenant LIKE tmpl
+CREATE TENANT othertenant LIKE tmpl WITH SERVICE NONE
 
 let $otherid
 SELECT id FROM system.tenants WHERE name = 'othertenant'
@@ -496,7 +496,7 @@ SET CLUSTER SETTING sql.create_virtual_cluster.default_template = 'tmpl';
 
 # Create a new tenant - this should use the template implicitly now.
 statement ok
-CREATE TENANT othertenant
+CREATE TENANT othertenant WITH SERVICE NONE
 
 let $otherid
 SELECT id FROM system.tenants WHERE name = 'othertenant'
@@ -544,7 +544,7 @@ RESET CLUSTER SETTING sql.create_virtual_cluster.default_template
 subtest regression_105115
 
 statement ok
-CREATE TENANT noservice
+CREATE TENANT noservice WITH SERVICE NONE
 
 statement error shared service not enabled for tenant "noservice"
 SET CLUSTER SETTING server.controller.default_target_cluster = noservice
@@ -563,10 +563,7 @@ RESET CLUSTER SETTING server.controller.default_target_cluster
 
 statement ok
 DROP TENANT noservice;
-CREATE TENANT withservice;
-
-statement ok
-ALTER TENANT withservice START SERVICE SHARED
+CREATE TENANT withservice WITH SERVICE SHARED
 
 statement ok
 SET CLUSTER SETTING server.controller.default_target_cluster = withservice

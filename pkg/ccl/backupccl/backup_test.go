@@ -7014,7 +7014,7 @@ func TestBackupRestoreCreatedAndDroppedTenant(t *testing.T) {
 
 	systemDB.Exec(t, fmt.Sprintf("BACKUP INTO 'nodelocal://1/clusterwide' AS OF SYSTEM TIME '%s' with include_all_virtual_clusters;", t1))
 
-	systemDB.Exec(t, "CREATE TENANT baz")
+	systemDB.Exec(t, "CREATE TENANT baz WITH SERVICE NONE")
 
 	t2 := getAOST()
 	systemDB.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/clusterwide' AS OF SYSTEM TIME %s with include_all_virtual_clusters;", t2))

@@ -46,7 +46,7 @@ func TestRevertTenantToTimestamp(t *testing.T) {
 	systemSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 	systemSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='100ms'")
 	systemSQL.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval ='100ms'")
-	systemSQL.Exec(t, "CREATE VIRTUAL CLUSTER target")
+	systemSQL.Exec(t, "CREATE VIRTUAL CLUSTER target WITH SERVICE NONE")
 
 	t.Run("errors if tenant doesn't exist", func(t *testing.T) {
 		_, err := systemDB.Exec("SELECT crdb_internal.unsafe_revert_tenant_to_timestamp('doesnotexist', cluster_logical_timestamp())")
