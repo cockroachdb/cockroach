@@ -2636,6 +2636,13 @@ func TestTenantLogicCCL_plpgsql_record(
 	runCCLLogicTest(t, "plpgsql_record")
 }
 
+func TestTenantLogicCCL_plpgsql_txn(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_txn")
+}
+
 func TestTenantLogicCCL_plpgsql_unsupported(
 	t *testing.T,
 ) {
