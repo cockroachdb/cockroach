@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -128,30 +127,23 @@ type CapacityOverride roachpb.StoreCapacity
 // NewCapacityOverride returns a capacity override where no overrides are set.
 func NewCapacityOverride() CapacityOverride {
 	return CapacityOverride{
-		Capacity:         capacityOverrideSentinel,
-		Available:        capacityOverrideSentinel,
-		Used:             capacityOverrideSentinel,
-		LogicalBytes:     capacityOverrideSentinel,
-		RangeCount:       capacityOverrideSentinel,
-		LeaseCount:       capacityOverrideSentinel,
-		QueriesPerSecond: capacityOverrideSentinel,
-		WritesPerSecond:  capacityOverrideSentinel,
-		CPUPerSecond:     capacityOverrideSentinel,
-		IOThreshold: admissionpb.IOThreshold{
-			L0NumSubLevels:           capacityOverrideSentinel,
-			L0NumSubLevelsThreshold:  capacityOverrideSentinel,
-			L0NumFiles:               capacityOverrideSentinel,
-			L0NumFilesThreshold:      capacityOverrideSentinel,
-			L0Size:                   capacityOverrideSentinel,
-			L0MinimumSizePerSubLevel: capacityOverrideSentinel,
-		},
+		Capacity:            capacityOverrideSentinel,
+		Available:           capacityOverrideSentinel,
+		Used:                capacityOverrideSentinel,
+		LogicalBytes:        capacityOverrideSentinel,
+		RangeCount:          capacityOverrideSentinel,
+		LeaseCount:          capacityOverrideSentinel,
+		QueriesPerSecond:    capacityOverrideSentinel,
+		WritesPerSecond:     capacityOverrideSentinel,
+		CPUPerSecond:        capacityOverrideSentinel,
+		IOThresholdScoreMax: capacityOverrideSentinel,
 	}
 }
 
 func (co CapacityOverride) String() string {
 	return fmt.Sprintf(
 		"capacity=%d, available=%d, used=%d, logical_bytes=%d, range_count=%d, lease_count=%d, "+
-			"queries_per_sec=%.2f, writes_per_sec=%.2f, cpu_per_sec=%.2f, io_threhold=%v",
+			"queries_per_sec=%.2f, writes_per_sec=%.2f, cpu_per_sec=%.2f, io_threshold_max=%v",
 		co.Capacity,
 		co.Available,
 		co.Used,
@@ -161,7 +153,7 @@ func (co CapacityOverride) String() string {
 		co.QueriesPerSecond,
 		co.WritesPerSecond,
 		co.CPUPerSecond,
-		co.IOThreshold,
+		co.IOThresholdScoreMax,
 	)
 }
 
@@ -196,23 +188,8 @@ func mergeOverride(
 	if override.CPUPerSecond != capacityOverrideSentinel {
 		ret.CPUPerSecond = override.CPUPerSecond
 	}
-	if override.IOThreshold.L0NumFiles != capacityOverrideSentinel {
-		ret.IOThreshold.L0NumFiles = override.IOThreshold.L0NumFiles
-	}
-	if override.IOThreshold.L0NumFilesThreshold != capacityOverrideSentinel {
-		ret.IOThreshold.L0NumFilesThreshold = override.IOThreshold.L0NumFilesThreshold
-	}
-	if override.IOThreshold.L0NumSubLevels != capacityOverrideSentinel {
-		ret.IOThreshold.L0NumSubLevels = override.IOThreshold.L0NumSubLevels
-	}
-	if override.IOThreshold.L0NumSubLevelsThreshold != capacityOverrideSentinel {
-		ret.IOThreshold.L0NumSubLevelsThreshold = override.IOThreshold.L0NumSubLevelsThreshold
-	}
-	if override.IOThreshold.L0Size != capacityOverrideSentinel {
-		ret.IOThreshold.L0Size = override.IOThreshold.L0Size
-	}
-	if override.IOThreshold.L0MinimumSizePerSubLevel != capacityOverrideSentinel {
-		ret.IOThreshold.L0MinimumSizePerSubLevel = override.IOThreshold.L0MinimumSizePerSubLevel
+	if override.IOThresholdScoreMax != capacityOverrideSentinel {
+		ret.IOThresholdScoreMax = override.IOThresholdScoreMax
 	}
 	return ret
 }

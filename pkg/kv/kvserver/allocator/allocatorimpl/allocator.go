@@ -2105,7 +2105,7 @@ func (a *Allocator) nonIOOverloadedLeaseTargets(
 	}
 
 	sl, _, _ := storePool.GetStoreListFromIDs(replDescsToStoreIDs(existingReplicas), storepool.StoreFilterSuspect)
-	avgIOOverload := sl.CandidateIOOverloadScores.Mean
+	avgIOOverload := sl.CandidateMaxIOOverloadScores.Mean
 
 	for _, replDesc := range existingReplicas {
 		store, ok := sl.FindStoreByID(replDesc.StoreID)
@@ -2148,7 +2148,7 @@ func (a *Allocator) leaseholderShouldMoveDueToIOOverload(
 	ioOverloadOptions IOOverloadOptions,
 ) bool {
 	sl, _, _ := storePool.GetStoreListFromIDs(replDescsToStoreIDs(existingReplicas), storepool.StoreFilterSuspect)
-	avgIOOverload := sl.CandidateIOOverloadScores.Mean
+	avgIOOverload := sl.CandidateMaxIOOverloadScores.Mean
 
 	// Check the existing replicas for the leaseholder, if it doesn't meet the
 	// check return that the lease should be moved due to IO overload on the

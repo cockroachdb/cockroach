@@ -1111,7 +1111,7 @@ func rankedCandidateListForAllocation(
 			!options.getIOOverloadOptions().allocateReplicaToCheck(
 				ctx,
 				s,
-				candidateStores.CandidateIOOverloadScores.Mean,
+				candidateStores.CandidateMaxIOOverloadScores.Mean,
 			) {
 			continue
 		}
@@ -1761,7 +1761,7 @@ func rankedCandidateListForRebalancing(
 				s,
 				// We only wish to compare the IO overload to the
 				// comparable stores average and not the cluster.
-				comparable.candidateSL.CandidateIOOverloadScores.Mean,
+				comparable.candidateSL.CandidateMaxIOOverloadScores.Mean,
 			)
 			cand.balanceScore = options.balanceScore(comparable.candidateSL, s.Capacity)
 			cand.convergesScore = options.rebalanceToConvergesScore(comparable, s)
@@ -2417,7 +2417,7 @@ func ioOverloadCheck(
 func (o IOOverloadOptions) allocateReplicaToCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
 ) bool {
-	score, _ := store.Capacity.IOThreshold.Score()
+	score := store.Capacity.IOThresholdScoreMax
 
 	if ok, reason := ioOverloadCheck(score, avg,
 		o.ReplicaIOOverloadThreshold, IOOverloadMeanThreshold,
@@ -2437,7 +2437,7 @@ func (o IOOverloadOptions) allocateReplicaToCheck(
 func (o IOOverloadOptions) rebalanceReplicaToCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
 ) bool {
-	score, _ := store.Capacity.IOThreshold.Score()
+	score := store.Capacity.IOThresholdScoreMax
 
 	if ok, reason := ioOverloadCheck(score, avg,
 		o.ReplicaIOOverloadThreshold, IOOverloadMeanThreshold,
@@ -2456,7 +2456,7 @@ func (o IOOverloadOptions) rebalanceReplicaToCheck(
 func (o IOOverloadOptions) transferLeaseToCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
 ) bool {
-	score, _ := store.Capacity.IOThreshold.Score()
+	score := store.Capacity.IOThresholdScoreMax
 
 	if ok, reason := ioOverloadCheck(score, avg,
 		o.LeaseIOOverloadThreshold, IOOverloadMeanThreshold,
@@ -2476,7 +2476,7 @@ func (o IOOverloadOptions) transferLeaseToCheck(
 func (o IOOverloadOptions) existingLeaseCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
 ) bool {
-	score, _ := store.Capacity.IOThreshold.Score()
+	score := store.Capacity.IOThresholdScoreMax
 
 	if ok, reason := ioOverloadCheck(score, avg,
 		o.LeaseIOOverloadShedThreshold, IOOverloadMeanThreshold,

@@ -33,7 +33,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigreporter",
-        "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
