@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -58,6 +59,10 @@ const (
 	// trigger gossip. This stops frequent re-gossiping when load values
 	// fluctuate but are insignificant in absolute terms.
 	gossipMinAbsoluteDelta = 100
+
+	// gossipMinMaxIOOverloadScore is the minimum IO overload required that is
+	// required to trigger gossip.
+	gossipMinMaxIOOverloadScore = 0.2
 
 	// systemDataGossipInterval is the interval at which range lease
 	// holders verify that the most recent system data is gossiped.
@@ -414,6 +419,22 @@ func (s *StoreGossip) RecordNewPerSecondStats(newQPS, newWPS float64) {
 	}
 }
 
+// RecordNewIOThreshold takes new values for the IO threshold and recent
+// maximum IO threshold score and decides whether the score has changed enough
+// to justify re-gossiping the store's capacity.
+func (s *StoreGossip) RecordNewIOThreshold(
+	threshold admissionpb.IOThreshold, maxIOThresholdScore float64,
+) {
+	s.cachedCapacity.Lock()
+	s.cachedCapacity.cached.IOThreshold = threshold
+	s.cachedCapacity.cached.IOThresholdScoreMax = maxIOThresholdScore
+	s.cachedCapacity.Unlock()
+
+	if shouldGossip, reason := s.shouldGossipOnCapacityDelta(); shouldGossip {
+		s.asyncGossipStore(context.TODO(), reason, true /* useCached */)
+	}
+}
+
 // shouldGossipOnCapacityDelta determines whether the difference between the
 // last gossiped store capacity and the currently cached capacity is large
 // enough that gossiping immediately is required to avoid poor allocation
@@ -444,6 +465,9 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	updateForLeaseCount, deltaLeaseCount := deltaExceedsThreshold(
 		float64(s.cachedCapacity.lastGossiped.LeaseCount), float64(s.cachedCapacity.cached.LeaseCount),
 		gossipWhenLeaseCountDeltaExceeds, gossipWhenCapacityDeltaExceedsFraction)
+	updateForMaxIOOverloadScore := s.cachedCapacity.cached.IOThresholdScoreMax >= gossipMinMaxIOOverloadScore &&
+		s.cachedCapacity.cached.IOThresholdScoreMax > s.cachedCapacity.lastGossiped.IOThresholdScoreMax
+	maxIOOverloadScore := s.cachedCapacity.cached.IOThresholdScoreMax
 	s.cachedCapacity.Unlock()
 
 	if s.knobs.DisableLeaseCapacityGossip {
@@ -461,6 +485,9 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	}
 	if updateForLeaseCount {
 		reason += fmt.Sprintf("lease-count(%.1f) ", deltaLeaseCount)
+	}
+	if updateForMaxIOOverloadScore {
+		reason += fmt.Sprintf("io-overload(%.1f) ", maxIOOverloadScore)
 	}
 	if reason != "" {
 		should = true

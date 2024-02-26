@@ -64,6 +64,27 @@ func TestStoreGossipDeltaTrigger(t *testing.T) {
 			expectedReason: "queries-per-second(100.0) writes-per-second(-100.0) range-count(5.0) lease-count(-5.0) change",
 			expectedShould: true,
 		},
+		{
+			desc:           "no delta: IO overload <= minimum",
+			lastGossiped:   roachpb.StoreCapacity{IOThresholdScoreMax: 0},
+			cached:         roachpb.StoreCapacity{IOThresholdScoreMax: gossipMinMaxIOOverloadScore - 1e9},
+			expectedReason: "",
+			expectedShould: false,
+		},
+		{
+			desc:           "no delta: IO overload unchanged",
+			lastGossiped:   roachpb.StoreCapacity{IOThresholdScoreMax: gossipMinMaxIOOverloadScore},
+			cached:         roachpb.StoreCapacity{IOThresholdScoreMax: gossipMinMaxIOOverloadScore},
+			expectedReason: "",
+			expectedShould: false,
+		},
+		{
+			desc:           "should gossip on IO overload increase greater than min",
+			lastGossiped:   roachpb.StoreCapacity{IOThresholdScoreMax: 0},
+			cached:         roachpb.StoreCapacity{IOThresholdScoreMax: gossipMinMaxIOOverloadScore},
+			expectedReason: "io-overload(0.2) change",
+			expectedShould: true,
+		},
 	}
 
 	for _, tc := range testCases {
