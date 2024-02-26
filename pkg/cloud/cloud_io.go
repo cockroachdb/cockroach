@@ -73,6 +73,12 @@ var HTTPRetryOptions = retry.Options{
 	Multiplier:     4,
 }
 
+var httpMetrics = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"cloudstorage.http.detailed_metrics.enabled",
+	"enabled collection of detailed metrics on cloud http requests",
+	true)
+
 // MakeHTTPClient makes an http client configured with the common settings used
 // for interacting with cloud storage (timeouts, retries, CA certs, etc).
 func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
