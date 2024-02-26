@@ -155,6 +155,13 @@ type eventTxnUpgradeToExplicit struct{}
 type eventTxnFinishCommitted struct{}
 type eventTxnFinishAborted struct{}
 
+// eventTxnFinishCommittedPLpgSQL and eventTxnFinishAbortedPLpgSQL are generated
+// when a PL/pgSQL stored procedure executes a COMMIT or ROLLBACK statement. The
+// current transaction is finished, but the statement buffer is not advanced,
+// since the current stored procedure resumes execution in the new transaction.
+type eventTxnFinishCommittedPLpgSQL struct{}
+type eventTxnFinishAbortedPLpgSQL struct{}
+
 // eventSavepointRollback is generated when we want to move from Aborted to Open
 // through a ROLLBACK TO SAVEPOINT <not cockroach_restart>. Note that it is not
 // generated when such a savepoint is rolled back to from the Open state. In
@@ -228,6 +235,8 @@ type payloadWithError interface {
 func (eventTxnStart) Event()                            {}
 func (eventTxnFinishCommitted) Event()                  {}
 func (eventTxnFinishAborted) Event()                    {}
+func (eventTxnFinishCommittedPLpgSQL) Event()           {}
+func (eventTxnFinishAbortedPLpgSQL) Event()             {}
 func (eventSavepointRollback) Event()                   {}
 func (eventNonRetriableErr) Event()                     {}
 func (eventRetriableErr) Event()                        {}
@@ -346,6 +355,23 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 					txnEvent{eventType: txnUpgradeToExplicit},
 				)
 				return nil
+			},
+		},
+		// Handle transaction management from PL/pgSQL. Note that these statements
+		// are not valid within the context of an explicit transaction, so we only
+		// have to handle implicit transactions.
+		eventTxnFinishCommittedPLpgSQL{}: {
+			Description: "COMMIT statement called via PL/pgSQL",
+			Next:        stateNoTxn{},
+			Action: func(args fsm.Args) error {
+				return args.Extended.(*txnState).finishTxnNoAdvance(txnCommit)
+			},
+		},
+		eventTxnFinishAbortedPLpgSQL{}: {
+			Description: "ROLLBACK statement called via PL/pgSQL",
+			Next:        stateNoTxn{},
+			Action: func(args fsm.Args) error {
+				return args.Extended.(*txnState).finishTxnNoAdvance(txnRollback)
 			},
 		},
 	},
@@ -550,6 +576,17 @@ func noTxnToOpen(args fsm.Args) error {
 func (ts *txnState) finishTxn(ev txnEventType) error {
 	finishedTxnID, commitTimestamp := ts.finishSQLTxn()
 	ts.setAdvanceInfo(advanceOne, noRewind, txnEvent{
+		eventType: ev, txnID: finishedTxnID, commitTimestamp: commitTimestamp,
+	})
+	return nil
+}
+
+// finishTxnNoAdvance is similar to finishTxn, but does not advance the cursor,
+// so that the same statement is executed again. This is used to handle CALL
+// statements with explicit transaction control.
+func (ts *txnState) finishTxnNoAdvance(ev txnEventType) error {
+	finishedTxnID, commitTimestamp := ts.finishSQLTxn()
+	ts.setAdvanceInfo(stayInPlace, noRewind, txnEvent{
 		eventType: ev, txnID: finishedTxnID, commitTimestamp: commitTimestamp,
 	})
 	return nil
