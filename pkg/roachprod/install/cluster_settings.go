@@ -10,7 +10,11 @@
 
 package install
 
-import "github.com/cockroachdb/cockroach/pkg/roachprod/config"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+)
 
 // ClusterSettings contains various knobs that affect operations on a cluster.
 type ClusterSettings struct {
@@ -109,7 +113,7 @@ func MakeClusterSettings(opts ...ClusterSettingOption) ClusterSettings {
 	clusterSettings := ClusterSettings{
 		Binary:          config.Binary,
 		Tag:             "",
-		PGUrlCertsDir:   "./certs",
+		PGUrlCertsDir:   fmt.Sprintf("./%s", CockroachNodeCertsDir),
 		Secure:          true,
 		UseTreeDist:     true,
 		Env:             config.DefaultEnvVars(),

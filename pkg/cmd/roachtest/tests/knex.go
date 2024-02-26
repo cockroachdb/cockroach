@@ -137,8 +137,9 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 			ctx,
 			t.L(),
 			option.WithNodes(node),
-			fmt.Sprintf(`cd /mnt/data1/knex/ && PGUSER=%s PGPASSWORD=%s PGPORT={pgport:1} PGSSLROOTCERT=$HOME/certs/ca.crt \
-							KNEX_TEST='/mnt/data1/knex/knexfile.js' DB='cockroachdb' npm test`, install.DefaultUser, install.DefaultPassword),
+			fmt.Sprintf(`cd /mnt/data1/knex/ && PGUSER=%s PGPASSWORD=%s PGPORT={pgport:1} PGSSLROOTCERT=$HOME/%s/ca.crt \
+				KNEX_TEST='/mnt/data1/knex/knexfile.js' DB='cockroachdb' npm test`,
+				install.DefaultUser, install.DefaultPassword, install.CockroachNodeCertsDir),
 		)
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)

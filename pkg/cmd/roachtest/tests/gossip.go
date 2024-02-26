@@ -443,7 +443,7 @@ SELECT count(replicas)
 			`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
 			fmt.Sprintf(`--listen-addr=:$[{pgport:1}+1000] --http-port=%d `, adminPorts[0])+
 			`--join={pghost:1}:{pgport:1} `+
-			`--certs-dir=certs `+
+			fmt.Sprintf(`--certs-dir=%s `, install.CockroachNodeCertsDir)+
 			`--advertise-addr={pghost:1}:$[{pgport:1}+1000] `+
 			`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)
 	if err != nil {

@@ -492,9 +492,9 @@ func virtualClusterDirSuffix(virtualClusterName string, instance int) string {
 // CertsDir returns the certificate directory for the given node.
 func (c *SyncedCluster) CertsDir(node Node) string {
 	if c.IsLocal() {
-		return filepath.Join(c.localVMDir(node), "certs")
+		return filepath.Join(c.localVMDir(node), CockroachNodeCertsDir)
 	}
-	return "certs"
+	return CockroachNodeCertsDir
 }
 
 type PGAuthMode int
