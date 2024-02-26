@@ -142,8 +142,10 @@ func initPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 }
 
 func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
-	// Can't use git clone locally, which is used to get pg_regress from
-	// the postgres repository.
+	// We could have run this test locally if we changed postgresDir to
+	// something like /tmp/postgres, but local runs on a gceworker produce
+	// slightly different results than the ones from the nightlies, so we
+	// explicitly prohibit the local runs for consistency.
 	if c.IsLocal() {
 		t.Fatal("cannot be run in local mode")
 	}
