@@ -85,6 +85,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
+	"github.com/cockroachdb/cockroach/pkg/util/slidingwindow"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
@@ -1061,7 +1062,8 @@ type Store struct {
 
 	ioThreshold struct {
 		syncutil.Mutex
-		t *admissionpb.IOThreshold // never nil
+		t        *admissionpb.IOThreshold // never nil
+		maxScore *slidingwindow.Swag
 	}
 
 	counts struct {
@@ -1413,6 +1415,8 @@ func NewStore(
 		rangeFeedSlowClosedTimestampNudge: singleflight.NewGroup("rangfeed-ct-nudge", "range"),
 	}
 	s.ioThreshold.t = &admissionpb.IOThreshold{}
+	// Track the maxScore over the last 5 minutes, in one minute windows.
+	s.ioThreshold.maxScore = slidingwindow.NewMaxSwag(cfg.Clock.Now().GoTime(), time.Minute, 5)
 	var allocatorStorePool storepool.AllocatorStorePool
 	var storePoolIsDeterministic bool
 	if cfg.StorePool != nil {
@@ -2571,11 +2575,15 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	return s.storeGossip.GossipStore(ctx, useCached)
 }
 
-// UpdateIOThreshold updates the IOThreshold reported in the StoreDescriptor.
+// UpdateIOThreshold updates the IOThreshold and IOThresholdScoreMax reported
+// in the StoreDescriptor.
 func (s *Store) UpdateIOThreshold(ioThreshold *admissionpb.IOThreshold) {
+	now := s.Clock().Now().GoTime()
 	s.ioThreshold.Lock()
 	defer s.ioThreshold.Unlock()
 	s.ioThreshold.t = ioThreshold
+	score, _ := ioThreshold.Score()
+	s.ioThreshold.maxScore.Record(now, score)
 }
 
 // VisitReplicasOption optionally modifies store.VisitReplicas.
@@ -2924,6 +2932,8 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	{
 		s.ioThreshold.Lock()
 		capacity.IOThreshold = *s.ioThreshold.t
+		capacity.IOThresholdScoreMax, _ = s.ioThreshold.maxScore.Query(
+			s.Clock().Now().GoTime())
 		s.ioThreshold.Unlock()
 	}
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
