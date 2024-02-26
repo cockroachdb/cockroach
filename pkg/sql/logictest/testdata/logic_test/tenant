@@ -322,6 +322,16 @@ ALTER TENANT 'tenant-one' START SERVICE EXTERNAL
 statement ok
 ALTER TENANT 'tenant-one' START SERVICE EXTERNAL
 
+# Creation option works too.
+statement ok
+CREATE TENANT createdext WITH SERVICE EXTERNAL
+
+statement ok
+CREATE TENANT createdshared WITH SERVICE SHARED
+
+statement ok
+CREATE TENANT creatednone WITH SERVICE NONE
+
 statement ok
 ALTER TENANT two START SERVICE SHARED
 
@@ -352,6 +362,9 @@ id  name             data_state  service_mode
 9   1                ready       none
 10  a-b              ready       none
 11  hello-100        ready       none
+12  createdext       ready       external
+13  createdshared    ready       shared
+14  creatednone      ready       none
 
 statement ok
 ALTER TENANT two STOP SERVICE
@@ -371,12 +384,31 @@ id  name             data_state  service_mode
 9   1                ready       none
 10  a-b              ready       none
 11  hello-100        ready       none
+12  createdext       ready       external
+13  createdshared    ready       shared
+14  creatednone      ready       none
 
 statement ok
 DROP TENANT two
 
 statement ok
 DROP TENANT 'tenant-one'
+
+statement ok
+ALTER TENANT createdext STOP SERVICE
+
+statement ok
+DROP TENANT createdext
+
+statement ok
+ALTER TENANT createdshared STOP SERVICE
+
+statement ok
+DROP TENANT createdshared
+
+statement ok
+DROP TENANT creatednone
+
 
 subtest tenant_templates
 

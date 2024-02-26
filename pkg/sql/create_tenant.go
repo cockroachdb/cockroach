@@ -22,6 +22,7 @@ type createTenantNode struct {
 	ifNotExists    bool
 	tenantSpec     tenantSpec
 	likeTenantSpec tenantSpec
+	options        tree.TenantCreationOptions
 }
 
 func (p *planner) CreateTenantNode(ctx context.Context, n *tree.CreateTenant) (planNode, error) {
@@ -40,6 +41,7 @@ func (p *planner) CreateTenantNode(ctx context.Context, n *tree.CreateTenant) (p
 		ifNotExists:    n.IfNotExists,
 		tenantSpec:     tspec,
 		likeTenantSpec: likeTenantSpec,
+		options:        n.Options,
 	}, nil
 }
 
@@ -72,6 +74,17 @@ func (n *createTenantNode) startExec(params runParams) error {
 		ctcfg.ID = &tenantID
 	}
 	ctcfg.IfNotExists = n.ifNotExists
+	if n.options.Service != tree.TenantServiceUnspecified {
+		// TODO(dt): This detour through *string is for the json builtin; remove it.
+		serviceString := mtinfopb.ServiceModeNone.String()
+		switch n.options.Service {
+		case tree.TenantServiceShared:
+			serviceString = mtinfopb.ServiceModeShared.String()
+		case tree.TenantServiceExternal:
+			serviceString = mtinfopb.ServiceModeExternal.String()
+		}
+		ctcfg.ServiceMode = &serviceString
+	}
 	_, err = params.p.createTenantInternal(params.ctx, ctcfg, configTemplate)
 	return err
 }
