@@ -3893,10 +3893,39 @@ var charts = []sectionDescription{
 		Organization: [][]string{{Jobs, "External Storage"}},
 		Charts: []chartDescription{
 			{
-				Title: "External Storage",
+				Title: "Transfer",
 				Metrics: []string{
 					"cloud.read_bytes",
 					"cloud.write_bytes",
+				},
+			},
+			{
+				Title: "Activity",
+				Metrics: []string{
+					"cloud.readers_opened",
+					"cloud.writers_opened",
+				},
+			},
+			{
+				Title: "Open Files",
+				Metrics: []string{
+					"cloud.open_readers",
+					"cloud.open_writers",
+				},
+			},
+			{
+				Title: "Connections",
+				Metrics: []string{
+					"cloud.conns_opened",
+					"cloud.conns_reused",
+					"cloud.tls_handshakes",
+				},
+			},
+			{
+				Title: "Listing",
+				Metrics: []string{
+					"cloud.listings",
+					"cloud.listing_results",
 				},
 			},
 		},
