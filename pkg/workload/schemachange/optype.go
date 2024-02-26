@@ -252,7 +252,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 
 var opWeights = []int{
 	// Non-DDL
-	insertRow:  10,
+	insertRow:  100,
 	selectStmt: 10,
 	validate:   2, // validate twice more often
 
@@ -265,7 +265,7 @@ var opWeights = []int{
 	alterFunctionRename:               1,
 	alterFunctionSetSchema:            1,
 	alterTableAddColumn:               1,
-	alterTableAddConstraintForeignKey: 1,
+	alterTableAddConstraintForeignKey: 300,
 	alterTableAddConstraintUnique:     0,
 	alterTableAlterColumnType:         0, // Disabled and tracked with #66662.
 	alterTableAlterPrimaryKey:         1,
@@ -284,7 +284,7 @@ var opWeights = []int{
 	createIndex:                       1,
 	createSchema:                      1,
 	createSequence:                    1,
-	createTable:                       1,
+	createTable:                       300,
 	createTableAs:                     1,
 	createTypeEnum:                    1,
 	createView:                        1,

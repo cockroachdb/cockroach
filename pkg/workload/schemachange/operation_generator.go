@@ -887,7 +887,7 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	stmt.potentialExecErrors.add(pgcode.ForeignKeyViolation)
 	og.potentialCommitErrors.add(pgcode.ForeignKeyViolation)
 
-	// TODO why did I add this??
+	// TODO(foundations): this was added in #116790 without reason
 	stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
 
 	// It's possible for the table to be dropped concurrently, while we are running
@@ -2845,10 +2845,10 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 		nonGeneratedCols = truncated
 	}
-	colNames := []string{}
+	nonGeneratedColNames := []string{}
 	rows := [][]string{}
 	for _, col := range nonGeneratedCols {
-		colNames = append(colNames, col.name)
+		nonGeneratedColNames = append(nonGeneratedColNames, col.name)
 	}
 	numRows := og.randIntn(3) + 1
 	for i := 0; i < numRows; i++ {
@@ -2884,7 +2884,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	anyInvalidInserts := false
 	stmt = makeOpStmt(OpStmtDML)
 	for _, row := range rows {
-		invalidInsert, generatedErrors, potentialErrors, err := og.validateGeneratedExpressionsForInsert(ctx, tx, tableName, colNames, allColumns, row)
+		invalidInsert, generatedErrors, potentialErrors, err := og.validateGeneratedExpressionsForInsert(ctx, tx, tableName, nonGeneratedColNames, allColumns, row)
 		if err != nil {
 			return nil, err
 		}
@@ -2895,10 +2895,11 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			// We will be pessimistic and assume that other column related errors can
 			// be hit, since the function above fails only on generated columns. But,
 			// there maybe index expressions with the exact same problem.
-			stmt.potentialExecErrors.add(pgcode.NumericValueOutOfRange)
-			stmt.potentialExecErrors.add(pgcode.FloatingPointException)
-			stmt.potentialExecErrors.add(pgcode.NotNullViolation)
-			anyInvalidInserts = true
+			stmt.expectedExecErrors.add(pgcode.NumericValueOutOfRange)
+			stmt.expectedExecErrors.add(pgcode.FloatingPointException)
+			stmt.expectedExecErrors.add(pgcode.NotNullViolation)
+			// TODO(before merge): remember to comment this back in
+			//anyInvalidInserts = true
 		}
 	}
 
@@ -2910,7 +2911,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		// Verify if the new row will violate unique constraints by checking the constraints and
 		// existing rows in the database.
 		var generatedErrors codesWithConditions
-		uniqueConstraintViolation, generatedErrors, err = og.valuesViolateUniqueConstraints(ctx, tx, tableName, colNames, allColumns, rows)
+		uniqueConstraintViolation, generatedErrors, err = og.valuesViolateUniqueConstraints(ctx, tx, tableName, nonGeneratedColNames, allColumns, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -2919,8 +2920,9 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 		// Verify if the new row will violate fk constraints by checking the constraints and rows
 		// in the database.
-		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
+		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
 		if err != nil {
+			fmt.Println("might make sense here")
 			return nil, err
 		}
 	}
@@ -2943,7 +2945,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	stmt.sql = fmt.Sprintf(
 		`INSERT INTO %s (%s) VALUES %s`,
 		tableName,
-		strings.Join(colNames, ","),
+		strings.Join(nonGeneratedColNames, ","),
 		strings.Join(formattedRows, ","),
 	)
 	return stmt, nil
