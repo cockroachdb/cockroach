@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/errors"
 )
 
 // RoutinePlanGenerator generates a plan for the execution of each statement
@@ -236,4 +238,93 @@ type BlockState struct {
 	// TODO(111139): Once we support nested routine calls, we may have to track
 	// newly opened cursors differently.
 	Cursors []Name
+}
+
+// StoredProcTxnOp indicates whether a stored procedure has requested that the
+// current transaction be committed or aborted.
+type StoredProcTxnOp uint8
+
+const (
+	StoredProcTxnNoOp StoredProcTxnOp = iota
+	StoredProcTxnCommit
+	StoredProcTxnRollback
+)
+
+// String returns a string representation of the transaction control statement.
+func (txnOp StoredProcTxnOp) String() string {
+	switch txnOp {
+	case StoredProcTxnCommit:
+		return "COMMIT"
+	case StoredProcTxnRollback:
+		return "ROLLBACK"
+	default:
+		return "NO-OP"
+	}
+}
+
+// StoredProcContinuation represents the plan for a CALL statement that resumes
+// execution of a stored procedure that paused in order to execute a COMMIT or
+// ROLLBACK statement. Currently maps to *memo.Memo.
+type StoredProcContinuation interface{}
+
+// TxnControlPlanGenerator builds the plan for a StoredProcContinuation.
+type TxnControlPlanGenerator func(
+	ctx context.Context, args Datums,
+) (StoredProcContinuation, error)
+
+// TxnControlExpr implements PL/pgSQL COMMIT and ROLLBACK statements. It directs
+// the session to end the current transaction, and provides a plan to resume
+// execution in a new transaction in the form of StoredProcContinuation.
+type TxnControlExpr struct {
+	Op   StoredProcTxnOp
+	Args TypedExprs
+	Gen  TxnControlPlanGenerator
+
+	Name string
+	Typ  *types.T
+}
+
+var _ Expr = &TxnControlExpr{}
+
+// NewTxnControlExpr returns a new TxnControlExpr that is well-typed.
+func NewTxnControlExpr(
+	opType StoredProcTxnOp, args TypedExprs, gen TxnControlPlanGenerator, name string, typ *types.T,
+) *TxnControlExpr {
+	return &TxnControlExpr{
+		Op:   opType,
+		Args: args,
+		Gen:  gen,
+		Name: name,
+		Typ:  typ,
+	}
+}
+
+// TypeCheck is part of the Expr interface.
+func (node *TxnControlExpr) TypeCheck(
+	ctx context.Context, semaCtx *SemaContext, desired *types.T,
+) (TypedExpr, error) {
+	return node, nil
+}
+
+// ResolvedType is part of the TypedExpr interface.
+func (node *TxnControlExpr) ResolvedType() *types.T {
+	return node.Typ
+}
+
+// Format is part of the Expr interface.
+func (node *TxnControlExpr) Format(ctx *FmtCtx) {
+	if buildutil.CrdbTestBuild {
+		if node.Op == StoredProcTxnNoOp {
+			panic(errors.AssertionFailedf("called Format for no-op txn control expr"))
+		}
+	}
+	ctx.Printf("%s; CALL %s(", node.Op, node.Name)
+	ctx.FormatNode(&node.Args)
+	ctx.WriteByte(')')
+}
+
+// Walk is part of the Expr interface.
+func (node *TxnControlExpr) Walk(v Visitor) Expr {
+	// Cannot walk into a TxnOp, so this is a no-op.
+	return node
 }

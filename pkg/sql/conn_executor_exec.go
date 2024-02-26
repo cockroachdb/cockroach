@@ -979,7 +979,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	// For regular statements (the ones that get to this point), we
-	// don't return any event unless an error happens.
+	// don't return any event unless an error happens, or a CALL statement
+	// performs a nested transaction COMMIT or ROLLBACK.
 
 	// For a portal (prepared stmt), since handleAOST() is called when preparing
 	// the statement, and this function is idempotent, we don't need to
@@ -1240,6 +1241,29 @@ func (ex *connExecutor) execStmtInOpenState(
 			return ev, payload, nil
 		}
 		log.VEventf(ctx, 2, "push detected for non-refreshable txn but auto-retry not possible")
+	}
+
+	// Special handling for explicit transaction management in CALL statements.
+	// A stored procedure has executed a COMMIT or ROLLBACK statement and
+	// suspended its execution. Direct the connExecutor to commit/rollback the
+	// current transaction, and then resume execution within the new transaction.
+	switch ex.extraTxnState.storedProcTxnState.txnOp {
+	case tree.StoredProcTxnCommit:
+		// Commit the current transaction. The connExecutor will open a new
+		// transaction, and then return to executing the same CALL statement.
+		ev, payload := ex.commitSQLTransaction(ctx, ast, ex.commitSQLTransactionInternal)
+		if payload != nil {
+			return ev, payload, nil
+		}
+		return eventTxnFinishCommittedPLpgSQL{}, nil, nil
+	case tree.StoredProcTxnRollback:
+		// Abort the current transaction. The connExecutor will open a new
+		// transaction, and then return to executing the same CALL statement.
+		ev, payload := ex.rollbackSQLTransaction(ctx, ast)
+		if payload != nil {
+			return ev, payload, nil
+		}
+		return eventTxnFinishAbortedPLpgSQL{}, nil, nil
 	}
 
 	// No event was generated.

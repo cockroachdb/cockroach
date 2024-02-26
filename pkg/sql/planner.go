@@ -239,6 +239,8 @@ type planner struct {
 
 	sqlCursors sqlCursors
 
+	storedProcTxnState storedProcTxnStateAccessor
+
 	createdSequences createdSequences
 
 	// autoCommit indicates whether the plan is allowed (but not required) to
