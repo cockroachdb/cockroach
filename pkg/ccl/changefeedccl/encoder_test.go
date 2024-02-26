@@ -1224,3 +1224,66 @@ func TestJsonRountrip(t *testing.T) {
 		})
 	}
 }
+
+// TestAvroWithRegionalTable tests how the avro encoder works with regional
+// tables and with different envelope formats. This is a regression test for
+// #119428.
+func TestAvroWithRegionalTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		tests := []struct {
+			format  string
+			payload []string
+		}{
+			{
+				format: "wrapped",
+				payload: []string{
+					`table1: {"a":{"long":1},"crdb_region":{"string":"us-east1"}}->{"after":{"table1":{"a":{"long":1},"crdb_region":{"string":"us-east1"}}}}`,
+					`table1: {"a":{"long":2},"crdb_region":{"string":"us-east1"}}->{"after":{"table1":{"a":{"long":2},"crdb_region":{"string":"us-east1"}}}}`,
+					`table1: {"a":{"long":3},"crdb_region":{"string":"us-east1"}}->{"after":{"table1":{"a":{"long":3},"crdb_region":{"string":"us-east1"}}}}`,
+				},
+			},
+			{
+				format: "bare",
+				payload: []string{
+					`table1: {"a":{"long":1},"crdb_region":{"string":"us-east1"}}->{"record":{"table1":{"a":{"long":1},"crdb_region":{"string":"us-east1"}}}}`,
+					`table1: {"a":{"long":2},"crdb_region":{"string":"us-east1"}}->{"record":{"table1":{"a":{"long":2},"crdb_region":{"string":"us-east1"}}}}`,
+					`table1: {"a":{"long":3},"crdb_region":{"string":"us-east1"}}->{"record":{"table1":{"a":{"long":3},"crdb_region":{"string":"us-east1"}}}}`,
+				},
+			},
+			{
+				format: "key_only",
+				payload: []string{
+					`table1: {"a":{"long":1},"crdb_region":{"string":"us-east1"}}->`,
+					`table1: {"a":{"long":2},"crdb_region":{"string":"us-east1"}}->`,
+					`table1: {"a":{"long":3},"crdb_region":{"string":"us-east1"}}->`,
+				},
+			},
+		}
+		for _, test := range tests {
+			t.Run(test.format, func(t *testing.T) {
+				cluster, db, cleanup := startTestCluster(t)
+				defer cleanup()
+				sqlDB := sqlutils.MakeSQLRunner(db)
+				sqlDB.Exec(t, `CREATE TABLE table1 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW`)
+				schemaReg := cdctest.StartTestSchemaRegistry()
+				defer schemaReg.Close()
+				stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE table1 WITH format = avro, envelope = %s, 
+	confluent_schema_registry = "%s", schema_change_events = column_changes, schema_change_policy = nobackfill`,
+					test.format, schemaReg.URL())
+
+				f := makeKafkaFeedFactory(cluster, db)
+				testFeed := feed(t, f, stmt)
+				defer closeFeed(t, testFeed)
+
+				sqlDB.Exec(t, `INSERT INTO table1(a) values(1)`)
+				sqlDB.Exec(t, `INSERT INTO table1(a) values(2)`)
+				sqlDB.Exec(t, `INSERT INTO table1(a) values(3)`)
+				assertPayloads(t, testFeed, test.payload)
+			})
+		}
+	}
+	cdcTest(t, testFn)
+}

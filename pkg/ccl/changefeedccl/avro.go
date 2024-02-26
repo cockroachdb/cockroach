@@ -1052,6 +1052,9 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 // Refresh the metadata for user-defined types on a cached schema
 // The only user-defined type is enum, so this is usually a no-op.
 func (r *avroDataRecord) refreshTypeMetadata(row cdcevent.Row) error {
+	if r == nil {
+		return nil
+	}
 	return row.ForEachUDTColumn().Col(func(col cdcevent.ResultColumn) error {
 		if fieldIdx, ok := r.fieldIdxByName[col.Name]; ok {
 			r.Fields[fieldIdx].typ = col.Typ
