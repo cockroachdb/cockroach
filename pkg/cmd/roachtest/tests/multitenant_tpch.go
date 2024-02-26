@@ -12,12 +12,12 @@ package tests
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -30,8 +30,6 @@ import (
 func runMultiTenantTPCH(
 	ctx context.Context, t test.Test, c cluster.Cluster, enableDirectScans bool, sharedProcess bool,
 ) {
-	secure := true
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
 	start := func() {
 		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.All())
 	}
@@ -45,7 +43,8 @@ func runMultiTenantTPCH(
 	// TPCH dataset using the provided connection and then runs each TPCH query
 	// one at a time (using the given url as a parameter to the 'workload run'
 	// command). The runtimes are accumulated in the perf helper.
-	runTPCH := func(conn *gosql.DB, url string, setupIdx int) {
+	runTPCH := func(node int, virtualClusterName string, sqlInstance int, setupIdx int) {
+		conn := c.Conn(ctx, t.L(), node, option.TenantName(virtualClusterName), option.SQLInstance(sqlInstance))
 		setting := fmt.Sprintf("SET CLUSTER SETTING sql.distsql.direct_columnar_scans.enabled = %t", enableDirectScans)
 		t.Status(setting)
 		if _, err := conn.Exec(setting); err != nil {
@@ -53,15 +52,18 @@ func runMultiTenantTPCH(
 		}
 		t.Status("restoring TPCH dataset for Scale Factor 1 in ", setupNames[setupIdx])
 		if err := loadTPCHDataset(
-			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), false /* disableMergeQueue */, secure,
+			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), false, /* disableMergeQueue */
 		); err != nil {
 			t.Fatal(err)
 		}
 		for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
-			cmd := fmt.Sprintf("./workload run tpch %s --secure "+
-				"--concurrency=1 --db=tpch --max-ops=%d --queries=%d {pgurl:1}",
-				url, numRunsPerQuery, queryNum)
-			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(1)), cmd)
+			cmd := roachtestutil.NewCommand("%s workload run tpch", test.DefaultCockroachPath).
+				Flag("concurrency", 1).
+				Flag("db", "tpch").
+				Flag("max-ops", numRunsPerQuery).
+				Flag("queries", queryNum).
+				Arg("{pgurl:%d:%s}", node, virtualClusterName)
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(1)), cmd.String())
 			workloadOutput := result.Stdout + result.Stderr
 			t.L().Printf(workloadOutput)
 			if err != nil {
@@ -71,69 +73,65 @@ func runMultiTenantTPCH(
 		}
 	}
 
-	// First, use the cluster as a single tenant deployment. It is important to
-	// not create the tenant yet so that the certs directory is not overwritten.
-	singleTenantConn := c.Conn(ctx, t.L(), 1)
+	const sqlInstance = 0
+
+	systemConn := c.Conn(ctx, t.L(), 1)
+	defer systemConn.Close()
+
+	// First, use the cluster as a single tenant deployment.
+	gatewayNode := c.All().RandNode()[0]
 	// Disable merge queue in the system tenant.
-	if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
+	if _, err := systemConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
 		t.Fatal(err)
 	}
-	runTPCH(singleTenantConn, "" /* url */, 0 /* setupIdx */)
+	runTPCH(gatewayNode, install.SystemInterfaceName, sqlInstance, 0 /* setupIdx */)
 
 	// Restart and wipe the cluster to remove advantage of the second TPCH run.
-	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 	c.Wipe(ctx)
 	start()
-	singleTenantConn = c.Conn(ctx, t.L(), 1)
 	// Disable merge queue in the system tenant.
-	if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
+	if _, err := systemConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now we create a tenant and run all TPCH queries within it.
-	if sharedProcess {
-		db := createInMemoryTenantWithConn(ctx, t, c, appTenantName, c.All(), true /* secure */)
-		defer db.Close()
-		url := fmt.Sprintf("{pgurl:1:%s}", appTenantName)
-		runTPCH(db, url, 1 /* setupIdx */)
-	} else {
-		const (
-			tenantID       = 123
-			tenantHTTPPort = 8081
-			tenantSQLPort  = 30258
-			tenantNode     = 1
-		)
-		_, err := singleTenantConn.Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		tenant := createTenantNode(ctx, t, c, c.All(), tenantID, tenantNode, tenantHTTPPort, tenantSQLPort)
-		tenant.start(ctx, t, c, "./cockroach")
-		multiTenantConn, err := gosql.Open("postgres", tenant.pgURL)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// Allow the tenant to be able to split tables. We need to run a dummy
-		// split in order to make sure the capability is propagated before
-		// starting the test, otherwise importing tpch may fail.
-		_, err = singleTenantConn.Exec(
-			`ALTER TENANT [$1] SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled=true`, tenantID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = singleTenantConn.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_split=true`, tenantID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		testutils.SucceedsSoon(t, func() error {
-			if _, err := multiTenantConn.Exec(`CREATE TABLE IF NOT EXISTS dummysplit (a INT)`); err != nil {
-				return err
-			}
-			_, err = multiTenantConn.Exec(`ALTER TABLE dummysplit SPLIT AT VALUES (0)`)
-			return err
-		})
-		runTPCH(multiTenantConn, "'"+tenant.secureURL()+"'", 1 /* setupIdx */)
+	startOpts := option.DefaultStartSharedVirtualClusterOpts(appTenantName)
+	var separateProcessNode option.NodeListOption
+	if !sharedProcess {
+		separateProcessNode = c.All().RandNode()
+		gatewayNode = separateProcessNode[0]
+		startOpts = option.DefaultStartVirtualClusterOpts(appTenantName, sqlInstance)
 	}
+	c.StartServiceForVirtualCluster(
+		ctx, t.L(), separateProcessNode, startOpts, install.MakeClusterSettings(),
+	)
+
+	// Allow the tenant to be able to split tables. We need to run a dummy
+	// split in order to make sure the capability is propagated before
+	// starting the test, otherwise importing tpch may fail.
+	if _, err := systemConn.Exec(
+		`ALTER TENANT $1 SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled=true`, appTenantName,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := systemConn.Exec(
+		`ALTER TENANT $1 GRANT CAPABILITY can_admin_split=true`, appTenantName,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	virtualClusterConn := c.Conn(ctx, t.L(), gatewayNode, option.TenantName(appTenantName), option.SQLInstance(sqlInstance))
+	defer virtualClusterConn.Close()
+
+	testutils.SucceedsSoon(t, func() error {
+		if _, err := virtualClusterConn.Exec(`CREATE TABLE IF NOT EXISTS dummysplit (a INT)`); err != nil {
+			return err
+		}
+		_, err := virtualClusterConn.Exec(`ALTER TABLE dummysplit SPLIT AT VALUES (0)`)
+		return err
+	})
+
+	runTPCH(gatewayNode, appTenantName, sqlInstance, 1 /* setupIdx */)
 
 	// Analyze the runtimes of both setups.
 	perfHelper.compareSetups(t, numRunsPerQuery, nil /* timesCallback */)
