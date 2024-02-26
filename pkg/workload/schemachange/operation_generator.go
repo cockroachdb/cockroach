@@ -887,7 +887,7 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	stmt.potentialExecErrors.add(pgcode.ForeignKeyViolation)
 	og.potentialCommitErrors.add(pgcode.ForeignKeyViolation)
 
-	// TODO why did I add this??
+	// TODO(foundations): this was added in #116790 without reason
 	stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
 
 	// It's possible for the table to be dropped concurrently, while we are running
@@ -2845,10 +2845,10 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 		nonGeneratedCols = truncated
 	}
-	colNames := []string{}
+	nonGeneratedColNames := []string{}
 	rows := [][]string{}
 	for _, col := range nonGeneratedCols {
-		colNames = append(colNames, col.name)
+		nonGeneratedColNames = append(nonGeneratedColNames, col.name)
 	}
 	numRows := og.randIntn(3) + 1
 	for i := 0; i < numRows; i++ {
@@ -2884,7 +2884,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	anyInvalidInserts := false
 	stmt = makeOpStmt(OpStmtDML)
 	for _, row := range rows {
-		invalidInsert, generatedErrors, potentialErrors, err := og.validateGeneratedExpressionsForInsert(ctx, tx, tableName, colNames, allColumns, row)
+		invalidInsert, generatedErrors, potentialErrors, err := og.validateGeneratedExpressionsForInsert(ctx, tx, tableName, nonGeneratedColNames, allColumns, row)
 		if err != nil {
 			return nil, err
 		}
@@ -2910,7 +2910,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		// Verify if the new row will violate unique constraints by checking the constraints and
 		// existing rows in the database.
 		var generatedErrors codesWithConditions
-		uniqueConstraintViolation, generatedErrors, err = og.valuesViolateUniqueConstraints(ctx, tx, tableName, colNames, allColumns, rows)
+		uniqueConstraintViolation, generatedErrors, err = og.valuesViolateUniqueConstraints(ctx, tx, tableName, nonGeneratedColNames, allColumns, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -2919,7 +2919,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 		// Verify if the new row will violate fk constraints by checking the constraints and rows
 		// in the database.
-		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
+		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -2943,7 +2943,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	stmt.sql = fmt.Sprintf(
 		`INSERT INTO %s (%s) VALUES %s`,
 		tableName,
-		strings.Join(colNames, ","),
+		strings.Join(nonGeneratedColNames, ","),
 		strings.Join(formattedRows, ","),
 	)
 	return stmt, nil
@@ -3190,6 +3190,7 @@ type column struct {
 	nullable            bool
 	generated           bool
 	generatedExpression string
+	ordinal             int
 }
 
 func (og *operationGenerator) getTableColumns(
@@ -3209,14 +3210,16 @@ func (og *operationGenerator) getTableColumns(
                       ),
          columns AS (
                   SELECT c->>'computeExpr' AS generation_expression,
-                         c->>'name' AS column_name
+                         c->>'name' AS column_name,
+												 c->>'id' AS ordinal
                     FROM columns_json
                  )
   SELECT quote_ident(show_columns.column_name),
          show_columns.data_type,
          show_columns.is_nullable,
          columns.generation_expression IS NOT NULL AS is_generated,
-         COALESCE(columns.generation_expression, '') as generated_expression
+         COALESCE(columns.generation_expression, '') AS generated_expression,
+			   columns.ordinal::INT-1
     FROM [SHOW COLUMNS FROM %s] AS show_columns, columns
    WHERE show_columns.column_name != 'rowid'
          AND show_columns.column_name = columns.column_name
@@ -3232,7 +3235,7 @@ func (og *operationGenerator) getTableColumns(
 	for rows.Next() {
 		var c column
 		var typName string
-		err := rows.Scan(&c.name, &typName, &c.nullable, &c.generated, &c.generatedExpression)
+		err := rows.Scan(&c.name, &typName, &c.nullable, &c.generated, &c.generatedExpression, &c.ordinal)
 		if err != nil {
 			return nil, err
 		}
