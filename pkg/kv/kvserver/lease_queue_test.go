@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -288,4 +289,34 @@ func TestLeaseQueueRaceReplicateQueue(t *testing.T) {
 	<-blocked
 	_, processErr, _ := repl.Store().Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
 	require.ErrorIs(t, processErr, plan.NewErrAllocatorToken("lease"))
+}
+
+// TestLeaseQueueShedsOnIOOverload asserts that leases are shed if the store is
+// IO overloaded.
+func TestLeaseQueueShedsOnIOOverload(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	s1 := tc.GetFirstStoreFromServer(t, 0)
+	capacityBefore, err := s1.Capacity(ctx, false /* useCached */)
+	require.NoError(t, err)
+	require.Greater(t, capacityBefore.LeaseCount, int32(30))
+
+	ioThreshold := allocatorimpl.TestingIOThresholdWithScore(1)
+	s1.UpdateIOThreshold(&ioThreshold)
+	testutils.SucceedsWithin(t, func() error {
+		capacityAfter, err := s1.Capacity(ctx, false /* useCached */)
+		if err != nil {
+			return err
+		}
+		if capacityAfter.LeaseCount > 0 {
+			return errors.Errorf("expected 0 leases on store 1, found %d",
+				capacityAfter.LeaseCount)
+		}
+		return nil
+	}, 5*time.Second)
 }
