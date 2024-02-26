@@ -322,11 +322,12 @@ func (b *Builder) buildRoutine(
 				class: param.Class,
 			})
 		}
-		plBuilder := newPLpgSQLBuilder(b, def.Name, colRefs, routineParams, rtyp)
-		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
-		finishResolveType(stmtScope)
 		var expr memo.RelExpr
 		var physProps *physical.Required
+		isProc := o.Type == tree.ProcedureRoutine
+		plBuilder := newPLpgSQLBuilder(b, def.Name, colRefs, routineParams, rtyp, isProc)
+		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
+		finishResolveType(stmtScope)
 		expr, physProps, isMultiColDataSource =
 			b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
 		body = []memo.RelExpr{expr}

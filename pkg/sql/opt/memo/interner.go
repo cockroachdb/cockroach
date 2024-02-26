@@ -777,6 +777,10 @@ func (h *hasher) HashUDFDefinition(val *UDFDefinition) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
+func (h *hasher) HashStoredProcTxnOp(val tree.StoredProcTxnOp) {
+	h.HashUint64(uint64(val))
+}
+
 // ----------------------------------------------------------------------
 //
 // Equality functions
@@ -1309,6 +1313,10 @@ func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
 		return false
 	}
 	return h.IsColListEqual(l.Params, r.Params) && l.IsRecursive == r.IsRecursive
+}
+
+func (h *hasher) IsStoredProcTxnOpEqual(l, r tree.StoredProcTxnOp) bool {
+	return l == r
 }
 
 // encodeDatum turns the given datum into an encoded string of bytes. If two
