@@ -1771,6 +1771,7 @@ func (node *NumVal) String() string           { return AsString(node) }
 func (node *OrExpr) String() string           { return AsString(node) }
 func (node *ParenExpr) String() string        { return AsString(node) }
 func (node *RangeCond) String() string        { return AsString(node) }
+func (node *TxnControlExpr) String() string   { return AsString(node) }
 func (node *StrVal) String() string           { return AsString(node) }
 func (node *Subquery) String() string         { return AsString(node) }
 func (node *RoutineExpr) String() string      { return AsString(node) }
