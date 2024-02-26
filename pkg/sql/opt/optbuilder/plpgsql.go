@@ -166,6 +166,7 @@ type plpgsqlBuilder struct {
 	// variables from a parent block can be referenced in a child block.
 	blocks []plBlock
 
+	isProcedure  bool
 	identCounter int
 }
 
@@ -175,13 +176,15 @@ func newPLpgSQLBuilder(
 	colRefs *opt.ColSet,
 	params []tree.ParamType,
 	returnType *types.T,
+	isProcedure bool,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
 	b := &plpgsqlBuilder{
-		ob:         ob,
-		colRefs:    colRefs,
-		returnType: returnType,
-		blocks:     make([]plBlock, 0, initialBlocksCap),
+		ob:          ob,
+		colRefs:     colRefs,
+		returnType:  returnType,
+		blocks:      make([]plBlock, 0, initialBlocksCap),
+		isProcedure: isProcedure,
 	}
 	// Build the initial block for the routine parameters, which are considered
 	// PL/pgSQL variables.
@@ -228,8 +231,30 @@ type plBlock struct {
 	state *tree.BlockState
 }
 
+// buildRootBlock builds a PL/pgSQL routine starting with the root block.
+func (b *plpgsqlBuilder) buildRootBlock(astBlock *ast.Block, s *scope) *scope {
+	// Push the scope, since otherwise the routine parameters could be considered
+	// pass-through columns when they are really outer columns.
+	s = s.push()
+	if b.isProcedure {
+		var tc transactionControlVisitor
+		ast.Walk(&tc, astBlock)
+		if tc.foundTxnControlStatement {
+			// Disable stable folding, since different parts of the routine can be run
+			// in different transactions.
+			b.ob.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+				s = b.buildBlock(astBlock, s)
+			})
+			return s
+		}
+	}
+	return b.buildBlock(astBlock, s)
+}
+
 // buildBlock constructs an expression that returns the result of executing a
 // PL/pgSQL block, including variable declarations and exception handlers.
+//
+// buildBlock should not be called externally; use buildRootBlock instead.
 func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 	if len(b.blocks) == 0 {
 		// There should always be a root block for the routine parameters.
@@ -243,9 +268,6 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		// blocks are not yet compatible.
 		panic(nestedBlockExceptionErr)
 	}
-	// Push the scope to ensure that routine parameters are not treated as
-	// passthrough columns.
-	s = s.push()
 	b.ensureScopeHasExpr(s)
 	block := b.pushBlock(plBlock{
 		label:     astBlock.Label,
@@ -254,8 +276,8 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		constants: make(map[ast.Variable]struct{}),
 		cursors:   make(map[ast.Variable]ast.CursorDeclaration),
 	})
-	// First, handle the variable declarations.
 	defer b.popBlock()
+	// First, handle the variable declarations.
 	for i := range astBlock.Decls {
 		switch dec := astBlock.Decls[i].(type) {
 		case *ast.Declaration:
@@ -739,6 +761,36 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			intoScope = b.callContinuation(&retCon, intoScope)
 			b.appendBodyStmt(&fetchCon, intoScope)
 			return b.callContinuation(&fetchCon, s)
+
+		case *ast.TransactionControl:
+			// Transaction control statements are handled by a TxnControlExpr, which
+			// wraps a continuation for the remaining statements in the routine.
+			// During execution, a TxnControlExpr directs the session to commit or
+			// rollback the transaction, and supplies a plan for the continuation to
+			// run in the new transaction.
+			if t.Chain {
+				panic(txnControlWithChainErr)
+			}
+			// NOTE: postgres doesn't make the following checks until runtime (see
+			// also #119750).
+			// TODO(#88198): check the calling context, since transaction control
+			// statements are only allowed through a stack of SPs and DO blocks.
+			if b.hasExceptionHandler() {
+				panic(txnControlWithExceptionErr)
+			}
+			if !b.isProcedure {
+				panic(txnInUDFErr)
+			}
+			name := "_stmt_commit"
+			txnOpType := tree.StoredProcTxnCommit
+			if t.Rollback {
+				name = "_stmt_rollback"
+				txnOpType = tree.StoredProcTxnRollback
+			}
+			con := b.makeContinuation(name)
+			con.def.Volatility = volatility.Volatile
+			b.appendPlpgSQLStmts(&con, stmts[i+1:])
+			return b.callContinuationWithTxnOp(&con, s, txnOpType)
 
 		default:
 			panic(unsupportedPLStmtErr)
@@ -1381,6 +1433,45 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 	if con == nil {
 		return b.buildEndOfFunctionRaise(s)
 	}
+	// PLpgSQL continuation routines are always in tail-call position.
+	args := b.makeContinuationArgs(con, s)
+	call := b.ob.factory.ConstructUDFCall(args, &memo.UDFCallPrivate{Def: con.def, TailCall: true})
+	b.addBarrierIfVolatile(s, call)
+
+	returnColName := scopeColName("").WithMetadataName(con.def.Name)
+	returnScope := s.push()
+	b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, call)
+	b.ob.constructProjectForScope(s, returnScope)
+	return returnScope
+}
+
+// callContinuationWithTxnOp is similar to callContinuation, but wraps the
+// continuation in a TxnControlExpr that will commit or abort the current
+// transaction before resuming execution with the continuation.
+func (b *plpgsqlBuilder) callContinuationWithTxnOp(
+	con *continuation, s *scope, txnOp tree.StoredProcTxnOp,
+) *scope {
+	if con == nil {
+		panic(errors.AssertionFailedf("nil continuation with transaction control"))
+	}
+	if txnOp == tree.StoredProcTxnNoOp {
+		panic(errors.AssertionFailedf("no-op transaction control statement"))
+	}
+	b.addBarrier(s)
+	returnScope := s.push()
+	args := b.makeContinuationArgs(con, s)
+	txnControlExpr := b.ob.factory.ConstructTxnControl(args, &memo.TxnControlPrivate{
+		TxnOp: txnOp,
+		Props: returnScope.makePhysicalProps(),
+		Def:   con.def,
+	})
+	returnColName := scopeColName("").WithMetadataName(con.def.Name)
+	b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, txnControlExpr)
+	b.ob.constructProjectForScope(s, returnScope)
+	return returnScope
+}
+
+func (b *plpgsqlBuilder) makeContinuationArgs(con *continuation, s *scope) memo.ScalarListExpr {
 	args := make(memo.ScalarListExpr, 0, len(con.def.Params))
 	addArg := func(name ast.Variable) {
 		_, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, name)
@@ -1407,15 +1498,7 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 			addArg(name)
 		}
 	}
-	// PLpgSQL continuation routines are always in tail-call position.
-	call := b.ob.factory.ConstructUDFCall(args, &memo.UDFCallPrivate{Def: con.def, TailCall: true})
-	b.addBarrierIfVolatile(s, call)
-
-	returnColName := scopeColName("").WithMetadataName(con.def.Name)
-	returnScope := s.push()
-	b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, call)
-	b.ob.constructProjectForScope(s, returnScope)
-	return returnScope
+	return args
 }
 
 // addBarrierIfVolatile checks if the given expression is volatile, and adds an
@@ -1431,8 +1514,14 @@ func (b *plpgsqlBuilder) addBarrierIfVolatile(s *scope, expr opt.ScalarExpr) {
 	var p props.Shared
 	memo.BuildSharedProps(expr, &p, b.ob.evalCtx)
 	if p.VolatilitySet.HasVolatile() {
-		s.expr = b.ob.factory.ConstructBarrier(s.expr)
+		b.addBarrier(s)
 	}
+}
+
+// addBarrier adds an optimization barrier to the given scope, in order to
+// prevent side effects from being duplicated, eliminated, or reordered.
+func (b *plpgsqlBuilder) addBarrier(s *scope) {
+	s.expr = b.ob.factory.ConstructBarrier(s.expr)
 }
 
 // buildPLpgSQLExpr parses and builds the given SQL expression into a ScalarExpr
@@ -1675,6 +1764,24 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, re
 	return stmt, true
 }
 
+// transactionControlVisitor is used to check for COMMIT or ROLLBACK statements
+// for a PL/pgSQL stored procedure, so that stable folding can be disabled.
+type transactionControlVisitor struct {
+	foundTxnControlStatement bool
+}
+
+var _ ast.StatementVisitor = &transactionControlVisitor{}
+
+func (tc *transactionControlVisitor) Visit(
+	stmt ast.Statement,
+) (newStmt ast.Statement, recurse bool) {
+	if _, ok := stmt.(*ast.TransactionControl); ok {
+		tc.foundTxnControlStatement = true
+		return stmt, false
+	}
+	return stmt, !tc.foundTxnControlStatement
+}
+
 var (
 	unsupportedPLStmtErr = unimplemented.New("unimplemented PL/pgSQL statement",
 		"attempted to use a PL/pgSQL statement that is not yet supported",
@@ -1747,5 +1854,15 @@ var (
 	)
 	nestedBlockExceptionErr = unimplemented.New("exception handler for nested blocks",
 		"PL/pgSQL blocks cannot yet be nested within a block that has an exception handler",
+	)
+	txnControlWithExceptionErr = errors.WithDetail(
+		pgerror.Newf(pgcode.InvalidTransactionTermination, "invalid transaction termination"),
+		"PL/pgSQL COMMIT/ROLLBACK is not allowed inside a block with exception handlers",
+	)
+	txnInUDFErr = errors.WithDetail(
+		pgerror.Newf(pgcode.InvalidTransactionTermination, "invalid transaction termination"),
+		"PL/pgSQL COMMIT/ROLLBACK is not allowed inside a user-defined function")
+	txnControlWithChainErr = unimplemented.NewWithIssue(119646,
+		"COMMIT or ROLLBACK with AND CHAIN syntax is not yet implemented",
 	)
 )

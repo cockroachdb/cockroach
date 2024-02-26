@@ -313,9 +313,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// the volatility.
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 			plBuilder := newPLpgSQLBuilder(
-				b, cf.Name.Object(), nil /* colRefs */, paramTypes, funcReturnType,
+				b, cf.Name.Object(), nil /* colRefs */, paramTypes, funcReturnType, cf.IsProcedure,
 			)
-			stmtScope = plBuilder.buildBlock(stmt.AST, bodyScope)
+			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope)
 		})
 		checkStmtVolatility(targetVolatility, stmtScope, stmt)
 

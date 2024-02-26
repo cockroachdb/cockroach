@@ -81,8 +81,9 @@ func init() {
 		opt.ExistsOp:   (*Builder).buildExistsSubquery,
 		opt.SubqueryOp: (*Builder).buildSubquery,
 
-		// User-defined functions.
-		opt.UDFCallOp: (*Builder).buildUDF,
+		// Routines.
+		opt.UDFCallOp:    (*Builder).buildUDF,
+		opt.TxnControlOp: (*Builder).buildTxnControl,
 	}
 
 	for _, op := range opt.BoolOperators {
@@ -934,16 +935,9 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Build the argument expressions.
-	var err error
-	var args tree.TypedExprs
-	if len(udf.Args) > 0 {
-		args = make(tree.TypedExprs, len(udf.Args))
-		for i := range udf.Args {
-			args[i], err = b.buildScalar(ctx, udf.Args[i])
-			if err != nil {
-				return nil, err
-			}
-		}
+	args, err := b.buildRoutineArgs(ctx, udf.Args)
+	if err != nil {
+		return nil, err
 	}
 
 	for _, s := range udf.Def.Body {
@@ -1023,6 +1017,22 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.BlockState,
 		udf.Def.CursorDeclaration,
 	), nil
+}
+
+func (b *Builder) buildRoutineArgs(
+	ctx *buildScalarCtx, routineArgs memo.ScalarListExpr,
+) (args tree.TypedExprs, err error) {
+	if len(routineArgs) == 0 {
+		return nil, nil
+	}
+	args = make(tree.TypedExprs, len(routineArgs))
+	for i := range routineArgs {
+		args[i], err = b.buildScalar(ctx, routineArgs[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return args, nil
 }
 
 // initRoutineExceptionHandler initializes the exception handler (if any) for
@@ -1237,4 +1247,56 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 func expectedLazyRoutineError(typ string) error {
 	return errors.AssertionFailedf("expected %s to be lazily planned as a routine", typ)
+}
+
+// buildTxnControl builds a TxnControlExpr into a typed expression that can be
+// evaluated.
+func (b *Builder) buildTxnControl(
+	ctx *buildScalarCtx, scalar opt.ScalarExpr,
+) (tree.TypedExpr, error) {
+	txnExpr := scalar.(*memo.TxnControlExpr)
+	// Build the argument expressions.
+	args, err := b.buildRoutineArgs(ctx, txnExpr.Args)
+	if err != nil {
+		return nil, err
+	}
+	gen := func(
+		ctx context.Context, evalArgs tree.Datums,
+	) (con tree.StoredProcContinuation, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				// This code allows us to propagate internal errors without
+				// having to add error checks everywhere throughout the code.
+				// This is only possible because the code does not update shared
+				// state and does not manipulate locks.
+				//
+				// This is the same panic-catching logic that exists in
+				// o.Optimize() below. It's required here because it's possible
+				// for factory functions to panic below, like
+				// CopyAndReplaceDefault.
+				if ok, e := errorutil.ShouldCatch(r); ok {
+					err = e
+					log.VEventf(ctx, 1, "%v", err)
+				} else {
+					// Other panic objects can't be considered "safe" and thus
+					// are propagated as crashes that terminate the session.
+					panic(r)
+				}
+			}
+		}()
+		// Build the plan for the "continuation" procedure that will resume
+		// execution of the parent stored procedure in a new transaction.
+		var f norm.Factory
+		f.Init(ctx, b.evalCtx, b.catalog)
+		rootExpr := b.mem.RootExpr().(memo.RelExpr)
+		f.CopyAndReplace(rootExpr, txnExpr.Props, f.CopyWithoutAssigningPlaceholders)
+		memoArgs := make(memo.ScalarListExpr, len(evalArgs))
+		for i := range evalArgs {
+			memoArgs[i] = f.ConstructConstVal(evalArgs[i], evalArgs[i].ResolvedType())
+		}
+		continuationProc := f.ConstructUDFCall(memoArgs, &memo.UDFCallPrivate{Def: txnExpr.Def})
+		f.Memo().SetRoot(f.ConstructCall(continuationProc), f.Memo().RootProps())
+		return f.DetachMemo(), nil
+	}
+	return tree.NewTxnControlExpr(txnExpr.TxnOp, args, gen, txnExpr.Def.Name, txnExpr.Def.Typ), nil
 }
