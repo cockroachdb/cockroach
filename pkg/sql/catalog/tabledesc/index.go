@@ -520,6 +520,10 @@ type partitioning struct {
 	desc *catpb.PartitioningDescriptor
 }
 
+func NewPartitioning(desc *catpb.PartitioningDescriptor) catalog.Partitioning {
+	return partitioning{desc: desc}
+}
+
 // PartitioningDesc returns the underlying protobuf descriptor.
 func (p partitioning) PartitioningDesc() *catpb.PartitioningDescriptor {
 	return p.desc

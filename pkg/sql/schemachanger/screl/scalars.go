@@ -125,6 +125,8 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		return true
 	case *scpb.SequenceOption:
 		return version.IsActive(clusterversion.V23_2)
+	case *scpb.DatabaseZoneConfig:
+		return version.IsActive(clusterversion.V24_1)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}
