@@ -68,6 +68,12 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 					L0NumFiles:              5,
 					L0NumFilesThreshold:     1000,
 				},
+				IOThresholdMax: admissionpb.IOThreshold{
+					L0NumSubLevels:          5,
+					L0NumSubLevelsThreshold: 20,
+					L0NumFiles:              5,
+					L0NumFilesThreshold:     1000,
+				},
 			},
 		},
 		{
@@ -82,6 +88,12 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 				QueriesPerSecond: 50,
 				WritesPerSecond:  25,
 				IOThreshold: admissionpb.IOThreshold{
+					L0NumSubLevels:          10,
+					L0NumSubLevelsThreshold: 20,
+					L0NumFiles:              10,
+					L0NumFilesThreshold:     1000,
+				},
+				IOThresholdMax: admissionpb.IOThreshold{
 					L0NumSubLevels:          10,
 					L0NumSubLevelsThreshold: 20,
 					L0NumFiles:              10,
@@ -143,7 +155,11 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		t.Errorf("expected WritesPerSecond %f, but got %f", expectedWPS, desc.Capacity.WritesPerSecond)
 	}
 	if expectedNumL0Sublevels := int64(5); desc.Capacity.IOThreshold.L0NumSubLevels != expectedNumL0Sublevels {
-		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedNumL0Sublevels, desc.Capacity.IOThreshold.L0NumFiles)
+		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedNumL0Sublevels, desc.Capacity.IOThreshold.L0NumSubLevels)
+	}
+	ioScoreMax, _ := desc.Capacity.IOThresholdMax.Score()
+	if expectedIOThresholdScoreMax := 0.25; ioScoreMax != expectedIOThresholdScoreMax {
+		t.Errorf("expected IOThresholdMax score %f, but got %f", expectedIOThresholdScoreMax, ioScoreMax)
 	}
 
 	sp.UpdateLocalStoreAfterRebalance(roachpb.StoreID(2), rangeUsageInfo, roachpb.REMOVE_VOTER)
@@ -165,6 +181,10 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	}
 	if expectedNumL0Sublevels := int64(10); desc.Capacity.IOThreshold.L0NumSubLevels != expectedNumL0Sublevels {
 		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedNumL0Sublevels, desc.Capacity.IOThreshold.L0NumFiles)
+	}
+	ioScoreMax, _ = desc.Capacity.IOThresholdMax.Score()
+	if expectedIOThresholdScoreMax := 0.5; ioScoreMax != expectedIOThresholdScoreMax {
+		t.Errorf("expected IOThresholdMax score %f, but got %f", expectedIOThresholdScoreMax, ioScoreMax)
 	}
 
 	sp.UpdateLocalStoresAfterLeaseTransfer(roachpb.StoreID(1), roachpb.StoreID(2), rangeUsageInfo)

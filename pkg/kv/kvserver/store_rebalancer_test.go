@@ -61,8 +61,7 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 3000,
 				CPUPerSecond:     3000 * float64(time.Millisecond),
-				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultReplicaIOOverloadThreshold - 10),
+				IOThresholdMax:   allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultReplicaIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -81,8 +80,7 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2800,
 				CPUPerSecond:     2800 * float64(time.Millisecond),
-				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultReplicaIOOverloadThreshold - 5),
+				IOThresholdMax:   allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultReplicaIOOverloadThreshold - 5),
 			},
 		},
 		{
@@ -101,8 +99,7 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2600,
 				CPUPerSecond:     2600 * float64(time.Millisecond),
-				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultReplicaIOOverloadThreshold + 2),
+				IOThresholdMax:   allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultReplicaIOOverloadThreshold + 2),
 			},
 		},
 		{
@@ -121,8 +118,7 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2400,
 				CPUPerSecond:     2400 * float64(time.Millisecond),
-				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultReplicaIOOverloadThreshold - 10),
+				IOThresholdMax:   allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultReplicaIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -141,8 +137,7 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2200,
 				CPUPerSecond:     2200 * float64(time.Millisecond),
-				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultReplicaIOOverloadThreshold - 3),
+				IOThresholdMax:   allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultReplicaIOOverloadThreshold - 3),
 			},
 		},
 		{
@@ -161,8 +156,7 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2000,
 				CPUPerSecond:     2000 * float64(time.Millisecond),
-				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultReplicaIOOverloadThreshold + 2),
+				IOThresholdMax:   allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultReplicaIOOverloadThreshold + 2),
 			},
 		},
 		{
@@ -181,8 +175,7 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1800,
 				CPUPerSecond:     1800 * float64(time.Millisecond),
-				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultReplicaIOOverloadThreshold - 10),
+				IOThresholdMax:   allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultReplicaIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -201,8 +194,7 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1600,
 				CPUPerSecond:     1600 * float64(time.Millisecond),
-				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultReplicaIOOverloadThreshold - 5),
+				IOThresholdMax:   allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultReplicaIOOverloadThreshold - 5),
 			},
 		},
 		{
@@ -221,8 +213,7 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1400,
 				CPUPerSecond:     1400 * float64(time.Millisecond),
-				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
-					allocatorimpl.DefaultReplicaIOOverloadThreshold + 3),
+				IOThresholdMax:   allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultReplicaIOOverloadThreshold + 3),
 			},
 		},
 	}
@@ -1284,6 +1275,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, LBRebalancingLeasesAndReplicas)
 			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
 				ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdBlockTransfers,
+				UseIOThresholdMax:       true,
 			}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 
