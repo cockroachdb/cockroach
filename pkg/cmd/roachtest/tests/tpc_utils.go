@@ -42,7 +42,6 @@ func loadTPCHDataset(
 	m cluster.Monitor,
 	roachNodes option.NodeListOption,
 	disableMergeQueue bool,
-	secure bool,
 ) (retErr error) {
 	if c.Cloud() != spec.GCE && !c.IsLocal() {
 		t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
