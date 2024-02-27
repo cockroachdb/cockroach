@@ -21,6 +21,7 @@ import (
 type alterTenantServiceNode struct {
 	tenantSpec tenantSpec
 	newMode    mtinfopb.TenantServiceMode
+	idempotent bool
 }
 
 func (p *planner) alterTenantService(
@@ -52,15 +53,17 @@ func (p *planner) alterTenantService(
 	return &alterTenantServiceNode{
 		tenantSpec: tspec,
 		newMode:    newMode,
+		idempotent: n.Idempotent,
 	}, nil
 }
 
 func (n *alterTenantServiceNode) startExec(params runParams) error {
 	rec, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
+
 	if err != nil {
 		return err
 	}
-	return params.p.setTenantService(params.ctx, rec, n.newMode)
+	return params.p.setTenantService(params.ctx, rec, n.newMode, n.idempotent)
 }
 
 func (n *alterTenantServiceNode) Next(_ runParams) (bool, error) { return false, nil }

@@ -320,13 +320,16 @@ ALTER TENANT 'tenant-one' START SERVICE EXTERNAL
 
 # operation is idempotent
 statement ok
-ALTER TENANT 'tenant-one' START SERVICE EXTERNAL
+ALTER TENANT 'tenant-one' START SERVICE EXTERNAL IF NOT STARTED
 
 statement ok
 ALTER TENANT two START SERVICE SHARED
 
-statement ok
+statement error cannot set service mode to "shared" when it is already "shared"
 ALTER TENANT two START SERVICE SHARED
+
+statement ok
+ALTER TENANT two START SERVICE SHARED IF NOT STARTED
 
 statement error cannot change service mode external to shared directly
 ALTER TENANT 'tenant-one' START SERVICE SHARED
@@ -355,6 +358,12 @@ id  name             data_state  service_mode
 
 statement ok
 ALTER TENANT two STOP SERVICE
+
+statement error cannot set service mode to "none" when it is already "none"
+ALTER TENANT two STOP SERVICE
+
+statement ok
+ALTER TENANT two STOP SERVICE IF STARTED
 
 statement ok
 ALTER TENANT 'tenant-one' STOP SERVICE
