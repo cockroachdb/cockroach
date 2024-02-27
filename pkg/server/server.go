@@ -1128,6 +1128,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		&systemServerWrapper{server: lateBoundServer},
 		systemTenantNameContainer,
 		pgPreServer.SendRoutingError,
+		cfg.BaseConfig.DisableTLSForHTTP,
 	)
 	drain.serverCtl = sc
 

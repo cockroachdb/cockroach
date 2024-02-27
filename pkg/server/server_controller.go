@@ -85,6 +85,8 @@ type serverController struct {
 	// orchestrator is the orchestration method to use.
 	orchestrator serverOrchestrator
 
+	disableTLSForHTTP bool
+
 	mu struct {
 		syncutil.Mutex
 
@@ -111,6 +113,7 @@ func newServerController(
 	systemServer onDemandServer,
 	systemTenantNameContainer *roachpb.TenantNameContainer,
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName),
+	disableTLSForHTTP bool,
 ) *serverController {
 	c := &serverController{
 		AmbientContext:      ambientCtx,
@@ -121,6 +124,7 @@ func newServerController(
 		stopper:             parentStopper,
 		tenantServerCreator: tenantServerCreator,
 		sendSQLRoutingError: sendSQLRoutingError,
+		disableTLSForHTTP:   disableTLSForHTTP,
 	}
 	c.orchestrator = newServerOrchestrator(parentStopper, c)
 	c.mu.servers = map[roachpb.TenantName]serverState{
