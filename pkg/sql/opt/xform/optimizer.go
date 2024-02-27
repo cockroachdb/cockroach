@@ -568,7 +568,7 @@ func (o *Optimizer) optimizeGroupMember(
 	// properties? That case is taken care of by enforceProps, which will
 	// recursively optimize the group with property subsets and then add
 	// enforcers to provide the remainder.
-	if CanProvidePhysicalProps(o.ctx, o.evalCtx, member, required) {
+	if CanProvidePhysicalProps(o.ctx, o.evalCtx, o.mem, member, required) {
 		var cost memo.Cost
 		for i, n := 0, member.ChildCount(); i < n; i++ {
 			// Given required parent properties, get the properties required from
@@ -683,7 +683,7 @@ func (o *Optimizer) enforceProps(
 		// with the required ordering. We do not need to add the enforcer if
 		// there is no common prefix or if the required ordering is implied by
 		// the input ordering.
-		interestingOrderings := ordering.DeriveInterestingOrderings(member)
+		interestingOrderings := ordering.DeriveInterestingOrderings(o.mem, member)
 		if lcp, ok := interestingOrderings.LongestCommonPrefix(&required.Ordering); ok {
 			getEnforcer = func() memo.RelExpr {
 				enforcer := o.getScratchSort()
@@ -814,8 +814,10 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		var provided physical.Provided
 		// BuildProvided relies on ProvidedPhysical() being set in the children, so
 		// it must run after the recursive calls on the children.
-		provided.Ordering = ordering.BuildProvided(o.evalCtx, relParent, &parentProps.Ordering)
-		provided.Distribution = distribution.BuildProvided(o.ctx, o.evalCtx, relParent, &parentProps.Distribution)
+		provided.Ordering = ordering.BuildProvided(o.evalCtx, o.mem, relParent, &parentProps.Ordering)
+		provided.Distribution = distribution.BuildProvided(
+			o.ctx, o.evalCtx, o.mem, relParent, &parentProps.Distribution,
+		)
 		o.mem.SetBestProps(relParent, parentProps, &provided, relCost)
 	}
 

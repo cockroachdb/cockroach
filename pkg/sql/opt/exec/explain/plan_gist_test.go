@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -29,15 +28,11 @@ import (
 
 func makeGist(ot *opttester.OptTester, t *testing.T) explain.PlanGist {
 	f := explain.NewPlanGistFactory(exec.StubFactory{})
-	expr, err := ot.Optimize()
+	mem, err := ot.Optimize()
 	if err != nil {
 		t.Error(err)
 	}
-	var mem *memo.Memo
-	if rel, ok := expr.(memo.RelExpr); ok {
-		mem = rel.Memo()
-	}
-	_, err = ot.ExecBuild(f, mem, expr)
+	_, err = ot.ExecBuild(f, mem, mem.RootExpr())
 	if err != nil {
 		t.Error(err)
 	}
@@ -60,16 +55,13 @@ func explainGist(gist string, catalog cat.Catalog) string {
 
 func plan(ot *opttester.OptTester, t *testing.T) string {
 	f := explain.NewFactory(exec.StubFactory{}, &tree.SemaContext{}, &eval.Context{})
-	expr, err := ot.Optimize()
+	mem, err := ot.Optimize()
 	if err != nil {
 		t.Error(err)
 	}
+	expr := mem.RootExpr()
 	if expr == nil {
 		t.Error("Optimize failed, use a logictest instead?")
-	}
-	var mem *memo.Memo
-	if rel, ok := expr.(memo.RelExpr); ok {
-		mem = rel.Memo()
 	}
 	explainPlan, err := ot.ExecBuild(f, mem, expr)
 	if err != nil {

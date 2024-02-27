@@ -297,7 +297,7 @@ func (f *Factory) EvalContext() *eval.Context {
 // memo should always be treated as immutable, and the destination memo must be
 // completely independent of it once CopyAndReplace has completed.
 func (f *Factory) CopyAndReplace(
-	from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
+	fromMemo *memo.Memo, from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
 ) {
 	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 
@@ -308,13 +308,13 @@ func (f *Factory) CopyAndReplace(
 	// Copy the next scalar rank to the target memo so that new scalar
 	// expressions built with the new memo will not share scalar ranks with
 	// existing expressions.
-	f.mem.CopyNextRankFrom(from.Memo())
+	f.mem.CopyNextRankFrom(fromMemo)
 
 	// Copy all metadata to the target memo so that referenced tables and
 	// columns can keep the same ids they had in the "from" memo. Scalar
 	// expressions in the metadata cannot have placeholders, so we simply copy
 	// the expressions without replacement.
-	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyWithoutAssigningPlaceholders)
+	f.mem.Metadata().CopyFrom(fromMemo.Metadata(), f.CopyWithoutAssigningPlaceholders)
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.
@@ -383,7 +383,7 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 		}
 		return f.CopyAndReplaceDefault(e, replaceFn)
 	}
-	f.CopyAndReplace(from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
+	f.CopyAndReplace(from, from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
 
 	return nil
 }
