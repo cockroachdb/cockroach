@@ -469,7 +469,20 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *kvpb.Batch
 			// tricky. Any read would need to chain on to any write that came
 			// before it in the batch and overlaps. For now, it doesn't seem
 			// worth it.
-			return false
+
+			// TODO(arul): introduce a better concept here instead of this hacky
+			// stuff. For now, allow DeleteRangeRequests to be the only ranged
+			// requests that can be pipelined, as long as we're not dealing with the
+			// last batch (the one that contains the EndTxn request).
+			_, hasET := ba.GetArg(kvpb.EndTxn)
+			if hasET {
+				// DeleteRange requests can only be pipelined if they're not part of the
+				// last batch (the one that contains the EndTxn request).
+				return false
+			}
+			if _, ok := req.(*kvpb.DeleteRangeRequest); !ok {
+				return false
+			}
 		}
 		// Inhibit async consensus if the batch would push us over the maximum
 		// tracking memory budget. If we allowed async consensus on this batch, its
@@ -730,12 +743,17 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 				// Record any writes that were performed asynchronously. We'll
 				// need to prove that these succeeded sometime before we commit.
 				header := req.Header()
-				tp.ifWrites.insert(header.Key, header.Sequence)
-				// The request is not expected to be a ranged one, as we're only
-				// tracking one key in the ifWrites. Ranged requests do not admit
-				// ba.AsyncConsensus.
 				if kvpb.IsRange(req) {
-					log.Fatalf(ctx, "unexpected range request with AsyncConsensus: %s", req)
+					switch req.(type) {
+					case *kvpb.DeleteRangeRequest:
+						for _, key := range resp.(*kvpb.DeleteRangeResponse).Keys {
+							tp.ifWrites.insert(key, header.Sequence)
+						}
+					default:
+						log.Fatalf(ctx, "unexpected ranged request with AsyncConsensus: %s", req)
+					}
+				} else {
+					tp.ifWrites.insert(header.Key, header.Sequence)
 				}
 			} else {
 				// If the lock acquisitions weren't performed asynchronously
