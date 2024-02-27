@@ -16,6 +16,7 @@ package tracker
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -180,15 +181,6 @@ func (p *ProgressTracker) Committed() uint64 {
 	return uint64(p.Voters.CommittedIndex(matchAckIndexer(p.Progress)))
 }
 
-func insertionSort(sl []uint64) {
-	a, b := 0, len(sl)
-	for i := a + 1; i < b; i++ {
-		for j := i; j > a && sl[j] < sl[j-1]; j-- {
-			sl[j], sl[j-1] = sl[j-1], sl[j]
-		}
-	}
-}
-
 // Visit invokes the supplied closure for all tracked progresses in stable order.
 func (p *ProgressTracker) Visit(f func(id uint64, pr *Progress)) {
 	n := len(p.Progress)
@@ -206,7 +198,7 @@ func (p *ProgressTracker) Visit(f func(id uint64, pr *Progress)) {
 		n--
 		ids[n] = id
 	}
-	insertionSort(ids)
+	slices.Sort(ids)
 	for _, id := range ids {
 		f(id, p.Progress[id])
 	}
