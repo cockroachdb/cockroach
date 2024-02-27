@@ -92,6 +92,16 @@ func DefaultStopOpts() StopOpts {
 	return StopOpts{RoachprodOpts: roachprod.DefaultStopOpts()}
 }
 
+// DefaultStopVirtualClusterOpts creates StopOpts that can be used to
+// stop the given virtual cluster and sql instance.
+func DefaultStopVirtualClusterOpts(virtualClusterName string, sqlInstance int) StopOpts {
+	opts := DefaultStopOpts()
+	opts.RoachprodOpts.VirtualClusterName = virtualClusterName
+	opts.RoachprodOpts.SQLInstance = sqlInstance
+
+	return opts
+}
+
 // WithNodes returns a RunOptions that will run on the given nodes.
 func WithNodes(nodes NodeListOption) install.RunOptions {
 	return install.WithNodes(nodes.InstallNodes())

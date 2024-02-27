@@ -2115,6 +2115,29 @@ func (c *clusterImpl) StartServiceForVirtualCluster(
 	}
 }
 
+// StopServiceForVirtualClusterE stops the service associated with the
+// virtual cluster identified in the `StopOpts` passed. For shared
+// process virtual clusters, the corresponding service is stopped. For
+// separate process, the OS process is killed.
+func (c *clusterImpl) StopServiceForVirtualClusterE(
+	ctx context.Context, l *logger.Logger, stopOpts option.StopOpts, opts ...option.Option,
+) error {
+	c.setStatusForClusterOpt("stopping virtual cluster", stopOpts.RoachtestOpts.Worker, opts...)
+	defer c.clearStatusForClusterOpt(stopOpts.RoachtestOpts.Worker)
+
+	return roachprod.StopServiceForVirtualCluster(
+		ctx, l, c.Name(), c.IsSecure(), stopOpts.RoachprodOpts,
+	)
+}
+
+func (c *clusterImpl) StopServiceForVirtualCluster(
+	ctx context.Context, l *logger.Logger, stopOpts option.StopOpts, opts ...option.Option,
+) {
+	if err := c.StopServiceForVirtualClusterE(ctx, l, stopOpts); err != nil {
+		c.t.Fatal(err)
+	}
+}
+
 func (c *clusterImpl) RefetchCertsFromNode(ctx context.Context, node int) error {
 	var err error
 	c.localCertsDir, err = os.MkdirTemp("", "roachtest-certs")
