@@ -353,6 +353,8 @@ func (ju *JobUpdater) PauseRequestedWithFunc(
 	return nil
 }
 
+// Unpaused sets the status of the tracked job to running or reverting iff the
+// job is currently paused. It does not directly resume the job.
 func (ju *JobUpdater) Unpaused(_ context.Context, md JobMetadata) error {
 	if md.Status == StatusRunning || md.Status == StatusReverting {
 		// Already resumed - do nothing.

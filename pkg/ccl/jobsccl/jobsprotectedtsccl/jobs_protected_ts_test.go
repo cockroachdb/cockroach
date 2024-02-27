@@ -115,7 +115,7 @@ func testJobsProtectedTimestamp(
 	}
 	jMovedToFailed, recMovedToFailed := mkJobAndRecord()
 	require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return jr.Failed(ctx, txn, jMovedToFailed.ID(), io.ErrUnexpectedEOF)
+		return jr.UnsafeFailed(ctx, txn, jMovedToFailed.ID(), io.ErrUnexpectedEOF)
 	}))
 	jFinished, recFinished := mkJobAndRecord()
 	require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
