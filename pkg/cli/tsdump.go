@@ -17,6 +17,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -41,6 +42,7 @@ var debugTimeSeriesDumpOpts = struct {
 	from, to     timestampValue
 	clusterLabel string
 	yaml         string
+	targetURL    string
 }{
 	format:       tsDumpText,
 	from:         timestampValue{},
@@ -93,7 +95,12 @@ will then convert it to the --format requested in the current invocation.
 		case tsDumpText:
 			w = defaultTSWriter{w: os.Stdout}
 		case tsDumpOpenMetrics:
-			w = makeOpenMetricsWriter(os.Stdout)
+			if debugTimeSeriesDumpOpts.targetURL != "" {
+				write := beginHttpRequestWithWritePipe(debugTimeSeriesDumpOpts.targetURL)
+				w = makeOpenMetricsWriter(write)
+			} else {
+				w = makeOpenMetricsWriter(os.Stdout)
+			}
 		default:
 			return errors.Newf("unknown output format: %v", debugTimeSeriesDumpOpts.format)
 		}
@@ -198,6 +205,30 @@ will then convert it to the --format requested in the current invocation.
 			}
 		}
 	}),
+}
+
+// beginHttpRequestWithWritePipe initiates an HTTP request to the
+// `targetURL` argument and returns an `io.Writer` that pipes to the
+// request body. This function will return while the request runs
+// async.
+func beginHttpRequestWithWritePipe(targetURL string) io.Writer {
+	read, write := io.Pipe()
+	req, err := http.NewRequest("POST", targetURL, read)
+	if err != nil {
+		panic(err)
+	}
+	// Start request async while we stream data to the body.
+	go func() {
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			fmt.Printf("tsdump: openmetrics: http request error: %s", err)
+			panic(err)
+		}
+		defer resp.Body.Close()
+		fmt.Printf("tsdump: openmetrics: http response: %v", resp)
+	}()
+
+	return write
 }
 
 type tsWriter interface {
