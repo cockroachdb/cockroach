@@ -1286,25 +1286,9 @@ func (r *Registry) DeleteTerminalJobByID(ctx context.Context, id jobspb.JobID) e
 	})
 }
 
-// getJobFn attempts to get a resumer from the given job id. If the job id
-// does not have a resumer then it returns an error message suitable for users.
-func (r *Registry) getJobFn(
-	ctx context.Context, txn isql.Txn, id jobspb.JobID,
-) (*Job, Resumer, error) {
-	job, err := r.LoadJobWithTxn(ctx, id, txn)
-	if err != nil {
-		return nil, nil, err
-	}
-	resumer, err := r.createResumer(job)
-	if err != nil {
-		return job, nil, errors.Errorf("job %d is not controllable", id)
-	}
-	return job, resumer, nil
-}
-
 // cancelRequested marks the job as cancel-requested using the specified txn (may be nil).
 func (r *Registry) cancelRequested(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return err
 	}
@@ -1315,7 +1299,7 @@ func (r *Registry) cancelRequested(ctx context.Context, txn isql.Txn, id jobspb.
 func (r *Registry) PauseRequested(
 	ctx context.Context, txn isql.Txn, id jobspb.JobID, reason string,
 ) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return err
 	}
@@ -1325,7 +1309,7 @@ func (r *Registry) PauseRequested(
 
 // Succeeded marks the job with id as succeeded.
 func (r *Registry) Succeeded(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return err
 	}
@@ -1336,7 +1320,7 @@ func (r *Registry) Succeeded(ctx context.Context, txn isql.Txn, id jobspb.JobID)
 func (r *Registry) Failed(
 	ctx context.Context, txn isql.Txn, id jobspb.JobID, causingError error,
 ) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return err
 	}
@@ -1346,7 +1330,7 @@ func (r *Registry) Failed(
 // Unpause changes the paused job with id to running or reverting using the
 // specified txn (may be nil).
 func (r *Registry) Unpause(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return err
 	}
