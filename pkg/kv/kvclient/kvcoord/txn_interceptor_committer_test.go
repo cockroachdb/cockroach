@@ -65,6 +65,8 @@ func TestTxnCommitterElideEndTxn(t *testing.T) {
 		ba := &kvpb.BatchRequest{}
 		ba.Header = kvpb.Header{Txn: &txn}
 		ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+		// TODO(arul): Not entirely sure what a Put request is doing here if we're
+		// trying to elide the EndTxn request.
 		ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 		ba.Add(&kvpb.EndTxnRequest{Commit: commit, LockSpans: nil})
 
