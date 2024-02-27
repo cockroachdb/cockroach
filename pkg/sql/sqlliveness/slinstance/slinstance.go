@@ -126,6 +126,9 @@ type Instance struct {
 		stopErr error
 		// s is the current session, if any.
 		s *session
+		// blockedExtensions indicates if extensions are disallowed because of availability
+		// issues on dependent tables.
+		blockedExtensions int
 		// blockCh is set when s == nil && stopErr == nil. It is used to wait on
 		// updates to s.
 		blockCh chan struct{}
@@ -249,6 +252,15 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 // is only ever returned when the ctx is canceled.
 func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) {
 	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
+
+	// If extensions are disallowed we are only going to heartbeat the same
+	// timestamp, so that we can detect if the sqlliveness row was removed.
+	l.mu.Lock()
+	extensionsBlocked := l.mu.blockedExtensions
+	l.mu.Unlock()
+	if extensionsBlocked > 0 {
+		exp = s.Expiration()
+	}
 
 	opts := retry.Options{
 		InitialBackoff: 10 * time.Millisecond,
@@ -445,6 +457,26 @@ func (l *Instance) Release(ctx context.Context) (sqlliveness.SessionID, error) {
 	}
 
 	return session.ID(), nil
+}
+
+func (l *Instance) PauseLivenessHeartbeat(ctx context.Context) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	firstToBlock := l.mu.blockedExtensions == 0
+	l.mu.blockedExtensions++
+	if firstToBlock {
+		log.Infof(ctx, "disabling sqlliveness extension because of availability issue on system tables")
+	}
+}
+
+func (l *Instance) UnpauseLivenessHeartbeat(ctx context.Context) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.mu.blockedExtensions--
+	lastToUnblock := l.mu.blockedExtensions == 0
+	if lastToUnblock {
+		log.Infof(ctx, "enabling sqlliveness extension due to restored availability")
+	}
 }
 
 // Session returns a live session id. For each Sqlliveness instance the

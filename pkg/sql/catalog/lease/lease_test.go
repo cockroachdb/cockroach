@@ -50,8 +50,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -60,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -3635,6 +3638,143 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	cancel()
 	// Ensure that the query completed successfully.
 	require.NoError(t, <-selectErr)
+}
+
+// TestLeaseTableWriteFailure is used to ensure that sqlliveness heart-beating
+// and extensions are disabled if the lease table becomes accessible. This
+// is used to ensure that schema changes are allowed on the remaining nodes.
+func TestLeaseTableWriteFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t)
+
+	type filter = kvserverbase.ReplicaResponseFilter
+	var f atomic.Value
+	noop := filter(func(context.Context, *kvpb.BatchRequest, *kvpb.BatchResponse) *kvpb.Error {
+		return nil
+	})
+	f.Store(noop)
+	ctx := context.Background()
+	// Session based leases will retry with the same value, which KV will be smart
+	// enough to cancel out on the replica when ambigious results happen. So,
+	// this test breaks on this setting.
+	settings := cluster.MakeTestingClusterSettings()
+	srv := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingResponseFilter: func(ctx context.Context, request *kvpb.BatchRequest, response *kvpb.BatchResponse) *kvpb.Error {
+						return f.Load().(filter)(ctx, request, response)
+					},
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer(0)
+	lease.LeaseDuration.Override(ctx, &s.ClusterSettings().SV, time.Second*10)
+	instancestorage.ReclaimLoopInterval.Override(ctx, &s.ClusterSettings().SV, 150*time.Millisecond)
+	slbase.DefaultTTL.Override(ctx, &s.ClusterSettings().SV, time.Second*10)
+	codec := s.Codec()
+
+	sqlDB := srv.ServerConn(0)
+	// Disable automatic stats collection to avoid un-related leases.
+	sqlutils.MakeSQLRunner(sqlDB).Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
+	sqlutils.MakeSQLRunner(sqlDB).Exec(t, "CREATE TABLE foo ()")
+	tableID := sqlutils.QueryTableID(t, sqlDB, "defaultdb", "public", "foo")
+
+	tablePrefix := codec.TablePrefix(keys.LeaseTableID)
+	testCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	errorsDuringLeaseInsert := make(chan chan *kvpb.Error)
+	f.Store(filter(func(ctx context.Context, request *kvpb.BatchRequest, response *kvpb.BatchResponse) *kvpb.Error {
+		for _, req := range request.Requests {
+			switch r := req.GetInner().(type) {
+			// Detect any inserts into the system.lease table involving the table foo
+			// from node 1.
+			case *kvpb.ConditionalPutRequest:
+				if !bytes.HasPrefix(r.Key, tablePrefix) {
+					return nil
+				}
+				in, _, _, err := codec.DecodeIndexPrefix(r.Key)
+				if err != nil {
+					return kvpb.NewError(errors.WithAssertionFailure(err))
+				}
+				var a tree.DatumAlloc
+				_, in, err = keyside.Decode(&a, types.Bytes, in, encoding.Ascending)
+				if !assert.NoError(t, err) {
+					return kvpb.NewError(err)
+				}
+				id, _, err := keyside.Decode(
+					&a, types.Int, in, encoding.Ascending,
+				)
+				assert.NoError(t, err)
+
+				// Extra the node ID, which is in the tuple.
+				tuple, err := r.Value.GetTuple()
+				assert.NoError(t, err)
+				nodeID, _, err := valueside.Decode(
+					&a, types.Int, tuple,
+				)
+				assert.NoError(t, err)
+
+				if tree.MustBeDInt(id) == tree.DInt(tableID) && tree.MustBeDInt(nodeID) == tree.DInt(1) {
+					errCh := make(chan *kvpb.Error)
+					select {
+					case errorsDuringLeaseInsert <- errCh:
+					case <-testCtx.Done():
+						return nil
+					}
+					err := <-errCh
+					return err
+				}
+			}
+		}
+		return nil
+	}))
+
+	// Make sure that the lease gets acquired and then, upon an ambiguous
+	// failure, the retry happens, and there is just one lease.
+	selectErr := make(chan error)
+
+	done := false
+	firstBlock := false
+	stopGeneratingErrors := atomic.Bool{}
+	grp := ctxgroup.WithContext(ctx)
+	grp.GoCtx(func(ctx context.Context) error {
+		_, err := sqlDB.Exec("SELECT * FROM foo")
+		selectErr <- err
+		return nil
+	})
+	for !done {
+		select {
+		// Everytime we attempt to insert a lease for foo on node 1, generate
+		// and ambiguous result error.
+		case unblock := <-errorsDuringLeaseInsert:
+			if !stopGeneratingErrors.Load() {
+				unblock <- kvpb.NewError(kvpb.NewAmbiguousResultError(errors.New("boom")))
+			} else {
+				unblock <- nil
+			}
+			// The first time we hit one of these errors lets try and get a schema
+			// change going which will need the lease on the old version to disappear.
+			if !firstBlock {
+				grp.GoCtx(func(ctx context.Context) error {
+					defer stopGeneratingErrors.Swap(true)
+					_, err := srv.ServerConn(1).Exec("ALTER TABLE foo ADD COLUMN j INT")
+					return err
+				})
+				firstBlock = true
+			}
+		case err := <-selectErr:
+			require.NoError(t, err)
+			close(errorsDuringLeaseInsert)
+			done = true
+		}
+	}
+	require.NoError(t, grp.Wait())
+	require.Truef(t, firstBlock, "did not block any lease writes")
 }
 
 // TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails makes sure that, during a lease
