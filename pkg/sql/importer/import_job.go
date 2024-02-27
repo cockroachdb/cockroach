@@ -1225,6 +1225,14 @@ func (r *importResumer) checkForUDTModification(
 	return sql.DescsTxn(ctx, execCfg, checkTypesAreEquivalent)
 }
 
+var retryDuration = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"bulkio.import.retry_duration",
+	"duration during which the IMPORT can be retried in face of non-permanent errors",
+	time.Minute*2,
+	settings.PositiveDuration,
+)
+
 func ingestWithRetry(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
@@ -1240,12 +1248,11 @@ func ingestWithRetry(
 	ctx, sp := tracing.ChildSpan(ctx, "importer.ingestWithRetry")
 	defer sp.Finish()
 
-	// We retry on pretty generic failures -- any rpc error. If a worker node were
-	// to restart, it would produce this kind of error, but there may be other
-	// errors that are also rpc errors. Don't retry to aggressively.
+	// Note that we don't specify MaxRetries since we use time-based limit
+	// in the loop below.
 	retryOpts := retry.Options{
-		MaxBackoff: 1 * time.Second,
-		MaxRetries: 5,
+		// Don't retry too aggressively.
+		MaxBackoff: 15 * time.Second,
 	}
 
 	// We want to retry an import if there are transient failures (i.e. worker
@@ -1253,11 +1260,18 @@ func ingestWithRetry(
 	// import.
 	var res kvpb.BulkOpSummary
 	var err error
+	// retryDurationElapsed tracks how much "budget" from retryDuration has been
+	// used up so far.
+	var retryDurationElapsed time.Duration
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		var retryIterationStart time.Time
 		for {
-			res, err = distImport(ctx, execCtx, job, tables, typeDescs, from, format, walltime,
-				testingKnobs, procsPerNode)
-			// Replanning errors should not count towards retry limits.
+			retryIterationStart = timeutil.Now()
+			res, err = distImport(
+				ctx, execCtx, job, tables, typeDescs, from, format, walltime, testingKnobs, procsPerNode,
+			)
+			// Re-planning errors should not count towards retry limits (this is
+			// achieved by updating retryIterationStart on the next iteration).
 			if err == nil || !errors.Is(err, sql.ErrPlanChanged) {
 				break
 			}
@@ -1265,6 +1279,8 @@ func ingestWithRetry(
 		if err == nil {
 			break
 		}
+
+		retryDurationElapsed += timeutil.Since(retryIterationStart)
 
 		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
 			return res, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
@@ -1291,9 +1307,23 @@ func ingestWithRetry(
 			log.Warningf(ctx, "IMPORT job %d could not reload job progress when retrying: %+v",
 				job.ID(), reloadErr)
 		} else {
+			// If we made some progress with the IMPORT, reset the retry
+			// duration budget.
+			orig := job.Progress().Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted
+			updated := reloadedJob.Progress().Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted
 			job = reloadedJob
+			if progress := float64(updated - orig); progress >= 0.01 {
+				log.Infof(ctx, "import made %d%% progress, resetting retry duration", int(math.Round(100*progress)))
+				retryDurationElapsed = 0
+			}
 		}
-		log.Warningf(ctx, "encountered retryable error: %+v", err)
+
+		if retryDurationElapsed > retryDuration.Get(&execCtx.ExecCfg().Settings.SV) {
+			log.Warningf(ctx, "encountered retryable error but exceeded retry duration, stopping: %+v", err)
+			break
+		} else {
+			log.Warningf(ctx, "encountered retryable error: %+v", err)
+		}
 	}
 
 	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
