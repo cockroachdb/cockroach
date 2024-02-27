@@ -443,9 +443,19 @@ func (b *Builder) buildExport(
 			return execPlan{}, colOrdMap{}, err
 		}
 	}
-	notNullColsSet, err := getNodeColumnOrdinalSet(inputCols, export.Input.Relational().NotNullCols)
-	if err != nil {
-		return execPlan{}, colOrdMap{}, err
+
+	var notNullOrds exec.NodeColumnOrdinalSet
+	notNullCols := export.Input.Relational().NotNullCols
+	for col, ok := notNullCols.Next(0); ok; col, ok = notNullCols.Next(col + 1) {
+		// Ignore NOT NULL columns that are not part of the input execPlan's
+		// output columns. This can happen when applyPresentation projects-away
+		// some output columns of the input expression. For example, a Sort
+		// expression must output a column it orders by, but that column must be
+		// projected-away after the sort if the presentation does not require
+		// the column.
+		if ord, ok := inputCols.Get(col); ok {
+			notNullOrds.Add(ord)
+		}
 	}
 
 	var ep execPlan
@@ -454,7 +464,7 @@ func (b *Builder) buildExport(
 		fileName,
 		export.FileFormat,
 		opts,
-		notNullColsSet,
+		notNullOrds,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
