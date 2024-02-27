@@ -203,7 +203,7 @@ func ActivateTenant(
 }
 
 func (p *planner) setTenantService(
-	ctx context.Context, info *mtinfopb.TenantInfo, targetMode mtinfopb.TenantServiceMode,
+	ctx context.Context, info *mtinfopb.TenantInfo, targetMode mtinfopb.TenantServiceMode, idempotent bool,
 ) error {
 	if p.EvalContext().TxnReadOnly {
 		return readOnlyError("ALTER VIRTUAL CLUSTER SERVICE")
@@ -221,6 +221,10 @@ func (p *planner) setTenantService(
 
 	if !p.extendedEvalCtx.TxnIsSingleStmt {
 		return errors.Errorf("ALTER VIRTUAL CLUSTER SERVICE cannot be used inside a multi-statement transaction")
+	}
+
+	if info.ServiceMode == targetMode && !idempotent {
+		return errors.Errorf("cannot set service mode to %q when it is already %q", targetMode, info.ServiceMode)
 	}
 
 	lastMode := info.ServiceMode
