@@ -1286,71 +1286,46 @@ func (r *Registry) DeleteTerminalJobByID(ctx context.Context, id jobspb.JobID) e
 	})
 }
 
-// getJobFn attempts to get a resumer from the given job id. If the job id
-// does not have a resumer then it returns an error message suitable for users.
-func (r *Registry) getJobFn(
-	ctx context.Context, txn isql.Txn, id jobspb.JobID,
-) (*Job, Resumer, error) {
-	job, err := r.LoadJobWithTxn(ctx, id, txn)
-	if err != nil {
-		return nil, nil, err
-	}
-	resumer, err := r.createResumer(job)
-	if err != nil {
-		return job, nil, errors.Errorf("job %d is not controllable", id)
-	}
-	return job, resumer, nil
-}
-
-// cancelRequested marks the job as cancel-requested using the specified txn (may be nil).
-func (r *Registry) cancelRequested(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
-	if err != nil {
-		return err
-	}
-	return job.WithTxn(txn).CancelRequested(ctx)
-}
-
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
 func (r *Registry) PauseRequested(
 	ctx context.Context, txn isql.Txn, id jobspb.JobID, reason string,
 ) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
-	if err != nil {
-		return err
-	}
-
-	return job.WithTxn(txn).PauseRequestedWithFunc(ctx, nil, reason)
+	return r.UpdateJobWithTxn(ctx, id, txn, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+		return ju.PauseRequestedWithFunc(ctx, txn, md, nil /* fn */, reason)
+	})
 }
 
-// Succeeded marks the job with id as succeeded.
-func (r *Registry) Succeeded(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
-	if err != nil {
-		return err
-	}
-	return job.WithTxn(txn).succeeded(ctx, nil)
+// Unpause changes the paused job with id to running or reverting using the
+// specified txn (may be nil).
+func (r *Registry) Unpause(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
+	return r.UpdateJobWithTxn(ctx, id, txn, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+		return ju.Unpaused(ctx, md)
+	})
 }
 
-// Failed marks the job with id as failed.
-func (r *Registry) Failed(
+// UnsafeFailed marks the job with id as failed. Use outside of the
+// job system is discouraged.
+//
+// This function does not stop a currently running Resumer.
+func (r *Registry) UnsafeFailed(
 	ctx context.Context, txn isql.Txn, id jobspb.JobID, causingError error,
 ) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return err
 	}
 	return job.WithTxn(txn).failed(ctx, causingError)
 }
 
-// Unpause changes the paused job with id to running or reverting using the
-// specified txn (may be nil).
-func (r *Registry) Unpause(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+// Succeeded marks the job with id as succeeded.
+//
+// Exported for testing purposes only.
+func (r *Registry) Succeeded(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).Unpaused(ctx)
+	return job.WithTxn(txn).succeeded(ctx, nil)
 }
 
 // Resumer is a resumable job, and is associated with a Job object. Jobs can be
