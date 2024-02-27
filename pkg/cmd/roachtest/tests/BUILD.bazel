@@ -162,7 +162,6 @@ go_library(
         "secondary_indexes.go",
         "sequelize.go",
         "slow_drain.go",
-        "smoketest_secure.go",
         "split.go",
         "sqlalchemy.go",
         "sqlalchemy_blocklist.go",
