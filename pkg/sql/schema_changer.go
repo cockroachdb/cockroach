@@ -2199,7 +2199,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			if err != nil {
 				return err
 			}
-			if err := sc.jobRegistry.Failed(ctx, txn, jobID, causingError); err != nil {
+			if err := sc.jobRegistry.UnsafeFailed(ctx, txn, jobID, causingError); err != nil {
 				return err
 			}
 		}

@@ -1298,17 +1298,21 @@ func (r *Registry) PauseRequested(
 	return job.WithTxn(txn).PauseRequestedWithFunc(ctx, nil, reason)
 }
 
-// Succeeded marks the job with id as succeeded.
-func (r *Registry) Succeeded(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
+// Unpause changes the paused job with id to running or reverting using the
+// specified txn (may be nil).
+func (r *Registry) Unpause(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
 	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).succeeded(ctx, nil)
+	return job.WithTxn(txn).Unpaused(ctx)
 }
 
-// Failed marks the job with id as failed.
-func (r *Registry) Failed(
+// UnsafeFailed marks the job with id as failed. Use outside of the
+// job system is discouraged.
+//
+// This function does not stop a currently running Resumer.
+func (r *Registry) UnsafeFailed(
 	ctx context.Context, txn isql.Txn, id jobspb.JobID, causingError error,
 ) error {
 	job, err := r.LoadJobWithTxn(ctx, id, txn)
@@ -1318,14 +1322,13 @@ func (r *Registry) Failed(
 	return job.WithTxn(txn).failed(ctx, causingError)
 }
 
-// Unpause changes the paused job with id to running or reverting using the
-// specified txn (may be nil).
-func (r *Registry) Unpause(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
+// Succeeded marks the job with id as succeeded.
+func (r *Registry) Succeeded(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
 	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).Unpaused(ctx)
+	return job.WithTxn(txn).succeeded(ctx, nil)
 }
 
 // Resumer is a resumable job, and is associated with a Job object. Jobs can be
