@@ -1290,22 +1290,17 @@ func (r *Registry) DeleteTerminalJobByID(ctx context.Context, id jobspb.JobID) e
 func (r *Registry) PauseRequested(
 	ctx context.Context, txn isql.Txn, id jobspb.JobID, reason string,
 ) error {
-	job, err := r.LoadJobWithTxn(ctx, id, txn)
-	if err != nil {
-		return err
-	}
-
-	return job.WithTxn(txn).PauseRequestedWithFunc(ctx, nil, reason)
+	return r.UpdateJobWithTxn(ctx, id, txn, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+		return ju.PauseRequestedWithFunc(ctx, txn, md, nil /* fn */, reason)
+	})
 }
 
 // Unpause changes the paused job with id to running or reverting using the
 // specified txn (may be nil).
 func (r *Registry) Unpause(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	job, err := r.LoadJobWithTxn(ctx, id, txn)
-	if err != nil {
-		return err
-	}
-	return job.WithTxn(txn).Unpaused(ctx)
+	return r.UpdateJobWithTxn(ctx, id, txn, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+		return ju.Unpaused(ctx, md)
+	})
 }
 
 // UnsafeFailed marks the job with id as failed. Use outside of the
@@ -1323,6 +1318,8 @@ func (r *Registry) UnsafeFailed(
 }
 
 // Succeeded marks the job with id as succeeded.
+//
+// Exported for testing purposes only.
 func (r *Registry) Succeeded(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
 	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
