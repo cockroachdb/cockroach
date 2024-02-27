@@ -1545,3 +1545,14 @@ build
 SELECT avg(k) OVER (ORDER BY id NULLS LAST RANGE 0 PRECEDING) FROM nulls_last_test
 ----
 error: NULLS LAST with RANGE mode with OFFSET is currently unsupported
+
+# Regression test for incorrectly using temporary nulls-last-handling column for
+# first window function in the second window function (#119188).
+build
+SELECT
+  variance(1) OVER (PARTITION BY id ORDER BY id ASC NULLS LAST),
+  min(v) OVER (PARTITION BY v, id ORDER BY id DESC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING)
+FROM
+  nulls_last_test;
+----
+error: NULLS LAST with RANGE mode with OFFSET is currently unsupported
