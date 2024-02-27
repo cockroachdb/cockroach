@@ -372,12 +372,6 @@ func (u Updater) CancelRequestedWithReason(ctx context.Context, reason error) er
 // implementation when a pause is requested.
 type onPauseRequestFunc func(ctx context.Context, md JobMetadata, ju *JobUpdater) error
 
-// PauseRequested is like PausedRequestedWithFunc but with no customer
-// job updater function.
-func (u Updater) PauseRequested(ctx context.Context, reason string) error {
-	return u.PauseRequestedWithFunc(ctx, nil /* fn */, reason)
-}
-
 // PauseRequestedWithFunc sets the status of the tracked job to pause-requested.
 // It does not directly pause the job; it expects the node that runs the job will
 // actively cancel it when it notices that it is in state StatusPauseRequested
