@@ -511,7 +511,7 @@ func applyCutoverTime(
 	ctx context.Context, job *jobs.Job, txn isql.Txn, cutoverTimestamp hlc.Timestamp,
 ) error {
 	log.Infof(ctx, "adding cutover time %s to job record", cutoverTimestamp)
-	if err := job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		progress := md.Progress.GetStreamIngest()
 		details := md.Payload.GetStreamIngestion()
 		if progress.ReplicationStatus == jobspb.ReplicationCuttingOver {
@@ -525,12 +525,8 @@ func applyCutoverTime(
 		progress.CutoverTime = cutoverTimestamp
 		progress.RemainingCutoverSpans = roachpb.Spans{details.Span}
 		ju.UpdateProgress(md.Progress)
-		return nil
-	}); err != nil {
-		return err
-	}
-	// Unpause the job if it is paused.
-	return job.WithTxn(txn).Unpaused(ctx)
+		return ju.Unpaused(ctx, md)
+	})
 }
 
 func alterTenantExpirationWindow(

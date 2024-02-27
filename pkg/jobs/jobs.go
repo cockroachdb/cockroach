@@ -346,16 +346,6 @@ func (u Updater) FractionProgressed(ctx context.Context, progressedFn FractionPr
 	})
 }
 
-// Unpaused sets the status of the tracked job to running or reverting iff the
-// job is currently paused. It does not directly resume the job; rather, it
-// expires the job's lease so that a Registry adoption loop detects it and
-// resumes it.
-func (u Updater) Unpaused(ctx context.Context) error {
-	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		return ju.Unpaused(ctx, md)
-	})
-}
-
 // CancelRequested sets the status of the tracked job to cancel-requested. It
 // does not directly cancel the job; like job.Paused, it expects the job to call
 // job.Progressed soon, observe a "job is cancel-requested" error, and abort.
