@@ -24,7 +24,6 @@ import "sql/sessiondatapb/session_data.proto";
 import "util/hlc/timestamp.proto";
 import "clusterversion/cluster_version.proto";
 import "google/protobuf/timestamp.proto";
-import "server/autoconfig/autoconfigpb/autoconfig.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 
 enum EncryptionMode {
@@ -1231,15 +1230,14 @@ message AutoConfigRunnerProgress {
 }
 
 message AutoConfigEnvRunnerDetails {
-  string env_id = 1 [(gogoproto.customname) = "EnvID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/server/autoconfig/autoconfigpb.EnvironmentID"];
+  reserved 1;
 }
 
 message AutoConfigEnvRunnerProgress {
 }
 
 message AutoConfigTaskDetails {
-  string env_id = 1 [(gogoproto.customname) = "EnvID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/server/autoconfig/autoconfigpb.EnvironmentID"];
-  cockroach.server.autoconfig.autoconfigpb.Task task = 2 [(gogoproto.nullable) = false];
+reserved 1, 2;
 }
 
 message AutoConfigTaskProgress {
