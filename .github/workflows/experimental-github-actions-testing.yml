@@ -122,3 +122,39 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
+  local_roachtest:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          submodules: true
+      - run: ./build/github/get-engflow-keys.sh
+      - name: run local roachtests
+        run: ./build/github/local-roachtest.sh crosslinux
+      - uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: local roachtest artifacts
+          path: artifacts
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  local_roachtest_fips:
+    runs-on: [self-hosted, basic_runner_group_fips]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          submodules: true
+      - run: ./build/github/get-engflow-keys.sh
+      - name: run local roachtests
+        run: ./build/github/local-roachtest.sh crosslinuxfips
+      - uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: local roachtest (FIPS) artifacts
+          path: artifacts
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
