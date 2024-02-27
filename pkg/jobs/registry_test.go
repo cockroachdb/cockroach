@@ -695,7 +695,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			if pauseJob {
 				return registry.PauseRequested(ctx, txn, jobID, "")
 			}
-			return registry.cancelRequested(ctx, txn, jobID)
+			return registry.CancelRequested(ctx, txn, jobID)
 		}))
 	}
 	// nextDelay returns the next delay based calculated from the given retryCnt
