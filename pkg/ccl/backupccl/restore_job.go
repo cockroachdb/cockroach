@@ -898,7 +898,10 @@ func createImportingDescriptors(
 
 			if eligible, err := backedUpDescriptorWithInProgressImportInto(ctx, p, desc); err != nil {
 				return nil, nil, nil, err
-			} else if !eligible {
+			} else if !eligible || r.job.Details().(jobspb.RestoreDetails).ExperimentalOnline {
+				log.Infof(ctx, "Table %s cannot be restored due to in progress import", desc.GetName())
+				// We cannot run online restore a table with an in progress import. See
+				// https://github.com/cockroachdb/cockroach/issues/118279
 				continue
 			}
 		}

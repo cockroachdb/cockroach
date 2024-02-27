@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -219,12 +220,12 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 
 	var tc serverutils.TestClusterInterface
 	var cleanup func()
+
 	tc, _, cfg.iodir, cleanup = backuptestutils.StartBackupRestoreTestCluster(t, clusterSize, opts...)
 	d.clusters[cfg.name] = tc
 	d.firstNode[cfg.name] = tc.Server(0)
 	d.dataDirs[cfg.name] = cfg.iodir
 	d.cleanupFns = append(d.cleanupFns, cleanup)
-
 	return nil
 }
 
@@ -458,6 +459,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 	ds := newDatadrivenTestState()
 	defer ds.cleanup(ctx, t)
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+
 		execWithTagAndPausePoint := func(jobType jobspb.Type) string {
 			ds.noticeBuffer = nil
 			const user = "root"
@@ -519,6 +521,10 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 		case "reset":
 			ds.cleanup(ctx, t)
 			ds = newDatadrivenTestState()
+			if d.HasArg("test-nodelocal") {
+				nodelocalCleanup := nodelocal.ReplaceNodeLocalForTesting(t.TempDir())
+				ds.cleanupFns = append(ds.cleanupFns, nodelocalCleanup)
+			}
 			return ""
 
 		case "new-cluster":
