@@ -1318,6 +1318,16 @@ func ingestWithRetry(
 			}
 		}
 
+		if !execCtx.ExecCfg().Codec.ForSystemTenant() && flowinfra.IsFlowRetryableError(err) {
+			// If we encountered "could not register flow because the registry
+			// is draining" error in the application virtual cluster, we
+			// calibrate the elapsed duration. This is the case since DistSQL
+			// physical planning in virtual clusters uses 'sql_instances' table
+			// which currently doesn't have draining information
+			// TODO(#100578): remove this when this problem is addressed.
+			retryDurationElapsed /= 100
+		}
+
 		if retryDurationElapsed > retryDuration.Get(&execCtx.ExecCfg().Settings.SV) {
 			log.Warningf(ctx, "encountered retryable error but exceeded retry duration, stopping: %+v", err)
 			break
