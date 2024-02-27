@@ -353,18 +353,8 @@ func (u Updater) FractionProgressed(ctx context.Context, progressedFn FractionPr
 // that it is in state StatusCancelRequested and will move it to state
 // StatusReverting.
 func (u Updater) CancelRequested(ctx context.Context) error {
-	return u.CancelRequestedWithReason(ctx, errJobCanceled)
-}
-
-// CancelRequestedWithReason sets the status of the tracked job to cancel-requested. It
-// does not directly cancel the job; like job.Paused, it expects the job to call
-// job.Progressed soon, observe a "job is cancel-requested" error, and abort.
-// Further the node the runs the job will actively cancel it when it notices
-// that it is in state StatusCancelRequested and will move it to state
-// StatusReverting.
-func (u Updater) CancelRequestedWithReason(ctx context.Context, reason error) error {
 	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		return ju.CancelRequestedWithReason(ctx, md, reason)
+		return ju.CancelRequestedWithReason(ctx, md, errJobCanceled)
 	})
 }
 
