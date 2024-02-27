@@ -1,0 +1,86 @@
+# This test ensures that online restore skips restoring tables 
+# undergoing an in progress import
+
+reset test-nodelocal
+----
+
+new-cluster name=s1 disable-tenant
+----
+
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
+CREATE TABLE foofoo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foofoo VALUES (10, 'x0');
+CREATE TABLE foo (
+  i INT PRIMARY KEY,
+  foofoo_1 INT REFERENCES foofoo (i),
+   s STRING);
+----
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+
+exec-sql
+EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM baz WHERE i = 1;
+----
+NOTICE: EXPORT is not the recommended way to move data out of CockroachDB and may be deprecated in the future. Please consider exporting data with changefeeds instead: https://www.cockroachlabs.com/docs/stable/export-data-with-changefeeds
+
+# Pause the import job, in order to back up the importing data.
+#import expect-pausepoint tag=a
+#IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+#----
+#job paused at pausepoint
+
+
+import expect-pausepoint tag=aa
+IMPORT INTO foofoo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+
+# Ensure table, database, and cluster full backups capture importing rows.
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster/';
+----
+
+
+# Ensure all ONLINE RESTOREs do not restore foo and foofoo, but that conventional
+# restore can be used to restore these tables.
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access disable-tenant
+----
+
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/cluster/' with EXPERIMENTAL DEFERRED COPY;
+----
+
+
+query-sql
+SELECT table_name [SHOW TABLES FROM d] ORDER BY table_name;
+----
+baz
+
+restore
+RESTORE TABLE d.foo, d.foofoo LATEST IN 'nodelocal://1/cluster/' WITH into_db='d';
+----
+
+query-sql
+SELECT * FROM d.foo;
+----
+
+
+query-sql
+SELECT * FROM d.foofoo;
+----
+10 x0
+
+
+reset
+----
