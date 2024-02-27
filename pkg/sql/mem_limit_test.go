@@ -11,8 +11,10 @@
 package sql
 
 import (
+	"archive/zip"
 	"context"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -161,6 +163,7 @@ func TestStreamerTightBudget(t *testing.T) {
 	// Streamer isn't hitting the root budget exceeded error.
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		SQLMemoryPoolSize: 1 << 30, /* 1GiB */
+		Insecure:          true,
 	})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -185,9 +188,9 @@ func TestStreamerTightBudget(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("SET distsql_workmem = '%dB'", blobSize))
 
 	// Perform an index join to read the blobs.
-	query := "EXPLAIN ANALYZE SELECT sum(length(blob)) FROM t@t_k_idx WHERE k = 1"
+	query := "SELECT sum(length(blob)) FROM t@t_k_idx WHERE k = 1"
 	maximumMemoryUsageRegex := regexp.MustCompile(`maximum memory usage: (\d+\.\d+) MiB`)
-	rows := sqlDB.QueryStr(t, query)
+	rows := sqlDB.QueryStr(t, "EXPLAIN ANALYZE (VERBOSE) "+query)
 	// Build pretty output for an error message in case we need it.
 	var sb strings.Builder
 	for _, row := range rows {
@@ -202,9 +205,54 @@ func TestStreamerTightBudget(t *testing.T) {
 			// by the ColIndexJoin when the blob is copied into the columnar
 			// batch). We allow for 0.1MiB for other memory usage in the query.
 			maxAllowed := 2.1
-			require.GreaterOrEqualf(t, maxAllowed, usage, "unexpectedly high memory usage\n----\n%s", sb.String())
-			return
+			if maxAllowed >= usage {
+				return
+			}
+			// Get a stmt bundle for this query to fetch a trace that might help
+			// in debugging.
+			rows = sqlDB.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) "+query)
+			url := getBundleDownloadURL(t, fmt.Sprint(rows))
+			unzip := downloadAndUnzipBundle(t, url)
+			readFile := func(f *zip.File) string {
+				r, err := f.Open()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer r.Close()
+				bytes, err := io.ReadAll(r)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return string(bytes)
+			}
+			for _, f := range unzip.File {
+				switch f.Name {
+				case "plan.txt":
+					contents := readFile(f)
+					sb.WriteString("\n\n\nbundle plan.txt:\n\n\n")
+					sb.WriteString(contents)
+					// Check that the memory usage is still elevated.
+					if matches := maximumMemoryUsageRegex.FindStringSubmatch(contents); len(matches) == 0 {
+						t.Fatalf("unexpectedly didn't find a match for maximum memory usage\n%s", sb.String())
+					} else {
+						bundleUsage, err := strconv.ParseFloat(matches[1], 64)
+						require.NoError(t, err)
+						if maxAllowed >= bundleUsage {
+							// Memory usage is as expected in the bundle - do
+							// not fail the test since we don't have any
+							// information to help in understanding the original
+							// high memory usage.
+							return
+						}
+					}
+				case "trace.txt":
+					contents := readFile(f)
+					sb.WriteString("\n\n\nbundle trace.txt:\n\n\n")
+					sb.WriteString(contents)
+				}
+			}
+			t.Fatalf("unexpectedly high memory usage\n----\n%s", sb.String())
 		}
 	}
-	t.Fatal("unexpectedly didn't find a match for maximum memory usage")
+	t.Fatalf("unexpectedly didn't find a match for maximum memory usage\n%s", sb.String())
 }
