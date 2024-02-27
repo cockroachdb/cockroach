@@ -35,10 +35,19 @@ func (j *Job) Reverted(ctx context.Context, err error) error {
 	return j.NoTxn().reverted(ctx, err, nil)
 }
 
-// Paused is a wrapper around the internal function that moves a job to the
-// paused state.
+// Paused is a helper to the paused state.
 func (j *Job) Paused(ctx context.Context) error {
-	return j.NoTxn().paused(ctx, nil /* fn */)
+	return j.NoTxn().Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status == StatusPaused {
+			// Already paused - do nothing.
+			return nil
+		}
+		if md.Status != StatusPauseRequested {
+			return errors.Newf("job with status %s cannot be set to paused", md.Status)
+		}
+		ju.UpdateStatus(StatusPaused)
+		return nil
+	})
 }
 
 // Failed is a wrapper around the internal function that moves a job to the

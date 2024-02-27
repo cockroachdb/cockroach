@@ -346,28 +346,6 @@ func (u Updater) FractionProgressed(ctx context.Context, progressedFn FractionPr
 	})
 }
 
-// paused sets the status of the tracked job to paused. It is called by the
-// registry adoption loop by the node currently running a job to move it from
-// PauseRequested to paused.
-func (u Updater) paused(ctx context.Context, fn func(context.Context, isql.Txn) error) error {
-	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status == StatusPaused {
-			// Already paused - do nothing.
-			return nil
-		}
-		if md.Status != StatusPauseRequested {
-			return fmt.Errorf("job with status %s cannot be set to paused", md.Status)
-		}
-		if fn != nil {
-			if err := fn(ctx, txn); err != nil {
-				return err
-			}
-		}
-		ju.UpdateStatus(StatusPaused)
-		return nil
-	})
-}
-
 // Unpaused sets the status of the tracked job to running or reverting iff the
 // job is currently paused. It does not directly resume the job; rather, it
 // expires the job's lease so that a Registry adoption loop detects it and
