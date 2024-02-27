@@ -42,7 +42,7 @@ type buildScalarCtx struct {
 
 	// ivarMap is a map from opt.ColumnID to the index of an IndexedVar.
 	// If a ColumnID is not in the map, it cannot appear in the expression.
-	ivarMap opt.ColMap
+	ivarMap colOrdMap
 }
 
 type buildFunc func(b *Builder, ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error)
@@ -115,10 +115,10 @@ func (b *Builder) buildScalar(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.
 }
 
 func (b *Builder) buildScalarWithMap(
-	colMap opt.ColMap, scalar opt.ScalarExpr,
+	colMap colOrdMap, scalar opt.ScalarExpr,
 ) (tree.TypedExpr, error) {
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numOutputColsInMap(colMap)),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, colMap.MaxOrd()+1),
 		ivarMap: colMap,
 	}
 	return b.buildScalar(&ctx, scalar)
@@ -147,7 +147,7 @@ func (b *Builder) buildVariable(
 func (b *Builder) indexedVar(
 	ctx *buildScalarCtx, md *opt.Metadata, colID opt.ColumnID,
 ) (tree.TypedExpr, error) {
-	idx, ok := ctx.ivarMap.Get(int(colID))
+	idx, ok := ctx.ivarMap.Get(colID)
 	if !ok {
 		return nil, errors.AssertionFailedf("cannot map variable %d to an indexed var", redact.Safe(colID))
 	}
@@ -517,7 +517,7 @@ func (b *Builder) buildArrayFlatten(
 		return nil, b.decorrelationError()
 	}
 
-	root, err := b.buildRelational(af.Input)
+	root, _, err := b.buildRelational(af.Input)
 	if err != nil {
 		return nil, err
 	}
@@ -577,15 +577,15 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Build the execution plan for the input subquery.
-	plan, err := b.buildRelational(any.Input)
+	plan, planCols, err := b.buildRelational(any.Input)
 	if err != nil {
 		return nil, err
 	}
 
 	// Construct tuple type of columns in the row.
-	contents := make([]*types.T, plan.numOutputCols())
-	plan.outputCols.ForEach(func(key, val int) {
-		contents[val] = b.mem.Metadata().ColumnMeta(opt.ColumnID(key)).Type
+	contents := make([]*types.T, planCols.MaxOrd()+1)
+	planCols.ForEach(func(col opt.ColumnID, ord int) {
+		contents[ord] = b.mem.Metadata().ColumnMeta(col).Type
 	})
 	typs := types.MakeTuple(contents)
 	subqueryExpr := b.addSubquery(
@@ -723,7 +723,7 @@ func (b *Builder) buildExistsSubquery(
 	// ConvertUncorrelatedExistsToCoalesceSubquery converts all uncorrelated
 	// Exists with Coalesce+Subquery expressions. Remove this and the execution
 	// support for the Exists mode.
-	plan, err := b.buildRelational(exists.Input)
+	plan, _, err := b.buildRelational(exists.Input)
 	if err != nil {
 		return nil, err
 	}
@@ -843,7 +843,7 @@ func (b *Builder) buildSubquery(
 			eb.withExprs = withExprs
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
-			ePlan, err := eb.buildRelational(input)
+			ePlan, _, err := eb.buildRelational(input)
 			if err != nil {
 				return err
 			}
@@ -887,7 +887,7 @@ func (b *Builder) buildSubquery(
 
 	// Build the execution plan for the subquery. Note that the subquery could
 	// have subqueries of its own which are added to b.subqueries.
-	plan, err := b.buildRelational(input)
+	plan, _, err := b.buildRelational(input)
 	if err != nil {
 		return nil, err
 	}
