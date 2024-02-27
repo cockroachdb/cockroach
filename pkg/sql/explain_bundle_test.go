@@ -466,7 +466,7 @@ func getBundleDownloadURL(t *testing.T, text string) string {
 	return url
 }
 
-func downloadAndUnzipBundle(t *testing.T, url string) *zip.Reader {
+func downloadBundle(t *testing.T, url string, dest io.Writer) {
 	httpClient := httputil.NewClientWithTimeout(30 * time.Second)
 	// Download the zip to a BytesBuffer.
 	resp, err := httpClient.Get(context.Background(), url)
@@ -474,8 +474,13 @@ func downloadAndUnzipBundle(t *testing.T, url string) *zip.Reader {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
+	_, _ = io.Copy(dest, resp.Body)
+}
+
+func downloadAndUnzipBundle(t *testing.T, url string) *zip.Reader {
+	// Download the zip to a BytesBuffer.
 	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, resp.Body)
+	downloadBundle(t, url, &buf)
 
 	unzip, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
@@ -483,6 +488,19 @@ func downloadAndUnzipBundle(t *testing.T, url string) *zip.Reader {
 		t.Fatal(err)
 	}
 	return unzip
+}
+
+func readUnzippedFile(t *testing.T, f *zip.File) string {
+	r, err := f.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	bytes, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(bytes)
 }
 
 // checkBundle searches text strings for a bundle URL and then verifies that the
@@ -515,17 +533,7 @@ func checkBundle(
 		}
 		files = append(files, f.Name)
 
-		r, err := f.Open()
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer r.Close()
-		bytes, err := io.ReadAll(r)
-		if err != nil {
-			t.Fatal(err)
-		}
-		contents := string(bytes)
-
+		contents := readUnzippedFile(t, f)
 		if !expectErrors && strings.Contains(contents, "-- error") {
 			t.Errorf(
 				"expected no errors in %s, file contents:\n%s",
@@ -658,16 +666,7 @@ func TestExplainClientTime(t *testing.T) {
 	var contents string
 	for _, f := range unzip.File {
 		if f.Name == "plan.txt" {
-			r, err := f.Open()
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer r.Close()
-			bytes, err := io.ReadAll(r)
-			if err != nil {
-				t.Fatal(err)
-			}
-			contents = string(bytes)
+			contents := readUnzippedFile(t, f)
 			t.Logf("contents of plan.txt\n%s", contents)
 		}
 	}
