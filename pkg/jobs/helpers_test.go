@@ -19,8 +19,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Functions in this file are exported for test code convience and
+// should not be used in production code.
+
+// CancelRequested marks the job as cancel-requested using the
+// specified txn (may be nil).
 func (r *Registry) CancelRequested(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	return r.cancelRequested(ctx, txn, id)
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
+	if err != nil {
+		return err
+	}
+	return job.WithTxn(txn).CancelRequested(ctx)
 }
 
 // Started is a wrapper around the internal function that moves a job to the

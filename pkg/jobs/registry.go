@@ -1286,15 +1286,6 @@ func (r *Registry) DeleteTerminalJobByID(ctx context.Context, id jobspb.JobID) e
 	})
 }
 
-// cancelRequested marks the job as cancel-requested using the specified txn (may be nil).
-func (r *Registry) cancelRequested(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	job, err := r.LoadJobWithTxn(ctx, id, txn)
-	if err != nil {
-		return err
-	}
-	return job.WithTxn(txn).CancelRequested(ctx)
-}
-
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
 func (r *Registry) PauseRequested(
 	ctx context.Context, txn isql.Txn, id jobspb.JobID, reason string,
