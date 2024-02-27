@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "descriptor_utils.go",
         "first_upgrade.go",
-        "permanent_create_auto_config_runner_job.go",
         "permanent_create_jobs_metrics_polling_job.go",
         "permanent_ensure_sql_schema_telemetry_schedule.go",
         "permanent_key_visualizer_migration.go",
