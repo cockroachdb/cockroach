@@ -31,6 +31,7 @@ go_library(
         "//pkg/util/bufalloc",
         "//pkg/util/cancelchecker",
         "//pkg/util/encoding",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/mon",
