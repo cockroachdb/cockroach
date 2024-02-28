@@ -1879,6 +1879,14 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.cfg.SQLAdvertiseAddr,
 	)
 
+	metricsSampleInterval := base.DefaultMetricsSampleInterval
+
+	if serverKnobs := s.cfg.TestingKnobs.Server; serverKnobs != nil {
+		if serverKnobs.(*TestingKnobs).MetricsSampleInterval != time.Duration(0) {
+			metricsSampleInterval = serverKnobs.(*TestingKnobs).MetricsSampleInterval
+		}
+	}
+
 	// Begin recording runtime statistics.
 	if err := startSampleEnvironment(workersCtx,
 		s.ClusterSettings(),
@@ -1889,6 +1897,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.runtime,
 		s.status.sessionRegistry,
 		s.sqlServer.execCfg.RootMemoryMonitor,
+		metricsSampleInterval,
 	); err != nil {
 		return err
 	}
@@ -1897,7 +1906,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// The writes will be async; we'll wait for the first one to go through
 	// later in this method, using the returned channel.
 	firstTSDBPollDone := s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
+		s.cfg.AmbientCtx, s.recorder, metricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
 
 	// Export statistics to graphite, if enabled by configuration.

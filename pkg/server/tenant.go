@@ -671,9 +671,17 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// initialized before store startup continues.
 	s.sqlServer.execCfg.DistSQLPlanner.ConstructAndSetSpanResolver(ctx, 0 /* NodeID */, s.sqlServer.execCfg.Locality)
 
+	metricsSampleInterval := base.DefaultMetricsSampleInterval
+
+	if serverKnobs := s.cfg.TestingKnobs.Server; serverKnobs != nil {
+		if serverKnobs.(*TestingKnobs).MetricsSampleInterval != time.Duration(0) {
+			metricsSampleInterval = serverKnobs.(*TestingKnobs).MetricsSampleInterval
+		}
+	}
+
 	// Start measuring the Go scheduler latency.
 	if err := schedulerlatency.StartSampler(
-		workersCtx, s.sqlServer.cfg.Settings, s.stopper, s.sysRegistry, base.DefaultMetricsSampleInterval,
+		workersCtx, s.sqlServer.cfg.Settings, s.stopper, s.sysRegistry, metricsSampleInterval,
 		nil, /* listener */
 	); err != nil {
 		return err
@@ -756,6 +764,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			s.runtime,
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,
+			metricsSampleInterval,
 		); err != nil {
 			return err
 		}

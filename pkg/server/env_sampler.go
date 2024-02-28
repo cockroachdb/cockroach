@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/goroutinedumper"
 	"github.com/cockroachdb/cockroach/pkg/server/profiler"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -54,11 +53,12 @@ func startSampleEnvironment(
 	runtimeSampler *status.RuntimeStatSampler,
 	sessionRegistry *sql.SessionRegistry,
 	rootMemMonitor *mon.BytesMonitor,
+	minSampleInterval time.Duration,
 ) error {
 	cfg := sampleEnvironmentCfg{
 		st:                   settings,
 		stopper:              stopper,
-		minSampleInterval:    base.DefaultMetricsSampleInterval,
+		minSampleInterval:    minSampleInterval,
 		goroutineDumpDirName: goroutineDumpDirName,
 		heapProfileDirName:   heapProfileDirName,
 		cpuProfileDirName:    cpuProfileDirName,

@@ -172,6 +172,9 @@ type TestingKnobs struct {
 	// // TODO(ahmad/healthy-pod): Remove this once `v23.2` is cut and update `TestTenantAutoUpgrade`
 	// to reflect the changes.
 	AllowTenantAutoUpgradeOnInternalVersionChanges bool
+
+	// MetricsSampleInterval overrides base.DefaultMetricsSampleInterval when used to construct sampleEnvironmentCfg.
+	MetricsSampleInterval time.Duration
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

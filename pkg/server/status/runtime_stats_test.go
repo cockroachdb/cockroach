@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,16 +36,22 @@ func TestStructuredEventLogging(t *testing.T) {
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				MetricsSampleInterval: 500 * time.Millisecond,
+			},
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 
 	testStartTs := timeutil.Now()
 
-	// Wait 10 seconds for the first runtime stats entry to log
-	time.Sleep(10 * time.Second)
+	// Wait longer than MetricsSampleInterval duration.
+	time.Sleep(time.Second)
 
 	// Ensure that the entry hits the OS so it can be read back below.
-	log.FlushFiles()
+	log.FlushAllSync()
 
 	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
 		math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
