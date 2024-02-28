@@ -656,6 +656,11 @@ type MonitorError struct {
 	Err error
 }
 
+// MonitorNoCockroachProcessesError is the error returned when the
+// monitor is called on a node that is not running a `cockroach`
+// process by the time the monitor runs.
+var MonitorNoCockroachProcessesError = errors.New("no cockroach processes running")
+
 // NodeMonitorInfo is a message describing a cockroach process' status.
 type NodeMonitorInfo struct {
 	// The index of the node (in a SyncedCluster) at which the message originated.
@@ -792,8 +797,7 @@ func (c *SyncedCluster) Monitor(
 			vcs := map[virtualClusterInfo]struct{}{}
 			vcLines := strings.TrimSuffix(result.CombinedOut, "\n")
 			if vcLines == "" {
-				err := errors.New("no cockroach processes running")
-				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
+				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{MonitorNoCockroachProcessesError}})
 				return
 			}
 			for _, label := range strings.Split(vcLines, "\n") {
@@ -955,6 +959,7 @@ wait
 				for {
 					line, _, err := r.ReadLine()
 					if err == io.EOF {
+						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
 						return
 					}
 					if err != nil {

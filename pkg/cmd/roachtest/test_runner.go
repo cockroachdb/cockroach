@@ -1016,6 +1016,14 @@ func (r *testRunner) runTest(
 				preemptedVMNames := getPreemptedVMNames(ctx, c, l)
 				if preemptedVMNames != "" {
 					failureMsg = fmt.Sprintf("VMs preempted during the test run : %s\n\n**Other Failure**\n%s", preemptedVMNames, failureMsg)
+					// Reset failures in the test so that the VM preemption
+					// error is the one that is taken into account when
+					// reporting the failure. Note any other failures that
+					// happened during the test will be present in the
+					// `failureMsg` used when reporting the issue. In addition,
+					// `failure_N.log` files should also already exist at this
+					// point.
+					t.resetFailures()
 					t.Error(vmPreemptionError(preemptedVMNames))
 				}
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
