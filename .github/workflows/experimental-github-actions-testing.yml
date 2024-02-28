@@ -158,3 +158,21 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
+  examples_orms:
+    runs-on: [self-hosted, basic_runner_group_fips]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cockroach
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/checkout@v4
+        with:
+          path: examples-orms
+          repository: cockroachdb/examples-orms
+          ref: 876b2d52ae2b63aa9cc1741c8d189ff0b66ab0d7
+      - run: ./cockroach/build/github/get-engflow-keys.sh
+      - name: run tests
+        run: ./cockroach/build/github/examples-orms.sh
+      - name: clean up
+        run: ./cockroach/build/github/cleanup-engflow-keys.sh
+        if: always()
