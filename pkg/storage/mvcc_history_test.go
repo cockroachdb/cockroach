@@ -271,7 +271,7 @@ func TestMVCCHistories(t *testing.T) {
 			buf.Printf(">> %s:\n", name)
 
 			// Dump point keys.
-			iter, err := r.NewIter(nil, nil)
+			iter, err := r.NewIter(sstable.NoTransforms, nil, nil)
 			if err != nil {
 				return err
 			}
@@ -296,7 +296,7 @@ func TestMVCCHistories(t *testing.T) {
 			}
 
 			// Dump rangedels.
-			if rdIter, err := r.NewRawRangeDelIter(); err != nil {
+			if rdIter, err := r.NewRawRangeDelIter(sstable.NoTransforms); err != nil {
 				return err
 			} else if rdIter != nil {
 				defer func() { _ = rdIter.Close() }()
@@ -321,7 +321,7 @@ func TestMVCCHistories(t *testing.T) {
 			}
 
 			// Dump range keys.
-			if rkIter, err := r.NewRawRangeKeyIter(); err != nil {
+			if rkIter, err := r.NewRawRangeKeyIter(sstable.NoTransforms); err != nil {
 				return err
 			} else if rkIter != nil {
 				defer func() { _ = rkIter.Close() }()
