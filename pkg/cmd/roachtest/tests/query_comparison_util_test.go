@@ -121,6 +121,14 @@ func TestUnsortedMatricesDiff(t *testing.T) {
 			exactMatch:  false,
 			approxMatch: true,
 		},
+		{
+			name:        "multi row 0 in array matches -0 in array",
+			colTypes:    []string{"[]FLOAT4"},
+			t1:          [][]string{{"NULL"}, {"{1e-45}"}, {"{0,-0}"}, {"{-0.0039,-Inf"}},
+			t2:          [][]string{{"NULL"}, {"{1e-45}"}, {"{-0,0}"}, {"{-0.0039,-Inf"}},
+			exactMatch:  false,
+			approxMatch: true,
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

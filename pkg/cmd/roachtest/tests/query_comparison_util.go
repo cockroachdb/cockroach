@@ -552,14 +552,26 @@ func joinAndSortRows(rowMatrix1, rowMatrix2 [][]string, sep string) (rows1, rows
 	return rows1, rows2
 }
 
+func needApproximateMatch(colType string) bool {
+	// On s390x, check that values for both float and decimal coltypes are
+	// approximately equal to take into account platform differences in floating
+	// point calculations. On other architectures, check float values only.
+	return (runtime.GOARCH == "s390x" && (colType == "DECIMAL" || colType == "[]DECIMAL")) ||
+		colType == "FLOAT4" || colType == "[]FLOAT4" ||
+		colType == "FLOAT8" || colType == "[]FLOAT8"
+}
+
 // sortRowsWithFloatComp is similar to joinAndSortRows, but it uses float
 // comparison for float columns (and decimal columns when on s390x).
 func sortRowsWithFloatComp(rowMatrix1, rowMatrix2 [][]string, colTypes []string) {
 	floatsLess := func(i, j int, rowMatrix [][]string) bool {
 		for idx := range colTypes {
-			if (runtime.GOARCH == "s390x" && colTypes[idx] == "DECIMAL") ||
-				colTypes[idx] == "FLOAT4" || colTypes[idx] == "FLOAT8" {
-				res, err := floatcmp.FloatsCmp(rowMatrix[i][idx], rowMatrix[j][idx])
+			if needApproximateMatch(colTypes[idx]) {
+				cmpFn := floatcmp.FloatsCmp
+				if strings.HasPrefix(colTypes[idx], "[]") {
+					cmpFn = floatcmp.FloatArraysCmp
+				}
+				res, err := cmpFn(rowMatrix[i][idx], rowMatrix[j][idx])
 				if err != nil {
 					panic(errors.NewAssertionErrorWithWrappedErrf(err, "error comparing floats %s and %s",
 						rowMatrix[i][idx], rowMatrix[j][idx]))
@@ -600,12 +612,8 @@ func unsortedMatricesDiffWithFloatComp(
 		return result, nil
 	}
 	var needApproxMatch bool
-	for i := range colTypes {
-		// On s390x, check that values for both float and decimal coltypes are
-		// approximately equal to take into account platform differences in floating
-		// point calculations. On other architectures, check float values only.
-		if (runtime.GOARCH == "s390x" && colTypes[i] == "DECIMAL") ||
-			colTypes[i] == "FLOAT4" || colTypes[i] == "FLOAT8" {
+	for _, colType := range colTypes {
+		if needApproximateMatch(colType) {
 			needApproxMatch = true
 			break
 		}
@@ -618,27 +626,18 @@ func unsortedMatricesDiffWithFloatComp(
 		row1 := rowMatrix1[i]
 		row2 := rowMatrix2[i]
 
-		for j := range row1 {
-			if runtime.GOARCH == "s390x" && colTypes[j] == "DECIMAL" {
-				// On s390x, check that values for both float and decimal coltypes are
-				// approximately equal to take into account platform differences in floating
-				// point calculations. On other architectures, check float values only.
-				match, err := floatcmp.FloatsMatchApprox(row1[j], row2[j])
-				if err != nil {
-					return "", err
+		for j, colType := range colTypes {
+			if needApproximateMatch(colType) {
+				cmpFn := floatcmp.FloatsMatch
+				switch {
+				case runtime.GOARCH == "s390x" && strings.HasPrefix(colType, "[]"):
+					cmpFn = floatcmp.FloatArraysMatchApprox
+				case runtime.GOARCH == "s390x" && !strings.HasPrefix(colType, "[]"):
+					cmpFn = floatcmp.FloatsMatchApprox
+				case strings.HasPrefix(colType, "[]"):
+					cmpFn = floatcmp.FloatArraysMatch
 				}
-				if !match {
-					return result, nil
-				}
-			} else if colTypes[j] == "FLOAT4" || colTypes[j] == "FLOAT8" {
-				// Check that float values are approximately equal.
-				var err error
-				var match bool
-				if runtime.GOARCH == "s390x" {
-					match, err = floatcmp.FloatsMatchApprox(row1[j], row2[j])
-				} else {
-					match, err = floatcmp.FloatsMatch(row1[j], row2[j])
-				}
+				match, err := cmpFn(row1[j], row2[j])
 				if err != nil {
 					return "", err
 				}
