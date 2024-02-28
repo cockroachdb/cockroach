@@ -151,6 +151,18 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		b.semaCtx.Annotations = oldSemaCtxAnn
 	}
 
+	paramNameSeenIn, paramNameSeenOut := make(map[tree.Name]struct{}), make(map[tree.Name]struct{})
+	for _, param := range cf.Params {
+		if param.Name != "" {
+			if param.IsInParam() {
+				checkDuplicateParamName(param, paramNameSeenIn)
+			}
+			if param.IsOutParam() {
+				checkDuplicateParamName(param, paramNameSeenOut)
+			}
+		}
+	}
+
 	// bodyScope is the base scope for each statement in the body. We add the
 	// named parameters to the scope so that references to them in the body can
 	// be resolved.
@@ -501,4 +513,14 @@ func checkUnsupportedType(ctx context.Context, semaCtx *tree.SemaContext, typ *t
 	if err := tree.CheckUnsupportedType(ctx, semaCtx, typ); err != nil {
 		panic(err)
 	}
+}
+
+func checkDuplicateParamName(param tree.RoutineParam, seen map[tree.Name]struct{}) {
+	if _, ok := seen[param.Name]; ok {
+		// Argument names cannot be used more than once.
+		panic(pgerror.Newf(
+			pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", param.Name,
+		))
+	}
+	seen[param.Name] = struct{}{}
 }
