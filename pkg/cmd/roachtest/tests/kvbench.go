@@ -228,7 +228,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 		// Wipe cluster before starting a new run because factors like load-based
 		// splitting can significantly change the underlying layout of the table and
 		// affect benchmark results.
-		c.Wipe(ctx, false /* preserveCerts */, roachNodes)
+		c.Wipe(ctx, roachNodes)
 		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), roachNodes)
 		time.Sleep(restartWait)
 

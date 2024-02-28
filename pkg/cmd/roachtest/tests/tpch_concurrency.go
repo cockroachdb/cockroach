@@ -45,7 +45,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 		if err := loadTPCHDataset(
 			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx, c.Range(1, numNodes-1)),
-			c.Range(1, numNodes-1), true /* disableMergeQueue */, false, /* secure */
+			c.Range(1, numNodes-1), true, /* disableMergeQueue */
 		); err != nil {
 			t.Fatal(err)
 		}
