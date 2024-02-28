@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -4468,7 +4469,13 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 		defer closeFeed(t, drop)
 		assertPayloads(t, drop, []string{`drop: [1]->{"after": {"a": 1}}`})
 		sqlDB.Exec(t, `DROP TABLE drop`)
-		const dropOrOfflineRE = `"drop" was dropped|CHANGEFEED cannot target offline table: drop`
+		// Dropping the table should cause the schema feed to return an error.
+		// This error can either come from validateDescriptor (the first two)
+		// or the lease manager (catalog.ErrDescriptorDropped).
+		dropOrOfflineRE := fmt.Sprintf(
+			`"drop" was dropped|CHANGEFEED cannot target offline table: drop|%s`,
+			catalog.ErrDescriptorDropped,
+		)
 		if err := drainUntilErr(drop); !testutils.IsError(err, dropOrOfflineRE) {
 			t.Errorf(`expected %q error, instead got: %+v`, dropOrOfflineRE, err)
 		}
