@@ -1,0 +1,85 @@
+# Test that IMPORT INTO properly increments the importEpoch descriptor field.
+#
+# NB: This test will be expanded to run backup and restore in a follow up PR.
+
+new-cluster name=s1
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
+----
+
+exec-sql
+CREATE VIEW import_epoch (epoch)
+AS WITH tbls AS (
+   	SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS orig FROM system.descriptor
+   )
+   SELECT orig->'table'->'importEpoch' FROM tbls WHERE id = '109';
+----
+
+exec-sql
+EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM baz WHERE i = 1;
+----
+NOTICE: EXPORT is not the recommended way to move data out of CockroachDB and may be deprecated in the future. Please consider exporting data with changefeeds instead: https://www.cockroachlabs.com/docs/stable/export-data-with-changefeeds
+
+exec-sql
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+
+query-sql
+SELECT name, id FROM system.namespace WHERE name = 'foo';
+----
+foo 109
+
+query-sql
+SELECT * FROM import_epoch
+----
+1
+
+exec-sql
+EXPORT INTO CSV 'nodelocal://1/export2/' FROM SELECT * FROM baz WHERE i = 2;
+----
+NOTICE: EXPORT is not the recommended way to move data out of CockroachDB and may be deprecated in the future. Please consider exporting data with changefeeds instead: https://www.cockroachlabs.com/docs/stable/export-data-with-changefeeds
+
+exec-sql
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export2/export*-n*.0.csv')
+----
+
+query-sql
+SELECT * FROM import_epoch
+----
+2
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+exec-sql
+EXPORT INTO CSV 'nodelocal://1/export3/' FROM SELECT * FROM baz WHERE i = 3;
+----
+NOTICE: EXPORT is not the recommended way to move data out of CockroachDB and may be deprecated in the future. Please consider exporting data with changefeeds instead: https://www.cockroachlabs.com/docs/stable/export-data-with-changefeeds
+
+# ensure the ImportEpoch increments before planning and does not rollback after the IMPORT INTO
+# job gets cancelled
+import expect-pausepoint tag=a
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export3/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+query-sql
+SELECT * FROM import_epoch
+----
+3
+
+# Cancel the job so that the cleanup hook runs.
+job cancel=a
+----
+
+query-sql
+SELECT * FROM import_epoch
+----
+3
