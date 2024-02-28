@@ -253,35 +253,11 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	return params.p.writeFuncSchemaChange(params.ctx, udfDesc)
 }
 
-func checkDuplicateParamName(param tree.RoutineParam, seen map[tree.Name]struct{}) error {
-	if _, ok := seen[param.Name]; ok {
-		// Argument names cannot be used more than once.
-		return pgerror.Newf(
-			pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", param.Name,
-		)
-	}
-	seen[param.Name] = struct{}{}
-	return nil
-}
-
 func (n *createFunctionNode) getMutableFuncDesc(
 	scDesc catalog.SchemaDescriptor, params runParams,
 ) (fnDesc *funcdesc.Mutable, isNew bool, err error) {
 	pbParams := make([]descpb.FunctionDescriptor_Parameter, len(n.cf.Params))
-	paramNameSeenIn, paramNameSeenOut := make(map[tree.Name]struct{}), make(map[tree.Name]struct{})
 	for i, param := range n.cf.Params {
-		if param.Name != "" {
-			if param.IsInParam() {
-				if err = checkDuplicateParamName(param, paramNameSeenIn); err != nil {
-					return nil, false, err
-				}
-			}
-			if param.IsOutParam() {
-				if err = checkDuplicateParamName(param, paramNameSeenOut); err != nil {
-					return nil, false, err
-				}
-			}
-		}
 		pbParam, err := makeFunctionParam(params.ctx, param, params.p)
 		if err != nil {
 			return nil, false, err

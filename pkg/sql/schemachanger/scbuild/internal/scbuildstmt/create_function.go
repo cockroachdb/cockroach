@@ -43,8 +43,6 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	n.Name.SchemaName = tree.Name(scName.Name)
 	n.Name.CatalogName = tree.Name(dbname.Name)
 
-	validateParameters(n)
-
 	existingFn := b.ResolveRoutine(
 		&tree.RoutineObj{
 			FuncName: n.Name,
@@ -188,30 +186,6 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	validateFunctionRelationReferences(b, refProvider, db.DatabaseID)
 	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, refProvider))
 	b.LogEventForExistingTarget(&fn)
-}
-
-func checkDuplicateParamName(param tree.RoutineParam, seen map[tree.Name]struct{}) {
-	if _, ok := seen[param.Name]; ok {
-		// Argument names cannot be used more than once.
-		panic(pgerror.Newf(
-			pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", param.Name,
-		))
-	}
-	seen[param.Name] = struct{}{}
-}
-
-func validateParameters(n *tree.CreateRoutine) {
-	seenIn, seenOut := make(map[tree.Name]struct{}), make(map[tree.Name]struct{})
-	for _, param := range n.Params {
-		if param.Name != "" {
-			if param.IsInParam() {
-				checkDuplicateParamName(param, seenIn)
-			}
-			if param.IsOutParam() {
-				checkDuplicateParamName(param, seenOut)
-			}
-		}
-	}
 }
 
 func validateTypeReferences(b BuildCtx, refProvider ReferenceProvider, parentDBID descpb.ID) {
