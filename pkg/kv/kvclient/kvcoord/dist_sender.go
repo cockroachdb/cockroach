@@ -2688,56 +2688,67 @@ func (ds *DistSender) sendToReplicas(
 				}
 			case *kvpb.NotLeaseHolderError:
 				ds.metrics.NotLeaseHolderErrCount.Inc(1)
+				// Update the leaseholder in the range cache. Naively this would also
+				// happen when the next RPC comes back, but we don't want to wait out
+				// the additional RPC latency.
+				var oldLeaseholder = routing.Leaseholder()
+				if oldLeaseholder == nil {
+					oldLeaseholder = &roachpb.ReplicaDescriptor{}
+				}
+				errDesc := &tErr.RangeDesc
+				errLease := tErr.Lease
+				// TODO(baptist): Many tests don't set the RangeDesc on NLHE. The
+				// desired behavior is undefined if it is not set. Ideally all tests
+				// should be updated to call NewNotLeaseHolderError
+				if errDesc.RangeID == 0 {
+					errDesc = routing.Desc()
+				}
+				// If there is no lease in the error, use an empty lease
+				if tErr.Lease == nil {
+					errLease = &roachpb.Lease{}
+				}
+				routing.SyncTokenAndMaybeUpdateCache(ctx, errLease, errDesc)
+				// Note that the leaseholder might not be the one indicated by
+				// the NLHE we just received, in case that error carried stale info.
+				lh := routing.Leaseholder()
+				// If we got new information, we use it. If not, we loop around and try
+				// the next replica.
 				var lhRUE bool // lease holder replica unavailable error
-				// If we got some lease information, we use it. If not, we loop around
-				// and try the next replica.
-				if tErr.Lease != nil {
-					// Update the leaseholder in the range cache. Naively this would also
-					// happen when the next RPC comes back, but we don't want to wait out
-					// the additional RPC latency.
-
-					var updatedLeaseholder bool
-					if tErr.Lease != nil {
-						updatedLeaseholder = routing.SyncTokenAndMaybeUpdateCache(ctx, tErr.Lease, &tErr.RangeDesc)
-					}
-					// Move the new leaseholder to the head of the queue for the next
-					// retry. Note that the leaseholder might not be the one indicated by
-					// the NLHE we just received, in case that error carried stale info.
-					if lh := routing.Leaseholder(); lh != nil {
-						// If we've already tried this replica and it's unavailable due to
-						// a tripped replica circuit breaker, skip it to avoid loops.
-						if err := replicaUnavailableError; err != nil {
-							if rue := (*kvpb.ReplicaUnavailableError)(nil); errors.As(err, &rue) {
-								lhRUE = lh.IsSame(rue.Replica)
-							}
+				if lh != nil && !errLease.Empty() {
+					updatedLeaseholder := !lh.IsSame(*oldLeaseholder)
+					// If we've already tried this replica and it's unavailable due to
+					// a tripped replica circuit breaker, skip it to avoid loops.
+					if err := replicaUnavailableError; err != nil {
+						if rue := (*kvpb.ReplicaUnavailableError)(nil); errors.As(err, &rue) {
+							lhRUE = lh.IsSame(rue.Replica)
 						}
-						// If the leaseholder is the replica that we've just tried, and
-						// we've tried this replica a bunch of times already, let's move on
-						// and not try it again. This prevents us getting stuck on a replica
-						// that we think has the lease but keeps returning redirects to us
-						// (possibly because it hasn't applied its lease yet). Perhaps that
-						// lease expires and someone else gets a new one, so by moving on we
-						// get out of possibly infinite loops.
-						if (!lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit) && !lhRUE {
-							moved := transport.MoveToFront(*lh)
-							if !moved {
-								// The transport always includes the client's view of the
-								// leaseholder when it's constructed. If the leaseholder can't
-								// be found on the transport then it must be the case that the
-								// routing was updated with lease information that is not
-								// compatible with the range descriptor that was used to
-								// construct the transport. A client may have an arbitrarily
-								// stale view of the leaseholder, but it is never expected to
-								// regress. As such, advancing through each replica on the
-								// transport until it's exhausted is unlikely to achieve much.
-								//
-								// We bail early by returning a SendError. The expectation is
-								// for the client to retry with a fresher eviction token.
-								log.VEventf(
-									ctx, 2, "transport incompatible with updated routing; bailing early",
-								)
-								return nil, newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error"))
-							}
+					}
+					// If the leaseholder is the replica that we've just tried, and
+					// we've tried this replica a bunch of times already, let's move on
+					// and not try it again. This prevents us getting stuck on a replica
+					// that we think has the lease but keeps returning redirects to us
+					// (possibly because it hasn't applied its lease yet). Perhaps that
+					// lease expires and someone else gets a new one, so by moving on we
+					// get out of possibly infinite loops.
+					if (!lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit) && !lhRUE {
+						moved := transport.MoveToFront(*lh)
+						if !moved {
+							// The transport always includes the client's view of the
+							// leaseholder when it's constructed. If the leaseholder can't
+							// be found on the transport then it must be the case that the
+							// routing was updated with lease information that is not
+							// compatible with the range descriptor that was used to
+							// construct the transport. A client may have an arbitrarily
+							// stale view of the leaseholder, but it is never expected to
+							// regress. As such, advancing through each replica on the
+							// transport until it's exhausted is unlikely to achieve much.
+							//
+							// We bail early by returning a SendError. The expectation is
+							// for the client to retry with a fresher eviction token.
+							log.VEventf(
+								ctx, 2, "transport incompatible with updated routing; bailing early",
+							)
+							return nil, newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error"))
 						}
 					}
 					// Check whether the request was intentionally sent to a follower
