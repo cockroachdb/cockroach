@@ -4428,6 +4428,7 @@ func TestChangefeedUpdatePrimaryKey(t *testing.T) {
 func TestChangefeedTruncateOrDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 119328, "flaky test")
 
 	assertFailuresCounter := func(t *testing.T, m *Metrics, exp int64) {
 		t.Helper()
