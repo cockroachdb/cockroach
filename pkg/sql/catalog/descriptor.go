@@ -763,6 +763,9 @@ type TableDescriptor interface {
 	// swap mutation or a secondary index used by the declarative schema changer
 	// for a primary index swap.
 	IsPrimaryKeySwapMutation(m *descpb.DescriptorMutation) bool
+	// GetInProgressImportEpoch gets the current import epoch and import type if
+	// there's an in progress import.
+	GetInProgressImportEpoch() (uint32, descpb.TableDescriptor_ImportType)
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.

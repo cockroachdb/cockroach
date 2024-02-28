@@ -30,6 +30,9 @@ var _ catalog.TableDescriptor = (*Mutable)(nil)
 var _ catalog.MutableDescriptor = (*Mutable)(nil)
 var _ catalog.TableDescriptor = (*wrapper)(nil)
 
+// OfflineReasonImporting hard codes the Offline Reason for Importing Tables
+const OfflineReasonImporting = "importing"
+
 // wrapper is the base implementation of the catalog.Descriptor
 // interface, which is overloaded by immutable and Mutable.
 type wrapper struct {
@@ -203,18 +206,25 @@ func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.Ind
 	desc.Indexes[indexOrdinal-1] = index
 }
 
-// InitializeImport binds the import start time to the table descriptor
-func (desc *Mutable) InitializeImport(startWallTime int64) error {
+// InitializeImport binds the import start time, type, and epoch to the table descriptor
+func (desc *Mutable) InitializeImportOnExistingTable(
+	startWallTime int64, importType descpb.TableDescriptor_ImportType,
+) error {
 	if desc.ImportStartWallTime != 0 {
 		return errors.AssertionFailedf("Import in progress with start time %v", desc.ImportStartWallTime)
 	}
 	desc.ImportStartWallTime = startWallTime
+	if importType == descpb.TableDescriptor_IMPORT_INTO_NON_EMPTY {
+		desc.ImportEpoch++
+	}
+	desc.ImportTypeInProgress = importType
 	return nil
 }
 
-// FinalizeImport removes the ImportStartTime
+// FinalizeImport removes in progress import metadata from the descriptor
 func (desc *Mutable) FinalizeImport() {
 	desc.ImportStartWallTime = 0
+	desc.ImportTypeInProgress = descpb.TableDescriptor_NO_IMPORT
 }
 
 // UpdateIndexPartitioning applies the new partition and adjusts the column info
@@ -678,4 +688,13 @@ func (desc *wrapper) IsPrimaryKeySwapMutation(m *descpb.DescriptorMutation) bool
 		}
 	}
 	return false
+}
+
+// GetInProgressImportEpoch returns the ImportEpoch and ImportType of the descriptor if there's
+// an in-progress import.
+func (desc *wrapper) GetInProgressImportEpoch() (uint32, descpb.TableDescriptor_ImportType) {
+	if desc.ImportTypeInProgress != 0 {
+		return desc.ImportEpoch, desc.ImportTypeInProgress
+	}
+	return 0, 0
 }
