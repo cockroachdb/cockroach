@@ -12,9 +12,11 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -94,6 +96,8 @@ will then convert it to the --format requested in the current invocation.
 			w = cw
 		case tsDumpText:
 			w = defaultTSWriter{w: os.Stdout}
+		case tsDumpJSON:
+			w = makeJSONWriter(debugTimeSeriesDumpOpts.targetURL)
 		case tsDumpOpenMetrics:
 			if debugTimeSeriesDumpOpts.targetURL != "" {
 				write := beginHttpRequestWithWritePipe(debugTimeSeriesDumpOpts.targetURL)
@@ -134,7 +138,7 @@ will then convert it to the --format requested in the current invocation.
 
 				// Buffer the writes to os.Stdout since we're going to
 				// be writing potentially a lot of data to it.
-				w := bufio.NewWriter(os.Stdout)
+				w := bufio.NewWriterSize(os.Stdout, 1024*1024)
 				if err := tsutil.DumpRawTo(stream, w); err != nil {
 					return err
 				}
@@ -228,12 +232,143 @@ func beginHttpRequestWithWritePipe(targetURL string) io.Writer {
 		fmt.Printf("tsdump: openmetrics: http response: %v", resp)
 	}()
 
-	return write
+	return bufio.NewWriterSize(write, 1024*1024)
 }
 
 type tsWriter interface {
 	Emit(*tspb.TimeSeriesData) error
 	Flush() error
+}
+
+type jsonWriter struct {
+	targetURL string
+	buffer    bytes.Buffer
+	timestamp int64
+}
+
+// Format via https://docs.victoriametrics.com/#json-line-format
+// {
+// // metric contans metric name plus labels for a particular time series
+// "metric":{
+// "__name__": "metric_name",  // <- this is metric name
+//
+// // Other labels for the time series
+//
+// "label1": "value1",
+// "label2": "value2",
+// ...
+// "labelN": "valueN"
+// },
+//
+// // values contains raw sample values for the given time series
+// "values": [1, 2.345, -678],
+//
+// // timestamps contains raw sample UNIX timestamps in milliseconds for the given time series
+// // every timestamp is associated with the value at the corresponding position
+// "timestamps": [1549891472010,1549891487724,1549891503438]
+// }
+type victoriaMetricsJSON struct {
+	Metric     map[string]string `json:"metric"`
+	Values     []float64         `json:"values"`
+	Timestamps []int64           `json:"timestamps"`
+}
+
+func (o *jsonWriter) Emit(data *tspb.TimeSeriesData) error {
+	if o.targetURL == "" {
+		return errors.New("No targetURL selected")
+	}
+	out := &victoriaMetricsJSON{
+		Metric:     make(map[string]string, 1),
+		Values:     make([]float64, len(data.Datapoints)),
+		Timestamps: make([]int64, len(data.Datapoints)),
+	}
+
+	name := data.Name
+
+	// Hardcoded values
+	out.Metric["cluster_type"] = "SELF_HOSTED"
+	out.Metric["job"] = "cockroachdb"
+	out.Metric["region"] = "local"
+	// Zero values
+	out.Metric["instance"] = ""
+	out.Metric["node"] = ""
+	out.Metric["organization_id"] = ""
+	out.Metric["organization_label"] = ""
+	out.Metric["sla_type"] = ""
+	out.Metric["tenant_id"] = ""
+	// Command values
+	if debugTimeSeriesDumpOpts.clusterLabel != "" {
+		out.Metric["cluster"] = debugTimeSeriesDumpOpts.clusterLabel
+	} else if serverCfg.ClusterName != "" {
+		out.Metric["cluster"] = serverCfg.ClusterName
+	} else {
+		out.Metric["cluster"] = fmt.Sprintf("cluster-debug-%d", o.timestamp)
+	}
+
+	sl := reCrStoreNode.FindStringSubmatch(data.Name)
+	out.Metric["node_id"] = "0"
+	if len(sl) != 0 {
+		storeNodeKey := sl[1]
+		if storeNodeKey == "node" {
+			storeNodeKey += "_id"
+		}
+		out.Metric[storeNodeKey] = data.Source
+		name = sl[2]
+	}
+
+	name = rePromTSName.ReplaceAllLiteralString(name, `_`)
+	out.Metric["__name__"] = name
+
+	for i, ts := range data.Datapoints {
+		out.Values[i] = ts.Value
+		out.Timestamps[i] = ts.TimestampNanos / 1_000_000
+	}
+
+	err := json.NewEncoder(&o.buffer).Encode(out)
+	if err != nil {
+		return err
+	}
+
+	if o.buffer.Len() > 10_000_000 {
+		fmt.Printf("Hit threshold. Sending HTTP Request: %s\n", name)
+		resp, err := http.Post(o.targetURL, "application/json", &o.buffer)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode > 299 {
+			return errors.Newf("bad status: %+v", resp)
+		}
+
+		o.buffer = bytes.Buffer{}
+		return nil
+	}
+	return nil
+}
+
+func (o *jsonWriter) Flush() error {
+	resp, err := http.Post(o.targetURL, "application/json", &o.buffer)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode > 299 {
+		return errors.Newf("bad status: %+v", resp)
+	}
+
+	o.buffer = bytes.Buffer{}
+	return nil
+}
+
+var _ tsWriter = &jsonWriter{}
+
+func makeJSONWriter(targetURL string) tsWriter {
+	return &jsonWriter{
+		targetURL: targetURL,
+		timestamp: timeutil.Now().Unix(),
+	}
 }
 
 type openMetricsWriter struct {
@@ -394,6 +529,7 @@ const (
 	tsDumpTSV
 	tsDumpRaw
 	tsDumpOpenMetrics
+	tsDumpJSON
 )
 
 // Type implements the pflag.Value interface.
@@ -412,6 +548,8 @@ func (m *tsDumpFormat) String() string {
 		return "raw"
 	case tsDumpOpenMetrics:
 		return "openmetrics"
+	case tsDumpJSON:
+		return "json"
 	}
 	return ""
 }
@@ -429,6 +567,8 @@ func (m *tsDumpFormat) Set(s string) error {
 		*m = tsDumpRaw
 	case "openmetrics":
 		*m = tsDumpOpenMetrics
+	case "json":
+		*m = tsDumpJSON
 	default:
 		return fmt.Errorf("invalid value for --format: %s", s)
 	}
