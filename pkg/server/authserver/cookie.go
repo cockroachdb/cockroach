@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -173,4 +174,82 @@ func findTenantSelectCookieValue(cookies []*http.Cookie) string {
 		}
 	}
 	return ""
+}
+
+// CreateSessionCookie constructs an HTTP cookie that holds a DB
+// Console session. This cookie is always marked `HttpOnly` and can be
+// optionally marked `Secure` if the cluster is running in secure mode,
+// based on the `forHTTPSOnly` arg.
+func CreateSessionCookie(value string, forHTTPSOnly bool) *http.Cookie {
+	return &http.Cookie{
+		Name:     SessionCookieName,
+		Value:    value,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   forHTTPSOnly,
+	}
+}
+
+// CreateEmptySessionCookieWithImmediateExpiry constructs an HTTP
+// cookie that clears the session cookie by setting an empty cookie
+// with the same name and an expiry at the Unix epoch. This will cause
+// the browser to clear the cookie since it expires immediately.
+func CreateEmptySessionCookieWithImmediateExpiry(forHTTPSOnly bool) *http.Cookie {
+	return &http.Cookie{
+		Name:     SessionCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   forHTTPSOnly,
+		Expires:  timeutil.Unix(0, 0),
+	}
+}
+
+// CreateTenantCookie constructs an HTTP cookie that holds a DB Console
+// tenant selection. This cookis is **not** marked `HttpOnly` because
+// its value can be inspected and modified by the client-side
+// Javascript code if the user changes their tenant selection. It can
+// be optionally marked `Secure` if you're runinning in secure mode by
+// setting the `forHttpsOnly` argument to true.
+func CreateTenantCookie(value string, forHTTPSOnly bool) *http.Cookie {
+	return &http.Cookie{
+		Name:     TenantSelectCookieName,
+		Value:    value,
+		Path:     "/",
+		HttpOnly: false,
+		Secure:   forHTTPSOnly,
+	}
+}
+
+// CreateEmptyTenantCookieWithImmediateExpiry constructs an HTTP
+// cookie that clears the tenant cookie by setting an empty cookie
+// with the same name and an expiry at the Unix epoch. This will cause
+// the browser to clear the cookie since it expires immediately.
+func CreateEmptyTenantCookieWithImmediateExpiry(forHTTPSOnly bool) *http.Cookie {
+	return &http.Cookie{
+		Name:     TenantSelectCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: false,
+		Secure:   forHTTPSOnly,
+		Expires:  timeutil.Unix(0, 0),
+	}
+}
+
+// CreateOIDCCookie constructs a cookie to hold the OIDC secret that's
+// used to validate requests between `/login` and `/callback` requests.
+// This cookie contains a hash that's shared by the browser between the
+// two requests and is used to validate that the `/callback` was
+// triggered in response to a valid login attempt from this cluster.
+// This cookie is **always** `Secure` and `HttpOnly` since OIDC doesn't
+// work on an insecure cluster. Its name is an argument to avoid a CCL
+// dependency.
+func CreateOIDCCookie(name string, value string) *http.Cookie {
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	}
 }
