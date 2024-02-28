@@ -56,7 +56,7 @@ const (
 	// by CRL employees who have proper AWS credentials. The password can't be
 	// auto rotated due to constraints with postgres DMS source endpoint restrictions
 	// where the password can't contain %, ;, or +.
-	awsrdsSecretName     = "rds!db-074de488-6274-4b3e-ad27-d008b8ffa750"
+	awsrdsSecretName     = "rds!db-bf11a38a-4ba2-425d-b2b2-acab58357f2e"
 	awsrdsDBIdentifier   = "migrations-dms"
 	awsrdsNumInitialRows = 200000000
 )
