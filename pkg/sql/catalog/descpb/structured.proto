@@ -1205,7 +1205,12 @@ message TableDescriptor {
   // SchemaLocked, if set, disallows schema change to this table.
   optional bool schema_locked = 58 [(gogoproto.nullable) = false, (gogoproto.customname) = "SchemaLocked"];
 
-  // Next ID: 59
+  // ImportEpoch is the count of IMPORT INTO jobs that have been attempted on
+  // this table. The ImportEpoch can include an in progress import, as the field
+  // gets incremented while preparing the table for ingestion.
+  optional uint32 import_epoch = 59 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportEpoch"];
+
+  // Next ID: 60
 }
 
 // SurvivalGoal is the survival goal for a database.

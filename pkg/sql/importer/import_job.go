@@ -277,9 +277,11 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					return errors.Wrap(err, "checking if existing table is empty")
 				}
 				details.Tables[i].WasEmpty = len(res) == 0
-				// Update the descriptor in the job record and in the database with the ImportStartTime
+
+				// Update the descriptor in the job record and in the database
 				details.Tables[i].Desc.ImportStartWallTime = details.Walltime
-				if err := bindImportStartTime(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
+
+				if err := bindTableDescImportProperties(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
 					return err
 				}
 			}
@@ -411,7 +413,6 @@ func (r *importResumer) prepareTablesForIngestion(
 				IsNew:      table.IsNew,
 				TargetCols: table.TargetCols,
 			}
-
 			hasExistingTables = true
 		} else {
 			// PGDUMP imports support non-public schemas.
@@ -499,7 +500,7 @@ func prepareExistingTablesForIngestion(
 	// Take the table offline for import.
 	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
 	// ensure that filtering by state handles IMPORTING correctly.
-	importing.SetOffline("importing")
+	importing.OfflineForImport()
 
 	// TODO(dt): de-validate all the FKs.
 	if err := descsCol.WriteDesc(
@@ -584,7 +585,7 @@ func prepareNewTablesForIngestion(
 	// as tabledesc.TableDescriptor.
 	tableDescs := make([]catalog.TableDescriptor, len(newMutableTableDescriptors))
 	for i := range tableDescs {
-		newMutableTableDescriptors[i].SetOffline("importing")
+		newMutableTableDescriptors[i].SetOffline(tabledesc.OfflineReasonImporting)
 		tableDescs[i] = newMutableTableDescriptors[i]
 	}
 
@@ -709,8 +710,9 @@ func (r *importResumer) prepareSchemasForIngestion(
 	return schemaMetadata, err
 }
 
-// bindImportStarTime writes the ImportStarTime to the descriptor.
-func bindImportStartTime(
+// bindTableDescImportProperties updates the table descriptor at the start of an
+// import for a table that existed before the import.
+func bindTableDescImportProperties(
 	ctx context.Context, p sql.JobExecContext, id catid.DescID, startWallTime int64,
 ) error {
 	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
