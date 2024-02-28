@@ -1471,22 +1471,29 @@ func (e *cacheEntry) maybeUpdate(
 	updatedLease = false
 	updatedDesc := false
 
-	// First, we handle the lease. If l is older than what the entry has (or the
-	// same), there's nothing to update.
+	// First, we handle the lease. For non-speculative leases, if l is older than
+	// what the entry has (or the same), there's nothing to update.
 	//
-	// This method handles speculative leases: a new lease with a sequence of 0 is
-	// presumed to be newer than anything if the replica it's coming from doesn't
-	// have an outdated view of the world (i.e does not have an older range
-	// descriptor than the one cached on the client); an existing lease with a
-	// sequence number of 0 is presumed to be older than anything and will be
-	// replaced by the supplied lease if the associated range descriptor is
-	// non-stale.
+	// This method handles speculative leases: a non-empty new lease with a
+	// sequence of 0 is presumed to be newer than anything if the replica it's
+	// coming from doesn't have an outdated view of the world (i.e does not have
+	// an older range descriptor than the one cached on the client); an existing
+	// lease with a sequence number of 0 is presumed to be older than anything and
+	// will be replaced by the supplied lease if the associated range descriptor
+	// is non-stale.
+	// TODO(baptist): A speculative lease shouldn't always replace a
+	// non-speculative lease. If the new lease sequence is 0, it may be older than
+	// the lease we already have. Consider changing the way speculative leases are
+	// sent to include what version of the lease they would replace.
 	//
 	// Lastly, if the cached lease is empty, it will be updated with the supplied
 	// lease regardless of the associated range descriptor's generation.
-	if (l.Sequence != 0 && e.lease.Sequence != 0 && l.Sequence > e.lease.Sequence) ||
-		((l.Sequence == 0 || e.lease.Sequence == 0) && rangeDesc.Generation >= e.desc.Generation) ||
-		e.lease.Empty() {
+	neitherSpeculative := !l.Speculative() && !e.lease.Speculative()
+	eitherSpeculative := l.Speculative() || e.lease.Speculative()
+	if !l.Empty() &&
+		(neitherSpeculative && l.Sequence > e.lease.Sequence ||
+			eitherSpeculative && rangeDesc.Generation >= e.desc.Generation ||
+			e.lease.Empty()) {
 		newEntry.lease = *l
 		updatedLease = true
 	}
