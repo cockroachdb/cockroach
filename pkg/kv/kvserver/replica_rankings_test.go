@@ -15,9 +15,11 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	aload "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
@@ -302,6 +304,96 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 			return nil
 		})
 	}
+}
+
+// TestLoadQPSStats validates that replica stats consistently accounted when batch request succeeds or fails.
+func TestLoadQPSStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	failBatchReq := atomic.Bool{}
+	failBatchReq.Store(false)
+	var key roachpb.Key
+	var qps, writeBytes float64
+
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &StoreTestingKnobs{
+					TestingRequestFilter: func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+						if failBatchReq.Load() {
+							for _, req := range ba.Requests {
+								if req.GetInner().Header().Key.Equal(key) {
+									return kvpb.NewError(fmt.Errorf("failed batch request"))
+								}
+							}
+						}
+						return nil
+					},
+				},
+			},
+		},
+	})
+
+	defer tc.Stopper().Stop(ctx)
+	ts := tc.Server(0)
+	db := ts.DB()
+	conn := tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	// Disable the consistency checker, to avoid interleaving requests
+	// artificially inflating QPS due to consistency checking.
+	sqlDB.Exec(t, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
+
+	key = tc.ScratchRange(t)
+
+	req := &kvpb.PutRequest{
+		RequestHeader: kvpb.RequestHeader{Key: key},
+		Value:         roachpb.MakeValueFromString("value"),
+	}
+	batchReq := &kvpb.BatchRequest{}
+	batchReq.Add(req)
+
+	store, err := ts.GetStores().(*Stores).GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+
+	repl := store.LookupReplica(roachpb.RKey(key))
+	require.NotNil(t, repl)
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		failBatchReq.Store(true)
+		// Reset stats before sending request.
+		repl.loadStats.Reset()
+		_, pErr := txn.Send(ctx, batchReq)
+
+		qps = repl.loadStats.TestingGetSum(load.Queries)
+		writeBytes = repl.loadStats.TestingGetSum(load.WriteBytes)
+		failBatchReq.Store(false)
+		return pErr.GoError()
+	})
+
+	// Expected error for filtered out batch request.
+	require.Error(t, err)
+	require.ErrorContains(t, err, "failed batch request")
+
+	// Test that for failed batch request, neither QPS, or write keys/bytes stats are accounted for.
+	require.Equal(t, 0.0, qps)
+	require.Equal(t, 0.0, writeBytes)
+
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Reset stats before sending request.
+		repl.loadStats.Reset()
+		_, pErr := txn.Send(ctx, batchReq)
+		qps = repl.loadStats.TestingGetSum(load.Queries)
+		writeBytes = repl.loadStats.TestingGetSum(load.WriteBytes)
+		return pErr.GoError()
+	})
+	require.NoError(t, err)
+
+	// QPS, write bytes and write keys should be non-zero values.
+	require.Greater(t, qps, 0.0)
+	require.Greater(t, writeBytes, 0.0)
 }
 
 func TestReadLoadMetricAccounting(t *testing.T) {
