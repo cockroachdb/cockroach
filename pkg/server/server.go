@@ -503,6 +503,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 
 	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
+	kvserver.WatchRaftMemoryBudgetingSetting(stores, &st.SV)
 
 	decomNodeMap := &decommissioningNodeMap{
 		nodes: make(map[roachpb.NodeID]interface{}),

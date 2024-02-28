@@ -330,6 +330,8 @@ type Replica struct {
 		// bytesAccountUse declares whether to use the bytesAccount.
 		bytesAccountUse bool
 	}
+	// tracker tracks all in-memory entry slices pulled from RaftStorage.
+	tracker *raftStorageTracker
 
 	// localMsgs contains a collection of raftpb.Message that target the local
 	// RawNode. They are to be delivered on the next iteration of handleRaftReady.

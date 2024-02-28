@@ -271,9 +271,19 @@ type RaftTransport struct {
 	knobs *RaftTransportTestingKnobs
 }
 
+type RaftMessage struct {
+	Req *kvserverpb.RaftMessageRequest
+	trk *raftStorageTracker
+}
+
+func (rm RaftMessage) release() {
+	rm.trk.free(rm.Req.Message.Entries)
+	releaseRaftMessageRequest(rm.Req)
+}
+
 // raftSendQueue is a queue of outgoing RaftMessageRequest messages.
 type raftSendQueue struct {
-	reqs chan *kvserverpb.RaftMessageRequest
+	reqs chan RaftMessage
 	// The specific node this queue is sending RaftMessageRequests to.
 	nodeID roachpb.NodeID
 	// The number of bytes in flight. Must be updated *atomically* on sending and
@@ -745,6 +755,13 @@ func (t *RaftTransport) processQueue(
 	}
 
 	batch := &kvserverpb.RaftMessageRequestBatch{}
+	var msgs []RaftMessage
+	release := func() {
+		for _, msg := range msgs {
+			msg.release()
+		}
+	}
+
 	for {
 		raftIdleTimer.Reset(idleTimeout)
 
@@ -759,7 +776,9 @@ func (t *RaftTransport) processQueue(
 		case err := <-errCh:
 			return err
 
-		case req := <-q.reqs:
+		case msg := <-q.reqs:
+			msgs = append(msgs, msg)
+			req := msg.Req
 			size := int64(req.Size())
 			q.bytes.Add(-size)
 			budget := targetRaftOutgoingBatchSize.Get(&t.st.SV) - size
@@ -787,17 +806,17 @@ func (t *RaftTransport) processQueue(
 			}
 
 			batch.Requests = append(batch.Requests, *req)
-			releaseRaftMessageRequest(req)
 
 			// Pull off as many queued requests as possible, within reason.
 			for budget > 0 {
 				select {
-				case req = <-q.reqs:
+				case msg = <-q.reqs:
+					msgs = append(msgs, msg)
+					req = msg.Req
 					size := int64(req.Size())
 					q.bytes.Add(-size)
 					budget -= size
 					batch.Requests = append(batch.Requests, *req)
-					releaseRaftMessageRequest(req)
 				default:
 					budget = -1
 				}
@@ -806,9 +825,11 @@ func (t *RaftTransport) processQueue(
 			maybeAnnotateWithStoreIDs(batch)
 			if err := stream.Send(batch); err != nil {
 				t.metrics.FlowTokenDispatchesDropped.Inc(int64(len(pendingDispatches)))
+				release()
 				return err
 			}
 			t.metrics.MessagesSent.Inc(int64(len(batch.Requests)))
+			release()
 			clearRequestBatch(batch)
 
 		case <-dispatchPendingFlowTokensCh:
@@ -873,7 +894,7 @@ func (t *RaftTransport) getQueue(
 	if !ok {
 		t.kvflowControl.mu.Lock()
 		q := raftSendQueue{
-			reqs:   make(chan *kvserverpb.RaftMessageRequest, raftSendBufferSize),
+			reqs:   make(chan RaftMessage, raftSendBufferSize),
 			nodeID: nodeID,
 		}
 		value, ok = queuesMap.LoadOrStore(int64(nodeID), unsafe.Pointer(&q))
@@ -888,14 +909,13 @@ func (t *RaftTransport) getQueue(
 // positive but will never be a false negative; if sent is true the message may
 // or may not actually be sent but if it's false the message definitely was not
 // sent. It is not safe to continue using the reference to the provided request.
-func (t *RaftTransport) SendAsync(
-	req *kvserverpb.RaftMessageRequest, class rpc.ConnectionClass,
-) (sent bool) {
+func (t *RaftTransport) SendAsync(msg RaftMessage, class rpc.ConnectionClass) (sent bool) {
+	req := msg.Req
 	toNodeID := req.ToReplica.NodeID
 	defer func() {
 		if !sent {
 			t.metrics.MessagesDropped.Inc(1)
-			releaseRaftMessageRequest(req)
+			msg.release()
 		}
 	}()
 
@@ -930,7 +950,7 @@ func (t *RaftTransport) SendAsync(
 		outgoingMessageHandler.HandleRaftRequestSent(context.Background(), req.FromReplica.NodeID, req.ToReplica.NodeID, size)
 	}
 	select {
-	case q.reqs <- req:
+	case q.reqs <- msg:
 		q.bytes.Add(size)
 		return true
 	default:
@@ -962,10 +982,10 @@ func (t *RaftTransport) startProcessNewQueue(
 		// way the code is written).
 		for {
 			select {
-			case req := <-q.reqs:
-				q.bytes.Add(-int64(req.Size()))
+			case msg := <-q.reqs:
+				q.bytes.Add(-int64(msg.Req.Size()))
 				t.metrics.MessagesDropped.Inc(1)
-				releaseRaftMessageRequest(req)
+				msg.release()
 			default:
 				return
 			}

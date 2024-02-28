@@ -798,10 +798,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			r.raftMu.bytesAccountUse = RaftEntriesMemLimit > 0
 			syncRd := raftGroup.Ready()
 			r.raftMu.bytesAccountUse = false
-			// We apply committed entries during this handleRaftReady, so it is ok to
-			// release the corresponding memory tokens at the end of this func. Next
-			// time we enter this function, the account will be empty again.
-			defer r.raftMu.bytesAccount.Clear(ctx)
 
 			logRaftReady(ctx, syncRd)
 			asyncRd := makeAsyncReady(syncRd)
@@ -1102,6 +1098,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 		// Send MsgStorageApply's responses.
 		r.sendRaftMessages(ctx, msgStorageApply.Responses, nil /* blocked */, true /* willDeliverLocal */)
+		r.tracker.free(msgStorageApply.Entries)
 	}
 	stats.tApplicationEnd = timeutil.Now()
 	applicationElapsed := stats.tApplicationEnd.Sub(stats.tApplicationBegin).Nanoseconds()
@@ -1851,7 +1848,8 @@ func (r *Replica) sendRaftMessageRequest(
 	if log.V(4) {
 		log.Infof(ctx, "sending raft request %+v", req)
 	}
-	return r.store.cfg.Transport.SendAsync(req, r.connectionClass.get())
+	return r.store.cfg.Transport.SendAsync(
+		RaftMessage{Req: req, trk: r.tracker}, r.connectionClass.get())
 }
 
 func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID, snapErr error) {

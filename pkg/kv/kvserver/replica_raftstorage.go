@@ -126,6 +126,9 @@ func (r *replicaRaftStorage) TypedEntries(
 	ents, _, loadedSize, err := logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
 		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes, account)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
+	if r.raftMu.bytesAccountUse {
+		r.tracker.add(ents, loadedSize)
+	}
 	return ents, err
 }
 
