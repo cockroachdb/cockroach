@@ -1817,6 +1817,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		log.Infof(ctx, "finished restoring the pre-data bundle")
 	}
 
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.after_pre_data"); err != nil {
+		return err
+	}
+
 	if !preValidateData.isEmpty() {
 		res, err := restoreWithRetry(
 			ctx,
