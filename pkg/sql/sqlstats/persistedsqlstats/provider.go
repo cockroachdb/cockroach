@@ -207,6 +207,11 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 					return
 				case <-s.drain:
 					return
+				default:
+					// Don't block the flush loop if the sql activity update job is not
+					// ready to receive. We should at least continue to collect and flush
+					// stats for this node.
+					log.Warning(ctx, "sql-stats-worker: unable to signal flush completion")
 				}
 			}
 		}

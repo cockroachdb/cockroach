@@ -17,6 +17,7 @@ import (
 	"math"
 	"regexp"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1070,4 +1071,41 @@ func smallestStatsCountAcrossAllShards(
 	}
 
 	return numStmtStats
+}
+
+func TestSQLStatsFlushDoesntWaitForFlushSigReceiver(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	var sqlStmtFlushCount, sqlTxnFlushCount atomic.Int32
+	sqlStatsKnobs.OnStmtStatsFlushFinished = func() {
+		sqlStmtFlushCount.Add(1)
+	}
+	sqlStatsKnobs.OnTxnStatsFlushFinished = func() {
+		sqlTxnFlushCount.Add(1)
+	}
+	tc := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: sqlStatsKnobs,
+			},
+		},
+	})
+
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	ss := tc.ApplicationLayer(0).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	flushDoneCh := make(chan struct{})
+	ss.SetFlushDoneSignalCh(flushDoneCh)
+
+	// It should not block on the flush signal receiver.
+	persistedsqlstats.SQLStatsFlushInterval.Override(ctx, &tc.Server(0).ClusterSettings().SV, 100*time.Millisecond)
+	testutils.SucceedsSoon(t, func() error {
+		if sqlStmtFlushCount.Load() < 5 || sqlTxnFlushCount.Load() < 5 {
+			return errors.New("flush count hasn't been reached yet")
+		}
+		return nil
+	})
 }
