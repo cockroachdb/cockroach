@@ -756,6 +756,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			s.runtime,
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,
+			s.cfg.TestingKnobs,
 		); err != nil {
 			return err
 		}
