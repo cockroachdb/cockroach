@@ -132,7 +132,12 @@ type splitStatsHelperInput struct {
 	// side of the split is scanned first. In cases where neither of the
 	// input stats contain estimates, this is the only side that needs to
 	// be scanned.
-	ScanRightFirst bool
+	ScanRightFirst           bool
+	PreSplitStats            enginepb.MVCCStats
+	PreSplitLeftUser         enginepb.MVCCStats
+	PostSplitScanLocalLeftFn splitStatsScanFn
+	MaxCountDiff             int64
+	MaxBytesDiff             int64
 }
 
 // makeSplitStatsHelper initializes a splitStatsHelper. The values in the input
@@ -190,6 +195,48 @@ func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error)
 	}
 	if err != nil {
 		return splitStatsHelper{}, err
+	}
+	return h, nil
+}
+
+func makeEstimatedSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error) {
+	h := splitStatsHelper{
+		in: input,
+	}
+
+	if !h.in.AbsPreSplitBothStored.HasUserDataCloseTo(
+		h.in.PreSplitStats, h.in.MaxCountDiff, h.in.MaxBytesDiff) {
+		return makeSplitStatsHelper(input)
+	}
+
+	var absPostSplitFirst enginepb.MVCCStats
+	var err error
+	if h.in.ScanRightFirst {
+		absPostSplitFirst, err = input.PostSplitScanRightFn()
+		h.absPostSplitRight = &absPostSplitFirst
+	} else {
+		absPostSplitFirst, err = input.PostSplitScanLocalLeftFn()
+		absPostSplitFirst.Add(input.PreSplitLeftUser)
+		h.absPostSplitLeft = &absPostSplitFirst
+	}
+	if err != nil {
+		return splitStatsHelper{}, err
+	}
+
+	ms := h.in.AbsPreSplitBothStored
+	ms.Subtract(absPostSplitFirst)
+	ms.Add(h.in.DeltaBatchEstimated)
+	ms.Add(h.in.DeltaRangeKey)
+	if h.in.ScanRightFirst {
+		h.absPostSplitLeft = &ms
+	} else {
+		h.absPostSplitRight = &ms
+	}
+
+	if !h.in.AbsPreSplitBothStored.HasUserDataCloseTo(
+		h.in.PreSplitStats, 0 /* maxCountDiff */, 0 /* maxBytesDiff */) {
+		h.absPostSplitLeft.ContainsEstimates += 1
+		h.absPostSplitRight.ContainsEstimates += 1
 	}
 	return h, nil
 }

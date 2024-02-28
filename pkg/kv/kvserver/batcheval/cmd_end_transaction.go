@@ -30,15 +30,33 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+var FallBackToAccurateSplitStats = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"kv.split.fall_back_to_accurate_stats.enabled",
+	"if enabled, MVCC stats will be computed accurately (as opposed to estimated) during splits",
+	true)
+
+var MaxMVCCStatCountDiff = settings.RegisterIntSetting(
+	settings.SystemVisible,
+	"kv.split.max_mvcc_stat_count_diff",
+	"defines the max number of units that are acceptable for an individual MVCC stat to be off by",
+	1000)
+
+var MaxMVCCStatByteDiff = settings.RegisterIntSetting(
+	settings.SystemVisible,
+	"kv.split.max_mvcc_stat_byte_diff",
+	"defines the max number of bytes that are acceptable for an individual MVCC stat to be off by",
+	100000)
 
 func init() {
 	RegisterReadWriteCommand(kvpb.EndTxn, declareKeysEndTxn, EndTxn)
@@ -1055,23 +1073,20 @@ func splitTrigger(
 	}
 
 	h := splitStatsHelperInput{
-		AbsPreSplitBothStored: currentStats,
-		DeltaBatchEstimated:   bothDeltaMS,
-		DeltaRangeKey:         rangeKeyDeltaMS,
-		PostSplitScanLeftFn:   makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
-		PostSplitScanRightFn:  makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
-		ScanRightFirst:        splitScansRightForStatsFirst || emptyRHS,
+		AbsPreSplitBothStored:    currentStats,
+		DeltaBatchEstimated:      bothDeltaMS,
+		DeltaRangeKey:            rangeKeyDeltaMS,
+		PostSplitScanLeftFn:      makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side", false),
+		PostSplitScanRightFn:     makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side", false),
+		ScanRightFirst:           emptyRHS,
+		PreSplitStats:            split.PreSplitStats,
+		PreSplitLeftUser:         split.PreSplitLeftUserStats,
+		PostSplitScanLocalLeftFn: makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side", true),
+		MaxCountDiff:             MaxMVCCStatCountDiff.Get(&rec.ClusterSettings().SV),
+		MaxBytesDiff:             MaxMVCCStatByteDiff.Get(&rec.ClusterSettings().SV),
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }
-
-// splitScansRightForStatsFirst controls whether the left hand side or the right
-// hand side of the split is scanned first on the leaseholder when evaluating
-// the split trigger. In practice, the splitQueue wants to scan the left hand
-// side because the split key computation ensures that we do not create large
-// LHS ranges. However, to improve test coverage, we use a metamorphic value.
-var splitScansRightForStatsFirst = util.ConstantWithMetamorphicTestBool(
-	"split-scans-right-for-stats-first", false)
 
 // makeScanStatsFn constructs a splitStatsScanFn for the provided post-split
 // range descriptor which computes the range's statistics.
@@ -1081,9 +1096,14 @@ func makeScanStatsFn(
 	ts hlc.Timestamp,
 	sideDesc *roachpb.RangeDescriptor,
 	sideName string,
+	nonUserOnly bool,
 ) splitStatsScanFn {
+	computeStatsFn := rditer.ComputeStatsForRange
+	if nonUserOnly {
+		computeStatsFn = rditer.ComputeStatsForRangeExcludingUser
+	}
 	return func() (enginepb.MVCCStats, error) {
-		sideMS, err := rditer.ComputeStatsForRange(ctx, sideDesc, reader, ts.WallTime)
+		sideMS, err := computeStatsFn(ctx, sideDesc, reader, ts.WallTime)
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrapf(err,
 				"unable to compute stats for %s range after split", sideName)
@@ -1128,7 +1148,12 @@ func splitTriggerHelper(
 	// modifications to the left hand side are allowed after this line and any
 	// modifications to the right hand side are accounted for by updating the
 	// helper's AbsPostSplitRight() reference.
-	h, err := makeSplitStatsHelper(statsInput)
+	var h splitStatsHelper
+	if FallBackToAccurateSplitStats.Get(&rec.ClusterSettings().SV) {
+		h, err = makeSplitStatsHelper(statsInput)
+	} else {
+		h, err = makeEstimatedSplitStatsHelper(statsInput)
+	}
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}

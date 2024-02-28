@@ -29,6 +29,7 @@ go_test(
     srcs = [
         "replica_data_iter_test.go",
         "select_test.go",
+        "stats_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":rditer"],
@@ -49,6 +50,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
         "@com_github_olekukonko_tablewriter//:tablewriter",

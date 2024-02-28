@@ -137,6 +137,21 @@ func MakeReplicatedKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
 	return ss
 }
 
+func MakeReplicatedKeySpansUserOnly(d *roachpb.RangeDescriptor) []roachpb.Span {
+	return Select(d.RangeID, SelectOpts{
+		ReplicatedBySpan:      d.RSpan(),
+		ReplicatedSpansFilter: ReplicatedSpansUserOnly,
+	})
+}
+
+func MakeReplicatedKeySpansExcludingUser(d *roachpb.RangeDescriptor) []roachpb.Span {
+	return Select(d.RangeID, SelectOpts{
+		ReplicatedBySpan:      d.RSpan(),
+		ReplicatedByRangeID:   true,
+		ReplicatedSpansFilter: ReplicatedSpansExcludeUser,
+	})
+}
+
 // makeReplicatedKeySpansExceptLockTable returns all key spans that are fully Raft
 // replicated for the given Range, except for the lock table spans. These are
 // returned in the following sorted order:

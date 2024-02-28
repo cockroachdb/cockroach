@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"math/rand"
 	"sort"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -169,11 +171,12 @@ func splitTxnAttempt(
 	ctx context.Context,
 	store *Store,
 	txn *kv.Txn,
-	rightRangeID roachpb.RangeID,
-	splitKey roachpb.RKey,
-	expiration hlc.Timestamp,
+	leftDesc *roachpb.RangeDescriptor,
+	rightDesc *roachpb.RangeDescriptor,
 	oldDesc *roachpb.RangeDescriptor,
 	reason redact.RedactableString,
+	preSplitStats enginepb.MVCCStats,
+	preSplitLeftUserStats enginepb.MVCCStats,
 ) error {
 	txn.SetDebugName(splitTxnName)
 
@@ -182,12 +185,6 @@ func splitTxnAttempt(
 	if err != nil {
 		return err
 	}
-	// TODO(tbg): return desc from conditionalGetDescValueFromDB and don't pass
-	// in oldDesc any more (just the start key).
-	desc := oldDesc
-	oldDesc = nil // prevent accidental use
-
-	leftDesc, rightDesc := prepareSplitDescs(rightRangeID, splitKey, expiration, desc)
 
 	// Update existing range descriptor for left hand side of
 	// split. Note that we mutate the descriptor for the left hand
@@ -234,8 +231,10 @@ func splitTxnAttempt(
 		Commit: true,
 		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 			SplitTrigger: &roachpb.SplitTrigger{
-				LeftDesc:  *leftDesc,
-				RightDesc: *rightDesc,
+				LeftDesc:              *leftDesc,
+				RightDesc:             *rightDesc,
+				PreSplitStats:         preSplitStats,
+				PreSplitLeftUserStats: preSplitLeftUserStats,
 			},
 		},
 	})
@@ -440,8 +439,30 @@ func (r *Replica) adminSplitWithDescriptor(
 	log.Infof(ctx, "initiating a split of this range at key %v [r%d] (%s)%s",
 		splitKey, rightRangeID, reason, extra)
 
+	// TODO(mira): should we do this stats re-computation async?
+	// As long as it starts running before the split trigger does,
+	// the split trigger will wait for the stats to be recomputed
+	// (because RecomputeStats holds a latch on the range descriptor).
+	if r.GetMVCCStats().ContainsEstimates > 0 {
+		req := kvpb.RecomputeStatsRequest{
+			RequestHeader: kvpb.RequestHeader{Key: desc.StartKey.AsRawKey()},
+		}
+		var ba kv.Batch
+		ba.AddRawRequest(&req)
+		if err = r.store.DB().Run(ctx, &ba); err != nil {
+			log.Event(ctx, "failed to re-compute MVCCStats pre split")
+		}
+	}
+
+	leftDesc, rightDesc := prepareSplitDescs(rightRangeID, splitKey, args.ExpirationTime, desc)
+
+	userOnlyLeftStats, err := rditer.ComputeStatsForRangeUserOnly(ctx, leftDesc, r.store.TODOEngine(), r.store.Clock().NowAsClockTimestamp().WallTime)
+	if err != nil {
+		return reply, errors.Wrapf(err, "unable to compute pre-split stats for LHS range")
+	}
+
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return splitTxnAttempt(ctx, r.store, txn, rightRangeID, splitKey, args.ExpirationTime, desc, reason)
+		return splitTxnAttempt(ctx, r.store, txn, leftDesc, rightDesc, desc, reason, r.GetMVCCStats(), userOnlyLeftStats)
 	}); err != nil {
 		// The ConditionFailedError can occur because the descriptors acting
 		// as expected values in the CPuts used to update the left or right

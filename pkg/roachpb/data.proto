@@ -130,6 +130,9 @@ message SplitTrigger {
   RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
 
   reserved 3, 4;
+
+  storage.enginepb.MVCCStats pre_split_stats = 5 [(gogoproto.nullable) = false];
+  storage.enginepb.MVCCStats pre_split_left_user_stats = 6 [(gogoproto.nullable) = false];
 }
 
 // A MergeTrigger is run after a successful commit of an AdminMerge
