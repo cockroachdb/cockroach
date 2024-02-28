@@ -984,6 +984,7 @@ var pgurlCmd = &cobra.Command{
 			Secure:             secure,
 			VirtualClusterName: virtualClusterName,
 			SQLInstance:        sqlInstance,
+			Auth:               install.AuthRootCert,
 		})
 		if err != nil {
 			return err

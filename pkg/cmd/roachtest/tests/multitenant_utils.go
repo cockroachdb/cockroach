@@ -202,7 +202,9 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 		extraArgs...,
 	)
 
-	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), roachprod.PGURLOptions{})
+	// The old multitenant API does not create a default admin user for virtual clusters, so root
+	// authentication is used instead.
+	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), roachprod.PGURLOptions{Auth: install.AuthRootCert})
 	require.NoError(t, err)
 	u, err := url.Parse(externalUrls[0])
 	require.NoError(t, err)
@@ -215,9 +217,14 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	// pgURL has full paths to local certs embedded, i.e.
 	// /tmp/roachtest-certs3630333874/certs, on the cluster we want just certs
 	// (i.e. to run workload on the tenant).
+	//
+	// The old multitenant API does not create a default admin user for virtual clusters, so root
+	// authentication is used instead.
 	secureUrls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(tn.node)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
 		External: false,
-		Secure:   true})
+		Secure:   true,
+		Auth:     install.AuthRootCert,
+	})
 	require.NoError(t, err)
 	u, err = url.Parse(strings.Trim(secureUrls[0], "'"))
 	require.NoError(t, err)
@@ -291,12 +298,10 @@ func startTenantServer(
 
 // createTenantAdminRole creates a role that can be used to log into a secure cluster's db console.
 func createTenantAdminRole(t test.Test, tenantName string, tenantSQL *sqlutils.SQLRunner) {
-	username := "secure"
-	password := "roach"
-	tenantSQL.Exec(t, fmt.Sprintf(`CREATE ROLE %s WITH LOGIN PASSWORD '%s'`, username, password))
-	tenantSQL.Exec(t, fmt.Sprintf(`GRANT ADMIN TO %s`, username))
+	tenantSQL.Exec(t, fmt.Sprintf(`CREATE ROLE IF NOT EXISTS %s WITH LOGIN PASSWORD '%s'`, install.DefaultUser, install.DefaultPassword))
+	tenantSQL.Exec(t, fmt.Sprintf(`GRANT ADMIN TO %s`, install.DefaultUser))
 	t.L().Printf(`Log into %s db console with username "%s" and password "%s"`,
-		tenantName, username, password)
+		tenantName, install.DefaultUser, install.DefaultPassword)
 }
 
 const appTenantName = "app"
@@ -372,7 +377,9 @@ func startInMemoryTenant(
 	var tenantConn *gosql.DB
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName))
+		// The old multitenant API does not create a default admin user for virtual clusters, so root
+		// authentication is used instead.
+		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName), option.AuthMode(install.AuthRootCert))
 		if err != nil {
 			return err
 		}

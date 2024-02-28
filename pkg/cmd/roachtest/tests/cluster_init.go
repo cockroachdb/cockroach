@@ -52,7 +52,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	settings := install.MakeClusterSettings(install.SecureOption(false))
 
 	for _, initNode := range []int{2, 1} {
-		c.Wipe(ctx, false /* preserveCerts */)
+		c.Wipe(ctx)
 		t.L().Printf("starting test with init node %d", initNode)
 		c.Start(ctx, t.L(), startOpts, settings)
 

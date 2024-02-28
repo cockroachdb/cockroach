@@ -1022,7 +1022,7 @@ func attachToExistingCluster(
 		}
 		if !opt.skipWipe {
 			if roachtestflags.ClusterWipe {
-				if err := c.WipeE(ctx, l, false /* preserveCerts */, c.All()); err != nil {
+				if err := roachprod.Wipe(ctx, l, c.MakeNodes(c.All()), false /* preserveCerts */); err != nil {
 					return nil, err
 				}
 			} else {
@@ -1349,19 +1349,28 @@ func (c *clusterImpl) FetchDebugZip(
 		// assumption that a down node will refuse the connection, so it won't
 		// waste our time.
 		for _, node := range nodes {
+			// `cockroach debug zip` does not support non root authentication.
+			nodePgUrl, err := c.InternalPGUrl(ctx, l, c.Node(node), roachprod.PGURLOptions{Auth: install.AuthRootCert})
+			if err != nil {
+				l.Printf("cluster.FetchDebugZip failed to retrieve PGUrl on node %d: %v", test.DefaultCockroachPath, node, err)
+				continue
+			}
+
 			// `cockroach debug zip` is noisy. Suppress the output unless it fails.
 			//
-			// Ignore the files in the the log directory; we pull the logs separately anyway
+			// Ignore the files in the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
 			excludeFiles := "*.log,*.txt,*.pprof"
+
 			cmd := roachtestutil.NewCommand("%s debug zip", test.DefaultCockroachPath).
 				Option("include-range-info").
 				Flag("exclude-files", fmt.Sprintf("'%s'", excludeFiles)).
-				Flag("url", fmt.Sprintf("{pgurl:%d}", node)).
+				Flag("url", nodePgUrl[0]).
 				MaybeFlag(c.IsSecure(), "certs-dir", install.CockroachNodeCertsDir).
+				MaybeFlag(c.IsSecure(), "certs-dir", "certs").
 				Arg(zipName).
 				String()
-			if err := c.RunE(ctx, option.WithNodes(c.Node(node)), cmd); err != nil {
+			if err = c.RunE(ctx, option.WithNodes(c.Node(node)), cmd); err != nil {
 				l.Printf("%s debug zip failed on node %d: %v", test.DefaultCockroachPath, node, err)
 				continue
 			}
@@ -2289,8 +2298,8 @@ func (c *clusterImpl) Signal(
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
 func (c *clusterImpl) WipeE(
-	ctx context.Context, l *logger.Logger, preserveCerts bool, nodes ...option.Option,
-) error {
+	ctx context.Context, l *logger.Logger, nodes ...option.Option,
+) (retErr error) {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.WipeE")
 	}
@@ -2300,16 +2309,16 @@ func (c *clusterImpl) WipeE(
 	}
 	c.setStatusForClusterOpt("wiping", false, nodes...)
 	defer c.clearStatusForClusterOpt(false)
-	return roachprod.Wipe(ctx, l, c.MakeNodes(nodes...), preserveCerts)
+	return roachprod.Wipe(ctx, l, c.MakeNodes(nodes...), c.IsSecure())
 }
 
 // Wipe is like WipeE, except instead of returning an error, it does
 // c.t.Fatal(). c.t needs to be set.
-func (c *clusterImpl) Wipe(ctx context.Context, preserveCerts bool, nodes ...option.Option) {
+func (c *clusterImpl) Wipe(ctx context.Context, nodes ...option.Option) {
 	if ctx.Err() != nil {
 		return
 	}
-	if err := c.WipeE(ctx, c.l, preserveCerts, nodes...); err != nil {
+	if err := c.WipeE(ctx, c.l, nodes...); err != nil {
 		c.t.Fatal(err)
 	}
 }
@@ -2724,6 +2733,7 @@ func (c *clusterImpl) ConnE(
 	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), roachprod.PGURLOptions{
 		VirtualClusterName: connOptions.TenantName,
 		SQLInstance:        connOptions.SQLInstance,
+		Auth:               connOptions.AuthMode,
 	})
 	if err != nil {
 		return nil, err
@@ -2844,7 +2854,7 @@ func (c *clusterImpl) WipeForReuse(
 		return errors.New("cluster reuse is disabled for local clusters to guarantee a clean slate for each test")
 	}
 	l.PrintfCtx(ctx, "Using existing cluster: %s (arch=%q). Wiping", c.name, c.arch)
-	if err := c.WipeE(ctx, l, false /* preserveCerts */); err != nil {
+	if err := roachprod.Wipe(ctx, l, c.MakeNodes(c.All()), false /* preserveCerts */); err != nil {
 		return err
 	}
 	// We remove the entire shared user directory between tests to ensure we aren't
