@@ -171,10 +171,7 @@ func (g *githubIssues) createPostRequest(
 	issueClusterName := ""
 	errWithOwnership := failuresSpecifyOwner(failures)
 	switch {
-	case errWithOwnership != nil:
-		handleErrorWithOwnership(*errWithOwnership)
-
-	// The following error come from various entrypoints in roachprod,
+	// The following errors come from various entrypoints in roachprod,
 	// but we know that they should be handled by TestEng whenever they
 	// happen during a test.
 	case failuresContainsError(failures, rperrors.ErrSSH255):
@@ -189,6 +186,8 @@ func (g *githubIssues) createPostRequest(
 			registry.WithTitleOverride("dns_problem"),
 			registry.InfraFlake,
 		))
+	case errWithOwnership != nil:
+		handleErrorWithOwnership(*errWithOwnership)
 	}
 
 	// Issues posted from roachtest are identifiable as such, and they are also release blockers

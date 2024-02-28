@@ -445,6 +445,12 @@ func (t *testImpl) suppressFailures() {
 	t.mu.failuresSuppressed = true
 }
 
+func (t *testImpl) resetFailures() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.failures = nil
+}
+
 // We take the "squashed" error that contains information of all the errors for each failure.
 func formatFailure(b *strings.Builder, reportFailures ...failure) {
 	for i, failure := range reportFailures {

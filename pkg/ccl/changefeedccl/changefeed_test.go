@@ -7526,7 +7526,8 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	// TODO(#119289): re-enable pulsar
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestOmitSinks("pulsar"))
 }
 
 func TestChangefeedOnlyInitialScanCSVSinkless(t *testing.T) {

@@ -443,7 +443,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 	)
 	c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
 
-	m := c.NewMonitor(ctx, c.All())
+	m := c.NewMonitor(ctx, crdbNodes)
 	m.Go(func(ctx context.Context) error {
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
