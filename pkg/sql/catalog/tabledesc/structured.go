@@ -2419,6 +2419,9 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 		if labelMetrics := ttl.LabelMetrics; labelMetrics {
 			appendStorageParam(`ttl_label_metrics`, fmt.Sprintf(`%t`, labelMetrics))
 		}
+		if ttl.DisableChangefeedReplication {
+			appendStorageParam(`ttl_disable_changefeed_replication`, fmt.Sprintf("%t", ttl.DisableChangefeedReplication))
+		}
 	}
 	if exclude := desc.GetExcludeDataFromBackup(); exclude {
 		appendStorageParam(`exclude_data_from_backup`, `true`)

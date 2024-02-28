@@ -153,7 +153,12 @@ func CheckJobEnabled(settingsValues *settings.Values) error {
 
 // GetChangefeedReplicationDisabled returns whether changefeed replication
 // should be disabled for this job based on the relevant cluster setting.
-func GetChangefeedReplicationDisabled(settingsValues *settings.Values) bool {
+func GetChangefeedReplicationDisabled(
+	settingsValues *settings.Values, ttl *catpb.RowLevelTTL,
+) bool {
+	if ttl.DisableChangefeedReplication {
+		return true
+	}
 	return changefeedReplicationDisabled.Get(settingsValues)
 }
 
