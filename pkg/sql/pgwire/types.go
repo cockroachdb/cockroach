@@ -264,7 +264,9 @@ func writeTextDatumNotNull(
 		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DOid:
-		b.writeLengthPrefixedDatum(v)
+		// OIDs have a special case for the "unknown" (zero) oid.
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DEnum:
 		// Enums are serialized with their logical representation.

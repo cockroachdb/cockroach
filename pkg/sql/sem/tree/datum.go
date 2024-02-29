@@ -5545,6 +5545,15 @@ type DOid struct {
 	name string
 }
 
+const (
+	// UnknownOidName represents the 0 oid value as '-' for types other than T_oid
+	// in the oid family, which matches the Postgres representation.
+	UnknownOidName = "-"
+
+	// UnknownOidValue is the 0 (unknown) oid value.
+	UnknownOidValue = oid.Oid(0)
+)
+
 // IntToOid is a helper that turns a DInt into a *DOid and checks that the value
 // is in range.
 func IntToOid(i DInt) (*DOid, error) {
@@ -5567,22 +5576,20 @@ func MakeDOid(d oid.Oid, semanticType *types.T) DOid {
 
 // NewDOidWithType constructs a DOid with the given type and no name.
 func NewDOidWithType(d oid.Oid, semanticType *types.T) *DOid {
-	oid := DOid{Oid: d, semanticType: semanticType}
-	return &oid
+	return &DOid{Oid: d, semanticType: semanticType}
 }
 
 // NewDOidWithTypeAndName constructs a DOid with the given type and name.
 func NewDOidWithTypeAndName(d oid.Oid, semanticType *types.T, name string) *DOid {
-	oid := DOid{Oid: d, semanticType: semanticType, name: name}
-	return &oid
+	return &DOid{Oid: d, semanticType: semanticType, name: name}
 }
 
 // NewDOid is a helper routine to create a *DOid initialized from a DInt.
 func NewDOid(d oid.Oid) *DOid {
 	// TODO(yuzefovich): audit the callers of NewDOid to see whether any want to
 	// create a DOid with a semantic type different from types.Oid.
-	oid := MakeDOid(d, types.Oid)
-	return &oid
+	oidDatum := MakeDOid(d, types.Oid)
+	return &oidDatum
 }
 
 // AsDOid attempts to retrieve a DOid from an Expr, returning a DOid and
@@ -5673,7 +5680,10 @@ func (d *DOid) CompareError(ctx CompareContext, other Datum) (int, error) {
 
 // Format implements the Datum interface.
 func (d *DOid) Format(ctx *FmtCtx) {
-	if d.semanticType.Oid() == oid.T_oid || d.name == "" {
+	if ctx.HasFlags(FmtPgwireText) && d.semanticType.Oid() != oid.T_oid && d.Oid == UnknownOidValue {
+		// Special case for the "unknown" oid.
+		ctx.WriteString(UnknownOidName)
+	} else if d.semanticType.Oid() == oid.T_oid || d.name == "" {
 		ctx.Write(strconv.AppendUint(ctx.scratch[:0], uint64(d.Oid), 10))
 	} else if ctx.HasFlags(fmtDisambiguateDatumTypes) {
 		ctx.WriteString("crdb_internal.create_")
@@ -5757,10 +5767,6 @@ type DOidWrapper struct {
 	Oid     oid.Oid
 }
 
-// ZeroOidValue represents the 0 oid value as '-', which matches the Postgres
-// representation.
-const ZeroOidValue = "-"
-
 // wrapWithOid wraps a Datum with a custom Oid.
 func wrapWithOid(d Datum, oid oid.Oid) Datum {
 	switch v := d.(type) {
@@ -5782,16 +5788,6 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 		Wrapped: d,
 		Oid:     oid,
 	}
-}
-
-// WrapAsZeroOid wraps ZeroOidValue with a custom Oid.
-func WrapAsZeroOid(t *types.T) Datum {
-	tmpOid := NewDOid(0)
-	tmpOid.semanticType = t
-	if t.Oid() != oid.T_oid {
-		tmpOid.name = ZeroOidValue
-	}
-	return tmpOid
 }
 
 // UnwrapDOidWrapper exposes the wrapped datum from a *DOidWrapper.

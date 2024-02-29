@@ -690,3 +690,25 @@ JOIN pg_namespace n ON c.relnamespace = n.oid
 WHERE c.oid='pg_type'::regclass
 ----
 pg_type  pg_type  pg_catalog
+
+# Regression test for #118273 - set the name of a non-T_oid oid type to '-' when
+# the value is zero.
+subtest zero_oid
+
+statement ok
+CREATE TABLE t118273 (x REGROLE PRIMARY KEY, y REGROLE);
+INSERT INTO t118273 VALUES (0, 0);
+
+skipif config local-mixed-23.1
+skipif config local-mixed-23.2
+query TT
+SELECT * FROM t118273;
+----
+-  -
+
+skipif config local-mixed-23.1
+skipif config local-mixed-23.2
+query TT
+SELECT 0::REGROLE, 0::REGROLE::TEXT;
+----
+-  -
