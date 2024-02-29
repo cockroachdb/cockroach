@@ -862,7 +862,7 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 }
 
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
-	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
+	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(false)))
 	rd.getAOST(ctx)
 }
 
