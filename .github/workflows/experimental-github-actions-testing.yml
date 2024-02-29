@@ -74,7 +74,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   acceptance:
-    runs-on: [self-hosted, basic_runner_group]
+    runs-on: [self-hosted, basic_big_runner_group]
     steps:
       - uses: actions/checkout@v4
         with:
