@@ -1,0 +1,153 @@
+parse
+DECLARE
+  x STRING := e'1GW\'';
+BEGIN
+  INSERT INTO tab SELECT e'1GW\'';
+END
+----
+DECLARE
+x STRING := e'1GW\'';
+BEGIN
+INSERT INTO tab SELECT e'1GW\'';
+END;
+ -- normalized!
+DECLARE
+x STRING := (e'1GW\'');
+BEGIN
+INSERT INTO tab SELECT (e'1GW\'');
+END;
+ -- fully parenthesized
+DECLARE
+x STRING := '_';
+BEGIN
+INSERT INTO tab SELECT '_';
+END;
+ -- literals removed
+DECLARE
+_ STRING := e'1GW\'';
+BEGIN
+INSERT INTO _ SELECT e'1GW\'';
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+  x STRING := b'1GW\'';
+BEGIN
+  INSERT INTO tab SELECT b'1GW\'';
+END
+----
+DECLARE
+x STRING := b'1GW\'';
+BEGIN
+INSERT INTO tab SELECT b'1GW\'';
+END;
+ -- normalized!
+DECLARE
+x STRING := (b'1GW\'');
+BEGIN
+INSERT INTO tab SELECT (b'1GW\'');
+END;
+ -- fully parenthesized
+DECLARE
+x STRING := '_';
+BEGIN
+INSERT INTO tab SELECT '_';
+END;
+ -- literals removed
+DECLARE
+_ STRING := b'1GW\'';
+BEGIN
+INSERT INTO _ SELECT b'1GW\'';
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+  x STRING := x'deadbeef';
+BEGIN
+  INSERT INTO tab SELECT x'deadbeef';
+END
+----
+DECLARE
+x STRING := b'\xde\xad\xbe\xef';
+BEGIN
+INSERT INTO tab SELECT b'\xde\xad\xbe\xef';
+END;
+ -- normalized!
+DECLARE
+x STRING := (b'\xde\xad\xbe\xef');
+BEGIN
+INSERT INTO tab SELECT (b'\xde\xad\xbe\xef');
+END;
+ -- fully parenthesized
+DECLARE
+x STRING := '_';
+BEGIN
+INSERT INTO tab SELECT '_';
+END;
+ -- literals removed
+DECLARE
+_ STRING := b'\xde\xad\xbe\xef';
+BEGIN
+INSERT INTO _ SELECT b'\xde\xad\xbe\xef';
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+  x STRING := B'010101';
+BEGIN
+  INSERT INTO tab SELECT B'010101';
+END
+----
+DECLARE
+x STRING := B'010101';
+BEGIN
+INSERT INTO tab SELECT B'010101';
+END;
+ -- normalized!
+DECLARE
+x STRING := (B'010101');
+BEGIN
+INSERT INTO tab SELECT (B'010101');
+END;
+ -- fully parenthesized
+DECLARE
+x STRING := _;
+BEGIN
+INSERT INTO tab SELECT _;
+END;
+ -- literals removed
+DECLARE
+_ STRING := B'010101';
+BEGIN
+INSERT INTO _ SELECT B'010101';
+END;
+ -- identifiers removed
+
+error
+DECLARE
+  x STRING := 'foo;
+BEGIN
+  RETURN x;
+END
+----
+at or near ":": syntax error: unterminated string
+DETAIL: source SQL:
+DECLARE
+  x STRING := 'foo;
+           ^
+
+error
+DECLARE
+  x STRING := $foo$ foo;
+BEGIN
+  RETURN x;
+END
+----
+at or near ":": syntax error: unterminated string
+DETAIL: source SQL:
+DECLARE
+  x STRING := $foo$ foo;
+           ^

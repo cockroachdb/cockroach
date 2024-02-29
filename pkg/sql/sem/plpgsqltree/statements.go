@@ -160,7 +160,7 @@ func (s *Declaration) CopyNode() *Declaration {
 }
 
 func (s *Declaration) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(string(s.Var))
+	ctx.FormatNode(&s.Var)
 	if s.Constant {
 		ctx.WriteString(" CONSTANT")
 	}
@@ -202,7 +202,7 @@ func (s *CursorDeclaration) CopyNode() *CursorDeclaration {
 }
 
 func (s *CursorDeclaration) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(string(s.Name))
+	ctx.FormatNode(&s.Name)
 	switch s.Scroll {
 	case tree.Scroll:
 		ctx.WriteString(" SCROLL")
@@ -225,7 +225,7 @@ func (s *CursorDeclaration) WalkStmt(visitor StatementVisitor) Statement {
 
 // stmt_assign
 type Assignment struct {
-	Statement
+	StatementImpl
 	Var   Variable
 	Value Expr
 }
