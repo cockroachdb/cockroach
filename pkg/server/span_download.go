@@ -60,7 +60,8 @@ func (s *systemStatusServer) DownloadSpan(
 	}
 
 	// Send DownloadSpan request to all stores on all nodes.
-	remoteRequest := serverpb.DownloadSpanRequest{NodeID: "local", Spans: req.Spans}
+	remoteRequest := *req
+	remoteRequest.NodeID = "local"
 	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.DownloadSpanResponse, error) {
 		return status.DownloadSpan(ctx, &remoteRequest)
 	}
