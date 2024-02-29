@@ -262,18 +262,14 @@ type Overload struct {
 	// in a Schema descriptor, which means that the full UDF descriptor need to be
 	// fetched to get more info, e.g. function Body.
 	UDFContainsOnlySignature bool
-	// NamedReturnColumn is non-empty when a user-defined function returns a
-	// single column of non-RECORD type and has named OUT parameter.
-	NamedReturnColumn string
-	// HasNamedReturnColumns is set when a user-defined function has multiple
-	// OUT parameters that specify an implicit alias for the RECORD return type.
-	HasNamedReturnColumns bool
 	// Version is the descriptor version of the descriptor used to construct
 	// this version of the function overload. Only used for UDFs.
 	Version uint64
 	// Language is the function language that was used to define the UDF.
 	// This is currently either SQL or PL/pgSQL.
 	Language RoutineLanguage
+	// RoutineParams contains all parameter information of the routine.
+	RoutineParams RoutineParams
 }
 
 // params implements the overloadImpl interface.
