@@ -526,6 +526,9 @@ func (desc *immutable) GetResolvedFuncDefinition(
 		if funcDescPb.Signatures[i].ReturnSet {
 			overload.Class = tree.GeneratorClass
 		}
+		// There is no need to look at the parameter classes since ArgTypes
+		// already contains only parameters that are included into the
+		// signature of the overload.
 		paramTypes := make(tree.ParamTypes, 0, len(sig.ArgTypes))
 		for _, paramType := range sig.ArgTypes {
 			paramTypes = append(
