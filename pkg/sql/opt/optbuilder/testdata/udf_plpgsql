@@ -6070,3 +6070,189 @@ project
                      │                                                                                                                                                └── projections
                      │                                                                                                                                                     └── const: 10 [as=stmt_return_11:25]
                      └── const: 1
+
+# Regression test for #119492 - don't push the in scope for non-root blocks.
+# Doing so drops the expression that had been built up to that point.
+exec-ddl
+CREATE FUNCTION somefunc() RETURNS integer AS $$
+DECLARE
+    outer_quantity integer := 30;
+BEGIN
+    RAISE NOTICE 'Quantity here is %', outer_quantity;  -- Prints 30
+    outer_quantity := 50;
+    --
+    -- Create a subblock
+    --
+    DECLARE
+        inner_quantity integer := 80;
+    BEGIN
+        RAISE NOTICE 'Quantity here is %', inner_quantity;  -- Prints 80
+        RAISE NOTICE 'Outer quantity here is %', outer_quantity;  -- Prints 50
+    END;
+
+    RAISE NOTICE 'Quantity here is %', outer_quantity;  -- Prints 50
+
+    RETURN outer_quantity;
+END;
+$$ LANGUAGE plpgsql;
+----
+
+build format=show-scalars
+SELECT somefunc();
+----
+project
+ ├── columns: somefunc:21
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: somefunc [as=somefunc:21]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":20
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":20
+                     │    ├── barrier
+                     │    │    ├── columns: outer_quantity:1!null
+                     │    │    └── project
+                     │    │         ├── columns: outer_quantity:1!null
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── const: 30 [as=outer_quantity:1]
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":20]
+                     │              ├── args
+                     │              │    └── variable: outer_quantity:1
+                     │              ├── params: outer_quantity:2
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:3
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:3]
+                     │                   │              ├── const: 'NOTICE'
+                     │                   │              ├── concat
+                     │                   │              │    ├── concat
+                     │                   │              │    │    ├── const: 'Quantity here is '
+                     │                   │              │    │    └── coalesce
+                     │                   │              │    │         ├── cast: STRING
+                     │                   │              │    │         │    └── variable: outer_quantity:2
+                     │                   │              │    │         └── const: '<NULL>'
+                     │                   │              │    └── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: '00000'
+                     │                   └── project
+                     │                        ├── columns: "_stmt_raise_7":19
+                     │                        ├── barrier
+                     │                        │    ├── columns: outer_quantity:4!null inner_quantity:10!null
+                     │                        │    └── project
+                     │                        │         ├── columns: inner_quantity:10!null outer_quantity:4!null
+                     │                        │         ├── project
+                     │                        │         │    ├── columns: outer_quantity:4!null
+                     │                        │         │    ├── values
+                     │                        │         │    │    └── tuple
+                     │                        │         │    └── projections
+                     │                        │         │         └── const: 50 [as=outer_quantity:4]
+                     │                        │         └── projections
+                     │                        │              └── const: 80 [as=inner_quantity:10]
+                     │                        └── projections
+                     │                             └── udf: _stmt_raise_7 [as="_stmt_raise_7":19]
+                     │                                  ├── args
+                     │                                  │    ├── variable: outer_quantity:4
+                     │                                  │    └── variable: inner_quantity:10
+                     │                                  ├── params: outer_quantity:11 inner_quantity:12
+                     │                                  └── body
+                     │                                       ├── project
+                     │                                       │    ├── columns: stmt_raise_8:13
+                     │                                       │    ├── values
+                     │                                       │    │    └── tuple
+                     │                                       │    └── projections
+                     │                                       │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_8:13]
+                     │                                       │              ├── const: 'NOTICE'
+                     │                                       │              ├── concat
+                     │                                       │              │    ├── concat
+                     │                                       │              │    │    ├── const: 'Quantity here is '
+                     │                                       │              │    │    └── coalesce
+                     │                                       │              │    │         ├── cast: STRING
+                     │                                       │              │    │         │    └── variable: inner_quantity:12
+                     │                                       │              │    │         └── const: '<NULL>'
+                     │                                       │              │    └── const: ''
+                     │                                       │              ├── const: ''
+                     │                                       │              ├── const: ''
+                     │                                       │              └── const: '00000'
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_raise_9":18
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_raise_9 [as="_stmt_raise_9":18]
+                     │                                                      ├── args
+                     │                                                      │    ├── variable: outer_quantity:11
+                     │                                                      │    └── variable: inner_quantity:12
+                     │                                                      ├── params: outer_quantity:14 inner_quantity:15
+                     │                                                      └── body
+                     │                                                           ├── project
+                     │                                                           │    ├── columns: stmt_raise_10:16
+                     │                                                           │    ├── values
+                     │                                                           │    │    └── tuple
+                     │                                                           │    └── projections
+                     │                                                           │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_10:16]
+                     │                                                           │              ├── const: 'NOTICE'
+                     │                                                           │              ├── concat
+                     │                                                           │              │    ├── concat
+                     │                                                           │              │    │    ├── const: 'Outer quantity here is '
+                     │                                                           │              │    │    └── coalesce
+                     │                                                           │              │    │         ├── cast: STRING
+                     │                                                           │              │    │         │    └── variable: outer_quantity:14
+                     │                                                           │              │    │         └── const: '<NULL>'
+                     │                                                           │              │    └── const: ''
+                     │                                                           │              ├── const: ''
+                     │                                                           │              ├── const: ''
+                     │                                                           │              └── const: '00000'
+                     │                                                           └── project
+                     │                                                                ├── columns: nested_block_3:17
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── udf: nested_block_3 [as=nested_block_3:17]
+                     │                                                                          ├── args
+                     │                                                                          │    └── variable: outer_quantity:14
+                     │                                                                          ├── params: outer_quantity:5
+                     │                                                                          └── body
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: "_stmt_raise_4":9
+                     │                                                                                    ├── values
+                     │                                                                                    │    └── tuple
+                     │                                                                                    └── projections
+                     │                                                                                         └── udf: _stmt_raise_4 [as="_stmt_raise_4":9]
+                     │                                                                                              ├── args
+                     │                                                                                              │    └── variable: outer_quantity:5
+                     │                                                                                              ├── params: outer_quantity:6
+                     │                                                                                              └── body
+                     │                                                                                                   ├── project
+                     │                                                                                                   │    ├── columns: stmt_raise_5:7
+                     │                                                                                                   │    ├── values
+                     │                                                                                                   │    │    └── tuple
+                     │                                                                                                   │    └── projections
+                     │                                                                                                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_5:7]
+                     │                                                                                                   │              ├── const: 'NOTICE'
+                     │                                                                                                   │              ├── concat
+                     │                                                                                                   │              │    ├── concat
+                     │                                                                                                   │              │    │    ├── const: 'Quantity here is '
+                     │                                                                                                   │              │    │    └── coalesce
+                     │                                                                                                   │              │    │         ├── cast: STRING
+                     │                                                                                                   │              │    │         │    └── variable: outer_quantity:6
+                     │                                                                                                   │              │    │         └── const: '<NULL>'
+                     │                                                                                                   │              │    └── const: ''
+                     │                                                                                                   │              ├── const: ''
+                     │                                                                                                   │              ├── const: ''
+                     │                                                                                                   │              └── const: '00000'
+                     │                                                                                                   └── project
+                     │                                                                                                        ├── columns: stmt_return_6:8
+                     │                                                                                                        ├── values
+                     │                                                                                                        │    └── tuple
+                     │                                                                                                        └── projections
+                     │                                                                                                             └── variable: outer_quantity:6 [as=stmt_return_6:8]
+                     └── const: 1
