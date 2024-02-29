@@ -189,8 +189,7 @@ describe("rest api", function () {
           {
             rows: [
               {
-                replicas: [1, 2, 3],
-                regions: ["gcp-europe-west1", "gcp-europe-west2"],
+                store_ids: [1, 2, 3],
               },
             ],
           },
