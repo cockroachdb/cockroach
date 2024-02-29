@@ -123,7 +123,16 @@ func ExternalSSTReader(
 		return newMemPebbleSSTReader(ctx, storeFiles, encryption, iterOpts)
 	}
 	remoteCacheSize := remoteSSTSuffixCacheSize.Get(&storeFiles[0].Store.Settings().SV)
-	readerLevels := make([][]sstable.ReadableFile, 0, len(storeFiles))
+	openedReadersByLevel := make([][]sstable.ReadableFile, 0, len(storeFiles))
+
+	// Cleanup any files we've opened if we fail with an error.
+	defer func() {
+		for _, l := range openedReadersByLevel {
+			for _, r := range l {
+				_ = r.Close()
+			}
+		}
+	}()
 
 	for _, sf := range storeFiles {
 		// prevent capturing the loop variables by reference when defining openAt below.
@@ -166,8 +175,11 @@ func ExternalSSTReader(
 			}
 			reader = raw
 		}
-		readerLevels = append(readerLevels, []sstable.ReadableFile{reader})
+		openedReadersByLevel = append(openedReadersByLevel, []sstable.ReadableFile{reader})
 	}
+
+	readerLevels := openedReadersByLevel
+	openedReadersByLevel = nil
 	return storage.NewSSTIterator(readerLevels, iterOpts)
 }
 
