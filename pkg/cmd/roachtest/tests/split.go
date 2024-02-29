@@ -230,9 +230,11 @@ func registerLoadSplits(r registry.Registry) {
 				qpsThreshold: 100,      // 100 queries per second
 				// We expect no splits so require only 1 range. However, in practice we
 				// sometimes see a split or two early in, presumably when the sampling
-				// gets lucky.
+				// gets lucky or due to workload concurrency, where later (>sequence)
+				// requests are serviced quicker than concurrent earlier requests, see
+				// reservoir sampling examples in #118457.
 				minimumRanges: 1,
-				maximumRanges: 3,
+				maximumRanges: 4,
 				load: kvSplitLoad{
 					concurrency:  64, // 64 concurrent workers
 					readPercent:  0,  // 0% reads
