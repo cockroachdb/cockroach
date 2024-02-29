@@ -799,9 +799,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.stmt = stmt
 	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-	if err := p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders); err != nil {
-		return makeErrEvent(err)
-	}
+	p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 
 	shouldLogToExecAndAudit := true
