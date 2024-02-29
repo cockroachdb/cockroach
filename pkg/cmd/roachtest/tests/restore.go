@@ -884,7 +884,7 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
 	opts := option.DefaultStartOptsNoBackups()
 	opts.RoachprodOpts.ExtraArgs = rd.sp.extraArgs
-	rd.c.Start(ctx, rd.t.L(), opts, install.MakeClusterSettings(), rd.sp.hardware.getCRDBNodes())
+	rd.c.Start(ctx, rd.t.L(), opts, install.MakeClusterSettings(install.SecureOption(false)), rd.sp.hardware.getCRDBNodes())
 	rd.getAOST(ctx)
 }
 
