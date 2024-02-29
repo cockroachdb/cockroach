@@ -82,6 +82,7 @@ ElementState:
     functionId: 110
     lang:
       lang: SQL
+    usesFunctionIds: []
     usesSequenceIds:
     - 105
     usesTables:
