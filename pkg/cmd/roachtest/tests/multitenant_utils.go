@@ -174,13 +174,6 @@ func (tn *tenantNode) storeDir() string {
 	return fmt.Sprintf("cockroach-data-mt-%d-%d", tn.tenantID, tn.instanceID)
 }
 
-// In secure mode the url we get from roachprod contains ssl parameters with
-// local file paths. secureURL returns a url with those changed to
-// roachprod/workload friendly local paths, ie "certs".
-func (tn *tenantNode) secureURL() string {
-	return tn.relativeSecureURL
-}
-
 func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster, binary string) {
 	require.True(t, c.IsSecure())
 
