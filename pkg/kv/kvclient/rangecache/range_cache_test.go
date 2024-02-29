@@ -1664,8 +1664,8 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 					Sequence: 1,
 				}
 				oldTok := tok
-				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(ctx, l, &desc1)
-				require.True(t, updatedLeaseholder)
+				err = tok.SyncTokenAndMaybeUpdateCache(ctx, l, &desc1)
+				require.NoError(t, err)
 				require.Equal(t, oldTok.Desc(), tok.Desc())
 				require.Equal(t, &l.Replica, tok.Leaseholder())
 				require.Equal(t, oldTok.ClosedTimestampPolicy(lag), tok.ClosedTimestampPolicy(lag))
@@ -1710,10 +1710,10 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 					Lease:                 roachpb.Lease{},
 					ClosedTimestampPolicy: lead,
 				})
-				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(
+				err = tok.SyncTokenAndMaybeUpdateCache(
 					ctx, &roachpb.Lease{Replica: rep2, Sequence: 3}, &staleRangeDescriptor,
 				)
-				require.True(t, updatedLeaseholder)
+				require.NoError(t, err)
 				require.NotNil(t, tok)
 				require.Equal(t, &desc2, tok.Desc())
 				require.Equal(t, &rep2, tok.Leaseholder())
@@ -1747,8 +1747,8 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 					Lease:                 l,
 					ClosedTimestampPolicy: lead,
 				})
-				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(ctx, &l, &desc2)
-				require.False(t, updatedLeaseholder)
+				err = tok.SyncTokenAndMaybeUpdateCache(ctx, &l, &desc2)
+				require.NoError(t, err)
 				require.NotNil(t, tok)
 				require.Equal(t, &desc3, tok.Desc())
 				require.Equal(t, &rep2, tok.Leaseholder())
@@ -1774,10 +1774,10 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				)
 				require.NoError(t, err)
 
-				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(
+				err = tok.SyncTokenAndMaybeUpdateCache(
 					ctx, &roachpb.Lease{Replica: rep2, Sequence: 3}, &desc2,
 				)
-				require.False(t, updatedLeaseholder)
+				require.NoError(t, err)
 				require.NotNil(t, tok)
 				require.Equal(t, &desc2, tok.Desc())
 				require.Equal(t, &rep3, tok.Leaseholder())
@@ -1803,10 +1803,10 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				)
 				require.NoError(t, err)
 
-				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(
+				err = tok.SyncTokenAndMaybeUpdateCache(
 					ctx, &roachpb.Lease{Replica: rep2, Sequence: 3}, &desc1,
 				)
-				require.False(t, updatedLeaseholder)
+				require.NoError(t, err)
 				require.NotNil(t, tok)
 				require.Equal(t, &desc2, tok.Desc())
 				require.Equal(t, &rep3, tok.Leaseholder())
@@ -1833,10 +1833,10 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				)
 				require.NoError(t, err)
 
-				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(
+				err = tok.SyncTokenAndMaybeUpdateCache(
 					ctx, &roachpb.Lease{Replica: rep2, Sequence: 3}, &desc3,
 				)
-				require.False(t, updatedLeaseholder)
+				require.NoError(t, err)
 				require.NotNil(t, tok)
 				require.Equal(t, &desc3, tok.Desc())
 				require.Nil(t, tok.Leaseholder())
@@ -1869,8 +1869,8 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 					Sequence: 2,
 				}
 				incompatibleDescriptor.Generation = desc2.Generation + 1
-				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(ctx, &l, &incompatibleDescriptor)
-				require.False(t, updatedLeaseholder)
+				err = tok.SyncTokenAndMaybeUpdateCache(ctx, &l, &incompatibleDescriptor)
+				require.Error(t, err)
 				require.False(t, tok.Valid())
 
 				entries := cache.GetCachedOverlapping(
@@ -1901,10 +1901,10 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				require.NoError(t, err)
 
 				incompatibleDescriptor.Generation = desc2.Generation - 1
-				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(
+				err = tok.SyncTokenAndMaybeUpdateCache(
 					ctx, &roachpb.Lease{Replica: rep2, Sequence: 4}, &incompatibleDescriptor,
 				)
-				require.False(t, updatedLeaseholder)
+				require.NoError(t, err)
 				require.True(t, tok.Valid())
 
 				entries := cache.GetCachedOverlapping(
@@ -1933,10 +1933,10 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				)
 				require.NoError(t, err)
 
-				updatedLeaseholder := tok.SyncTokenAndMaybeUpdateCache(
+				err = tok.SyncTokenAndMaybeUpdateCache(
 					ctx, &roachpb.Lease{Replica: rep2}, &desc2,
 				)
-				require.True(t, updatedLeaseholder)
+				require.NoError(t, err)
 				require.Equal(t, &desc2, tok.Desc())
 				require.Equal(t, &rep2, tok.Leaseholder())
 				require.Equal(t, roachpb.LeaseSequence(0), tok.Lease().Sequence)
@@ -2020,9 +2020,8 @@ func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 1,
 	}
-	updated, updatedLease, e := e.maybeUpdate(ctx, &l, &desc)
+	updated, e := e.maybeUpdate(ctx, &l, &desc)
 	require.True(t, updated)
-	require.True(t, updatedLease)
 	require.True(t, l.Equal(e.lease))
 	require.True(t, desc.Equal(e.desc))
 
@@ -2032,9 +2031,8 @@ func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 		Replica:  rep2,
 		Sequence: 0,
 	}
-	updated, updatedLease, e = e.maybeUpdate(ctx, &l, &desc)
+	updated, e = e.maybeUpdate(ctx, &l, &desc)
 	require.True(t, updated)
-	require.True(t, updatedLease)
 	require.Equal(t, l.Replica, e.lease.Replica)
 	require.Equal(t, desc, e.desc)
 	// Check that the lease is Speculative.
@@ -2046,9 +2044,8 @@ func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 0,
 	}
-	updated, updatedLease, e = e.maybeUpdate(ctx, &l, &desc)
+	updated, e = e.maybeUpdate(ctx, &l, &desc)
 	require.True(t, updated)
-	require.True(t, updatedLease)
 	require.Equal(t, l.Replica, e.lease.Replica)
 	require.Equal(t, desc, e.desc)
 	// Check that the lease is Speculative.
@@ -2061,9 +2058,8 @@ func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 	}
 	// Ensure that a speculative lease is not overwritten when accompanied by a
 	// stale range descriptor.
-	updated, updatedLease, e = e.maybeUpdate(ctx, &l, &staleDesc)
+	updated, e = e.maybeUpdate(ctx, &l, &staleDesc)
 	require.False(t, updated)
-	require.False(t, updatedLease)
 	require.Equal(t, oldL.Replica, e.lease.Replica)
 	require.Equal(t, desc, e.desc)
 	// The old lease is still speculative; ensure it isn't returned by Lease().
@@ -2075,18 +2071,16 @@ func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 1,
 	}
-	updated, updatedLease, e = e.maybeUpdate(ctx, &l, &staleDesc)
+	updated, e = e.maybeUpdate(ctx, &l, &staleDesc)
 	require.False(t, updated)
-	require.False(t, updatedLease)
 	require.Equal(t, oldL.Replica, e.lease.Replica)
 	require.Equal(t, desc, e.desc)
 
 	// Empty out the lease and ensure that it is overwritten by a lease even if
 	// the accompanying range descriptor is stale.
 	e.lease = roachpb.Lease{}
-	updated, updatedLease, e = e.maybeUpdate(ctx, &l, &staleDesc)
+	updated, e = e.maybeUpdate(ctx, &l, &staleDesc)
 	require.True(t, updated)
-	require.True(t, updatedLease)
 	require.Equal(t, oldL.Replica, e.lease.Replica)
 	require.Equal(t, l, e.lease)
 	// The range descriptor shouldn't be updated because the one supplied was
@@ -2098,9 +2092,8 @@ func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 		Replica:  rep2,
 		Sequence: 2,
 	}
-	updated, updatedLease, e = e.maybeUpdate(ctx, &l, &desc)
+	updated, e = e.maybeUpdate(ctx, &l, &desc)
 	require.True(t, updated)
-	require.True(t, updatedLease)
 	require.Equal(t, l, e.lease)
 	require.Equal(t, desc, e.desc)
 
@@ -2109,15 +2102,13 @@ func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 1,
 	}
-	updated, updatedLease, e = e.maybeUpdate(ctx, &l, &desc)
+	updated, e = e.maybeUpdate(ctx, &l, &desc)
 	require.False(t, updated)
-	require.False(t, updatedLease)
 	require.NotEqual(t, l, e.lease)
 
 	// Check that updating to an older descriptor doesn't work.
-	updated, updatedLease, e = e.maybeUpdate(ctx, &l, &staleDesc)
+	updated, e = e.maybeUpdate(ctx, &l, &staleDesc)
 	require.False(t, updated)
-	require.False(t, updatedLease)
 	require.Equal(t, desc, e.desc)
 
 	// Check that updating to the same lease returns false.
@@ -2126,17 +2117,15 @@ func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 		Sequence: 2,
 	}
 	require.Equal(t, l, e.lease)
-	updated, updatedLease, e = e.maybeUpdate(ctx, &l, &desc)
+	updated, e = e.maybeUpdate(ctx, &l, &desc)
 	require.False(t, updated)
-	require.False(t, updatedLease)
 	require.Equal(t, l, e.lease)
 	require.Equal(t, desc, e.desc)
 
 	// Check that updating just the descriptor to a newer descriptor returns the
-	// correct values for updated and updatedLease.
-	updated, updatedLease, e = e.maybeUpdate(ctx, &l, &desc2)
+	// correct value for updated.
+	updated, e = e.maybeUpdate(ctx, &l, &desc2)
 	require.True(t, updated)
-	require.False(t, updatedLease)
 	require.Equal(t, l, e.lease)
 	require.Equal(t, desc2, e.desc)
 
@@ -2148,9 +2137,8 @@ func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 		Sequence: 1,
 	}
 	require.Equal(t, roachpb.LeaseSequence(2), e.lease.Sequence)
-	updated, updatedLease, e = e.maybeUpdate(ctx, &l, &desc3)
+	updated, e = e.maybeUpdate(ctx, &l, &desc3)
 	require.True(t, updated)
-	require.False(t, updatedLease)
 	require.True(t, e.lease.Empty())
 	require.Equal(t, desc3, e.desc)
 }
