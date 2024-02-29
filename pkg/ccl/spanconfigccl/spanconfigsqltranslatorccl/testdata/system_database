@@ -11,7 +11,7 @@ translate database=system
 /Table/{7-8}                               database system (host)
 /Table/{8-9}                               database system (host)
 /Table/{9-10}                              database system (host)
-/Table/1{1-2}                              database system (host)
+/Table/1{1-2}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/1{2-3}                              database system (host)
 /Table/1{3-4}                              database system (host)
 /Table/1{4-5}                              database system (host)
@@ -80,7 +80,7 @@ translate database=system
 /Table/{7-8}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/{8-9}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/{9-10}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
-/Table/1{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/1{1-2}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/1{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/1{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/1{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
@@ -155,7 +155,7 @@ full-translate
 /Table/{7-8}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/{8-9}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/{9-10}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
-/Table/1{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/1{1-2}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/1{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/1{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/1{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
