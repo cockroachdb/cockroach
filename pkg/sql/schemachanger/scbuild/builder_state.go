@@ -1578,6 +1578,16 @@ func (b *builderState) WrapFunctionBody(
 		panic(err)
 	}
 
+	if err := refProvider.ForEachFunctionReference(func(id descpb.ID) error {
+		fnBody.UsesFunctions = append(fnBody.UsesFunctions,
+			scpb.FunctionBody_FunctionReference{
+				FunctionID: id,
+			})
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+
 	fnBody.UsesSequenceIDs = refProvider.ReferencedSequences().Ordered()
 	fnBody.UsesTypeIDs = refProvider.ReferencedTypes().Ordered()
 	return fnBody

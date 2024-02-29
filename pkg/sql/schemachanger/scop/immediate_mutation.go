@@ -530,6 +530,13 @@ type RemoveBackReferenceInTypes struct {
 	TypeIDs                    []descpb.ID
 }
 
+type RemoveBackReferenceInFunctions struct {
+	immediateMutationOp
+
+	BackReferencedDescriptorID descpb.ID
+	FunctionIDs                []descpb.ID
+}
+
 // UpdateTableBackReferencesInSequences updates back references to a table expression
 // (in a column or a check constraint) in the specified sequences.
 type UpdateTableBackReferencesInSequences struct {
@@ -807,10 +814,11 @@ type UpdateFunctionTypeReferences struct {
 
 type UpdateFunctionRelationReferences struct {
 	immediateMutationOp
-	FunctionID      descpb.ID
-	TableReferences []scpb.FunctionBody_TableReference
-	ViewReferences  []scpb.FunctionBody_ViewReference
-	SequenceIDs     []descpb.ID
+	FunctionID         descpb.ID
+	TableReferences    []scpb.FunctionBody_TableReference
+	ViewReferences     []scpb.FunctionBody_ViewReference
+	SequenceIDs        []descpb.ID
+	FunctionReferences []scpb.FunctionBody_FunctionReference
 }
 
 type SetObjectParentID struct {

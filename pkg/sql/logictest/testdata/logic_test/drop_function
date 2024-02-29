@@ -263,18 +263,15 @@ CREATE FUNCTION f_called_by_b2() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 + f_cal
 statement ok;
 CREATE FUNCTION f_b()  RETURNS INT LANGUAGE SQL AS $$ SELECT (f_called_by_b() + f_called_by_b2()) /f_called_by_b2() $$;
 
-onlyif config local-legacy-schema-changer
 statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other objects \(\[test.public.f_called_by_b2, test.public.f_b\]\) still depend on it
 DROP FUNCTION f_called_by_b;
 
-onlyif config local-legacy-schema-changer
 statement error pgcode 2BP01 cannot drop function \"f_called_by_b2\" because other objects \(\[test.public.f_b\]\) still depend on it
 DROP FUNCTION f_called_by_b2;
 
 statement ok
 CREATE OR REPLACE FUNCTION f_b()  RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
-onlyif config local-legacy-schema-changer
 statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other objects \(\[test.public.f_called_by_b2\]\) still depend on it
 DROP FUNCTION f_called_by_b;
 

@@ -451,6 +451,24 @@ func (i *immediateVisitor) RemoveBackReferencesInRelations(
 	return nil
 }
 
+func (i *immediateVisitor) RemoveBackReferenceInFunctions(
+	ctx context.Context, op scop.RemoveBackReferenceInFunctions,
+) error {
+	for _, f := range op.FunctionIDs {
+		backRefFunc, err := i.checkOutFunction(ctx, f)
+		if err != nil {
+			return err
+		}
+		for i, dep := range backRefFunc.DependedOnBy {
+			if dep.ID == op.BackReferencedDescriptorID {
+				backRefFunc.DependedOnBy = append(backRefFunc.DependedOnBy[:i], backRefFunc.DependedOnBy[i+1:]...)
+				break
+			}
+		}
+	}
+	return nil
+}
+
 func removeViewBackReferencesInRelation(
 	ctx context.Context, m *immediateVisitor, relationID, backReferencedID descpb.ID,
 ) error {
@@ -515,6 +533,7 @@ func (i *immediateVisitor) UpdateFunctionRelationReferences(
 	}
 	relIDs := catalog.DescriptorIDSet{}
 	relIDToReferences := make(map[descpb.ID][]descpb.TableDescriptor_Reference)
+	functionIDs := catalog.DescriptorIDSet{}
 
 	for _, ref := range op.TableReferences {
 		relIDs.Add(ref.TableID)
@@ -543,6 +562,18 @@ func (i *immediateVisitor) UpdateFunctionRelationReferences(
 		}
 		relIDToReferences[seqID] = append(relIDToReferences[seqID], dep)
 	}
+
+	for _, functionRef := range op.FunctionReferences {
+		backRefFunc, err := i.checkOutFunction(ctx, functionRef.FunctionID)
+		if err != nil {
+			return err
+		}
+		if err := backRefFunc.AddFunctionReference(op.FunctionID); err != nil {
+			return err
+		}
+		functionIDs.Add(functionRef.FunctionID)
+	}
+	fn.DependsOnFunctions = functionIDs.Ordered()
 
 	for relID, refs := range relIDToReferences {
 		if err := updateBackReferencesInRelation(ctx, i, relID, op.FunctionID, refs); err != nil {

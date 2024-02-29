@@ -36,10 +36,11 @@ func init() {
 				}),
 				emit(func(this *scpb.FunctionBody) *scop.UpdateFunctionRelationReferences {
 					return &scop.UpdateFunctionRelationReferences{
-						FunctionID:      this.FunctionID,
-						TableReferences: this.UsesTables,
-						ViewReferences:  this.UsesViews,
-						SequenceIDs:     this.UsesSequenceIDs,
+						FunctionID:         this.FunctionID,
+						TableReferences:    this.UsesTables,
+						ViewReferences:     this.UsesViews,
+						SequenceIDs:        this.UsesSequenceIDs,
+						FunctionReferences: this.UsesFunctions,
 					}
 				}),
 			),
@@ -72,7 +73,18 @@ func init() {
 						BackReferencedID: this.FunctionID,
 						RelationIDs:      relationIDs,
 					}
-				})),
+				}),
+				emit(func(this *scpb.FunctionBody) *scop.RemoveBackReferenceInFunctions {
+					functionIDs := make([]descpb.ID, 0, len(this.UsesFunctions))
+					for _, f := range this.UsesFunctions {
+						functionIDs = append(functionIDs, f.FunctionID)
+					}
+					return &scop.RemoveBackReferenceInFunctions{
+						BackReferencedDescriptorID: this.FunctionID,
+						FunctionIDs:                functionIDs,
+					}
+				}),
+			),
 		),
 	)
 }

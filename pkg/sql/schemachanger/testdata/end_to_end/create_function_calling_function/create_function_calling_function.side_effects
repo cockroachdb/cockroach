@@ -1,0 +1,433 @@
+/* setup */
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT a FROM t;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE TABLE t2(a notmyworkday);
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+CREATE FUNCTION f2(a notmyworkday)  RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT f(a) + f(a);
+$$;
+----
+...
++object {100 101 t} -> 104
++object {100 101 sq1} -> 105
++object {100 101 v} -> 106
++object {100 101 notmyworkday} -> 107
++object {100 101 _notmyworkday} -> 108
++object {100 101 t2} -> 109
+
+/* test */
+CREATE FUNCTION f3(a notmyworkday)  RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT f2(a) + f(a);
+$$;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CREATE FUNCTION
+increment telemetry for sql.schema.create_function
+write *eventpb.CreateFunction to event log:
+  functionName: defaultdb.public.f3
+  sql:
+    descriptorId: 112
+    statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹f3›(IN ‹a› ‹notmyworkday›)\n\tRETURNS INT8\n\tVOLATILE\n\tLANGUAGE SQL\n\tAS $$SELECT public.f2(‹a›) + public.f(‹a›);$$"
+    tag: CREATE FUNCTION
+    user: root
+## StatementPhase stage 1 of 1 with 12 MutationType ops
+upsert descriptor #112
+  -
+  +function:
+  +  dependsOn:
+  +  - 104
+  +  - 105
+  +  - 106
+  +  dependsOnFunctions:
+  +  - 110
+  +  - 111
+  +  dependsOnTypes:
+  +  - 107
+  +  - 108
+  +  functionBody: SELECT f2(a) + f(a);
+  +  id: 112
+  +  lang: SQL
+  +  modificationTime: {}
+  +  name: f3
+  +  nullInputBehavior: CALLED_ON_NULL_INPUT
+  +  params:
+  +  - class: IN
+  +    name: a
+  +    type:
+  +      family: EnumFamily
+  +      oid: 100107
+  +      udtMetadata:
+  +        arrayTypeOid: 100108
+  +  parentId: 100
+  +  parentSchemaId: 101
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "1048576"
+  +      userProto: public
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  returnType:
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  version: "1"
+  +  volatility: VOLATILE
+upsert descriptor #101
+  ...
+             oid: 20
+             width: 64
+  +    f3:
+  +      signatures:
+  +      - argTypes:
+  +        - family: EnumFamily
+  +          oid: 100107
+  +          udtMetadata:
+  +            arrayTypeOid: 100108
+  +        id: 112
+  +        returnType:
+  +          family: IntFamily
+  +          oid: 20
+  +          width: 64
+     id: 101
+     modificationTime: {}
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "4"
+  +  version: "5"
+upsert descriptor #104
+  ...
+       id: 111
+       indexId: 3
+  +  - columnIds:
+  +    - 1
+  +    id: 112
+  +  - columnIds:
+  +    - 2
+  +    id: 112
+  +    indexId: 2
+  +  - columnIds:
+  +    - 3
+  +    id: 112
+  +    indexId: 3
+  +  - columnIds:
+  +    - 1
+  +    id: 112
+  +  - columnIds:
+  +    - 2
+  +    id: 112
+  +    indexId: 2
+  +  - columnIds:
+  +    - 3
+  +    id: 112
+  +    indexId: 3
+  +  - columnIds:
+  +    - 1
+  +    id: 112
+  +  - columnIds:
+  +    - 2
+  +    id: 112
+  +    indexId: 2
+  +  - columnIds:
+  +    - 3
+  +    id: 112
+  +    indexId: 3
+     families:
+     - columnIds:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+upsert descriptor #105
+  ...
+     - byId: true
+       id: 111
+  +  - byId: true
+  +    id: 112
+     formatVersion: 3
+     id: 105
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #106
+  ...
+       - 1
+       id: 111
+  +  - columnIds:
+  +    - 1
+  +    id: 112
+  +  - columnIds:
+  +    - 1
+  +    id: 112
+  +  - columnIds:
+  +    - 1
+  +    id: 112
+     dependsOn:
+     - 104
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+     viewQuery: SELECT a FROM defaultdb.public.t
+upsert descriptor #107
+  ...
+     - 110
+     - 111
+  -  version: "4"
+  +  - 112
+  +  version: "5"
+upsert descriptor #108
+  ...
+     - 110
+     - 111
+  -  version: "4"
+  +  - 112
+  +  version: "5"
+upsert descriptor #110
+  ...
+     dependedOnBy:
+     - id: 111
+  +  - id: 112
+     dependsOn:
+     - 104
+  ...
+         oid: 20
+         width: 64
+  -  version: "2"
+  +  version: "3"
+     volatility: VOLATILE
+upsert descriptor #111
+   function:
+  +  dependedOnBy:
+  +  - id: 112
+     dependsOn:
+     - 104
+  ...
+         oid: 20
+         width: 64
+  -  version: "1"
+  +  version: "2"
+     volatility: VOLATILE
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 12 MutationType ops
+upsert descriptor #112
+  -
+  +function:
+  +  dependsOn:
+  +  - 104
+  +  - 105
+  +  - 106
+  +  dependsOnFunctions:
+  +  - 110
+  +  - 111
+  +  dependsOnTypes:
+  +  - 107
+  +  - 108
+  +  functionBody: SELECT f2(a) + f(a);
+  +  id: 112
+  +  lang: SQL
+  +  modificationTime: {}
+  +  name: f3
+  +  nullInputBehavior: CALLED_ON_NULL_INPUT
+  +  params:
+  +  - class: IN
+  +    name: a
+  +    type:
+  +      family: EnumFamily
+  +      oid: 100107
+  +      udtMetadata:
+  +        arrayTypeOid: 100108
+  +  parentId: 100
+  +  parentSchemaId: 101
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "1048576"
+  +      userProto: public
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  returnType:
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+  +  version: "1"
+  +  volatility: VOLATILE
+upsert descriptor #101
+  ...
+             oid: 20
+             width: 64
+  +    f3:
+  +      signatures:
+  +      - argTypes:
+  +        - family: EnumFamily
+  +          oid: 100107
+  +          udtMetadata:
+  +            arrayTypeOid: 100108
+  +        id: 112
+  +        returnType:
+  +          family: IntFamily
+  +          oid: 20
+  +          width: 64
+     id: 101
+     modificationTime: {}
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "4"
+  +  version: "5"
+upsert descriptor #104
+  ...
+       id: 111
+       indexId: 3
+  +  - columnIds:
+  +    - 1
+  +    id: 112
+  +  - columnIds:
+  +    - 2
+  +    id: 112
+  +    indexId: 2
+  +  - columnIds:
+  +    - 3
+  +    id: 112
+  +    indexId: 3
+  +  - columnIds:
+  +    - 1
+  +    id: 112
+  +  - columnIds:
+  +    - 2
+  +    id: 112
+  +    indexId: 2
+  +  - columnIds:
+  +    - 3
+  +    id: 112
+  +    indexId: 3
+  +  - columnIds:
+  +    - 1
+  +    id: 112
+  +  - columnIds:
+  +    - 2
+  +    id: 112
+  +    indexId: 2
+  +  - columnIds:
+  +    - 3
+  +    id: 112
+  +    indexId: 3
+     families:
+     - columnIds:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+upsert descriptor #105
+  ...
+     - byId: true
+       id: 111
+  +  - byId: true
+  +    id: 112
+     formatVersion: 3
+     id: 105
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #106
+  ...
+       - 1
+       id: 111
+  +  - columnIds:
+  +    - 1
+  +    id: 112
+  +  - columnIds:
+  +    - 1
+  +    id: 112
+  +  - columnIds:
+  +    - 1
+  +    id: 112
+     dependsOn:
+     - 104
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+     viewQuery: SELECT a FROM defaultdb.public.t
+upsert descriptor #107
+  ...
+     - 110
+     - 111
+  -  version: "4"
+  +  - 112
+  +  version: "5"
+upsert descriptor #108
+  ...
+     - 110
+     - 111
+  -  version: "4"
+  +  - 112
+  +  version: "5"
+upsert descriptor #110
+  ...
+     dependedOnBy:
+     - id: 111
+  +  - id: 112
+     dependsOn:
+     - 104
+  ...
+         oid: 20
+         width: 64
+  -  version: "2"
+  +  version: "3"
+     volatility: VOLATILE
+upsert descriptor #111
+   function:
+  +  dependedOnBy:
+  +  - id: 112
+     dependsOn:
+     - 104
+  ...
+         oid: 20
+         width: 64
+  -  version: "1"
+  +  version: "2"
+     volatility: VOLATILE
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1
