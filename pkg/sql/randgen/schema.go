@@ -297,7 +297,7 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 		if colTypes[j] == types.RegType {
 			// RandDatum is naive to the constraint that a RegType < len(types.OidToType),
 			// at least before linking and user defined types are added.
-			d = tree.NewDOid(oid.Oid(rng.Intn(len(types.OidToType))))
+			d = tree.NewDOidWithType(oid.Oid(rng.Intn(len(types.OidToType))), types.RegType)
 		}
 		if d == nil {
 			d = RandDatum(rng, colTypes[j], nullable[j])
