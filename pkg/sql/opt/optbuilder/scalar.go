@@ -574,7 +574,12 @@ func (b *Builder) buildFunction(
 	})
 
 	if overload.Class == tree.GeneratorClass {
-		return b.finishBuildGeneratorFunction(f, overload, out, inScope, outScope, outCol)
+		if colDefListTypes := b.getColumnDefinitionListTypes(inScope); colDefListTypes != nil {
+			// Use the types from the column definition list to determine the
+			// function return type.
+			f.SetTypeAnnotation(colDefListTypes)
+		}
+		return b.finishBuildGeneratorFunction(f, out, inScope, outScope, outCol)
 	}
 
 	// Add a dependency on sequences that are used as a string argument.
@@ -607,6 +612,27 @@ func (b *Builder) buildFunction(
 	}
 
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
+}
+
+// getColumnDefinitionListTypes returns a composite type representing the column
+// definition list for the current scope, if any. If one doesn't exist,
+// getColumnDefinitionListTypes returns nil.
+func (b *Builder) getColumnDefinitionListTypes(inScope *scope) *types.T {
+	alias := inScope.alias
+	if alias == nil || len(alias.Cols) == 0 || alias.Cols[0].Type == nil {
+		return nil
+	}
+	contents := make([]*types.T, len(alias.Cols))
+	labels := make([]string, len(alias.Cols))
+	for i, c := range alias.Cols {
+		defTyp, err := tree.ResolveType(b.ctx, c.Type, b.semaCtx.TypeResolver)
+		if err != nil {
+			panic(err)
+		}
+		contents[i] = defTyp
+		labels[i] = string(c.Name)
+	}
+	return types.MakeLabeledTuple(contents, labels)
 }
 
 // buildRangeCond builds a RANGE clause as a simpler expression. Examples:
