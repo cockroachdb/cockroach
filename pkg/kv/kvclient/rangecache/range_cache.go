@@ -397,20 +397,17 @@ func (et *EvictionToken) syncRLocked(
 // [1]: As long as the associated range descriptor is not older than what's
 // cached.
 //
-// TODO(arul): Instead of returning updatedLeaseholder all the way back to the
-// DistSender and then using its value to determine whether we need to backoff,
-// we should instead check if we're retrying the same replica. This will allow
-// us to eschew plumbing this state back up to the caller.
+// It returns an error if the token is no longer valid.
 func (et *EvictionToken) SyncTokenAndMaybeUpdateCache(
 	ctx context.Context, l *roachpb.Lease, rangeDesc *roachpb.RangeDescriptor,
-) (updatedLeaseholder bool) {
+) error {
 	rdc := et.rdc
 	rdc.rangeCache.Lock()
 	defer rdc.rangeCache.Unlock()
 
 	stillValid, cachedEntry, rawEntry := et.syncRLocked(ctx)
 	if !stillValid {
-		return false
+		return errors.New("after sync, the token is no longer valid")
 	}
 
 	// Check if the supplied range descriptor is compatible with the one in the
@@ -420,7 +417,7 @@ func (et *EvictionToken) SyncTokenAndMaybeUpdateCache(
 	// descriptor is older, we can simply return early.
 	if !descsCompatible(rangeDesc, et.Desc()) {
 		if rangeDesc.Generation < et.Desc().Generation {
-			return false
+			return nil
 		}
 		// Newer descriptor.
 		ri := roachpb.RangeInfo{
@@ -429,21 +426,24 @@ func (et *EvictionToken) SyncTokenAndMaybeUpdateCache(
 			ClosedTimestampPolicy: et.entry.closedts,
 		}
 		et.evictAndReplaceLocked(ctx, ri)
-		return false
+		if !et.Valid() {
+			return errors.New("incompatible descriptors")
+		}
+		return nil
 	}
 
-	updated, updatedLeaseholder, newEntry := cachedEntry.maybeUpdate(ctx, l, rangeDesc)
+	updated, newEntry := cachedEntry.maybeUpdate(ctx, l, rangeDesc)
 	if !updated {
 		// The cachedEntry wasn't updated; no need to replace it with newEntry in
 		// the RangeCache.
-		return false
+		return nil
 	}
 	rdc.swapEntryLocked(ctx, rawEntry, newEntry)
 
 	// Finish syncing the eviction token by updating it to the newest
 	// information available in the RangeCache.
 	et.entry = newEntry
-	return updatedLeaseholder
+	return nil
 }
 
 // EvictLease evicts information about the current lease from the cache, if the
@@ -1456,7 +1456,7 @@ func compareEntryLeases(a, b *cacheEntry) int {
 // on the cache entry.
 func (e *cacheEntry) maybeUpdate(
 	ctx context.Context, l *roachpb.Lease, rangeDesc *roachpb.RangeDescriptor,
-) (updated, updatedLease bool, newEntry *cacheEntry) {
+) (updated bool, newEntry *cacheEntry) {
 	if !descsCompatible(&e.desc, rangeDesc) {
 		log.Fatalf(ctx, "attempting to update by comparing non-compatible descs: %s vs %s",
 			e.desc, rangeDesc)
@@ -1468,7 +1468,7 @@ func (e *cacheEntry) maybeUpdate(
 		closedts: e.closedts,
 	}
 
-	updatedLease = false
+	updatedLease := false
 	updatedDesc := false
 
 	// First, we handle the lease. For non-speculative leases, if l is older than
@@ -1530,7 +1530,7 @@ func (e *cacheEntry) maybeUpdate(
 		updatedLease = false
 	}
 
-	return updatedLease || updatedDesc, updatedLease, newEntry
+	return updatedLease || updatedDesc, newEntry
 }
 
 func (e *cacheEntry) evictLeaseholder(
