@@ -439,6 +439,14 @@ func (r *restoreResumer) waitForDownloadToComplete(
 			remaining += remainingForSpan
 		}
 
+		// Sometimes a new virtual/external file sneaks in after we count total; the
+		// amount this skews the informational percentage isn't enough to recompute
+		// total but we still don't want total-remaining to be negative as that
+		// leads to nonsensical progress.
+		if remaining > total {
+			total = remaining
+		}
+
 		fractionComplete := float32(total-remaining) / float32(total)
 		log.Infof(ctx, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
 			sz(total-remaining), sz(remaining), sz(total), fractionComplete,
