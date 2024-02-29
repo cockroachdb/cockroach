@@ -603,8 +603,9 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 			IsProcedure: t.IsProcedure(),
 		}
 		for _, p := range t.Params {
-			if !tree.IsInParamClass(funcdesc.ToTreeRoutineParamClass(p.Class)) {
-				// Only IN parameters are included into the signature.
+			// For procedures all parameters are included into the signature,
+			// for UDFs - only IN / INOUT parameters.
+			if !ol.IsProcedure && !tree.IsInParamClass(funcdesc.ToTreeRoutineParamClass(p.Class)) {
 				continue
 			}
 			ol.ArgTypes = append(ol.ArgTypes, p.Type)

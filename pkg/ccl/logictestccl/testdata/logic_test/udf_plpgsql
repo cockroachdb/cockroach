@@ -2900,3 +2900,11 @@ CREATE OR REPLACE FUNCTION f(x INT) RETURNS INT AS $$
 $$ LANGUAGE PLpgSQL;
 
 subtest end
+
+statement ok
+CREATE FUNCTION f_empty() RETURNS VOID AS $$ BEGIN END; $$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f_empty()
+----
+NULL

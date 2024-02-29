@@ -169,11 +169,19 @@ type plpgsqlBuilder struct {
 	identCounter int
 }
 
+// routineParam is similar to tree.RoutineParam but stores the resolved type.
+type routineParam struct {
+	name  ast.Variable
+	typ   *types.T
+	class tree.RoutineParamClass
+	// TODO(100962): populate DefaultVal.
+}
+
 func newPLpgSQLBuilder(
 	ob *Builder,
 	routineName string,
 	colRefs *opt.ColSet,
-	params []tree.ParamType,
+	routineParams []routineParam,
 	returnType *types.T,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
@@ -187,11 +195,15 @@ func newPLpgSQLBuilder(
 	// PL/pgSQL variables.
 	b.pushBlock(plBlock{
 		label:    routineName,
-		vars:     make([]ast.Variable, 0, len(params)),
+		vars:     make([]ast.Variable, 0, len(routineParams)),
 		varTypes: make(map[ast.Variable]*types.T),
 	})
-	for _, param := range params {
-		b.addVariable(ast.Variable(param.Name), param.Typ)
+	for _, param := range routineParams {
+		if param.name != "" {
+			// TODO(119502): unnamed parameters can only be accessed via $i
+			// notation.
+			b.addVariable(param.name, param.typ)
+		}
 	}
 	return b
 }
@@ -229,14 +241,25 @@ type plBlock struct {
 }
 
 // buildRootBlock builds a PL/pgSQL routine starting with the root block.
-func (b *plpgsqlBuilder) buildRootBlock(astBlock *ast.Block, s *scope) *scope {
+func (b *plpgsqlBuilder) buildRootBlock(
+	astBlock *ast.Block, s *scope, routineParams []routineParam,
+) *scope {
 	// Push the scope so that the routine parameters live on a parent scope
 	// instead of the current one. This indicates that the columns are "outer"
 	// columns, which can be referenced but do not originate from an input
 	// expression. If we don't do this, the result would be internal errors due
 	// to Project expressions that try to "pass through" input columns that aren't
 	// actually produced by the input expression.
-	return b.buildBlock(astBlock, s.push())
+	s = s.push()
+	b.ensureScopeHasExpr(s)
+	// Initialize OUT parameters to NULL.
+	for _, param := range routineParams {
+		if param.class != tree.RoutineParamOut || param.name == "" {
+			continue
+		}
+		s = b.addPLpgSQLAssign(s, param.name, &tree.CastExpr{Expr: tree.DNull, Type: param.typ})
+	}
+	return b.buildBlock(astBlock, s)
 }
 
 // buildBlock constructs an expression that returns the result of executing a
@@ -1757,5 +1780,8 @@ var (
 	)
 	nestedBlockExceptionErr = unimplemented.New("exception handler for nested blocks",
 		"PL/pgSQL blocks cannot yet be nested within a block that has an exception handler",
+	)
+	returnWithOUTParameterErr = pgerror.New(pgcode.DatatypeMismatch,
+		"RETURN cannot have a parameter in function with OUT parameters",
 	)
 )

@@ -720,9 +720,9 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	var outParamNames []string
 	for _, param := range desc.Params {
 		class := ToTreeRoutineParamClass(param.Class)
-		if tree.IsInParamClass(class) {
-			// Only IN parameters should be included into the signature of this
-			// function overload.
+		if desc.IsProcedure() || tree.IsInParamClass(class) {
+			// For procedures all parameters are included into the signature,
+			// for UDFs - only IN / INOUT parameters.
 			signatureTypes = append(signatureTypes, tree.ParamType{Name: param.Name, Typ: param.Type})
 		}
 		if tree.IsOutParamClass(class) {

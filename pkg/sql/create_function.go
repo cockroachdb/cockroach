@@ -141,7 +141,9 @@ func (n *createFunctionNode) createNewFunction(
 	}
 	signatureTypes := make([]*types.T, 0, len(udfDesc.Params))
 	for _, param := range udfDesc.Params {
-		if tree.IsInParamClass(funcdesc.ToTreeRoutineParamClass(param.Class)) {
+		if udfDesc.IsProcedure() || tree.IsInParamClass(funcdesc.ToTreeRoutineParamClass(param.Class)) {
+			// For procedures all parameters are included into the signature,
+			// for UDFs - only IN / INOUT parameters.
 			signatureTypes = append(signatureTypes, param.Type)
 		}
 	}
