@@ -80,7 +80,7 @@ func SampleDatum(t *types.T) Datum {
 		j, _ := ParseDJSON(`{"a": "b"}`)
 		return j
 	case types.OidFamily:
-		return NewDOid(1009)
+		return NewDOidWithType(1009, t)
 	case types.PGLSNFamily:
 		return NewDPGLSN(0x1000000100)
 	case types.RefCursorFamily:
