@@ -73,8 +73,25 @@ func (b *Builder) buildUDF(
 		if outScope != nil {
 			outCol = b.synthesizeColumn(outScope, scopeColName(""), f.ResolvedType(), nil /* expr */, routine)
 		}
-	} else if o.NamedReturnColumn != "" && b.insideDataSource {
-		outCol.name = scopeColName(tree.Name(o.NamedReturnColumn))
+	} else if b.insideDataSource {
+		// When we have a single OUT parameter, it becomes the output column
+		// name.
+		var firstOutParamName tree.Name
+		var numOutParams int
+		for _, param := range o.RoutineParams {
+			if param.IsOutParam() {
+				numOutParams++
+				if numOutParams == 1 {
+					firstOutParamName = param.Name
+				}
+			}
+			if numOutParams == 2 {
+				break
+			}
+		}
+		if numOutParams == 1 && firstOutParamName != "" {
+			outCol.name = scopeColName(firstOutParamName)
+		}
 	}
 
 	return b.finishBuildScalar(f, routine, inScope, outScope, outCol)

@@ -673,6 +673,9 @@ func TestToOverload(t *testing.T) {
 				Body:       "ANY QUERIES",
 				Type:       tree.UDFRoutine,
 				Language:   tree.RoutineLangSQL,
+				RoutineParams: tree.RoutineParams{
+					{Name: "arg1", Type: types.Int},
+				},
 			},
 		},
 		{
@@ -697,6 +700,9 @@ func TestToOverload(t *testing.T) {
 				Body:       "ANY QUERIES",
 				Type:       tree.UDFRoutine,
 				Language:   tree.RoutineLangSQL,
+				RoutineParams: tree.RoutineParams{
+					{Name: "arg1", Type: types.Int},
+				},
 			},
 		},
 		{
@@ -722,6 +728,9 @@ func TestToOverload(t *testing.T) {
 				Body:       "ANY QUERIES",
 				Type:       tree.UDFRoutine,
 				Language:   tree.RoutineLangSQL,
+				RoutineParams: tree.RoutineParams{
+					{Name: "arg1", Type: types.Int},
+				},
 			},
 		},
 		{
@@ -748,6 +757,9 @@ func TestToOverload(t *testing.T) {
 				Type:              tree.UDFRoutine,
 				CalledOnNullInput: true,
 				Language:          tree.RoutineLangSQL,
+				RoutineParams: tree.RoutineParams{
+					{Name: "arg1", Type: types.Int},
+				},
 			},
 		},
 		{
@@ -772,6 +784,9 @@ func TestToOverload(t *testing.T) {
 				Body:       "ANY QUERIES",
 				Type:       tree.UDFRoutine,
 				Language:   tree.RoutineLangSQL,
+				RoutineParams: tree.RoutineParams{
+					{Name: "arg1", Type: types.Int},
+				},
 			},
 			err: "function 1 is leakproof but not immutable",
 		},

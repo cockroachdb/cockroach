@@ -708,15 +708,15 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		routineType = tree.ProcedureRoutine
 	}
 	ret = &tree.Overload{
-		Oid:      catid.FuncIDToOID(desc.ID),
-		Body:     desc.FunctionBody,
-		Type:     routineType,
-		Version:  uint64(desc.Version),
-		Language: desc.getCreateExprLang(),
+		Oid:           catid.FuncIDToOID(desc.ID),
+		Body:          desc.FunctionBody,
+		Type:          routineType,
+		Version:       uint64(desc.Version),
+		Language:      desc.getCreateExprLang(),
+		RoutineParams: make(tree.RoutineParams, 0, len(desc.Params)),
 	}
 
 	signatureTypes := make(tree.ParamTypes, 0, len(desc.Params))
-	var firstOutParamName string
 	var outParamNames []string
 	for _, param := range desc.Params {
 		class := ToTreeRoutineParamClass(param.Class)
@@ -727,14 +727,17 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		}
 		if tree.IsOutParamClass(class) {
 			paramName := param.Name
-			if len(outParamNames) == 0 {
-				firstOutParamName = paramName
-			}
 			if paramName == "" {
 				paramName = fmt.Sprintf("column%d", len(outParamNames)+1)
 			}
 			outParamNames = append(outParamNames, paramName)
 		}
+		ret.RoutineParams = append(ret.RoutineParams, tree.RoutineParam{
+			Name:  tree.Name(param.Name),
+			Type:  param.Type,
+			Class: class,
+			// TODO(100962): populate DefaultVal.
+		})
 	}
 	returnType := desc.ReturnType.Type
 	if types.IsRecordType(returnType) {
@@ -743,10 +746,6 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	}
 	ret.ReturnType = tree.FixedReturnType(returnType)
 	ret.Types = signatureTypes
-	if len(outParamNames) == 1 {
-		ret.NamedReturnColumn = firstOutParamName
-	}
-	ret.HasNamedReturnColumns = len(outParamNames) > 1
 	ret.Volatility, err = desc.getOverloadVolatility()
 	if err != nil {
 		return nil, err
