@@ -215,6 +215,7 @@ func (n *AlterTenantRename) Format(ctx *FmtCtx) {
 type AlterTenantService struct {
 	TenantSpec *TenantSpec
 	Command    TenantServiceCmd
+	Idempotent bool
 }
 
 // TenantServiceCmd represents a parameter to ALTER VIRTUAL CLUSTER.
@@ -242,6 +243,13 @@ func (n *AlterTenantService) Format(ctx *FmtCtx) {
 		ctx.WriteString(" START SERVICE SHARED")
 	case TenantStopService:
 		ctx.WriteString(" STOP SERVICE")
+	}
+	if n.Idempotent {
+		if n.Command == TenantStopService {
+			ctx.WriteString(" IF STARTED")
+		} else {
+			ctx.WriteString(" IF NOT STARTED")
+		}
 	}
 }
 

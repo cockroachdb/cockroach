@@ -1000,7 +1000,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %token <str> SHARE SHARED SHOW SIMILAR SIMPLE SIZE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SKIP_MISSING_UDFS SMALLINT SMALLSERIAL
 %token <str> SNAPSHOT SOME SPLIT SQL SQLLOGIN
-%token <str> STABLE START STATE STATISTICS STATUS STDIN STDOUT STOP STRAIGHT STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
+%token <str> STABLE START STARTED STATE STATISTICS STATUS STDIN STDOUT STOP STRAIGHT STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
 %token <str> SUPPORT SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANT_NAME TENANTS TESTING_RELOCATE TEXT THEN
@@ -1107,6 +1107,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %type <tree.Statement> alter_virtual_cluster_rename_stmt
 %type <tree.Statement> alter_virtual_cluster_reset_stmt
 %type <tree.Statement> alter_virtual_cluster_service_stmt
+%type <bool> opt_if_started opt_if_not_started
 
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
@@ -6859,33 +6860,44 @@ alter_virtual_cluster_rename_stmt:
 // ALTER VIRTUAL CLUSTER <virtual_cluster_spec> START SERVICE SHARED
 // ALTER VIRTUAL CLUSTER <virtual_cluster_spec> STOP SERVICE
 alter_virtual_cluster_service_stmt:
-  ALTER virtual_cluster virtual_cluster_spec START SERVICE EXTERNAL
+  ALTER virtual_cluster virtual_cluster_spec START SERVICE EXTERNAL opt_if_not_started
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantService{
       TenantSpec: $3.tenantSpec(),
       Command: tree.TenantStartServiceExternal,
+      Idempotent: $7.bool(),
     }
   }
-| ALTER virtual_cluster virtual_cluster_spec START SERVICE SHARED
+| ALTER virtual_cluster virtual_cluster_spec START SERVICE SHARED opt_if_not_started
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantService{
       TenantSpec: $3.tenantSpec(),
       Command: tree.TenantStartServiceShared,
+      Idempotent: $7.bool(),
     }
   }
-| ALTER virtual_cluster virtual_cluster_spec STOP SERVICE
+| ALTER virtual_cluster virtual_cluster_spec STOP SERVICE opt_if_started
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantService{
       TenantSpec: $3.tenantSpec(),
       Command: tree.TenantStopService,
+      Idempotent: $6.bool(),
     }
   }
 | ALTER virtual_cluster virtual_cluster_spec START error // SHOW HELP: ALTER VIRTUAL CLUSTER SERVICE
 | ALTER virtual_cluster virtual_cluster_spec STOP error // SHOW HELP: ALTER VIRTUAL CLUSTER SERVICE
 
+opt_if_started:
+  /* EMPTY */ { $$.val = false }
+| IF STARTED { $$.val = true }
+
+opt_if_not_started:
+  /* EMPTY */ { $$.val = false }
+| IF NOT STARTED { $$.val = true }
+  
 
 // %Help: ALTER VIRTUAL CLUSTER REPLICATION - alter replication stream between virtual clusters
 // %Category: Experimental
@@ -17308,6 +17320,7 @@ unreserved_keyword:
 | SQLLOGIN
 | STABLE
 | START
+| STARTED
 | STATE
 | STATEMENTS
 | STATISTICS
@@ -17873,6 +17886,7 @@ bare_label_keywords:
 | SQLLOGIN
 | STABLE
 | START
+| STARTED
 | STATE
 | STATEMENTS
 | STATISTICS

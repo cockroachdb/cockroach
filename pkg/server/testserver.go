@@ -1353,19 +1353,18 @@ func (ts *testServer) StartSharedProcessTenant(
 			id := uint64(*row[0].(*tree.DInt))
 			tenantID = roachpb.MustMakeTenantID(id)
 		}
+		// Also mark it for shared-process execution.
+		err = execSQL(
+			"start-tenant-shared-service",
+			"ALTER TENANT $1 START SERVICE SHARED",
+			args.TenantName,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	if err = ts.grantDefaultTenantCapabilities(ctx, tenantID, args.SkipTenantCheck); err != nil {
-		return nil, nil, err
-	}
-
-	// Also mark it for shared-process execution.
-	err = execSQL(
-		"start-tenant-shared-service",
-		"ALTER TENANT $1 START SERVICE SHARED",
-		args.TenantName,
-	)
-	if err != nil {
 		return nil, nil, err
 	}
 
@@ -1562,6 +1561,14 @@ func (ts *testServer) StartTenant(
 			); err != nil {
 				return nil, err
 			}
+			// Mark it for external execution. This is needed before we can spawn a server.
+			if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+				ctx, "testserver-set-tenant-service-mode", nil, /* txn */
+				"ALTER TENANT [$1] START SERVICE EXTERNAL",
+				params.TenantID.ToUint64(),
+			); err != nil {
+				return nil, err
+			}
 		} else if params.TenantName != "" {
 			_, err := ie.Exec(ctx, "rename-test-tenant", nil,
 				`ALTER TENANT [$1] RENAME TO $2`,
@@ -1569,14 +1576,6 @@ func (ts *testServer) StartTenant(
 			if err != nil {
 				return nil, err
 			}
-		}
-		// Mark it for external execution. This is needed before we can spawn a server.
-		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
-			ctx, "testserver-set-tenant-service-mode", nil, /* txn */
-			"ALTER TENANT [$1] START SERVICE EXTERNAL",
-			params.TenantID.ToUint64(),
-		); err != nil {
-			return nil, err
 		}
 	} else if !params.SkipTenantCheck {
 		requestedID := uint64(0)
