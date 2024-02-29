@@ -460,12 +460,6 @@ func (p ParamTypes) GetAt(i int) *types.T {
 	return p[i].Typ
 }
 
-// SetAt is part of the TypeList interface.
-func (p ParamTypes) SetAt(i int, name string, t *types.T) {
-	p[i].Name = name
-	p[i].Typ = t
-}
-
 // Length is part of the TypeList interface.
 func (p ParamTypes) Length() int {
 	return len(p)

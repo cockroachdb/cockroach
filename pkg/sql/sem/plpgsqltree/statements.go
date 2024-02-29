@@ -791,6 +791,9 @@ type Return struct {
 	StatementImpl
 	Expr   Expr
 	RetVar Variable
+	// Implicit is set if this Return statement was not originally in the body
+	// and was added by us.
+	Implicit bool
 }
 
 func (s *Return) CopyNode() *Return {

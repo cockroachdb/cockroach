@@ -2,6 +2,7 @@
 
 subtest types
 
+# PLpgSQL UDFs
 statement error pgcode 42P13 pq: function result type must be int because of OUT parameters
 CREATE FUNCTION f(OUT param INT) RETURNS FLOAT AS $$ BEGIN SELECT 1; END $$ LANGUAGE PLpgSQL;
 
@@ -15,25 +16,128 @@ statement error pgcode 42P13 pq: function result type must be int because of OUT
 CREATE FUNCTION f(OUT param INT) RETURNS RECORD AS $$ BEGIN SELECT 1; END $$ LANGUAGE PLpgSQL;
 
 statement ok
-CREATE FUNCTION f(OUT param INT) RETURNS INT AS $$ BEGIN SELECT 1; END $$ LANGUAGE PLpgSQL;
+CREATE FUNCTION f(OUT param INT) RETURNS INT AS $$ BEGIN SELECT 1 INTO param; END $$ LANGUAGE PLpgSQL;
+
+query I colnames
+SELECT f();
+----
+f
+1
+
+query I colnames
+SELECT * FROM f();
+----
+param
+1
+
+statement ok
+DROP FUNCTION f;
+
+statement error RETURN cannot have a parameter in function with OUT parameters
+CREATE FUNCTION f(OUT INT) AS $$ BEGIN RETURN NULL; END $$ LANGUAGE PLpgSQL;
+
+statement error RETURN cannot have a parameter in function with OUT parameters
+CREATE FUNCTION f(OUT INT, OUT INT) AS $$ BEGIN RETURN NULL; END $$ LANGUAGE PLpgSQL;
+
+statement error RETURN cannot have a parameter in function with OUT parameters
+CREATE FUNCTION f(INOUT INT) AS $$ BEGIN RETURN NULL; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f(INOUT param1 INT, OUT param2 INT) RETURNS RECORD AS $$
+BEGIN
+  param2 := 2;
+  RAISE NOTICE '%', param2;
+END
+$$ LANGUAGE PLpgSQL;
+
+query T colnames
+SELECT f(3);
+----
+f
+(3,2)
+
+query T noticetrace
+SELECT f(3);
+----
+NOTICE: 2
+
+query II colnames
+SELECT * FROM f(3);
+----
+param1 param2
+3 2
+
+# TODO(yuzefovich): figure out why this causes an internal error.
+# query T noticetrace
+# SELECT * FROM f(3);
+# ----
+# NOTICE: 2
+
+query I colnames
+SELECT param1 FROM f(3);
+----
+param1
+3
+
+query I colnames
+SELECT param2 FROM f(3);
+----
+param2
+2
 
 statement ok
 DROP FUNCTION f;
 
 statement ok
-CREATE FUNCTION f(INOUT param1 INT, OUT param2 INT) RETURNS RECORD AS $$ BEGIN SELECT 1, 2; END $$ LANGUAGE PLpgSQL;
+CREATE FUNCTION f(INOUT param1 INT, OUT param2 INT) AS $$ BEGIN SELECT 3 INTO param1; END $$ LANGUAGE PLpgSQL;
+
+query II colnames
+SELECT * FROM f(1);
+----
+param1 param2
+3 NULL
+
+statement ok
+CREATE OR REPLACE FUNCTION f(INOUT param1 INT, OUT param2 INT) AS $$
+BEGIN
+  RAISE NOTICE '% %', param1, param2;
+  param1 = 3;
+  RAISE NOTICE '% %', param1, param2;
+  SELECT 4 INTO param2;
+  RAISE NOTICE '% %', param1, param2;
+END
+$$ LANGUAGE PLpgSQL;
+
+query T colnames
+SELECT f(1);
+----
+f
+(3,4)
+
+query T noticetrace
+SELECT f(1);
+----
+NOTICE: 1 <NULL>
+NOTICE: 3 <NULL>
+NOTICE: 3 4
+
+# TODO(yuzefovich): figure this out.
+# query II colnames
+# SELECT * FROM f(1);
+# ----
+# param1 param2
+# 3 4
+
+# query T noticetrace
+# SELECT * FROM f(1);
+# ----
+# NOTICE: 1 <NULL>
+# NOTICE: 3 <NULL>
+# NOTICE: 3 4
 
 statement ok
 DROP FUNCTION f;
 
-# TODO(#100405) Executing this function results in 42601: query has no destination for result data
-statement ok
-CREATE FUNCTION f(INOUT param1 INT, OUT param2 INT) AS $$ BEGIN SELECT 1, 2, 3; END $$ LANGUAGE PLpgSQL;
-
-statement ok
-DROP FUNCTION f;
-
-# TODO(#100405) Executing this function results in 42601: query has no destination for result data
 statement ok
 CREATE FUNCTION f(INOUT param INT) AS $$ BEGIN SELECT 'hello'; END $$ LANGUAGE PLpgSQL;
 
@@ -48,8 +152,53 @@ BEGIN
 END
 $$ LANGUAGE PLpgSQL;
 
+query II
+SELECT * FROM f(3)
+----
+1 2
+
 statement ok
 DROP FUNCTION f;
+
+# Verify that function resolution works correctly when dropping functions (OUT
+# arguments are ignored).
+statement ok
+CREATE FUNCTION f(OUT param INT) AS $$ BEGIN SELECT 1 INTO param; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f(OUT param INT) AS $$ BEGIN SELECT 1 INTO param; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f(OUT INT);
+
+statement ok
+CREATE FUNCTION f(OUT param1 INT, OUT param2 INT) AS $$ BEGIN SELECT 1 INTO param1; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f(OUT INT);
+
+# TODO(119502): uncomment this and invoke the function when $i notation is
+# supported.
+# statement ok
+# CREATE FUNCTION f(OUT param1 INT, OUT param2 INT) AS $$ BEGIN SELECT 1 INTO $2; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f(OUT param1 INT, OUT param2 INT) AS $$ BEGIN SELECT 1 INTO param2; END $$ LANGUAGE PLpgSQL;
+
+statement error pq: function f\(int\) does not exist
+DROP FUNCTION f(INT);
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f(OUT param INT) RETURNS INT AS $$ BEGIN SELECT 1 INTO param; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f(OUT INT, OUT text, OUT INT);
 
 # Stored Procedures
 statement ok
@@ -64,14 +213,12 @@ CREATE PROCEDURE p(IN param1 INT, INOUT param2 INT, OUT param3 INT) AS $$ BEGIN 
 statement ok
 DROP PROCEDURE p;
 
-# TODO(#100405) Executing this procedure results in 42601: query has no destination for result data
 statement ok
 CREATE PROCEDURE p(INOUT param1 INT, OUT param2 INT) AS $$ BEGIN SELECT 1, 2, 3; END $$ LANGUAGE PLpgSQL;
 
 statement ok
 DROP PROCEDURE p;
 
-# TODO(#100405) Executing this procedure results in 42601: query has no destination for result data
 statement ok
 CREATE PROCEDURE p(INOUT param INT) AS $$ BEGIN SELECT 'hello'; END $$ LANGUAGE PLpgSQL;
 
@@ -133,3 +280,389 @@ statement ok
 DROP FUNCTION f_param_types;
 
 subtest end
+
+subtest parameter_names
+
+# Unlike for SQL UDFs, sharing of parameter names is not allowed across
+# different "parameter namespaces" (IN vs OUT).
+
+statement error pgcode 42P13 pq: parameter name "a" used more than once
+CREATE FUNCTION f_same_name(IN a INT, IN a INT) RETURNS INT AS $$ BEGIN RETURN a + a; END $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 pq: parameter name "a" used more than once
+CREATE FUNCTION f_same_name(IN a INT, INOUT a INT) RETURNS INT AS $$ BEGIN RETURN a + a; END $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 pq: parameter name "a" used more than once
+CREATE FUNCTION f_same_name(OUT a INT, INOUT a INT) RETURNS INT AS $$ BEGIN RETURN a + a; END $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 pq: parameter name "a" used more than once
+CREATE FUNCTION f_same_name(IN a INT, OUT a INT) RETURNS INT AS $$ BEGIN RETURN a; END $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f_names(IN param_in INT, OUT param_out INT) AS $$ BEGIN SELECT param_in INTO param_out; END $$ LANGUAGE PLpgSQL;
+
+query I colnames
+SELECT f_names(2);
+----
+f_names
+2
+
+query I colnames
+SELECT * FROM f_names(2);
+----
+param_out
+2
+
+statement ok
+CREATE FUNCTION f_in_int(IN param INT) RETURNS INT AS $$ BEGIN RETURN param; END; $$ LANGUAGE PLpgSQL;
+
+query I colnames
+SELECT f_in_int(2);
+----
+f_in_int
+2
+
+query I colnames
+SELECT * FROM f_in_int(2);
+----
+f_in_int
+2
+
+# Changing OUT parameter name is ok.
+statement ok
+CREATE FUNCTION f_out_int(OUT param INT) AS $$ BEGIN param = 2; END; $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE OR REPLACE FUNCTION f_out_int(OUT param_new INT) AS $$ BEGIN param_new = 2; END; $$ LANGUAGE PLpgSQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_out_int];
+----
+CREATE FUNCTION public.f_out_int(OUT param_new INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+  param_new := 2;
+  END;
+$$
+
+query I colnames
+SELECT f_out_int();
+----
+f_out_int
+2
+
+query I colnames
+SELECT * FROM f_out_int();
+----
+param_new
+2
+
+# But changing IN or INOUT parameter name is not allowed.
+statement error pgcode 42P13 pq: cannot change name of input parameter "param"
+CREATE OR REPLACE FUNCTION f_in_int(IN param_new INT) RETURNS INT AS $$ BEGIN RETURN param_new; END; $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f_inout_int(INOUT param INT) AS $$ BEGIN param = 2; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 pq: cannot change name of input parameter "param"
+CREATE OR REPLACE FUNCTION f_inout_int(INOUT param_new INT) AS $$ BEGIN param_new = 2; END; $$ LANGUAGE PLpgSQL;
+
+subtest end
+
+subtest changing_parameters
+
+statement ok
+CREATE FUNCTION f_int(IN param INT) RETURNS INT AS $$ BEGIN RETURN param; END; $$ LANGUAGE PLpgSQL;
+
+query I colnames
+SELECT * FROM f_int(2);
+----
+f_int
+2
+
+# We can change the parameter class from IN to INOUT without introducing new
+# overload.
+statement ok
+CREATE OR REPLACE FUNCTION f_int(INOUT param INT) AS $$ BEGIN param = 2; END; $$ LANGUAGE PLpgSQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_int];
+----
+CREATE FUNCTION public.f_int(INOUT param INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+  param := 2;
+  END;
+$$
+
+query I colnames
+SELECT * FROM f_int(2);
+----
+param
+2
+
+# We can add and remove an OUT parameter too without introducing another
+# overload (but must preserve the original parameter name for IN / INOUT
+# parameter).
+statement error pgcode 42P13 pq: cannot change name of input parameter "param"
+CREATE OR REPLACE FUNCTION f_int(IN param_in INT, OUT param_out INT) AS $$ BEGIN param_out = param_in; END; $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE OR REPLACE FUNCTION f_int(IN param INT, OUT param_out INT) AS $$ BEGIN SELECT param INTO param_out; END; $$ LANGUAGE PLpgSQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_int];
+----
+CREATE FUNCTION public.f_int(IN param INT8, OUT param_out INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+  SELECT param INTO param_out;
+  END;
+$$
+
+query I colnames
+SELECT * FROM f_int(2);
+----
+param_out
+2
+
+statement ok
+CREATE OR REPLACE FUNCTION f_int(OUT param_out INT, IN param INT) AS $$ BEGIN SELECT param INTO param_out; END; $$ LANGUAGE PLpgSQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_int];
+----
+CREATE FUNCTION public.f_int(OUT param_out INT8, IN param INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+  SELECT param INTO param_out;
+  END;
+$$
+
+query I colnames
+SELECT * FROM f_int(2);
+----
+param_out
+2
+
+statement ok
+CREATE OR REPLACE FUNCTION f_int(INOUT param INT) AS $$ BEGIN param = param; END; $$ LANGUAGE PLpgSQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_int];
+----
+CREATE FUNCTION public.f_int(INOUT param INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+  param := param;
+  END;
+$$
+
+query I colnames
+SELECT * FROM f_int(2);
+----
+param
+2
+
+subtest end
+
+subtest default_parameter_names
+
+# Parameter names are optional. Whenever a UDF returns RECORD type, each unnamed
+# OUT parameter with ordinal 'i' (among all OUT parameters) gets the default
+# name that is "column" || i.
+
+statement ok
+CREATE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT INT) AS $$ BEGIN param2 = 2; END; $$ LANGUAGE PLpgSQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_default_names];
+----
+CREATE FUNCTION public.f_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT INT8)
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+  param2 := 2;
+  END;
+$$
+
+query T colnames
+SELECT f_default_names(0);
+----
+f_default_names
+(,2,)
+
+query III colnames
+SELECT * FROM f_default_names(0);
+----
+column1  param2  column3
+NULL     2       NULL
+
+query I colnames
+SELECT column1 FROM f_default_names(0);
+----
+column1
+NULL
+
+query I colnames
+SELECT param2 FROM f_default_names(0);
+----
+param2
+2
+
+query I colnames
+SELECT column3 FROM f_default_names(0);
+----
+column3
+NULL
+
+# However, attempting to access the parameter by the default names is invalid.
+statement error pgcode 42601 pq: \"column1\" is not a known variable
+CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT INT) AS $$ BEGIN SELECT 1 INTO column1; END; $$ LANGUAGE PLpgSQL;
+
+# Introducing the OUT parameter name is disallowed because it'd change the
+# return type.
+statement error cannot change return type of existing function
+CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT param3 INT) AS $$ BEGIN param2 = 2; END; $$ LANGUAGE PLpgSQL;
+
+# Introducing the name that matches the default OUT parameter name is allowed.
+statement ok
+CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT column3 INT) AS $$ BEGIN SELECT 3 INTO column3; END; $$ LANGUAGE PLpgSQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_default_names];
+----
+CREATE FUNCTION public.f_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT column3 INT8)
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+  SELECT 3 INTO column3;
+  END;
+$$
+
+query I colnames
+SELECT column3 FROM f_default_names(0);
+----
+column3
+3
+
+# Then we can omit the default OUT parameter name again (but still cannot use it
+# in the body).
+statement error pgcode 42601 pq: \"column3\" is not a known variable
+CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT INT) AS $$ BEGIN SELECT 3 INTO column3; END; $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT INT) AS $$ BEGIN param2 = 2; END; $$ LANGUAGE PLpgSQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_default_names];
+----
+CREATE FUNCTION public.f_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT INT8)
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+  param2 := 2;
+  END;
+$$
+
+# Introducing the IN parameter name is ok.
+statement ok
+CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN in_param INT, OUT INT) AS $$ BEGIN SELECT in_param INTO param2; END; $$ LANGUAGE PLpgSQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_default_names];
+----
+CREATE FUNCTION public.f_default_names(OUT INT8, OUT param2 INT8, IN in_param INT8, OUT INT8)
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  AS $$
+  BEGIN
+  SELECT in_param INTO param2;
+  END;
+$$
+
+# But then the IN parameter name cannot be changed anymore.
+statement error cannot change name of input parameter "in_param"
+CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN in_param_new INT, OUT INT) AS $$ BEGIN SELECT in_param_new INTO param2; END; $$ LANGUAGE PLpgSQL;
+
+query T colnames
+SELECT f_default_names(0);
+----
+f_default_names
+(,0,)
+
+query III colnames
+SELECT * FROM f_default_names(0);
+----
+column1  param2  column3
+NULL     0       NULL
+
+subtest end
+
+statement ok
+CREATE TYPE typ AS (a INT, b INT);
+CREATE FUNCTION f_udt() RETURNS typ AS $$ BEGIN RETURN (1, 2); END; $$ LANGUAGE PLpgSQL;
+
+query T colnames
+SELECT f_udt()
+----
+f_udt
+(1,2)
+
+query II colnames
+SELECT * FROM f_udt()
+----
+a  b
+1  2
+
+query I colnames
+SELECT a FROM f_udt()
+----
+a
+1
+
+query I colnames
+SELECT b FROM f_udt()
+----
+b
+2
