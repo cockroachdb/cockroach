@@ -1091,10 +1091,11 @@ func (p *Provider) runInstance(
 	m[vm.TagCreated] = timeutil.Now().Format(time.RFC3339)
 	m["Name"] = name
 	var awsLabelsNameMap = map[string]string{
-		vm.TagCluster:   "Cluster",
-		vm.TagCreated:   "Created",
-		vm.TagLifetime:  "Lifetime",
-		vm.TagRoachprod: "Roachprod",
+		vm.TagCluster:      "Cluster",
+		vm.TagCreated:      "Created",
+		vm.TagLifetime:     "Lifetime",
+		vm.TagRoachprod:    "Roachprod",
+		vm.TagSpotInstance: "Spot",
 	}
 
 	var labelPairs []string

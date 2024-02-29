@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -25,6 +26,24 @@ import (
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+const (
+	// the print details headers for instances.
+
+	Name        = "Name"
+	DNS         = "DNS"
+	PrivateIP   = "Private IP"
+	PublicIP    = "Public IP"
+	MachineType = "Machine Type"
+	CPUArch     = "CPU Arch"
+	CPUFamily   = "CPU Family"
+	IsSpot      = "Is Spot"
+)
+
+// printDetailsColumnHeaders are the headers to be printed in the defined sequence.
+var printDetailsColumnHeaders = []string{
+	Name, DNS, PrivateIP, PublicIP, MachineType, CPUArch, CPUFamily, IsSpot,
+}
 
 // Cloud contains information about all known clusters (across multiple cloud
 // providers).
@@ -155,9 +174,42 @@ func (c *Cluster) PrintDetails(logger *logger.Logger) {
 	} else {
 		logger.Printf("(no expiration)")
 	}
+	logPrettifiedHeader(logger, printDetailsColumnHeaders)
 	for _, vm := range c.VMs {
-		logger.Printf("  %s\t%s\t%s\t%s\t%s\t%s\t%s", vm.Name, vm.DNS, vm.PrivateIP, vm.PublicIP, vm.MachineType, vm.CPUArch, vm.CPUFamily)
+		spot := ""
+		if vm.Preemptible {
+			spot = "spot"
+		}
+		logger.Printf(prettifyRow(printDetailsColumnHeaders, map[string]string{
+			Name: vm.Name, DNS: vm.DNS, PrivateIP: vm.PrivateIP, PublicIP: vm.PublicIP, MachineType: vm.MachineType,
+			CPUArch: string(vm.CPUArch), CPUFamily: vm.CPUFamily, IsSpot: spot,
+		}))
 	}
+}
+
+// logPrettifiedHeader logs a prettified row of headers.
+func logPrettifiedHeader(logger *logger.Logger, headers []string) {
+	row := ""
+	for _, header := range headers {
+		row = fmt.Sprintf("%s%s\t", row, header)
+	}
+	separator := strings.Repeat("-", len(row))
+	logger.Printf(separator)
+	logger.Printf(row)
+	logger.Printf(separator)
+}
+
+// prettifyRow returns a prettified row of values. the sequence of the header is maintained.
+func prettifyRow(headers []string, rowMap map[string]string) string {
+	row := ""
+	for _, header := range headers {
+		value := ""
+		if v, ok := rowMap[header]; ok {
+			value = v
+		}
+		row = fmt.Sprintf("%s%s\t", row, value)
+	}
+	return row
 }
 
 // IsLocal returns true if c is a local cluster.
