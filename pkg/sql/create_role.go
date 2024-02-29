@@ -230,6 +230,11 @@ func updateRoleOptions(
 				// will not be interpreted as NULL by the Executor.
 				qargs = append(qargs, nil)
 			} else {
+				if v.Validate != nil {
+					if err := v.Validate(params.ExecCfg().Settings, roleName, val); err != nil {
+						return 0, err
+					}
+				}
 				qargs = append(qargs, val)
 			}
 		}

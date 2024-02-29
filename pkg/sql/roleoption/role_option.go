@@ -14,6 +14,11 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,6 +35,7 @@ type RoleOption struct {
 	Option
 	HasValue bool
 	Value    func() (bool, string, error)
+	Validate func(_ *cluster.Settings, _ username.SQLUsername, val string) error
 }
 
 // KindList of role options.
@@ -72,6 +78,7 @@ const (
 	NOSQLLOGIN
 	VIEWCLUSTERSETTING
 	NOVIEWCLUSTERSETTING
+	SUBJECT
 )
 
 // ControlChangefeedDeprecationNoticeMsg is a user friendly notice which should be shown when CONTROLCHANGEFEED is used
@@ -111,6 +118,7 @@ var toSQLStmts = map[Option]string{
 	NOVIEWACTIVITYREDACTED: `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWACTIVITYREDACTED'`,
 	VIEWCLUSTERSETTING:     `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'VIEWCLUSTERSETTING', $2) ON CONFLICT DO NOTHING`,
 	NOVIEWCLUSTERSETTING:   `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWCLUSTERSETTING'`,
+	SUBJECT:                `UPSERT INTO system.role_options (username, option, value, user_id) VALUES ($1, 'SUBJECT', $2::string, $3)`,
 }
 
 // Mask returns the bitmask for a given role option.
@@ -148,6 +156,7 @@ var ByName = map[string]Option{
 	"NOSQLLOGIN":             NOSQLLOGIN,
 	"VIEWCLUSTERSETTING":     VIEWCLUSTERSETTING,
 	"NOVIEWCLUSTERSETTING":   NOVIEWCLUSTERSETTING,
+	"SUBJECT":                SUBJECT,
 }
 
 // ToOption takes a string and returns the corresponding Option.
@@ -201,6 +210,22 @@ func MakeListFromKVOptions(
 				Option: option, HasValue: false,
 			}
 		}
+
+		switch option {
+		case SUBJECT:
+			roleOptions[i].Validate = func(settings *cluster.Settings, u username.SQLUsername, s string) error {
+				if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
+					return pgerror.Newf(pgcode.FeatureNotSupported, "SUBJECT role option is only supported after v24.1 upgrade is finalized")
+				}
+				if err := base.CheckEnterpriseEnabled(settings, "SUBJECT role option"); err != nil {
+					return err
+				}
+				if err := distinguishedname.ValidateDN(u, s); err != nil {
+					return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+				}
+				return nil
+			}
+		}
 	}
 
 	return roleOptions, nil
@@ -225,7 +250,7 @@ func (rol List) GetSQLStmts(onRoleOption func(Option)) (map[string]*RoleOption, 
 		if onRoleOption != nil {
 			onRoleOption(ro.Option)
 		}
-		// Skip PASSWORD and DEFAULTSETTINGS options.
+		// Skip PASSWORD option.
 		// Since PASSWORD still resides in system.users, we handle setting PASSWORD
 		// outside of this set stmt.
 		// TODO(richardjcai): migrate password to system.role_options

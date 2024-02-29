@@ -1574,6 +1574,7 @@ GO_TARGETS = [
     "//pkg/security/certmgr:certmgr_test",
     "//pkg/security/certnames:certnames",
     "//pkg/security/clientsecopts:clientsecopts",
+    "//pkg/security/distinguishedname:distinguishedname",
     "//pkg/security/password:password",
     "//pkg/security/password:password_test",
     "//pkg/security/pprompt:pprompt",

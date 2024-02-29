@@ -36,6 +36,7 @@ func _() {
 	_ = x[NOSQLLOGIN-26]
 	_ = x[VIEWCLUSTERSETTING-27]
 	_ = x[NOVIEWCLUSTERSETTING-28]
+	_ = x[SUBJECT-29]
 }
 
 func (i Option) String() string {
@@ -96,6 +97,8 @@ func (i Option) String() string {
 		return "VIEWCLUSTERSETTING"
 	case NOVIEWCLUSTERSETTING:
 		return "NOVIEWCLUSTERSETTING"
+	case SUBJECT:
+		return "SUBJECT"
 	default:
 		return "Option(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

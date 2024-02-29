@@ -8,12 +8,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "3bedac2f1816095d9f6aa5b3ea6caa8e7f1651de7d67af1fc0e9127148ab9a36",
-    strip_prefix = "cockroachdb-rules_go-d41d6ec",
+    sha256 = "d667ccdf672d5190d33f91ad0460cb7b69a21dc39124a4a9ded8621265302df7",
+    strip_prefix = "cockroachdb-rules_go-d2ae515",
     urls = [
-        # cockroachdb/rules_go as of d41d6ecad15f14423f47d94b5fb2bd05d7de9937
-        # (upstream release-0.43 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-405-gd41d6ec.tar.gz",
+        # cockroachdb/rules_go as of d2ae51519b29e078c7affe4918ba3b297e38ef6e
+        # (upstream release-0.46 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-457-gd2ae515.tar.gz",
     ],
 )
 
@@ -165,14 +165,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.21.5.darwin-amd64.tar.gz", "182c3e597111d474b29d72fbfee1ddb2915acd39b7c3e534a78eaddfa767089d"),
-        "darwin_arm64": ("go1.21.5.darwin-arm64.tar.gz", "1894e6f86814cd882c51bb5a73cf1312551c734bd4ac9fb33866df2a50e1d1a0"),
-        "linux_amd64": ("go1.21.5.linux-amd64.tar.gz", "ff04d463bf9da03cfe6aefeff6039312c701f74ab291162b937b31026f262228"),
-        "linux_arm64": ("go1.21.5.linux-arm64.tar.gz", "9a09561064580e837af46bc314536b450bd2546985955ddf1e70699a4abe2fb6"),
-        "windows_amd64": ("go1.21.5.windows-amd64.tar.gz", "93375cd3e51b811297a52a0e7a9d98b126da3ae02daaabb5d423e1c496275f06"),
+        "darwin_amd64": ("go1.22.0.darwin-amd64.tar.gz", "04397fcb8eca99eb0c613cd0000ee45751777b06cd60946f55ac027e7ebb154c"),
+        "darwin_arm64": ("go1.22.0.darwin-arm64.tar.gz", "c1d6436a7273162be40e87d65d22c358c0e47e75d39110cc13acfa496dce6482"),
+        "linux_amd64": ("go1.22.0.linux-amd64.tar.gz", "b3f93826ba072b0d808264fd46e747b2b8e28cd04881aeb966fe4c44c5d8db8a"),
+        "linux_arm64": ("go1.22.0.linux-arm64.tar.gz", "baec0c1ef1f2029be76839eb702c263464c44987b470906d8b03ee696874c5db"),
+        "windows_amd64": ("go1.22.0.windows-amd64.tar.gz", "42d0bcc8db004a4f89d94e345be44f286841dfe439256946b71e8eab9e324642"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240220-195058/{}"],
-    version = "1.21.5",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240227-175941/{}"],
+    version = "1.22.0",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
