@@ -2301,9 +2301,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	if err != nil {
 		return err
 	}
-	if err := ot.semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
-		return err
-	}
+	ot.semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */)
 	ot.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	ot.semaCtx.TypeResolver = ot.catalog
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt.AST)
