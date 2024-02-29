@@ -1090,11 +1090,18 @@ func (p *Provider) runInstance(
 	m := vm.GetDefaultLabelMap(opts)
 	m[vm.TagCreated] = timeutil.Now().Format(time.RFC3339)
 	m["Name"] = name
+
+	// add a label for spot instances
+	if providerOpts.UseSpot {
+		m[vm.TagSpotInstance] = "true"
+	}
+
 	var awsLabelsNameMap = map[string]string{
-		vm.TagCluster:   "Cluster",
-		vm.TagCreated:   "Created",
-		vm.TagLifetime:  "Lifetime",
-		vm.TagRoachprod: "Roachprod",
+		vm.TagCluster:      "Cluster",
+		vm.TagCreated:      "Created",
+		vm.TagLifetime:     "Lifetime",
+		vm.TagRoachprod:    "Roachprod",
+		vm.TagSpotInstance: "Spot",
 	}
 
 	var labelPairs []string
