@@ -228,8 +228,21 @@ type plBlock struct {
 	state *tree.BlockState
 }
 
+// buildRootBlock builds a PL/pgSQL routine starting with the root block.
+func (b *plpgsqlBuilder) buildRootBlock(astBlock *ast.Block, s *scope) *scope {
+	// Push the scope so that the routine parameters live on a parent scope
+	// instead of the current one. This indicates that the columns are "outer"
+	// columns, which can be referenced but do not originate from an input
+	// expression. If we don't do this, the result would be internal errors due
+	// to Project expressions that try to "pass through" input columns that aren't
+	// actually produced by the input expression.
+	return b.buildBlock(astBlock, s.push())
+}
+
 // buildBlock constructs an expression that returns the result of executing a
 // PL/pgSQL block, including variable declarations and exception handlers.
+//
+// buildBlock should only be used for non-root blocks.
 func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 	if len(b.blocks) == 0 {
 		// There should always be a root block for the routine parameters.
@@ -243,9 +256,6 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		// blocks are not yet compatible.
 		panic(nestedBlockExceptionErr)
 	}
-	// Push the scope to ensure that routine parameters are not treated as
-	// passthrough columns.
-	s = s.push()
 	b.ensureScopeHasExpr(s)
 	block := b.pushBlock(plBlock{
 		label:     astBlock.Label,
@@ -254,8 +264,8 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		constants: make(map[ast.Variable]struct{}),
 		cursors:   make(map[ast.Variable]ast.CursorDeclaration),
 	})
-	// First, handle the variable declarations.
 	defer b.popBlock()
+	// First, handle the variable declarations.
 	for i := range astBlock.Decls {
 		switch dec := astBlock.Decls[i].(type) {
 		case *ast.Declaration:
