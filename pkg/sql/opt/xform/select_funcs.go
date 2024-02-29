@@ -453,6 +453,31 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 			return
 		}
 
+		// Make a best-effort check to avoid generating trivial constrained scans
+		// that actually scan the entire table.
+		//
+		// As a special case, omit singleton tables (statically guaranteed to have
+		// one row). This is advantageous because a full-table constrained scan for
+		// a singleton table will be performed using a Get instead of a Scan, which
+		// allows for some low-level optimizations.
+		if !grp.Relational().Cardinality.IsZeroOrOne() {
+			checkConstraintFilters := c.checkConstraintFilters(scanPrivate.Table)
+			for i := range checkConstraintFilters {
+				if !checkConstraintFilters[i].ScalarProps().TightConstraints {
+					continue
+				}
+				optionalConstraints := checkConstraintFilters[i].ScalarProps().Constraints
+				if optionalConstraints == nil {
+					continue
+				}
+				for j := 0; j < optionalConstraints.Length(); j++ {
+					if combinedConstraint.Contains(c.e.evalCtx, optionalConstraints.Constraint(j)) {
+						return
+					}
+				}
+			}
+		}
+
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Distribution.Regions = nil
