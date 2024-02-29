@@ -784,6 +784,7 @@ const hexAlphabet = "0123456789abcdef"
 // encodeJSONString writes a string literal to buf as a JSON string.
 // Cribbed from https://github.com/golang/go/blob/7badae85f20f1bce4cc344f9202447618d45d414/src/encoding/json/encode.go.
 func encodeJSONString(buf *bytes.Buffer, s string) {
+	buf.Grow(len(s) + 2)
 	buf.WriteByte('"')
 	start := 0
 	for i := 0; i < len(s); {
