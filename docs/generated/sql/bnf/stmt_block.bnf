@@ -1440,6 +1440,7 @@ unreserved_keyword ::=
 	| 'STREAM'
 	| 'STRICT'
 	| 'SUBSCRIPTION'
+	| 'SUBJECT'
 	| 'SUPER'
 	| 'SUPPORT'
 	| 'SURVIVE'
@@ -3050,6 +3051,7 @@ role_option ::=
 	| 'NOVIEWCLUSTERSETTING'
 	| password_clause
 	| valid_until_clause
+	| subject_clause
 	| 'REPLICATION'
 	| 'NOREPLICATION'
 
@@ -3477,6 +3479,10 @@ password_clause ::=
 valid_until_clause ::=
 	'VALID' 'UNTIL' string_or_placeholder
 	| 'VALID' 'UNTIL' 'NULL'
+
+subject_clause ::=
+	'SUBJECT' string_or_placeholder
+	| 'SUBJECT' 'NULL'
 
 typed_literal ::=
 	func_name_no_crdb_extra 'SCONST'
@@ -4073,6 +4079,7 @@ bare_label_keywords ::=
 	| 'STRING'
 	| 'SUBSCRIPTION'
 	| 'SUBSTRING'
+	| 'SUBJECT'
 	| 'SUPER'
 	| 'SUPPORT'
 	| 'SURVIVAL'

@@ -1,0 +1,67 @@
+# LogicTest: !local-mixed-23.1 !local-mixed-23.2
+# Tests for parsing/validation of the SUBJECT role option.
+
+statement error role "root" cannot have a SUBJECT
+ALTER ROLE root SUBJECT 'O=US, CN=John Doe'
+
+statement error failed to parse distinguished name foo: DN ended with incomplete type, value pair
+CREATE ROLE role_with_subject SUBJECT 'foo'
+
+statement ok
+CREATE ROLE role_with_subject SUBJECT 'foo=bar'
+
+query T
+SELECT value FROM system.role_options
+WHERE username = 'role_with_subject'
+AND option = 'SUBJECT'
+----
+foo=bar
+
+statement ok
+ALTER ROLE role_with_subject SUBJECT 'O=US, CN=role_with_subject'
+
+query T
+SELECT value FROM system.role_options
+WHERE username = 'role_with_subject'
+AND option = 'SUBJECT'
+----
+O=US, CN=role_with_subject
+
+statement error failed to parse distinguished name O=US,, CN=role_with_subject: incomplete type, value pair
+ALTER ROLE role_with_subject SUBJECT 'O=US,, CN=role_with_subject'
+
+statement ok
+ALTER ROLE role_with_subject SUBJECT 'O=US=A, CN=role_with_subject'
+
+query T
+SELECT value FROM system.role_options
+WHERE username = 'role_with_subject'
+AND option = 'SUBJECT'
+----
+O=US=A, CN=role_with_subject
+
+statement ok
+ALTER ROLE role_with_subject SUBJECT 'O=US\=A, CN=role_with_subject'
+
+query T
+SELECT value FROM system.role_options
+WHERE username = 'role_with_subject'
+AND option = 'SUBJECT'
+----
+O=US\=A, CN=role_with_subject
+
+statement ok
+ALTER ROLE role_with_subject SUBJECT 'O=US\,A, CN=role_with_subject'
+
+query T
+SELECT value FROM system.role_options
+WHERE username = 'role_with_subject'
+AND option = 'SUBJECT'
+----
+O=US\,A, CN=role_with_subject
+
+statement error SUBJECT CN must match "role_with_subject" but got "different_role"
+ALTER ROLE role_with_subject SUBJECT 'O=US\,A, CN=different_role'
+
+statement error SUBJECT must have only one CN attribute
+ALTER ROLE role_with_subject SUBJECT 'CN=role_with_subject, O=US\,A, CN=different_role'
