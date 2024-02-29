@@ -12,7 +12,6 @@ package json
 
 import (
 	"bytes"
-	"fmt"
 	"sort"
 	"strconv"
 	"unsafe"
@@ -673,15 +672,6 @@ func (j *jsonEncoded) FetchValKeyOrIdx(key string) (JSON, error) {
 		return j.FetchValIdx(idx)
 	}
 	return nil, nil
-}
-
-func (j *jsonEncoded) Format(buf *bytes.Buffer) {
-	decoded, err := j.decode()
-	if err != nil {
-		fmt.Fprintf(buf, `<corrupt JSON data: %s>`, err.Error())
-	} else {
-		decoded.Format(buf)
-	}
 }
 
 // RemoveIndex implements the JSON interface.
