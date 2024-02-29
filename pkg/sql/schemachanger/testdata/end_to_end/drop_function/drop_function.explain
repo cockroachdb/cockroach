@@ -36,7 +36,7 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109 (f-)}
  │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109 (f-)}
  │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109 (f-)}
- │         └── 12 Mutation operations
+ │         └── 13 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":109}
  │              ├── RemoveObjectParent {"ObjectID":109,"ParentSchemaID":101}
  │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNam..."}
@@ -45,6 +45,7 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNul..."}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":109}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":109}
+ │              ├── RemoveBackReferenceInFunctions {"BackReferencedDescriptorID":109}
  │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"public"}
@@ -78,7 +79,7 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109 (f-)}
  │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109 (f-)}
  │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109 (f-)}
- │         └── 19 Mutation operations
+ │         └── 20 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":109}
  │              ├── RemoveObjectParent {"ObjectID":109,"ParentSchemaID":101}
  │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNam..."}
@@ -87,6 +88,7 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNul..."}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":109}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":109}
+ │              ├── RemoveBackReferenceInFunctions {"BackReferencedDescriptorID":109}
  │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"public"}

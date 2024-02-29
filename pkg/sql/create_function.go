@@ -64,7 +64,8 @@ func (n *createFunctionNode) startExec(params runParams) error {
 
 	for _, dep := range n.planDeps {
 		if dbID := dep.desc.GetParentID(); dbID != n.dbDesc.GetID() && dbID != keys.SystemDatabaseID {
-			return pgerror.Newf(pgcode.FeatureNotSupported, "the function cannot refer to other databases")
+			return pgerror.Newf(pgcode.FeatureNotSupported, "dependent relation %s cannot be from another database",
+				dep.desc.GetName())
 		}
 	}
 
@@ -74,7 +75,8 @@ func (n *createFunctionNode) startExec(params runParams) error {
 			return err
 		}
 		if dbID := funcDesc.GetParentID(); dbID != n.dbDesc.GetID() && dbID != keys.SystemDatabaseID {
-			return pgerror.Newf(pgcode.FeatureNotSupported, "the function cannot refer to other databases")
+			return pgerror.Newf(pgcode.FeatureNotSupported, "dependent function %s cannot be from another database",
+				funcDesc.GetName())
 		}
 	}
 
@@ -177,9 +179,6 @@ func (n *createFunctionNode) createNewFunction(
 }
 
 func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params runParams) error {
-	// TODO(chengxiong): add validation that the function is not referenced. This
-	// is needed when we start allowing function references from other objects.
-
 	if n.cf.IsProcedure && !udfDesc.IsProcedure() {
 		return errors.WithDetailf(
 			pgerror.Newf(pgcode.WrongObjectType, "cannot change routine kind"),
