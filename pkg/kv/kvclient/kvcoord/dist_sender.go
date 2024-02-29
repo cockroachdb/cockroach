@@ -2707,7 +2707,10 @@ func (ds *DistSender) sendToReplicas(
 				if tErr.Lease == nil {
 					errLease = &roachpb.Lease{}
 				}
-				routing.SyncTokenAndMaybeUpdateCache(ctx, errLease, errDesc)
+				// If the range bounds changed our routing may be invalid.
+				if err := routing.SyncTokenAndMaybeUpdateCache(ctx, errLease, errDesc); err != nil {
+					log.VErrEventf(ctx, 1, "problem syncing our token: %s", err)
+				}
 				// Note that the leaseholder might not be the one indicated by
 				// the NLHE we just received, in case that error carried stale info.
 				lh := routing.Leaseholder()
