@@ -28,7 +28,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 3}
       │    │    └── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 3}
-      │    └── 17 Mutation operations
+      │    └── 18 Mutation operations
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
@@ -38,6 +38,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
       │         ├── MarkDescriptorAsDropped {"DescriptorID":105}
       │         ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
       │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.FunctionNam..."}
+      │         ├── RemoveBackReferenceInFunctions {"BackReferencedDescriptorID":105}
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
       │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
