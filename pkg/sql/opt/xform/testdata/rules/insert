@@ -175,17 +175,15 @@ insert t
       │         ├── columns: t.k:26!null t.r:27!null t.a:28!null t.b:29 t.c:30
       │         ├── key: (26)
       │         ├── fd: ()-->(28), (26)-->(27,29,30)
-      │         ├── index-join t
+      │         ├── scan t
       │         │    ├── columns: t.k:26!null t.r:27!null t.a:28 t.b:29 t.c:30
+      │         │    ├── check constraint expressions
+      │         │    │    └── t.r:27 IN ('east', 'west') [outer=(27), constraints=(/27: [/'east' - /'east'] [/'west' - /'west']; tight)]
+      │         │    ├── computed column expressions
+      │         │    │    └── t.b:29
+      │         │    │         └── t.k:26 % 9
       │         │    ├── key: (26)
-      │         │    ├── fd: (26)-->(27-30)
-      │         │    └── scan t@t_r_c_idx
-      │         │         ├── columns: t.k:26!null t.r:27!null t.c:30
-      │         │         ├── constraint: /27/30/26
-      │         │         │    ├── [/'east' - /'east']
-      │         │         │    └── [/'west' - /'west']
-      │         │         ├── key: (26)
-      │         │         └── fd: (26)-->(27,30)
+      │         │    └── fd: (26)-->(27-30)
       │         └── filters
       │              └── t.a:28 = 10 [outer=(28), constraints=(/28: [/10 - /10]; tight), fd=()-->(28)]
       └── fast-path-unique-checks-item: t(c)
@@ -525,19 +523,15 @@ insert t
       │         ├── key: (22)
       │         └── fd: ()-->(24), (22)-->(23,25)
       ├── fast-path-unique-checks-item: t(b)
-      │    └── select
+      │    └── index-join t
       │         ├── columns: t.k:38!null t.r:39!null t.a:40 t.b:41!null
       │         ├── key: (38)
       │         ├── fd: ()-->(41), (38)-->(39,40)
-      │         ├── scan t@t_r_a_b_idx
-      │         │    ├── columns: t.k:38!null t.r:39!null t.a:40 t.b:41
-      │         │    ├── constraint: /39/40/41/38
-      │         │    │    ├── [/'east' - /'east']
-      │         │    │    └── [/'west' - /'west']
-      │         │    ├── key: (38)
-      │         │    └── fd: (38)-->(39-41)
-      │         └── filters
-      │              └── t.b:41 = 2 [outer=(41), constraints=(/41: [/2 - /2]; tight), fd=()-->(41)]
+      │         └── scan t@t_b_a_idx
+      │              ├── columns: t.k:38!null t.a:40 t.b:41!null
+      │              ├── constraint: /41/40/38: [/2 - /2]
+      │              ├── key: (38)
+      │              └── fd: ()-->(41), (38)-->(40)
       ├── fast-path-unique-checks-item: t(r,a,b)
       │    └── scan t@t_r_a_b_idx
       │         ├── columns: t.k:54!null t.r:55!null t.a:56!null t.b:57!null
