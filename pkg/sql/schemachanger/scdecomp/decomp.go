@@ -901,6 +901,7 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 			}
 		}
 	}
+	fnBody.UsesFunctionIDs = append(fnBody.UsesFunctionIDs, fnDesc.GetDependsOnFunctions()...)
 	for _, backRef := range fnDesc.GetDependedOnBy() {
 		w.backRefs.Add(backRef.ID)
 	}

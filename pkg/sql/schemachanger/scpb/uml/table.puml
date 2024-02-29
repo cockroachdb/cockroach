@@ -181,6 +181,7 @@ FunctionBody : []UsesTables
 FunctionBody : []UsesViews
 FunctionBody : []UsesSequenceIDs
 FunctionBody : []UsesTypeIDs
+FunctionBody : []UsesFunctionIDs
 
 object FunctionLeakProof
 
