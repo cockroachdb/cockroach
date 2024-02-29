@@ -135,10 +135,10 @@ RAISE NOTICE '_', x;
 END;
  -- literals removed
 DECLARE
-x INT8;
+_ INT8;
 BEGIN
 DECLARE
-y INT8;
+_ INT8;
 BEGIN
 RAISE NOTICE '% %', _, _;
 END;
@@ -184,7 +184,7 @@ RAISE NOTICE '_', x;
 END;
  -- literals removed
 DECLARE
-x INT8;
+_ INT8;
 BEGIN
 BEGIN
 _ := 100;
@@ -243,7 +243,7 @@ RAISE NOTICE '_', x;
 END;
  -- literals removed
 DECLARE
-x INT8;
+_ INT8;
 BEGIN
 BEGIN
 _ := 1 // 0;

@@ -78,9 +78,9 @@ RETURN res;
 END;
  -- literals removed
 DECLARE
-i INT8;
-n INT8 := _(_, 1);
-res INT8[] := ARRAY[]::INT8[];
+_ INT8;
+_ INT8 := _(_, 1);
+_ INT8[] := ARRAY[]::INT8[];
 BEGIN
 _ := 0;
 LOOP
