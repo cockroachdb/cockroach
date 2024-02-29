@@ -234,9 +234,7 @@ func TestTypeCheck(t *testing.T) {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
 			semaCtx := tree.MakeSemaContext()
-			if err := semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
-				t.Fatal(err)
-			}
+			semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */)
 			semaCtx.TypeResolver = mapResolver
 			typeChecked, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 			if err != nil {
@@ -413,9 +411,7 @@ func TestTypeCheckVolatility(t *testing.T) {
 
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
-	if err := semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes); err != nil {
-		t.Fatal(err)
-	}
+	semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
 
 	typeCheck := func(sql string) error {
 		expr, err := parser.ParseExpr(sql)
@@ -463,8 +459,7 @@ func TestTypeCheckCollatedString(t *testing.T) {
 
 	// Hint a normal string type for $1.
 	placeholderTypes := []*types.T{types.String}
-	err := semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
-	require.NoError(t, err)
+	semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
 
 	// The collated string constant must be on the LHS for this test, so that
 	// the type-checker chooses the collated string overload first.
@@ -516,8 +511,7 @@ func TestTypeCheckCaseExprWithPlaceholders(t *testing.T) {
 
 	// Hint all int4 types.
 	placeholderTypes := []*types.T{types.Int4, types.Int4, types.Int4, types.Int4, types.Int4}
-	err := semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
-	require.NoError(t, err)
+	semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
 
 	expr, err := parser.ParseExpr("case when 1 < $1 then $2 else $3 end = $4")
 	require.NoError(t, err)
@@ -539,8 +533,7 @@ func TestTypeCheckCaseExprWithConstantsAndUnresolvedPlaceholders(t *testing.T) {
 
 	// Hint all int4 types, but leave one of the THEN branches unhinted.
 	placeholderTypes := []*types.T{types.Int4, types.Int4, types.Int4, nil, types.Int4}
-	err := semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
-	require.NoError(t, err)
+	semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
 
 	expr, err := parser.ParseExpr("case when 1 < $1 then $2 when 1 < $3 then $4 else 3 end = $5")
 	require.NoError(t, err)
@@ -570,8 +563,7 @@ func TestTypeCheckArrayWithNullAndPlaceholder(t *testing.T) {
 	semaCtx.Properties.Require("", 0 /* flags */)
 
 	placeholderTypes := []*types.T{types.Int}
-	err := semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
-	require.NoError(t, err)
+	semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
 
 	expr, err := parser.ParseExpr("array[null, $1]::int[]")
 	require.NoError(t, err)
