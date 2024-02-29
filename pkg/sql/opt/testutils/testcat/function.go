@@ -82,7 +82,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	}
 
 	// Resolve the parameter names and types.
-	paramTypes := make(tree.ParamTypes, len(c.Params))
+	signatureTypes := make(tree.ParamTypes, 0, len(c.Params))
 	var outParamTypes []*types.T
 	var outParamNames []string
 	for i := range c.Params {
@@ -91,7 +91,14 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		if err != nil {
 			panic(err)
 		}
-		paramTypes.SetAt(i, string(param.Name), typ)
+		if c.IsProcedure || param.IsInParam() {
+			// For procedures all parameters are included into the signature,
+			// for UDFs - only IN / INOUT parameters.
+			signatureTypes = append(signatureTypes, tree.ParamType{
+				Name: string(param.Name),
+				Typ:  typ,
+			})
+		}
 		if param.IsOutParam() {
 			outParamTypes = append(outParamTypes, typ)
 			paramName := string(param.Name)
@@ -154,7 +161,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	tc.currUDFOid++
 	overload := &tree.Overload{
 		Oid:               tc.currUDFOid,
-		Types:             paramTypes,
+		Types:             signatureTypes,
 		ReturnType:        tree.FixedReturnType(retType),
 		Body:              body,
 		Volatility:        v,

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql"
 	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	ast "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -151,14 +152,26 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		b.semaCtx.Annotations = oldSemaCtxAnn
 	}
 
-	paramNameSeenIn, paramNameSeenOut := make(map[tree.Name]struct{}), make(map[tree.Name]struct{})
-	for _, param := range cf.Params {
-		if param.Name != "" {
-			if param.IsInParam() {
-				checkDuplicateParamName(param, paramNameSeenIn)
+	// TODO(100405): check this logic for procedures.
+	if language == tree.RoutineLangPLpgSQL {
+		paramNameSeen := make(map[tree.Name]struct{})
+		for _, param := range cf.Params {
+			if param.Name != "" {
+				checkDuplicateParamName(param, paramNameSeen)
 			}
-			if param.IsOutParam() {
-				checkDuplicateParamName(param, paramNameSeenOut)
+		}
+	} else {
+		// For SQL routines, input and output parameters form separate
+		// "namespaces".
+		paramNameSeenIn, paramNameSeenOut := make(map[tree.Name]struct{}), make(map[tree.Name]struct{})
+		for _, param := range cf.Params {
+			if param.Name != "" {
+				if param.IsInParam() {
+					checkDuplicateParamName(param, paramNameSeenIn)
+				}
+				if param.IsOutParam() {
+					checkDuplicateParamName(param, paramNameSeenOut)
+				}
 			}
 		}
 	}
@@ -167,11 +180,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	// named parameters to the scope so that references to them in the body can
 	// be resolved.
 	bodyScope := b.allocScope()
-	var paramTypes tree.ParamTypes
+	// routineParams are all parameters of PLpgSQL routines.
+	var routineParams []routineParam
 	var outParamTypes []*types.T
 	// When multiple OUT parameters are present, parameter names become the
 	// labels in the output RECORD type.
-	// TODO(#100405): this needs to be checked for PLpgSQL routines.
 	var outParamNames []string
 	for i := range cf.Params {
 		param := &cf.Params[i]
@@ -201,10 +214,14 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			}
 		}
 
-		// Add the parameter to the base scope of the body.
-		paramColName := funcParamColName(param.Name, i)
-		col := b.synthesizeColumn(bodyScope, paramColName, typ, nil /* expr */, nil /* scalar */)
-		col.setParamOrd(i)
+		// Add this parameter to the base scope of the body if needed (for
+		// procedures all parameters are needed, for UDFs - only IN / INOUT
+		// parameters).
+		if cf.IsProcedure || param.IsInParam() {
+			paramColName := funcParamColName(param.Name, i)
+			col := b.synthesizeColumn(bodyScope, paramColName, typ, nil /* expr */, nil /* scalar */)
+			col.setParamOrd(i)
+		}
 
 		// Collect the user defined type dependencies.
 		typedesc.GetTypeDescriptorClosure(typ).ForEach(func(id descpb.ID) {
@@ -213,9 +230,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 		// Collect the parameters for PLpgSQL routines.
 		if language == tree.RoutineLangPLpgSQL {
-			paramTypes = append(paramTypes, tree.ParamType{
-				Name: param.Name.String(),
-				Typ:  typ,
+			routineParams = append(routineParams, routineParam{
+				name:  param.Name,
+				typ:   typ,
+				class: param.Class,
 			})
 		}
 	}
@@ -319,15 +337,21 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if err != nil {
 			panic(err)
 		}
+		if len(stmt.AST.Body) > 0 {
+			lastStmt := stmt.AST.Body[len(stmt.AST.Body)-1]
+			if _, hasReturn := lastStmt.(*ast.Return); hasReturn && len(outParamTypes) > 0 {
+				panic(returnWithOUTParameterErr)
+			}
+		}
 
 		// We need to disable stable function folding because we want to catch the
 		// volatility of stable functions. If folded, we only get a scalar and lose
 		// the volatility.
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 			plBuilder := newPLpgSQLBuilder(
-				b, cf.Name.Object(), nil /* colRefs */, paramTypes, funcReturnType,
+				b, cf.Name.Object(), nil /* colRefs */, routineParams, funcReturnType,
 			)
-			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope)
+			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})
 		checkStmtVolatility(targetVolatility, stmtScope, stmt)
 
