@@ -633,6 +633,7 @@ RANGE liveness                                                                  
 RANGE meta                                                                         meta      NULL         NULL                          NULL           NULL
 RANGE system                                                                       system    NULL         NULL                          NULL           NULL
 TABLE "my database".public."my table"                                              NULL      my database  my table                      NULL           NULL
+TABLE system.public.lease                                                          NULL      system       lease                         NULL           NULL
 TABLE system.public.replication_constraint_stats                                   NULL      system       replication_constraint_stats  NULL           NULL
 TABLE system.public.replication_stats                                              NULL      system       replication_stats             NULL           NULL
 TABLE system.public.span_stats_tenant_boundaries                                   NULL      system       span_stats_tenant_boundaries  NULL           NULL

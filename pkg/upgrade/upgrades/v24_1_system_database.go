@@ -79,6 +79,27 @@ ALTER DATABASE system SURVIVE REGION FAILURE;
 		}); err != nil {
 			return err
 		}
+
+		// Setup the GC TTL on the system.lease table if one has not been
+		// set yet.
+		if err := deps.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			zoneCfg, err := txn.Descriptors().GetZoneConfig(ctx, txn.KV(), keys.LeaseTableID)
+			if err != nil {
+				return err
+			}
+			if zoneCfg == nil ||
+				zoneCfg.ZoneConfigProto().GC == nil {
+				_, err := txn.ExecEx(ctx,
+					"setup-lease-table-ttl",
+					txn.KV(), /* txn */
+					sessiondata.NodeUserSessionDataOverride,
+					"ALTER TABLE system.lease  CONFIGURE ZONE USING gc.ttlseconds=600")
+				return err
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
 		return nil
 	}
 	return bumpSystemDatabaseSchemaVersion(ctx, cv, deps)

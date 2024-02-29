@@ -545,6 +545,10 @@ func InitialZoneConfigKVs(
 	// Liveness zone config entry with a shorter GC time.
 	livenessZoneConf.GC.TTLSeconds = 10 * 60 // 10m
 
+	// Lease table zone config
+	leaseZoneConfig := zonepb.NewZoneConfig()
+	leaseZoneConfig.GC = &zonepb.GCPolicy{TTLSeconds: 10 * 60}
+
 	add(keys.MetaRangesID, metaRangeZoneConf)
 	add(keys.LivenessRangesID, livenessZoneConf)
 	add(keys.SystemRangesID, systemZoneConf)
@@ -552,6 +556,7 @@ func InitialZoneConfigKVs(
 	add(keys.ReplicationConstraintStatsTableID, replicationConstraintStatsZoneConf)
 	add(keys.ReplicationStatsTableID, replicationStatsZoneConf)
 	add(keys.TenantUsageTableID, tenantUsageZoneConf)
+	add(keys.LeaseTableID, leaseZoneConfig)
 
 	return ret
 }

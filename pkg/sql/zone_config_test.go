@@ -211,7 +211,6 @@ func TestGetZoneConfig(t *testing.T) {
 	verifyZoneConfigs([]testCase{
 		{0, nil, "", defaultZoneConfig},
 		{1, nil, "", defaultZoneConfig},
-		{keys.DeprecatedMaxSystemConfigDescID + 1, nil, "", defaultZoneConfig},
 		{db1, nil, "", defaultZoneConfig},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", defaultZoneConfig},
@@ -295,7 +294,6 @@ func TestGetZoneConfig(t *testing.T) {
 	verifyZoneConfigs([]testCase{
 		{0, nil, "", defaultZoneConfig},
 		{1, nil, "", defaultZoneConfig},
-		{keys.DeprecatedMaxSystemConfigDescID + 1, nil, "", defaultZoneConfig},
 		{db1, nil, "", db1Cfg},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", tb11Cfg},
@@ -448,7 +446,6 @@ func TestCascadingZoneConfig(t *testing.T) {
 	verifyZoneConfigs([]testCase{
 		{0, nil, "", defaultZoneConfig},
 		{1, nil, "", defaultZoneConfig},
-		{keys.DeprecatedMaxSystemConfigDescID + 1, nil, "", defaultZoneConfig},
 		{db1, nil, "", defaultZoneConfig},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", defaultZoneConfig},
@@ -577,7 +574,6 @@ func TestCascadingZoneConfig(t *testing.T) {
 	verifyZoneConfigs([]testCase{
 		{0, nil, "", defaultZoneConfig},
 		{1, nil, "", defaultZoneConfig},
-		{keys.DeprecatedMaxSystemConfigDescID + 1, nil, "", defaultZoneConfig},
 		{db1, nil, "", expectedDb1Cfg},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", expectedTb11Cfg},
