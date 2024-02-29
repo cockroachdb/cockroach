@@ -898,6 +898,8 @@ func createImportingDescriptors(
 
 			if eligible, err := backedUpDescriptorWithInProgressImportInto(ctx, p, desc); err != nil {
 				return nil, nil, nil, err
+			} else if eligible && r.job.Details().(jobspb.RestoreDetails).ExperimentalOnline {
+				return nil, nil, nil, errors.Newf("table %s (id %d) has an in-progress import, but online restore cannot be run on a table with an in progress import.", desc.GetName(), desc.GetID())
 			} else if !eligible {
 				continue
 			}
