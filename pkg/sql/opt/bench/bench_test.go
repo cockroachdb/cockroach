@@ -746,9 +746,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 		}
 	}
 
-	if err := h.semaCtx.Placeholders.Init(len(query.args), nil /* typeHints */); err != nil {
-		tb.Fatal(err)
-	}
+	h.semaCtx.Placeholders.Init(len(query.args), nil /* typeHints */)
 	// Run optbuilder to build the memo for Prepare. Even if we will not be using
 	// the Prepare method, we still want to run the optbuilder to infer any
 	// placeholder types.
