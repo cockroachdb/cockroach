@@ -15,7 +15,7 @@
 package raft
 
 import (
-	pb "go.etcd.io/raft/v3/raftpb"
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 func applyToStore(_ []pb.Entry)      {}
