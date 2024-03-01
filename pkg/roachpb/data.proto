@@ -128,6 +128,9 @@ message SplitTrigger {
 
   RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
   RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
+  // Pre-computed stats for the LHS spans corresponding to user data.
+  // Used in splitTrigger to estimate the LHS range's MVCC stats.
+  storage.enginepb.MVCCStats pre_split_left_user_stats = 5 [(gogoproto.nullable) = false];
 
   reserved 3, 4;
 }
