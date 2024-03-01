@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/olekukonko/tablewriter"
@@ -119,6 +121,13 @@ func createRangeData(
 			TxnUUID:  testTxnID,
 		},
 	}
+	lockMeta := enginepb.MVCCMetadata{
+		Txn:      &enginepb.TxnMeta{ID: testTxnID},
+		KeyBytes: storage.MVCCVersionTimestampSize,
+		ValBytes: int64(len(value.RawBytes)),
+	}
+	lockVal, err := protoutil.Marshal(&lockMeta)
+	require.NoError(t, err)
 
 	rs = append(rs, storage.MVCCRangeKey{ // emitted last because we emit all point keys before range keys
 		StartKey:  desc.StartKey.AsRawKey().Clone(),
@@ -135,7 +144,7 @@ func createRangeData(
 	}
 	for _, l := range locks {
 		sl, _ := l.ToEngineKey(nil)
-		require.NoError(t, eng.PutEngineKey(sl, []byte("fake lock")))
+		require.NoError(t, eng.PutEngineKey(sl, lockVal))
 	}
 
 	return ps, rs
