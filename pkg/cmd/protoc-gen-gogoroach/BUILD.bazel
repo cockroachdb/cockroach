@@ -31,7 +31,6 @@ go_proto_compiler(
         # the protoc invocation in the Makefile, with a couple custom options
         # that fix compilation errors under Bazel as well. Without the
         # -M options, the generated code will import the wrong go packages.
-        "Mraft/v3/raftpb/raft.proto=go.etcd.io/raft/v3/raftpb",
         "Merrorspb/errors.proto=github.com/cockroachdb/errors/errorspb",
         "Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types",
         "Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types",
@@ -53,7 +52,6 @@ go_proto_compiler(
     name = "protoc-gen-gogoroach_grpc_compiler",
     options = [
         "plugins=grpc",
-        "Mraft/v3/raftpb/raft.proto=go.etcd.io/raft/v3/raftpb",
         "Merrorspb/errors.proto=github.com/cockroachdb/errors/errorspb",
         "Mgoogle/api/annotations.proto=google.golang.org/genproto/googleapis/api/annotations",
         "Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types",

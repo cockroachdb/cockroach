@@ -42,8 +42,6 @@ exports_files([
 # gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/internal @com_github_grpc_ecosystem_grpc_gateway//internal
 # gazelle:resolve proto proto errorspb/errors.proto @com_github_cockroachdb_errors//errorspb:errorspb_proto
 # gazelle:resolve proto go errorspb/errors.proto @com_github_cockroachdb_errors//errorspb
-# gazelle:resolve proto proto raft/v3/raftpb/raft.proto @io_etcd_go_raft_v3//raftpb:raftpb_proto
-# gazelle:resolve proto go raft/v3/raftpb/raft.proto @io_etcd_go_raft_v3//raftpb
 # gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto
 # gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto
 # gazelle:resolve proto proto google/api/annotations.proto @go_googleapis//google/api:annotations_proto

@@ -17,6 +17,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -30,7 +31,6 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
-        "@io_etcd_go_raft_v3//raftpb",
         "@org_golang_x_time//rate",
     ],
 )
