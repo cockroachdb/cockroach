@@ -851,9 +851,19 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	require.GreaterOrEqual(t, msLeft.RangeValBytes+msRight.RangeValBytes, ms.RangeValBytes)
 	require.GreaterOrEqual(t, msLeft.GCBytesAge+msRight.GCBytesAge, ms.GCBytesAge)
 
-	// Stats should agree with recomputation.
+	// Stats should agree with re-computation.
 	assertRecomputedStats(t, "LHS after split", snap, repl.Desc(), msLeft, s.Clock().PhysicalNow())
 	assertRecomputedStats(t, "RHS after split", snap, replRight.Desc(), msRight, s.Clock().PhysicalNow())
+	// Expect estimates if the cluster setting is enabled and neither side is empty.
+	expectEstimates := kvserver.EnableEstimatedMVCCStatsInSplit.Get(&store.ClusterSettings().SV) &&
+		msLeft.Total() > 0 && msRight.Total() > 0
+	if expectEstimates {
+		// The LHS gets ContainsEstimates = 1 from the split, which is then multiplied
+		// by 2 in evaluateProposal for migration reasons.
+		require.Equal(t, msLeft.ContainsEstimates, int64(2))
+		// The RHS gets ContainsEstimates = 1 from the split.
+		require.Equal(t, msRight.ContainsEstimates, int64(1))
+	}
 
 	// Merge the ranges back together, and assert that the merged stats
 	// agree with the pre-split stats.
@@ -871,6 +881,13 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 
 	msMerged.SysBytes, msMerged.SysCount, msMerged.AbortSpanBytes = 0, 0, 0
 	ms.AgeTo(msMerged.LastUpdateNanos)
+	if expectEstimates {
+		// The stats delta accumulated by the merge has ContainsEstimates = 1 (from the
+		// RHS stats). It gets multiplied by 2 in evaluateProposal for migration
+		// reasons, and then added to the LHS stats, which has ContainsEstimates = 2
+		// from above.
+		ms.ContainsEstimates = 4
+	}
 	require.Equal(t, ms, msMerged, "post-merge stats differ from pre-split")
 }
 
@@ -881,7 +898,9 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 // The test writes some data, then initiates a split and pauses it before the
 // EndTxn request with the split trigger is evaluated. Then, it writes some more
 // data, and unpauses the split. The MVCC stats for the two new ranges should
-// agree with a re-computation.
+// agree with a re-computation. If the split computes accurate stats, the MVCC
+// stats for the two new ranges should agree with a re-computation. Otherwise,
+// we expect ContainsEstimates.
 func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -903,65 +922,127 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 		return nil
 	}
 
-	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue:    true,
-				DisableSplitQueue:    true,
-				TestingRequestFilter: filter,
-			},
-		},
+	testutils.RunTrueAndFalse(t, "estimates", func(t *testing.T, estimates bool) {
+		testutils.RunTrueAndFalse(t, "recompute", func(t *testing.T, recompute bool) {
+			settings := cluster.MakeTestingClusterSettings()
+			kvserver.EnableEstimatedMVCCStatsInSplit.Override(context.Background(), &settings.SV, estimates)
+			kvserver.EnableMVCCStatsRecomputationInSplit.Override(context.Background(), &settings.SV, recompute)
+
+			ctx := context.Background()
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						DisableMergeQueue:    true,
+						DisableSplitQueue:    true,
+						TestingRequestFilter: filter,
+					},
+				},
+				Settings: settings,
+			})
+
+			defer s.Stopper().Stop(ctx)
+			store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+			require.NoError(t, err)
+
+			// Write some initial data to the future LHS.
+			_, pErr := kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("a"), []byte("foo")))
+			require.NoError(t, pErr.GoError())
+			// Write some initial data to the future RHS.
+			_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("c"), []byte("bar")))
+			require.NoError(t, pErr.GoError())
+
+			splitKeyAddr, err := keys.Addr(splitKey)
+			require.NoError(t, err)
+			lhsRepl := store.LookupReplica(splitKeyAddr)
+
+			// Split the range.
+			g := ctxgroup.WithContext(ctx)
+			g.GoCtx(func(ctx context.Context) error {
+				_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKey))
+				return pErr.GoError()
+			})
+
+			// Wait until split is underway.
+			<-splitBlocked
+
+			// Write some more data to both sides.
+			_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("aa"), []byte("foo")))
+			require.NoError(t, pErr.GoError())
+			_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("cc"), []byte("bar")))
+			require.NoError(t, pErr.GoError())
+
+			// Unblock the split.
+			splitBlocked <- struct{}{}
+
+			// Wait for the split to complete.
+			require.Nil(t, g.Wait())
+
+			snap := store.TODOEngine().NewSnapshot()
+			defer snap.Close()
+			lhsStats, err := stateloader.Make(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+			require.NoError(t, err)
+			rhsRepl := store.LookupReplica(splitKeyAddr)
+			rhsStats, err := stateloader.Make(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+			require.NoError(t, err)
+			// If the split is producing estimates, expect non-zero ContainsEstimates.
+			if estimates {
+				require.Greater(t, lhsStats.ContainsEstimates, int64(0))
+				require.Greater(t, rhsStats.ContainsEstimates, int64(0))
+			} else {
+				// Otherwise, the stats should agree with re-computation.
+				assertRecomputedStats(t, "LHS after split", snap, lhsRepl.Desc(), lhsStats, s.Clock().PhysicalNow())
+				assertRecomputedStats(t, "RHS after split", snap, rhsRepl.Desc(), rhsStats, s.Clock().PhysicalNow())
+			}
+
+			// If we used estimated stats while splitting the range, the stats on disk
+			// will not match the stats recomputed from the range. We expect both of the
+			// concurrent writes to be attributed to the RHS (instead of 1 to the LHS and
+			// 1 th the RHS). But if we split these ranges one more time (no concurrent
+			// writes this time), we expect the stats to be corrected and not drift
+			// (when recompute = true).
+			splitKeyLeft := roachpb.Key("aa")
+			splitKeyLeftAddr, err := keys.Addr(splitKeyLeft)
+			require.NoError(t, err)
+			_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKeyLeft))
+			require.NoError(t, pErr.GoError())
+			splitKeyRight := roachpb.Key("bb")
+			splitKeyRightAddr, err := keys.Addr(splitKeyRight)
+			require.NoError(t, err)
+			_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKeyRight))
+			require.NoError(t, pErr.GoError())
+
+			snap = store.TODOEngine().NewSnapshot()
+			defer snap.Close()
+			lhs1Stats, err := stateloader.Make(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+			require.NoError(t, err)
+			lhs2Repl := store.LookupReplica(splitKeyLeftAddr)
+			lhs2Stats, err := stateloader.Make(lhs2Repl.RangeID).LoadMVCCStats(ctx, snap)
+			require.NoError(t, err)
+			rhs1Stats, err := stateloader.Make(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+			require.NoError(t, err)
+			rhs2Repl := store.LookupReplica(splitKeyRightAddr)
+			rhs2Stats, err := stateloader.Make(rhs2Repl.RangeID).LoadMVCCStats(ctx, snap)
+			require.NoError(t, err)
+
+			// Stats should agree with re-computation unless we're producing
+			// estimates and not re-computing stats at the beginning of splits.
+			expectIncorrectStats := estimates && !recompute
+			if !expectIncorrectStats {
+				assertRecomputedStats(t, "LHS1 after second split", snap, lhsRepl.Desc(), lhs1Stats, s.Clock().PhysicalNow())
+				assertRecomputedStats(t, "LHS2 after second split", snap, lhs2Repl.Desc(), lhs2Stats, s.Clock().PhysicalNow())
+				assertRecomputedStats(t, "RHS1 after second split", snap, rhsRepl.Desc(), rhs1Stats, s.Clock().PhysicalNow())
+				assertRecomputedStats(t, "RHS2 after second split", snap, rhs2Repl.Desc(), rhs2Stats, s.Clock().PhysicalNow())
+			}
+			if estimates {
+				require.Greater(t, lhs1Stats.ContainsEstimates, int64(0))
+				require.Greater(t, lhs2Stats.ContainsEstimates, int64(0))
+				// The range corresponding to rhs1Stats is empty, so the split of the
+				// original RHS fell back to accurate-stats computation.
+				require.Equal(t, int64(0), rhs1Stats.ContainsEstimates)
+				require.Equal(t, int64(0), rhs2Stats.ContainsEstimates)
+			}
+		})
 	})
-
-	defer s.Stopper().Stop(ctx)
-	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
-	require.NoError(t, err)
-
-	// Write some initial data to the future LHS.
-	_, pErr := kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("a"), []byte("foo")))
-	require.NoError(t, pErr.GoError())
-	// Write some initial data to the future RHS.
-	_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("c"), []byte("bar")))
-	require.NoError(t, pErr.GoError())
-
-	splitKeyAddr, err := keys.Addr(splitKey)
-	require.NoError(t, err)
-	lhsRepl := store.LookupReplica(splitKeyAddr)
-
-	// Split the range.
-	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
-		_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKey))
-		return pErr.GoError()
-	})
-
-	// Wait until split is underway.
-	<-splitBlocked
-
-	// Write some more data to both sides.
-	_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("aa"), []byte("foo")))
-	require.NoError(t, pErr.GoError())
-	_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("cc"), []byte("bar")))
-	require.NoError(t, pErr.GoError())
-
-	// Unblock the split.
-	splitBlocked <- struct{}{}
-
-	// Wait for the split to complete.
-	require.Nil(t, g.Wait())
-
-	snap := store.TODOEngine().NewSnapshot()
-	defer snap.Close()
-	lhsStats, err := stateloader.Make(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
-	require.NoError(t, err)
-	rhsRepl := store.LookupReplica(splitKeyAddr)
-	rhsStats, err := stateloader.Make(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
-	require.NoError(t, err)
-
-	// Stats should agree with re-computation.
-	assertRecomputedStats(t, "LHS after split", snap, lhsRepl.Desc(), lhsStats, s.Clock().PhysicalNow())
-	assertRecomputedStats(t, "RHS after split", snap, rhsRepl.Desc(), rhsStats, s.Clock().PhysicalNow())
 }
 
 // RaftMessageHandlerInterceptor wraps a storage.IncomingRaftMessageHandler. It
@@ -1116,9 +1197,15 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	require.Less(t, start.WallTime, msLeft.LastUpdateNanos, "LHS stats have old timestamp")
 	require.Less(t, start.WallTime, msRight.LastUpdateNanos, "RHS stats have old timestamp")
 
-	// Stats should agree with recomputation.
-	assertRecomputedStats(t, "LHS after split", snap, repl.Desc(), msLeft, s.Clock().PhysicalNow())
-	assertRecomputedStats(t, "RHS after split", snap, replRight.Desc(), msRight, s.Clock().PhysicalNow())
+	// Stats should agree with re-computation because generally the split will
+	// correct the estimated time-series stats. This is not true if the split is
+	// estimating stats and not re-computing them in AdminSplit.
+	estimates := kvserver.EnableEstimatedMVCCStatsInSplit.Get(&store.ClusterSettings().SV)
+	recompute := kvserver.EnableMVCCStatsRecomputationInSplit.Get(&store.ClusterSettings().SV)
+	if !estimates || (estimates && recompute) {
+		assertRecomputedStats(t, "LHS after split", snap, repl.Desc(), msLeft, s.Clock().PhysicalNow())
+		assertRecomputedStats(t, "RHS after split", snap, replRight.Desc(), msRight, s.Clock().PhysicalNow())
+	}
 }
 
 // fillRange writes keys with the given prefix and associated values
