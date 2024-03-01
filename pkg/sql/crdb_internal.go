@@ -2671,10 +2671,13 @@ func populateQueriesTable(
 	addRow func(...tree.Datum) error,
 	response *serverpb.ListSessionsResponse,
 ) error {
-	shouldRedactQuery := false
+	shouldRedactOtherUserQuery := false
+	canViewOtherUser := false
 	// Check if the user is admin.
 	if isAdmin, err := p.HasAdminRole(ctx); err != nil {
 		return err
+	} else if isAdmin {
+		canViewOtherUser = true
 	} else if !isAdmin {
 		// If the user is not admin, check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED
 		// privileges.
@@ -2683,16 +2686,24 @@ func populateQueriesTable(
 		} else if hasViewActivityRedacted {
 			// If the user has VIEWACTIVITYREDACTED, redact the query as it takes precedence
 			// over VIEWACTIVITY.
-			shouldRedactQuery = true
-		} else if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
-			return err
-		} else if !hasViewActivity {
-			// If the user is not admin and does not have VIEWACTIVITY or VIEWACTIVITYREDACTED,
-			// return insufficient privileges error.
-			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+			shouldRedactOtherUserQuery = true
+			canViewOtherUser = true
+		} else if !hasViewActivityRedacted {
+			if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
+				return err
+			} else if hasViewActivity {
+				canViewOtherUser = true
+			}
 		}
 	}
 	for _, session := range response.Sessions {
+		normalizedUser, err := username.MakeSQLUsernameFromUserInput(session.Username, username.PurposeValidation)
+		if err != nil {
+			return err
+		}
+		if !canViewOtherUser && normalizedUser != p.User() {
+			continue
+		}
 		sessionID := getSessionID(session)
 		for _, query := range session.ActiveQueries {
 			isDistributedDatum := tree.DNull
@@ -2736,8 +2747,9 @@ func populateQueriesTable(
 
 			// Interpolate placeholders into the SQL statement.
 			sql := formatActiveQuery(query)
-			// If the user does not have the correct privileges, show the query without literals or constants.
-			if shouldRedactQuery {
+			// If the user does not have the correct privileges, show the query
+			// without literals or constants.
+			if shouldRedactOtherUserQuery && session.Username != p.SessionData().User().Normalized() {
 				sql = query.SqlNoConstants
 			}
 			if err := addRow(
