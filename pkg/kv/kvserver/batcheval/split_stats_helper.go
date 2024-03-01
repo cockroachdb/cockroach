@@ -133,6 +133,24 @@ type splitStatsHelperInput struct {
 	// input stats contain estimates, this is the only side that needs to
 	// be scanned.
 	ScanRightFirst bool
+	// LeftIsEmpty denotes that the left hand side is empty. If this is the case,
+	// the entire left hand side will be scanned to compute stats accurately. This
+	// is cheap because the range is empty.
+	LeftIsEmpty bool
+	// RightIsEmpty denotes that the right hand side is empty. If this is the
+	// case, the entire right hand side will be scanned to compute stats
+	// accurately. This is cheap because the range is empty.
+	RightIsEmpty bool
+	// PreSplitLeftUser contains the pre-split user-only stats of the left hand
+	// side. Those are expensive to compute, so we compute them in AdminSplit,
+	// before holding latches, and pass them to splitTrigger.
+	PreSplitLeftUser enginepb.MVCCStats
+	// PostSplitScanLocalLeftFn returns the stats for the non-user spans of the
+	// left hand side. Adding these to PreSplitLeftUser results in an estimate of
+	// the left hand side stats. It's only an estimate because any writes to the
+	// user spans of the left hand side, concurrent with the split, may not be
+	// accounted for.
+	PostSplitScanLocalLeftFn splitStatsScanFn
 }
 
 // makeSplitStatsHelper initializes a splitStatsHelper. The values in the input
@@ -191,6 +209,89 @@ func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error)
 	if err != nil {
 		return splitStatsHelper{}, err
 	}
+	return h, nil
+}
+
+// makeEstimatedSplitStatsHelper is like makeSplitStatsHelper except it does
+// not scan the entire LHS or RHS by calling PostSplitScan(Left|Right)Fn().
+// Instead, this function derives the post-split LHS stats by adding
+// the pre-split user LHS stats to the non-user LHS stats computed here by
+// calling PostSplitScanLocalLeftFn(). The resulting stats are not guaranteed
+// to be 100% accurate, so they are marked with ContainsEstimates. However,
+// if there are no writes concurrent with the split (i.e. the pre-computed
+// PreSplitLeftUser still correspond to the correct LHS user stats), then the
+// stats are guaranteed to be correct.
+// INVARIANT 1: Non-user stats (SysBytes, SysCount, etc.) are always correct.
+// This is because we scan those spans while holding latches in this function.
+// INVARIANT 2: If there are no writes concurrent with the split, the stats are
+// always correct.
+func makeEstimatedSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error) {
+	h := splitStatsHelper{
+		in: input,
+	}
+
+	// Fast path: if both ranges are guaranteed to be empty, just scan them and
+	// return early. They do not contain estimates.
+	if h.in.LeftIsEmpty && h.in.RightIsEmpty {
+		leftStats, err := input.PostSplitScanLeftFn()
+		if err != nil {
+			return splitStatsHelper{}, err
+		}
+		h.absPostSplitLeft = &leftStats
+		rightStats, err := input.PostSplitScanRightFn()
+		if err != nil {
+			return splitStatsHelper{}, err
+		}
+		h.absPostSplitRight = &rightStats
+		return h, nil
+	}
+
+	var absPostSplitFirst enginepb.MVCCStats
+	var err error
+	// If either the RHS or LHS is empty, scan it (it's cheap).
+	if h.in.RightIsEmpty {
+		absPostSplitFirst, err = input.PostSplitScanRightFn()
+		h.absPostSplitRight = &absPostSplitFirst
+	} else if h.in.LeftIsEmpty {
+		absPostSplitFirst, err = input.PostSplitScanLeftFn()
+		h.absPostSplitLeft = &absPostSplitFirst
+	} else {
+		// Otherwise, compute the LHS stats by adding the user-only LHS stats passed
+		// into the split trigger and the non-user LHS stats computed by calling
+		// PostSplitScanLocalLeftFn(). The local key space is very small, so this is
+		// not expensive. Scanning the local key space ensures that any writes to
+		// local keys during the split (e.g. to range descriptors and transaction
+		// records) are accounted for.
+		absPostSplitFirst, err = input.PostSplitScanLocalLeftFn()
+		absPostSplitFirst.Add(input.PreSplitLeftUser)
+		h.absPostSplitLeft = &absPostSplitFirst
+	}
+	if err != nil {
+		return splitStatsHelper{}, err
+	}
+
+	// For the second side of the split, the computation is identical to that in
+	// makeSplitStatsHelper: subtract the first side's stats from the total, and
+	// adjust DeltaBatchEstimated and DeltaRangeKey.
+	ms := h.in.AbsPreSplitBothStored
+	ms.Subtract(absPostSplitFirst)
+	ms.Add(h.in.DeltaBatchEstimated)
+	ms.Add(h.in.DeltaRangeKey)
+	if h.in.RightIsEmpty {
+		h.absPostSplitLeft = &ms
+	} else {
+		h.absPostSplitRight = &ms
+	}
+
+	// Mark the new stats with ContainsEstimates only if the corresponding range
+	// is not empty.
+	if !h.in.LeftIsEmpty {
+		h.absPostSplitLeft.ContainsEstimates++
+	}
+	if !h.in.RightIsEmpty {
+		h.absPostSplitRight.ContainsEstimates++
+	}
+
 	return h, nil
 }
 

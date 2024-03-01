@@ -130,6 +130,9 @@ message SplitTrigger {
   RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
 
   reserved 3, 4;
+  // Pre-computed stats for the LHS spans corresponding to user data.
+  // Used in splitTrigger to estimate the LHS range's MVCC stats.
+  storage.enginepb.MVCCStats pre_split_left_user_stats = 5 [(gogoproto.nullable) = false];
 }
 
 // A MergeTrigger is run after a successful commit of an AdminMerge

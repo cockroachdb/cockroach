@@ -202,10 +202,6 @@ WHERE 'kv' IN (
 					for _, id := range rangeIDs {
 						stats := getRangeStats(t, id)
 						t.Logf("range %d stats: %s", id, &stats)
-						// Test can't give meaningful results if stats contain estimates.
-						// Test also doesn't perform any operations that result in estimated stats
-						// being created, so it is a failure in the environment if that happens.
-						require.Zerof(t, stats.ContainsEstimates, "we must not have estimates")
 						if stats.RangeKeyCount > 0 || stats.KeyCount > 0 {
 							nonEmptyRangeIDs = append(nonEmptyRangeIDs, id)
 						}
