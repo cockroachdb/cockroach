@@ -5,7 +5,6 @@ go_library(
     name = "rowexec",
     srcs = [
         "aggregator.go",
-        "backfiller.go",
         "bulk_row_writer.go",
         "columnbackfiller.go",
         "countrows.go",
