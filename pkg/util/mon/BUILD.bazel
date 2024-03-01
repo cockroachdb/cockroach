@@ -13,6 +13,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/ioctx",
@@ -22,6 +23,7 @@ go_library(
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_dustin_go_humanize//:go-humanize",
     ],
 )
 

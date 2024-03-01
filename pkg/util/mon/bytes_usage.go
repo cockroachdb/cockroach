@@ -12,12 +12,15 @@ package mon
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
+	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -27,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
 // BoundAccount and BytesMonitor together form the mechanism by which
@@ -226,6 +230,8 @@ type BytesMonitor struct {
 		// NB: this field doesn't need mutex protection but is inside of mu
 		// struct in order to reduce the struct size.
 		rootSQLMonitor bool
+
+		longLiving bool
 	}
 
 	// parentMu encompasses the fields that must be accessed while holding the
@@ -319,6 +325,7 @@ type MonitorState struct {
 	// ReservedReserved is amount of bytes reserved in the reserved account, or
 	// 0 if no reserved account was provided in Start.
 	ReservedReserved int64
+	LongLiving       bool
 }
 
 // TraverseTree traverses the tree of monitors rooted in the BytesMonitor. The
@@ -361,6 +368,7 @@ func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState
 		Used:             mm.mu.curAllocated,
 		ReservedUsed:     reservedUsed,
 		ReservedReserved: reservedReserved,
+		LongLiving:       mm.mu.longLiving,
 	}
 	// Note that we cannot call traverseTree on the children while holding mm's
 	// lock since it could lead to deadlocks. Instead, we store all children as
@@ -582,11 +590,53 @@ func (mm *BytesMonitor) Limit() int64 {
 	return mm.limit
 }
 
+func (mm *BytesMonitor) MarkLongLiving() {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	mm.mu.longLiving = true
+}
+
 const bytesMaxUsageLoggingThreshold = 100 * 1024
+
+func getMonitorStateCb(f io.Writer, numShortLiving *int) func(state MonitorState) error {
+	return func(s MonitorState) error {
+		if s.LongLiving {
+			return nil
+		}
+		*numShortLiving++
+		info := fmt.Sprintf("%s%s %s", strings.Repeat(" ", 4*s.Level), s.Name, humanize.IBytes(uint64(s.Used)))
+		if s.ReservedUsed != 0 || s.ReservedReserved != 0 {
+			info += fmt.Sprintf(" (%s / %s)", humanize.IBytes(uint64(s.ReservedUsed)), humanize.IBytes(uint64(s.ReservedReserved)))
+		}
+		if _, err := f.Write([]byte(info)); err != nil {
+			return err
+		}
+		_, err := f.Write([]byte{'\n'})
+		return err
+	}
+}
 
 func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
+	if buildutil.CrdbTestBuild {
+		// We expect that all short-living descendants of this monitor are
+		// closed.
+		if mm.mu.head != nil {
+			mm.mu.Unlock()
+			var sb strings.Builder
+			var numShortLiving int
+			_ = mm.TraverseTree(getMonitorStateCb(&sb, &numShortLiving))
+			mm.mu.Lock()
+			if numShortLiving > 1 {
+				// Ignore mm itself - it hasn't been marked as stopped yet.
+				panic(errors.AssertionFailedf(
+					"found %d short-living non-stopped monitors in %s\n%s",
+					numShortLiving-1, mm.name, sb.String(),
+				))
+			}
+		}
+	}
 	mm.mu.stopped = true
 
 	if log.V(1) && mm.mu.maxAllocated >= bytesMaxUsageLoggingThreshold {
