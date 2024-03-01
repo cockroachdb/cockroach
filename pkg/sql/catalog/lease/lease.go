@@ -639,7 +639,7 @@ func acquireNodeLease(
 			var session sqlliveness.Session
 			if m.sessionBasedLeasingModeAtLeast(ctx, SessionBasedDualWrite) {
 				var err error
-				session, err = m.livenessProvider.Session(ctx)
+				session, err = m.storage.livenessProvider.Session(ctx)
 				if err != nil {
 					return false, errors.Wrapf(err, "lease acquisition was unable to resolve liveness session")
 				}
@@ -850,7 +850,6 @@ type Manager struct {
 	rangeFeedFactory *rangefeed.Factory
 	storage          storage
 	settings         *cluster.Settings
-	livenessProvider sqlliveness.Provider
 	mu               struct {
 		syncutil.Mutex
 		// TODO(james): Track size of leased descriptors in memory.
@@ -902,14 +901,15 @@ func NewLeaseManager(
 ) *Manager {
 	lm := &Manager{
 		storage: storage{
-			nodeIDContainer: nodeIDContainer,
-			db:              db,
-			clock:           clock,
-			settings:        settings,
-			codec:           codec,
-			sysDBCache:      catkv.NewSystemDatabaseCache(codec, settings),
-			group:           singleflight.NewGroup("acquire-lease", "descriptor ID"),
-			testingKnobs:    testingKnobs.LeaseStoreTestingKnobs,
+			nodeIDContainer:  nodeIDContainer,
+			db:               db,
+			clock:            clock,
+			settings:         settings,
+			codec:            codec,
+			livenessProvider: livenessProvider,
+			sysDBCache:       catkv.NewSystemDatabaseCache(codec, settings),
+			group:            singleflight.NewGroup("acquire-lease", "descriptor ID"),
+			testingKnobs:     testingKnobs.LeaseStoreTestingKnobs,
 			outstandingLeases: metric.NewGauge(metric.Metadata{
 				Name:        "sql.leases.active",
 				Help:        "The number of outstanding SQL schema leases.",
@@ -930,7 +930,6 @@ func NewLeaseManager(
 			}),
 		},
 		settings:         settings,
-		livenessProvider: livenessProvider,
 		rangeFeedFactory: rangeFeedFactory,
 		testingKnobs:     testingKnobs,
 		names:            makeNameCache(),
