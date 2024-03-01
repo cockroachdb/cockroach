@@ -45,6 +45,7 @@ type RoundTripBenchTestCase struct {
 	// creating the table.
 	SetupEx   []string
 	Stmt      string
+	StmtArgs  []interface{}
 	Reset     string
 	SkipIssue int
 }
@@ -163,7 +164,7 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 		}
 
 		b.StartTimer()
-		sql.Exec(b, tc.Stmt)
+		sql.Exec(b, tc.Stmt, tc.StmtArgs...)
 		b.StopTimer()
 		var ok bool
 
