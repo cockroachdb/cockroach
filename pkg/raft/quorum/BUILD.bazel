@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "quorum",
+    srcs = [
+        "joint.go",
+        "majority.go",
+        "quorum.go",
+        "voteresult_string.go",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/raft/quorum",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "quorum_test",
+    srcs = [
+        "bench_test.go",
+        "datadriven_test.go",
+        "quick_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":quorum"],
+    deps = ["@com_github_cockroachdb_datadriven//:datadriven"],
+)
