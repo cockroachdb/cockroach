@@ -286,7 +286,7 @@ type BudgetFactoryConfig struct {
 	rootMon                 *mon.BytesMonitor
 	provisionalFeedLimit    int64
 	adjustLimit             func(int64) int64
-	totalRangeReedBudget    int64
+	totalRangeFeedBudget    int64
 	histogramWindowInterval time.Duration
 	settings                *settings.Values
 }
@@ -308,13 +308,13 @@ func CreateBudgetFactoryConfig(
 	if rootMon == nil || !useBudgets {
 		return BudgetFactoryConfig{}
 	}
-	totalRangeReedBudget := int64(float64(memoryPoolSize) * totalSharedFeedBudgetFraction)
-	feedSizeLimit := int64(float64(totalRangeReedBudget) * maxFeedFraction)
+	totalRangeFeedBudget := int64(float64(memoryPoolSize) * totalSharedFeedBudgetFraction)
+	feedSizeLimit := int64(float64(totalRangeFeedBudget) * maxFeedFraction)
 	return BudgetFactoryConfig{
 		rootMon:                 rootMon,
 		provisionalFeedLimit:    feedSizeLimit,
 		adjustLimit:             adjustLimit,
-		totalRangeReedBudget:    totalRangeReedBudget,
+		totalRangeFeedBudget:    totalRangeFeedBudget,
 		histogramWindowInterval: histogramWindowInterval,
 		settings:                settings,
 	}
@@ -335,7 +335,7 @@ func NewBudgetFactory(ctx context.Context, config BudgetFactoryConfig) *BudgetFa
 
 	rangeFeedPoolMonitor := mon.NewMonitorInheritWithLimit(
 		"rangefeed-monitor",
-		config.totalRangeReedBudget,
+		config.totalRangeFeedBudget,
 		config.rootMon)
 	rangeFeedPoolMonitor.SetMetrics(metrics.SharedBytesCount, nil /* maxHist */)
 	rangeFeedPoolMonitor.StartNoReserved(ctx, config.rootMon)
