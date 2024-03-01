@@ -57,7 +57,7 @@ SELECT get_db_survival_goal()
 ----
 (alter_survive_db,zone)
 (survive_zone_db,zone)
-(system,zone)
+(system,region)
 
 # Make sure system db survival goal is upgraded.
 statement ok
@@ -79,7 +79,7 @@ SELECT get_db_survival_goal()
 ----
 (alter_survive_db,zone)
 (survive_zone_db,zone)
-(system,zone)
+(system,region)
 
 # Make sure a database created with a surival goal upgrades the systemdb.
 statement ok
@@ -102,7 +102,7 @@ SELECT get_db_survival_goal()
 ----
 (alter_survive_db,zone)
 (survive_zone_db,zone)
-(system,zone)
+(system,region)
 
 statement ok
 ALTER DATABASE system SURVIVE REGION FAILURE;

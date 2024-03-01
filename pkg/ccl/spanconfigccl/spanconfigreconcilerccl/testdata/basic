@@ -19,7 +19,7 @@ upsert /Table/{6-7}                        database system (host)
 upsert /Table/{7-8}                        database system (host)
 upsert /Table/{8-9}                        database system (host)
 upsert /Table/{9-10}                       database system (host)
-upsert /Table/1{1-2}                       database system (host)
+upsert /Table/1{1-2}                       ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 upsert /Table/1{2-3}                       database system (host)
 upsert /Table/1{3-4}                       database system (host)
 upsert /Table/1{4-5}                       database system (host)
@@ -153,8 +153,6 @@ delete /Table/{8-9}
 upsert /Table/{8-9}                        ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 delete /Table/{9-10}
 upsert /Table/{9-10}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
-delete /Table/1{1-2}
-upsert /Table/1{1-2}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 delete /Table/1{2-3}
 upsert /Table/1{2-3}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 delete /Table/1{3-4}
@@ -256,7 +254,7 @@ state offset=5 limit=42
 /Table/{7-8}                               ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/{8-9}                               ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/{9-10}                              ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
-/Table/1{1-2}                              ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/1{1-2}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/1{2-3}                              ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/1{3-4}                              ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/1{4-5}                              ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true

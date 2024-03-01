@@ -708,7 +708,12 @@ func validateMultiRegion(
 		regionNames = append(regionNames, name)
 		return nil
 	})
-	if dbDesc.GetRegionConfig().SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+
+	// The system database can be configured to be SURVIVE REGION without enough
+	// regions. This would just mean that it will behave as SURVIVE ZONE until
+	// enough regions are added by the user.
+	if dbDesc.GetRegionConfig().SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE &&
+		dbDesc.GetID() != keys.SystemDatabaseID {
 		if len(regionNames) < 3 {
 			vea.Report(
 				errors.AssertionFailedf(

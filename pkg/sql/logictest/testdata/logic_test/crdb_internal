@@ -572,6 +572,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
 0    RANGE default
 1    DATABASE system
+11   TABLE system.public.lease
 16   RANGE meta
 17   RANGE system
 18   RANGE timeseries

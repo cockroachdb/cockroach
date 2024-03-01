@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
@@ -41,8 +42,9 @@ func keyVisualizerTablesMigration(
 	}
 
 	for _, table := range tables {
-		err := createSystemTable(ctx, d.DB.KV(), d.Settings, keys.SystemSQLCodec,
-			table)
+		err := createSystemTable(ctx, d.DB, d.Settings, keys.SystemSQLCodec,
+			table,
+			tree.LocalityLevelTable)
 		if err != nil {
 			return err
 		}
