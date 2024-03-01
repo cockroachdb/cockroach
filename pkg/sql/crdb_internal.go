@@ -2850,7 +2850,7 @@ var crdbInternalLocalSessionsTable = virtualSchemaTable{
 		if err != nil {
 			return err
 		}
-		return populateSessionsTable(ctx, addRow, response)
+		return populateSessionsTable(ctx, p, addRow, response)
 	},
 }
 
@@ -2868,14 +2868,49 @@ var crdbInternalClusterSessionsTable = virtualSchemaTable{
 		if err != nil {
 			return err
 		}
-		return populateSessionsTable(ctx, addRow, response)
+		return populateSessionsTable(ctx, p, addRow, response)
 	},
 }
 
 func populateSessionsTable(
-	ctx context.Context, addRow func(...tree.Datum) error, response *serverpb.ListSessionsResponse,
+	ctx context.Context,
+	p *planner,
+	addRow func(...tree.Datum) error,
+	response *serverpb.ListSessionsResponse,
 ) error {
+	shouldRedactOtherUserQuery := false
+	canViewOtherUser := false
+	// Check if the user is admin.
+	if isAdmin, err := p.HasAdminRole(ctx); err != nil {
+		return err
+	} else if isAdmin {
+		canViewOtherUser = true
+	} else if !isAdmin {
+		// If the user is not admin, check the VIEWACTIVITYREDACTED privilege to
+		// see if constants need to be redacted.
+		if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+			return err
+		} else if hasViewActivityRedacted {
+			// If the user has VIEWACTIVITYREDACTED, redact the query as it takes precedence
+			// over VIEWACTIVITY.
+			shouldRedactOtherUserQuery = true
+			canViewOtherUser = true
+		} else if !hasViewActivityRedacted {
+			if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
+				return err
+			} else if hasViewActivity {
+				canViewOtherUser = true
+			}
+		}
+	}
 	for _, session := range response.Sessions {
+		normalizedUser, err := username.MakeSQLUsernameFromUserInput(session.Username, username.PurposeValidation)
+		if err != nil {
+			return err
+		}
+		if !canViewOtherUser && normalizedUser != p.User() {
+			continue
+		}
 		// Generate active_queries and active_query_start
 		var activeQueries bytes.Buffer
 		var activeQueryStart time.Time
@@ -2887,10 +2922,18 @@ func populateSessionsTable(
 			// queries to be executed at once in a session.
 			activeQueryStart = query.Start
 			sql := formatActiveQuery(query)
+			// Never redact queries made by the same user.
+			if shouldRedactOtherUserQuery && session.Username != p.User().Normalized() {
+				sql = query.SqlNoConstants
+			}
 			activeQueries.WriteString(sql)
 		}
+		lastActiveQuery := session.LastActiveQuery
+		// Never redact queries made by the same user.
+		if shouldRedactOtherUserQuery && session.Username != p.User().Normalized() {
+			lastActiveQuery = session.LastActiveQueryNoConstants
+		}
 
-		var err error
 		if activeQueryStart.IsZero() {
 			activeQueryStartDatum = tree.DNull
 		} else {
@@ -2924,7 +2967,7 @@ func populateSessionsTable(
 			tree.NewDString(session.ClientAddress),
 			tree.NewDString(session.ApplicationName),
 			tree.NewDString(activeQueries.String()),
-			tree.NewDString(session.LastActiveQuery),
+			tree.NewDString(lastActiveQuery),
 			tree.NewDInt(tree.DInt(session.NumTxnsExecuted)),
 			startTSDatum,
 			activeQueryStartDatum,
