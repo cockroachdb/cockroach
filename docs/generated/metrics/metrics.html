@@ -1578,6 +1578,11 @@
 <tr><td>SERVER</td><td>sys.gc.pause.ns</td><td>Total GC pause</td><td>GC Pause</td><td>GAUGE</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.gc.pause.percent</td><td>Current GC pause percentage</td><td>GC Pause</td><td>GAUGE</td><td>PERCENT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.go.allocbytes</td><td>Current bytes of memory allocated by go</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.go.heap.allocbytes</td><td>Cumulative bytes allocated for heap objects.</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.go.heap.heapfragmentbytes</td><td>Total heap fragmentation bytes, derived from bytes in in-use spans subtracts bytes allocated</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.go.heap.heapreleasedbytes</td><td>Total bytes returned to the OS from heap.</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.go.heap.heapreservedbytes</td><td>Total bytes reserved by heap, derived from bytes in idle (unused) spans subtracts bytes returned to the OS</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>SERVER</td><td>sys.go.stack.systembytes</td><td>Stack memories obtained from the OS.</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.go.totalbytes</td><td>Total bytes of memory allocated by go, but not released</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.goroutines</td><td>Current number of goroutines</td><td>goroutines</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.host.disk.io.time</td><td>Time spent reading from or writing to all disks since this process started (as reported by the OS)</td><td>Time</td><td>GAUGE</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
