@@ -472,6 +472,10 @@ type SessionAccessor interface {
 	// HasViewActivityOrViewActivityRedactedRole returns true iff the current session user has the
 	// VIEWACTIVITY or VIEWACTIVITYREDACTED permission.
 	HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, error)
+
+	// HasGlobalPrivilegeOrRoleOption returns a bool representing whether the current user
+	// has a global privilege or the corresponding legacy role option.
+	HasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) (bool, error)
 }
 
 // PreparedStatementState is a limited interface that exposes metadata about
