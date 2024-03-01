@@ -193,6 +193,8 @@ func MakeServer(
 		queryWorkerMax: queryWorkerMax,
 		workerSem:      workerSem,
 	}
+	s.resultMemMonitor.MarkLongLiving()
+	s.workerMemMonitor.MarkLongLiving()
 
 	s.workerMemMonitor.StartNoReserved(ctx, memoryMonitor)
 	stopper.AddCloser(stop.CloserFn(func() {

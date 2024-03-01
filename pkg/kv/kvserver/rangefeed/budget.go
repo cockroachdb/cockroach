@@ -329,6 +329,7 @@ func NewBudgetFactory(ctx context.Context, config BudgetFactoryConfig) *BudgetFa
 	metrics := NewFeedBudgetMetrics(config.histogramWindowInterval)
 	systemRangeMonitor := mon.NewMonitorInheritWithLimit("rangefeed-system-monitor",
 		systemRangeFeedBudget, config.rootMon)
+	systemRangeMonitor.MarkLongLiving()
 	systemRangeMonitor.SetMetrics(metrics.SystemBytesCount, nil /* maxHist */)
 	systemRangeMonitor.Start(ctx, config.rootMon,
 		mon.NewStandaloneBudget(systemRangeFeedBudget))
@@ -337,6 +338,7 @@ func NewBudgetFactory(ctx context.Context, config BudgetFactoryConfig) *BudgetFa
 		"rangefeed-monitor",
 		config.totalRangeFeedBudget,
 		config.rootMon)
+	rangeFeedPoolMonitor.MarkLongLiving()
 	rangeFeedPoolMonitor.SetMetrics(metrics.SharedBytesCount, nil /* maxHist */)
 	rangeFeedPoolMonitor.StartNoReserved(ctx, config.rootMon)
 

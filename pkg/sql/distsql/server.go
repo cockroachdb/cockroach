@@ -92,6 +92,7 @@ func NewServer(
 			Settings: cfg.Settings,
 		}),
 	}
+	ds.memMonitor.MarkLongLiving()
 	ds.memMonitor.StartNoReserved(ctx, cfg.ParentMemoryMonitor)
 	// We have to initialize the flow runner at the same time we're creating
 	// the DistSQLServer because the latter will be registered as a gRPC service

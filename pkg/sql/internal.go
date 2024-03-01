@@ -179,12 +179,14 @@ func MakeInternalExecutor(
 func MakeInternalExecutorMemMonitor(
 	memMetrics MemoryMetrics, settings *cluster.Settings,
 ) *mon.BytesMonitor {
-	return mon.NewMonitor(mon.Options{
+	m := mon.NewMonitor(mon.Options{
 		Name:     "internal SQL executor",
 		CurCount: memMetrics.CurBytesCount,
 		MaxHist:  memMetrics.MaxBytesHist,
 		Settings: settings,
 	})
+	m.MarkLongLiving()
+	return m
 }
 
 // SetSessionData binds the session variables that will be used by queries

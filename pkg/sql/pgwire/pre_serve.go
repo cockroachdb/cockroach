@@ -151,6 +151,7 @@ func NewPreServeConnHandler(
 			Settings:  st,
 		}),
 	}
+	s.tenantIndependentConnMonitor.MarkLongLiving()
 	s.tenantIndependentConnMonitor.StartNoReserved(ctx, parentMemoryMonitor)
 
 	// TODO(knz,ben): Use a cluster setting for this.
