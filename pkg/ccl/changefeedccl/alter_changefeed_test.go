@@ -668,6 +668,7 @@ func TestAlterChangefeedPersistSinkURI(t *testing.T) {
 	const unredactedSinkURI = "null://blah?AWS_ACCESS_KEY_ID=the_secret"
 
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	registry := s.JobRegistry().(*jobs.Registry)
