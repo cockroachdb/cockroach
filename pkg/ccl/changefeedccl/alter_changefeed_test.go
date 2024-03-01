@@ -666,7 +666,11 @@ func TestAlterChangefeedPersistSinkURI(t *testing.T) {
 	const unredactedSinkURI = "null://blah?AWS_ACCESS_KEY_ID=the_secret"
 
 	ctx := context.Background()
-	srv, rawSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, rawSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
 	defer srv.Stopper().Stop(ctx)
 
 	s := srv.ApplicationLayer()
