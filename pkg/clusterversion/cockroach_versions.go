@@ -296,6 +296,10 @@ const (
 	// database to be SURVIVE ZONE.
 	V24_1_SystemDatabaseSurvivability
 
+	// V24_1_EstimatedMVCCStatsInSplit introduces MVCC stats estimates during range
+	// splits.
+	V24_1_EstimatedMVCCStatsInSplit
+
 	numKeys
 )
 
@@ -361,6 +365,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1_SessionBasedLeasingUpgradeDescriptor: {Major: 23, Minor: 2, Internal: 14},
 	V24_1_PebbleFormatSyntheticPrefixSuffix:    {Major: 23, Minor: 2, Internal: 16},
 	V24_1_SystemDatabaseSurvivability:          {Major: 23, Minor: 2, Internal: 18},
+	V24_1_EstimatedMVCCStatsInSplit:            {Major: 23, Minor: 2, Internal: 20},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster

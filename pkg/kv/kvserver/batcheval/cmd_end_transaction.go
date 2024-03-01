@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -39,6 +40,15 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+// EnableEstimatedMVCCStatsInSplit controls whether the MVCC stats produced
+// during splits are estimated (when enabled) or 100% accurate (when disabled).
+// Defaults to true but metamorphically changed in tests.
+var EnableEstimatedMVCCStatsInSplit = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"kv.split.estimated_mvcc_stats.enabled",
+	"if enabled, MVCC stats will be computed estimated (as opposed to computed accurately) during splits",
+	util.ConstantWithMetamorphicTestBool("kv.split.estimated_mvcc_stats.enabled", true))
 
 func init() {
 	RegisterReadWriteCommand(kvpb.EndTxn, declareKeysEndTxn, EndTxn)
@@ -1032,6 +1042,22 @@ func splitTrigger(
 			"unable to determine whether right hand side of split is empty")
 	}
 
+	// The intentInterleavingIterator doesn't like iterating over spans containing
+	// both local and global keys. Here we only care about global keys, so if the
+	// LHS includes some local keys, move the start key to right after LocalMax.
+	startKey := split.LeftDesc.StartKey.AsRawKey()
+	endKey := split.LeftDesc.EndKey.AsRawKey()
+	if startKey.Compare(keys.LocalMax) <= 0 && endKey.Compare(keys.LocalMax) > 0 {
+		startKey = keys.LocalMax.Next()
+	}
+	emptyLHS, err := storage.MVCCIsSpanEmpty(ctx, batch, storage.MVCCIsSpanEmptyOptions{
+		StartKey: startKey, EndKey: endKey,
+	})
+	if err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrapf(err,
+			"unable to determine whether left hand side of split is empty")
+	}
+
 	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(ctx, batch, split.LeftDesc, split.RightDesc)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
@@ -1055,12 +1081,16 @@ func splitTrigger(
 	}
 
 	h := splitStatsHelperInput{
-		AbsPreSplitBothStored: currentStats,
-		DeltaBatchEstimated:   bothDeltaMS,
-		DeltaRangeKey:         rangeKeyDeltaMS,
-		PostSplitScanLeftFn:   makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
-		PostSplitScanRightFn:  makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
-		ScanRightFirst:        splitScansRightForStatsFirst || emptyRHS,
+		AbsPreSplitBothStored:    currentStats,
+		DeltaBatchEstimated:      bothDeltaMS,
+		DeltaRangeKey:            rangeKeyDeltaMS,
+		PostSplitScanLeftFn:      makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side", false /* excludeUserSpans */),
+		PostSplitScanRightFn:     makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side", false /* excludeUserSpans */),
+		ScanRightFirst:           splitScansRightForStatsFirst || emptyRHS,
+		LeftIsEmpty:              emptyLHS,
+		RightIsEmpty:             emptyRHS,
+		PreSplitLeftUser:         split.PreSplitLeftUserStats,
+		PostSplitScanLocalLeftFn: makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "local left hand side", true /* excludeUserSpans */),
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }
@@ -1081,9 +1111,14 @@ func makeScanStatsFn(
 	ts hlc.Timestamp,
 	sideDesc *roachpb.RangeDescriptor,
 	sideName string,
+	excludeUserSpans bool,
 ) splitStatsScanFn {
+	computeStatsFn := rditer.ComputeStatsForRange
+	if excludeUserSpans {
+		computeStatsFn = rditer.ComputeStatsForRangeExcludingUser
+	}
 	return func() (enginepb.MVCCStats, error) {
-		sideMS, err := rditer.ComputeStatsForRange(ctx, sideDesc, reader, ts.WallTime)
+		sideMS, err := computeStatsFn(ctx, sideDesc, reader, ts.WallTime)
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrapf(err,
 				"unable to compute stats for %s range after split", sideName)
@@ -1128,7 +1163,16 @@ func splitTriggerHelper(
 	// modifications to the left hand side are allowed after this line and any
 	// modifications to the right hand side are accounted for by updating the
 	// helper's AbsPostSplitRight() reference.
-	h, err := makeSplitStatsHelper(statsInput)
+	var h splitStatsHelper
+	// If the leaseholder node is running an older version, it would not include
+	// the PreSplitLeftUser proto field, which is needed in
+	// makeEstimatedSplitStatsHelper.
+	if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1_EstimatedMVCCStatsInSplit) &&
+		EnableEstimatedMVCCStatsInSplit.Get(&rec.ClusterSettings().SV) {
+		h, err = makeEstimatedSplitStatsHelper(statsInput)
+	} else {
+		h, err = makeSplitStatsHelper(statsInput)
+	}
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
