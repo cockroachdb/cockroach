@@ -25,10 +25,10 @@ import (
 	"strings"
 	"sync"
 
-	"go.etcd.io/raft/v3/confchange"
-	"go.etcd.io/raft/v3/quorum"
-	pb "go.etcd.io/raft/v3/raftpb"
-	"go.etcd.io/raft/v3/tracker"
+	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
+	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
 
 const (
