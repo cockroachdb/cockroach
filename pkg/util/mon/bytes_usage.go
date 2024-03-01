@@ -12,12 +12,15 @@ package mon
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
+	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -27,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
 // BoundAccount and BytesMonitor together form the mechanism by which
@@ -577,9 +581,36 @@ func (mm *BytesMonitor) Limit() int64 {
 
 const bytesMaxUsageLoggingThreshold = 100 * 1024
 
+func getMonitorStateCb(f io.Writer) func(state MonitorState) error {
+	return func(s MonitorState) error {
+		info := fmt.Sprintf("%s%s %s", strings.Repeat(" ", 4*s.Level), s.Name, humanize.IBytes(uint64(s.Used)))
+		if s.ReservedUsed != 0 || s.ReservedReserved != 0 {
+			info += fmt.Sprintf(" (%s / %s)", humanize.IBytes(uint64(s.ReservedUsed)), humanize.IBytes(uint64(s.ReservedReserved)))
+		}
+		if _, err := f.Write([]byte(info)); err != nil {
+			return err
+		}
+		_, err := f.Write([]byte{'\n'})
+		return err
+	}
+}
+
 func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
+	if buildutil.CrdbTestBuild {
+		// We expect that all children of this monitor are closed.
+		if mm.mu.head != nil {
+			mm.mu.Unlock()
+			var sb strings.Builder
+			_ = mm.TraverseTree(getMonitorStateCb(&sb))
+			mm.mu.Lock()
+			panic(errors.AssertionFailedf(
+				"found some children in a stopped monitor %s\n%s",
+				mm.name, sb.String(),
+			))
+		}
+	}
 	mm.mu.stopped = true
 
 	if log.V(1) && mm.mu.maxAllocated >= bytesMaxUsageLoggingThreshold {
