@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -406,6 +407,9 @@ func TestImportHonorsResumePosition(t *testing.T) {
 		numKeys := 0
 
 		for _, resumePos := range resumes {
+			// t.Failed() acquires a read lock only, so in order to prevent the
+			// race in the progress consumer goroutine, we use our own atomic.
+			var failed atomic.Bool
 			spec.ResumePos = map[int32]int64{0: resumePos}
 			if resumePos == 0 {
 				// We use 0 resume position to record the set of keys in the input file.
@@ -430,6 +434,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					keys.Lock()
 					idx := sort.Search(maxKeyIdx, func(i int) bool { return keys.keys[i].Compare(k) == 0 })
 					if idx < maxKeyIdx {
+						failed.Store(true)
 						t.Errorf("failed to skip key[%d]=%s", idx, k)
 					}
 					keys.Unlock()
@@ -447,7 +452,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					// (BulkAdderFlushesEveryBatch), then the progress resport must be emitted every
 					// batchSize rows (possibly out of order), starting from our initial resumePos
 					for prog := range progCh {
-						if !t.Failed() && prog.ResumePos[0] < (rp+int64(batchSize)) {
+						if !failed.Load() && prog.ResumePos[0] < (rp+int64(batchSize)) {
 							t.Logf("unexpected progress resume pos: %d", prog.ResumePos[0])
 							t.Fail()
 						}
