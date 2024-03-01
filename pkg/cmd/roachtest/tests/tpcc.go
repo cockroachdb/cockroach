@@ -1360,7 +1360,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	if b.SharedProcessMT {
 		startOpts = option.DefaultStartSharedVirtualClusterOpts(appTenantName)
 		c.StartServiceForVirtualCluster(ctx, t.L(), roachNodes, startOpts, settings, roachNodes)
-		db = c.Conn(ctx, t.L(), 1, option.TenantName(appTenantName))
+		db = c.Conn(ctx, t.L(), 1, option.VirtualClusterName(appTenantName))
 	} else {
 		db = c.Conn(ctx, t.L(), 1)
 	}

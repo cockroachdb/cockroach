@@ -87,7 +87,7 @@ func runMultiTenantDistSQL(
 
 	m := c.NewMonitor(ctx, c.Nodes(1, 2, 3))
 
-	inst1Conn, err := c.ConnE(ctx, t.L(), 1, option.TenantName(tenantName))
+	inst1Conn, err := c.ConnE(ctx, t.L(), 1, option.VirtualClusterName(tenantName))
 	require.NoError(t, err)
 	_, err = inst1Conn.Exec("CREATE TABLE t(n INT, i INT,s STRING, PRIMARY KEY(n,i))")
 	require.NoError(t, err)
@@ -106,7 +106,7 @@ func runMultiTenantDistSQL(
 		m.Go(func(ctx context.Context) error {
 			node := (li % c.Spec().NodeCount) + 1
 			sqlInstance := li / c.Spec().NodeCount
-			dbi, err := c.ConnE(ctx, t.L(), node, option.TenantName(tenantName), option.SQLInstance(sqlInstance))
+			dbi, err := c.ConnE(ctx, t.L(), node, option.VirtualClusterName(tenantName), option.SQLInstance(sqlInstance))
 			require.NoError(t, err)
 			iter := 0
 			for {

@@ -360,7 +360,7 @@ func startInMemoryTenant(
 		var err error
 		// The old multitenant API does not create a default admin user for virtual clusters, so root
 		// authentication is used instead.
-		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName), option.AuthMode(install.AuthRootCert))
+		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.VirtualClusterName(tenantName), option.AuthMode(install.AuthRootCert))
 		if err != nil {
 			return err
 		}

@@ -62,7 +62,7 @@ func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluste
 	)
 
 	db := c.Conn(
-		ctx, t.L(), virtualClusterNode[0], option.TenantName(virtualClusterName), option.SQLInstance(sqlInstance),
+		ctx, t.L(), virtualClusterNode[0], option.VirtualClusterName(virtualClusterName), option.SQLInstance(sqlInstance),
 	)
 	defer db.Close()
 
