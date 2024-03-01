@@ -660,8 +660,8 @@ go_download_sdk(
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
     sdks = {
-        "linux_amd64": ("go1.21.5fips.linux-amd64.tar.gz", "68fefc15b4328244fe78f1269e8856a2a2cd52f1fb9f451bb8bc0c23d590fe14"),
+        "linux_amd64": ("go1.22.1fips.linux-amd64.tar.gz", "820b63c352dc2312789ab1cc37a7b52cd334271d5f0679c0c5645695493dbaea"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240220-195058/{}"],
-    version = "1.21.5fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240318-141515/{}"],
+    version = "1.22.1fips",
 )
