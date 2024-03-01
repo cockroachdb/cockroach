@@ -641,7 +641,7 @@ func runBackupMVCCRangeTombstones(
 	c.Run(ctx, option.WithNodes(c.All()), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 	// c2c tests still use the old multitenant API, which does not support non root authentication
-	conn := c.Conn(ctx, t.L(), 1, option.TenantName(config.tenantName), option.AuthMode(install.AuthRootCert))
+	conn := c.Conn(ctx, t.L(), 1, option.VirtualClusterName(config.tenantName), option.AuthMode(install.AuthRootCert))
 
 	// Configure cluster.
 	t.Status("configuring cluster")

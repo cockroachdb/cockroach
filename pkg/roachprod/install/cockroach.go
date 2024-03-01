@@ -562,7 +562,7 @@ const (
 	DefaultPassword = "cockroachdb"
 )
 
-// NodeURL constructs a postgres URL. If sharedTenantName is not empty, it will
+// NodeURL constructs a postgres URL. If virtualClusterName is not empty, it will
 // be used as the virtual cluster name in the URL. This is used to connect to a
 // shared process running services for multiple virtual clusters.
 func (c *SyncedCluster) NodeURL(
