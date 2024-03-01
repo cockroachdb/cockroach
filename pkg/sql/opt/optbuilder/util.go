@@ -246,19 +246,23 @@ func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
 // default label for a function expression. Returns true if the function's
 // return type is not an empty tuple and doesn't declare any tuple labels.
 func (b *Builder) shouldCreateDefaultColumn(texpr tree.TypedExpr) bool {
-	if texpr.ResolvedType().Identical(types.EmptyTuple) {
-		// This is only to support crdb_internal.unary_table().
-		return false
-	}
-
 	if funcExpr, ok := texpr.(*tree.FuncExpr); ok {
-		if funcExpr.Func.FunctionReference.(*tree.ResolvedFunctionDefinition).Name == "unnest" {
+		funcName := funcExpr.Func.FunctionReference.(*tree.ResolvedFunctionDefinition).Name
+		switch funcName {
+		case "unnest":
 			// Special case for unnest functions: we should create a default column in
 			// the case when there is one input argument, since this implies there
 			// will be one output column. This is necessary because the type of the
 			// single column output by unnest in this case may be a tuple with labels,
 			// which breaks the assumption made below.
 			return len(funcExpr.Exprs) == 1
+		case "crdb_internal.unary_table":
+			// Special case for crdb_internal.unary_table, which produces no columns.
+			return false
+		case "json_to_record", "jsonb_to_record", "json_to_recordset", "jsonb_to_recordset":
+			// Special case for functions that have a dynamic type which will be
+			// resolved later.
+			return false
 		}
 	}
 
