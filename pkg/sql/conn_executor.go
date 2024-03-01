@@ -1309,11 +1309,13 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.mu.IdleInTransactionSessionTimeout.Stop()
 
 	if closeType != panicClose {
+		ex.txnFingerprintIDCache.mon.Stop(ctx)
 		ex.state.mon.Stop(ctx)
 		ex.sessionPreparedMon.Stop(ctx)
 		ex.sessionMon.Stop(ctx)
 		ex.mon.Stop(ctx)
 	} else {
+		ex.txnFingerprintIDCache.mon.EmergencyStop(ctx)
 		ex.state.mon.EmergencyStop(ctx)
 		ex.sessionPreparedMon.EmergencyStop(ctx)
 		ex.sessionMon.EmergencyStop(ctx)

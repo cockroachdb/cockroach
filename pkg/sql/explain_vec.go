@@ -62,8 +62,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 
 	finalizePlanWithRowCount(params.ctx, planCtx, physPlan, n.plan.mainRowCount)
 	flows := physPlan.GenerateFlowSpecs()
-	flowCtx, cleanup := newFlowCtxForExplainPurposes(params.ctx, params.p)
-	defer cleanup()
+	flowCtx := newFlowCtxForExplainPurposes(params.ctx, params.p)
 
 	// We want to get the vectorized plan which would be executed with the
 	// current 'vectorize' option. If 'vectorize' is set to 'off', then the
@@ -90,9 +89,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	return nil
 }
 
-func newFlowCtxForExplainPurposes(
-	ctx context.Context, p *planner,
-) (_ *execinfra.FlowCtx, cleanup func()) {
+func newFlowCtxForExplainPurposes(ctx context.Context, p *planner) *execinfra.FlowCtx {
 	monitor := mon.NewMonitor(
 		"explain", /* name */
 		mon.MemoryResource,
@@ -102,10 +99,12 @@ func newFlowCtxForExplainPurposes(
 		math.MaxInt64, /* noteworthy */
 		p.execCfg.Settings,
 	)
-	monitor.StartNoReserved(ctx, p.Mon())
-	cleanup = func() {
-		monitor.Stop(ctx)
-	}
+	// Note that we do not use planner's monitor here in order to not link any
+	// monitors created later to the planner's monitor (since we might not close
+	// the components that use them). This also allows us to not close this
+	// monitor because eventually the whole monitor tree rooted in this monitor
+	// will be garbage collected.
+	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	return &execinfra.FlowCtx{
 		NodeID:  p.EvalContext().NodeID,
 		EvalCtx: p.EvalContext(),
@@ -119,7 +118,7 @@ func newFlowCtxForExplainPurposes(
 		},
 		Descriptors: p.Descriptors(),
 		DiskMonitor: &mon.BytesMonitor{},
-	}, cleanup
+	}
 }
 
 func newPlanningCtxForExplainPurposes(
