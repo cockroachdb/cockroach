@@ -7,7 +7,8 @@ source build/shlib.sh
 
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GCEWORKER_PROJECT-cockroach-workers}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
-NAME=${GCEWORKER_NAME-gceworker-$(id -un)}
+USER_ID=$(id -un)
+NAME=${GCEWORKER_NAME-gceworker-${USER_ID//.}}
 FQNAME="${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}"
 
 cmd=${1-}
