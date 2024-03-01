@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -57,6 +59,7 @@ type storage struct {
 	regionPrefix            *atomic.Value
 	sessionBasedLeasingMode sessionBasedLeasingModeReader
 	sysDBCache              *catkv.SystemDatabaseCache
+	livenessProvider        sqlliveness.Provider
 
 	// group is used for all calls made to acquireNodeLease to prevent
 	// concurrent lease acquisitions from the store.
@@ -227,12 +230,39 @@ func (s storage) acquire(
 		return s.writer.insertLease(ctx, txn, lf)
 	}
 
+	// Compute the maximum time we will retry ambiguous replica errors before
+	// disabling the SQL liveness heartbeat. The time chosen will guarantee that
+	// the sqlliveness TTL expires once the lease duration has surpassed.
+	maxTimeToDisableLiveness := s.jitteredLeaseDuration()
+	defaultTTLForLiveness := slbase.DefaultTTL.Get(&s.settings.SV)
+	if maxTimeToDisableLiveness > defaultTTLForLiveness {
+		maxTimeToDisableLiveness -= defaultTTLForLiveness
+	} else {
+		// If the TTL time is somehow bigger than the lease duration, then immediately
+		// after the first retry sqlliveness will renewals will be disabled.
+		maxTimeToDisableLiveness = 0
+	}
+	acquireStart := timeutil.Now()
+	extensionsBlocked := false
+	defer func() {
+		if extensionsBlocked {
+			s.livenessProvider.UnpauseLivenessHeartbeat(ctx)
+		}
+	}()
 	// Run a retry loop to deal with AmbiguousResultErrors. All other error types
 	// are propagated up to the caller.
 	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
 		err := s.db.KV().Txn(ctx, acquireInTxn)
 		switch {
 		case startup.IsRetryableReplicaError(err):
+			// If we keep encountering the retryable replica error for more then
+			// the lease expiry duration we can no longer keep updating the liveness.
+			// i.e. This node is no longer productive at this point since it can't
+			// acquire or release releases potentially blocking schema changes.
+			if !extensionsBlocked && timeutil.Since(acquireStart) > maxTimeToDisableLiveness {
+				s.livenessProvider.PauseLivenessHeartbeat(ctx)
+				extensionsBlocked = true
+			}
 			log.Infof(ctx, "retryable replica error occurred during lease acquisition for %v, retrying: %v", id, err)
 			continue
 		case pgerror.GetPGCode(err) == pgcode.UniqueViolation:
@@ -263,6 +293,25 @@ func (s storage) release(
 	retryOptions := base.DefaultRetryOptions()
 	retryOptions.Closer = stopper.ShouldQuiesce()
 
+	// Compute the maximum time we will retry ambiguous replica errors before
+	// disabling the SQL liveness heartbeat. The time chosen will guarantee that
+	// the sqlliveness TTL expires once the lease duration has surpassed.
+	maxTimeToDisableLiveness := s.jitteredLeaseDuration()
+	defaultTTLForLiveness := slbase.DefaultTTL.Get(&s.settings.SV)
+	if maxTimeToDisableLiveness > defaultTTLForLiveness {
+		maxTimeToDisableLiveness -= defaultTTLForLiveness
+	} else {
+		// If the TTL time is somehow bigger than the lease duration, then immediately
+		// after the first retry sqlliveness will renewals will be disabled.
+		maxTimeToDisableLiveness = 0
+	}
+	acquireStart := timeutil.Now()
+	extensionsBlocked := false
+	defer func() {
+		if extensionsBlocked {
+			s.livenessProvider.UnpauseLivenessHeartbeat(ctx)
+		}
+	}()
 	// This transaction is idempotent; the retry was put in place because of
 	// NodeUnavailableErrors.
 	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
@@ -284,6 +333,17 @@ func (s storage) release(
 			log.Warningf(ctx, "error releasing lease %q: %s", lease, err)
 			if grpcutil.IsConnectionRejected(err) {
 				return
+			}
+			if startup.IsRetryableReplicaError(err) {
+				// If we keep encountering the retryable replica error for more then
+				// the lease expiry duration we can no longer keep updating the liveness.
+				// i.e. This node is no longer productive at this point since it can't
+				// acquire or release releases potentially blocking schema changes across
+				// a cluster.
+				if !extensionsBlocked && timeutil.Since(acquireStart) > maxTimeToDisableLiveness {
+					s.livenessProvider.PauseLivenessHeartbeat(ctx)
+					extensionsBlocked = true
+				}
 			}
 			continue
 		}

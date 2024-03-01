@@ -48,6 +48,14 @@ type Provider interface {
 	// no running tasks that depend on the session.
 	Release(ctx context.Context) (SessionID, error)
 
+	// PauseLivenessHeartbeat prevents the sqlliveness session from being extended
+	// into the future, which should be done if some key system table like system.leases
+	// is inaccessible.
+	PauseLivenessHeartbeat(ctx context.Context)
+
+	// UnpauseLivenessHeartbeat resumes sqlliveness session extensions.
+	UnpauseLivenessHeartbeat(ctx context.Context)
+
 	// Metrics returns a metric.Struct which holds metrics for the provider.
 	Metrics() metric.Struct
 }
