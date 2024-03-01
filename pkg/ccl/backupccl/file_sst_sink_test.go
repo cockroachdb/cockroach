@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -100,7 +99,7 @@ func TestFileSSTSinkExtendOneFile(t *testing.T) {
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '20B'`)
 
-	sink, _ := fileSSTSinkTestSetUp(ctx, t, tc, sqlDB)
+	sink, _ := fileSSTSinkTestSetUp(ctx, t, tc)
 
 	require.NoError(t, sink.write(ctx, exportResponse1))
 	require.NoError(t, sink.write(ctx, exportResponse2))
@@ -285,7 +284,7 @@ func TestFileSSTSinkWrite(t *testing.T) {
 			if tt.errorExplanation != "" {
 				return
 			}
-			sink, store := fileSSTSinkTestSetUp(ctx, t, tc, sqlDB)
+			sink, store := fileSSTSinkTestSetUp(ctx, t, tc)
 			defer func() {
 				require.NoError(t, sink.Close())
 			}()
@@ -343,7 +342,7 @@ func TestFileSSTSinkStats(t *testing.T) {
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '10KB'`)
 
-	sink, _ := fileSSTSinkTestSetUp(ctx, t, tc, sqlDB)
+	sink, _ := fileSSTSinkTestSetUp(ctx, t, tc)
 
 	defer func() {
 		require.NoError(t, sink.Close())
@@ -861,7 +860,7 @@ func (b *exportedSpanBuilder) build() exportedSpan {
 }
 
 func fileSSTSinkTestSetUp(
-	ctx context.Context, t *testing.T, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner,
+	ctx context.Context, t *testing.T, tc *testcluster.TestCluster,
 ) (*fileSSTSink, cloud.ExternalStorage) {
 	srv := tc.Servers[0].ApplicationLayer()
 	store, err := cloud.ExternalStorageFromURI(ctx, "userfile:///0",
