@@ -13,6 +13,8 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
@@ -167,6 +169,20 @@ func TestFileSSTSinkWrite(t *testing.T) {
 			errorExplanation: "unsupported write ordering; backup processor should not do this due to one sink per worker and #118990.",
 		},
 		{
+			name: "prefix-differ",
+			exportSpans: []exportedSpan{
+				newExportedSpanBuilder("2/a", "2/c", false).withKVs([]kvAndTS{{key: "2/a", timestamp: 10}, {key: "2/c", timestamp: 10}}).build(),
+				newExportedSpanBuilder("2/b", "2/d", true).withKVs([]kvAndTS{{key: "2/a", timestamp: 10}, {key: "2/d", timestamp: 10}}).build(),
+				newExportedSpanBuilder("3/c", "3/e", true).withKVs([]kvAndTS{{key: "3/b", timestamp: 9}, {key: "3/e", timestamp: 10}}).build(),
+			},
+			flushedSpans: []roachpb.Spans{
+				{roachpb.Span{Key: []byte("2/a"), EndKey: []byte("2/d")}},
+				{roachpb.Span{Key: []byte("3/b"), EndKey: []byte("3/e")}},
+			},
+			unflushedSpans:   []roachpb.Spans{{roachpb.Span{Key: []byte("c"), EndKey: []byte("e")}}},
+			errorExplanation: "unsupported write ordering; backup processor should not do this due to one sink per worker and #118990.",
+		},
+		{
 			name: "extend-key-boundary-1-file",
 			exportSpans: []exportedSpan{
 				newExportedSpanBuilder("a", "c", true).withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}).build(),
@@ -304,6 +320,19 @@ func TestFileSSTSinkWrite(t *testing.T) {
 				}
 			}
 
+			for i := range tt.flushedSpans {
+				for j, sp := range tt.flushedSpans[i] {
+					tt.flushedSpans[i][j].Key = s2k(string(sp.Key))
+					tt.flushedSpans[i][j].EndKey = s2k(string(sp.EndKey))
+				}
+			}
+			for i := range tt.unflushedSpans {
+				for j, sp := range tt.unflushedSpans[i] {
+					tt.unflushedSpans[i][j].Key = s2k(string(sp.Key))
+					tt.unflushedSpans[i][j].EndKey = s2k(string(sp.EndKey))
+				}
+			}
+
 			// progCh contains the files that have already been created with
 			// flushes. Verify the contents.
 			require.NoError(t, checkFiles(ctx, store, progress, tt.flushedSpans))
@@ -322,6 +351,16 @@ func TestFileSSTSinkWrite(t *testing.T) {
 		})
 	}
 
+}
+
+func s2k(s string) roachpb.Key {
+	tbl := 1
+	k := []byte(s)
+	if p := strings.Split(s, "/"); len(p) > 1 {
+		tbl, _ = strconv.Atoi(p[0])
+		k = []byte(p[1])
+	}
+	return append(keys.SystemSQLCodec.IndexPrefix(uint32(tbl), 2), k...)
 }
 
 // TestFileSSTSinkStats tests the internal counters and stats of the FileSSTSink under
@@ -530,7 +569,11 @@ func TestFileSSTSinkCopyPointKeys(t *testing.T) {
 
 			var expected []kvAndTS
 			for _, input := range tt.inputs {
+				for i := range input.input {
+					input.input[i].key = string(s2k(input.input[i].key))
+				}
 				expected = append(expected, input.input...)
+
 			}
 
 			iterOpts := storage.IterOptions{
@@ -668,7 +711,7 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 				// Add some point key values in the input as well.
 				es := newExportedSpanBuilder(rangeKeys[0].key, rangeKeys[len(rangeKeys)-1].key, false).
 					withRangeKeys(rangeKeys).
-					withKVs([]kvAndTS{{rangeKeys[0].key, nil, rangeKeys[0].timestamp}}).
+					withKVs([]kvAndTS{{key: rangeKeys[0].key, timestamp: rangeKeys[0].timestamp}}).
 					build()
 				err := sink.copyRangeKeys(es.dataSST)
 				if input.expectErr != "" {
@@ -692,7 +735,7 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 					if expected[rk.timestamp] == nil {
 						expected[rk.timestamp] = &roachpb.SpanGroup{}
 					}
-
+					t.Logf("%d: Adding %v", rk.timestamp, rk.span())
 					expected[rk.timestamp].Add(rk.span())
 				}
 			}
@@ -761,8 +804,8 @@ type rangeKeyAndTS struct {
 
 func (rk rangeKeyAndTS) span() roachpb.Span {
 	return roachpb.Span{
-		Key:    []byte(rk.key),
-		EndKey: []byte(rk.endKey),
+		Key:    s2k(rk.key),
+		EndKey: s2k(rk.endKey),
 	}
 }
 
@@ -777,8 +820,8 @@ func newExportedSpanBuilder(spanStart, spanEnd string, atKeyBoundary bool) *expo
 		es: &exportedSpan{
 			metadata: backuppb.BackupManifest_File{
 				Span: roachpb.Span{
-					Key:    []byte(spanStart),
-					EndKey: []byte(spanEnd),
+					Key:    s2k(spanStart),
+					EndKey: s2k(spanEnd),
 				},
 				EntryCounts: roachpb.RowCount{
 					DataSize:     1,
@@ -825,7 +868,7 @@ func (b *exportedSpanBuilder) build() exportedSpan {
 	sst := storage.MakeBackupSSTWriter(ctx, settings, buf)
 	for _, d := range b.keyValues {
 		err := sst.Put(storage.MVCCKey{
-			Key:       []byte(d.key),
+			Key:       s2k(d.key),
 			Timestamp: hlc.Timestamp{WallTime: d.timestamp},
 		}, d.value)
 		if err != nil {
