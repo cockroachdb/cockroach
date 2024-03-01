@@ -16,7 +16,18 @@ release_build_match="$(is_release_or_master_build "$TC_BUILD_BRANCH")"
 is_customized_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo "")"
 github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
 
-if [[ -z "${DRY_RUN}" ]] ; then
+if [[ "$TC_BUILD_BRANCH" == "master" ]]; then
+  # When a release branch is cut and the version on the master branch is bumped
+  # to the next major version, we should stop relying on `git describe` to
+  # identify the release branch for the master branch builds. This will prevent
+  # the situation, when we have no alpha builds (i.e v24.1.0-alpha.1),
+  # pkg/builds/version.txt identifies as alpha.1, but `git describe` finds the
+  # latest available release tag as something from the previous major release
+  # (i.e. v23.2.0-alpha.2).
+  release_branch="$(grep -Eo "^v[0-9]+\.[0-9]+" pkg/build/version.txt)"
+fi
+
+if [[ -z "${DRY_RUN}" ]]; then
   if [[ -z "${is_customized_build}" ]] ; then
     google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS
     gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
