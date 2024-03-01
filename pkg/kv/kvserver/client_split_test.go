@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -804,6 +805,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	ms, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
 	assertRecomputedStats(t, "before split", snap, repl.Desc(), ms, start.WallTime)
+	require.Equal(t, int64(0), ms.ContainsEstimates)
 	require.Equal(t, repl.GetMVCCStats(), ms, "in-memory and on-disk stats diverge")
 
 	// Split the range at approximate halfway point.
@@ -850,9 +852,11 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	require.GreaterOrEqual(t, msLeft.RangeValBytes+msRight.RangeValBytes, ms.RangeValBytes)
 	require.GreaterOrEqual(t, msLeft.GCBytesAge+msRight.GCBytesAge, ms.GCBytesAge)
 
-	// Stats should agree with recomputation.
+	// Stats should agree with re-computation.
 	assertRecomputedStats(t, "LHS after split", snap, repl.Desc(), msLeft, s.Clock().PhysicalNow())
+	require.Equal(t, int64(1), msLeft.ContainsEstimates)
 	assertRecomputedStats(t, "RHS after split", snap, replRight.Desc(), msRight, s.Clock().PhysicalNow())
+	require.Equal(t, int64(1), msRight.ContainsEstimates)
 
 	// Merge the ranges back together, and assert that the merged stats
 	// agree with the pre-split stats.
@@ -870,6 +874,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 
 	msMerged.SysBytes, msMerged.SysCount, msMerged.AbortSpanBytes = 0, 0, 0
 	ms.AgeTo(msMerged.LastUpdateNanos)
+	ms.ContainsEstimates = 2
 	require.Equal(t, ms, msMerged, "post-merge stats differ from pre-split")
 }
 
@@ -958,9 +963,50 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 	rhsStats, err := stateloader.Make(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
 
+	if !batcheval.EnableEstimatedMVCCStatsInSplit.Get(&store.ClusterSettings().SV) {
+		// Stats should agree with re-computation.
+		assertRecomputedStats(t, "LHS after split", snap, lhsRepl.Desc(), lhsStats, s.Clock().PhysicalNow())
+		assertRecomputedStats(t, "RHS after split", snap, rhsRepl.Desc(), rhsStats, s.Clock().PhysicalNow())
+	}
+
+	// If we used estimated stats while splitting the range, the stats on disk
+	// will not match the stats recomputed from the range. We expect both of the
+	// concurrent writes to be attributed to the RHS (instead of 1 to the LHS and
+	// 1 th the RHS). But if we split these ranges one more time (no concurrent
+	// writes this time), we expect the stats to be corrected and not drift.
+	splitKeyLeft := roachpb.Key("aa")
+	splitKeyLeftAddr, err := keys.Addr(splitKeyLeft)
+	require.NoError(t, err)
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKeyLeft))
+	require.NoError(t, pErr.GoError())
+	splitKeyRight := roachpb.Key("bb")
+	splitKeyRightAddr, err := keys.Addr(splitKeyRight)
+	require.NoError(t, err)
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKeyRight))
+	require.NoError(t, pErr.GoError())
+
+	snap = store.TODOEngine().NewSnapshot()
+	defer snap.Close()
+	lhs1Stats, err := stateloader.Make(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+	require.NoError(t, err)
+	lhs2Repl := store.LookupReplica(splitKeyLeftAddr)
+	lhs2Stats, err := stateloader.Make(lhs2Repl.RangeID).LoadMVCCStats(ctx, snap)
+	require.NoError(t, err)
+	rhs1Stats, err := stateloader.Make(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+	require.NoError(t, err)
+	rhs2Repl := store.LookupReplica(splitKeyRightAddr)
+	rhs2Stats, err := stateloader.Make(rhs2Repl.RangeID).LoadMVCCStats(ctx, snap)
+	require.NoError(t, err)
+
 	// Stats should agree with re-computation.
-	assertRecomputedStats(t, "LHS after split", snap, lhsRepl.Desc(), lhsStats, s.Clock().PhysicalNow())
-	assertRecomputedStats(t, "RHS after split", snap, rhsRepl.Desc(), rhsStats, s.Clock().PhysicalNow())
+	assertRecomputedStats(t, "LHS1 after second split", snap, lhsRepl.Desc(), lhs1Stats, s.Clock().PhysicalNow())
+	require.Equal(t, int64(1), lhs1Stats.ContainsEstimates)
+	assertRecomputedStats(t, "LHS2 after second split", snap, lhs2Repl.Desc(), lhs2Stats, s.Clock().PhysicalNow())
+	require.Equal(t, int64(1), lhs2Stats.ContainsEstimates)
+	assertRecomputedStats(t, "RHS1 after second split", snap, rhsRepl.Desc(), rhs1Stats, s.Clock().PhysicalNow())
+	require.Equal(t, int64(0), rhs1Stats.ContainsEstimates)
+	assertRecomputedStats(t, "RHS2 after second split", snap, rhs2Repl.Desc(), rhs2Stats, s.Clock().PhysicalNow())
+	require.Equal(t, int64(1), rhs2Stats.ContainsEstimates)
 }
 
 // RaftMessageHandlerInterceptor wraps a storage.IncomingRaftMessageHandler. It
@@ -1117,7 +1163,9 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 
 	// Stats should agree with recomputation.
 	assertRecomputedStats(t, "LHS after split", snap, repl.Desc(), msLeft, s.Clock().PhysicalNow())
+	require.Equal(t, int64(1), msLeft.ContainsEstimates)
 	assertRecomputedStats(t, "RHS after split", snap, replRight.Desc(), msRight, s.Clock().PhysicalNow())
+	require.Equal(t, int64(1), msRight.ContainsEstimates)
 }
 
 // fillRange writes keys with the given prefix and associated values

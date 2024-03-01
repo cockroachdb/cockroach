@@ -30,11 +30,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -169,11 +171,12 @@ func splitTxnAttempt(
 	ctx context.Context,
 	store *Store,
 	txn *kv.Txn,
-	rightRangeID roachpb.RangeID,
-	splitKey roachpb.RKey,
-	expiration hlc.Timestamp,
+	leftDesc *roachpb.RangeDescriptor,
+	rightDesc *roachpb.RangeDescriptor,
 	oldDesc *roachpb.RangeDescriptor,
 	reason redact.RedactableString,
+	preSplitLeftUserStats enginepb.MVCCStats,
+	antiDriftDeltaStats enginepb.MVCCStats,
 ) error {
 	txn.SetDebugName(splitTxnName)
 
@@ -182,12 +185,6 @@ func splitTxnAttempt(
 	if err != nil {
 		return err
 	}
-	// TODO(tbg): return desc from conditionalGetDescValueFromDB and don't pass
-	// in oldDesc any more (just the start key).
-	desc := oldDesc
-	oldDesc = nil // prevent accidental use
-
-	leftDesc, rightDesc := prepareSplitDescs(rightRangeID, splitKey, expiration, desc)
 
 	// Update existing range descriptor for left hand side of
 	// split. Note that we mutate the descriptor for the left hand
@@ -234,8 +231,10 @@ func splitTxnAttempt(
 		Commit: true,
 		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 			SplitTrigger: &roachpb.SplitTrigger{
-				LeftDesc:  *leftDesc,
-				RightDesc: *rightDesc,
+				LeftDesc:              *leftDesc,
+				RightDesc:             *rightDesc,
+				PreSplitLeftUserStats: preSplitLeftUserStats,
+				AntiDriftDeltaStats:   antiDriftDeltaStats,
 			},
 		},
 	})
@@ -440,8 +439,30 @@ func (r *Replica) adminSplitWithDescriptor(
 	log.Infof(ctx, "initiating a split of this range at key %v [r%d] (%s)%s",
 		splitKey, rightRangeID, reason, extra)
 
+	leftDesc, rightDesc := prepareSplitDescs(rightRangeID, splitKey, args.ExpirationTime, desc)
+
+	// Compute the stats for the range and a delta wrt the stored stats. Applying
+	// this delta to the on-disk stats in splitTrigger will prevent estimates from
+	// compounding across splits.
+	totalStats, err := rditer.ComputeStatsForRange(
+		ctx, desc, r.store.TODOEngine(), r.store.Clock().NowAsClockTimestamp().WallTime)
+	if err != nil {
+		return reply, errors.Wrapf(err, "unable to compute total pre-split stats for range")
+	}
+	antiDriftDelta := totalStats
+	antiDriftDelta.Subtract(r.GetMVCCStats())
+
+	// We need the LHS user-only stats separately to estimate the total post-split
+	// LHS stats by combining these stats with the non-user stats computed in
+	// splitTrigger.
+	userOnlyLeftStats, err := rditer.ComputeStatsForRangeUserOnly(
+		ctx, leftDesc, r.store.TODOEngine(), r.store.Clock().NowAsClockTimestamp().WallTime)
+	if err != nil {
+		return reply, errors.Wrapf(err, "unable to compute user-only pre-split stats for LHS range")
+	}
+
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return splitTxnAttempt(ctx, r.store, txn, rightRangeID, splitKey, args.ExpirationTime, desc, reason)
+		return splitTxnAttempt(ctx, r.store, txn, leftDesc, rightDesc, desc, reason, userOnlyLeftStats, antiDriftDelta)
 	}); err != nil {
 		// The ConditionFailedError can occur because the descriptors acting
 		// as expected values in the CPuts used to update the left or right

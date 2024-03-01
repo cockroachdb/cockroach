@@ -30,7 +30,7 @@ import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 //     well as for the writes in DeltaBatch related to the shrunk keyrange. In
 //     practice, we obtain this by recomputing the stats using the corresponding
 //     AbsPostSplit{Left,Right}Fn, and so we don't expect ContainsEstimates to be
-//     set in them. The choice of which side to scan is controlled by ScanRightFirst.
+//     set in them. The choice of which side to scan is controlled by RightIsEmpty.
 //   - DeltaRangeKey: the stats delta that must be added to the non-computed
 //     half's stats to account for the splitting of range keys straddling the split
 //     point. See computeSplitRangeKeyStatsDelta() for details.
@@ -128,11 +128,26 @@ type splitStatsHelperInput struct {
 	// PostSplitScanRightFn returns the stats for the right hand side of the
 	// split computed by scanning relevant part of the range.
 	PostSplitScanRightFn splitStatsScanFn
-	// ScanRightFirst controls whether the left hand side or the right hand
-	// side of the split is scanned first. In cases where neither of the
-	// input stats contain estimates, this is the only side that needs to
-	// be scanned.
-	ScanRightFirst bool
+	// RightIsEmpty denotes that the RHS is empty. If this is the case, it will
+	// be scanned first.
+	RightIsEmpty bool
+	// LeftIsEmpty denotes that the LHS is empty. If this is the case, it will
+	// be scanned first.
+	LeftIsEmpty bool
+	// PreSplitLeftUser contains the pre-split user-only stats of the LHS. Those
+	// are expensive to compute, so we compute them in AdminSplit, before holding
+	// latches.
+	PreSplitLeftUser enginepb.MVCCStats
+	// PostSplitScanLocalLeftFn returns the stats for the non-user spans of the
+	// LHS. Adding these to PreSplitLeftUser results in an estimate of the LHS
+	// stats. It's only an estimate because any writes to the user spans of the
+	// LHS, concurrent with the split, may not be accounted for.
+	PostSplitScanLocalLeftFn splitStatsScanFn
+	// AntiDriftDelta contains the delta between the recomputed total range stats
+	// pre-split, and the stored stats on disk. This delta corresponds to stats
+	// inaccuracies introduced by previous splits (but also potentially other
+	// operations that produce stats estimates).
+	AntiDriftDelta enginepb.MVCCStats
 }
 
 // makeSplitStatsHelper initializes a splitStatsHelper. The values in the input
@@ -148,7 +163,7 @@ func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error)
 	// Scan to compute the stats for the first side.
 	var absPostSplitFirst enginepb.MVCCStats
 	var err error
-	if h.in.ScanRightFirst {
+	if h.in.RightIsEmpty {
 		absPostSplitFirst, err = input.PostSplitScanRightFn()
 		h.absPostSplitRight = &absPostSplitFirst
 	} else {
@@ -167,7 +182,7 @@ func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error)
 		ms.Subtract(absPostSplitFirst)
 		ms.Add(h.in.DeltaBatchEstimated)
 		ms.Add(h.in.DeltaRangeKey)
-		if h.in.ScanRightFirst {
+		if h.in.RightIsEmpty {
 			h.absPostSplitLeft = &ms
 		} else {
 			h.absPostSplitRight = &ms
@@ -181,7 +196,7 @@ func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error)
 	// contains estimates, so that we can guarantee that the post-splits stats
 	// don't.
 	var absPostSplitSecond enginepb.MVCCStats
-	if h.in.ScanRightFirst {
+	if h.in.RightIsEmpty {
 		absPostSplitSecond, err = input.PostSplitScanLeftFn()
 		h.absPostSplitLeft = &absPostSplitSecond
 	} else {
@@ -191,6 +206,62 @@ func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error)
 	if err != nil {
 		return splitStatsHelper{}, err
 	}
+	return h, nil
+}
+
+// makeEstimatedSplitStatsHelper is like makeSplitStatsHelper except it does
+// not scan the entire LHS or RHS by calling PostSplitScan(Left|Right)Fn().
+// Instead, this function derives the post-split LHS stats by adding
+// the pre-split user LHS stats to the non-user LHS stats computed here by
+// calling PostSplitScanLocalLeftFn(). The resulting stats are not guaranteed
+// to be 100% accurate, so they are marked with ContainsEstimates.
+func makeEstimatedSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error) {
+	h := splitStatsHelper{
+		in: input,
+	}
+
+	var absPostSplitFirst enginepb.MVCCStats
+	var err error
+	if h.in.RightIsEmpty {
+		absPostSplitFirst, err = input.PostSplitScanRightFn()
+		h.absPostSplitRight = &absPostSplitFirst
+	} else if h.in.LeftIsEmpty {
+		absPostSplitFirst, err = input.PostSplitScanLeftFn()
+		h.absPostSplitLeft = &absPostSplitFirst
+	} else {
+		absPostSplitFirst, err = input.PostSplitScanLocalLeftFn()
+		absPostSplitFirst.Add(input.PreSplitLeftUser)
+		h.absPostSplitLeft = &absPostSplitFirst
+	}
+	if err != nil {
+		return splitStatsHelper{}, err
+	}
+
+	ms := h.in.AbsPreSplitBothStored
+	ms.Add(h.in.AntiDriftDelta)
+	ms.Subtract(absPostSplitFirst)
+	ms.Add(h.in.DeltaBatchEstimated)
+	ms.Add(h.in.DeltaRangeKey)
+	if h.in.RightIsEmpty {
+		h.absPostSplitLeft = &ms
+	} else {
+		h.absPostSplitRight = &ms
+	}
+
+	// Mark the stats with ContainsEstimates. Even if AbsPreSplitBothStored and
+	// h.in.PreSplitStats are identical, there may have been concurrent writes
+	// that keep these stats the same while the LHS and RHS stats differ.
+	// For example, one key, and corresponding value, are deleted from the LHS,
+	// and another key and value, of the same size, are written to the RHS.
+	// But if the LHS or RHS is known to be empty, the stats are guaranteed to
+	// be correct because we scanned the range using PostSplitScan(Right|Left)Fn().
+	if !h.in.LeftIsEmpty {
+		h.absPostSplitLeft.ContainsEstimates++
+	}
+	if !h.in.RightIsEmpty {
+		h.absPostSplitRight.ContainsEstimates++
+	}
+
 	return h, nil
 }
 

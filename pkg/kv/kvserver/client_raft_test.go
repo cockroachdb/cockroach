@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -5810,7 +5811,11 @@ func TestRaftSnapshotsWithMVCCRangeKeys(t *testing.T) {
 		require.Len(t, ccResp.Result, 1)
 		result := ccResp.Result[0]
 		require.Equal(t, desc.RangeID, result.RangeID)
-		require.Equal(t, kvpb.CheckConsistencyResponse_RANGE_CONSISTENT, result.Status, "%+v", result)
+		if batcheval.EnableEstimatedMVCCStatsInSplit.Get(&ts.ClusterSettings().SV) {
+			require.Equal(t, kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED, result.Status, "%+v", result)
+		} else {
+			require.Equal(t, kvpb.CheckConsistencyResponse_RANGE_CONSISTENT, result.Status, "%+v", result)
+		}
 	}
 
 	checkConsistency(descA)
