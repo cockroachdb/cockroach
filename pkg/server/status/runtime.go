@@ -157,6 +157,36 @@ var (
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaMemStackSysBytes = metric.Metadata{
+		Name:        "sys.stack.systembytes",
+		Help:        "Stack memories obtained from the OS.",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaHeapFragmentBytes = metric.Metadata{
+		Name:        "sys.heap.heapfragmentbytes",
+		Help:        "Total heap fragmentation bytes, derived from bytes in in-use spans subtracts bytes allocated",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaHeapReservedBytes = metric.Metadata{
+		Name:        "sys.heap.heapreservedbytes",
+		Help:        "Total bytes reserved by heap, derived from bytes in idle (unused) spans subtracts bytes returned to the OS",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaHeapReleasedBytes = metric.Metadata{
+		Name:        "sys.heap.heapreleasedbytes",
+		Help:        "Total bytes returned to the OS from heap.",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaTotalAlloc = metric.Metadata{
+		Name:        "sys.heap.allocbytes",
+		Help:        "Cumulative bytes allocated for heap objects.",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaFDOpen = metric.Metadata{
 		Name:        "sys.fd.open",
 		Help:        "Process open file descriptors",
@@ -309,6 +339,10 @@ const runtimeMetricGCAssist = "/cpu/classes/gc/mark/assist:cpu-seconds"
 // yet been marked free by the garbage collector.
 const runtimeMetricHeapAlloc = "/memory/classes/heap/objects:bytes"
 
+// Cumulative sum of memory allocated to the heap by the
+// application.
+const runtimeMetricCumulativeAlloc = "/gc/heap/allocs:bytes"
+
 // Memory that is reserved for heap objects but is not currently
 // used to hold heap objects.
 const runtimeMetricHeapFragmentBytes = "/memory/classes/heap/unused:bytes"
@@ -356,6 +390,7 @@ var runtimeMetrics = []string{
 	runtimeMetricMemStackHeapBytes,
 	runtimeMetricMemStackOSBytes,
 	runtimeMetricGoTotal,
+	runtimeMetricCumulativeAlloc,
 }
 
 // GoRuntimeSampler are a collection of metrics to sample from golang's runtime environment and
@@ -495,8 +530,13 @@ type RuntimeStatSampler struct {
 	// CPU stats for the CRDB process usage.
 	HostCPUCombinedPercentNorm *metric.GaugeFloat64
 	// Memory stats.
-	RSSBytes      *metric.Gauge
-	TotalMemBytes *metric.Gauge
+	RSSBytes          *metric.Gauge
+	TotalMemBytes     *metric.Gauge
+	MemStackSysBytes  *metric.Gauge
+	HeapFragmentBytes *metric.Gauge
+	HeapReservedBytes *metric.Gauge
+	HeapReleasedBytes *metric.Gauge
+	TotalAlloc        *metric.Gauge
 	// File descriptor stats.
 	FDOpen      *metric.Gauge
 	FDSoftLimit *metric.Gauge
@@ -585,6 +625,11 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 
 		RSSBytes:               metric.NewGauge(metaRSSBytes),
 		TotalMemBytes:          metric.NewGauge(metaTotalMemBytes),
+		MemStackSysBytes:       metric.NewGauge(metaMemStackSysBytes),
+		HeapFragmentBytes:      metric.NewGauge(metaHeapFragmentBytes),
+		HeapReservedBytes:      metric.NewGauge(metaHeapReservedBytes),
+		HeapReleasedBytes:      metric.NewGauge(metaHeapReleasedBytes),
+		TotalAlloc:             metric.NewGauge(metaTotalAlloc),
 		HostDiskReadBytes:      metric.NewGauge(metaHostDiskReadBytes),
 		HostDiskReadCount:      metric.NewGauge(metaHostDiskReadCount),
 		HostDiskReadTime:       metric.NewGauge(metaHostDiskReadTime),
@@ -768,12 +813,13 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	rsr.last.runnableSum = runnableSum
 
 	// Log summary of statistics to console.
+	osStackBytes := rsr.goRuntimeSampler.uint64(runtimeMetricMemStackOSBytes)
 	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
 	goAlloc := rsr.goRuntimeSampler.uint64(runtimeMetricHeapAlloc)
 	goTotal := rsr.goRuntimeSampler.uint64(runtimeMetricGoTotal) -
 		rsr.goRuntimeSampler.uint64(runtimeMetricHeapReleasedBytes)
 	stackTotal := rsr.goRuntimeSampler.uint64(runtimeMetricMemStackHeapBytes) +
-		rsr.goRuntimeSampler.uint64(runtimeMetricMemStackOSBytes)
+		osStackBytes
 	stats := &eventpb.RuntimeStats{
 		MemRSSBytes:       mem.Resident,
 		GoroutineCount:    uint64(numGoroutine),
@@ -824,6 +870,11 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	rsr.RSSBytes.Update(int64(mem.Resident))
 	totalMem, _, _ := GetTotalMemoryWithoutLogging()
 	rsr.TotalMemBytes.Update(totalMem)
+	rsr.MemStackSysBytes.Update(int64(osStackBytes))
+	rsr.HeapFragmentBytes.Update(int64(rsr.goRuntimeSampler.uint64(runtimeMetricHeapFragmentBytes)))
+	rsr.HeapReservedBytes.Update(int64(rsr.goRuntimeSampler.uint64(runtimeMetricHeapReservedBytes)))
+	rsr.HeapReleasedBytes.Update(int64(rsr.goRuntimeSampler.uint64(runtimeMetricHeapReleasedBytes)))
+	rsr.TotalAlloc.Update(int64(rsr.goRuntimeSampler.uint64(runtimeMetricCumulativeAlloc)))
 	rsr.Uptime.Update((now - rsr.startTimeNanos) / 1e9)
 }
 
