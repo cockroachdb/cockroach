@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/tracker"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
 
 func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) {

@@ -66,7 +66,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 func adminMergeArgs(key roachpb.Key) *kvpb.AdminMergeRequest {

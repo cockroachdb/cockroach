@@ -43,8 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"google.golang.org/grpc/metadata"
 )
 

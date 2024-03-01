@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 // TestBelowRaftProtosDontChange is a manually curated list of protos that we

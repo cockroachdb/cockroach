@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 // Asserter is a test utility that tracks application of Raft commands, and

@@ -71,7 +71,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 // adminSplitArgs creates an AdminSplitRequest for the provided split key.

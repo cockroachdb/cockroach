@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 func TestNewEntry(t *testing.T) {

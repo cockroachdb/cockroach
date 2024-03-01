@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/raft/v3"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 )
 
 var (

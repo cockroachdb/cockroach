@@ -17,6 +17,7 @@ go_library(
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/benignerror",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft",
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -24,6 +25,5 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@io_etcd_go_raft_v3//:raft",
     ],
 )

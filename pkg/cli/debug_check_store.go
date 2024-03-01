@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"golang.org/x/sync/errgroup"
 )
 

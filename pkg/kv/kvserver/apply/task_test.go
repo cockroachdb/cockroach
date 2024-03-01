@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 // logging is used for Example.

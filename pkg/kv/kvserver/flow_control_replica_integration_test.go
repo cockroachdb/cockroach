@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/tracker"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
 
 // TestFlowControlReplicaIntegration tests the kvflowcontrol replica integration

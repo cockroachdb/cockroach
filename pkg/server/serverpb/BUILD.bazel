@@ -27,6 +27,7 @@ proto_library(
         "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_proto",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb:loqrecoverypb_proto",
         "//pkg/multitenant/mtinfopb:mtinfopb_proto",
+        "//pkg/raft/raftpb:raftpb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_proto",
         "//pkg/server/status/statuspb:statuspb_proto",
@@ -44,7 +45,6 @@ proto_library(
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
         "@go_googleapis//google/api:annotations_proto",
-        "@io_etcd_go_raft_v3//raftpb:raftpb_proto",
     ],
 )
 
@@ -69,6 +69,7 @@ go_proto_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/multitenant/mtinfopb",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/server/status/statuspb",
@@ -90,7 +91,6 @@ go_proto_library(
         # NB: The grpc-gateway compiler injects a dependency on the descriptor
         # package that Gazelle isn't prepared to deal with.
         "@com_github_golang_protobuf//descriptor:go_default_library_gen",  # keep
-        "@io_etcd_go_raft_v3//raftpb",
         "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
     ],
 )

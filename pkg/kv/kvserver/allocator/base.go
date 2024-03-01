@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"go.etcd.io/raft/v3"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 )
 
 const (

@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/raft/v3"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 )
 
 // ReplicationChangesForRebalance returns a list of ReplicationChanges to

@@ -91,7 +91,7 @@ import (
 	"github.com/google/pprof/profile"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/prometheus/common/expfmt"
-	raft "go.etcd.io/raft/v3"
+	raft "github.com/cockroachdb/cockroach/pkg/raft"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

@@ -43,7 +43,7 @@ import (
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"

@@ -40,7 +40,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 func makeClockTS(walltime int64, logical int32) hlc.ClockTimestamp {

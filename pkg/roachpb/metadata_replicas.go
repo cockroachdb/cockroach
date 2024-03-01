@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 // ReplicaSet is a set of replicas, usually the nodes/stores on which

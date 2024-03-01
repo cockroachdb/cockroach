@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"go.etcd.io/raft/v3"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 )
 
 // storeRebalancerPhase represents the current phase the store rebalancer is

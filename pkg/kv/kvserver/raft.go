@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 // maxRaftMsgType is the maximum value in the raft.MessageType enum.

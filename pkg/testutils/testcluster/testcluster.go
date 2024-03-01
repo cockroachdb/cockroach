@@ -54,7 +54,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used

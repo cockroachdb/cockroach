@@ -37,8 +37,8 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(

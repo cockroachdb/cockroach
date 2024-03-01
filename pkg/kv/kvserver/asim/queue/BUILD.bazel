@@ -21,11 +21,11 @@ go_library(
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/constraint",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft",
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/timeutil",
-        "@io_etcd_go_raft_v3//:raft",
     ],
 )
 

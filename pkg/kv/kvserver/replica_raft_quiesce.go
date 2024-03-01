@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
-	"go.etcd.io/raft/v3/tracker"
+	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
 
 // quiesceAfterTicks is the number of ticks without proposals after which ranges

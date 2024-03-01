@@ -49,9 +49,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
-	"go.etcd.io/raft/v3/tracker"
+	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
 
 // mergeApplicationTimeout is the timeout when waiting for a merge command to be
