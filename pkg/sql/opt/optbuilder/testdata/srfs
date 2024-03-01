@@ -1168,3 +1168,14 @@ project
  │         └── t95315.c2:2 = c2:7
  └── projections
       └── 1 [as="?column?":8]
+
+# Regression test for #119612.
+build
+SELECT unnest(ARRAY[ROW(),ROW(),ROW()]);
+----
+project-set
+ ├── columns: unnest:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── unnest(ARRAY[(),(),()])
