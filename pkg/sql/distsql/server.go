@@ -206,6 +206,7 @@ func (ds *ServerImpl) setupFlow(
 	rowSyncFlowConsumer execinfra.RowReceiver,
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localState LocalState,
+	disableFlowMonitorCheck bool,
 ) (retCtx context.Context, _ flowinfra.Flow, _ execopnode.OpChains, retErr error) {
 	var sp *tracing.Span                       // will be Finish()ed by Flow.Cleanup()
 	var monitor, diskMonitor *mon.BytesMonitor // will be closed in Flow.Cleanup()
@@ -269,6 +270,9 @@ func (ds *ServerImpl) setupFlow(
 		MaxHist:  ds.Metrics.MaxBytesHist,
 		Settings: ds.Settings,
 	})
+	if disableFlowMonitorCheck {
+		monitor.MarkLongLiving()
+	}
 	monitor.Start(ctx, parentMonitor, reserved)
 	diskMonitor = execinfra.NewMonitor(ctx, ds.ParentDiskMonitor, "flow-disk-monitor")
 
@@ -583,10 +587,11 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	output execinfra.RowReceiver,
 	batchOutput execinfra.BatchReceiver,
 	localState LocalState,
+	disableFlowMonitorCheck bool,
 ) (context.Context, flowinfra.Flow, execopnode.OpChains, error) {
 	return ds.setupFlow(
 		ctx, tracing.SpanFromContext(ctx), parentMonitor, &mon.BoundAccount{}, /* reserved */
-		req, output, batchOutput, localState,
+		req, output, batchOutput, localState, disableFlowMonitorCheck,
 	)
 }
 
@@ -650,7 +655,7 @@ func (ds *ServerImpl) SetupFlow(
 		var f flowinfra.Flow
 		ctx, f, _, err = ds.setupFlow(
 			ctx, rpcSpan, ds.memMonitor, &reserved, req, nil, /* rowSyncFlowConsumer */
-			nil /* batchSyncFlowConsumer */, LocalState{},
+			nil /* batchSyncFlowConsumer */, LocalState{}, false, /* disableFlowMonitorCheck */
 		)
 		// Check whether the RPC context has been canceled indicating that we
 		// actually don't need to run this flow. This can happen when the

@@ -911,6 +911,9 @@ type PlanningCtx struct {
 
 	// This is true if plan is a simple insert that can be vectorized.
 	isVectorInsert bool
+
+	// TODO: file an issue about it.
+	DisableFlowMonitorCheck bool
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}
