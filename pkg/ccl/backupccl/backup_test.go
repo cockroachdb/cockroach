@@ -184,8 +184,9 @@ func TestBackupRestoreSingleNodeLocal(t *testing.T) {
 	params := base.TestClusterArgs{}
 	knobs := base.TestingKnobs{
 		SQLExecutor: &sql.ExecutorTestingKnobs{
-			AfterBackupChunk: func() {
+			AfterBackupChunk: func() error {
 				chunks++
+				return nil
 			},
 		},
 	}
@@ -1635,6 +1636,63 @@ func TestRestoreRetryProcErr(t *testing.T) {
 		}
 		require.Equal(t, mu.flowCount, expectedFlowCount)
 	})
+}
+
+// TestBackupJobRetryReset tests that the job level retry counter
+// resets after the backup made progresses. To do so, the test does the following:
+// 1. Intercept the backup job after a backup chunk completes and returns a retryable
+// error until the retry reached desired count.
+// 2. Added a new testing know BeforeBackupResetRetry to simulate backup job has made
+// progress and force the retry loop to reset.
+// 3. Validate the retry reset works by checking the actual retry count is greater than
+// the max retry count set initially.
+func TestBackupJobRetryReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	mu := struct {
+		syncutil.Mutex
+		retryCount int
+	}{}
+	targetRetryCount := 3
+	maxRetries := 2
+	params := base.TestClusterArgs{}
+	knobs := base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			AfterBackupChunk: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				if mu.retryCount == targetRetryCount {
+					return nil
+				}
+				mu.retryCount++
+				return syscall.ECONNRESET
+			},
+			BeforeBackupResetRetry: func() bool {
+				mu.Lock()
+				defer mu.Unlock()
+				return mu.retryCount < targetRetryCount
+			},
+		},
+		BackupRestore: &sql.BackupRestoreTestingKnobs{
+			BackupDistSQLRetryPolicy: &retry.Options{
+				InitialBackoff: time.Microsecond,
+				Multiplier:     2,
+				MaxBackoff:     2 * time.Microsecond,
+				MaxRetries:     maxRetries,
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+	params.ServerArgs = base.TestServerArgs{Knobs: knobs}
+	// Best effort to set up backup jobs with spans > 1.
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, 45000, InitManualReplication, params)
+	defer cleanupFn()
+
+	var backupJobId jobspb.JobID
+	sqlDB.QueryRow(t, `BACKUP DATABASE data INTO $1 WITH DETACHED`, localFoo).Scan(&backupJobId)
+
+	jobutils.WaitForJobToSucceed(t, sqlDB, backupJobId)
+	require.Greater(t, mu.retryCount, maxRetries)
 }
 
 func createAndWaitForJob(
