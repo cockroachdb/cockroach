@@ -1032,6 +1032,17 @@ func splitTrigger(
 			"unable to determine whether right hand side of split is empty")
 	}
 
+	// The intentInterleavingIterator doesn't like iterating over spans containing
+	// both local and global keys. Here we only care about global keys.
+	spanWithNoLocals := split.LeftDesc.KeySpan().AsRawSpanWithNoLocals()
+	emptyLHS, err := storage.MVCCIsSpanEmpty(ctx, batch, storage.MVCCIsSpanEmptyOptions{
+		StartKey: spanWithNoLocals.Key, EndKey: spanWithNoLocals.EndKey,
+	})
+	if err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrapf(err,
+			"unable to determine whether left hand side of split is empty")
+	}
+
 	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(ctx, batch, split.LeftDesc, split.RightDesc)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
@@ -1055,12 +1066,16 @@ func splitTrigger(
 	}
 
 	h := splitStatsHelperInput{
-		AbsPreSplitBothStored: currentStats,
-		DeltaBatchEstimated:   bothDeltaMS,
-		DeltaRangeKey:         rangeKeyDeltaMS,
-		PostSplitScanLeftFn:   makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
-		PostSplitScanRightFn:  makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
-		ScanRightFirst:        splitScansRightForStatsFirst || emptyRHS,
+		AbsPreSplitBothStored:    currentStats,
+		DeltaBatchEstimated:      bothDeltaMS,
+		DeltaRangeKey:            rangeKeyDeltaMS,
+		PreSplitLeftUser:         split.PreSplitLeftUserStats,
+		PostSplitScanLeftFn:      makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side", false /* excludeUserSpans */),
+		PostSplitScanRightFn:     makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side", false /* excludeUserSpans */),
+		PostSplitScanLocalLeftFn: makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "local left hand side", true /* excludeUserSpans */),
+		ScanRightFirst:           splitScansRightForStatsFirst || emptyRHS,
+		LeftUserIsEmpty:          emptyLHS,
+		RightUserIsEmpty:         emptyRHS,
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }
@@ -1081,9 +1096,14 @@ func makeScanStatsFn(
 	ts hlc.Timestamp,
 	sideDesc *roachpb.RangeDescriptor,
 	sideName string,
+	excludeUserSpans bool,
 ) splitStatsScanFn {
+	computeStatsFn := rditer.ComputeStatsForRange
+	if excludeUserSpans {
+		computeStatsFn = rditer.ComputeStatsForRangeExcludingUser
+	}
 	return func() (enginepb.MVCCStats, error) {
-		sideMS, err := rditer.ComputeStatsForRange(ctx, sideDesc, reader, ts.WallTime)
+		sideMS, err := computeStatsFn(ctx, sideDesc, reader, ts.WallTime)
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrapf(err,
 				"unable to compute stats for %s range after split", sideName)
@@ -1128,7 +1148,22 @@ func splitTriggerHelper(
 	// modifications to the left hand side are allowed after this line and any
 	// modifications to the right hand side are accounted for by updating the
 	// helper's AbsPostSplitRight() reference.
-	h, err := makeSplitStatsHelper(statsInput)
+	var h splitStatsHelper
+	// If the leaseholder node is running an older version, it would not include
+	// the PreSplitLeftUser proto field, which is needed in
+	// makeEstimatedSplitStatsHelper, so we fall back to accurate stats computation.
+	// Note that PreSplitLeftUserStats can also be equal to enginepb.MVCCStats{}
+	// when the user LHS stats are all zero, but in that case it's ok to fall back
+	// to accurate stats computation because scanning the empty LHS is not
+	// expensive.
+	if split.PreSplitLeftUserStats == (enginepb.MVCCStats{}) ||
+		// If either side contains no user data, fall back to accurate stats
+		// computation because scanning the empty ranges is cheap.
+		statsInput.LeftUserIsEmpty || statsInput.RightUserIsEmpty {
+		h, err = makeSplitStatsHelper(statsInput)
+	} else {
+		h, err = makeEstimatedSplitStatsHelper(statsInput)
+	}
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
