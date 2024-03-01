@@ -565,6 +565,7 @@
 /pkg/obs/                    @cockroachdb/obs-inf-prs
 /pkg/obsservice/             @cockroachdb/obs-inf-prs
 /pkg/ccl/auditloggingccl     @cockroachdb/obs-inf-prs
+/pkg/migrations              @cockroachdb/migrations
 
 # Own all bazel files to dev-inf, but don't request reviews for them
 # as they are mostly - but not only - generated code that changes with

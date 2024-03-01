@@ -1,0 +1,51 @@
+# Confirm that crdb_internal.protect_table_for_session() lays a protected
+# timestamp
+subtest protect_table_for_session
+
+user host-cluster-root
+
+# Move up the reconciliation interval so that the PTS is cleaned up faster.
+statement ok
+SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '10ms'
+
+user root
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+# Here we lay a PTS for an arbitrary oid. For our purposes, this is OK as
+# we're not validating that the PTS is protecting things properly (we leave
+# that job to the PTS tests) but instead, are validating that the builtin
+# is laying PTSes properly.
+statement ok
+select crdb_internal.protect_table_for_session(112, 1709131929793796000.0000000000);
+
+query TTT colnames
+select ts as timestamp, meta_type, crdb_internal.pb_to_json( 'cockroach.protectedts.Target', target ) from system.protected_ts_records
+----
+timestamp  meta_type  crdb_internal.pb_to_json
+1709131929793796000.0000000000  sessions   {"schemaObjects": {"ids": [112]}}
+
+user root
+
+query T
+SELECT user_name from [SHOW SESSIONS] WHERE user_name = 'testuser' ORDER BY user_name
+----
+testuser
+
+# Cancel the session to force the cleanup the PTS.
+statement ok
+CANCEL SESSIONS (WITH x AS (SHOW SESSIONS) SELECT session_id FROM x WHERE user_name = 'testuser');
+
+# Confirm that the session is gone.
+query T retry
+SELECT user_name from [SHOW SESSIONS] WHERE user_name = 'testuser' ORDER BY user_name
+----
+
+# Confirm that the PTS is gone.
+query TTT retry
+select ts as timestamp, meta_type, crdb_internal.pb_to_json( 'cockroach.protectedts.Target', target ) from system.protected_ts_records
+----
+

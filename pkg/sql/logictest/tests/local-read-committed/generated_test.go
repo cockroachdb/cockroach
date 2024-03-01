@@ -1177,6 +1177,13 @@ func TestLogic_merge_join(
 	runLogicTest(t, "merge_join")
 }
 
+func TestLogic_migrations(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "migrations")
+}
+
 func TestLogic_multi_statement(
 	t *testing.T,
 ) {

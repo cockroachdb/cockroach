@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/migrations"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -440,6 +441,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx = internalExtendedEvalCtx(ctx, sds, params.collection, txn, ts, ts, execCfg)
 	p.extendedEvalCtx.Planner = p
 	p.extendedEvalCtx.StreamManagerFactory = p
+	p.extendedEvalCtx.MigrationsManagerFactory = p
 	p.extendedEvalCtx.PrivilegedAccessor = p
 	p.extendedEvalCtx.SessionAccessor = p
 	p.extendedEvalCtx.ClientNoticeSender = p
@@ -925,6 +927,11 @@ func (p *planner) GetReplicationStreamManager(
 // GetStreamIngestManager returns a StreamIngestManager.
 func (p *planner) GetStreamIngestManager(ctx context.Context) (eval.StreamIngestManager, error) {
 	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID)
+}
+
+// GetMigrationsManager returns a MigrationsManager.
+func (p *planner) GetMigrationsManager(ctx context.Context) (eval.MigrationsManager, error) {
+	return migrations.GetMigrationsManager(ctx, p.EvalContext(), p.execCfg.ProtectedTimestampProvider, p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID), nil
 }
 
 // SpanStats returns a stats for the given span of keys.

@@ -1489,6 +1489,7 @@ GO_TARGETS = [
     "//pkg/kv/kvserver:kvserver_test",
     "//pkg/kv:kv",
     "//pkg/kv:kv_test",
+    "//pkg/migrations:migrations",
     "//pkg/multitenant/mtinfo:mtinfo",
     "//pkg/multitenant/mtinfopb:mtinfopb",
     "//pkg/multitenant/multitenantcpu:multitenantcpu",
