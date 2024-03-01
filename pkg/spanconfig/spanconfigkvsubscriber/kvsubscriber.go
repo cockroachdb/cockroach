@@ -465,9 +465,10 @@ func (s *KVSubscriber) handlePartialUpdate(
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		for _, ev := range events {
-			// TODO(irfansharif): We can apply a batch of updates atomically
-			// now that the StoreWriter interface supports it; it'll let us
-			// avoid this mutex.
+			// NB: Even though the StoreWriter can apply a batch of updates
+			// atomically, the updates need to be non-overlapping. That's not the case
+			// here because we can have deletion events followed by additions for
+			// overlapping spans.
 			s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*BufferEvent).Update)
 		}
 		s.setLastUpdatedLocked(ts)
