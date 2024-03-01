@@ -3616,6 +3616,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		Context: eval.Context{
 			Planner:                        p,
 			StreamManagerFactory:           p,
+			MigrationsManagerFactory:       p,
 			PrivilegedAccessor:             p,
 			SessionAccessor:                p,
 			JobExecContext:                 p,

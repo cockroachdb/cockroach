@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -157,6 +158,8 @@ type Context struct {
 	Planner Planner
 
 	StreamManagerFactory StreamManagerFactory
+
+	MigrationsManagerFactory MigrationsManagerFactory
 
 	// Not using sql.JobExecContext type to avoid cycle dependency with sql package
 	JobExecContext interface{}
@@ -826,6 +829,11 @@ type StreamManagerFactory interface {
 	GetStreamIngestManager(ctx context.Context) (StreamIngestManager, error)
 }
 
+// MigrationsManagerFactory stores methods used to support migrations from other database vendors.
+type MigrationsManagerFactory interface {
+	GetMigrationsManager(ctx context.Context) (MigrationsManager, error)
+}
+
 // ReplicationStreamManager represents a collection of APIs that streaming replication supports
 // on the production side.
 type ReplicationStreamManager interface {
@@ -886,5 +894,17 @@ type StreamIngestManager interface {
 		ctx context.Context,
 		tenantName roachpb.TenantName,
 		revertTo hlc.Timestamp,
+	) error
+}
+
+// MigrationsManager represents a collection of APIs used to support migrations from other
+// database vendors.
+type MigrationsManager interface {
+	// ProtectTableForSession protects the specified table by laying a session-scoped protected
+	// timestamp.
+	ProtectTableForSession(
+		ctx context.Context,
+		tableID descpb.ID,
+		timestamp hlc.Timestamp,
 	) error
 }

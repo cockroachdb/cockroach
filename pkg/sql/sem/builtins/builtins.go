@@ -8662,6 +8662,35 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			CalledOnNullInput: true,
 		},
 	),
+	"crdb_internal.protect_table_for_session": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategoryMigrations,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "table_id", Typ: types.Int}, {Name: "timestamp", Typ: types.Decimal}},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				tableID := tree.MustBeDInt(args[0])
+				tsDec := tree.MustBeDDecimal(args[1])
+				timestamp, err := hlc.DecimalToHLC(&tsDec.Decimal)
+				if err != nil {
+					return nil, err
+				}
+				mgr, err := evalCtx.MigrationsManagerFactory.GetMigrationsManager(ctx)
+				if err != nil {
+					return nil, err
+				}
+				err = mgr.ProtectTableForSession(ctx, catid.DescID(tableID), timestamp)
+				if err != nil {
+					return nil, err
+				}
+				return tree.DVoidDatum, nil
+			},
+			Info:       `This function is used to lay session-scoped protected time stamps.`,
+			Volatility: volatility.Volatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
