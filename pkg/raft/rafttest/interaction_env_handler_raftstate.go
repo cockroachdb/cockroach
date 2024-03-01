@@ -17,7 +17,7 @@ package rafttest
 import (
 	"fmt"
 
-	"go.etcd.io/raft/v3"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 )
 
 // isVoter checks whether node id is in the voter list within st.

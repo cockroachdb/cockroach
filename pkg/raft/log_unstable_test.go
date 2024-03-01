@@ -20,7 +20,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	pb "go.etcd.io/raft/v3/raftpb"
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 func TestUnstableMaybeFirstIndex(t *testing.T) {

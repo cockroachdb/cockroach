@@ -68,7 +68,7 @@ func (EntryType) EnumDescriptor() ([]byte, []int) {
 }
 
 // For description of different message types, see:
-// https://pkg.go.dev/go.etcd.io/raft/v3#hdr-MessageType
+// https://pkg.go.dev/github.com/cockroachdb/cockroach/pkg/raft#hdr-MessageType
 type MessageType int32
 
 const (

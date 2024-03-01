@@ -31,10 +31,9 @@ import (
 	"sort"
 	"testing"
 
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	pb "go.etcd.io/raft/v3/raftpb"
 )
 
 func TestFollowerUpdateTermFromMessage(t *testing.T) {

@@ -20,8 +20,8 @@ import (
 	"sort"
 	"strings"
 
-	"go.etcd.io/raft/v3/quorum"
-	pb "go.etcd.io/raft/v3/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 // Config reflects the configuration tracked in a ProgressTracker.

@@ -17,7 +17,7 @@ package raft
 import (
 	"fmt"
 
-	pb "go.etcd.io/raft/v3/raftpb"
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 // entryID uniquely identifies a raft log entry.
