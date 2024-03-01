@@ -324,7 +324,7 @@ func setupStatCollector(
 		if err := c.StopGrafana(ctx, t.L(), t.ArtifactsDir()); err != nil {
 			t.L().ErrorfCtx(ctx, "Error(s) shutting down prom/grafana %s", err)
 		}
-		c.Wipe(ctx, false /* preserveCerts */)
+		c.Wipe(ctx)
 	}
 
 	promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), cfg)
