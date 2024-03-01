@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"path"
 	"reflect"
@@ -314,7 +315,9 @@ func backup(
 			for i := int32(0); i < progDetails.CompletedSpans; i++ {
 				requestFinishedCh <- struct{}{}
 				if execCtx.ExecCfg().TestingKnobs.AfterBackupChunk != nil {
-					execCtx.ExecCfg().TestingKnobs.AfterBackupChunk()
+					if err := execCtx.ExecCfg().TestingKnobs.AfterBackupChunk(); err != nil {
+						return err
+					}
 				}
 			}
 
@@ -817,6 +820,11 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		MaxRetries: 5,
 	}
 
+	if p.ExecCfg().BackupRestoreTestingKnobs != nil &&
+		p.ExecCfg().BackupRestoreTestingKnobs.BackupDistSQLRetryPolicy != nil {
+		retryOpts = *p.ExecCfg().BackupRestoreTestingKnobs.BackupDistSQLRetryPolicy
+	}
+
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.before.flow"); err != nil {
 		return err
 	}
@@ -824,6 +832,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// We want to retry a backup if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
 	var res roachpb.RowCount
+	var lastProgress float32
 	var numBackupInstances int
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		res, numBackupInstances, err = backup(
@@ -867,6 +876,29 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			defaultStore, details, p.User(), &kmsEnv)
 		if reloadBackupErr != nil {
 			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
+		}
+		// Re-load the job in order to update our progress object, which
+		// may have been updated since the flow started.
+		reloadedJob, reloadErr := p.ExecCfg().JobRegistry.LoadClaimedJob(ctx, b.job.ID())
+		if reloadErr != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Warningf(ctx, "BACKUP job %d could not reload job progress when retrying: %+v",
+				b.job.ID(), reloadErr)
+		} else {
+			curProgress := reloadedJob.FractionCompleted()
+			var retryForTest bool
+			if p.ExecCfg().TestingKnobs.BeforeBackupResetRetry != nil {
+				retryForTest = p.ExecCfg().TestingKnobs.BeforeBackupResetRetry()
+			}
+			// If we made decent progress with the BACKUP, reset the last
+			// progress state.
+			if madeProgress := curProgress - lastProgress; retryForTest || madeProgress >= 0.01 {
+				log.Infof(ctx, "backport made %d%% progress, resetting retry duration", int(math.Round(float64(100*madeProgress))))
+				lastProgress = curProgress
+				r.Reset()
+			}
 		}
 	}
 

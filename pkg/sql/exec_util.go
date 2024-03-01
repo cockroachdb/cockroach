@@ -1616,7 +1616,7 @@ type ExecutorTestingKnobs struct {
 	)
 
 	// AfterBackupChunk is called after each chunk of a backup is completed.
-	AfterBackupChunk func()
+	AfterBackupChunk func() error
 
 	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
 	// is written.
@@ -1646,6 +1646,10 @@ type ExecutorTestingKnobs struct {
 	// ForceSQLLivenessSession will force the use of a sqlliveness session for
 	// transaction deadlines even in the system tenant.
 	ForceSQLLivenessSession bool
+
+	// BeforeBackupResetRetry is called before backup loop encounters a retryable
+	// error.
+	BeforeBackupResetRetry func() bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -1758,6 +1762,8 @@ type BackupRestoreTestingKnobs struct {
 	RunBeforeRestoreFlow func() error
 
 	RunAfterRestoreFlow func() error
+
+	BackupDistSQLRetryPolicy *retry.Options
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
