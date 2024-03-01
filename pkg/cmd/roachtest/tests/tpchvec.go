@@ -312,7 +312,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 				if p.sharedProcessMT() {
 					tenantName = appTenantName
 				}
-				tempConn, err := c.ConnE(ctx, t.L(), 1, option.TenantName(tenantName))
+				tempConn, err := c.ConnE(ctx, t.L(), 1, option.VirtualClusterName(tenantName))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -532,7 +532,7 @@ func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tp
 		}
 		startOpts := option.DefaultStartSharedVirtualClusterOpts(appTenantName)
 		c.StartServiceForVirtualCluster(ctx, t.L(), c.All(), startOpts, install.MakeClusterSettings(), c.All())
-		conn = c.Conn(ctx, t.L(), c.All().RandNode()[0], option.TenantName(appTenantName))
+		conn = c.Conn(ctx, t.L(), c.All().RandNode()[0], option.VirtualClusterName(appTenantName))
 	} else {
 		conn = c.Conn(ctx, t.L(), 1)
 		disableMergeQueue = true

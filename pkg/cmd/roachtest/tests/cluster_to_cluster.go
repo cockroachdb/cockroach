@@ -309,7 +309,7 @@ func (kv replicateKV) runDriver(
 		require.NotEqual(t, "", kv.antiRegion, "if partitionKVDatabaseInRegion is set, then antiRegion must be set")
 		t.L().Printf("constrain the kv database to region %s", kv.partitionKVDatabaseInRegion)
 		alterStmt := fmt.Sprintf("ALTER DATABASE kv CONFIGURE ZONE USING constraints = '[+region=%s]'", kv.partitionKVDatabaseInRegion)
-		srcTenantConn := c.Conn(workloadCtx, t.L(), setup.src.nodes.RandNode()[0], option.TenantName(setup.src.name))
+		srcTenantConn := c.Conn(workloadCtx, t.L(), setup.src.nodes.RandNode()[0], option.VirtualClusterName(setup.src.name))
 		srcTenantSQL := sqlutils.MakeSQLRunner(srcTenantConn)
 		srcTenantSQL.Exec(t, alterStmt)
 		defer kv.checkRegionalConstraints(t, setup, srcTenantSQL)
@@ -792,9 +792,9 @@ func (rd *replicationDriver) onFingerprintMismatch(
 	ctx context.Context, startTime, endTime hlc.Timestamp,
 ) {
 	rd.t.L().Printf("conducting table level fingerprints")
-	srcTenantConn := rd.c.Conn(ctx, rd.t.L(), 1, option.TenantName(rd.setup.src.name))
+	srcTenantConn := rd.c.Conn(ctx, rd.t.L(), 1, option.VirtualClusterName(rd.setup.src.name))
 	defer srcTenantConn.Close()
-	dstTenantConn := rd.c.Conn(ctx, rd.t.L(), rd.rs.srcNodes+1, option.TenantName(rd.setup.dst.name))
+	dstTenantConn := rd.c.Conn(ctx, rd.t.L(), rd.rs.srcNodes+1, option.VirtualClusterName(rd.setup.dst.name))
 	defer dstTenantConn.Close()
 	fingerprintBisectErr := replicationutils.InvestigateFingerprints(ctx, srcTenantConn, dstTenantConn,
 		startTime,
