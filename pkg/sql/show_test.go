@@ -1078,16 +1078,18 @@ func TestShowRedactedActiveStatements(t *testing.T) {
 	_ = sqlDBroot.Exec(t, `GRANT SYSTEM VIEWACTIVITYREDACTED TO bothperms`)
 
 	type user struct {
-		username        string
-		canViewTable    bool // Can the user view the `cluster_queries` table?
-		isQueryRedacted bool // Is the user's query redacted?
-		sqlRunner       *sqlutils.SQLRunner
+		username         string
+		canViewOtherRows bool // Can the user view other users' rows in the table?
+		isQueryRedacted  bool // Are the other userss queries redacted?
+		sqlRunner        *sqlutils.SQLRunner
 	}
 
-	// A user with no permissions should not see the table. A user with only
-	// VIEWACTIVITY should be able to see the whole query. A user with only
-	// VIEWACTIVITYREDACTED should see a redacted query. A user with both should
-	// see the redacted query, as VIEWACTIVITYREDACTED takes precedence.
+	// A user with no permissions should only be able to see their own rows
+	// in the table.
+	// A user with only VIEWACTIVITY should be able to see the whole query.
+	// A user with only VIEWACTIVITYREDACTED should see a redacted query.
+	// A user with both should see the redacted query, as VIEWACTIVITYREDACTED
+	// takes precedence.
 	users := []user{
 		{"onlyviewactivityredacted", true, true, nil},
 		{"onlyviewactivity", true, false, nil},
@@ -1126,10 +1128,10 @@ func TestShowRedactedActiveStatements(t *testing.T) {
 	// Wait for the start signal.
 	<-startSignal
 
-	selectQuery := `SELECT query FROM [SHOW CLUSTER QUERIES] WHERE query LIKE 'SELECT pg_sleep%'`
+	selectRootQuery := `SELECT query FROM [SHOW CLUSTER QUERIES] WHERE query LIKE 'SELECT pg_sleep%' AND user_name = 'root'`
 
 	testutils.SucceedsSoon(t, func() error {
-		rows := sqlDBroot.Query(t, selectQuery)
+		rows := sqlDBroot.Query(t, selectRootQuery)
 		defer rows.Close()
 		count := 0
 		for rows.Next() {
@@ -1150,41 +1152,60 @@ func TestShowRedactedActiveStatements(t *testing.T) {
 
 	for _, u := range users {
 		t.Run(u.username, func(t *testing.T) {
-			// Make sure that if the user can't view the table, they get an error.
-			if !u.canViewTable {
-				u.sqlRunner.ExpectErr(t, "does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege", selectQuery)
-			} else {
-				rows := u.sqlRunner.Query(t, selectQuery)
-				defer rows.Close()
-				if err := rows.Err(); err != nil {
+			rootRows := u.sqlRunner.Query(t, selectRootQuery)
+			defer func() { require.NoError(t, rootRows.Close()) }()
+
+			count := 0
+			for rootRows.Next() {
+				count++
+
+				var query string
+				if err := rootRows.Scan(&query); err != nil {
 					t.Fatal(err)
 				}
-				count := 0
-				for rows.Next() {
-					count++
 
-					var query string
-					if err := rows.Scan(&query); err != nil {
-						t.Fatal(err)
+				t.Log(query)
+				// Make sure that if the user is supposed to see a redacted query, they do.
+				if u.isQueryRedacted {
+					if !strings.HasPrefix(query, "SELECT pg_sleep(_)") {
+						t.Fatalf("Expected `SELECT pg_sleep(_)`, got %s", query)
 					}
-
-					t.Log(query)
-					// Make sure that if the user is supposed to see a redacted query, they do.
-					if u.isQueryRedacted {
-						if !strings.HasPrefix(query, "SELECT pg_sleep(_)") {
-							t.Fatalf("Expected `SELECT pg_sleep(_)`, got %s", query)
-						}
-						// Make sure that if the user is supposed to see the full query, they do.
-					} else {
-						if !strings.HasPrefix(query, "SELECT pg_sleep(30)") {
-							t.Fatalf("Expected `SELECT pg_sleep(30)`, got %s", query)
-						}
+					// Make sure that if the user is supposed to see the full query, they do.
+				} else {
+					if !strings.HasPrefix(query, "SELECT pg_sleep(30)") {
+						t.Fatalf("Expected `SELECT pg_sleep(30)`, got %s", query)
 					}
-				}
-				if count != 1 {
-					t.Fatalf("expected 1 row, got %d", count)
 				}
 			}
+			if u.canViewOtherRows {
+				require.Equalf(t, 1, count, "expected 1 row, got %d", count)
+			} else {
+				require.Equalf(t, 0, count, "expected 0 rows, got %d", count)
+			}
+
+			selectOwnQuery := fmt.Sprintf(
+				`SELECT query FROM [SHOW CLUSTER QUERIES] WHERE query LIKE 'SELECT query FROM%%' AND user_name = '%s'`,
+				u.username,
+			)
+			ownRows := u.sqlRunner.Query(t, selectOwnQuery)
+			defer func() { require.NoError(t, ownRows.Close()) }()
+
+			count = 0
+			for ownRows.Next() {
+				count++
+
+				var query string
+				if err := ownRows.Scan(&query); err != nil {
+					t.Fatal(err)
+				}
+
+				t.Log(query)
+				// Any user can always see their own unredacted queries.
+				if !strings.Contains(query, fmt.Sprintf("user_name = '%s'", u.username)) {
+					t.Fatalf("Expected unredacted query, got %s", query)
+				}
+			}
+			require.Equalf(t, 1, count, "expected 1 row, got %d", count)
 		})
 	}
 
