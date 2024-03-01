@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tracker",
+    srcs = [
+        "inflights.go",
+        "progress.go",
+        "state.go",
+        "tracker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/raft/tracker",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/raft/quorum",
+        "//pkg/raft/raftpb",
+    ],
+)
+
+go_test(
+    name = "tracker_test",
+    srcs = [
+        "inflights_test.go",
+        "progress_test.go",
+    ],
+    embed = [":tracker"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
