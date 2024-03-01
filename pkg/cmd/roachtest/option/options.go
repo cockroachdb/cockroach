@@ -57,11 +57,11 @@ func DefaultStartSingleNodeOpts() StartOpts {
 }
 
 // DefaultStartVirtualClusterOpts returns StartOpts for starting an external
-// process virtual cluster with the given tenant name and SQL instance.
-func DefaultStartVirtualClusterOpts(tenantName string, sqlInstance int) StartOpts {
+// process virtual cluster with the given name and SQL instance.
+func DefaultStartVirtualClusterOpts(name string, sqlInstance int) StartOpts {
 	startOpts := DefaultStartOpts()
 	startOpts.RoachprodOpts.Target = install.StartServiceForVirtualCluster
-	startOpts.RoachprodOpts.VirtualClusterName = tenantName
+	startOpts.RoachprodOpts.VirtualClusterName = name
 	startOpts.RoachprodOpts.SQLInstance = sqlInstance
 	// TODO(DarrylWong): remove once #117125 is addressed.
 	startOpts.RoachprodOpts.AdminUIPort = 0
@@ -69,11 +69,11 @@ func DefaultStartVirtualClusterOpts(tenantName string, sqlInstance int) StartOpt
 }
 
 // DefaultStartSharedVirtualClusterOpts returns StartOpts for starting a shared
-// process virtual cluster with the given tenant name.
-func DefaultStartSharedVirtualClusterOpts(tenantName string) StartOpts {
+// process virtual cluster with the given name.
+func DefaultStartSharedVirtualClusterOpts(name string) StartOpts {
 	startOpts := DefaultStartOpts()
 	startOpts.RoachprodOpts.Target = install.StartSharedProcessForVirtualCluster
-	startOpts.RoachprodOpts.VirtualClusterName = tenantName
+	startOpts.RoachprodOpts.VirtualClusterName = name
 	return startOpts
 }
 

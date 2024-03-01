@@ -18,12 +18,12 @@ import (
 )
 
 type ConnOption struct {
-	User        string
-	DBName      string
-	TenantName  string
-	SQLInstance int
-	AuthMode    install.PGAuthMode
-	Options     map[string]string
+	User               string
+	DBName             string
+	VirtualClusterName string
+	SQLInstance        int
+	AuthMode           install.PGAuthMode
+	Options            map[string]string
 }
 
 func User(user string) func(*ConnOption) {
@@ -32,9 +32,9 @@ func User(user string) func(*ConnOption) {
 	}
 }
 
-func TenantName(tenantName string) func(*ConnOption) {
+func VirtualClusterName(name string) func(*ConnOption) {
 	return func(option *ConnOption) {
-		option.TenantName = tenantName
+		option.VirtualClusterName = name
 	}
 }
 

@@ -304,7 +304,7 @@ func runMultiTenantFairness(
 	for j, name := range virtualClusterNames {
 		node := virtualClusters[name]
 
-		vcdb := c.Conn(ctx, t.L(), node[0], option.TenantName(name), option.SQLInstance(sqlInstance))
+		vcdb := c.Conn(ctx, t.L(), node[0], option.VirtualClusterName(name), option.SQLInstance(sqlInstance))
 		defer vcdb.Close()
 
 		_, err := vcdb.ExecContext(ctx, "USE kv")

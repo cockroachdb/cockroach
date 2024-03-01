@@ -2739,7 +2739,7 @@ func (c *clusterImpl) ConnE(
 		opt(connOptions)
 	}
 	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), roachprod.PGURLOptions{
-		VirtualClusterName: connOptions.TenantName,
+		VirtualClusterName: connOptions.VirtualClusterName,
 		SQLInstance:        connOptions.SQLInstance,
 		Auth:               connOptions.AuthMode,
 	})

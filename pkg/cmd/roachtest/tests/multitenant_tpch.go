@@ -44,7 +44,7 @@ func runMultiTenantTPCH(
 	// one at a time (using the given url as a parameter to the 'workload run'
 	// command). The runtimes are accumulated in the perf helper.
 	runTPCH := func(node int, virtualClusterName string, sqlInstance int, setupIdx int) {
-		conn := c.Conn(ctx, t.L(), node, option.TenantName(virtualClusterName), option.SQLInstance(sqlInstance))
+		conn := c.Conn(ctx, t.L(), node, option.VirtualClusterName(virtualClusterName), option.SQLInstance(sqlInstance))
 		setting := fmt.Sprintf("SET CLUSTER SETTING sql.distsql.direct_columnar_scans.enabled = %t", enableDirectScans)
 		t.Status(setting)
 		if _, err := conn.Exec(setting); err != nil {
@@ -120,7 +120,7 @@ func runMultiTenantTPCH(
 		t.Fatal(err)
 	}
 
-	virtualClusterConn := c.Conn(ctx, t.L(), gatewayNode, option.TenantName(appTenantName), option.SQLInstance(sqlInstance))
+	virtualClusterConn := c.Conn(ctx, t.L(), gatewayNode, option.VirtualClusterName(appTenantName), option.SQLInstance(sqlInstance))
 	defer virtualClusterConn.Close()
 
 	testutils.SucceedsSoon(t, func() error {
