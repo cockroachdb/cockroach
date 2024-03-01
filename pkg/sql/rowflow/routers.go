@@ -286,6 +286,10 @@ func (rb *routerBase) init(
 			ctx, flowCtx.DiskMonitor,
 			redact.Sprintf("router-disk-%d", rb.outputs[i].streamID),
 		)
+		// This monitor is not a long-living one, but there is a race between
+		// the output goroutine stopping it and the main goroutine performing
+		// the cleanup of the flow (when the flow disk monitor is closed).
+		rb.outputs[i].diskMonitor.MarkLongLiving()
 		// Note that the monitor is an unlimited one since we don't know how
 		// to fallback to disk if a memory budget error is encountered when
 		// we're popping rows from the row container into the row buffer.

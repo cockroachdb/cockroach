@@ -489,15 +489,19 @@ func (e *familyEvaluator) closeErr() error {
 		}()
 	}
 
+	if e.cleanup != nil {
+		defer func() {
+			e.cleanup()
+			e.cleanup = nil
+		}()
+	}
+
 	if e.input != nil {
 		e.input.ProducerDone()
 		e.input = nil
 		return e.planGroup.Wait()
 	}
 
-	if e.cleanup != nil {
-		e.cleanup()
-	}
 	return nil
 }
 
