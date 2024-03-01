@@ -1,5 +1,6 @@
 syntax = "proto2";
 package raftpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/raft/raftpb";
 
 import "gogoproto/gogo.proto";
 

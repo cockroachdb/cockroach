@@ -18,6 +18,8 @@ go_library(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/raftlog",
+        "//pkg/raft",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -38,8 +40,6 @@ go_library(
         "@com_github_cockroachdb_pebble//record",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
-        "@io_etcd_go_raft_v3//:raft",
-        "@io_etcd_go_raft_v3//raftpb",
         "@org_golang_x_time//rate",
     ],
 )
@@ -58,6 +58,7 @@ go_test(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/raftlog",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
@@ -74,7 +75,6 @@ go_test(
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
-        "@io_etcd_go_raft_v3//raftpb",
         "@org_golang_x_time//rate",
     ],
 )

@@ -19,6 +19,7 @@ go_library(
         "//pkg/kv/kvserver/logstore",
         "//pkg/kv/kvserver/rditer",
         "//pkg/kv/kvserver/stateloader",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/util/hlc",
@@ -28,7 +29,6 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@io_etcd_go_raft_v3//raftpb",
     ],
 )
 
@@ -44,6 +44,7 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/logstore",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
@@ -57,6 +58,5 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
-        "@io_etcd_go_raft_v3//raftpb",
     ],
 )

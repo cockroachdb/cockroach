@@ -39,6 +39,7 @@ proto_library(
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb:kvflowcontrolpb_proto",
         "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_proto",
         "//pkg/kv/kvserver/readsummary/rspb:rspb_proto",
+        "//pkg/raft/raftpb:raftpb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/util/hlc:hlc_proto",
@@ -46,7 +47,6 @@ proto_library(
         "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:timestamp_proto",
-        "@io_etcd_go_raft_v3//raftpb:raftpb_proto",
     ],
 )
 
@@ -62,6 +62,7 @@ go_proto_library(
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/readsummary/rspb",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
@@ -69,6 +70,5 @@ go_proto_library(
         "//pkg/util/uuid",  # keep
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
-        "@io_etcd_go_raft_v3//raftpb",
     ],
 )

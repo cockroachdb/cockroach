@@ -14,8 +14,8 @@ package raftlog
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/raftpb"
 )
 
 func TestNewEntry(t *testing.T) {
