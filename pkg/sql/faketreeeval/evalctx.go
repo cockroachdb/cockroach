@@ -133,7 +133,7 @@ func (so *DummyRegionOperator) ValidateAllMultiRegionZoneConfigsInCurrentDatabas
 // ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
 // interface.
 func (so *DummyRegionOperator) ResetMultiRegionZoneConfigsForTable(
-	_ context.Context, id int64,
+	_ context.Context, id int64, forceSurviveZone bool,
 ) error {
 	return errors.WithStack(errRegionOperator)
 }

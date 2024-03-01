@@ -17,8 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -90,22 +92,29 @@ FROM
 		MaxBackoff:     time.Second * 10,
 	})
 	for r.Next() {
-		row, err := deps.InternalExecutor.QueryRowEx(ctx,
-			"check-for-session-based-leases-only",
-			nil,
-			sessiondata.InternalExecutorOverride{
-				User:     username.NodeUserName(),
-				Database: catconstants.SystemDatabaseName,
-			},
-			countQuery)
-		if err != nil {
+		sessionBasedOnly := tree.DBool(false)
+		if err := deps.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return txn.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V23_2()}, func() error {
+				row, err := txn.QueryRowEx(ctx,
+					"check-for-session-based-leases-only",
+					txn.KV(),
+					sessiondata.InternalExecutorOverride{
+						User:     username.NodeUserName(),
+						Database: catconstants.SystemDatabaseName,
+					},
+					countQuery)
+				if err != nil {
+					return err
+				}
+				if len(row) != 1 {
+					return errors.AssertionFailedf("unexpected row from session based leasing drain query %v", row)
+				}
+				sessionBasedOnly = tree.MustBeDBool(row[0])
+				return nil
+			})
+		}); err != nil {
 			return err
 		}
-
-		if len(row) != 1 {
-			return errors.AssertionFailedf("unexpected row from session based leasing drain query %v", row)
-		}
-		sessionBasedOnly := tree.MustBeDBool(row[0])
 		if sessionBasedOnly {
 			break
 		}
@@ -126,7 +135,9 @@ func upgradeSystemLeasesDescriptor(
 		}
 		regionType := leaseTable.Columns[4].Type
 		newLeaseTableFormat := systemschema.LeaseTable()
+		oldPartitioning := leaseTable.PrimaryIndex.Partitioning
 		leaseTable.PrimaryIndex = newLeaseTableFormat.TableDesc().PrimaryIndex
+		leaseTable.PrimaryIndex.Partitioning = oldPartitioning
 		leaseTable.Columns = newLeaseTableFormat.TableDesc().Columns
 		// If we are running on multi-region serverless the region column will
 		// have the type transformed. So copy that over now.

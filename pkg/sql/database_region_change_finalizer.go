@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -217,7 +218,14 @@ func (r *databaseRegionChangeFinalizer) updateDatabaseZoneConfig(
 func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 	ctx context.Context, txn descs.Txn,
 ) (repartitioned []*tabledesc.Mutable, zoneConfigUpdates []*zoneConfigUpdate, _ error) {
-	regionConfig, err := SynthesizeRegionConfig(ctx, txn.KV(), r.dbID, r.localPlanner.Descriptors())
+	var regionConfigOpts []SynthesizeRegionConfigOption
+	// For regional by row tables these will be forced as survive zone on
+	// the system database, even if the system database is survive region
+	if r.dbID == keys.SystemDatabaseID {
+		regionConfigOpts = []SynthesizeRegionConfigOption{SynthesizeRegionConfigOptionForceSurvivalZone}
+	}
+
+	regionConfig, err := SynthesizeRegionConfig(ctx, txn.KV(), r.dbID, r.localPlanner.Descriptors(), regionConfigOpts...)
 	if err != nil {
 		return nil, nil, err
 	}

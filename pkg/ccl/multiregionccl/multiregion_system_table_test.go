@@ -17,7 +17,9 @@ import (
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
@@ -70,6 +72,10 @@ func TestMrSystemDatabase(t *testing.T) {
 	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
+
+	tDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE DATABASE system]", [][]string{
+		{"CREATE DATABASE system PRIMARY REGION \"us-east1\" REGIONS = \"us-east1\", \"us-east2\", \"us-east3\" SURVIVE REGION FAILURE"},
+	})
 
 	// Run schema validations to ensure the manual descriptor modifications are
 	// okay.
@@ -228,6 +234,49 @@ func TestMrSystemDatabase(t *testing.T) {
 			{"TABLE system.public.users"},
 			{"TABLE system.public.web_sessions"},
 			{"TABLE system.public.zones"},
+		})
+	})
+
+	t.Run("RegionTables", func(t *testing.T) {
+		query := `
+		    SELECT target
+			FROM [SHOW ALL ZONE CONFIGURATIONS]
+			WHERE target LIKE 'TABLE system.public.%'
+			    AND raw_config_sql NOT LIKE '%global_reads = true%'
+			ORDER BY target;
+		`
+		tDB.CheckQueryResults(t, query, [][]string{
+			{"TABLE system.public.eventlog"},
+			{"TABLE system.public.external_connections"},
+			{"TABLE system.public.job_info"},
+			{"TABLE system.public.jobs"},
+			{"TABLE system.public.join_tokens"},
+			{"TABLE system.public.locations"},
+			{"TABLE system.public.migrations"},
+			{"TABLE system.public.mvcc_statistics"},
+			{"TABLE system.public.protected_ts_meta"},
+			{"TABLE system.public.protected_ts_records"},
+			{"TABLE system.public.rangelog"},
+			{"TABLE system.public.replication_constraint_stats"},
+			{"TABLE system.public.replication_critical_localities"},
+			{"TABLE system.public.replication_stats"},
+			{"TABLE system.public.reports_meta"},
+			{"TABLE system.public.scheduled_jobs"},
+			{"TABLE system.public.span_count"},
+			{"TABLE system.public.span_stats_buckets"},
+			{"TABLE system.public.span_stats_samples"},
+			{"TABLE system.public.span_stats_tenant_boundaries"},
+			{"TABLE system.public.span_stats_unique_keys"},
+			{"TABLE system.public.statement_activity"},
+			{"TABLE system.public.statement_bundle_chunks"},
+			{"TABLE system.public.statement_diagnostics"},
+			{"TABLE system.public.statement_diagnostics_requests"},
+			{"TABLE system.public.statement_execution_insights"},
+			{"TABLE system.public.statement_statistics"},
+			{"TABLE system.public.transaction_activity"},
+			{"TABLE system.public.transaction_execution_insights"},
+			{"TABLE system.public.transaction_statistics"},
+			{"TABLE system.public.ui"},
 		})
 	})
 
@@ -407,4 +456,80 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, r, "us-east1")
 	}
+
+	// Validate that the zone configuration contains the appropriate constraints.q
+	tenSQLDB.CheckQueryResults(t, "SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATIONS] WHERE target LIKE 'PARTITION %lease%' ORDER BY target;", [][]string{
+		{"ALTER PARTITION \"us-east1\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east1]',\n\tlease_preferences = '[[+region=us-east1]]'"},
+		{"ALTER PARTITION \"us-east2\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east2]',\n\tlease_preferences = '[[+region=us-east2]]'"},
+		{"ALTER PARTITION \"us-east3\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east3]',\n\tlease_preferences = '[[+region=us-east3]]'"},
+	})
+}
+
+func TestMrSystemDatabaseUpgrade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Enable settings required for configuring a tenant's system database as multi-region.
+	makeSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.V24_1.Version(),
+			clusterversion.MinSupported.Version(),
+			false)
+		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		return cs
+	}
+
+	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3,
+		base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+			},
+		},
+		multiregionccltestutils.WithSettings(makeSettings()))
+	defer cleanup()
+
+	id, err := roachpb.MakeTenantID(11)
+	require.NoError(t, err)
+
+	tenantArgs := base.TestTenantArgs{
+		Settings: makeSettings(),
+		TestingKnobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+			},
+		},
+		TenantID: id,
+		Locality: cluster.Servers[0].Locality(),
+	}
+	_, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
+
+	tDB := sqlutils.MakeSQLRunner(tenantSQL)
+
+	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
+	tDB.Exec(t, `ALTER DATABASE defaultdb SET PRIMARY REGION "us-east1"`)
+	tDB.Exec(t, `ALTER DATABASE defaultdb ADD REGION "us-east2"`)
+	tDB.Exec(t, `ALTER DATABASE defaultdb ADD REGION "us-east3"`)
+	tDB.Exec(t, "ALTER DATABASE defaultdb SURVIVE REGION FAILURE")
+
+	tDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE DATABASE system]", [][]string{
+		{"CREATE DATABASE system PRIMARY REGION \"us-east1\" REGIONS = \"us-east1\", \"us-east2\", \"us-east3\" SURVIVE REGION FAILURE"},
+	})
+
+	_, err = cluster.Conns[0].Exec("SET CLUSTER SETTING version = crdb_internal.node_executable_version();")
+	require.NoError(t, err)
+	tDB.Exec(t, "SET CLUSTER SETTING version = crdb_internal.node_executable_version();")
+
+	tDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE DATABASE system]", [][]string{
+		{"CREATE DATABASE system PRIMARY REGION \"us-east1\" REGIONS = \"us-east1\", \"us-east2\", \"us-east3\" SURVIVE REGION FAILURE"},
+	})
+	tDB.CheckQueryResults(t, "SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATIONS] WHERE target LIKE 'PARTITION %lease%' ORDER BY target;", [][]string{
+		{"ALTER PARTITION \"us-east1\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east1]',\n\tlease_preferences = '[[+region=us-east1]]'"},
+		{"ALTER PARTITION \"us-east2\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east2]',\n\tlease_preferences = '[[+region=us-east2]]'"},
+		{"ALTER PARTITION \"us-east3\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east3]',\n\tlease_preferences = '[[+region=us-east3]]'"},
+	})
 }
