@@ -24,7 +24,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -37,14 +36,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -569,87 +564,4 @@ func requireRecoveryEvent(
 		require.Equal(t, expected, actual)
 		return nil
 	})
-}
-
-// Verify that during restore, if a restore span has too many files to fit in
-// the memory budget with a single SST iterator, the restore processor should
-// repeatedly open and process iterators for as many files as can fit within the
-// budget until the span is finished.
-//
-//lint:ignore U1000 unused
-func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProcessorMaxFiles int) {
-	skip.WithIssue(t, 119836, "this functionality was never enabled and will likely be removed rather than enabled")
-	const splitSize = 10
-	numAccounts := numSplits * splitSize
-	var expectedNumFiles int
-	var actualNumFiles int
-	restoreProcessorKnobCount := atomic.Uint32{}
-	args := base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		SQLMemoryPoolSize: 1 << 30, // Large enough for all mem limit settings.
-		Knobs: base.TestingKnobs{
-			DistSQL: &execinfra.TestingKnobs{
-				BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-					RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, entry *execinfrapb.RestoreSpanEntry) error {
-						// The total size of the backup files should be less than the target
-						// SST size, thus should all fit in one import span.
-						require.Equal(t, actualNumFiles, len(entry.Files))
-						restoreProcessorKnobCount.Add(1)
-						return nil
-					},
-				},
-			},
-		},
-	}
-	params := base.TestClusterArgs{ServerArgs: args}
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
-	defer cleanupFn()
-
-	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.sst_memory_limit.enabled=true")
-	sqlDB.Exec(t, "SET CLUSTER SETTING kv.bulk_io_write.restore_node_concurrency=2")
-
-	// Add some splits in the table, and set the target file size to be something
-	// small so that we get one flushed file per split in the backup.
-	sqlDB.Exec(t, "ALTER TABLE data.bank SPLIT AT SELECT generate_series($1::INT, $2, $3)", 0, numAccounts, splitSize)
-	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.file_size = '1b'")
-	sqlDB.Exec(t, "BACKUP data.bank INTO 'userfile:///backup'")
-
-	// Take some incremental backups after mutating some rows. Take note of the
-	// splits that have been changed as that determines the number of incremental
-	// files that are created.
-	var numIncFiles int
-	for i := 0; i < numInc; i++ {
-		incSplitsWithFile := make(map[int]bool)
-
-		for n := 0; n < 100; n++ {
-			id := rand.Intn(numAccounts)
-			sqlDB.Exec(t, `UPDATE data.bank SET balance = balance + 1 WHERE id = $1`, id)
-			split := id / splitSize
-			incSplitsWithFile[split] = true
-		}
-
-		sqlDB.Exec(t, `BACKUP data.bank INTO latest IN 'userfile:///backup' WITH revision_history`)
-		numIncFiles += len(incSplitsWithFile)
-	}
-
-	// Verify the file counts in the backup is at least what's expected. The
-	// actual number can be more due to elastic CPU preempting export responses.
-	expectedNumFiles += numSplits + numIncFiles
-	sqlDB.QueryRow(t, "SELECT count(*) FROM [SHOW BACKUP FILES FROM latest IN 'userfile:///backup']").Scan(&actualNumFiles)
-	require.GreaterOrEqual(t, actualNumFiles, expectedNumFiles)
-
-	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.per_processor_memory_limit = $1", restoreProcessorMaxFiles*sstReaderOverheadBytesPerFile)
-
-	sqlDB.Exec(t, "CREATE DATABASE data2")
-	sqlDB.Exec(t, "RESTORE data.bank FROM latest IN 'userfile:///backup' WITH OPTIONS (into_db='data2')")
-
-	// Assert that the restore processor is processing the same span multiple
-	// times, and the count is based on what's expected from the memory budget.
-	// The expected number is just the ceiling of actualNumFiles/restoreProcessorMaxFiles.
-	require.Equal(t, (actualNumFiles-1)/restoreProcessorMaxFiles+1, int(restoreProcessorKnobCount.Load()))
-
-	// Verify data in the restored table.
-	expectedFingerprints := sqlDB.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data.bank")
-	actualFingerprints := sqlDB.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data2.bank")
-	require.Equal(t, expectedFingerprints, actualFingerprints)
 }
