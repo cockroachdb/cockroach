@@ -15,20 +15,16 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,8 +41,6 @@ func TestFileSSTSinkExtendOneFile(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, sqlDB, _, cleanup := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
-	defer cleanup()
 
 	getKeys := func(prefix string, n int) []byte {
 		var b bytes.Buffer
@@ -98,9 +92,9 @@ func TestFileSSTSinkExtendOneFile(t *testing.T) {
 		atKeyBoundary:  true,
 	}
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '20B'`)
-
-	sink, _ := fileSSTSinkTestSetUp(ctx, t, tc, sqlDB)
+	st := cluster.MakeTestingClusterSettings()
+	targetFileSize.Override(ctx, &st.SV, 20)
+	sink, _ := fileSSTSinkTestSetUp(ctx, t, st)
 
 	require.NoError(t, sink.write(ctx, exportResponse1))
 	require.NoError(t, sink.write(ctx, exportResponse2))
@@ -134,10 +128,6 @@ func TestFileSSTSinkWrite(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, sqlDB, _, cleanup := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
-	defer cleanup()
-
-	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '10KB'`)
 
 	type testCase struct {
 		name           string
@@ -285,7 +275,10 @@ func TestFileSSTSinkWrite(t *testing.T) {
 			if tt.errorExplanation != "" {
 				return
 			}
-			sink, store := fileSSTSinkTestSetUp(ctx, t, tc, sqlDB)
+			st := cluster.MakeTestingClusterSettings()
+			targetFileSize.Override(ctx, &st.SV, 10<<10)
+
+			sink, store := fileSSTSinkTestSetUp(ctx, t, st)
 			defer func() {
 				require.NoError(t, sink.Close())
 			}()
@@ -338,12 +331,11 @@ func TestFileSSTSinkStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, sqlDB, _, cleanup := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
-	defer cleanup()
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '10KB'`)
+	st := cluster.MakeTestingClusterSettings()
+	targetFileSize.Override(ctx, &st.SV, 10<<10)
 
-	sink, _ := fileSSTSinkTestSetUp(ctx, t, tc, sqlDB)
+	sink, _ := fileSSTSinkTestSetUp(ctx, t, st)
 
 	defer func() {
 		require.NoError(t, sink.Close())
@@ -861,19 +853,10 @@ func (b *exportedSpanBuilder) build() exportedSpan {
 }
 
 func fileSSTSinkTestSetUp(
-	ctx context.Context, t *testing.T, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner,
+	ctx context.Context, t *testing.T, settings *cluster.Settings,
 ) (*fileSSTSink, cloud.ExternalStorage) {
-	srv := tc.Servers[0].ApplicationLayer()
-	store, err := cloud.ExternalStorageFromURI(ctx, "userfile:///0",
-		base.ExternalIODirConfig{},
-		srv.ClusterSettings(),
-		blobs.TestEmptyBlobClientFactory,
-		username.RootUserName(),
-		srv.InternalDB().(isql.DB),
-		nil, /* limiters */
-		cloud.NilMetrics,
-	)
-	require.NoError(t, err)
+
+	store := nodelocal.TestingMakeNodelocalStorage(t.TempDir(), settings, cloudpb.ExternalStorage{})
 
 	// Never block.
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress, 100)
@@ -882,7 +865,7 @@ func fileSSTSinkTestSetUp(
 		id:       1,
 		enc:      nil,
 		progCh:   progCh,
-		settings: &srv.ClusterSettings().SV,
+		settings: &settings.SV,
 	}
 
 	sink := makeFileSSTSink(sinkConf, store)
