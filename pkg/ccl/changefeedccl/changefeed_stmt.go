@@ -984,6 +984,7 @@ func changefeedJobDescription(
 		changefeedbase.SinkParamCACert,
 		changefeedbase.SinkParamClientCert,
 		changefeedbase.SinkParamConfluentAPISecret,
+		changefeedbase.SinkParamAzureAccessKey,
 	})
 	if err != nil {
 		return "", err
