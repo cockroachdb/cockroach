@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -71,6 +73,12 @@ const (
 	defaultDeclarativeSchemaMaxStmtsPerTxn = 1
 )
 
+type schemaChangeCounter struct {
+	// success and error keep track of the number of
+	// successful and erroneous schema transactions.
+	success, error prometheus.Counter
+}
+
 type schemaChange struct {
 	flags                           workload.Flags
 	connFlags                       *workload.ConnFlags
@@ -93,6 +101,8 @@ type schemaChange struct {
 	declarativeSchemaMaxStmtsPerTxn int
 	traceFilePath                   string
 	schemaWorkloadResultAnnotator   *schemaWorkloadResultAnnotator
+	reg                             *histogram.Registry
+	scCounter                       schemaChangeCounter
 }
 
 var schemaChangeMeta = workload.Meta{
@@ -140,6 +150,28 @@ func init() {
 	workload.Register(schemaChangeMeta)
 }
 
+func setupSchemaChangePromCounter(reg prometheus.Registerer) schemaChangeCounter {
+	f := promauto.With(reg)
+	return schemaChangeCounter{
+		success: f.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: histogram.PrometheusNamespace,
+				Subsystem: schemaChangeMeta.Name,
+				Name:      "schema_change_success",
+				Help:      "The total number of successful schema change transactions.",
+			},
+		),
+		error: f.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: histogram.PrometheusNamespace,
+				Subsystem: schemaChangeMeta.Name,
+				Name:      "schema_change_errors",
+				Help:      "The total number of unexpected failures.",
+			},
+		),
+	}
+}
+
 // Meta implements the workload.Generator interface.
 func (s *schemaChange) Meta() workload.Meta {
 	return schemaChangeMeta
@@ -163,8 +195,15 @@ func (s *schemaChange) Ops(
 	// managing the life cycle of this workload so we keep tracing localized to
 	// this function.
 	tracerProvider, err := s.initTracerProvider()
-	// Initialize workload result annotator to compute metrics on the workload performance.
+	// Initialize workload result annotator to compute trace metrics on the workload performance.
 	s.schemaWorkloadResultAnnotator = &schemaWorkloadResultAnnotator{}
+	// Initialize prometheus counters to export metrics for schema change workload.
+	if s.reg == nil {
+		// Check for nil to ensure idempotency - Ops might be invoked multiple times with the same
+		// registry. We should set up counters only once.
+		s.reg = reg
+		s.scCounter = setupSchemaChangePromCounter(reg.Registerer())
+	}
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -297,6 +336,7 @@ func (s *schemaChange) Ops(
 			},
 			isHoldingEntryLocks: false,
 			tracer:              tracer,
+			scCounter:           &s.scCounter,
 		}
 
 		s.workers = append(s.workers, w)
@@ -362,6 +402,7 @@ type schemaChangeWorker struct {
 	isHoldingEntryLocks bool
 	logger              *logger
 	tracer              trace.Tracer
+	scCounter           *schemaChangeCounter
 }
 
 var (
@@ -637,6 +678,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	w.logger.flushLog("")
 	w.recordInHist(timeutil.Since(start), txnOk)
 	workloadMetrics[txnCommitted] = attribute.BoolValue(true)
+	w.scCounter.success.Inc()
 	return nil
 }
 
@@ -659,6 +701,9 @@ func (w *schemaChangeWorker) preErrorHook() {
 		}
 		_ = w.workload.closeJSONLogFile()
 		w.isHoldingEntryLocks = true
+		// preErrorHook is called for all unexpected errors. So we can use this hook to
+		// increase the unexpected error count.
+		w.scCounter.error.Inc()
 	})
 }
 
