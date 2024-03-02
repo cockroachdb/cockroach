@@ -144,7 +144,6 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/pprofutil",
         "//pkg/util/protoutil",
-        "//pkg/util/quotapool",
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/span",
@@ -188,7 +187,6 @@ go_test(
         "partitioned_backup_test.go",
         "restore_data_processor_test.go",
         "restore_entry_cover_generated_test.go",  # keep
-        "restore_memory_monitoring_generated_test.go",  # keep
         "restore_mid_schema_change_generated_test.go",  # keep
         "restore_mid_schema_change_test.go",
         "restore_multiregion_rbr_test.go",
@@ -362,13 +360,12 @@ genrule(
     name = "gen-backupccl-tests",
     srcs = glob(["testdata/**"]),
     outs = [
-        "restore_memory_monitoring_generated_test.go",
         "data_driven_generated_test.go",
         "restore_entry_cover_generated_test.go",
         "restore_mid_schema_change_generated_test.go",
     ],
     cmd = """
-        $(location //pkg/ccl/backupccl/testgen) -restore-memory-monitoring=$(location restore_memory_monitoring_generated_test.go) \
+        $(location //pkg/ccl/backupccl/testgen) \
         -data-driven=$(location data_driven_generated_test.go) -restore-entry-cover=$(location restore_entry_cover_generated_test.go) \
         -restore-mid-schema-change=$(location restore_mid_schema_change_generated_test.go)
        """,

@@ -20,36 +20,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var restoreRemoteMonitoringOutPath = flag.String("restore-memory-monitoring", "", "path to the output file")
 var dataDrivenOutPath = flag.String("data-driven", "", "path to the output file")
 var restoreEntryCoverOutPath = flag.String("restore-entry-cover", "", "path to the output file")
 var restoreMidSchemaChangeOutPath = flag.String("restore-mid-schema-change", "", "path to the output file")
-
-func genTestRestoreMemoryMonitoring() {
-	type testCase struct {
-		NumSplits                int
-		NumInc                   int
-		RestoreProcessorMaxFiles int
-	}
-	var testCases []testCase
-	for _, numSplits := range []int{10, 100, 200} {
-		for _, numInc := range []int{0, 1, 3, 10} {
-			for _, restoreProcessorMaxFiles := range []int{5, 10, 20} {
-				testCases = append(testCases, testCase{numSplits, numInc, restoreProcessorMaxFiles})
-			}
-		}
-	}
-	data := struct{ Tests []testCase }{Tests: testCases}
-	tmpl := template.Must(template.New("source").Parse(test_restore_memory_monitoring_template))
-	file, err := os.Create(filepath.Join(*restoreRemoteMonitoringOutPath))
-	if err != nil {
-		panic(errors.Wrap(err, "failed to create file"))
-	}
-	defer file.Close()
-	if err := tmpl.Execute(file, data); err != nil {
-		panic(errors.Wrap(err, "failed to execute template"))
-	}
-}
 
 func genTestDataDriven() {
 	type TestCase struct {
@@ -136,11 +109,10 @@ func genTestRestoreMidSchemaChange() {
 
 func main() {
 	flag.Parse()
-	if *restoreRemoteMonitoringOutPath == "" || *dataDrivenOutPath == "" || *restoreEntryCoverOutPath == "" || *restoreMidSchemaChangeOutPath == "" {
+	if *dataDrivenOutPath == "" || *restoreEntryCoverOutPath == "" || *restoreMidSchemaChangeOutPath == "" {
 		panic(`you need to pass values for the following flags:
 -restore-memory-monitoring -data-driven -restore-entry-cover -restore-mid-schema-change`)
 	}
-	genTestRestoreMemoryMonitoring()
 	genTestDataDriven()
 	genTestRestoreEntryCover()
 	genTestRestoreMidSchemaChange()
