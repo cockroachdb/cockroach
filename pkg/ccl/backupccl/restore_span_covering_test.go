@@ -47,7 +47,7 @@ import (
 // Files spans are ordered by start key but may overlap.
 func MockBackupChain(
 	ctx context.Context,
-	length, spans, baseFiles int,
+	length, spans, baseFiles, fileSize int,
 	r *rand.Rand,
 	hasExternalFilesList bool,
 	execCfg sql.ExecutorConfig,
@@ -109,7 +109,7 @@ func MockBackupChain(
 			backups[i].Files[f].Span.Key = encoding.EncodeVarintAscending(k, int64(start))
 			backups[i].Files[f].Span.EndKey = encoding.EncodeVarintAscending(k, int64(end))
 			backups[i].Files[f].Path = fmt.Sprintf("12345-b%d-f%d.sst", i, f)
-			backups[i].Files[f].EntryCounts.DataSize = 1 << 20
+			backups[i].Files[f].EntryCounts.DataSize = int64(fileSize)
 		}
 
 		es, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx,
@@ -226,6 +226,9 @@ func checkRestoreCovering(
 	}
 	var spanIdx int
 	for _, c := range cov {
+		if len(c.Files) > 500 {
+			return errors.Errorf("%d files in span %v", len(c.Files), c.Span)
+		}
 		for _, f := range c.Files {
 			if requireSpan, ok := required[f.Path]; ok {
 				requireSpan.Sub(c.Span)
@@ -951,8 +954,21 @@ func sanityCheckFileIterator(
 	}
 }
 
+func TestRestoreEntryCoverTinyFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	runTestRestoreEntryCoverForSpanAndFileCounts(t, 5, 5<<10, []int{5}, []int{1000, 5000})
+}
+
 //lint:ignore U1000 unused
 func runTestRestoreEntryCover(t *testing.T, numBackups int) {
+	spans := []int{1, 2, 3, 5, 9, 11, 12}
+	files := []int{0, 1, 2, 3, 4, 10, 12, 50}
+	runTestRestoreEntryCoverForSpanAndFileCounts(t, numBackups, 1<<20, spans, files)
+}
+
+func runTestRestoreEntryCoverForSpanAndFileCounts(
+	t *testing.T, numBackups, fileSize int, spanCounts, fileCounts []int,
+) {
 	r, _ := randutil.NewTestRand()
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
@@ -982,10 +998,10 @@ func runTestRestoreEntryCover(t *testing.T, numBackups int) {
 		return merged
 	}
 
-	for _, spans := range []int{1, 2, 3, 5, 9, 11, 12} {
-		for _, files := range []int{0, 1, 2, 3, 4, 10, 12, 50} {
+	for _, spans := range spanCounts {
+		for _, files := range fileCounts {
 			for _, hasExternalFilesList := range []bool{true, false} {
-				backups, err := MockBackupChain(ctx, numBackups, spans, files, r, hasExternalFilesList, execCfg)
+				backups, err := MockBackupChain(ctx, numBackups, spans, files, fileSize, r, hasExternalFilesList, execCfg)
 				require.NoError(t, err)
 				layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx,
 					execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
