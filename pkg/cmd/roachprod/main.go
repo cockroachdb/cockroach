@@ -324,18 +324,20 @@ hosts file.
 			// We use a hacky workaround below to color the empty string.
 			// [1] https://github.com/golang/go/issues/12073
 
-			// Print header.
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
-				"Cluster", "Clouds", "Size", "VM", "Arch",
-				color.HiWhiteString("$/hour"), color.HiWhiteString("$ Spent"),
-				color.HiWhiteString("Uptime"), color.HiWhiteString("TTL"),
-				color.HiWhiteString("$/TTL"))
-			// Print separator.
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
-				"", "", "", "",
-				color.HiWhiteString(""), color.HiWhiteString(""),
-				color.HiWhiteString(""), color.HiWhiteString(""),
-				color.HiWhiteString(""))
+			if !listDetails {
+				// Print header only if we are not printing cluster details.
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
+					"Cluster", "Clouds", "Size", "VM", "Arch",
+					color.HiWhiteString("$/hour"), color.HiWhiteString("$ Spent"),
+					color.HiWhiteString("Uptime"), color.HiWhiteString("TTL"),
+					color.HiWhiteString("$/TTL"))
+				// Print separator.
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
+					"", "", "", "",
+					color.HiWhiteString(""), color.HiWhiteString(""),
+					color.HiWhiteString(""), color.HiWhiteString(""),
+					color.HiWhiteString(""))
+			}
 			totalCostPerHour := 0.0
 			for _, name := range names {
 				c := filteredCloud.Clusters[name]

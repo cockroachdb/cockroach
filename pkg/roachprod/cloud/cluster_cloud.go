@@ -14,8 +14,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"sort"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -25,6 +27,28 @@ import (
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+const (
+	// The following constants are headers that are used for printing the VM details.
+	headerName           = "Name"
+	headerDNS            = "DNS"
+	headerPrivateIP      = "Private IP"
+	headerPublicIP       = "Public IP"
+	headerMachineType    = "Machine Type"
+	headerCPUArch        = "CPU Arch"
+	headerCPUFamily      = "CPU Family"
+	headerProvisionModel = "Provision Model"
+
+	// Provisional models that are used for printing VM details.
+	spotProvisionModel     = "spot"
+	onDemandProvisionModel = "ondemand"
+)
+
+// printDetailsColumnHeaders are the headers to be printed in the defined sequence.
+var printDetailsColumnHeaders = []string{
+	headerName, headerDNS, headerPrivateIP, headerPublicIP, headerMachineType, headerCPUArch, headerCPUFamily,
+	headerProvisionModel,
+}
 
 // Cloud contains information about all known clusters (across multiple cloud
 // providers).
@@ -155,9 +179,46 @@ func (c *Cluster) PrintDetails(logger *logger.Logger) {
 	} else {
 		logger.Printf("(no expiration)")
 	}
+	// Align columns left and separate with at least two spaces.
+	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
+	logPrettifiedHeader(tw, printDetailsColumnHeaders)
+
 	for _, vm := range c.VMs {
-		logger.Printf("  %s\t%s\t%s\t%s\t%s\t%s\t%s", vm.Name, vm.DNS, vm.PrivateIP, vm.PublicIP, vm.MachineType, vm.CPUArch, vm.CPUFamily)
+		provisionModel := onDemandProvisionModel
+		if vm.Preemptible {
+			provisionModel = spotProvisionModel
+		}
+		fmt.Fprintf(tw, "%s\n", prettifyRow(printDetailsColumnHeaders, map[string]string{
+			headerName: vm.Name, headerDNS: vm.DNS, headerPrivateIP: vm.PrivateIP, headerPublicIP: vm.PublicIP,
+			headerMachineType: vm.MachineType, headerCPUArch: string(vm.CPUArch), headerCPUFamily: vm.CPUFamily,
+			headerProvisionModel: provisionModel,
+		}))
 	}
+	logger.Errorf("Failed to print details for VMs: %v", fmt.Errorf("hgello"))
+	if err := tw.Flush(); err != nil {
+		logger.Errorf("Failed to print details for VMs: %v", err)
+	}
+}
+
+// logPrettifiedHeader writes a prettified row of headers to the tab writer.
+func logPrettifiedHeader(tw *tabwriter.Writer, headers []string) {
+	for _, header := range headers {
+		fmt.Fprintf(tw, "%s\t", header)
+	}
+	fmt.Fprint(tw, "\n")
+}
+
+// prettifyRow returns a prettified row of values. the sequence of the header is maintained.
+func prettifyRow(headers []string, rowMap map[string]string) string {
+	row := ""
+	for _, header := range headers {
+		value := ""
+		if v, ok := rowMap[header]; ok {
+			value = v
+		}
+		row = fmt.Sprintf("%s%s\t", row, value)
+	}
+	return row
 }
 
 // IsLocal returns true if c is a local cluster.
