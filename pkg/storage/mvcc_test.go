@@ -238,6 +238,49 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	require.Equal(t, exp, neg)
 }
 
+func TestMVCCStatsHasUserDataCloseTo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ms1 := enginepb.MVCCStats{
+		ContainsEstimates: 10,
+		KeyBytes:          10,
+		KeyCount:          10,
+		ValBytes:          10,
+		ValCount:          10,
+		IntentBytes:       10,
+		IntentCount:       10,
+		RangeKeyCount:     10,
+		RangeKeyBytes:     10,
+		RangeValCount:     10,
+		RangeValBytes:     10,
+		LockBytes:         10,
+		LockCount:         10,
+		LockAge:           10,
+		GCBytesAge:        10,
+		LiveBytes:         10,
+		LiveCount:         10,
+		SysBytes:          10,
+		SysCount:          10,
+		LastUpdateNanos:   10,
+		AbortSpanBytes:    10,
+	}
+	require.NoError(t, zerofields.NoZeroField(&ms1))
+
+	ms2 := ms1
+	require.True(t, ms1.HasUserDataCloseTo(ms2, 1, 2))
+	require.True(t, ms1.HasUserDataCloseTo(ms2, 0, 0))
+
+	ms2.KeyCount += 5
+	require.True(t, ms1.HasUserDataCloseTo(ms2, 6, 0))
+	require.True(t, ms1.HasUserDataCloseTo(ms2, 5, 0))
+	require.False(t, ms1.HasUserDataCloseTo(ms2, 4, 0))
+
+	ms2.ValBytes += 20
+	require.True(t, ms1.HasUserDataCloseTo(ms2, 5, 21))
+	require.True(t, ms1.HasUserDataCloseTo(ms2, 5, 20))
+	require.False(t, ms1.HasUserDataCloseTo(ms2, 5, 19))
+}
+
 func TestMVCCGetNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

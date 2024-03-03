@@ -202,6 +202,41 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.AbortSpanBytes -= oms.AbortSpanBytes
 }
 
+// HasUserDataCloseTo compares the fields corresponding to user data and returns
+// whether their absolute difference is within a certain limit. Separate limits
+// are passed in for stats measures in count and bytes.
+func (ms *MVCCStats) HasUserDataCloseTo(
+	oms MVCCStats, maxCountDiff int64, maxBytesDiff int64,
+) bool {
+	abs := func(x int64) int64 {
+		if x < 0 {
+			return -x
+		}
+		return x
+	}
+	countWithinLimit := func(v1 int64, v2 int64) bool {
+		return abs(v1-v2) <= maxCountDiff
+	}
+	bytesWithinLimit := func(v1 int64, v2 int64) bool {
+		return abs(v1-v2) <= maxBytesDiff
+	}
+
+	return countWithinLimit(ms.KeyCount, oms.KeyCount) &&
+		bytesWithinLimit(ms.KeyBytes, oms.KeyBytes) &&
+		countWithinLimit(ms.ValCount, oms.ValCount) &&
+		bytesWithinLimit(ms.ValBytes, oms.ValBytes) &&
+		countWithinLimit(ms.LiveCount, oms.LiveCount) &&
+		bytesWithinLimit(ms.LiveBytes, oms.LiveBytes) &&
+		countWithinLimit(ms.IntentCount, oms.IntentCount) &&
+		bytesWithinLimit(ms.IntentBytes, oms.IntentBytes) &&
+		countWithinLimit(ms.LockCount, oms.LockCount) &&
+		bytesWithinLimit(ms.LockBytes, oms.LockBytes) &&
+		countWithinLimit(ms.RangeKeyCount, oms.RangeKeyCount) &&
+		bytesWithinLimit(ms.RangeKeyBytes, oms.RangeKeyBytes) &&
+		countWithinLimit(ms.RangeValCount, oms.RangeValCount) &&
+		bytesWithinLimit(ms.RangeValBytes, oms.RangeValBytes)
+}
+
 // IsInline returns true if the value is inlined in the metadata.
 func (meta MVCCMetadata) IsInline() bool {
 	return meta.RawBytes != nil
