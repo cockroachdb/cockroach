@@ -17,11 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -44,6 +47,7 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Fails with the default test tenant due to span limits. Tracked
@@ -126,14 +130,26 @@ database_name = 'rand' AND schema_name = 'public'`)
 	// verifyTables asserts that the list of input tables in the restored
 	// database, restoredb, contains the same schema as the original randomly
 	// generated tables.
-	verifyTables := func(t *testing.T, tableNames []string) {
+	verifyTables := func(t *testing.T, tableNames []string, restoreCmd string) {
+
+		if strings.Contains(restoreCmd, "experimental deferred copy") {
+			var downloadJobID jobspb.JobID
+			sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created LIMIT 1`).Scan(&downloadJobID)
+			jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
+		}
+
 		for _, tableName := range tableNames {
 			t.Logf("Verifying table %q", tableName)
 			restoreTable := "restoredb." + tree.NameString(tableName)
 			createStmt := sqlDB.QueryStr(t,
 				fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s]`, restoreTable))[0][0]
-			assert.Equal(t, expectedCreateTableStmt[tableName], createStmt,
-				"SHOW CREATE %s not equal after RESTORE", tableName)
+			if !strings.Contains(restoreCmd, "experimental deferred copy") {
+				// TODO(msbutler): Remove this condition after
+				// https://github.com/cockroachdb/cockroach/pull/119955 merges.
+				assert.Equal(t, expectedCreateTableStmt[tableName], createStmt,
+					"SHOW CREATE %s not equal after RESTORE", tableName)
+			}
+
 			if runSchemaOnlyExtension == "" {
 				tableID := sqlutils.QueryTableID(t, sqlDB.DB, "restoredb", "public", tableName)
 				fingerpint, err := fingerprintutils.FingerprintTable(ctx, tc.Conns[0], tableID,
@@ -147,26 +163,35 @@ database_name = 'rand' AND schema_name = 'public'`)
 		}
 	}
 
+	withOnlineRestore := func() string {
+		onlineRestoreExtension := ""
+		if rng.Intn(2) != 0 && runSchemaOnlyExtension == "" {
+			onlineRestoreExtension = " , experimental deferred copy"
+		}
+		return onlineRestoreExtension
+	}
+
 	// This loop tests that two kinds of table restores (full database restore
 	// and per-table restores) work properly with two kinds of table backups
 	// (full database backups and per-table backups).
 	for _, backup := range dbBackups {
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
 		sqlDB.Exec(t, "CREATE DATABASE restoredb")
-		tableQuery := fmt.Sprintf("RESTORE rand.* FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb'%s)", runSchemaOnlyExtension)
+
+		tableQuery := fmt.Sprintf("RESTORE rand.* FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb'%s%s)", runSchemaOnlyExtension, withOnlineRestore())
 		if err := backuptestutils.VerifyBackupRestoreStatementResult(
 			t, sqlDB, tableQuery, backup,
 		); err != nil {
 			t.Fatal(err)
 		}
-		verifyTables(t, tableNames)
+		verifyTables(t, tableNames, tableQuery)
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
 
-		dbQuery := fmt.Sprintf("RESTORE DATABASE rand FROM LATEST IN $1 WITH OPTIONS (new_db_name='restoredb'%s)", runSchemaOnlyExtension)
+		dbQuery := fmt.Sprintf("RESTORE DATABASE rand FROM LATEST IN $1 WITH OPTIONS (new_db_name='restoredb'%s%s)", runSchemaOnlyExtension, withOnlineRestore())
 		if err := backuptestutils.VerifyBackupRestoreStatementResult(t, sqlDB, dbQuery, backup); err != nil {
 			t.Fatal(err)
 		}
-		verifyTables(t, tableNames)
+		verifyTables(t, tableNames, dbQuery)
 	}
 
 	tableNameCombos := powerset(tableNames)
@@ -188,9 +213,8 @@ database_name = 'rand' AND schema_name = 'public'`)
 		tables := buf.String()
 		t.Logf("Testing subset backup/restore %s", tables)
 		sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE %s INTO $1`, tables), backupTarget)
-		_, err := tc.Conns[0].Exec(
-			fmt.Sprintf("RESTORE TABLE %s FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb' %s)", tables, runSchemaOnlyExtension),
-			backupTarget)
+		comboQuery := fmt.Sprintf("RESTORE TABLE %s FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb' %s%s)", tables, runSchemaOnlyExtension, withOnlineRestore())
+		_, err := tc.Conns[0].Exec(comboQuery, backupTarget)
 		if err != nil {
 			if strings.Contains(err.Error(), "skip_missing_foreign_keys") {
 				// Ignore subset, since we can't restore subsets that don't include the
@@ -199,7 +223,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 			}
 			t.Fatal(err)
 		}
-		verifyTables(t, combo)
+		verifyTables(t, combo, comboQuery)
 		t.Log("combo", i, combo)
 	}
 }
