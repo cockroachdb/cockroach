@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -77,11 +78,17 @@ func sendAddRemoteSSTs(
 		return genSpan(ctx, restoreSpanEntriesCh)
 	})
 
+	kr, err := MakeKeyRewriterFromRekeys(execCtx.ExecCfg().Codec, dataToRestore.getRekeys(), dataToRestore.getTenantRekeys(),
+		false /* restoreTenantFromStream */)
+	if err != nil {
+		return errors.Wrap(err, "creating key rewriter from rekeys")
+	}
+
 	fromSystemTenant := isFromSystemTenant(dataToRestore.getTenantRekeys())
 
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh, fromSystemTenant))
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh, kr, fromSystemTenant))
 	}
 
 	if err := grp.Wait(); err != nil {
@@ -110,18 +117,58 @@ func sendAddRemoteSSTs(
 	})
 }
 
+func assertCommonPrefix(span roachpb.Span, elidedPrefixType execinfrapb.ElidePrefix) error {
+	syntheticPrefix, err := elidedPrefix(span.Key, elidedPrefixType)
+	if err != nil {
+		return err
+	}
+
+	endKeyPrefix, err := elidedPrefix(span.EndKey, elidedPrefixType)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(syntheticPrefix, endKeyPrefix) {
+		return errors.AssertionFailedf("span start key %s and end key %s have different prefixes", span.Key, span.EndKey)
+	}
+	return nil
+}
+
+// rewriteSpan rewrites the span start and end key, potentially in place.
+func rewriteSpan(
+	kr *KeyRewriter, span roachpb.Span, elidedPrefixType execinfrapb.ElidePrefix,
+) (roachpb.Span, error) {
+	var (
+		ok  bool
+		err error
+	)
+	if err = assertCommonPrefix(span, elidedPrefixType); err != nil {
+		return span, err
+	}
+	span.Key, ok, err = kr.RewriteKey(span.Key, 0)
+	if !ok || err != nil {
+		return span, errors.Wrapf(err, "span start key %s was not rewritten", span.Key)
+	}
+	span.EndKey, ok, err = kr.RewriteKey(span.EndKey, 0)
+	if !ok || err != nil {
+		return span, errors.Wrapf(err, "span end key %s was not rewritten ", span.Key)
+	}
+	return span, nil
+}
+
 func sendAddRemoteSSTWorker(
 	execCtx sql.JobExecContext,
 	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
 	requestFinishedCh chan<- struct{},
+	kr *KeyRewriter,
 	fromSystemTenant bool,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		var toAdd []execinfrapb.RestoreFileSpec
 		var batchSize int64
+		var err error
 		const targetBatchSize = 440 << 20
 
-		flush := func(splitAt roachpb.Key) error {
+		flush := func(splitAt roachpb.Key, elidedPrefixType execinfrapb.ElidePrefix) error {
 			if len(toAdd) == 0 {
 				return nil
 			}
@@ -133,7 +180,7 @@ func sendAddRemoteSSTWorker(
 			}
 
 			for _, file := range toAdd {
-				if err := sendRemoteAddSSTable(ctx, execCtx, file, fromSystemTenant); err != nil {
+				if err := sendRemoteAddSSTable(ctx, execCtx, file, elidedPrefixType, fromSystemTenant); err != nil {
 					return err
 				}
 			}
@@ -144,6 +191,9 @@ func sendAddRemoteSSTWorker(
 
 		for entry := range restoreSpanEntriesCh {
 			firstSplitDone := false
+			if err := assertCommonPrefix(entry.Span, entry.ElidedPrefix); err != nil {
+				return err
+			}
 			for _, file := range entry.Files {
 				restoringSubspan := file.BackupFileEntrySpan.Intersect(entry.Span)
 				if !restoringSubspan.Valid() {
@@ -153,8 +203,13 @@ func sendAddRemoteSSTWorker(
 						entry.Span,
 					)
 				}
-
-				log.Infof(ctx, "experimental restore: sending span %s of file %s (file span: %s) as part of restore span %s",
+				// Clone the key because rewriteSpan could modify the keys in place, but
+				// we reuse backup files across restore span entries.
+				restoringSubspan, err = rewriteSpan(kr, restoringSubspan.Clone(), entry.ElidedPrefix)
+				if err != nil {
+					return err
+				}
+				log.Infof(ctx, "experimental restore: sending span %s of file %s (file span: %s) as part of restore span (old key space) %s",
 					restoringSubspan, file.Path, file.BackupFileEntrySpan, entry.Span)
 				file.BackupFileEntrySpan = restoringSubspan
 				if !firstSplitDone {
@@ -173,8 +228,8 @@ func sendAddRemoteSSTWorker(
 				// span rather than one we have added to, since we add with estimated
 				// stats and splitting a span with estimated stats is slow.
 				if batchSize+file.BackupFileEntryCounts.DataSize > targetBatchSize {
-					log.Infof(ctx, "flushing %s batch of %d SSTs due to size limit up to %s in in span %s", sz(batchSize), len(toAdd), file.BackupFileEntrySpan.Key, entry.Span)
-					if err := flush(file.BackupFileEntrySpan.Key); err != nil {
+					log.Infof(ctx, "flushing %s batch of %d SSTs due to size limit. split at %s in span (old keyspace) %s", sz(batchSize), len(toAdd), file.BackupFileEntrySpan.Key, entry.Span)
+					if err := flush(file.BackupFileEntrySpan.Key, entry.ElidedPrefix); err != nil {
 						return err
 					}
 				}
@@ -187,7 +242,11 @@ func sendAddRemoteSSTWorker(
 			// key to split on. Note that it only is safe with
 			// https://github.com/cockroachdb/cockroach/pull/114464
 			log.Infof(ctx, "flushing %s batch of %d SSTs at end of restore span entry %s", sz(batchSize), len(toAdd), entry.Span)
-			if err := flush(entry.Span.EndKey); err != nil {
+			rewrittenFlushKey, ok, err := kr.RewriteKey(entry.Span.EndKey, 0)
+			if !ok || err != nil {
+				return errors.Newf("flush key %s could not be rewritten", entry.Span.EndKey)
+			}
+			if err := flush(rewrittenFlushKey, entry.ElidedPrefix); err != nil {
 				return err
 			}
 			requestFinishedCh <- struct{}{}
@@ -221,6 +280,7 @@ func sendRemoteAddSSTable(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	file execinfrapb.RestoreFileSpec,
+	elidedPrefixType execinfrapb.ElidePrefix,
 	fromSystemTenant bool,
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "backupccl.sendRemoteAddSSTable")
@@ -243,12 +303,17 @@ func sendRemoteAddSSTable(
 	if fileSize == 0 {
 		fileSize = 16 << 20
 	}
+	syntheticPrefix, err := elidedPrefix(file.BackupFileEntrySpan.Key, elidedPrefixType)
+	if err != nil {
+		return err
+	}
 
 	loc := kvpb.AddSSTableRequest_RemoteFile{
 		Locator:                 file.Dir.URI,
 		Path:                    file.Path,
 		ApproximatePhysicalSize: fileSize,
 		BackingFileSize:         file.BackingFileSize,
+		SyntheticPrefix:         syntheticPrefix,
 	}
 	// TODO(dt): see if KV has any better ideas for making these up.
 	fileStats := &enginepb.MVCCStats{
@@ -265,7 +330,7 @@ func sendRemoteAddSSTable(
 		batchTimestamp = execCtx.ExecCfg().DB.Clock().Now()
 	}
 
-	_, _, err := execCtx.ExecCfg().DB.AddRemoteSSTable(
+	_, _, err = execCtx.ExecCfg().DB.AddRemoteSSTable(
 		ctx, file.BackupFileEntrySpan, loc, fileStats, batchTimestamp)
 	return err
 }
@@ -296,16 +361,35 @@ func checkManifestsForOnlineCompat(ctx context.Context, manifests []backuppb.Bac
 	return nil
 }
 
-// checkRewritesAreNoops returns an error if any of the rewrites in
-// the rewrite map actually require key rewriting. We currently don't
-// rewrite keys, so this would be a problem.
-func checkRewritesAreNoops(rewrites jobspb.DescRewriteMap) error {
-	for oldID, rw := range rewrites {
-		if rw.ID != oldID {
-			return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: descriptor rewrites not supported but required (%d -> %d)", oldID, rw.ID)
+// checkBackupElidedPrefixForOnlineCompat ensures the backup is online
+// restorable depending on the kind of elided prefix in the backup. If no
+// prefixes were stripped in the backup, the restore cannot rewrite table
+// descriptors.
+func checkBackupElidedPrefixForOnlineCompat(
+	ctx context.Context, manifests []backuppb.BackupManifest, rewrites jobspb.DescRewriteMap,
+) error {
+	elidePrefix := manifests[0].ElidedPrefix
+
+	for _, manifest := range manifests {
+		if manifest.ElidedPrefix != elidePrefix {
+			return errors.AssertionFailedf("incremental backup elided prefix is not the same as full backup")
 		}
 	}
-	return nil
+	switch elidePrefix {
+	case execinfrapb.ElidePrefix_TenantAndTable:
+		return nil
+	case execinfrapb.ElidePrefix_Tenant:
+		return errors.AssertionFailedf("online restore disallowed for restores of tenants. previous check failed.")
+	case execinfrapb.ElidePrefix_None:
+		for oldID, rw := range rewrites {
+			if rw.ID != oldID {
+				return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: descriptor rewrites not supported but required (%d -> %d) on backup without stripped table prefixes", oldID, rw.ID)
+			}
+		}
+		return nil
+	default:
+		return errors.AssertionFailedf("unexpected elided prefix value")
+	}
 }
 
 func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
