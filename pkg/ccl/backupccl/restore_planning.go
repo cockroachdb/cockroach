@@ -1362,10 +1362,8 @@ func restorePlanHook(
 		}
 	}
 
-	if restoreStmt.Options.ExperimentalOnline && !restoreStmt.Targets.TenantID.IsSet() {
-		// TODO(ssd): Disable this once it is less annoying to
-		// disable it in tests.
-		log.Warningf(ctx, "running non-tenant online RESTORE; this is dangerous and will only work if you know exactly what you are doing")
+	if restoreStmt.Options.ExperimentalOnline && (restoreStmt.Targets.TenantID.IsSet() || restoreStmt.Options.IncludeAllSecondaryTenants != nil) {
+		return nil, nil, nil, false, errors.New("cannot run Online Restore on a tenant")
 	}
 
 	var newTenantID *roachpb.TenantID
@@ -1644,7 +1642,14 @@ func checkBackupManifestVersionCompatability(
 	version clusterversion.Handle,
 	mainBackupManifests []backuppb.BackupManifest,
 	unsafeRestoreIncompatibleVersion bool,
+	onlineRestore bool,
 ) error {
+	if onlineRestore && unsafeRestoreIncompatibleVersion {
+		return errors.New("cannot use UNSAFE_RESTORE_INCOMPATIBLE_VERSION with EXPERIMENTAL_DEFERRED_COPY")
+	}
+	if onlineRestore && mainBackupManifests[0].ClusterVersion.Less(clusterversion.V24_1.Version()) {
+		return errors.New("the backup is from a version older than our minimum online restorable version 24.1")
+	}
 	// Skip the version check if the user runs the restore with
 	// `UNSAFE_RESTORE_INCOMPATIBLE_VERSION`.
 	if unsafeRestoreIncompatibleVersion {
@@ -1868,7 +1873,7 @@ func doRestorePlan(
 	}()
 
 	err = checkBackupManifestVersionCompatability(ctx, p.ExecCfg().Settings.Version,
-		mainBackupManifests, restoreStmt.Options.UnsafeRestoreIncompatibleVersion)
+		mainBackupManifests, restoreStmt.Options.UnsafeRestoreIncompatibleVersion, restoreStmt.Options.ExperimentalOnline)
 	if err != nil {
 		return err
 	}
@@ -2077,12 +2082,6 @@ func doRestorePlan(
 		fromDescription = [][]string{fullyResolvedBaseDirectory}
 	} else {
 		fromDescription = from
-	}
-
-	if restoreStmt.Options.ExperimentalOnline {
-		if err := checkRewritesAreNoops(descriptorRewrites); err != nil {
-			return err
-		}
 	}
 
 	description, err := restoreJobDescription(

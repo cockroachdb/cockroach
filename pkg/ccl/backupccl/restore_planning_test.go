@@ -107,6 +107,8 @@ func TestBackupManifestVersionCompatibility(t *testing.T) {
 		clusterVersion          roachpb.Version
 		minimumSupportedVersion roachpb.Version
 		expectedError           string
+		onlineRestore bool
+		beginningBinaryVersion roachpb.Version
 	}
 
 	binaryVersion := roachpb.Version{Major: 23, Minor: 1}
@@ -151,16 +153,29 @@ func TestBackupManifestVersionCompatibility(t *testing.T) {
 			minimumSupportedVersion: roachpb.Version{Major: 22, Minor: 2},
 			expectedError:           "the backup is from a version older than our minimum restorable version 22.2",
 		},
+		{
+			name:                    "online-restore-old-backup",
+			backupVersion:           roachpb.Version{Major: 23, Minor: 2},
+			clusterVersion:          roachpb.Version{Major: 24, Minor: 1},
+			minimumSupportedVersion: roachpb.Version{Major: 23, Minor: 2},
+			expectedError:           "the backup is from a version older than our minimum online restorable version 24.1",
+			onlineRestore: true,
+			beginningBinaryVersion: roachpb.Version{Major: 23,Minor:2},
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			settings := cluster.MakeTestingClusterSettingsWithVersions(binaryVersion, tc.minimumSupportedVersion, false)
+			beginningBinaryVersion := binaryVersion
+			if !tc.beginningBinaryVersion.Less(binaryVersion){
+				beginningBinaryVersion = tc.beginningBinaryVersion
+			}
+			settings := cluster.MakeTestingClusterSettingsWithVersions(beginningBinaryVersion, tc.minimumSupportedVersion, false)
 			require.NoError(t, clusterversion.Initialize(context.Background(), tc.clusterVersion, &settings.SV))
-			version := clusterversion.MakeVersionHandleWithOverride(&settings.SV, binaryVersion, tc.minimumSupportedVersion)
+			version := clusterversion.MakeVersionHandleWithOverride(&settings.SV, beginningBinaryVersion, tc.minimumSupportedVersion)
 			manifest := []backuppb.BackupManifest{{ClusterVersion: tc.backupVersion}}
 
-			err := checkBackupManifestVersionCompatability(context.Background(), version, manifest /*unsafe=*/, false)
+			err := checkBackupManifestVersionCompatability(context.Background(), version, manifest /*unsafe=*/, false,tc.onlineRestore)
 			if tc.expectedError == "" {
 				require.NoError(t, err)
 			} else {
@@ -168,7 +183,7 @@ func TestBackupManifestVersionCompatibility(t *testing.T) {
 				require.Contains(t, err.Error(), tc.expectedError)
 			}
 
-			require.NoError(t, checkBackupManifestVersionCompatability(context.Background(), version, manifest /*unsafe=*/, true))
+			require.NoError(t, checkBackupManifestVersionCompatability(context.Background(), version, manifest /*unsafe=*/,true, tc.onlineRestore))
 		})
 	}
 }
