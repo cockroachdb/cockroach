@@ -150,6 +150,18 @@ type splitStatsHelperInput struct {
 	// stats. It's only an estimate because any writes to the user spans of the
 	// LHS, concurrent with the split, may not be accounted for.
 	PostSplitScanLocalLeftFn splitStatsScanFn
+	// PreSplitStats are the total on-disk stats before the split (in AdminSplit).
+	PreSplitStats enginepb.MVCCStats
+	// Max number of entities (keys, values, etc.) corresponding to a single MVCC
+	// stat (e.g. KeyCount) that is acceptable as the absolute difference between
+	// PreSplitStats and AbsPreSplitBothStored.
+	// Tuned by kv.split.max_mvcc_stat_count_diff.
+	MaxCountDiff int64
+	// Max number of bytes corresponding to a single MVCC stat (e.g. KeyBytes)
+	// that is acceptable as the absolute difference between PreSplitStats and
+	// AbsPreSplitBothStored.
+	// Tuned by kv.split.max_mvcc_stat_bytes_diff.
+	MaxBytesDiff int64
 }
 
 // makeSplitStatsHelper initializes a splitStatsHelper. The values in the input
@@ -243,6 +255,16 @@ func makeEstimatedSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelpe
 		}
 		h.absPostSplitRight = &rightStats
 		return h, nil
+	}
+
+	// If the user pre-split stats differ significantly form the current stats
+	// stored on disk, fall back to accurate-stats computation.
+	// Note that the current stats on disk were corrected in AdminSplit, so any
+	// differences we see here are due to writes concurrent with this split (not
+	// compounded estimates from previous splits).
+	if !h.in.AbsPreSplitBothStored.HasUserDataCloseTo(
+		h.in.PreSplitStats, h.in.MaxCountDiff, h.in.MaxBytesDiff) {
+		return makeSplitStatsHelper(input)
 	}
 
 	var absPostSplitFirst enginepb.MVCCStats
