@@ -13,6 +13,8 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
@@ -130,10 +132,11 @@ func TestFileSSTSinkWrite(t *testing.T) {
 	ctx := context.Background()
 
 	type testCase struct {
-		name           string
-		exportSpans    []exportedSpan
-		flushedSpans   []roachpb.Spans
-		unflushedSpans []roachpb.Spans
+		name              string
+		exportSpans       []exportedSpan
+		flushedSpans      []roachpb.Spans
+		elideFlushedSpans []roachpb.Spans
+		unflushedSpans    []roachpb.Spans
 		// errorExplanation, if non-empty, explains why an error is expected when
 		// writing the case inputs, and makes the test case fail if none is hit.
 		errorExplanation string
@@ -165,6 +168,23 @@ func TestFileSSTSinkWrite(t *testing.T) {
 			},
 			unflushedSpans:   []roachpb.Spans{{roachpb.Span{Key: []byte("c"), EndKey: []byte("e")}}},
 			errorExplanation: "unsupported write ordering; backup processor should not do this due to one sink per worker and #118990.",
+		},
+		{
+			name: "prefix-differ",
+			exportSpans: []exportedSpan{
+				newExportedSpanBuilder("2/a", "2/c", false).withKVs([]kvAndTS{{key: "2/a", timestamp: 10}, {key: "2/c", timestamp: 10}}).build(),
+				newExportedSpanBuilder("2/c", "2/d", true).withKVs([]kvAndTS{{key: "2/c", timestamp: 9}, {key: "2/d", timestamp: 10}}).build(),
+				newExportedSpanBuilder("3/c", "3/e", true).withKVs([]kvAndTS{{key: "3/c", timestamp: 9}, {key: "3/d", timestamp: 10}}).build(),
+				newExportedSpanBuilder("2/e", "2/g", true).withKVs([]kvAndTS{{key: "2/e", timestamp: 10}, {key: "2/f", timestamp: 10}}).build(),
+			},
+			flushedSpans: []roachpb.Spans{
+				{roachpb.Span{Key: []byte("2/a"), EndKey: []byte("2/d")}, roachpb.Span{Key: []byte("3/c"), EndKey: []byte("3/e")}},
+			},
+			elideFlushedSpans: []roachpb.Spans{
+				{roachpb.Span{Key: []byte("2/a"), EndKey: []byte("2/d")}},
+				{roachpb.Span{Key: []byte("3/c"), EndKey: []byte("3/e")}},
+			},
+			unflushedSpans: []roachpb.Spans{{roachpb.Span{Key: []byte("2/e"), EndKey: []byte("2/g")}}},
 		},
 		{
 			name: "extend-key-boundary-1-file",
@@ -271,57 +291,92 @@ func TestFileSSTSinkWrite(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.errorExplanation != "" {
-				return
+		for i := range tt.flushedSpans {
+			for j, sp := range tt.flushedSpans[i] {
+				tt.flushedSpans[i][j].Key = s2k(string(sp.Key))
+				tt.flushedSpans[i][j].EndKey = s2k(string(sp.EndKey))
 			}
-			st := cluster.MakeTestingClusterSettings()
-			targetFileSize.Override(ctx, &st.SV, 10<<10)
-
-			sink, store := fileSSTSinkTestSetUp(ctx, t, st)
-			defer func() {
-				require.NoError(t, sink.Close())
-			}()
-
-			for _, es := range tt.exportSpans {
-				require.NoError(t, sink.write(ctx, es))
+		}
+		for i := range tt.elideFlushedSpans {
+			for j, sp := range tt.elideFlushedSpans[i] {
+				tt.elideFlushedSpans[i][j].Key = s2k(string(sp.Key))
+				tt.elideFlushedSpans[i][j].EndKey = s2k(string(sp.EndKey))
 			}
+		}
+		for i := range tt.unflushedSpans {
+			for j, sp := range tt.unflushedSpans[i] {
+				tt.unflushedSpans[i][j].Key = s2k(string(sp.Key))
+				tt.unflushedSpans[i][j].EndKey = s2k(string(sp.EndKey))
+			}
+		}
 
-			progress := make([]backuppb.BackupManifest_File, 0)
-
-		Loop:
-			for {
-				select {
-				case p := <-sink.conf.progCh:
-					var progDetails backuppb.BackupManifest_Progress
-					if err := types.UnmarshalAny(&p.ProgressDetails, &progDetails); err != nil {
-						t.Fatal(err)
-					}
-
-					progress = append(progress, progDetails.Files...)
-				default:
-					break Loop
+		for _, elide := range []execinfrapb.ElidePrefix{execinfrapb.ElidePrefix_None, execinfrapb.ElidePrefix_TenantAndTable} {
+			t.Run(fmt.Sprintf("%s/elide=%s", tt.name, elide), func(t *testing.T) {
+				if tt.errorExplanation != "" {
+					return
 				}
-			}
+				st := cluster.MakeTestingClusterSettings()
+				targetFileSize.Override(ctx, &st.SV, 10<<10)
 
-			// progCh contains the files that have already been created with
-			// flushes. Verify the contents.
-			require.NoError(t, checkFiles(ctx, store, progress, tt.flushedSpans))
+				sink, store := fileSSTSinkTestSetUp(ctx, t, st)
+				defer func() {
+					require.NoError(t, sink.Close())
+				}()
+				sink.elideMode = elide
 
-			// flushedFiles contain the files that are in queue to be created on the
-			// next flush. Save these and then flush the sink to check their contents.
-			var actualUnflushedFiles []backuppb.BackupManifest_File
-			actualUnflushedFiles = append(actualUnflushedFiles, sink.flushedFiles...)
-			// We cannot end the test -- by calling flush -- if the sink is mid-key.
-			if len(tt.exportSpans) > 0 && !tt.exportSpans[len(tt.exportSpans)-1].atKeyBoundary {
-				sink.writeWithNoData(newExportedSpanBuilder("z", "zz", true).build())
-			}
-			require.NoError(t, sink.flush(ctx))
-			require.NoError(t, checkFiles(ctx, store, actualUnflushedFiles, tt.unflushedSpans))
-			require.Empty(t, sink.flushedFiles)
-		})
+				for _, es := range tt.exportSpans {
+					require.NoError(t, sink.write(ctx, es))
+				}
+
+				progress := make([]backuppb.BackupManifest_File, 0)
+
+			Loop:
+				for {
+					select {
+					case p := <-sink.conf.progCh:
+						var progDetails backuppb.BackupManifest_Progress
+						if err := types.UnmarshalAny(&p.ProgressDetails, &progDetails); err != nil {
+							t.Fatal(err)
+						}
+
+						progress = append(progress, progDetails.Files...)
+					default:
+						break Loop
+					}
+				}
+				expectedSpans := tt.flushedSpans
+				eliding := sink.elideMode != execinfrapb.ElidePrefix_None
+				if eliding && len(tt.elideFlushedSpans) > 0 {
+					expectedSpans = tt.elideFlushedSpans
+				}
+				// progCh contains the files that have already been created with
+				// flushes. Verify the contents.
+				require.NoError(t, checkFiles(ctx, store, progress, expectedSpans, eliding))
+
+				// flushedFiles contain the files that are in queue to be created on the
+				// next flush. Save these and then flush the sink to check their contents.
+				var actualUnflushedFiles []backuppb.BackupManifest_File
+				actualUnflushedFiles = append(actualUnflushedFiles, sink.flushedFiles...)
+				// We cannot end the test -- by calling flush -- if the sink is mid-key.
+				if len(tt.exportSpans) > 0 && !tt.exportSpans[len(tt.exportSpans)-1].atKeyBoundary {
+					sink.writeWithNoData(newExportedSpanBuilder("z", "zz", true).build())
+				}
+				require.NoError(t, sink.flush(ctx))
+				require.NoError(t, checkFiles(ctx, store, actualUnflushedFiles, tt.unflushedSpans, eliding))
+				require.Empty(t, sink.flushedFiles)
+			})
+		}
 	}
+}
 
+func s2k(s string) roachpb.Key {
+	tbl := 1
+	k := []byte(s)
+	if p := strings.Split(s, "/"); len(p) > 1 {
+		tbl, _ = strconv.Atoi(p[0])
+		k = []byte(p[1])
+	}
+	return append(keys.SystemSQLCodec.IndexPrefix(uint32(tbl), 2), k...)
 }
 
 // TestFileSSTSinkStats tests the internal counters and stats of the FileSSTSink under
@@ -530,7 +585,11 @@ func TestFileSSTSinkCopyPointKeys(t *testing.T) {
 
 			var expected []kvAndTS
 			for _, input := range tt.inputs {
+				for i := range input.input {
+					input.input[i].key = string(s2k(input.input[i].key))
+				}
 				expected = append(expected, input.input...)
+
 			}
 
 			iterOpts := storage.IterOptions{
@@ -668,7 +727,7 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 				// Add some point key values in the input as well.
 				es := newExportedSpanBuilder(rangeKeys[0].key, rangeKeys[len(rangeKeys)-1].key, false).
 					withRangeKeys(rangeKeys).
-					withKVs([]kvAndTS{{rangeKeys[0].key, nil, rangeKeys[0].timestamp}}).
+					withKVs([]kvAndTS{{key: rangeKeys[0].key, timestamp: rangeKeys[0].timestamp}}).
 					build()
 				err := sink.copyRangeKeys(es.dataSST)
 				if input.expectErr != "" {
@@ -692,7 +751,7 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 					if expected[rk.timestamp] == nil {
 						expected[rk.timestamp] = &roachpb.SpanGroup{}
 					}
-
+					t.Logf("%d: Adding %v", rk.timestamp, rk.span())
 					expected[rk.timestamp].Add(rk.span())
 				}
 			}
@@ -761,8 +820,8 @@ type rangeKeyAndTS struct {
 
 func (rk rangeKeyAndTS) span() roachpb.Span {
 	return roachpb.Span{
-		Key:    []byte(rk.key),
-		EndKey: []byte(rk.endKey),
+		Key:    s2k(rk.key),
+		EndKey: s2k(rk.endKey),
 	}
 }
 
@@ -777,8 +836,8 @@ func newExportedSpanBuilder(spanStart, spanEnd string, atKeyBoundary bool) *expo
 		es: &exportedSpan{
 			metadata: backuppb.BackupManifest_File{
 				Span: roachpb.Span{
-					Key:    []byte(spanStart),
-					EndKey: []byte(spanEnd),
+					Key:    s2k(spanStart),
+					EndKey: s2k(spanEnd),
 				},
 				EntryCounts: roachpb.RowCount{
 					DataSize:     1,
@@ -825,7 +884,7 @@ func (b *exportedSpanBuilder) build() exportedSpan {
 	sst := storage.MakeBackupSSTWriter(ctx, settings, buf)
 	for _, d := range b.keyValues {
 		err := sst.Put(storage.MVCCKey{
-			Key:       []byte(d.key),
+			Key:       s2k(d.key),
 			Timestamp: hlc.Timestamp{WallTime: d.timestamp},
 		}, d.value)
 		if err != nil {
@@ -877,6 +936,7 @@ func checkFiles(
 	store cloud.ExternalStorage,
 	files []backuppb.BackupManifest_File,
 	expectedFileSpans []roachpb.Spans,
+	elided bool,
 ) error {
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
@@ -924,7 +984,7 @@ func checkFiles(
 
 			key := iter.UnsafeKey()
 
-			if !endKeyInclusiveSpansContainsKey(spans, key.Key) {
+			if !endKeyInclusiveSpansContainsKey(spans, key.Key, elided) {
 				return errors.Newf("key %v in file %s not contained by its spans [%v]", key.Key, f, spans)
 			}
 		}
@@ -934,8 +994,12 @@ func checkFiles(
 	return nil
 }
 
-func endKeyInclusiveSpansContainsKey(spans roachpb.Spans, key roachpb.Key) bool {
+func endKeyInclusiveSpansContainsKey(spans roachpb.Spans, key roachpb.Key, elided bool) bool {
 	for _, sp := range spans {
+		if elided {
+			sp.Key, _ = keys.StripTablePrefix(sp.Key)
+			sp.EndKey, _ = keys.StripTablePrefix(sp.EndKey)
+		}
 		if sp.ContainsKey(key) {
 			return true
 		}

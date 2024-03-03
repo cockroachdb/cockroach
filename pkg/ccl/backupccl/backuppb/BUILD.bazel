@@ -31,6 +31,7 @@ go_proto_library(
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/execinfrapb",  # keep
         "//pkg/sql/stats",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
