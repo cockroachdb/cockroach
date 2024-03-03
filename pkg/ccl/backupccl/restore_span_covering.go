@@ -313,7 +313,8 @@ func generateAndSendImportSpans(
 
 	flush := func(ctx context.Context) error {
 		entry := execinfrapb.RestoreSpanEntry{
-			Span: lastCovSpan,
+			Span:         lastCovSpan,
+			ElidedPrefix: backups[0].ElidedPrefix,
 		}
 		for layer := range covFilesByLayer {
 			for _, f := range covFilesByLayer[layer] {
