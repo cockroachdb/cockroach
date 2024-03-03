@@ -133,6 +133,8 @@ type splitStatsHelperInput struct {
 	// side. Those are expensive to compute, so we compute them in AdminSplit,
 	// before holding latches, and pass them to splitTrigger.
 	PreSplitLeftUser enginepb.MVCCStats
+	// PreSplitStats are the total on-disk stats before the split (in AdminSplit).
+	PreSplitStats enginepb.MVCCStats
 	// PostSplitScanLeftFn returns the stats for the left hand side of the
 	// split computed by scanning relevant part of the range.
 	PostSplitScanLeftFn splitStatsScanFn
@@ -160,6 +162,16 @@ type splitStatsHelperInput struct {
 	// entire right hand side will be scanned to compute stats accurately. This is
 	// cheap because the range is empty.
 	RightUserIsEmpty bool
+	// Max number of entities (keys, values, etc.) corresponding to a single MVCC
+	// stat (e.g. KeyCount) that is acceptable as the absolute difference between
+	// PreSplitStats and AbsPreSplitBothStored.
+	// Tuned by kv.split.max_mvcc_stat_count_diff.
+	MaxCountDiff int64
+	// Max number of bytes corresponding to a single MVCC stat (e.g. KeyBytes)
+	// that is acceptable as the absolute difference between PreSplitStats and
+	// AbsPreSplitBothStored.
+	// Tuned by kv.split.max_mvcc_stat_bytes_diff.
+	MaxBytesDiff int64
 }
 
 // makeSplitStatsHelper initializes a splitStatsHelper. The values in the input

@@ -199,6 +199,7 @@ func splitTxnAttempt(
 	oldDesc *roachpb.RangeDescriptor,
 	reason redact.RedactableString,
 	preSplitLeftUserStats enginepb.MVCCStats,
+	preSplitStats enginepb.MVCCStats,
 ) error {
 	txn.SetDebugName(splitTxnName)
 
@@ -256,6 +257,7 @@ func splitTxnAttempt(
 				LeftDesc:              *leftDesc,
 				RightDesc:             *rightDesc,
 				PreSplitLeftUserStats: preSplitLeftUserStats,
+				PreSplitStats:         preSplitStats,
 			},
 		},
 	})
@@ -465,6 +467,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	// If MVCC stats estimates are enabled, pre-compute some stats here to pass to
 	// splitTrigger (where we hold latches, so it's more expensive to do so).
 	var userOnlyLeftStats enginepb.MVCCStats
+	var totalStats enginepb.MVCCStats
 	if EnableEstimatedMVCCStatsInSplit.Get(&r.store.ClusterSettings().SV) &&
 		r.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1_EstimatedMVCCStatsInSplit) {
 		// If the stats contain estimates, re-compute them to prevent estimates
@@ -492,10 +495,15 @@ func (r *Replica) adminSplitWithDescriptor(
 		if err != nil {
 			return reply, errors.Wrapf(err, "unable to compute user-only pre-split stats for LHS range")
 		}
+
+		// The total stats will be used in splitTrigger to potentially fall back to
+		// accurate-stats computation, if the pre-split total stats here vary too
+		// much from the total stats at the time of the split (in splitTrigger).
+		totalStats = r.GetMVCCStats()
 	}
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return splitTxnAttempt(ctx, r.store, txn, leftDesc, rightDesc, desc, reason, userOnlyLeftStats)
+		return splitTxnAttempt(ctx, r.store, txn, leftDesc, rightDesc, desc, reason, userOnlyLeftStats, totalStats)
 	}); err != nil {
 		// The ConditionFailedError can occur because the descriptors acting
 		// as expected values in the CPuts used to update the left or right
