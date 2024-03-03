@@ -177,6 +177,7 @@ func splitTxnAttempt(
 	oldDesc *roachpb.RangeDescriptor,
 	reason redact.RedactableString,
 	preSplitLeftUserStats enginepb.MVCCStats,
+	preSplitStats enginepb.MVCCStats,
 ) error {
 	txn.SetDebugName(splitTxnName)
 
@@ -234,6 +235,7 @@ func splitTxnAttempt(
 				LeftDesc:              *leftDesc,
 				RightDesc:             *rightDesc,
 				PreSplitLeftUserStats: preSplitLeftUserStats,
+				PreSplitStats:         preSplitStats,
 			},
 		},
 	})
@@ -471,7 +473,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return splitTxnAttempt(ctx, r.store, txn, leftDesc, rightDesc, desc, reason, userOnlyLeftStats)
+		return splitTxnAttempt(ctx, r.store, txn, leftDesc, rightDesc, desc, reason, userOnlyLeftStats, r.GetMVCCStats())
 	}); err != nil {
 		// The ConditionFailedError can occur because the descriptors acting
 		// as expected values in the CPuts used to update the left or right

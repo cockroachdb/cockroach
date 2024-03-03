@@ -64,6 +64,30 @@ var EnableMVCCStatsRecomputationInSplit = settings.RegisterBoolSetting(
 		"to prevent stats estimates from drifting",
 	util.ConstantWithMetamorphicTestBool("kv.split.mvcc_stats_recomputation.enabled", true))
 
+// MaxMVCCStatCountDiff defines the maximum number of units (e.g. keys or
+// intents) that is acceptable for an individual MVCC stat to diverge from the
+// real value when computed during splits. If this threshold is
+// exceeded, the split will fall back to computing 100% accurate stats.
+// It takes effect only if kv.split.estimated_mvcc_stats.enabled is true.
+var MaxMVCCStatCountDiff = settings.RegisterIntSetting(
+	settings.SystemVisible,
+	"kv.split.max_mvcc_stat_count_diff",
+	"defines the max number of units that are acceptable for an individual "+
+		"MVCC stat to diverge; needs kv.split.estimated_mvcc_stats.enabled to be true",
+	1000)
+
+// MaxMVCCStatBytesDiff defines the maximum number of bytes (e.g. keys bytes or
+// intents bytes) that is acceptable for an individual MVCC stat to diverge
+// from the real value when computed during splits. If this threshold is
+// exceeded, the split will fall back to computing 100% accurate stats.
+// It takes effect only if kv.split.estimated_mvcc_stats.enabled is true.
+var MaxMVCCStatBytesDiff = settings.RegisterIntSetting(
+	settings.SystemVisible,
+	"kv.split.max_mvcc_stat_bytes_diff",
+	"defines the max number of bytes that are acceptable for an individual "+
+		"MVCC stat to diverge; needs kv.split.estimated_mvcc_stats.enabled to be true",
+	512000) // 512 KB = 0.1% of the max range size
+
 func init() {
 	RegisterReadWriteCommand(kvpb.EndTxn, declareKeysEndTxn, EndTxn)
 }
@@ -1105,6 +1129,9 @@ func splitTrigger(
 		RightIsEmpty:             emptyRHS,
 		PreSplitLeftUser:         split.PreSplitLeftUserStats,
 		PostSplitScanLocalLeftFn: makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "local left hand side", true /* excludeUserSpans */),
+		PreSplitStats:            split.PreSplitStats,
+		MaxCountDiff:             MaxMVCCStatCountDiff.Get(&rec.ClusterSettings().SV),
+		MaxBytesDiff:             MaxMVCCStatBytesDiff.Get(&rec.ClusterSettings().SV),
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }
