@@ -1551,7 +1551,8 @@ message SchemaDescriptor {
     optional uint32 id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
 
-    // ArgTypes contains only IN / INOUT parameters.
+    // ArgTypes contains only IN / INOUT parameters when IsProcedure is false,
+    // and all parameters when IsProcedure is true.
     repeated sql.sem.types.T arg_types = 2;
 
     optional sql.sem.types.T return_type = 3;
@@ -1621,7 +1622,8 @@ message FunctionDescriptor {
   optional uint32 parent_schema_id = 4 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
 
-  // params represents the list of parameters of the UDF signature.
+  // params represents the list of parameters, regardless of the parameter
+  // class, of the UDF signature.
   repeated Parameter params = 5 [(gogoproto.nullable) = false];
 
   // return_type represents the return type of the UDF signature.

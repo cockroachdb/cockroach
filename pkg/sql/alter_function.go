@@ -462,7 +462,7 @@ func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor
 		IsProcedure: fnDesc.IsProcedure(),
 	}
 	for _, param := range fnDesc.Params {
-		if tree.IsInParamClass(funcdesc.ToTreeRoutineParamClass(param.Class)) {
+		if tree.IsParamIncludedIntoSignature(funcdesc.ToTreeRoutineParamClass(param.Class), ret.IsProcedure) {
 			ret.ArgTypes = append(ret.ArgTypes, param.Type)
 		}
 	}

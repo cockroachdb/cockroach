@@ -93,6 +93,34 @@ SELECT get_body_str('f_rewrite');
 statement ok
 DROP FUNCTION f_rewrite();
 
+statement ok
+CREATE FUNCTION f_rewrite(OUT weekday) AS
+$$
+  SELECT 'thursday'::weekday;
+$$ LANGUAGE SQL
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"SELECT b'\\xa0':::@100107;"
+
+statement ok
+DROP FUNCTION f_rewrite();
+
+statement ok
+CREATE FUNCTION f_rewrite(INOUT weekday) AS
+$$
+  SELECT 'thursday'::weekday;
+$$ LANGUAGE SQL
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"SELECT b'\\xa0':::@100107;"
+
+statement ok
+DROP FUNCTION f_rewrite;
+
 subtest end
 
 subtest rewrite_proc

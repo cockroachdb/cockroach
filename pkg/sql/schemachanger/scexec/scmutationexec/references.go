@@ -603,11 +603,9 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 			IsProcedure: t.IsProcedure(),
 		}
 		for _, p := range t.Params {
-			if !tree.IsInParamClass(funcdesc.ToTreeRoutineParamClass(p.Class)) {
-				// Only IN parameters are included into the signature.
-				continue
+			if tree.IsParamIncludedIntoSignature(funcdesc.ToTreeRoutineParamClass(p.Class), ol.IsProcedure) {
+				ol.ArgTypes = append(ol.ArgTypes, p.Type)
 			}
-			ol.ArgTypes = append(ol.ArgTypes, p.Type)
 		}
 		sc.AddFunction(obj.GetName(), ol)
 	}

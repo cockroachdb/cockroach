@@ -262,18 +262,18 @@ type Overload struct {
 	// in a Schema descriptor, which means that the full UDF descriptor need to be
 	// fetched to get more info, e.g. function Body.
 	UDFContainsOnlySignature bool
-	// NamedReturnColumn is non-empty when a user-defined function returns a
-	// single column of non-RECORD type and has named OUT parameter.
-	NamedReturnColumn string
-	// HasNamedReturnColumns is set when a user-defined function has multiple
-	// OUT parameters that specify an implicit alias for the RECORD return type.
-	HasNamedReturnColumns bool
 	// Version is the descriptor version of the descriptor used to construct
 	// this version of the function overload. Only used for UDFs.
 	Version uint64
 	// Language is the function language that was used to define the UDF.
 	// This is currently either SQL or PL/pgSQL.
 	Language RoutineLanguage
+	// RoutineParams contains all parameter information of the routine.
+	//
+	// Note that unlike Types (which only contains input parameters and defines
+	// the signature of the function), RoutineParams contains all parameters as
+	// well as their class.
+	RoutineParams RoutineParams
 }
 
 // params implements the overloadImpl interface.
@@ -458,12 +458,6 @@ func (p ParamTypes) MatchLen(l int) bool {
 // GetAt is part of the TypeList interface.
 func (p ParamTypes) GetAt(i int) *types.T {
 	return p[i].Typ
-}
-
-// SetAt is part of the TypeList interface.
-func (p ParamTypes) SetAt(i int, name string, t *types.T) {
-	p[i].Name = name
-	p[i].Typ = t
 }
 
 // Length is part of the TypeList interface.

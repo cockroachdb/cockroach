@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -577,6 +578,7 @@ func requireRecoveryEvent(
 //
 //lint:ignore U1000 unused
 func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProcessorMaxFiles int) {
+	skip.WithIssue(t, 119836, "this functionality was never enabled and will likely be removed rather than enabled")
 	const splitSize = 10
 	numAccounts := numSplits * splitSize
 	var expectedNumFiles int
