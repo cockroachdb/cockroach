@@ -35,6 +35,8 @@ const (
 	TagLifetime = "lifetime"
 	// TagRoachprod is roachprod tag const, value is true & false.
 	TagRoachprod = "roachprod"
+	// TagSpotInstance is a tag added to spot instance vms with value as true.
+	TagSpotInstance = "spot"
 	// TagUsage indicates where a certain resource is used. "roachtest" is used
 	// as the key for roachtest created resources.
 	TagUsage = "usage"

@@ -597,7 +597,9 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 		return err
 	}
 
-	cloudCluster.PrintDetails(l)
+	if err = cloudCluster.PrintDetails(l); err != nil {
+		return err
+	}
 	// Run ssh-keygen -R serially on each new VM in case an IP address has been recycled
 	for _, v := range cloudCluster.VMs {
 		cmd := exec.Command("ssh-keygen", "-R", v.PublicIP)
@@ -667,8 +669,7 @@ func Extend(l *logger.Logger, clusterName string, lifetime time.Duration) error 
 		return fmt.Errorf("cluster %s does not exist", clusterName)
 	}
 
-	c.PrintDetails(l)
-	return nil
+	return c.PrintDetails(l)
 }
 
 // Default scheduled backup runs a full backup every hour and an incremental
