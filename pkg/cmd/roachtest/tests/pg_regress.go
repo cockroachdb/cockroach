@@ -460,14 +460,18 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 func registerPGRegress(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "pg_regress",
-		Owner:            registry.OwnerSQLQueries,
-		Benchmark:        false,
-		Cluster:          r.MakeClusterSpec(1 /* nodeCount */),
-		RequiresLicense:  true,
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
+		Name:      "pg_regress",
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: false,
+		Cluster:   r.MakeClusterSpec(1 /* nodeCount */),
+		// At the moment, we have a very large deviation from postgres, also
+		// some diffs include line numbers, so we don't treat failures as
+		// blockers for now.
+		NonReleaseBlocker: true,
+		RequiresLicense:   true,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Weekly),
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPGRegress(ctx, t, c)
 		},
