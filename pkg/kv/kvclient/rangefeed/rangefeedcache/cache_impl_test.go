@@ -27,7 +27,7 @@ import (
 // cache provides a consistent snapshot when available, but the snapshot
 // may be stale.
 type Cache struct {
-	w *Watcher
+	w *Watcher[*kvpb.RangeFeedValue]
 
 	mu struct {
 		syncutil.RWMutex
@@ -75,7 +75,7 @@ func (c *Cache) GetSnapshot() ([]roachpb.KeyValue, hlc.Timestamp, bool) {
 	return c.mu.data, c.mu.timestamp, true
 }
 
-func (c *Cache) handleUpdate(ctx context.Context, update Update) {
+func (c *Cache) handleUpdate(ctx context.Context, update Update[*kvpb.RangeFeedValue]) {
 	updateKVs := rangefeedbuffer.EventsToKVs(update.Events,
 		rangefeedbuffer.RangeFeedValueEventToKV)
 	var updatedData []roachpb.KeyValue
@@ -96,6 +96,8 @@ func (c *Cache) handleUpdate(ctx context.Context, update Update) {
 	c.mu.timestamp = update.Timestamp
 }
 
-func passThroughTranslation(ctx context.Context, value *kvpb.RangeFeedValue) rangefeedbuffer.Event {
-	return value
+func passThroughTranslation(
+	ctx context.Context, value *kvpb.RangeFeedValue,
+) (*kvpb.RangeFeedValue, bool) {
+	return value, value != nil
 }
