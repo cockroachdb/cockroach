@@ -78,11 +78,8 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 	var b bytes.Buffer
 	cmd.Stdout = &b
 	cmd.Stderr = &b
-	switch err := cmd.Run(); err.(type) {
-	case nil:
-	case *exec.ExitError:
-		// Non-zero exit is expected.
-	default:
+	err := cmd.Run()
+	if err != nil && !errors.HasType(err, (*exec.ExitError)(nil)) {
 		t.Fatal(err)
 	}
 	filters = append([]stream.Filter{
@@ -138,11 +135,11 @@ func TestLint(t *testing.T) {
 	pkgVar, pkgSpecified := os.LookupEnv("PKG")
 
 	var nogoConfig map[string]any
-	nogoJson, err := os.ReadFile(filepath.Join(crdbDir, "build", "bazelutil", "nogo_config.json"))
+	nogoJSON, err := os.ReadFile(filepath.Join(crdbDir, "build", "bazelutil", "nogo_config.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(nogoJson, &nogoConfig); err != nil {
+	if err := json.Unmarshal(nogoJSON, &nogoConfig); err != nil {
 		t.Error(err)
 	}
 
