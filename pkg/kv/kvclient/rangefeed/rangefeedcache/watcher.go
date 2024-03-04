@@ -63,7 +63,7 @@ import (
 // Users seeking to leverage the Updates which arrive with that delay but also
 // react to the row-level events as they arrive can hijack the translateEvent
 // function to trigger some non-blocking action.
-type Watcher struct {
+type Watcher[E rangefeedbuffer.Event] struct {
 	name                   redact.SafeString
 	clock                  *hlc.Clock
 	rangefeedFactory       *rangefeed.Factory
@@ -74,8 +74,8 @@ type Watcher struct {
 
 	started int32 // accessed atomically
 
-	translateEvent TranslateEventFunc
-	onUpdate       OnUpdateFunc
+	translateEvent TranslateEventFunc[E]
+	onUpdate       OnUpdateFunc[E]
 
 	lastFrontierTS hlc.Timestamp // used to assert monotonicity across rangefeed attempts
 
@@ -107,20 +107,20 @@ func (u UpdateType) String() string {
 }
 
 // TranslateEventFunc is used by the client to translate a low-level event
-// into an event for buffering. If nil is returned, the event is skipped.
-type TranslateEventFunc func(
+// into an event for buffering. If false is returned, the event is skipped.
+type TranslateEventFunc[E rangefeedbuffer.Event] func(
 	context.Context, *kvpb.RangeFeedValue,
-) rangefeedbuffer.Event
+) (_ E, ok bool)
 
 // OnUpdateFunc is used by the client to receive an Update, which is a batch
 // of events which represent either a CompleteUpdate or an IncrementalUpdate.
-type OnUpdateFunc func(context.Context, Update)
+type OnUpdateFunc[E rangefeedbuffer.Event] func(context.Context, Update[E])
 
 // Update corresponds to a set of events derived from the underlying RangeFeed.
-type Update struct {
+type Update[E rangefeedbuffer.Event] struct {
 	Type      UpdateType
 	Timestamp hlc.Timestamp
-	Events    []rangefeedbuffer.Event
+	Events    []E
 }
 
 // TestingKnobs allows tests to inject behavior into the Watcher.
@@ -162,7 +162,7 @@ var _ base.ModuleTestingKnobs = (*TestingKnobs)(nil)
 // Callers can control whether the values passed to translateEvent carry a
 // populated PrevValue using the withPrevValue parameter. See
 // rangefeed.WithDiff for more details.
-func NewWatcher(
+func NewWatcher[E rangefeedbuffer.Event](
 	name redact.SafeString,
 	clock *hlc.Clock,
 	rangeFeedFactory *rangefeed.Factory,
@@ -170,11 +170,11 @@ func NewWatcher(
 	spans []roachpb.Span,
 	withPrevValue bool,
 	withRowTSInInitialScan bool,
-	translateEvent TranslateEventFunc,
-	onUpdate OnUpdateFunc,
+	translateEvent TranslateEventFunc[E],
+	onUpdate OnUpdateFunc[E],
 	knobs *TestingKnobs,
-) *Watcher {
-	w := &Watcher{
+) *Watcher[E] {
+	w := &Watcher[E]{
 		name:                   name,
 		clock:                  clock,
 		rangefeedFactory:       rangeFeedFactory,
@@ -194,7 +194,9 @@ func NewWatcher(
 
 // Start calls Run on the Watcher as an async task with exponential backoff.
 // If the Watcher ran for what is deemed long enough, the backoff is reset.
-func Start(ctx context.Context, stopper *stop.Stopper, c *Watcher, onError func(error)) error {
+func Start[E rangefeedbuffer.Event](
+	ctx context.Context, stopper *stop.Stopper, c *Watcher[E], onError func(error),
+) error {
 	return stopper.RunAsyncTask(ctx, string(c.name), func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
@@ -231,7 +233,7 @@ func Start(ctx context.Context, stopper *stop.Stopper, c *Watcher, onError func(
 // This is a blocking operation, returning only when the context is canceled,
 // or when an error occurs. For the latter, it's expected that callers will
 // re-run the watcher.
-func (s *Watcher) Run(ctx context.Context) error {
+func (s *Watcher[E]) Run(ctx context.Context) error {
 	if !atomic.CompareAndSwapInt32(&s.started, 0, 1) {
 		log.Fatal(ctx, "currently started: only allowed once at any point in time")
 	}
@@ -252,7 +254,7 @@ func (s *Watcher) Run(ctx context.Context) error {
 	// transparently query the backing table if the record requested is not found.
 	// We could also have the initial scan operate in chunks, handing off results
 	// to the caller incrementally, all within the "initial scan" phase.
-	buffer := rangefeedbuffer.New(math.MaxInt)
+	buffer := rangefeedbuffer.New[E](math.MaxInt)
 	frontierBumpedCh, initialScanDoneCh, errCh := make(chan struct{}), make(chan struct{}), make(chan error)
 	mu := struct { // serializes access between the rangefeed and the main thread here
 		syncutil.Mutex
@@ -266,8 +268,8 @@ func (s *Watcher) Run(ctx context.Context) error {
 	}()
 
 	onValue := func(ctx context.Context, ev *kvpb.RangeFeedValue) {
-		bEv := s.translateEvent(ctx, ev)
-		if bEv == nil {
+		bEv, ok := s.translateEvent(ctx, ev)
+		if !ok {
 			return
 		}
 
@@ -375,14 +377,14 @@ var restartErr = errors.New("testing restart requested")
 // it to restart. This is separate from the testing knob so that we
 // can force a restart from test infrastructure without overriding the
 // user-provided testing knobs.
-func (s *Watcher) TestingRestart() {
+func (s *Watcher[E]) TestingRestart() {
 	s.restartErrCh <- restartErr
 }
 
-func (s *Watcher) handleUpdate(
-	ctx context.Context, buffer *rangefeedbuffer.Buffer, ts hlc.Timestamp, updateType UpdateType,
+func (s *Watcher[E]) handleUpdate(
+	ctx context.Context, buffer *rangefeedbuffer.Buffer[E], ts hlc.Timestamp, updateType UpdateType,
 ) {
-	s.onUpdate(ctx, Update{
+	s.onUpdate(ctx, Update[E]{
 		Type:      updateType,
 		Timestamp: ts,
 		Events:    buffer.Flush(ctx, ts),

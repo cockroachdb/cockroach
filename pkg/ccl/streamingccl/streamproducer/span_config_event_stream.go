@@ -40,10 +40,10 @@ type spanConfigEventStream struct {
 	data tree.Datums // Data to send to the consumer
 
 	// Fields below initialized when Start called.
-	rfc         *rangefeedcache.Watcher
+	rfc         *rangefeedcache.Watcher[*spanconfigkvsubscriber.BufferEvent]
 	streamGroup ctxgroup.Group // Context group controlling stream execution.
 	doneChan    chan struct{}  // Channel signaled to close the stream loop.
-	updateCh    chan rangefeedcache.Update
+	updateCh    chan rangefeedcache.Update[*spanconfigkvsubscriber.BufferEvent]
 	errCh       chan error       // Signaled when error occurs in rangefeed.
 	streamCh    chan tree.Datums // Channel signaled to forward datums to consumer.
 	sp          *tracing.Span    // Span representing the lifetime of the eventStream.
@@ -74,7 +74,7 @@ func (s *spanConfigEventStream) Start(ctx context.Context, txn *kv.Txn) error {
 	s.errCh = make(chan error, 1)
 
 	// updateCh gets buffered RangeFeedEvents and is consumed by the ValueGenerator.
-	s.updateCh = make(chan rangefeedcache.Update)
+	s.updateCh = make(chan rangefeedcache.Update[*spanconfigkvsubscriber.BufferEvent])
 
 	// Stream channel receives datums to be sent to the consumer.
 	s.streamCh = make(chan tree.Datums)
@@ -178,7 +178,9 @@ func (s *spanConfigEventStream) Close(ctx context.Context) {
 	s.sp.Finish()
 }
 
-func (s *spanConfigEventStream) handleUpdate(ctx context.Context, update rangefeedcache.Update) {
+func (s *spanConfigEventStream) handleUpdate(
+	ctx context.Context, update rangefeedcache.Update[*spanconfigkvsubscriber.BufferEvent],
+) {
 	select {
 	case <-ctx.Done():
 		log.Warningf(ctx, "rangefeedcache context cancelled with error %s", ctx.Err())
@@ -233,8 +235,7 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 				batcher.spanConfigFrontier = hlc.MinTimestamp
 			}
 			for _, ev := range update.Events {
-				spcfgEvent := ev.(*spanconfigkvsubscriber.BufferEvent)
-				target := spcfgEvent.Update.GetTarget()
+				target := ev.Update.GetTarget()
 				if target.IsSystemTarget() {
 					// We skip replicating SystemTarget Span configs as they are not
 					// necessary to replicate. System target span configurations are
@@ -259,9 +260,9 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 				streamedSpanCfgEntry := streampb.StreamedSpanConfigEntry{
 					SpanConfig: roachpb.SpanConfigEntry{
 						Target: target.ToProto(),
-						Config: spcfgEvent.Update.GetConfig(),
+						Config: ev.Update.GetConfig(),
 					},
-					Timestamp:    spcfgEvent.Timestamp(),
+					Timestamp:    ev.Timestamp(),
 					FromFullScan: fromFullScan,
 				}
 				bufferedEvents = append(bufferedEvents, streamedSpanCfgEntry)
