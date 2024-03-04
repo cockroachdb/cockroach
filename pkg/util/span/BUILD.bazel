@@ -33,10 +33,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":span"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/roachpb",
         "//pkg/testutils",

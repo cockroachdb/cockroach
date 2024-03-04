@@ -29,10 +29,6 @@ go_test(
         "parse_test.go",
     ],
     embed = [":duration"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/types",
         "//pkg/util/leaktest",

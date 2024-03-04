@@ -17,9 +17,5 @@ go_test(
     name = "logictestbase_test",
     srcs = ["logictestbase_test.go"],
     embed = [":logictestbase"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = ["//pkg/clusterversion"],
 )

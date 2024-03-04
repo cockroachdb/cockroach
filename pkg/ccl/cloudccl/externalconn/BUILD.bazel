@@ -7,16 +7,9 @@ go_test(
         "main_test.go",
     ],
     data = glob(["testdata/**"]),
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {
-            "dockerNetwork": "standard",
-            "test.Pool": "heavy",
-        },
-        "//conditions:default": {
-            "dockerNetwork": "standard",
-            "test.Pool": "default",
-        },
-    }),
+    exec_properties = {
+        "dockerNetwork": "standard",
+    },
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",

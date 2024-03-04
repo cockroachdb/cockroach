@@ -56,10 +56,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":metric"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",

@@ -18,10 +18,6 @@ go_test(
     size = "small",
     srcs = ["unimplemented_test.go"],
     embed = [":unimplemented"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/build",
         "@com_github_cockroachdb_errors//:errors",

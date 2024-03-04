@@ -23,10 +23,6 @@ go_test(
     name = "httpsink_test",
     srcs = ["http_storage_test.go"],
     embed = [":httpsink"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/blobs",

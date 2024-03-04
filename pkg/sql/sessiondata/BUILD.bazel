@@ -35,10 +35,6 @@ go_test(
         "session_data_test.go",
     ],
     embed = [":sessiondata"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/sessiondatapb",
         "//pkg/util/randutil",

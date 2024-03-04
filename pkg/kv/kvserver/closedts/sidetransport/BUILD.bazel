@@ -39,10 +39,6 @@ go_test(
         "sender_test.go",
     ],
     embed = [":sidetransport"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/kv/kvpb",

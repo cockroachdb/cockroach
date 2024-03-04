@@ -52,10 +52,6 @@ go_test(
         "sync_waiter_test.go",
     ],
     embed = [":logstore"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",

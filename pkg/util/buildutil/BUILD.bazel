@@ -34,10 +34,6 @@ go_test(
     name = "buildutil_test",
     srcs = ["crdb_test_test.go"],
     embed = [":buildutil"],  # keep
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/build/bazel",
         "@com_github_stretchr_testify//require",

@@ -70,10 +70,6 @@ go_test(
         "version_test.go",
     ],
     embed = [":roachpb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/cli/exit",
         "//pkg/keys",

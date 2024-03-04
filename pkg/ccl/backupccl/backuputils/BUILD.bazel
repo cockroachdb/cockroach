@@ -22,10 +22,6 @@ go_test(
     name = "backuputils_test",
     srcs = ["memory_backed_quota_pool_test.go"],
     embed = [":backuputils"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/settings/cluster",

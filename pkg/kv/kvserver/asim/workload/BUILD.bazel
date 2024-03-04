@@ -11,9 +11,5 @@ go_test(
     name = "workload_test",
     srcs = ["workload_test.go"],
     embed = [":workload"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = ["@com_github_stretchr_testify//require"],
 )

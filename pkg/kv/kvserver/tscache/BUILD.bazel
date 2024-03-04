@@ -40,10 +40,6 @@ go_test(
         "tree_impl_test.go",
     ],
     embed = [":tscache"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/roachpb",

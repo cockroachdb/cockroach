@@ -22,10 +22,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":scanner"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/lexbase",
         "@com_github_cockroachdb_datadriven//:datadriven",

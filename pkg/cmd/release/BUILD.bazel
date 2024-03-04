@@ -60,10 +60,6 @@ go_test(
         "testdata/**",
     ]),
     embed = [":release_lib"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/testutils/release",
         "@com_github_masterminds_semver_v3//:semver",

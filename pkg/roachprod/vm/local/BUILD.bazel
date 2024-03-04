@@ -26,10 +26,6 @@ go_test(
     name = "local_test",
     srcs = ["dns_test.go"],
     embed = [":local"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/roachprod/vm",
         "@com_github_stretchr_testify//require",

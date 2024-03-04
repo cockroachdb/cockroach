@@ -35,10 +35,6 @@ go_test(
         "options_test.go",
     ],
     embed = [":changefeedbase"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/ccl",

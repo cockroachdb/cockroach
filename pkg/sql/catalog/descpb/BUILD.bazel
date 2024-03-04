@@ -40,10 +40,6 @@ go_test(
     size = "small",
     srcs = ["structured_test.go"],
     embed = [":descpb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
 )
 
 proto_library(
