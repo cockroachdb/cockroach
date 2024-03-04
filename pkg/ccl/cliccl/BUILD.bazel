@@ -56,6 +56,7 @@ go_test(
     size = "medium",
     srcs = [
         "ear_test.go",
+        "gen_test.go",
         "main_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -82,6 +83,7 @@ go_test(
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_spf13_cobra//:cobra",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )

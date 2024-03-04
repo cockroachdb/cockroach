@@ -18,8 +18,41 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var aesSize int
-var overwriteKey bool
+var aesSizeFlag int
+var overwriteKeyFlag bool
+
+func genEncryptionKey(encryptionKeyPath string, aesSize int, overwriteKey bool) error {
+	// Check encryptionKeySize is suitable for the encryption algorithm.
+	if aesSize != 128 && aesSize != 192 && aesSize != 256 {
+		return fmt.Errorf("store key size should be 128, 192, or 256 bits, got %d", aesSize)
+	}
+
+	// 32 bytes are reserved for key ID.
+	kSize := aesSize/8 + 32
+	b := make([]byte, kSize)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Errorf("failed to create key with size %d bytes", kSize)
+	}
+
+	// Write key to the file with owner read/write permission.
+	openMode := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	if !overwriteKey {
+		openMode |= os.O_EXCL
+	}
+
+	f, err := os.OpenFile(encryptionKeyPath, openMode, 0600)
+	if err != nil {
+		return err
+	}
+	n, err := f.Write(b)
+	if err == nil && n < len(b) {
+		err = io.ErrShortWrite
+	}
+	if err1 := f.Close(); err == nil {
+		err = err1
+	}
+	return err
+}
 
 // genEncryptionKeyCmd is a command to generate a store key for Encryption At
 // Rest.
@@ -35,41 +68,13 @@ The resulting key file will be 32 bytes (random key ID) + key_size in bytes.
 	RunE: func(cmd *cobra.Command, args []string) error {
 		encryptionKeyPath := args[0]
 
-		// Check encryptionKeySize is suitable for the encryption algorithm.
-		if aesSize != 128 && aesSize != 192 && aesSize != 256 {
-			return fmt.Errorf("store key size should be 128, 192, or 256 bits, got %d", aesSize)
-		}
-
-		// 32 bytes are reserved for key ID.
-		kSize := aesSize/8 + 32
-		b := make([]byte, kSize)
-		if _, err := rand.Read(b); err != nil {
-			return fmt.Errorf("failed to create key with size %d bytes", kSize)
-		}
-
-		// Write key to the file with owner read/write permission.
-		openMode := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
-		if !overwriteKey {
-			openMode |= os.O_EXCL
-		}
-
-		f, err := os.OpenFile(encryptionKeyPath, openMode, 0600)
-		if err != nil {
-			return err
-		}
-		n, err := f.Write(b)
-		if err == nil && n < len(b) {
-			err = io.ErrShortWrite
-		}
-		if err1 := f.Close(); err == nil {
-			err = err1
-		}
+		err := genEncryptionKey(encryptionKeyPath, aesSizeFlag, overwriteKeyFlag)
 
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("successfully created AES-%d key: %s\n", aesSize, encryptionKeyPath)
+		fmt.Printf("successfully created AES-%d key: %s\n", aesSizeFlag, encryptionKeyPath)
 		return nil
 	},
 }
@@ -77,8 +82,8 @@ The resulting key file will be 32 bytes (random key ID) + key_size in bytes.
 func init() {
 	cli.GenCmd.AddCommand(genEncryptionKeyCmd)
 
-	genEncryptionKeyCmd.PersistentFlags().IntVarP(&aesSize, "size", "s", 128,
+	genEncryptionKeyCmd.PersistentFlags().IntVarP(&aesSizeFlag, "size", "s", 128,
 		"AES key size for encryption at rest (one of: 128, 192, 256)")
-	genEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKey, "overwrite", false,
+	genEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKeyFlag, "overwrite", false,
 		"Overwrite key if it exists")
 }

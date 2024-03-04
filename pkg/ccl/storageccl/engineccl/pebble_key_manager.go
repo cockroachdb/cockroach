@@ -86,11 +86,11 @@ type StoreKeyManager struct {
 // Load must be called before calling other functions.
 func (m *StoreKeyManager) Load(ctx context.Context) error {
 	var err error
-	m.activeKey, err = loadKeyFromFile(m.fs, m.activeKeyFilename)
+	m.activeKey, err = LoadKeyFromFile(m.fs, m.activeKeyFilename)
 	if err != nil {
 		return err
 	}
-	m.oldKey, err = loadKeyFromFile(m.fs, m.oldKeyFilename)
+	m.oldKey, err = LoadKeyFromFile(m.fs, m.oldKeyFilename)
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,8 @@ func (m *StoreKeyManager) GetKey(id string) (*enginepbccl.SecretKey, error) {
 	return nil, fmt.Errorf("store key ID %s was not found", id)
 }
 
-func loadKeyFromFile(fs vfs.FS, filename string) (*enginepbccl.SecretKey, error) {
+// LoadKeyFromFile reads a secret key from the given file.
+func LoadKeyFromFile(fs vfs.FS, filename string) (*enginepbccl.SecretKey, error) {
 	now := kmTimeNow().Unix()
 	key := &enginepbccl.SecretKey{}
 	key.Info = &enginepbccl.KeyInfo{}
