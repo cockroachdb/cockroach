@@ -31,7 +31,7 @@ import (
 // cache provides a consistent snapshot when available, but the snapshot
 // may be stale.
 type Cache struct {
-	w                   *rangefeedcache.Watcher
+	w                   *rangefeedcache.Watcher[*kvpb.RangeFeedValue]
 	defaultZoneConfig   *zonepb.ZoneConfig
 	additionalKVsSource config.SystemConfigProvider
 	mu                  struct {
@@ -222,7 +222,9 @@ func (k keyValues) Less(i, j int) bool { return k[i].Key.Compare(k[j].Key) < 0 }
 
 var _ sort.Interface = (keyValues)(nil)
 
-func (c *Cache) handleUpdate(_ context.Context, update rangefeedcache.Update) {
+func (c *Cache) handleUpdate(
+	_ context.Context, update rangefeedcache.Update[*kvpb.RangeFeedValue],
+) {
 	updateKVs := rangefeedbuffer.EventsToKVs(update.Events,
 		rangefeedbuffer.RangeFeedValueEventToKV)
 	c.mu.Lock()
@@ -256,8 +258,10 @@ func (c *Cache) setUpdatedConfigLocked(updated *config.SystemConfig) {
 	}
 }
 
-func passThroughTranslation(ctx context.Context, value *kvpb.RangeFeedValue) rangefeedbuffer.Event {
-	return value
+func passThroughTranslation(
+	ctx context.Context, value *kvpb.RangeFeedValue,
+) (*kvpb.RangeFeedValue, bool) {
+	return value, value != nil
 }
 
 var _ config.SystemConfigProvider = (*Cache)(nil)

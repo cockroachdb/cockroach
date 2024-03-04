@@ -24,7 +24,7 @@ import (
 // events than the limit the buffer is configured with.
 var ErrBufferLimitExceeded = errors.New("rangefeed buffer limit exceeded")
 
-// Event is the unit of what can be added to the buffer.
+// Event is a contract for the unit of what can be added to the buffer.
 type Event interface {
 	Timestamp() hlc.Timestamp
 }
@@ -33,25 +33,25 @@ type Event interface {
 // accumulates raw events which can then be flushed out in timestamp sorted
 // order en-masse whenever the rangefeed frontier is bumped. If we accumulate
 // more events than the limit allows for, we error out to the caller.
-type Buffer struct {
+type Buffer[E Event] struct {
 	mu struct {
 		syncutil.Mutex
 
-		events
+		events[E]
 		frontier hlc.Timestamp
 		limit    int
 	}
 }
 
 // New constructs a Buffer with the provided limit.
-func New(limit int) *Buffer {
-	b := &Buffer{}
+func New[E Event](limit int) *Buffer[E] {
+	b := &Buffer[E]{}
 	b.mu.limit = limit
 	return b
 }
 
 // Add adds the given entry to the buffer.
-func (b *Buffer) Add(ev Event) error {
+func (b *Buffer[E]) Add(ev E) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -73,7 +73,7 @@ func (b *Buffer) Add(ev Event) error {
 // less than or equal to the provided frontier timestamp. The timestamp is
 // recorded (expected to monotonically increase), and future events with
 // timestamps less than or equal to it are discarded.
-func (b *Buffer) Flush(ctx context.Context, frontier hlc.Timestamp) (events []Event) {
+func (b *Buffer[E]) Flush(ctx context.Context, frontier hlc.Timestamp) (events []E) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -97,17 +97,17 @@ func (b *Buffer) Flush(ctx context.Context, frontier hlc.Timestamp) (events []Ev
 // SetLimit is used to limit the number of events the buffer internally tracks.
 // If already in excess of the limit, future additions will error out (until the
 // buffer is Flush()-ed at least).
-func (b *Buffer) SetLimit(limit int) {
+func (b *Buffer[E]) SetLimit(limit int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	b.mu.limit = limit
 }
 
-type events []Event
+type events[E Event] []E
 
-var _ sort.Interface = (*events)(nil)
+var _ sort.Interface = (*events[Event])(nil)
 
-func (es *events) Len() int           { return len(*es) }
-func (es *events) Less(i, j int) bool { return (*es)[i].Timestamp().Less((*es)[j].Timestamp()) }
-func (es *events) Swap(i, j int)      { (*es)[i], (*es)[j] = (*es)[j], (*es)[i] }
+func (es *events[E]) Len() int           { return len(*es) }
+func (es *events[E]) Less(i, j int) bool { return (*es)[i].Timestamp().Less((*es)[j].Timestamp()) }
+func (es *events[E]) Swap(i, j int)      { (*es)[i], (*es)[j] = (*es)[j], (*es)[i] }

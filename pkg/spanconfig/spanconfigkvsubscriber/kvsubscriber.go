@@ -123,7 +123,7 @@ type KVSubscriber struct {
 	knobs    *spanconfig.TestingKnobs
 	settings *cluster.Settings
 
-	rfc *rangefeedcache.Watcher
+	rfc *rangefeedcache.Watcher[*BufferEvent]
 
 	mu struct { // serializes between Start and external threads
 		syncutil.RWMutex
@@ -401,7 +401,7 @@ func (s *KVSubscriber) GetProtectionTimestamps(
 	return protectionTimestamps, s.mu.lastUpdated, nil
 }
 
-func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update) {
+func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update[*BufferEvent]) {
 	switch u.Type {
 	case rangefeedcache.CompleteUpdate:
 		s.handleCompleteUpdate(ctx, u.Timestamp, u.Events)
@@ -411,11 +411,11 @@ func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update
 }
 
 func (s *KVSubscriber) handleCompleteUpdate(
-	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
+	ctx context.Context, ts hlc.Timestamp, events []*BufferEvent,
 ) {
 	freshStore := spanconfigstore.New(s.fallback, s.settings, s.boundsReader, s.knobs)
 	for _, ev := range events {
-		freshStore.Apply(ctx, false /* dryrun */, ev.(*BufferEvent).Update)
+		freshStore.Apply(ctx, false /* dryrun */, ev.Update)
 	}
 	handlers := func() []handler {
 		s.mu.Lock()
@@ -438,7 +438,7 @@ func (s *KVSubscriber) setLastUpdatedLocked(ts hlc.Timestamp) {
 }
 
 func (s *KVSubscriber) handlePartialUpdate(
-	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
+	ctx context.Context, ts hlc.Timestamp, events []*BufferEvent,
 ) {
 	// The events we've received from the rangefeed buffer are sorted in
 	// increasing timestamp order. However, any updates with the same timestamp
@@ -456,7 +456,7 @@ func (s *KVSubscriber) handlePartialUpdate(
 		case 1: // ts(i) > ts(j)
 			return false
 		case 0: // ts(i) == ts(j); deletions sort before additions
-			return events[i].(*BufferEvent).Deletion() // no need to worry about the sort being stable
+			return events[i].Deletion() // no need to worry about the sort being stable
 		default:
 			panic("unexpected")
 		}
@@ -469,7 +469,7 @@ func (s *KVSubscriber) handlePartialUpdate(
 			// atomically, the updates need to be non-overlapping. That's not the case
 			// here because we can have deletion events followed by additions for
 			// overlapping spans.
-			s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*BufferEvent).Update)
+			s.mu.internal.Apply(ctx, false /* dryrun */, ev.Update)
 		}
 		s.setLastUpdatedLocked(ts)
 		return s.mu.handlers
@@ -478,7 +478,7 @@ func (s *KVSubscriber) handlePartialUpdate(
 	for i := range handlers {
 		handler := &handlers[i] // mutated by invoke
 		for _, ev := range events {
-			target := ev.(*BufferEvent).Update.GetTarget()
+			target := ev.Update.GetTarget()
 			handler.invoke(ctx, target.KeyspaceTargeted())
 		}
 	}

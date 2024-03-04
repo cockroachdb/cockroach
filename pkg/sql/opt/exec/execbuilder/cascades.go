@@ -71,39 +71,39 @@ import (
 // processed (in a queue). At this time the PlanFn method is called and the
 // following happens:
 //
-//  1. We set up a new empty memo and add metadata for the columns of the
-//     buffer node (binding &1).
+//	1: We set up a new empty memo and add metadata for the columns of the
+//	   buffer node (binding &1).
 //
-//  2. We invoke the memo.CascadeBuilder to optbuild the cascading query. At this
-//     point, the new memo will contain the following expression:
+//	2: We invoke the memo.CascadeBuilder to optbuild the cascading query. At
+//	   this point, the new memo will contain the following expression:
 //
-//     delete child
-//     ├── columns: <none>
-//     ├── fetch columns: c:4 child.p:5
-//     └── semi-join (hash)
-//     ├── columns: c:4!null child.p:5!null
-//     ├── scan child
-//     │    └── columns: c:4!null child.p:5!null
-//     ├── with-scan &1
-//     │    ├── columns: p:6!null
-//     │    └── mapping:
-//     │         └──  parent.p:1 => p:6
-//     └── filters
-//     └── child.p:5 = p:6
+//	delete child
+//	 ├── columns: <none>
+//	 ├── fetch columns: c:4 child.p:5
+//	 └── semi-join (hash)
+//		  ├── columns: c:4!null child.p:5!null
+//		  ├── scan child
+//		  │    └── columns: c:4!null child.p:5!null
+//		  ├── with-scan &1
+//		  │    ├── columns: p:6!null
+//		  │    └── mapping:
+//		  │         └──  parent.p:1 => p:6
+//		  └── filters
+//		       └── child.p:5 = p:6
 //
-//     Notes:
-//     - normally, a WithScan can only refer to an ancestor mutation or With
-//     operator. In this case we are creating a reference "out of the void".
-//     This works just fine; we can consider adding a special dummy root
-//     operator but so far it hasn't been necessary;
-//     - the binding &1 column ID has changed: it used to be 2, it is now 1.
-//     This is because we are starting with a fresh memo. We need to take into
-//     account this remapping when referring to the foreign key columns.
+//	Notes:
+//	- normally, a WithScan can only refer to an ancestor mutation or With
+//	  operator. In this case we are creating a reference "out of the void".
+//	  This works just fine; we can consider adding a special dummy root
+//	  operator but so far it hasn't been necessary;
+//	- the binding &1 column ID has changed: it used to be 2, it is now 1.
+//	  This is because we are starting with a fresh memo. We need to take into
+//	  account this remapping when referring to the foreign key columns.
 //
-//  3. We optimize the newly built expression.
+//	3: We optimize the newly built expression.
 //
-//  4. We execbuild the optimizer expression. We have to be careful to set up
-//     the "With" reference before starting.
+//	4: We execbuild the optimizer expression. We have to be careful to set up
+//	   the "With" reference before starting.
 //
 // After PlanFn is called, the resulting plan is executed. Note that this plan
 // could itself have more exec.Cascades; these are queued and handled in the
