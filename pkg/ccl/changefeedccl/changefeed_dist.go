@@ -509,7 +509,10 @@ func makePlan(
 		switch s := frontierPlacementStrategy.Get(sv); frontierPlacementType(s) {
 		case frontierOnRandomNode:
 			settings := execCtx.ExecCfg().Settings
-			if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
+			if details.SinkURI == "" {
+				log.VInfof(ctx, 2, "random frontier placement not available for core changefeed, using gateway instance %d",
+					frontierSQLInstance)
+			} else if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
 				log.Warningf(ctx,
 					"random frontier placement requested with upgrade in progress, using gateway instance %d",
 					frontierSQLInstance)
