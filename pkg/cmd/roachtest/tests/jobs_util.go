@@ -50,14 +50,7 @@ type jobStarter func(c cluster.Cluster, l *logger.Logger) (jobspb.JobID, error)
 func jobSurvivesNodeShutdown(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodeToShutdown int, startJob jobStarter,
 ) {
-	cfg := nodeShutdownConfig{
-		shutdownNode:         nodeToShutdown,
-		watcherNode:          1 + (nodeToShutdown)%c.Spec().NodeCount,
-		crdbNodes:            c.All(),
-		waitFor3XReplication: true,
-		sleepBeforeShutdown:  30 * time.Second,
-	}
-	require.NoError(t, executeNodeShutdown(ctx, t, c, cfg, startJob))
+	require.NoError(t, executeNodeShutdown(ctx, t, c, defaultNodeShutdownConfig(c, nodeToShutdown), startJob))
 }
 
 type nodeShutdownConfig struct {
@@ -68,6 +61,16 @@ type nodeShutdownConfig struct {
 	waitFor3XReplication bool
 	sleepBeforeShutdown  time.Duration
 	rng                  *rand.Rand
+}
+
+func defaultNodeShutdownConfig(c cluster.Cluster, nodeToShutdown int) nodeShutdownConfig {
+	return nodeShutdownConfig{
+		shutdownNode:         nodeToShutdown,
+		watcherNode:          1 + (nodeToShutdown)%c.Spec().NodeCount,
+		crdbNodes:            c.All(),
+		waitFor3XReplication: true,
+		sleepBeforeShutdown:  30 * time.Second,
+	}
 }
 
 // executeNodeShutdown executes a node shutdown and returns all errors back to the caller.
