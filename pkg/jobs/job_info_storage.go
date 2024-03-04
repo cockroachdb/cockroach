@@ -63,13 +63,13 @@ func (i *InfoStorage) checkClaimSession(ctx context.Context) error {
 
 	if row == nil {
 		return errors.Errorf(
-			"expected session %q for job ID %d but found none", i.j.Session().ID(), i.j.ID())
+			"expected session %q for job ID %d but found none", i.j.SessionID(), i.j.ID())
 	}
 
 	storedSession := []byte(*row[0].(*tree.DBytes))
-	if !bytes.Equal(storedSession, i.j.Session().ID().UnsafeBytes()) {
+	if !bytes.Equal(storedSession, i.j.SessionID().UnsafeBytes()) {
 		return errors.Errorf(
-			"expected session %q but found %q", i.j.Session().ID(), sqlliveness.SessionID(storedSession))
+			"expected session %q but found %q", i.j.SessionID(), sqlliveness.SessionID(storedSession))
 	}
 	i.claimChecked = true
 
@@ -152,7 +152,7 @@ func (i InfoStorage) doWrite(
 
 	j := i.j
 
-	if j.Session() != nil {
+	if !j.SessionID().IsEmpty() {
 		if err := i.checkClaimSession(ctx); err != nil {
 			return err
 		}

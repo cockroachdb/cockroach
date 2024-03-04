@@ -1352,7 +1352,7 @@ func reconcileJobStateWithLocalState(
 ) error {
 	// Re-load the job in order to update our progress object, which may have
 	// been updated by the changeFrontier processor since the flow started.
-	reloadedJob, reloadErr := execCfg.JobRegistry.LoadClaimedJob(ctx, jobID)
+	reloadedJob, reloadErr := execCfg.JobRegistry.LoadAdoptedJob(ctx, jobID)
 	if reloadErr != nil {
 		log.Warningf(ctx, `CHANGEFEED job %d could not reload job progress (%s); `+
 			`job should be retried later`, jobID, reloadErr)

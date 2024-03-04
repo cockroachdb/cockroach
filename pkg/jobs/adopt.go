@@ -231,7 +231,7 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 	defer r.mu.Unlock()
 	// Process all current adopted jobs in our in-memory jobs map.
 	for id, aj := range r.mu.adoptedJobs {
-		if aj.session.ID() != s.ID() {
+		if aj.sessionID != s.ID() {
 			log.Warningf(ctx, "job %d: running without having a live claim; canceling", id)
 			aj.cancel()
 			delete(r.mu.adoptedJobs, id)
@@ -274,7 +274,7 @@ func (r *Registry) resumeJob(
 	if opts, ok := getRegisterOptions(payload.Type()); ok && opts.disableTenantCostControl {
 		resumeCtx = multitenant.WithTenantCostControlExemption(resumeCtx)
 	}
-	if alreadyAdopted := r.addAdoptedJob(jobID, s, cancel, resumer); alreadyAdopted {
+	if alreadyAdopted := r.addAdoptedJob(jobID, s.ID(), cancel, resumer); alreadyAdopted {
 		// Not needing the context after all. Avoid leaking resources.
 		cancel()
 		return nil
@@ -384,7 +384,7 @@ func (r *Registry) loadJobForResume(
 	job.mu.payload = *payload
 	job.mu.progress = *progress
 	job.mu.status = status
-	job.session = s
+	job.sessionID = s.ID()
 	return job, nil
 }
 
@@ -395,7 +395,7 @@ func (r *Registry) loadJobForResume(
 // false, it means that the job is already registered as running and should not
 // be run again.
 func (r *Registry) addAdoptedJob(
-	jobID jobspb.JobID, session sqlliveness.Session, cancel context.CancelFunc, resumer Resumer,
+	jobID jobspb.JobID, sessionID sqlliveness.SessionID, cancel context.CancelFunc, resumer Resumer,
 ) (alreadyAdopted bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -405,10 +405,10 @@ func (r *Registry) addAdoptedJob(
 	}
 
 	r.mu.adoptedJobs[jobID] = &adoptedJob{
-		session: session,
-		cancel:  cancel,
-		isIdle:  false,
-		resumer: resumer,
+		sessionID: sessionID,
+		cancel:    cancel,
+		isIdle:    false,
+		resumer:   resumer,
 	}
 	return false
 }

@@ -52,8 +52,8 @@ import (
 // adoptedJobs represents the epoch and cancellation of a job id being run by
 // the registry.
 type adoptedJob struct {
-	session sqlliveness.Session
-	isIdle  bool
+	sessionID sqlliveness.SessionID
+	isIdle    bool
 	// Reference to the Resumer that is currently running the job.
 	resumer Resumer
 	// Calling the func will cancel the context the job was resumed with.
@@ -554,7 +554,7 @@ func (r *Registry) CreateJobWithTxn(
 		if err != nil {
 			return errors.Wrap(err, "error getting live session")
 		}
-		j.session = s
+		j.sessionID = s.ID()
 		start := timeutil.Now()
 		if txn != nil {
 			start = txn.KV().ReadTimestamp().GoTime()
@@ -804,7 +804,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 		// Using a new context allows for independent lifetimes and cancellation.
 		resumerCtx, cancel = r.makeCtx()
 
-		if alreadyAdopted := r.addAdoptedJob(jobID, j.session, cancel, resumer); alreadyAdopted {
+		if alreadyAdopted := r.addAdoptedJob(jobID, j.sessionID, cancel, resumer); alreadyAdopted {
 			log.Fatalf(
 				ctx,
 				"job %d: was just created but found in registered adopted jobs",
@@ -838,13 +838,29 @@ func (r *Registry) LoadJob(ctx context.Context, jobID jobspb.JobID) (*Job, error
 	return r.LoadJobWithTxn(ctx, jobID, nil)
 }
 
-// LoadClaimedJob loads an existing job with the given jobID from the
-// system.jobs table. The job must have already been claimed by this
+// LoadAdoptedJob loads an existing job with the given jobID from the
+// system.jobs table. The job must have already been adopted by this
 // Registry.
-func (r *Registry) LoadClaimedJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
-	j, err := r.getClaimedJob(jobID)
+func (r *Registry) LoadAdoptedJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
+	j, err := r.getAdoptedJob(jobID)
 	if err != nil {
 		return nil, err
+	}
+	if err := j.NoTxn().load(ctx); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+// LoadClaimedJob loads the given job if it is claimed by the given
+// session ID.
+func (r *Registry) LoadClaimedJob(
+	ctx context.Context, jobID jobspb.JobID, sessionID sqlliveness.SessionID,
+) (*Job, error) {
+	j := &Job{
+		id:        jobID,
+		sessionID: sessionID,
+		registry:  r,
 	}
 	if err := j.NoTxn().load(ctx); err != nil {
 		return nil, err
@@ -906,7 +922,7 @@ func (r *Registry) withSession(ctx context.Context, f withSessionFunc) {
 	f(ctx, s)
 }
 
-// Start polls the current node for liveness failures and cancels all registered
+// Start polls the cuarrent node for liveness failures and cancels all registered
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
 // registry that poll the jobs table and start/cancel/gc jobs.
 func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
@@ -1128,7 +1144,7 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, s sqlliveness.Session) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for id, aj := range r.mu.adoptedJobs {
-		if aj.session.ID() != s.ID() {
+		if aj.sessionID != s.ID() {
 			log.Warningf(ctx, "job %d: running without having a live claim; killed.", id)
 			aj.cancel()
 			delete(r.mu.adoptedJobs, id)
@@ -1840,7 +1856,7 @@ func (r *Registry) GetResumerForClaimedJob(jobID jobspb.JobID) (Resumer, error) 
 	return aj.resumer, nil
 }
 
-func (r *Registry) getClaimedJob(jobID jobspb.JobID) (*Job, error) {
+func (r *Registry) getAdoptedJob(jobID jobspb.JobID) (*Job, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1849,9 +1865,9 @@ func (r *Registry) getClaimedJob(jobID jobspb.JobID) (*Job, error) {
 		return nil, &JobNotFoundError{jobID: jobID}
 	}
 	return &Job{
-		id:       jobID,
-		session:  aj.session,
-		registry: r,
+		id:        jobID,
+		sessionID: aj.sessionID,
+		registry:  r,
 	}, nil
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -507,18 +508,25 @@ func makePlan(
 		frontierSQLInstance := dsp.GatewayID()
 		switch s := frontierPlacementStrategy.Get(sv); frontierPlacementType(s) {
 		case frontierOnRandomNode:
-			rng, _ := randutil.NewPseudoRand()
-			all, err := dsp.GetAllInstancesByLocality(ctx, locFilter)
-			if len(all) == 0 || err != nil {
-				// Rather unlikely anything else is
-				// going to succeed if we've hit this
-				// case.
+			settings := execCtx.ExecCfg().Settings
+			if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
 				log.Warningf(ctx,
-					"random frontier placement requested, but no GetAllInstancesByLocality failed to return nodes (err: %s), using gateway instance %d",
-					err.Error(), frontierSQLInstance)
+					"random frontier placement requested with upgrade in progress, using gateway instance %d",
+					frontierSQLInstance)
 			} else {
-				frontierSQLInstance = all[rng.Intn(len(all))].InstanceID
-				log.VInfof(ctx, 2, "placing frontier on randomly chosen instance instance %d", frontierSQLInstance)
+				rng, _ := randutil.NewPseudoRand()
+				all, err := dsp.GetAllInstancesByLocality(ctx, locFilter)
+				if len(all) == 0 || err != nil {
+					// Rather unlikely anything else is
+					// going to succeed if we've hit this
+					// case.
+					log.Warningf(ctx,
+						"random frontier placement requested, but no GetAllInstancesByLocality failed to return nodes (err: %s), using gateway instance %d",
+						err.Error(), frontierSQLInstance)
+				} else {
+					frontierSQLInstance = all[rng.Intn(len(all))].InstanceID
+					log.VInfof(ctx, 2, "placing frontier on randomly chosen instance instance %d", frontierSQLInstance)
+				}
 			}
 		case frontierOnGateway:
 			log.VInfof(ctx, 2, "placing frontier on gateway instance %d", frontierSQLInstance)

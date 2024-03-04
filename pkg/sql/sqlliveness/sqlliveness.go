@@ -78,6 +78,11 @@ func (s SessionID) String() string {
 	return hex.EncodeToString(encoding.UnsafeConvertStringToBytes(string(s)))
 }
 
+// IsEmpty returns true if the session ID is zero-valued.
+func (s SessionID) IsEmpty() bool {
+	return s == ""
+}
+
 // SafeValue implements the redact.SafeValue interface.
 func (s SessionID) SafeValue() {}
 

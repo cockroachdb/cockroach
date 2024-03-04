@@ -187,7 +187,17 @@ func startDistIngestion(
 		if err != nil {
 			return err
 		}
-		ingestor, err := makeSpanConfigIngestor(ctx, execCtx.ExecCfg(), ingestionJob, sourceTenantID, spanConfigIngestStopper)
+		session, err := execCtx.ExecCfg().SQLLiveness.Session(ctx)
+		if err != nil {
+			return err
+		}
+		if session.ID() != ingestionJob.SessionID() {
+			return errors.Newf("session ID mismatch (%s != %s) when starting span config ingestion",
+				session.ID(),
+				ingestionJob.SessionID(),
+			)
+		}
+		ingestor, err := makeSpanConfigIngestor(ctx, execCtx.ExecCfg(), ingestionJob, session, sourceTenantID, spanConfigIngestStopper)
 		if err != nil {
 			return err
 		}

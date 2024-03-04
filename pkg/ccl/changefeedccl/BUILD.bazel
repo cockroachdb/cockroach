@@ -117,6 +117,7 @@ go_library(
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
+        "//pkg/sql/sqlliveness",
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
         "//pkg/util",
