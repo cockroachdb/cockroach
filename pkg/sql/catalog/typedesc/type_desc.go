@@ -764,7 +764,7 @@ func (desc *immutable) AsTypesT() *types.T {
 		contents := make([]*types.T, len(desc.Composite.Elements))
 		labels := make([]string, len(desc.Composite.Elements))
 		for i, e := range desc.Composite.Elements {
-			contents[i] = e.ElementType
+			contents[i] = e.ElementType.CopyForHydrate()
 			labels[i] = e.ElementLabel
 		}
 		return types.NewCompositeType(
