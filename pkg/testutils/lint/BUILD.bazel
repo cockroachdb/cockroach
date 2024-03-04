@@ -14,8 +14,9 @@ go_library(
 
 go_test(
     name = "lint_test",
+    # keep
     srcs = [
-        "lint_test.go",
+        "gen-lint_test.go",
         "nightly_lint_test.go",
     ],
     data = glob(["testdata/**"]) + [
@@ -24,7 +25,6 @@ go_test(
     ],
     embed = [":lint"],
     embedsrcs = ["gcassert_paths.txt"],
-    gotags = ["lint"],
     tags = [
         "integration",
         "no-remote-exec",
@@ -44,4 +44,11 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@org_golang_x_tools//go/packages",
     ],
+)
+
+genrule(
+    name = "gen-lint-test",
+    srcs = ["lint_test.go"],
+    outs = ["gen-lint_test.go"],
+    cmd = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@",
 )
