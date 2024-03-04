@@ -159,7 +159,17 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 	const aWhile = 5 * time.Minute // arbitrary but much longer than a retry
 	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
 		started := timeutil.Now()
-		if err := rc.Reconcile(ctx, lastCheckpoint, r.job.Session(), func() error {
+		session, err := execCtx.ExecCfg().SQLLiveness.Session(ctx)
+		if err != nil {
+			return err
+		}
+		if session.ID() != r.job.SessionID() {
+			return errors.Newf("current session ID %q does not match job session ID %q",
+				session.ID(),
+				r.job.SessionID())
+		}
+
+		if err := rc.Reconcile(ctx, lastCheckpoint, session, func() error {
 			if onCheckpointInterceptor != nil {
 				if err := onCheckpointInterceptor(); err != nil {
 					return err

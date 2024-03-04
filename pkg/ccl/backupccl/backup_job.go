@@ -883,7 +883,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 		// Re-load the job in order to update our progress object, which
 		// may have been updated since the flow started.
-		reloadedJob, reloadErr := p.ExecCfg().JobRegistry.LoadClaimedJob(ctx, b.job.ID())
+		reloadedJob, reloadErr := p.ExecCfg().JobRegistry.LoadAdoptedJob(ctx, b.job.ID())
 		if reloadErr != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()

@@ -80,6 +80,7 @@ func makeSpanConfigIngestor(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	ingestionJob *jobs.Job,
+	session sqlliveness.Session,
 	sourceTenantID roachpb.TenantID,
 	stopperCh chan struct{},
 ) (*spanConfigIngestor, error) {
@@ -109,7 +110,7 @@ func makeSpanConfigIngestor(
 	return &spanConfigIngestor{
 		accessor:                 execCfg.SpanConfigKVAccessor,
 		settings:                 execCfg.Settings,
-		session:                  ingestionJob.Session(),
+		session:                  session,
 		client:                   client,
 		rekeyer:                  rekeyer,
 		stopperCh:                stopperCh,
