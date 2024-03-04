@@ -13,7 +13,9 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/cockroachdb/cmux"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -91,6 +94,56 @@ func (s *httpServer) handleHealth(healthHandler http.Handler) {
 	s.mux.Handle(healthPath, healthHandler)
 }
 
+const virtualClustersPath = "/virtual_clusters"
+
+// virtualClustersResp is the response returned by the virtual clusters
+// endpoint that contains a list of active tenant sessions in the
+// current session cookie. This allows the DB Console to populate a
+// dropdown allowing the user to select a cluster.
+type virtualClustersResp struct {
+	// VirtualClusters is a list of virtual cluster names.
+	VirtualClusters []string `json:"virtual_clusters"`
+}
+
+// virtualClustersHandler parses the session cookie from the request
+// and returns a JSON body with the list of cluster names contained
+// within the session. If the session does not contain any cluster
+// names, it returns an empty list. If the cookie is missing, it
+// returns 200 OK with an empty request body.
+var virtualClustersHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	sessionCookie, err := req.Cookie(authserver.SessionCookieName)
+	if err != nil {
+		if errors.Is(err, http.ErrNoCookie) {
+			w.Header().Add("Content-Type", "application/json")
+			if _, err := w.Write([]byte(`{"virtual_clusters":[]}`)); err != nil {
+				log.Errorf(req.Context(), "unable to write virtual clusters response: %s", err.Error())
+			}
+			return
+		}
+		http.Error(w, "unable to decode session cookie", http.StatusInternalServerError)
+		return
+	}
+	sessionsAndClusters := strings.Split(sessionCookie.Value, ",")
+	resp := &virtualClustersResp{
+		VirtualClusters: make([]string, 0),
+	}
+	for i, c := range sessionsAndClusters {
+		if i%2 == 1 {
+			resp.VirtualClusters = append(resp.VirtualClusters, c)
+		}
+	}
+
+	respBytes, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, "unable to marshal virtual clusterse JSON", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Add("Content-Type", "application/json")
+	if _, err := w.Write(respBytes); err != nil {
+		log.Errorf(req.Context(), "unable to write virtual clusters response: %s", err.Error())
+	}
+})
+
 func (s *httpServer) setupRoutes(
 	ctx context.Context,
 	authnServer authserver.Server,
@@ -147,6 +200,7 @@ func (s *httpServer) setupRoutes(
 	// The /login endpoint is, by definition, available pre-authentication.
 	s.mux.Handle(authserver.LoginPath, handleRequestsUnauthenticated)
 	s.mux.Handle(authserver.LogoutPath, authenticatedHandler)
+	s.mux.Handle(virtualClustersPath, virtualClustersHandler)
 	// The login path for 'cockroach demo', if we're currently running
 	// that.
 	if s.cfg.EnableDemoLoginEndpoint {
