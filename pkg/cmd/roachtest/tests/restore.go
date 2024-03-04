@@ -81,8 +81,11 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 
 			rd := makeRestoreDriver(t, c, sp)
 			rd.prepareCluster(ctx)
-			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c,
-				gatewayNode, rd))
+			cfg := defaultNodeShutdownConfig(c, nodeToShutdown)
+			cfg.restartSettings = rd.defaultClusterSettings()
+			require.NoError(t,
+				executeNodeShutdown(ctx, t, c, cfg,
+					makeRestoreStarter(ctx, t, c, gatewayNode, rd)))
 			rd.checkFingerprint(ctx)
 		},
 	})
@@ -96,15 +99,16 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          sp.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-
 			gatewayNode := 2
 			nodeToShutdown := 2
 
 			rd := makeRestoreDriver(t, c, sp)
 			rd.prepareCluster(ctx)
-
-			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c,
-				gatewayNode, rd))
+			cfg := defaultNodeShutdownConfig(c, nodeToShutdown)
+			cfg.restartSettings = rd.defaultClusterSettings()
+			require.NoError(t,
+				executeNodeShutdown(ctx, t, c, cfg,
+					makeRestoreStarter(ctx, t, c, gatewayNode, rd)))
 			rd.checkFingerprint(ctx)
 		},
 	})
@@ -881,10 +885,23 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 	}
 }
 
-func (rd *restoreDriver) prepareCluster(ctx context.Context) {
+func (rd *restoreDriver) defaultClusterSettings() []install.ClusterSettingOption {
+	return []install.ClusterSettingOption{
+		install.SecureOption(false),
+	}
+}
+
+func (rd *restoreDriver) roachprodOpts() option.StartOpts {
 	opts := option.DefaultStartOptsNoBackups()
-	opts.RoachprodOpts.ExtraArgs = rd.sp.extraArgs
-	rd.c.Start(ctx, rd.t.L(), opts, install.MakeClusterSettings(install.SecureOption(false)), rd.sp.hardware.getCRDBNodes())
+	opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs, rd.sp.extraArgs...)
+	return opts
+}
+
+func (rd *restoreDriver) prepareCluster(ctx context.Context) {
+	rd.c.Start(ctx, rd.t.L(),
+		rd.roachprodOpts(),
+		install.MakeClusterSettings(rd.defaultClusterSettings()...),
+		rd.sp.hardware.getCRDBNodes())
 	rd.getAOST(ctx)
 }
 
