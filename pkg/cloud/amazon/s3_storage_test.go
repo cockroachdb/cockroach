@@ -59,6 +59,26 @@ func makeS3Storage(
 	return s, nil
 }
 
+// You can create an IAM that can access S3 in the AWS console, then
+// set it up locally.
+// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
+// We only run the calling test if default role exists.
+func skipIfNoDefaultConfig(t *testing.T, ctx context.Context) {
+	t.Helper()
+	const helpMsg = "we only run this test if a default role exists, " +
+		"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html"
+	config, err := config.LoadDefaultConfig(ctx,
+		config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
+	if err != nil && err.Error() == "failed to get shared config profile, default" {
+		skip.IgnoreLintf(t, "%s: %s", helpMsg, err)
+	}
+	require.NoError(t, err)
+	_, err = config.Credentials.Retrieve(ctx)
+	if err != nil {
+		skip.IgnoreLintf(t, "%s: %s", helpMsg, err)
+	}
+}
+
 func TestPutS3(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -107,19 +127,7 @@ func TestPutS3(t *testing.T) {
 				))
 			})
 			t.Run("auth-implicit", func(t *testing.T) {
-				// You can create an IAM that can access S3
-				// in the AWS console, then set it up locally.
-				// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
-				// We only run this test if default role exists.
-				config, err := config.LoadDefaultConfig(ctx,
-					config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
-				require.NoError(t, err)
-				_, err = config.Credentials.Retrieve(ctx)
-				if err != nil {
-					skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
-						"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
-				}
-
+				skipIfNoDefaultConfig(t, ctx)
 				cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 					"s3://%s/%s-%d?%s=%s",
 					bucket, "backup-test-default", testID,
@@ -142,19 +150,7 @@ func TestPutS3(t *testing.T) {
 
 			// Tests that we can put an object with server side encryption specified.
 			t.Run("server-side-encryption", func(t *testing.T) {
-				// You can create an IAM that can access S3
-				// in the AWS console, then set it up locally.
-				// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
-				// We only run this test if default role exists.
-				config, err := config.LoadDefaultConfig(ctx,
-					config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
-				require.NoError(t, err)
-				_, err = config.Credentials.Retrieve(ctx)
-				if err != nil {
-					skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
-						"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
-				}
-
+				skipIfNoDefaultConfig(t, ctx)
 				cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 					"s3://%s/%s-%d?%s=%s&%s=%s",
 					bucket, "backup-test-sse-256", testID,
@@ -184,19 +180,7 @@ func TestPutS3(t *testing.T) {
 			})
 
 			t.Run("server-side-encryption-invalid-params", func(t *testing.T) {
-				// You can create an IAM that can access S3
-				// in the AWS console, then set it up locally.
-				// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
-				// We only run this test if default role exists.
-				config, err := config.LoadDefaultConfig(ctx,
-					config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
-				require.NoError(t, err)
-				_, err = config.Credentials.Retrieve(ctx)
-				if err != nil {
-					skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
-						"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
-				}
-
+				skipIfNoDefaultConfig(t, ctx)
 				// Unsupported server side encryption option.
 				invalidSSEModeURI := fmt.Sprintf(
 					"s3://%s/%s?%s=%s&%s=%s",
@@ -250,13 +234,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 	}
 	ctx := context.Background()
 	t.Run("auth-implicit", func(t *testing.T) {
-		cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
-		require.NoError(t, err)
-		_, err = cfg.Credentials.Retrieve(ctx)
-		if err != nil {
-			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
-				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
-		}
+		skipIfNoDefaultConfig(t, ctx)
 		uri := S3URI(bucket, testPath,
 			&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamImplicit, RoleARN: roleArn, Region: "us-east-1"},
 		)
@@ -552,14 +530,8 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	ctx := context.Background()
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
-	require.NoError(t, err)
-	_, err = cfg.Credentials.Retrieve(ctx)
-	if err != nil {
-		skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
-			"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
-	}
+	skipIfNoDefaultConfig(t, ctx)
+
 	q := make(url.Values)
 	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
 	q.Add(S3RegionParam, "us-east-1")
