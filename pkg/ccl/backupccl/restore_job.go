@@ -896,9 +896,11 @@ func createImportingDescriptors(
 				offlineSchemas[schema.GetID()] = struct{}{}
 			}
 
-			if eligible, err := backedUpDescriptorWithInProgressImportInto(ctx, p, desc); err != nil {
+			if hasInProgressImportInto, err := backedUpDescriptorWithInProgressImportInto(ctx, p, desc); err != nil {
 				return nil, nil, nil, err
-			} else if !eligible {
+			} else if hasInProgressImportInto && details.ExperimentalOnline {
+				return nil, nil, nil, errors.Newf("table %s (id %d) in restoring backup has an in-progress import, but online restore cannot be run on a table with an in progress import", desc.GetName(), desc.GetID())
+			} else if !hasInProgressImportInto {
 				continue
 			}
 		}
