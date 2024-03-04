@@ -1060,6 +1060,10 @@ func computeLabelsArg(opts vm.CreateOpts, providerOpts *ProviderOpts) (string, e
 		addLabel(ManagedLabel, "true")
 	}
 
+	if providerOpts.UseSpot {
+		addLabel(vm.TagSpotInstance, "true")
+	}
+
 	for key, value := range opts.CustomLabels {
 		_, ok := m[strings.ToLower(key)]
 		if ok {
