@@ -9,6 +9,7 @@ go_library(
         "demo.go",
         "ear.go",
         "flags.go",
+        "gen.go",
         "mt.go",
         "mt_proxy.go",
         "mt_test_directory.go",

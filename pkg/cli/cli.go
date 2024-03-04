@@ -265,7 +265,7 @@ func init() {
 		// TODO(pmattis): stats
 		demoCmd,
 		convertURLCmd,
-		genCmd,
+		GenCmd,
 		versionCmd,
 		DebugCmd,
 		sqlfmtCmd,
