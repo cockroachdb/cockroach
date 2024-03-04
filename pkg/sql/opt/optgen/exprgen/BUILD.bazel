@@ -34,10 +34,6 @@ go_test(
     size = "small",
     srcs = ["expr_gen_test.go"],
     data = glob(["testdata/**"]),
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/opt/testutils/opttester",
         "//pkg/sql/opt/testutils/testcat",

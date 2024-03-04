@@ -19,10 +19,6 @@ go_library(
 go_test(
     name = "password_test",
     srcs = ["password_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":password",
         "//pkg/security",

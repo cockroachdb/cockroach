@@ -26,10 +26,6 @@ go_test(
     name = "schedulebase_test",
     srcs = ["util_test.go"],
     embed = [":schedulebase"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/jobs/jobspb",
         "//pkg/util/leaktest",

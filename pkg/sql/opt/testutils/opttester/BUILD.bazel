@@ -69,10 +69,6 @@ go_test(
     size = "small",
     srcs = ["opt_tester_test.go"],
     data = glob(["testdata/**"]),
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         ":opttester",
         "//pkg/sql/opt/memo",

@@ -15,10 +15,6 @@ go_test(
     name = "queue_test",
     srcs = ["mem_queue_test.go"],
     embed = [":queue"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/log",

@@ -59,10 +59,6 @@ go_test(
         "table_col_set_test.go",
     ],
     embed = [":catalog"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",

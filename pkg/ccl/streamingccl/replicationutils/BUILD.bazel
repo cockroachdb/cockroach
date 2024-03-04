@@ -28,10 +28,6 @@ go_test(
     name = "replicationutils_test",
     srcs = ["utils_test.go"],
     embed = [":replicationutils"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = [
         "//pkg/clusterversion",

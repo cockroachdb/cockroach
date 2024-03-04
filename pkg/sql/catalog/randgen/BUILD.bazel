@@ -53,10 +53,6 @@ go_test(
     name = "randgen_test",
     srcs = ["template_test.go"],
     embed = [":randgen"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/tabledesc",

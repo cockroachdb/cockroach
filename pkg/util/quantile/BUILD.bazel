@@ -11,8 +11,4 @@ go_test(
     name = "quantile_test",
     srcs = ["stream_test.go"],
     embed = [":quantile"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
 )

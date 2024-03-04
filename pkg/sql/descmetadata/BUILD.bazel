@@ -23,10 +23,6 @@ go_library(
 go_test(
     name = "descmetadata_test",
     srcs = ["main_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

@@ -50,10 +50,6 @@ go_test(
         "gcs_storage_test.go",
     ],
     embed = [":gcp"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/cloud",

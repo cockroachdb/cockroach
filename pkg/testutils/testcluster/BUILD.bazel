@@ -52,10 +52,7 @@ go_test(
         "testcluster_test.go",
     ],
     embed = [":testcluster"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "large"},
-    }),
+    exec_properties = {"test.Pool": "large"},
     deps = [
         "//pkg/base",
         "//pkg/keys",

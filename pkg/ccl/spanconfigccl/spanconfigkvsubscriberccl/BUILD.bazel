@@ -7,7 +7,7 @@ go_test(
         "main_test.go",
     ],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
         "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [

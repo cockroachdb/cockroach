@@ -39,10 +39,6 @@ go_test(
     srcs = ["main_test.go"],
     data = glob(["testdata/**"]),
     embed = [":optgen_lib"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",

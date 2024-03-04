@@ -22,10 +22,6 @@ go_test(
     size = "small",
     srcs = ["sdnotify_unix_test.go"],
     embed = [":sdnotify"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = select({
         "@io_bazel_rules_go//go/platform:aix": [
             "//pkg/util/log",

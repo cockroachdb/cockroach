@@ -7,10 +7,6 @@ go_test(
         "propagation_test.go",
         "settings_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     shard_count = 6,
     deps = [
         "//pkg/base",

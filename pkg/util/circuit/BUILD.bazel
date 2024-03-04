@@ -22,10 +22,6 @@ go_test(
     srcs = ["circuitbreaker_test.go"],
     data = glob(["testdata/**"]),
     embed = [":circuit"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",

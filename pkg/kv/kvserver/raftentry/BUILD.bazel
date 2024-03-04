@@ -28,10 +28,6 @@ go_test(
         "ring_buffer_test.go",
     ],
     embed = [":raftentry"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/roachpb",

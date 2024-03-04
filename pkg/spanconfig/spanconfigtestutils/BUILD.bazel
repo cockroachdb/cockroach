@@ -31,9 +31,5 @@ go_test(
     name = "spanconfigtestutils_test",
     srcs = ["utils_test.go"],
     embed = [":spanconfigtestutils"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = ["@com_github_stretchr_testify//require"],
 )

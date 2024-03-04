@@ -59,10 +59,6 @@ go_test(
     name = "sessiondatapb_test",
     srcs = ["session_data_test.go"],
     embed = [":sessiondatapb"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/sql/protoreflect",
         "@com_github_stretchr_testify//require",

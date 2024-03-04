@@ -15,10 +15,6 @@ go_test(
     name = "replicastats_test",
     srcs = ["replica_stats_test.go"],
     embed = [":replicastats"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/roachpb",
         "//pkg/util/leaktest",

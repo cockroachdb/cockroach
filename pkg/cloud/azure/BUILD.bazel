@@ -52,10 +52,6 @@ go_test(
         "azure_storage_test.go",
     ],
     embed = [":azure"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/blobs",

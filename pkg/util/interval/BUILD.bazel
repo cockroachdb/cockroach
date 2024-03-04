@@ -27,10 +27,6 @@ go_test(
         "range_group_test.go",
     ],
     embed = [":interval"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/util/log",
         "//pkg/util/timeutil",

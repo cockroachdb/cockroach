@@ -21,9 +21,5 @@ go_test(
         "functions_test.go",
     ],
     embed = [":testmodel"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = ["//pkg/ts/tspb"],
 )

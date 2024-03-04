@@ -13,10 +13,6 @@ go_test(
     size = "small",
     srcs = ["search_test.go"],
     embed = [":search"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",

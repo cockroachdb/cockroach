@@ -65,10 +65,6 @@ go_library(
 go_test(
     name = "backuppb_test",
     srcs = ["backup_test.go"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     tags = ["ccl_test"],
     deps = [
         ":backuppb",

@@ -16,8 +16,4 @@ go_test(
     name = "config_test",
     srcs = ["config_test.go"],
     embed = [":config"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
 )

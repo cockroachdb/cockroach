@@ -20,10 +20,6 @@ go_test(
         "writer_test.go",
     ],
     embed = [":csv"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",

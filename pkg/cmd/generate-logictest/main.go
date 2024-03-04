@@ -33,6 +33,7 @@ type testFileTemplateConfig struct {
 	Ccl                           bool
 	ForceProductionValues         bool
 	SkipCclUnderRace              bool
+	UseHeavyPool                  bool
 	Package, TestRuleName, RelDir string
 	ConfigIdx                     int
 	TestCount                     int
@@ -181,6 +182,9 @@ func (t *testdir) dump() error {
 		tplCfg.NumCPU = (cfg.NumNodes / 2) + 1
 		if cfg.Name == "3node-tenant" || strings.HasPrefix(cfg.Name, "multiregion-") {
 			tplCfg.SkipCclUnderRace = true
+		}
+		if strings.Contains(cfg.Name, "5node") || strings.Contains(cfg.Name, "fakedist") {
+			tplCfg.UseHeavyPool = true
 		}
 		subdir := filepath.Join(t.dir, cfg.Name)
 		f, buildF, cleanup, err := openTestSubdir(subdir)

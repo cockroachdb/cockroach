@@ -30,10 +30,6 @@ go_test(
         "spanset_test.go",
     ],
     embed = [":spanset"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",

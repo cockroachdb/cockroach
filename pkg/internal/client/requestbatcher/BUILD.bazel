@@ -20,10 +20,6 @@ go_test(
     size = "small",
     srcs = ["batcher_test.go"],
     embed = [":requestbatcher"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/roachpb",

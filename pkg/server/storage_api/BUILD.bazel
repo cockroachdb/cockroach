@@ -25,10 +25,6 @@ go_test(
         "rangelog_test.go",
         "ranges_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/build",

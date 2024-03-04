@@ -21,9 +21,5 @@ go_test(
     size = "small",
     srcs = ["ipaddr_test.go"],
     embed = [":ipaddr"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = ["//pkg/util/uint128"],
 )

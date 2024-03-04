@@ -12,9 +12,5 @@ go_test(
     size = "small",
     srcs = ["shuffle_test.go"],
     embed = [":shuffle"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = ["//pkg/util/leaktest"],
 )

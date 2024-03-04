@@ -8,10 +8,7 @@ go_test(
         "local_test_util_test.go",
         "main_test.go",
     ],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "large"},
-    }),
+    exec_properties = {"test.Pool": "large"},
     shard_count = 14,
     tags = ["ccl_test"],
     deps = [
