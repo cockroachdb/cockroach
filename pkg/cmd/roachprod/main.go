@@ -860,11 +860,13 @@ var stageURLCmd = &cobra.Command{
 	Long: `Prints URL for release and edge binaries.
 
 Currently available application options are:
-  cockroach - Cockroach Unofficial. Can provide an optional SHA, otherwise
-              latest build version is used.
-  workload  - Cockroach workload application.
-  release   - Official CockroachDB Release. Must provide a specific release
-              version.
+  cockroach  - Cockroach Unofficial. Can provide an optional SHA, otherwise
+               latest build version is used.
+  workload   - Cockroach workload application.
+  release    - Official CockroachDB Release. Must provide a specific release
+               version.
+  customized - Customized CockroachDB build. Must provide a specific build
+               version.
 `,
 	Args: cobra.RangeArgs(1, 2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
@@ -904,6 +906,9 @@ Some examples of usage:
 
   -- Stage the official release binary of CockroachDB at version 2.0.5
   roachprod stage my-cluster release v2.0.5
+
+  -- Stage customized binary of CockroachDB at version v23.2.0-alpha.2-4375-g7cd2b76ed00
+  roachprod stage my-cluster customized v23.2.0-alpha.2-4375-g7cd2b76ed00
 `,
 	Args: cobra.RangeArgs(2, 3),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
