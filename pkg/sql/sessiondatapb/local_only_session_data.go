@@ -355,12 +355,12 @@ var qosLevelsDict = map[QoSLevel]string{
 
 // ParseQoSLevelFromString converts a string into a QoSLevel
 func ParseQoSLevelFromString(val string) (_ QoSLevel, ok bool) {
-	switch strings.ToUpper(val) {
-	case strings.ToUpper(UserHighName):
+	switch strings.ToLower(val) {
+	case UserHighName:
 		return UserHigh, true
-	case strings.ToUpper(UserLowName):
+	case UserLowName:
 		return UserLow, true
-	case strings.ToUpper(NormalName):
+	case NormalName:
 		return Normal, true
 	default:
 		return 0, false
