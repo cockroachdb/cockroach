@@ -13,6 +13,7 @@ package sslocal
 import (
 	"context"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -138,6 +139,71 @@ func (s *SQLStats) IterateStatementStats(
 	}
 
 	return nil
+}
+
+// ConsumeStats leverages the process of atomic pulling stats from in-memory storage, clearing in-memory stats, and
+// then iterating over them pulled stats calling stmtVisitor and txnVisitor on statement and transaction stats
+// respectively. ConsumeStats allows to process pulled statements while new sql stats can be added to in-memory statistics.
+func (s *SQLStats) ConsumeStats(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	stmtVisitor sqlstats.StatementVisitor,
+	txnVisitor sqlstats.TransactionVisitor,
+) {
+	if s.knobs != nil {
+		if s.knobs != nil && s.knobs.ConsumeStmtStatsInterceptor != nil {
+			stmtVisitor = s.knobs.ConsumeStmtStatsInterceptor
+		}
+		if s.knobs != nil && s.knobs.ConsumeTxnStatsInterceptor != nil {
+			txnVisitor = s.knobs.ConsumeTxnStatsInterceptor
+		}
+	}
+	apps := s.getAppNames(false)
+	for _, app := range apps {
+		container := s.GetApplicationStats(app, true).(*ssmemstorage.Container)
+		if err := s.MaybeDumpStatsToLog(ctx, app, container, s.flushTarget); err != nil {
+			log.Warningf(ctx, "failed to dump stats to log, %s", err.Error())
+		}
+		stmtStats, txnStats := container.PopAllStats(ctx)
+
+		// Iterate over collected stats that have been already cleared from in-memory stats and persist them
+		// the system statement|transaction_statistics tables.
+		// In-memory stats storage is not locked here and it is safe to call stmtVisitor or txnVisitor functions
+		// that might be time consuming operations.
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		err := stopper.RunAsyncTask(ctx, "sql-stmt-stats-flush", func(ctx context.Context) {
+			defer wg.Done()
+			for _, stat := range stmtStats {
+				stat := stat
+				if err := stmtVisitor(ctx, stat); err != nil {
+					log.Warningf(ctx, "failed to consume statement statistics, %s", err.Error())
+				}
+			}
+		})
+		if err != nil {
+			log.Warningf(ctx, "failed to execute sql-stmt-stats-flush task, %s", err.Error())
+			wg.Done()
+			return
+		}
+
+		err = stopper.RunAsyncTask(ctx, "sql-txn-stats-flush", func(ctx context.Context) {
+			defer wg.Done()
+			for _, stat := range txnStats {
+				stat := stat
+				if err := txnVisitor(ctx, stat); err != nil {
+					log.Warningf(ctx, "failed to consume transaction statistics, %s", err.Error())
+				}
+			}
+		})
+		if err != nil {
+			log.Warningf(ctx, "failed to execute sql-txn-stats-flush task, %s", err.Error())
+			wg.Done()
+			return
+		}
+		wg.Wait()
+	}
 }
 
 // StmtStatsIterator returns an instance of sslocal.StmtStatsIterator for
