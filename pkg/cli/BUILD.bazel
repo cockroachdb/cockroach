@@ -225,6 +225,7 @@ go_library(
         "//pkg/workload/insights",
         "//pkg/workload/kv",
         "//pkg/workload/movr",
+        "//pkg/workload/sqlstats",
         "//pkg/workload/tpcc",
         "//pkg/workload/tpch",
         "//pkg/workload/ttlbench",
