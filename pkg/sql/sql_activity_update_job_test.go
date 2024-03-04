@@ -107,7 +107,7 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	db.Exec(t, "SET SESSION application_name=$1", appName)
 	db.Exec(t, "SELECT 1;")
 
-	ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+	ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, srv.AppStopper())
 
 	db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
@@ -152,7 +152,7 @@ func TestMergeFunctionLogic(t *testing.T) {
 	db.Exec(t, "SELECT * FROM system.statement_statistics")
 	db.Exec(t, "SELECT count_rows() FROM system.transaction_statistics")
 
-	srv.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+	srv.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, srv.AppStopper())
 
 	db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
@@ -316,7 +316,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
 		db.Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled  = true;")
-		ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, srv.AppStopper())
 		db.Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled  = false;")
 
 		// Run the updater to add rows to the activity tables.
@@ -573,7 +573,7 @@ func TestTransactionActivityMetadata(t *testing.T) {
 
 	// Flush and transfer stats.
 	var metadataJSON string
-	ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+	ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, s.AppStopper())
 
 	// Ensure that the metadata column contains the populated 'stmtFingerprintIDs' field.
 	var metadata struct {
@@ -590,7 +590,7 @@ func TestTransactionActivityMetadata(t *testing.T) {
 	db.Exec(t, "SELECT 1")
 
 	// Flush and transfer top stats.
-	ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+	ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, s.AppStopper())
 	require.NoError(t, updater.transferTopStats(ctx, stubTime, 100, 100, 100))
 
 	// Ensure that the metadata column contains the populated 'stmtFingerprintIDs' field.
@@ -645,7 +645,7 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 
 	// Flush and transfer stats.
 	var metadataJSON string
-	ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+	ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, s.AppStopper())
 
 	// Ensure that the metadata column contains the populated 'stmtFingerprintIDs' field.
 	var metadata struct {
@@ -837,7 +837,7 @@ func TestFlushToActivityWithDifferentAggTs(t *testing.T) {
 				fmt.Fprintf(&buf, "%s\n", strings.Join(row, ","))
 			}
 		case "flush-stats":
-			ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+			ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx, srv.AppStopper())
 		case "update-top-activity":
 			// Populate the Top Activity. This will use the transfer all scenarios
 			// with there only being a few rows.

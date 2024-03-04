@@ -594,6 +594,78 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 	log.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
 }
 
+// PopAllStats returns all collected statement and transaction stats in memory to the caller and clears SQL stats
+// make sure that new arriving stats won't be interfering with existing one.
+func (s *Container) PopAllStats(
+	ctx context.Context,
+) ([]*appstatspb.CollectedStatementStatistics, []*appstatspb.CollectedTransactionStatistics) {
+	statementStats := make([]*appstatspb.CollectedStatementStatistics, 0)
+	var stmts map[stmtKey]*stmtStats
+
+	transactionStats := make([]*appstatspb.CollectedTransactionStatistics, 0)
+	var txns map[appstatspb.TransactionFingerprintID]*txnStats
+
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		stmts = s.mu.stmts
+		txns = s.mu.txns
+		// Reset statementStats and transactions after they're assigned to local variables.
+		s.mu.stmts = make(map[stmtKey]*stmtStats, len(s.mu.stmts)/2)
+		s.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
+		s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
+		s.freeLocked(ctx)
+		if s.knobs != nil && s.knobs.OnAfterClear != nil {
+			s.knobs.OnAfterClear()
+		}
+	}()
+
+	var data appstatspb.StatementStatistics
+	var distSQLUsed, vectorized, fullScan bool
+	var database, querySummary string
+
+	for key, stmt := range stmts {
+		func() {
+			stmt.mu.Lock()
+			defer stmt.mu.Unlock()
+			data = stmt.mu.data
+			distSQLUsed = stmt.mu.distSQLUsed
+			vectorized = stmt.mu.vectorized
+			fullScan = stmt.mu.fullScan
+			database = stmt.mu.database
+			querySummary = stmt.mu.querySummary
+		}()
+
+		statementStats = append(statementStats, &appstatspb.CollectedStatementStatistics{
+			Key: appstatspb.StatementStatisticsKey{
+				Query:                    key.stmtNoConstants,
+				QuerySummary:             querySummary,
+				DistSQL:                  distSQLUsed,
+				Vec:                      vectorized,
+				ImplicitTxn:              key.implicitTxn,
+				FullScan:                 fullScan,
+				Failed:                   key.failed,
+				App:                      s.appName,
+				Database:                 database,
+				PlanHash:                 key.planHash,
+				TransactionFingerprintID: key.transactionFingerprintID,
+			},
+			ID:    constructStatementFingerprintIDFromStmtKey(key),
+			Stats: data,
+		})
+	}
+
+	for key, txnStats := range txns {
+		transactionStats = append(transactionStats, &appstatspb.CollectedTransactionStatistics{
+			StatementFingerprintIDs:  txnStats.statementFingerprintIDs,
+			App:                      s.appName,
+			Stats:                    txnStats.mu.data,
+			TransactionFingerprintID: key,
+		})
+	}
+	return statementStats, transactionStats
+}
+
 // Clear clears the data stored in this Container and prepare the Container
 // for reuse.
 func (s *Container) Clear(ctx context.Context) {
@@ -607,6 +679,9 @@ func (s *Container) Clear(ctx context.Context) {
 	s.mu.stmts = make(map[stmtKey]*stmtStats, len(s.mu.stmts)/2)
 	s.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
 	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
+	if s.knobs != nil && s.knobs.OnAfterClear != nil {
+		s.knobs.OnAfterClear()
+	}
 }
 
 // Free frees the accounted resources from the Container. The Container is

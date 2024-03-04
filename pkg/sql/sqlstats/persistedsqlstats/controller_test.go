@@ -74,7 +74,7 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 	}
 
 	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider()
-	sqlStats.(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+	sqlStats.(*persistedsqlstats.PersistedSQLStats).Flush(ctx, cluster.ApplicationLayer(0).AppStopper())
 
 	checkInsertedStmtStatsAndUpdateFingerprintIDs(t, appName, observer, expectedStmtFingerprintToFingerprintID)
 	checkInsertedTxnStats(t, appName, observer, expectedStmtFingerprintToFingerprintID)
