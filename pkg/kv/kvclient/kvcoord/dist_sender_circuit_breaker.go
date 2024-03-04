@@ -76,12 +76,22 @@ const (
 	// breaker will be garbage collected.
 	cbGCThreshold = 10 * time.Minute
 
+	// cbGCThresholdTripped is the threshold after which an idle replica's circuit
+	// breaker will be garbage collected when tripped. This is greater than
+	// cbGCThreshold to avoid frequent (un)tripping of rarely accessed replicas.
+	cbGCThresholdTripped = time.Hour
+
 	// cbGCInterval is the interval between garbage collection scans.
 	cbGCInterval = time.Minute
 
 	// cbGCBatchSize is the number of circuit breakers to garbage collect
 	// at once while holding the mutex.
 	cbGCBatchSize = 20
+
+	// cbProbeIdleIntervals is the number of probe intervals with no client
+	// requests after which a failing probe should exit. It will be relaunched on
+	// the next request, if any.
+	cbProbeIdleIntervals = 3
 )
 
 // cbKey is a key in the DistSender replica circuit breakers map.
@@ -120,12 +130,14 @@ type cbKey struct {
 // The breaker is only tripped once the probe fails (never in response to user
 // request failures alone).
 //
-// The probe sends a LeaseInfo request every probe interval, and expects either
-// a successful response (if it is the leaseholder) or a NLHE (if it knows a
-// leaseholder or leader exists elsewhere) before the probe timeout. Otherwise,
-// it will trip the circuit breaker. In particular, this will fail if the
-// replica is unable to acquire or detect a lease, e.g. because it is
-// partitioned away from the leader.
+// The probe sends a LeaseInfo request and expects either a successful response
+// (if it is the leaseholder) or a NLHE (if it knows a leaseholder or leader
+// exists elsewhere) before the probe timeout. Otherwise, it will trip the
+// circuit breaker. In particular, this will fail if the replica is unable to
+// acquire or detect a lease, e.g. because it is partitioned away from the
+// leader. With a tripped breaker, a new probe is sent every probe interval as
+// long as the replica keeps seeing recent client traffic, otherwise a new one
+// is launched on the next request.
 //
 // We don't try too hard to interpret errors from the replica, since this can be
 // brittle. Instead, we assume that most functional replicas will have a mix of
@@ -134,7 +146,7 @@ type cbKey struct {
 // which is likely ok since this case is likely rare.
 //
 // Stale circuit breakers are removed if they haven't seen any traffic for the
-// past GC threshold (and aren't tripped).
+// past GC threshold.
 //
 // TODO(erikgrinaker): we can extend this to also manage range-level circuit
 // breakers, but for now we focus exclusively on replica-level circuit breakers.
@@ -224,7 +236,11 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 
 		for _, cb := range cbs {
 			if cb.inflightReqs.Load() > 0 && nowNanos-cb.stallSince.Load() >= probeThreshold {
-				cb.breaker.Probe()
+				// Don't probe if the breaker is already tripped. It will be probed in
+				// response to user traffic, to reduce the number of concurrent probes.
+				if !cb.isTripped() {
+					cb.breaker.Probe()
+				}
 			}
 		}
 	}
@@ -261,22 +277,18 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 
 		nowNanos := timeutil.Now().UnixNano()
 		gcBelow := nowNanos - cbGCThreshold.Nanoseconds()
+		gcBelowTripped := nowNanos - cbGCThresholdTripped.Nanoseconds()
 
 		for _, cb := range cbs {
-			if lastRequest := cb.lastRequest.Load(); lastRequest == 0 || lastRequest >= gcBelow {
-				continue // not yet eligible for GC
+			if lastRequest := cb.lastRequest.Load(); lastRequest > 0 && lastRequest < gcBelow {
+				if !cb.isTripped() || lastRequest < gcBelowTripped {
+					gc = append(gc, cbKey{rangeID: cb.rangeID, replicaID: cb.desc.ReplicaID})
+				}
 			}
-			if cb.inflightReqs.Load() > 0 {
-				continue // still has in-flight requests
-			}
-			if cb.Err() != nil {
-				continue // circuit breaker is tripped
-			}
-			gc = append(gc, cbKey{rangeID: cb.rangeID, replicaID: cb.desc.ReplicaID})
 		}
 
-		// Garbage collect the replicas. We may have raced with concurrent requests
-		// or probes, but that's ok.
+		// Garbage collect the replicas. We may have raced with concurrent requests,
+		// but that's ok.
 		func() {
 			d.mu.Lock()
 			defer d.mu.Unlock()
@@ -287,17 +299,7 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 					d.mu.Unlock()
 					d.mu.Lock()
 				}
-
-				// Recheck under lock that the circuit breaker is still in the map. They
-				// should only be removed by this loop, but better safe than sorry.
-				if cb, ok := d.mu.replicas[key]; ok {
-					delete(d.mu.replicas, key) // nolint:deferunlockcheck
-
-					// Close the circuit breaker's closedC channel to abort any probes.
-					// We use the map as a synchronization point above, so we know this
-					// will only be closed once.
-					close(cb.closedC) // nolint:deferunlockcheck
-				}
+				delete(d.mu.replicas, key) // nolint:deferunlockcheck
 			}
 		}()
 	}
@@ -403,11 +405,6 @@ type ReplicaCircuitBreaker struct {
 		// requests. Only tracked if cancellation is enabled.
 		cancelFns map[*kvpb.BatchRequest]func()
 	}
-
-	// closedC is closed when the replica circuit breaker is closed and removed
-	// from DistSenderCircuitBreakers. It will cause any circuit breaker probes to
-	// shut down.
-	closedC chan struct{}
 }
 
 // newReplicaCircuitBreaker creates a new DistSender replica circuit breaker.
@@ -423,7 +420,6 @@ func newReplicaCircuitBreaker(
 		rangeID:  rangeDesc.RangeID,
 		startKey: rangeDesc.StartKey.AsRawKey(), // immutable
 		desc:     *replDesc,
-		closedC:  make(chan struct{}),
 	}
 	r.breaker = circuit.NewBreaker(circuit.Options{
 		Name:       r.id(),
@@ -457,6 +453,9 @@ func (r *ReplicaCircuitBreaker) id() redact.RedactableString {
 }
 
 // Err returns the circuit breaker error if it is tripped.
+//
+// NB: if the breaker is tripped, this will also launch an async probe if one
+// isn't already running. Use isTripped() instead to avoid this.
 func (r *ReplicaCircuitBreaker) Err() error {
 	if r == nil {
 		return nil // circuit breakers disabled
@@ -464,6 +463,15 @@ func (r *ReplicaCircuitBreaker) Err() error {
 	// TODO(erikgrinaker): this is a bit more expensive than necessary, consider
 	// optimizing it.
 	return r.breaker.Signal().Err()
+}
+
+// isTripped returns true if the circuit breaker is currently tripped. Unlike
+// Err(), this will not launch an async probe when tripped.
+func (r *ReplicaCircuitBreaker) isTripped() bool {
+	if r == nil {
+		return false // circuit breakers disabled
+	}
+	return r.breaker.Signal().IsTripped()
 }
 
 // Track attempts to start tracking a request with the circuit breaker. If the
@@ -480,7 +488,8 @@ func (r *ReplicaCircuitBreaker) Track(
 	// Record the request timestamp.
 	r.lastRequest.Store(nowNanos)
 
-	// Check if the breaker is tripped.
+	// Check if the breaker is tripped. If it is, this will also launch a probe if
+	// one isn't already running.
 	if err := r.Err(); err != nil {
 		return nil, replicaCircuitBreakerToken{}, err
 	}
@@ -627,18 +636,21 @@ func (r *ReplicaCircuitBreaker) done(
 	}
 }
 
-// launchProbe spawns an async replica probe that periodically sends LeaseInfo
-// requests to the replica.
+// launchProbe spawns an async replica probe that sends LeaseInfo requests to
+// the replica and trips/untrips the breaker as appropriate.
 //
-// TODO(erikgrinaker): instead of spawning a goroutine for each replica, we
-// should use a shared worker pool, and batch LeaseInfo requests for many/all
-// replicas on the same node or store.
+// While the breaker is tripped, the probe keeps running as long as there have
+// been requests to the replica in the past few probe intervals. Otherwise, the
+// probe exits, and a new one will be launched on the next request to the
+// replica.  This limits the number of probe goroutines to the number of active
+// replicas with a tripped circuit breaker, which should be small in the common
+// case (in particular, leases will often move to a different replica once the
+// current lease expires).
 //
-// TODO(erikgrinaker): instead of running a continuous probe until it untrips,
-// consider instead exiting after each probe and letting Breaker.Signal().Err()
-// spawn a new probe in response to user traffic. That way, we won't be running
-// probes for unused replicas (the common case when the lease moves), and can
-// possibly garbage collect the circuit breakers.
+// TODO(erikgrinaker): consider batching LeaseInfo requests for many/all
+// replicas on the same node/store. However, this needs server-side timeout
+// handling such that if 1 out of 1000 replicas are stalled we won't fail the
+// entire batch.
 func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 	// TODO(erikgrinaker): use an annotated context here and elsewhere.
 	ctx := context.Background()
@@ -668,8 +680,9 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 		}
 		defer transport.Release()
 
-		// Continually probe the replica until it succeeds. We probe immediately
-		// since we only trip the breaker on probe failure.
+		// Continually probe the replica until it succeeds or the replica stops
+		// seeing traffic. We probe immediately since we only trip the breaker on
+		// probe failure.
 		var timer timeutil.Timer
 		defer timer.Stop()
 		timer.Reset(CircuitBreakerProbeInterval.Get(&r.d.settings.SV))
@@ -707,12 +720,24 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 			select {
 			case <-timer.C:
 				timer.Read = true
-				timer.Reset(CircuitBreakerProbeInterval.Get(&r.d.settings.SV))
 			case <-r.d.stopper.ShouldQuiesce():
 				return
 			case <-ctx.Done():
 				return
-			case <-r.closedC:
+			}
+
+			probeInterval := CircuitBreakerProbeInterval.Get(&r.d.settings.SV)
+			timer.Reset(probeInterval)
+
+			// If there haven't been any requests in the past few probe intervals,
+			// stop probing but keep the breaker tripped. A new probe will be launched
+			// on the next request.
+			//
+			// NB: we check this after waiting out the probe interval above, to avoid
+			// frequently spawning new probe goroutines, instead waiting to see if any
+			// requests come in.
+			idleThreshold := cbProbeIdleIntervals * probeInterval
+			if r.lastRequest.Load() < timeutil.Now().UnixNano()-idleThreshold.Nanoseconds() {
 				return
 			}
 		}
