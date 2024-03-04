@@ -190,6 +190,9 @@ jest_test(
     env = {
         "BAZEL_TARGET": "1",
     },
+    exec_properties = {
+        "test.Pool": "large",
+    },
     node_modules = ":node_modules",
     shard_count = 4,
 )
