@@ -176,3 +176,20 @@ jobs:
       - name: clean up
         run: ./cockroach/build/github/cleanup-engflow-keys.sh
         if: always()
+  lint:
+    runs-on: [self-hosted, basic_big_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          submodules: true
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: run lint tests
+        run: ./build/github/lint.sh
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
