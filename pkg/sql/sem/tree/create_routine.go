@@ -407,6 +407,15 @@ func IsInParamClass(class RoutineParamClass) bool {
 	}
 }
 
+// IsParamIncludedIntoSignature returns whether the parameter of the given class
+// is included into the signature of the routine (either a function, when
+// isProcedure is false, or a procedure, when isProcedure is true).
+func IsParamIncludedIntoSignature(class RoutineParamClass, isProcedure bool) bool {
+	// For procedures all parameters are included into the signature, for UDFs -
+	// only IN / INOUT parameters.
+	return isProcedure || IsInParamClass(class)
+}
+
 // IsOutParamClass returns true if the given parameter class specifies an output
 // parameter (i.e. either OUT or INOUT).
 func IsOutParamClass(class RoutineParamClass) bool {
@@ -502,6 +511,8 @@ func (node RoutineObj) SignatureTypes(
 		typs = make([]*types.T, 0, len(node.Params))
 		for _, arg := range node.Params {
 			if arg.IsInParam() {
+				// TODO(100405): we might need to include all parameters for
+				// procedures here.
 				typ, err := ResolveType(ctx, arg.Type, res)
 				if err != nil {
 					return nil, err

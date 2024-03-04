@@ -151,14 +151,26 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		b.semaCtx.Annotations = oldSemaCtxAnn
 	}
 
-	paramNameSeenIn, paramNameSeenOut := make(map[tree.Name]struct{}), make(map[tree.Name]struct{})
-	for _, param := range cf.Params {
-		if param.Name != "" {
-			if param.IsInParam() {
-				checkDuplicateParamName(param, paramNameSeenIn)
+	// TODO(100405): check this logic for procedures.
+	if language == tree.RoutineLangPLpgSQL {
+		paramNameSeen := make(map[tree.Name]struct{})
+		for _, param := range cf.Params {
+			if param.Name != "" {
+				checkDuplicateParamName(param, paramNameSeen)
 			}
-			if param.IsOutParam() {
-				checkDuplicateParamName(param, paramNameSeenOut)
+		}
+	} else {
+		// For SQL routines, input and output parameters form separate
+		// "namespaces".
+		paramNameSeenIn, paramNameSeenOut := make(map[tree.Name]struct{}), make(map[tree.Name]struct{})
+		for _, param := range cf.Params {
+			if param.Name != "" {
+				if param.IsInParam() {
+					checkDuplicateParamName(param, paramNameSeenIn)
+				}
+				if param.IsOutParam() {
+					checkDuplicateParamName(param, paramNameSeenOut)
+				}
 			}
 		}
 	}
@@ -167,11 +179,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	// named parameters to the scope so that references to them in the body can
 	// be resolved.
 	bodyScope := b.allocScope()
-	var paramTypes tree.ParamTypes
+	// routineParams are all parameters of PLpgSQL routines.
+	var routineParams []routineParam
 	var outParamTypes []*types.T
 	// When multiple OUT parameters are present, parameter names become the
 	// labels in the output RECORD type.
-	// TODO(#100405): this needs to be checked for PLpgSQL routines.
 	var outParamNames []string
 	for i := range cf.Params {
 		param := &cf.Params[i]
@@ -201,10 +213,12 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			}
 		}
 
-		// Add the parameter to the base scope of the body.
-		paramColName := funcParamColName(param.Name, i)
-		col := b.synthesizeColumn(bodyScope, paramColName, typ, nil /* expr */, nil /* scalar */)
-		col.setParamOrd(i)
+		// Add this parameter to the base scope of the body if needed.
+		if tree.IsParamIncludedIntoSignature(param.Class, cf.IsProcedure) {
+			paramColName := funcParamColName(param.Name, i)
+			col := b.synthesizeColumn(bodyScope, paramColName, typ, nil /* expr */, nil /* scalar */)
+			col.setParamOrd(i)
+		}
 
 		// Collect the user defined type dependencies.
 		typedesc.GetTypeDescriptorClosure(typ).ForEach(func(id descpb.ID) {
@@ -213,9 +227,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 		// Collect the parameters for PLpgSQL routines.
 		if language == tree.RoutineLangPLpgSQL {
-			paramTypes = append(paramTypes, tree.ParamType{
-				Name: param.Name.String(),
-				Typ:  typ,
+			routineParams = append(routineParams, routineParam{
+				name:  param.Name,
+				typ:   typ,
+				class: param.Class,
 			})
 		}
 	}
@@ -325,9 +340,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// the volatility.
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 			plBuilder := newPLpgSQLBuilder(
-				b, cf.Name.Object(), nil /* colRefs */, paramTypes, funcReturnType,
+				b, cf.Name.Object(), nil /* colRefs */, routineParams, funcReturnType,
 			)
-			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope)
+			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})
 		checkStmtVolatility(targetVolatility, stmtScope, stmt)
 

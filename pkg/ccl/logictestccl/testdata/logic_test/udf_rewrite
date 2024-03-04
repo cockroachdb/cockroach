@@ -388,6 +388,73 @@ ALTER TYPE weekday RENAME VALUE 'humpday' TO 'wednesday';
 statement ok
 DROP FUNCTION f_rewrite();
 
+statement ok
+CREATE FUNCTION f_rewrite(INOUT param1 weekday, OUT param2 weekday) AS
+$$
+  BEGIN
+    param2 = param1;
+    param1 = 'friday'::weekday;
+  END
+$$ LANGUAGE PLPGSQL;
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"BEGIN\nparam2 := param1;\nparam1 := b'\\xc0':::@100107;\nEND;\n"
+
+query TT
+SHOW CREATE FUNCTION f_rewrite;
+----
+f_rewrite  CREATE FUNCTION public.f_rewrite(INOUT param1 test.public.weekday, OUT param2 test.public.weekday)
+             RETURNS RECORD
+             VOLATILE
+             NOT LEAKPROOF
+             CALLED ON NULL INPUT
+             LANGUAGE plpgsql
+             AS $$
+             BEGIN
+             param2 := param1;
+             param1 := 'friday':::test.public.weekday;
+             END;
+           $$
+
+statement ok
+ALTER TYPE weekday RENAME VALUE 'friday' TO 'humpday';
+
+statement ok
+ALTER TYPE weekday RENAME TO workday;
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"BEGIN\nparam2 := param1;\nparam1 := b'\\xc0':::@100107;\nEND;\n"
+
+query TT
+SHOW CREATE FUNCTION f_rewrite;
+----
+f_rewrite  CREATE FUNCTION public.f_rewrite(INOUT param1 test.public.workday, OUT param2 test.public.workday)
+             RETURNS RECORD
+             VOLATILE
+             NOT LEAKPROOF
+             CALLED ON NULL INPUT
+             LANGUAGE plpgsql
+             AS $$
+             BEGIN
+             param2 := param1;
+             param1 := 'humpday':::test.public.workday;
+             END;
+           $$
+
+# Reset types for subtest.
+statement ok
+ALTER TYPE workday RENAME TO weekday;
+
+statement ok
+ALTER TYPE weekday RENAME VALUE 'humpday' TO 'friday';
+
+statement ok
+DROP FUNCTION f_rewrite;
+
 subtest end
 
 subtest rewrite_proc
