@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -519,6 +520,10 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 		case "reset":
 			ds.cleanup(ctx, t)
 			ds = newDatadrivenTestState()
+			if d.HasArg("test-nodelocal") {
+				nodelocalCleanup := nodelocal.ReplaceNodeLocalForTesting(t.TempDir())
+				ds.cleanupFns = append(ds.cleanupFns, nodelocalCleanup)
+			}
 			return ""
 
 		case "new-cluster":

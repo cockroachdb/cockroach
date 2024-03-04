@@ -1,0 +1,35 @@
+# This test ensures that online restore failes when restoring tables 
+# undergoing an in progress import
+
+reset test-nodelocal
+----
+
+new-cluster name=s1 disable-tenant
+----
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+
+# Pause the import job, in order to back up the importing data.
+import expect-pausepoint tag=a
+IMPORT INTO data.bank CSV DATA ('workload:///csv/bank/bank?rows=100&version=1.0.0')
+----
+job paused at pausepoint
+
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster/';
+----
+
+
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access disable-tenant
+----
+
+
+exec-sql
+RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/cluster/' with EXPERIMENTAL DEFERRED COPY;
+----
+pq: table bank (id 106) in restoring backup has an in-progress import, but online restore cannot be run on a table with an in progress import
