@@ -49,6 +49,10 @@ stubComponentInModule("src/views/insights/schemaInsightsPage", "default");
 stubComponentInModule("src/views/schedules/schedulesPage", "default");
 stubComponentInModule("src/views/schedules/scheduleDetails", "default");
 stubComponentInModule("src/views/tracez_v2/snapshotPage", "default");
+stubComponentInModule(
+  "src/views/app/components/tenantDropdown/tenantDropdown",
+  "default",
+);
 
 import React from "react";
 import { Action, Store } from "redux";

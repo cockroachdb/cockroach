@@ -20,7 +20,7 @@ import { cockroach } from "src/js/protos";
 import { getDataFromServer } from "src/util/dataFromServer";
 
 import UserLoginRequest = cockroach.server.serverpb.UserLoginRequest;
-import { maybeClearTenantCookie } from "./cookies";
+import { clearTenantCookie } from "./cookies";
 
 const dataFromServer = getDataFromServer();
 
@@ -217,7 +217,9 @@ export function doLogout(): ThunkAction<
 > {
   return dispatch => {
     dispatch(logoutBeginAction);
-    maybeClearTenantCookie();
+    // Clearing the tenant cookie on logout is necessary in order to
+    // avoid routing login requests to that specific tenant.
+    clearTenantCookie();
     // Make request to log out, reloading the page whether it succeeds or not.
     // If there was a successful log out but the network dropped the response somehow,
     // you'll get the login page on reload. If The logout actually didn't work, you'll
