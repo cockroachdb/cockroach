@@ -65,7 +65,7 @@ type Watcher struct {
 
 	// rfc provides access to the underlying
 	// rangefeedcache.Watcher for testing.
-	rfc *rangefeedcache.Watcher
+	rfc *rangefeedcache.Watcher[rangefeedbuffer.Event]
 
 	// initialScan is used to synchronize the Start() method with the
 	// reception of the initial batch of values from the rangefeed
@@ -282,7 +282,9 @@ func (w *Watcher) onError(err error) {
 	}
 }
 
-func (w *Watcher) handleRangefeedCacheEvent(ctx context.Context, u rangefeedcache.Update) {
+func (w *Watcher) handleRangefeedCacheEvent(
+	ctx context.Context, u rangefeedcache.Update[rangefeedbuffer.Event],
+) {
 	switch u.Type {
 	case rangefeedcache.CompleteUpdate:
 		log.Info(ctx, "received results of a full table scan for tenant capabilities")
@@ -335,10 +337,10 @@ func (w *Watcher) onAnyChangeLocked() {
 // callback.
 func (w *Watcher) handleIncrementalUpdate(
 	ctx context.Context, ev *kvpb.RangeFeedValue,
-) rangefeedbuffer.Event {
+) (rangefeedbuffer.Event, bool) {
 	hasEvent, update := w.decoder.translateEvent(ctx, ev)
 	if !hasEvent {
-		return nil
+		return nil, false
 	}
 
 	if fn := w.knobs.WatcherUpdatesInterceptor; fn != nil {
@@ -352,7 +354,7 @@ func (w *Watcher) handleIncrementalUpdate(
 	if prevTs, ok := w.mu.lastUpdate[tid]; ok && ts.Less(prevTs) {
 		// Skip updates which have an earlier timestamp to avoid
 		// regressing on the contents of an entry.
-		return nil
+		return nil, false
 	}
 	w.mu.lastUpdate[tid] = ts
 
@@ -376,7 +378,7 @@ func (w *Watcher) handleIncrementalUpdate(
 		}
 	}
 	w.onAnyChangeLocked()
-	return nil
+	return nil, false
 }
 
 func (w *Watcher) removeEntriesBeforeTimestamp(ctx context.Context, ts hlc.Timestamp) {
