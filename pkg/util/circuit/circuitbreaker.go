@@ -63,8 +63,16 @@ func NewBreaker(opts Options) *Breaker {
 
 // Signal is returned from the Breaker.Signal method.
 type Signal interface {
+	// Err returns a non-nil error if the breaker is tripped. When tripped, it
+	// will also launch a probe if one isn't already running, since this method
+	// indicates that there is a caller with a vested interest in untripping the
+	// circuit breaker.
 	Err() error
+	// C returns a channel that is closed when the breaker trips.
 	C() <-chan struct{}
+	// IsTripped returns true if the breaker is tripped. Unlike Err(), this does
+	// not launch a probe when tripped.
+	IsTripped() bool
 }
 
 // Signal returns a channel that is closed once the breaker trips and a function
@@ -222,6 +230,10 @@ func (a *alwaysTrippedSignaler) C() <-chan struct{} {
 	return closedCh
 }
 
+func (a *alwaysTrippedSignaler) IsTripped() bool {
+	return true
+}
+
 func TestingSetTripped(b *Breaker, err error) (undo func()) {
 	err = errors.Mark(errors.Mark(err, ErrBreakerOpen), b.errMark())
 	a := &alwaysTrippedSignaler{
@@ -316,6 +328,15 @@ func (eac *errAndCh) Err() error {
 		return eac.err
 	default:
 		return nil
+	}
+}
+
+func (eac *errAndCh) IsTripped() bool {
+	select {
+	case <-eac.ch:
+		return true
+	default:
+		return false
 	}
 }
 
