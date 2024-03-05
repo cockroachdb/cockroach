@@ -178,6 +178,10 @@ type splitStatsHelperInput struct {
 	// AbsPreSplitBothStored.
 	// Tuned by kv.split.max_mvcc_stat_bytes_diff.
 	MaxBytesDiff int64
+	// UseEstimatesBecauseExternalBytesArePresent controls whether the LHS and RHS
+	// statistics will be calculated without iterations if both
+	// sides happen to contain estimates and the range has external bytes.
+	UseEstimatesBecauseExternalBytesArePresent bool
 }
 
 // makeSplitStatsHelper initializes a splitStatsHelper. The values in the input
@@ -236,6 +240,30 @@ func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error)
 	if err != nil {
 		return splitStatsHelper{}, err
 	}
+	return h, nil
+}
+
+// makeCrudelyEstimatedSplitStatsHelper is like makeSplitStatsHelper
+// except that uses a very crude method of dividing the existing stats.
+//
+// This is currently only used if the underlying store had external
+// bytes when the EndTxnRequest was created.
+func makeCrudelyEstimatedSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error) {
+	h := splitStatsHelper{
+		in: input,
+	}
+	rhs := h.in.AbsPreSplitBothStored
+	rhs.Scale(0.5)
+
+	lhs := h.in.AbsPreSplitBothStored
+	lhs.Subtract(rhs)
+	lhs.Add(h.in.DeltaBatchEstimated)
+
+	h.absPostSplitRight = &rhs
+	h.absPostSplitRight.ContainsEstimates += 1
+
+	h.absPostSplitLeft = &lhs
+	h.absPostSplitLeft.ContainsEstimates += 1
 	return h, nil
 }
 
