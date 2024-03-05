@@ -67,7 +67,6 @@ func TestTimerStop(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestTimerUninitializedStopNoop(t *testing.T) {
