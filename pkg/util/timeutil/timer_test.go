@@ -202,3 +202,18 @@ func TestIllegalTimerShare(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func BenchmarkTimer(b *testing.B) {
+	run := func() {
+		timer := NewTimer()
+		defer timer.Stop()
+		for i := 0; i < 10; i++ {
+			timer.Reset(10 * time.Microsecond)
+			<-timer.C
+			timer.Read = true
+		}
+	}
+	for i := 0; i < b.N; i++ {
+		run()
+	}
+}
