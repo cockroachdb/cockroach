@@ -38,10 +38,6 @@ type indexRecInfo struct {
 type IndexRecCache struct {
 	st *cluster.Settings
 
-	// minExecCount is the minimum value for execution count that a statement
-	// must have before a recommendation is generated.
-	minExecCount int64
-
 	mu struct {
 		syncutil.RWMutex
 
@@ -51,16 +47,44 @@ type IndexRecCache struct {
 		// lastCleanupTs has the last time we cleaned up the cache.
 		lastCleanupTs time.Time
 	}
+
+	// minExecCount is the minimum value for execution count that a statement
+	// must have before a recommendation is generated.
+	minExecCount int64
+
+	// recTimeoutDuration is the time after which a recommendation can be
+	// recomputed. Prior to this interval, if a recommendation is
+	// recorded in the cache, a new one will not be suggested.
+	recTimeoutDuration time.Duration
+
+	// Cleanup process:
+	// Every `timeBetweenCleanups` we may delete all entries older than `timeThresholdForDeletion`
+
+	// timeBetweenCleanups rate limits cache cleanups. If `lastCleanupTs`
+	// is within this duration relative to now, another cleanup won't
+	// trigger.
+	timeBetweenCleanups time.Duration
+
+	// timeThresholdForDeletion is the threshold after which entries are
+	// considered deletable by the cleanup process.
+	timeThresholdForDeletion time.Duration
 }
 
-const timeBetweenCleanups = 5 * time.Minute
-const timeThresholdForDeletion = 24 * time.Hour
+var _ IdxRecommendations = &IndexRecCache{}
+
+const defaultMinExecCount = 5
+const defaultRecTimeoutDuration = time.Hour
+const defaultTimeBetweenCleanups = 5 * time.Minute
+const defaultTimeThresholdForDeletion = 24 * time.Hour
 
 // NewIndexRecommendationsCache creates a new map to be used as a cache for index recommendations.
 func NewIndexRecommendationsCache(setting *cluster.Settings) *IndexRecCache {
 	idxRecCache := &IndexRecCache{
-		st:           setting,
-		minExecCount: 5,
+		st:                       setting,
+		minExecCount:             defaultMinExecCount,
+		recTimeoutDuration:       defaultRecTimeoutDuration,
+		timeBetweenCleanups:      defaultTimeBetweenCleanups,
+		timeThresholdForDeletion: defaultTimeThresholdForDeletion,
 	}
 	idxRecCache.mu.idxRecommendations = make(map[indexRecKey]indexRecInfo)
 	idxRecCache.mu.lastCleanupTs = time.Time{}
@@ -93,7 +117,7 @@ func (idxRec *IndexRecCache) ShouldGenerateIndexRecommendation(
 	}
 
 	timeSinceLastGenerated := timeutil.Since(recInfo.lastGeneratedTs)
-	return recInfo.executionCount >= idxRec.minExecCount && timeSinceLastGenerated.Hours() >= 1
+	return recInfo.executionCount >= idxRec.minExecCount && timeSinceLastGenerated >= idxRec.recTimeoutDuration
 }
 
 // UpdateIndexRecommendations  implements IdxRecommendations interface.
@@ -174,7 +198,7 @@ func (idxRec *IndexRecCache) getOrCreateIndexRecommendation(key indexRecKey) (in
 	limit := sqlstats.MaxMemReportedSampleIndexRecommendations.Get(&idxRec.st.SV)
 
 	// Check if the limit was reached and if we can do cleanup (in case it was reached).
-	if int64(cacheSize) >= limit && timeutil.Since(lastCleanupTs) < timeBetweenCleanups {
+	if int64(cacheSize) >= limit && timeutil.Since(lastCleanupTs) < idxRec.timeBetweenCleanups {
 		return indexRecInfo{}, false
 	}
 
@@ -192,15 +216,15 @@ func (idxRec *IndexRecCache) getOrCreateIndexRecommendation(key indexRecKey) (in
 	// Calculate the size again, because it could have been updated by another thread.
 	if int64(len(idxRec.mu.idxRecommendations)) >= limit {
 		timeNow := timeutil.Now()
-		// Check if has been at least 5min since last cleanup, to avoid
+		// Check if has been at least `timeBetweenCleanups since last cleanup, to avoid
 		// lock contention when we reached the limit.
-		if timeNow.Sub(idxRec.mu.lastCleanupTs) < timeBetweenCleanups {
+		if timeNow.Sub(idxRec.mu.lastCleanupTs) < idxRec.timeBetweenCleanups {
 			return indexRecInfo{}, false
 		}
 
-		// Clear entries that were last updated more than a day ago.
+		// Clear entries that were last updated more than `timeThresholdForDeletion` ago.
 		for idxKey, value := range idxRec.mu.idxRecommendations {
-			if timeNow.Sub(value.lastGeneratedTs) >= timeThresholdForDeletion {
+			if timeNow.Sub(value.lastGeneratedTs) >= idxRec.timeThresholdForDeletion {
 				delete(idxRec.mu.idxRecommendations, idxKey)
 			}
 		}

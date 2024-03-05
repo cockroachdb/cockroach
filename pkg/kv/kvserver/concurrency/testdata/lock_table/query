@@ -138,14 +138,12 @@ num=3
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 4, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
-   distinguished req: 4
 
 query span=a,/Max max-bytes=100
 ----

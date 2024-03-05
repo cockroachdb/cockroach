@@ -69,7 +69,6 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 8.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 2)]
    queued locking requests:
     active: true req: 1, strength: Intent, txn: none
-   distinguished req: 1
 
 dequeue r=reqContend
 ----
@@ -124,7 +123,7 @@ start-waiting: true
 
 guard-state r=req5
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
 
 print
 ----
@@ -133,7 +132,6 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 8.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 2, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 2
 
 new-txn txn=txn1 ts=14 epoch=2 seq=1
 ----
@@ -148,11 +146,10 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 8.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 2, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 2
 
 guard-state r=req5
 ----
-old: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
+old: state=waitFor txn=txn1 key="a" held=true guard-strength=None
 
 acquire r=req6 k=a durability=r strength=intent
 ----
@@ -180,7 +177,7 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
 
 add-discovered r=req7 k=a txn=txn1
 ----
@@ -189,11 +186,10 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 14.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 3, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
 
 guard-state r=req7
 ----
-old: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
+old: state=waitFor txn=txn1 key="a" held=true guard-strength=None
 
 # ------------------------------------------------------------------------------
 # Try to re-acquire an unreplicated lock that is already held at a higher epoch.
@@ -209,7 +205,6 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 14.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 3, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
 
 new-txn txn=txn1 ts=14 epoch=1 seq=1
 ----

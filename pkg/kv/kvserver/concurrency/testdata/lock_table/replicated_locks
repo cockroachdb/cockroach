@@ -89,7 +89,6 @@ num=3
    queued locking requests:
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 3
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
@@ -106,7 +105,6 @@ num=3
    queued locking requests:
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 3
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
@@ -155,7 +153,6 @@ num=3
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 4, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 3
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent, Exclusive]
    queued locking requests:
@@ -228,12 +225,10 @@ num=2
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Exclusive], unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 6, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 6
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 7
 
 acquire r=req8 k=b durability=r strength=shared
 ----
@@ -242,12 +237,10 @@ num=2
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Exclusive], unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 6, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 6
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared], unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 7
 
 
 # Test the other way around. A replicated lock is held first, followed by
@@ -702,7 +695,6 @@ num=2
     req: 29, txn: 00000000-0000-0000-0000-000000000003
    queued locking requests:
     active: false req: 24, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 29
 
 
 # ------------------------------------------------------------------------------
@@ -820,7 +812,6 @@ num=1
    queued locking requests:
     active: false req: 32, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 37, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 37
 
 # 3d. Lock discovery; strength = Shared.
 new-request r=req38 txn=txn2 ts=10 spans=intent@a
@@ -843,7 +834,6 @@ num=1
     active: false req: 32, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 37, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 38, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 37
 
 # ------------------------------------------------------------------------------
 # Test the case where both an unreplicated exclusive lock and an intent exists
@@ -892,7 +882,6 @@ num=1
    queued locking requests:
     active: false req: 41, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 40, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 40
 
 # Ensure non-locking readers at various timestamps -- below the exclusive lock
 # (10), at the exclusive lock (10), between exclusive and intent (20),
@@ -945,4 +934,3 @@ num=1
    queued locking requests:
     active: false req: 41, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 40, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 40

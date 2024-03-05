@@ -572,8 +572,6 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				var typeStr string
 				switch state.kind {
-				case waitForDistinguished:
-					typeStr = "waitForDistinguished"
 				case waitFor:
 					typeStr = "waitFor"
 				case waitElsewhere:
@@ -1162,7 +1160,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 					if item.request.Txn == nil {
 						return errors.Errorf("non-transactional request cannot waitSelf")
 					}
-				case waitForDistinguished, waitFor, waitElsewhere:
+				case waitFor, waitElsewhere:
 					if item.request.Txn != nil {
 						var aborted bool
 						aborted, err = e.waitingFor(item.request.Txn.ID, lastID, state.txn.ID)
