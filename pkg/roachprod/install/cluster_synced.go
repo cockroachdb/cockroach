@@ -2940,6 +2940,19 @@ func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) e
 	return nil
 }
 
+func (c *SyncedCluster) addrs(ctx context.Context) (string, error) {
+	var addrs []string
+	for _, node := range c.Nodes {
+		port, err := c.NodePort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
+		if err != nil {
+			return "", err
+		}
+		addrs = append(addrs, fmt.Sprintf("%s:%d", c.Host(node), port))
+	}
+
+	return strings.Join(addrs, ","), nil
+}
+
 // GenFilenameFromArgs given a list of cmd args, returns an alphahumeric string up to
 // `maxLen` in length with hyphen delimiters, suitable for use in a filename.
 // e.g. ["/bin/bash", "-c", "'sudo dmesg > dmesg.txt'"] -> binbash-c-sudo-dmesg

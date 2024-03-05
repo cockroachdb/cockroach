@@ -12,8 +12,6 @@ package roachprod
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -38,16 +36,7 @@ func StartServiceForVirtualCluster(
 		return err
 	}
 
-	var kvAddrs []string
-	for _, node := range sc.Nodes {
-		port, err := sc.NodePort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
-		if err != nil {
-			return err
-		}
-		kvAddrs = append(kvAddrs, fmt.Sprintf("%s:%d", sc.Host(node), port))
-	}
-	startOpts.KVAddrs = strings.Join(kvAddrs, ",")
-	startOpts.KVCluster = sc
+	startOpts.StorageCluster = sc
 
 	var startCluster *install.SyncedCluster
 	if externalCluster == "" {
