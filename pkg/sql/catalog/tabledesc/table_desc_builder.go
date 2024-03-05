@@ -390,7 +390,6 @@ func maybeFillInDescriptor(
 	}
 	set(catalog.UpgradedPrivileges, fixedPrivileges)
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
-	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
 	set(catalog.SetCheckConstraintColumnIDs, maybeSetCheckConstraintColumnIDs(desc))
 	set(catalog.StrippedDanglingSelfBackReferences, maybeStripDanglingSelfBackReferences(desc))
 	set(catalog.FixSecondaryIndexEncodingType, maybeFixSecondaryIndexEncodingType(desc))
@@ -822,102 +821,6 @@ func cleanedIDs(input []descpb.ID) []descpb.ID {
 		return nil
 	}
 	return s
-}
-
-// maybeAddConstraintIDs ensures that all constraints have an ID associated with
-// them.
-func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
-	// Only assign constraint IDs to physical tables.
-	if !desc.IsTable() {
-		return false
-	}
-	// Collect pointers to constraint ID variables.
-	var idPtrs []*descpb.ConstraintID
-	if len(desc.PrimaryIndex.KeyColumnIDs) > 0 {
-		idPtrs = append(idPtrs, &desc.PrimaryIndex.ConstraintID)
-	}
-	for i := range desc.Indexes {
-		idx := &desc.Indexes[i]
-		if !idx.Unique || idx.UseDeletePreservingEncoding {
-			continue
-		}
-		idPtrs = append(idPtrs, &idx.ConstraintID)
-	}
-	checkByName := make(map[string]*descpb.TableDescriptor_CheckConstraint)
-	for i := range desc.Checks {
-		ck := desc.Checks[i]
-		idPtrs = append(idPtrs, &ck.ConstraintID)
-		checkByName[ck.Name] = ck
-	}
-	fkByName := make(map[string]*descpb.ForeignKeyConstraint)
-	for i := range desc.OutboundFKs {
-		fk := &desc.OutboundFKs[i]
-		idPtrs = append(idPtrs, &fk.ConstraintID)
-		fkByName[fk.Name] = fk
-	}
-	for i := range desc.InboundFKs {
-		idPtrs = append(idPtrs, &desc.InboundFKs[i].ConstraintID)
-	}
-	uwoiByName := make(map[string]*descpb.UniqueWithoutIndexConstraint)
-	for i := range desc.UniqueWithoutIndexConstraints {
-		uwoi := &desc.UniqueWithoutIndexConstraints[i]
-		idPtrs = append(idPtrs, &uwoi.ConstraintID)
-		uwoiByName[uwoi.Name] = uwoi
-	}
-	for _, m := range desc.GetMutations() {
-		if idx := m.GetIndex(); idx != nil && idx.Unique && !idx.UseDeletePreservingEncoding {
-			idPtrs = append(idPtrs, &idx.ConstraintID)
-		} else if c := m.GetConstraint(); c != nil {
-			switch c.ConstraintType {
-			case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
-				idPtrs = append(idPtrs, &c.Check.ConstraintID)
-			case descpb.ConstraintToUpdate_FOREIGN_KEY:
-				idPtrs = append(idPtrs, &c.ForeignKey.ConstraintID)
-			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
-				idPtrs = append(idPtrs, &c.UniqueWithoutIndexConstraint.ConstraintID)
-			}
-		}
-	}
-	// Set constraint ID counter to sane initial value.
-	var maxID descpb.ConstraintID
-	for _, p := range idPtrs {
-		if id := *p; id > maxID {
-			maxID = id
-		}
-	}
-	if desc.NextConstraintID <= maxID {
-		desc.NextConstraintID = maxID + 1
-		hasChanged = true
-	}
-	// Update zero constraint IDs using counter.
-	for _, p := range idPtrs {
-		if *p != 0 {
-			continue
-		}
-		*p = desc.NextConstraintID
-		desc.NextConstraintID++
-		hasChanged = true
-	}
-	// Reconcile constraint IDs between enforced slice and mutation.
-	for _, m := range desc.GetMutations() {
-		if c := m.GetConstraint(); c != nil {
-			switch c.ConstraintType {
-			case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
-				if other, ok := checkByName[c.Check.Name]; ok {
-					c.Check.ConstraintID = other.ConstraintID
-				}
-			case descpb.ConstraintToUpdate_FOREIGN_KEY:
-				if other, ok := fkByName[c.ForeignKey.Name]; ok {
-					c.ForeignKey.ConstraintID = other.ConstraintID
-				}
-			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
-				if other, ok := uwoiByName[c.UniqueWithoutIndexConstraint.Name]; ok {
-					c.UniqueWithoutIndexConstraint.ConstraintID = other.ConstraintID
-				}
-			}
-		}
-	}
-	return hasChanged
 }
 
 // maybeSetCheckConstraintColumnIDs ensures that all check constraints have a
