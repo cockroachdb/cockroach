@@ -1047,6 +1047,13 @@ func (r *testRunner) runTest(
 				}
 
 				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", testRunID, durationStr, output)
+
+				if roachtestflags.GitHubActions {
+					outputLines := strings.Split(strings.TrimSpace(output), "\n")
+					for _, line := range outputLines {
+						shout(ctx, l, stdout, "::error title=%s failed::%s", s.Name, line)
+					}
+				}
 			} else {
 				shout(ctx, l, stdout, "--- PASS: %s (%s)", testRunID, durationStr)
 			}
@@ -1077,6 +1084,10 @@ func (r *testRunner) runTest(
 			}
 		}
 
+		if roachtestflags.GitHubActions && roachtestflags.Parallelism == 1 {
+			shout(ctx, l, stdout, "::endgroup::")
+		}
+
 		r.recordTestFinish(completedTestInfo{
 			test:    t.Name(),
 			run:     runNum,
@@ -1099,6 +1110,13 @@ func (r *testRunner) runTest(
 		}
 		r.status.Unlock()
 	}()
+
+	// NB: Nesting won't work properly if we're running multiple tests
+	// concurrently. Therefore, we only group log lines if parallelism is 1
+	// (which is true for local roachtests that we run in GitHub Actions).
+	if roachtestflags.GitHubActions && roachtestflags.Parallelism == 1 {
+		shout(ctx, l, stdout, "::group::%s", s.Name)
+	}
 
 	t.start = timeutil.Now()
 

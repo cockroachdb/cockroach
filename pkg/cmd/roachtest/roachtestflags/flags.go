@@ -282,6 +282,12 @@ var (
 		Usage: `Include teamcity-specific markers in output`,
 	})
 
+	GitHubActions bool
+	_             = registerRunFlag(&GitHubActions, FlagInfo{
+		Name:  "github",
+		Usage: `Add GitHub-specific markers to the output where possible, and optionally populate GITHUB_STEP_SUMMARY with a summary of all tests`,
+	})
+
 	DisableIssue bool
 	_            = registerRunFlag(&DisableIssue, FlagInfo{
 		Name:  "disable-issue",
