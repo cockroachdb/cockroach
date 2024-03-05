@@ -26,7 +26,7 @@ import (
 
 var asyncpgRunTestCmd = fmt.Sprintf(`
 source venv/bin/activate &&
-cd /mnt/data1/asyncpg && 
+cd /mnt/data1/asyncpg &&
 PGPORT={pgport:1} PGHOST=localhost PGUSER=%s PGPASSWORD=%s PGSSLROOTCERT=$HOME/%s/ca.crt PGSSLMODE=require PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
 `, install.DefaultUser, install.DefaultPassword, install.CockroachNodeCertsDir)
 
@@ -54,7 +54,7 @@ func registerAsyncpg(r registry.Registry) {
 		// See: https://github.com/cockroachdb/cockroach/issues/113164
 		settings := install.MakeClusterSettings()
 		settings.Env = append(settings.Env, "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true")
-		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), settings, c.All())
+		c.Start(ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {

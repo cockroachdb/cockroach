@@ -11,6 +11,8 @@
 package option
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
@@ -23,36 +25,26 @@ type StartOpts struct {
 	}
 }
 
+// StartStopOption allows us to apply optional customizations to
+// start or stop options.
+type StartStopOption func(interface{})
+
 // DefaultStartOpts returns a StartOpts populated with default values.
 func DefaultStartOpts() StartOpts {
+	return NewStartOpts()
+}
+
+// NewStartOpts returns a StartOpts populated with default values when
+// called with no options. Pass customization functions to change the
+// start options.
+func NewStartOpts(opts ...StartStopOption) StartOpts {
 	startOpts := StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
 	startOpts.RoachprodOpts.ScheduleBackups = true
-	return startOpts
-}
 
-// DefaultStartOptsInMemory returns a StartOpts populated with default values,
-// and with in-memory storage
-func DefaultStartOptsInMemory() StartOpts {
-	startOpts := StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
-	startOpts.RoachprodOpts.ScheduleBackups = true
-	// size=0.3 means 30% of available RAM.
-	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--store=type=mem,size=0.3")
-	return startOpts
-}
+	for _, opt := range opts {
+		opt(&startOpts)
+	}
 
-// DefaultStartOptsNoBackups returns a StartOpts with default values,
-// but a scheduled backup will not begin at the start of the roachtest.
-func DefaultStartOptsNoBackups() StartOpts {
-	return StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
-}
-
-// DefaultStartSingleNodeOpts returns StartOpts with default values,
-// but no init. This is helpful if node is not going to start gracefully or
-// will be terminated as init could fail even if it is a noop for a running
-// cluster.
-func DefaultStartSingleNodeOpts() StartOpts {
-	startOpts := StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
-	startOpts.RoachprodOpts.SkipInit = true
 	return startOpts
 }
 
@@ -100,4 +92,49 @@ func DefaultStopVirtualClusterOpts(virtualClusterName string, sqlInstance int) S
 	opts.RoachprodOpts.SQLInstance = sqlInstance
 
 	return opts
+}
+
+// InMemoryDB can be used to configure StartOpts that start in-memory
+// cockroach processes. The `size` argument must be in [0,1) and
+// indicates the percentage of RAM to be used by the process.
+func InMemoryDB(size float64) StartStopOption {
+	return func(opts interface{}) {
+		switch opts := opts.(type) {
+		case *StartOpts:
+			opts.RoachprodOpts.ExtraArgs = append(
+				opts.RoachprodOpts.ExtraArgs,
+				fmt.Sprintf("--store=type=mem,size=%.1f", size),
+			)
+		}
+	}
+}
+
+func SkipInit(opts interface{}) {
+	switch opts := opts.(type) {
+	case *StartOpts:
+		opts.RoachprodOpts.SkipInit = true
+	}
+}
+
+// VirtualClusterInstance can be used to indicate the SQL instance to
+// start or stop. Only used when starting multiple instances (SQL
+// processes) of the same virtual cluster on the same node.
+func VirtualClusterInstance(instance int) StartStopOption {
+	return func(opts interface{}) {
+		switch opts := opts.(type) {
+		case *StartOpts:
+			opts.RoachprodOpts.SQLInstance = instance
+		case *StopOpts:
+			opts.RoachprodOpts.SQLInstance = instance
+		}
+	}
+}
+
+// NoBackupSchedule can be used to generate StartOpts that skip the
+// creation of the default backup schedule.
+func NoBackupSchedule(opts interface{}) {
+	switch opts := opts.(type) {
+	case *StartOpts:
+		opts.RoachprodOpts.ScheduleBackups = false
+	}
 }

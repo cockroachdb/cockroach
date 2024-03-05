@@ -316,7 +316,7 @@ func binaryUpgradeStep(
 ) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := clusterupgrade.RestartNodesWithNewBinary(
-			ctx, t, t.L(), u.c, nodes, option.DefaultStartOptsNoBackups(), newVersion,
+			ctx, t, t.L(), u.c, nodes, option.NewStartOpts(option.NoBackupSchedule), newVersion,
 		); err != nil {
 			t.Fatal(err)
 		}

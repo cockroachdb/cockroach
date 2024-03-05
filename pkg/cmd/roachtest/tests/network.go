@@ -52,7 +52,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	settings := install.MakeClusterSettings()
 
 	// Don't create a backup schedule as this test shuts the cluster down immediately.
-	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, serverNodes)
+	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, serverNodes)
 	require.NoError(t, c.StopE(ctx, t.L(), option.DefaultStopOpts(), serverNodes))
 
 	t.L().Printf("restarting nodes...")
@@ -67,14 +67,14 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	// Currently, creating a scheduled backup at start fails, potentially due to
 	// the induced network partition. Further investigation required to allow scheduled backups
 	// to run on this test.
-	startOpts := option.DefaultStartOptsNoBackups()
+	startOpts := option.NewStartOpts(option.NoBackupSchedule)
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--locality=node=1", "--accept-sql-without-tls")
 	c.Start(ctx, t.L(), startOpts, settings, c.Node(1))
 
 	// See comment above about env vars.
 	// "--env=COCKROACH_SCAN_INTERVAL=200ms",
 	// "--env=COCKROACH_SCAN_MAX_IDLE_TIME=20ms",
-	startOpts = option.DefaultStartOptsNoBackups()
+	startOpts = option.NewStartOpts(option.NoBackupSchedule)
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--locality=node=other", "--accept-sql-without-tls")
 	c.Start(ctx, t.L(), startOpts, settings, c.Range(2, n-1))
 

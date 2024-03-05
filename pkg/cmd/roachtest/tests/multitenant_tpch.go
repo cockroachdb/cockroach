@@ -32,7 +32,7 @@ func runMultiTenantTPCH(
 ) {
 	clusterSettings := install.MakeClusterSettings()
 	start := func() {
-		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), clusterSettings, c.All())
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), clusterSettings, c.All())
 	}
 	start()
 

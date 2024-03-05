@@ -163,7 +163,7 @@ func runMultiTenantUpgrade(
 	settings.Binary = currentBinary
 	// TODO (msbutler): investigate why the scheduled backup command fails due to a `Is the Server
 	// running?` error.
-	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, kvNodes)
+	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, kvNodes)
 	time.Sleep(time.Second)
 
 	t.Status("checking the pre-upgrade sql server still works after the system tenant binary upgrade")

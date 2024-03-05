@@ -41,7 +41,7 @@ func registerAllocator(r registry.Registry) {
 		nodes := c.Spec().NodeCount - 1
 
 		// Don't start scheduled backups in this perf sensitive test that reports to roachperf
-		startOpts := option.DefaultStartOptsNoBackups()
+		startOpts := option.NewStartOpts(option.NoBackupSchedule)
 		startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5"}
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, start))
 		db := c.Conn(ctx, t.L(), 1)

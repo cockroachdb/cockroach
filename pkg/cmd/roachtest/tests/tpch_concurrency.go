@@ -34,7 +34,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		disableStreamer bool,
 	) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
-		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 
 		conn := c.Conn(ctx, t.L(), 1)
 		if disableStreamer {
