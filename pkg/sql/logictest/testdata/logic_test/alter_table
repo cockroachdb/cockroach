@@ -3598,3 +3598,34 @@ CREATE UNIQUE INDEX ON public.t_118626(c) WHERE n>= 1;
 
 statement ok
 ALTER TABLE public.t_118626 ALTER PRIMARY KEY USING COLUMNS(b);
+
+# Regression test to make sure that we can drop and re-add a CHECK constraint
+# with the same name in one statement.
+subtest 120017
+
+statement ok
+CREATE TABLE t_120017 (
+  a INT PRIMARY KEY,
+  b TEXT,
+  c INT NOT NULL,
+  CHECK (b IN ('x', 'y'))
+)
+
+statement ok
+ALTER TABLE t_120017
+DROP CONSTRAINT check_b,
+ADD CONSTRAINT check_b CHECK (b IN ('x', 'y', 'z'))
+
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor) #> '{table,mutations}'
+FROM system.descriptor
+WHERE id = 't_120017'::regclass::oid
+----
+NULL
+
+statement ok
+ALTER TABLE t_120017
+DROP CONSTRAINT "t_120017_pkey",
+ADD CONSTRAINT "t_120017_pkey" PRIMARY KEY (a, c)
+
+subtest end
