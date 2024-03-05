@@ -197,7 +197,10 @@ func registerTPCCSevereOverload(r registry.Registry) {
 			roachNodes := c.Range(1, c.Spec().NodeCount-1)
 			workloadNode := c.Spec().NodeCount
 
-			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), roachNodes)
+			c.Start(
+				ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule),
+				install.MakeClusterSettings(), roachNodes,
+			)
 
 			t.Status("initializing (~1h)")
 			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload fixtures import tpcc --checks=false --warehouses=10000 {pgurl:1}")

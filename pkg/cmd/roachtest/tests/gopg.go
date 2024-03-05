@@ -58,7 +58,10 @@ func registerGopg(r registry.Registry) {
 		// See: https://github.com/go-pg/pg/pull/1996
 		// TODO(darrylwong): once the above change is part of a release,
 		// upgrade support to that version and enable secure mode.
-		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(install.SecureOption(false)), c.All())
+		c.Start(
+			ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB),
+			install.MakeClusterSettings(install.SecureOption(false)),
+		)
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
 			t.Fatal(err)

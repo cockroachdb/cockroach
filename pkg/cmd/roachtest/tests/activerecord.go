@@ -28,6 +28,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// This `startOpts` option configures in-memory databases to use a
+// fixed (30%) amount of memory and is used in a variety of client
+// library tests.
+var sqlClientsInMemoryDB = option.InMemoryDB(0.3)
+
 var activerecordResultRegex = regexp.MustCompile(`^(?P<test>[^\s]+#[^\s]+) = (?P<timing>\d+\.\d+ s) = (?P<result>.)$`)
 var railsReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)\.?(?P<subpoint>\d*)$`)
 
@@ -49,7 +54,7 @@ func registerActiveRecord(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		startOpts := option.DefaultStartOptsInMemory()
+		startOpts := option.NewStartOpts(sqlClientsInMemoryDB)
 		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
 		// Activerecord uses root user with ssl disabled.
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.All())

@@ -221,7 +221,7 @@ func UsingRuntimeAssertions(t test.Test) bool {
 // if runtime assertions are enabled, and the default values otherwise.
 // A scheduled backup will not begin at the start of the roachtest.
 func maybeUseMemoryBudget(t test.Test, budget int) option.StartOpts {
-	startOpts := option.DefaultStartOptsNoBackups()
+	startOpts := option.NewStartOpts(option.NoBackupSchedule)
 	if UsingRuntimeAssertions(t) {
 		// When running tests with runtime assertions enabled, increase
 		// SQL's memory budget to avoid 'budget exceeded' failures.

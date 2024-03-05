@@ -31,7 +31,7 @@ func runMultiTenantTPCH(
 	ctx context.Context, t test.Test, c cluster.Cluster, enableDirectScans bool, sharedProcess bool,
 ) {
 	start := func() {
-		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.All())
 	}
 	start()
 
