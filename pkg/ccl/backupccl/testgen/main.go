@@ -21,7 +21,6 @@ import (
 )
 
 var dataDrivenOutPath = flag.String("data-driven", "", "path to the output file")
-var restoreEntryCoverOutPath = flag.String("restore-entry-cover", "", "path to the output file")
 var restoreMidSchemaChangeOutPath = flag.String("restore-mid-schema-change", "", "path to the output file")
 
 func genTestDataDriven() {
@@ -62,29 +61,6 @@ func genTestDataDriven() {
 	}
 }
 
-func genTestRestoreEntryCover() {
-	type testCase struct {
-		NumBackups int
-	}
-	var testCases []testCase
-	for _, numBackups := range []int{1, 2, 3, 5, 9, 10, 11, 12} {
-		testCases = append(testCases, testCase{
-			NumBackups: numBackups,
-		})
-	}
-
-	data := struct{ Tests []testCase }{Tests: testCases}
-	tmpl := template.Must(template.New("source").Parse(test_restore_entry_cover_template))
-	file, err := os.Create(filepath.Join(*restoreEntryCoverOutPath))
-	if err != nil {
-		panic(errors.Wrap(err, "failed to create file"))
-	}
-	defer file.Close()
-	if err := tmpl.Execute(file, data); err != nil {
-		panic(errors.Wrap(err, "failed to execute template"))
-	}
-}
-
 func genTestRestoreMidSchemaChange() {
 	type testCase struct {
 		SchemaOnly, ClusterRestore bool
@@ -109,11 +85,10 @@ func genTestRestoreMidSchemaChange() {
 
 func main() {
 	flag.Parse()
-	if *dataDrivenOutPath == "" || *restoreEntryCoverOutPath == "" || *restoreMidSchemaChangeOutPath == "" {
+	if *dataDrivenOutPath == "" || *restoreMidSchemaChangeOutPath == "" {
 		panic(`you need to pass values for the following flags:
--restore-memory-monitoring -data-driven -restore-entry-cover -restore-mid-schema-change`)
+-restore-memory-monitoring -data-driven -restore-mid-schema-change`)
 	}
 	genTestDataDriven()
-	genTestRestoreEntryCover()
 	genTestRestoreMidSchemaChange()
 }

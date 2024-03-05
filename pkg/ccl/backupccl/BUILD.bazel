@@ -186,7 +186,6 @@ go_test(
         "main_test.go",
         "partitioned_backup_test.go",
         "restore_data_processor_test.go",
-        "restore_entry_cover_generated_test.go",  # keep
         "restore_mid_schema_change_generated_test.go",  # keep
         "restore_mid_schema_change_test.go",
         "restore_multiregion_rbr_test.go",
@@ -361,12 +360,11 @@ genrule(
     srcs = glob(["testdata/**"]),
     outs = [
         "data_driven_generated_test.go",
-        "restore_entry_cover_generated_test.go",
         "restore_mid_schema_change_generated_test.go",
     ],
     cmd = """
         $(location //pkg/ccl/backupccl/testgen) \
-        -data-driven=$(location data_driven_generated_test.go) -restore-entry-cover=$(location restore_entry_cover_generated_test.go) \
+        -data-driven=$(location data_driven_generated_test.go) \
         -restore-mid-schema-change=$(location restore_mid_schema_change_generated_test.go)
        """,
     exec_tools = [
