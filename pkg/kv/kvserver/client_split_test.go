@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -59,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -4283,6 +4286,143 @@ func TestLBSplitUnsafeKeys(t *testing.T) {
 				// end key.
 				require.NoError(t, processErr)
 				require.Equal(t, makeTestKey(tableID, tc.expSplitKey), endKey)
+			}
+		})
+	}
+}
+
+// TestSplitWithExternalFilesFastStats tests that while a range has
+// external file bytes, we calculate an estimate of the stats during
+// splits.
+func TestSplitWithExternalFilesFastStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	const externURI = "nodelocal://1/external-files"
+	ctx := context.Background()
+
+	for _, fastStats := range []bool{true, false} {
+		testName := fmt.Sprintf("%s=%v", kvserver.EnableEstimatedStatsForExternalBytes.InternalKey(), fastStats)
+		t.Run(testName, func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			kvserver.EnableEstimatedStatsForExternalBytes.Override(ctx, &st.SV, fastStats)
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{
+				Settings: st,
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						DisableMergeQueue:              true,
+						DisableSplitQueue:              true,
+						DisableCanAckBeforeApplication: true,
+					},
+				},
+			})
+
+			extStore, err := cloud.EarlyBootExternalStorageFromURI(ctx,
+				externURI,
+				base.ExternalIODirConfig{},
+				s.ClusterSettings(),
+				nil, /* limiters */
+				cloud.NilMetrics)
+			require.NoError(t, err)
+
+			defer s.Stopper().Stop(ctx)
+			store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+			require.NoError(t, err)
+
+			splitKey := roachpb.Key("b")
+			// Link an external SST to the range with points on both
+			// sides of our proposed split key.
+			expKVs := []struct {
+				Key   string
+				Value string
+			}{
+				{Key: "a", Value: "a-val"},
+				{Key: "c", Value: "c-val"},
+			}
+			kvs := make([]interface{}, 0, len(expKVs))
+			for _, expKV := range expKVs {
+				kvs = append(kvs, storageutils.PointKV(expKV.Key, 1, expKV.Value))
+			}
+			fileName := "external-1.sst"
+			sst, _, _ := storageutils.MakeSST(t, s.ClusterSettings(), kvs)
+			w, err := extStore.Writer(ctx, fileName)
+			require.NoError(t, err)
+			_, err = w.Write(sst)
+			require.NoError(t, err)
+			require.NoError(t, w.Close())
+
+			size, err := extStore.Size(ctx, fileName)
+			require.NoError(t, err)
+
+			err = s.DB().LinkExternalSSTable(ctx, roachpb.Span{
+				Key:    roachpb.Key("a"),
+				EndKey: roachpb.Key("d"),
+			}, kvpb.LinkExternalSSTableRequest_ExternalFile{
+				Locator:                 externURI,
+				Path:                    fileName,
+				ApproximatePhysicalSize: uint64(size),
+				BackingFileSize:         uint64(size),
+				MVCCStats: &enginepb.MVCCStats{
+					ContainsEstimates: 1,
+					KeyBytes:          2,
+					ValBytes:          10,
+					KeyCount:          2,
+					LiveCount:         2,
+				},
+			}, s.DB().Clock().Now())
+			require.NoError(t, err)
+
+			originalRepl := store.LookupReplica(roachpb.RKey(splitKey))
+			require.NotNil(t, originalRepl)
+			origStats, err := stateloader.Make(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+			require.NoError(t, err)
+			require.Greater(t, origStats.ContainsEstimates, int64(0), "range expected to have estimated stats")
+
+			// Split the range.
+			args := adminSplitArgs(splitKey)
+			if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
+				t.Fatal(pErr)
+			}
+
+			snap := store.StateEngine().NewSnapshot()
+			defer snap.Close()
+			lhsRepl := store.LookupReplica(originalRepl.Desc().StartKey)
+			rhsRepl := store.LookupReplica(roachpb.RKey(splitKey))
+
+			if !bytes.Equal(rhsRepl.Desc().StartKey, splitKey) || !bytes.Equal(splitKey, lhsRepl.Desc().EndKey) {
+				t.Errorf("ranges mismatched, wanted %q=%q=%q", lhsRepl.Desc().EndKey, splitKey, rhsRepl.Desc().StartKey)
+			}
+
+			lhsStats, err := stateloader.Make(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+			require.NoError(t, err)
+			rhsStats, err := stateloader.Make(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+			require.NoError(t, err)
+
+			if fastStats {
+				require.Greater(t, lhsStats.ContainsEstimates, int64(0), "lhs expected to have estimated stats")
+				require.Greater(t, rhsStats.ContainsEstimates, int64(0), "rhs expected to have estimated stats")
+			} else {
+				estimates := kvserver.EnableEstimatedMVCCStatsInSplit.Get(&store.ClusterSettings().SV)
+				recompute := kvserver.EnableMVCCStatsRecomputationInSplit.Get(&store.ClusterSettings().SV)
+				if !estimates || (estimates && recompute) {
+					now := s.Clock().Now()
+					assertRecomputedStats(t, "lhs after split", snap, lhsRepl.Desc(), lhsStats, now.WallTime)
+					assertRecomputedStats(t, "rhs after split", snap, rhsRepl.Desc(), rhsStats, now.WallTime)
+				}
+			}
+
+			// Read back our values, just to be sure.
+			for _, v := range expKVs {
+				key := roachpb.Key(v.Key)
+				gArgs := getArgs(key)
+				reply, pErr := kv.SendWrapped(ctx, store.TestSender(), gArgs)
+				require.NoError(t, pErr.GoError())
+
+				replyBytes, err := reply.(*kvpb.GetResponse).Value.GetBytes()
+				require.NoError(t, err)
+
+				require.NoError(t, err)
+				require.Equal(t, replyBytes, []byte(v.Value))
 			}
 		})
 	}
