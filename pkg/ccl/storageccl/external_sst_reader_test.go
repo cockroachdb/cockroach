@@ -14,16 +14,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	_ "github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -101,11 +98,9 @@ func TestNewExternalSSTReader(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tempDir, dirCleanupFn := testutils.TempDir(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(tempDir)()
 	defer dirCleanupFn()
-	args := base.TestServerArgs{ExternalIODir: tempDir}
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
-	defer tc.Stopper().Stop(ctx)
-	clusterSettings := tc.Server(0).ClusterSettings()
+	clusterSettings := cluster.MakeTestingClusterSettings()
 
 	const localFoo = "nodelocal://1/foo"
 
@@ -115,14 +110,11 @@ func TestNewExternalSSTReader(t *testing.T) {
 	for i, subdir := range subdirs {
 
 		// Create a store rooted in the file's subdir
-		store, err := cloud.ExternalStorageFromURI(
+		store, err := cloud.EarlyBootExternalStorageFromURI(
 			ctx,
 			localFoo+subdir+"/",
 			base.ExternalIODirConfig{},
 			clusterSettings,
-			blobs.TestBlobServiceClient(tempDir),
-			username.RootUserName(),
-			tc.Servers[0].InternalDB().(isql.DB),
 			nil, /* limiters */
 			cloud.NilMetrics,
 		)
@@ -169,4 +161,55 @@ func TestNewExternalSSTReader(t *testing.T) {
 			break
 		}
 	}
+}
+
+func TestNewExternalSSTReaderFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	metrics := cloud.MakeMetrics()
+
+	const localFoo = "nodelocal://1/foo"
+
+	store, err := cloud.EarlyBootExternalStorageFromURI(ctx,
+		localFoo,
+		base.ExternalIODirConfig{},
+		settings,
+		nil, /* limiters */
+		metrics)
+	require.NoError(t, err)
+
+	fileName := "ExistingFile.sst"
+	sst, _, _ := storageutils.MakeSST(t, settings, []interface{}{})
+	w, err := store.Writer(ctx, fileName)
+	require.NoError(t, err)
+	_, err = w.Write(sst)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	fileStores := []StoreFile{
+		{
+			Store:    store,
+			FilePath: "ExistingFile.sst",
+		},
+		{
+			Store:    store,
+			FilePath: "DoesNotExist.sst",
+		},
+	}
+	iterOpts := storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: keys.LocalMax,
+		UpperBound: keys.MaxKey,
+	}
+
+	_, err = ExternalSSTReader(ctx, fileStores, nil, iterOpts)
+	require.Error(t, err)
+	require.Equal(t,
+		int64(0),
+		metrics.(*cloud.Metrics).OpenReaders.Value(),
+		"unexpected open readers")
 }
