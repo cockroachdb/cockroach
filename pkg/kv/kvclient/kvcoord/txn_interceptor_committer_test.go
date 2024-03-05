@@ -72,7 +72,7 @@ func TestTxnCommitterElideEndTxn(t *testing.T) {
 		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			require.Len(t, ba.Requests, 2)
 			require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
-			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
+			require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[1].GetInner())
 
 			br := ba.CreateReply()
 			br.Txn = ba.Txn
