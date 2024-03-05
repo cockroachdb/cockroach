@@ -970,6 +970,12 @@ func (r *testRunner) runTest(
 		grafanaAvailable = false
 	}
 
+	if grafanaAvailable {
+		// Add the runID, testRunID, and cluster name to grafanaTags. These are the three
+		// template variables grafana uses to filter tests by.
+		c.grafanaTags = []string{vm.SanitizeLabel(runID), vm.SanitizeLabel(testRunID), vm.SanitizeLabel(c.Name())}
+	}
+
 	defer func() {
 		t.end = timeutil.Now()
 		if err := c.removeLabels([]string{VmLabelTestName}); err != nil {
