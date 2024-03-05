@@ -148,7 +148,7 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLoginSQL, _, canUseReplicationMode, isSuperuser, defaultSettings, _, pwRetrievalFn, err :=
+	exists, canLoginSQL, _, canUseReplicationMode, isSuperuser, defaultSettings, subject, pwRetrievalFn, err :=
 		sql.GetUserSessionInitInfo(
 			ctx,
 			execCfg,
@@ -178,7 +178,7 @@ func (c *conn) handleAuthentication(
 	// At this point, we know that the requested user exists and is
 	// allowed to log in. Now we can delegate to the selected AuthMethod
 	// implementation to complete the authentication.
-	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn); err != nil {
+	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn, subject); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)
 		if pErr := (*security.PasswordUserAuthError)(nil); errors.As(err, &pErr) {
 			err = pgerror.WithCandidateCode(err, pgcode.InvalidPassword)

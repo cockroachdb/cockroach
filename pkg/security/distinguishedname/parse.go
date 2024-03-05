@@ -11,6 +11,11 @@
 package distinguishedname
 
 import (
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
+	"slices"
+
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 	"github.com/go-ldap/ldap/v3"
@@ -55,4 +60,68 @@ func ParseDN(dnStr string) (*ldap.DN, error) {
 		return nil, errors.Wrapf(err, "failed to parse distinguished name %s", dnStr)
 	}
 	return dn, nil
+}
+
+// GenerateDN generates a distinguished name for the subject from X.509
+// certificate provided. It retains the sequence of fields as provided in the
+// certificate subject and also parses all fields mentioned in RFC4514 which
+// ldap/v3 library currently supports. It also replaces the CN of the
+// certificate with sqlUserName from current authorization context. If CN does
+// not exist, it adds the sqlUserName as the CN.
+func GenerateDN(cert *x509.Certificate, sqlUserName string) (*ldap.DN, error) {
+	var RDNSeq pkix.RDNSequence
+	_, err := asn1.Unmarshal(cert.RawSubject, &RDNSeq)
+	if err != nil {
+		return nil, err
+	}
+
+	// This is required because RDNSeq.String() reverses the order of fields.
+	// The x509 library possibly intended to use cert.Subject.ToRDNSequence and
+	// RDNSequence.String() in succession which is done in the library function
+	// cert.Subject.String(). But since x509 is incapable of handling all fields
+	// defined in RFC 4514, we need to directly parse cert.RawSubject here.
+	slices.Reverse(RDNSeq)
+	subjectDN, err := ParseDN(RDNSeq.String())
+	if err != nil {
+		return nil, err
+	}
+
+	const (
+		// Go only parses a subset of the possible fields in a DN (golang/go#25667).
+		// We add the remaining ones defined in section 3 of RFC 4514
+		// (https://datatracker.ietf.org/doc/html/rfc4514#section-3)
+		encodedUserID          = "0.9.2342.19200300.100.1.1"
+		encodedDomainComponent = "0.9.2342.19200300.100.1.25"
+		// Since the generate sequence will be matched with role subject, CN needs
+		// to be set as the sqlUserName from current authorization context.
+		commonName = "CN"
+	)
+
+	commonNameReplacementSuccess := false
+	for _, dn := range subjectDN.RDNs {
+		for _, attr := range dn.Attributes {
+			switch attr.Type {
+			case encodedUserID:
+				attr.Type = "UID"
+			case encodedDomainComponent:
+				attr.Type = "DC"
+			case commonName:
+				attr.Value = sqlUserName
+				commonNameReplacementSuccess = true
+			}
+		}
+	}
+
+	if !commonNameReplacementSuccess {
+		subjectDN.RDNs = append(subjectDN.RDNs, &ldap.RelativeDN{
+			[]*ldap.AttributeTypeAndValue{
+				{
+					Type:  "CN",
+					Value: sqlUserName,
+				},
+			},
+		})
+	}
+
+	return subjectDN, nil
 }
