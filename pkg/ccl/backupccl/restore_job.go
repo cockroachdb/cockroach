@@ -2248,6 +2248,11 @@ func (r *restoreResumer) publishDescriptors(
 		return err
 	}
 
+	var tableAutoStatsSettings map[uint32]*catpb.AutoStatsSettings
+	if details.ExperimentalOnline {
+		tableAutoStatsSettings = make(map[uint32]*catpb.AutoStatsSettings, len(details.TableDescs))
+	}
+
 	// Write the new TableDescriptors and flip state over to public so they can be
 	// accessed.
 	for i := range details.TableDescs {
@@ -2258,6 +2263,9 @@ func (r *restoreResumer) publishDescriptors(
 			// download job finishes.
 			boolean := false
 			mutTable.AutoStatsSettings = &catpb.AutoStatsSettings{Enabled: &boolean}
+
+			// Preserve the backed up table stats so the download job re-enables them
+			tableAutoStatsSettings[uint32(details.TableDescs[i].ID)] = details.TableDescs[i].AutoStatsSettings
 		}
 
 		// Note that we don't need to worry about the re-validated indexes for descriptors
@@ -2362,6 +2370,9 @@ func (r *restoreResumer) publishDescriptors(
 	details.SchemaDescs = newSchemas
 	details.DatabaseDescs = newDBs
 	details.FunctionDescs = newFunctions
+	if details.ExperimentalOnline {
+		details.PostDownloadTableAutoStatsSettings = tableAutoStatsSettings
+	}
 	if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
 		return errors.Wrap(err,
 			"updating job details after publishing tables")

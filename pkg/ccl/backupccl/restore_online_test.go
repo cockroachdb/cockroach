@@ -47,6 +47,9 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	defer cleanupFn()
 	externalStorage := "nodelocal://1/backup"
 
+	createStmt := `SELECT create_statement FROM [SHOW CREATE TABLE data.bank]`
+	createStmtRes := sqlDB.QueryStr(t, createStmt)
+
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 
 	params := base.TestClusterArgs{
@@ -74,6 +77,8 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	var downloadJobID jobspb.JobID
 	rSQLDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&downloadJobID)
 	jobutils.WaitForJobToSucceed(t, rSQLDB, downloadJobID)
+
+	rSQLDB.CheckQueryResults(t, createStmt, createStmtRes)
 }
 
 // TestOnlineRestoreWaitForDownload checks that the download job succeeeds even

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -491,7 +492,7 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 	downloadJobRecord := jobs.Record{
 		Description: fmt.Sprintf("Background Data Download for %s", r.job.Payload().Description),
 		Username:    r.job.Payload().UsernameProto.Decode(),
-		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans},
+		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans, PostDownloadTableAutoStatsSettings: details.PostDownloadTableAutoStatsSettings},
 		Progress:    jobspb.RestoreProgress{},
 	}
 
@@ -621,13 +622,30 @@ func (r *restoreResumer) cleanupAfterDownload(
 	ctx, sp := tracing.ChildSpan(ctx, "backupccl.cleanupAfterDownload")
 	defer sp.Finish()
 
-	executor := r.execCfg.InternalDB.Executor()
-
-	// Re-enable automatic stats collection on restored tables.
-	for _, table := range details.TableDescs {
-		_, err := executor.Exec(ctx, "enable-stats", nil, `ALTER TABLE $1 SET (sql_stats_automatic_collection_enabled = true);`, table.Name)
-		if err != nil {
-			log.Warningf(ctx, "could not enable automatic stats on table %s", table)
+	// Try to restore automatic stats collection preference on each restored
+	// table.
+	for id, settings := range details.PostDownloadTableAutoStatsSettings {
+		if err := sql.DescsTxn(ctx, r.execCfg, func(
+			ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+		) error {
+			b := txn.KV().NewBatch()
+			newTableDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, catid.DescID(id))
+			if err != nil {
+				return err
+			}
+			newTableDesc.AutoStatsSettings = settings
+			if err := descsCol.WriteDescToBatch(
+				ctx, false /* kvTrace */, newTableDesc, b); err != nil {
+				return err
+			}
+			if err := txn.KV().Run(ctx, b); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			// Re-enabling stats is best effort. The user may have dropped the table
+			// since it came online.
+			log.Warningf(ctx, "failed to re-enable auto stats on table %d", id)
 		}
 	}
 	return nil

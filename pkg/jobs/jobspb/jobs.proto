@@ -19,6 +19,7 @@ import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
+import "sql/catalog/catpb/catalog.proto";
 import "multitenant/mtinfopb/info.proto";
 import "sql/sessiondatapb/session_data.proto";
 import "util/hlc/timestamp.proto";
@@ -504,8 +505,13 @@ message RestoreDetails {
   // UnsafeRestoreIncompatibleVersion allows restoring a backup older than the min compatible
   // version.
   bool unsafe_restore_incompatible_version = 34;
+ 
+  // PostDownloadTableAutoStatsSettings contains the backed up auto stats
+  // settings for online restored tables. These setting will be restored at the
+  // end of the download job. 
+  map<uint32,cockroach.sql.catalog.catpb.AutoStatsSettings> post_download_table_auto_stats_settings = 35;
 
-  // NEXT ID: 34.
+  // NEXT ID: 36.
 }
 
 
