@@ -21,7 +21,6 @@ import (
 )
 
 var dataDrivenOutPath = flag.String("data-driven", "", "path to the output file")
-var restoreMidSchemaChangeOutPath = flag.String("restore-mid-schema-change", "", "path to the output file")
 
 func genTestDataDriven() {
 	type TestCase struct {
@@ -61,34 +60,11 @@ func genTestDataDriven() {
 	}
 }
 
-func genTestRestoreMidSchemaChange() {
-	type testCase struct {
-		SchemaOnly, ClusterRestore bool
-	}
-	var testCases []testCase
-	for _, SchemaOnly := range []bool{true, false} {
-		for _, ClusterRestore := range []bool{true, false} {
-			testCases = append(testCases, testCase{SchemaOnly, ClusterRestore})
-		}
-	}
-	data := struct{ Tests []testCase }{Tests: testCases}
-	tmpl := template.Must(template.New("source").Parse(test_restore_mid_schema_change_template))
-	file, err := os.Create(filepath.Join(*restoreMidSchemaChangeOutPath))
-	if err != nil {
-		panic(errors.Wrap(err, "failed to create file"))
-	}
-	defer file.Close()
-	if err := tmpl.Execute(file, data); err != nil {
-		panic(errors.Wrap(err, "failed to execute template"))
-	}
-}
-
 func main() {
 	flag.Parse()
-	if *dataDrivenOutPath == "" || *restoreMidSchemaChangeOutPath == "" {
+	if *dataDrivenOutPath == "" {
 		panic(`you need to pass values for the following flags:
--restore-memory-monitoring -data-driven -restore-mid-schema-change`)
+-restore-memory-monitoring -data-driven`)
 	}
 	genTestDataDriven()
-	genTestRestoreMidSchemaChange()
 }
