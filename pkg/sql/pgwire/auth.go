@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/go-ldap/ldap/v3"
 )
 
 const (
@@ -148,7 +149,7 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLoginSQL, _, canUseReplicationMode, isSuperuser, defaultSettings, _, pwRetrievalFn, err :=
+	exists, canLoginSQL, _, canUseReplicationMode, isSuperuser, defaultSettings, subject, pwRetrievalFn, err :=
 		sql.GetUserSessionInitInfo(
 			ctx,
 			execCfg,
@@ -178,7 +179,7 @@ func (c *conn) handleAuthentication(
 	// At this point, we know that the requested user exists and is
 	// allowed to log in. Now we can delegate to the selected AuthMethod
 	// implementation to complete the authentication.
-	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn); err != nil {
+	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn, subject); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)
 		if pErr := (*security.PasswordUserAuthError)(nil); errors.As(err, &pErr) {
 			err = pgerror.WithCandidateCode(err, pgcode.InvalidPassword)
@@ -419,6 +420,8 @@ type AuthConn interface {
 	LogAuthOK(ctx context.Context)
 	// GetTenantSpecificMetrics returns the tenant-specific metrics for the connection.
 	GetTenantSpecificMetrics() *tenantSpecificMetrics
+	// GetRoleSubject returns the LDAP subject set for the user role
+	GetRoleSubject() *ldap.DN
 }
 
 // authPipe is the implementation for the authenticator and AuthConn interfaces.
@@ -582,4 +585,9 @@ func (p *authPipe) SendAuthRequest(authType int32, data []byte) error {
 // GetTenantSpecificMetrics is part of the AuthConn interface.
 func (p *authPipe) GetTenantSpecificMetrics() *tenantSpecificMetrics {
 	return p.c.metrics
+}
+
+// GetRoleSubject is part of the AuthConn interface.
+func (p *authPipe) GetRoleSubject() *ldap.DN {
+	return p.c.sessionArgs.RoleSubject
 }

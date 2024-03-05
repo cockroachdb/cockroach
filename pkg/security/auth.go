@@ -14,15 +14,20 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/go-ldap/ldap/v3"
 )
 
 var certPrincipalMap struct {
@@ -30,11 +35,14 @@ var certPrincipalMap struct {
 	m map[string]string
 }
 
-// CertificateUserScope indicates the scope of a user certificate i.e.
-// which tenant the user is allowed to authenticate on. Older client certificates
+// CertificateUserScope indicates the scope of a user certificate i.e. which
+// tenant the user is allowed to authenticate on. Older client certificates
 // without a tenant scope are treated as global certificates which can
-// authenticate on any tenant strictly for backward compatibility with the
-// older certificates.
+// authenticate on any tenant strictly for backward compatibility with the older
+// certificates. A certificate must specify the SQL user name in either the CN
+// or a DNS SAN entry, so one certificate has multiple candidate usernames. The
+// GetCertificateUserScope function expands a cert into a set of "scopes" with
+// each possible username (and tenant ID).
 type CertificateUserScope struct {
 	Username string
 	TenantID roachpb.TenantID
@@ -100,7 +108,59 @@ func getCertificatePrincipals(cert *x509.Certificate) []string {
 	return results
 }
 
-// GetCertificateUserScope extracts the certificate scopes from a client certificate.
+// generateSubjectDNSequence generates a distinguished name for the subject from
+// X.509 certificate provided. It retains the sequence of fields as provided in
+// the certificate subject and also parses all fields mentioned in RFC4514 which
+// ldap/v3 library currently supports. It also replaces the CN of the
+// certificate with sqlUserName from current authorization context.
+func generateSubjectDNSequence(cert *x509.Certificate, sqlUserName string) (*ldap.DN, error) {
+	var RDNSeq pkix.RDNSequence
+	_, err := asn1.Unmarshal(cert.RawSubject, &RDNSeq)
+	if err != nil {
+		return nil, err
+	}
+
+	// This is required because RDNSeq.String() reverses the order of fields.
+	// The x509 library possibly intended to use cert.Subject.ToRDNSequence and
+	// RDNSequence.String() in succession which is done in the library function
+	// cert.Subject.String(). But since x509 is incapable of handling all fields
+	// defined in RFC 4514, we need to directly parse cert.RawSubject here.
+	slices.Reverse(RDNSeq)
+	subjectDN, err := distinguishedname.ParseDN(RDNSeq.String())
+	if err != nil {
+		return nil, err
+	}
+
+	const (
+		// Go only parses a subset of the possible fields in a DN (golang/go#25667).
+		// We add the remaining ones defined in section 3 of RFC 4514
+		// (https://datatracker.ietf.org/doc/html/rfc4514#section-3)
+		encodedUserID          = "0.9.2342.19200300.100.1.1"
+		encodedDomainComponent = "0.9.2342.19200300.100.1.25"
+		// Since the generate sequence will be matched with role subject, CN needs
+		// to be set as the sqlUserName from current authorization context.
+		commonName = "CN"
+	)
+	for _, dn := range subjectDN.RDNs {
+		for _, attr := range dn.Attributes {
+			switch attr.Type {
+			case encodedUserID:
+				attr.Type = "UID"
+			case encodedDomainComponent:
+				attr.Type = "DC"
+			case commonName:
+				attr.Value = sqlUserName
+			}
+		}
+	}
+
+	return subjectDN, nil
+}
+
+// GetCertificateUserScope extracts the certificate scopes from a client
+// certificate. It tries to get CRDB prefixed SAN URIs and extracts tenantID and
+// user information. If there is no such URI, then it gets principal transformed
+// CN and SAN DNSNames with global scope.
 func GetCertificateUserScope(
 	peerCert *x509.Certificate,
 ) (userScopes []CertificateUserScope, _ error) {
@@ -148,6 +208,7 @@ func UserAuthCertHook(
 	tlsState *tls.ConnectionState,
 	tenantID roachpb.TenantID,
 	certManager *CertificateManager,
+	roleSubject *ldap.DN,
 ) (UserAuthHook, error) {
 	var certUserScope []CertificateUserScope
 	if !insecureMode {
@@ -190,7 +251,12 @@ func UserAuthCertHook(
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
-		if ValidateUserScope(certUserScope, systemIdentity.Normalized(), tenantID) {
+		certSubject, err := generateSubjectDNSequence(peerCert, systemIdentity.Normalized())
+		if err != nil {
+			return errors.Errorf("could not parse certificate subject DN")
+		}
+
+		if ValidateUserScope(certUserScope, systemIdentity.Normalized(), tenantID, roleSubject, certSubject) {
 			if certManager != nil {
 				certManager.MaybeUpsertClientExpiration(
 					ctx,
@@ -200,7 +266,12 @@ func UserAuthCertHook(
 			}
 			return nil
 		}
-		return errors.WithDetailf(errors.Errorf("certificate authentication failed for user %q", systemIdentity),
+		return errors.WithDetailf(
+			errors.Errorf(
+				"certificate authentication failed for user %q (DN: %s)",
+				systemIdentity,
+				roleSubject,
+			),
 			"The client certificate is valid for %s.", FormatUserScopes(certUserScope))
 	}, nil
 }
@@ -294,17 +365,24 @@ func (i *PasswordUserAuthError) FormatError(p errors.Printer) error {
 	return i.err
 }
 
-// ValidateUserScope returns true if the user is a valid user for the tenant based on the certificate
-// user scope. It also returns true if the certificate is a global certificate. A client certificate
-// is considered global only when it doesn't contain a tenant SAN which is only possible for older
-// client certificates created prior to introducing tenant based scoping for the client.
+// ValidateUserScope returns true if the user is a valid user for the tenant
+// based on the certificate user scope. It also returns true if the certificate
+// is a global certificate. A client certificate is considered global only when
+// it doesn't contain a tenant SAN which is only possible for older client
+// certificates created prior to introducing tenant based scoping for the
+// client. Additionally, if subject role option is set for a user, we check if
+// certificate parsed subject DN matches the set subject.
 func ValidateUserScope(
-	certUserScope []CertificateUserScope, user string, tenantID roachpb.TenantID,
+	certUserScope []CertificateUserScope,
+	user string,
+	tenantID roachpb.TenantID,
+	roleSubject *ldap.DN,
+	certSubject *ldap.DN,
 ) bool {
 	for _, scope := range certUserScope {
-		if scope.Username == user {
-			// If username matches, allow authentication to succeed if the tenantID is a match
-			// or if the certificate scope is global.
+		if scope.Username == user && (roleSubject == nil || roleSubject.Equal(certSubject)) {
+			// If username and subject DN match, allow authentication to succeed if
+			// the tenantID is a match or if the certificate scope is global.
 			if scope.TenantID == tenantID || scope.Global {
 				return true
 			}
