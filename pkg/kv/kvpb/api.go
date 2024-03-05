@@ -75,15 +75,18 @@ const (
 	canSkipLocked                                             // commands which can evaluate under the SkipLocked wait policy
 	bypassesReplicaCircuitBreaker                             // commands which bypass the replica circuit breaker, i.e. opt out of fail-fast
 	requiresClosedTSOlderThanStorageSnapshot                  // commands which read a replica's closed timestamp that is older than the state of the storage engine
+	canPipeline                                               // commands which can be pipelined
+	canParallelCommit                                         // commands which can be part of a parallel commit batch
 )
 
 // flagDependencies specifies flag dependencies, asserted by TestFlagCombinations.
 var flagDependencies = map[flag][]flag{
-	isAdmin:         {isAlone},
-	isLocking:       {isTxn},
-	isIntentWrite:   {isWrite, isLocking},
-	appliesTSCache:  {isWrite},
-	skipsLeaseCheck: {isAlone},
+	isAdmin:           {isAlone},
+	isLocking:         {isTxn},
+	isIntentWrite:     {isWrite, isLocking},
+	canParallelCommit: {canPipeline},
+	appliesTSCache:    {isWrite},
+	skipsLeaseCheck:   {isAlone},
 }
 
 // flagExclusions specifies flag incompatibilities, asserted by TestFlagCombinations.
@@ -178,6 +181,17 @@ func CanSkipLocked(args Request) bool {
 // addressed to an unavailable range (instead of failing fast).
 func BypassesReplicaCircuitBreaker(args Request) bool {
 	return (args.flags() & bypassesReplicaCircuitBreaker) != 0
+}
+
+// CanPipeline returns true iff the BatchRequest can be pipelined.
+func CanPipeline(args Request) bool {
+	return (args.flags() & canPipeline) != 0
+}
+
+// CanParallelCommit returns true iff the BatchRequest can be part of a batch
+// that is committed in parallel.
+func CanParallelCommit(args Request) bool {
+	return (args.flags() & canParallelCommit) != 0
 }
 
 // Request is an interface for RPC requests.
@@ -1569,7 +1583,8 @@ func (gr *GetRequest) flags() flag {
 }
 
 func (*PutRequest) flags() flag {
-	return isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure
+	return isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure |
+		canPipeline | canParallelCommit
 }
 
 // ConditionalPut effectively reads without writing if it hits a
@@ -1579,7 +1594,8 @@ func (*PutRequest) flags() flag {
 // transaction to be retried at end transaction.
 func (*ConditionalPutRequest) flags() flag {
 	return isRead | isWrite | isTxn | isLocking | isIntentWrite |
-		appliesTSCache | updatesTSCache | updatesTSCacheOnErr | canBackpressure
+		appliesTSCache | updatesTSCache | updatesTSCacheOnErr | canBackpressure | canPipeline |
+		canParallelCommit
 }
 
 // InitPut, like ConditionalPut, effectively reads without writing if it hits a
@@ -1589,7 +1605,8 @@ func (*ConditionalPutRequest) flags() flag {
 // to be retried at end transaction.
 func (*InitPutRequest) flags() flag {
 	return isRead | isWrite | isTxn | isLocking | isIntentWrite |
-		appliesTSCache | updatesTSCache | updatesTSCacheOnErr | canBackpressure
+		appliesTSCache | updatesTSCache | updatesTSCacheOnErr | canBackpressure |
+		canPipeline | canParallelCommit
 }
 
 // Increment reads the existing value, but always leaves an intent so
@@ -1598,7 +1615,8 @@ func (*InitPutRequest) flags() flag {
 // error immediately instead of continuing a serializable transaction
 // to be retried at end transaction.
 func (*IncrementRequest) flags() flag {
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure |
+		canPipeline | canParallelCommit
 }
 
 func (*DeleteRequest) flags() flag {
@@ -1622,6 +1640,10 @@ func (drr *DeleteRangeRequest) flags() flag {
 	// transaction by TxnCoordSender, which can occur if the command spans
 	// multiple ranges.
 	//
+	// As inline deletes cannot be part of a transaction, and don't go through the
+	// TxnCoordSender stack, there's no pipelining to speak of. As such, they
+	// don't set the canPipeline flag as well.
+	//
 	// TODO(mrtracy): The behavior of DeleteRangeRequest with "inline" set has
 	// likely diverged enough that it should be promoted into its own command.
 	// However, it is complicated to plumb a new command through the system,
@@ -1637,8 +1659,16 @@ func (drr *DeleteRangeRequest) flags() flag {
 	// it. Note that, even if we didn't update the ts cache, deletes of keys
 	// that exist would not be lost (since the DeleteRange leaves intents on
 	// those keys), but deletes of "empty space" would.
+	//
+	// DeleteRange requests work operate over a range of keys. As such, we only
+	// know the actual keys that were deleted on the response path, not on the
+	// request path. This prevents them from being part of a batch that can be
+	// committed using parallel commits -- that's because for parallel commit
+	// recovery we need the entire in-flight write set to plop on the txn record,
+	// and we don't have that on the request path if the batch contains a
+	// DeleteRange request.
 	return isRead | isWrite | isTxn | isLocking | isIntentWrite | isRange |
-		appliesTSCache | updatesTSCache | needsRefresh | canBackpressure
+		appliesTSCache | updatesTSCache | needsRefresh | canBackpressure | canPipeline
 }
 
 // Note that ClearRange commands cannot be part of a transaction as

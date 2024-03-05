@@ -492,7 +492,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, pErr
 	}
 
-	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() {
+	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.disableElideEndTxn {
 		return nil, tc.finalizeNonLockingTxnLocked(ctx, ba)
 	}
 

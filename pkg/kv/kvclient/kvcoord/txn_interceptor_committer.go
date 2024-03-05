@@ -130,12 +130,13 @@ var parallelCommitsEnabled = settings.RegisterBoolSetting(
 // In all cases, the interceptor abstracts away the details of this from all
 // interceptors above it in the coordinator interceptor stack.
 type txnCommitter struct {
-	st         *cluster.Settings
-	stopper    *stop.Stopper
-	wrapped    lockedSender
-	metrics    *TxnMetrics
-	mu         sync.Locker
-	disable1PC bool
+	st                 *cluster.Settings
+	stopper            *stop.Stopper
+	wrapped            lockedSender
+	metrics            *TxnMetrics
+	mu                 sync.Locker
+	disable1PC         bool
+	disableElideEndTxn bool
 }
 
 // SendLocked implements the lockedSender interface.
@@ -143,6 +144,7 @@ func (tc *txnCommitter) SendLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
 	tc.maybeDisable1PC(ba)
+	tc.maybeDisableElideEndTxn(ba)
 	// If the batch does not include an EndTxn request, pass it through.
 	rArgs, hasET := ba.GetArg(kvpb.EndTxn)
 	if !hasET {
@@ -154,10 +156,8 @@ func (tc *txnCommitter) SendLocked(
 		return nil, kvpb.NewError(err)
 	}
 
-	// Determine whether we can elide the EndTxn entirely. We can do so if the
-	// transaction is read-only, which we determine based on whether the EndTxn
-	// request contains any writes.
-	if len(et.LockSpans) == 0 && len(et.InFlightWrites) == 0 {
+	// Elide the EndTxn if we're able to do so.
+	if !tc.disableElideEndTxn {
 		return tc.sendLockedWithElidedEndTxn(ctx, ba, et)
 	}
 
@@ -599,6 +599,21 @@ func (tc *txnCommitter) maybeDisable1PC(ba *kvpb.BatchRequest) {
 				return
 			}
 		}
+	}
+}
+
+// maybeDisableElideEndTxn determines whether the supplied batch prevents us
+// from eliding the EndTxn request when the time comes. We can only elide EndTxn
+// requests if the transaction is read-only and does not acquire locks.
+func (tc *txnCommitter) maybeDisableElideEndTxn(ba *kvpb.BatchRequest) {
+	if tc.disableElideEndTxn {
+		return // already disabled; nothing to do
+	}
+	// Locks (including intent writes) acquired by a transaction need to be
+	// resolved after it finalizes. As a result, locking requests prevent us from
+	// eliding EndTxn requests (when the time comes to issue one).
+	if ba.IsLocking() {
+		tc.disableElideEndTxn = true
 	}
 }
 

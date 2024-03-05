@@ -522,9 +522,10 @@ func TestTxnPipelinerReads(t *testing.T) {
 	require.Equal(t, 0, tp.ifWrites.len())
 }
 
-// TestTxnPipelinerRangedWrites tests that txnPipeliner will never perform
-// ranged write operations using async consensus. It also tests that ranged
-// writes will correctly chain on to existing in-flight writes.
+// TestTxnPipelinerRangedWrites tests that the txnPipeliner can perform some
+// ranged write operations using async consensus. In particular, ranged requests
+// which have the canPipeline flag set. It also verifies that ranged writes will
+// correctly chain on to existing in-flight writes.
 func TestTxnPipelinerRangedWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -534,6 +535,7 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 	txn := makeTxnProto()
 	keyA, keyD := roachpb.Key("a"), roachpb.Key("d")
 
+	// First, test DeleteRangeRequests which can be pipelined.
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
 	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
@@ -541,7 +543,7 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
-		require.False(t, ba.AsyncConsensus)
+		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[1].GetInner())
 
@@ -553,8 +555,12 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 	br, pErr := tp.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
-	// The PutRequest was not run asynchronously, so it is not outstanding.
-	require.Equal(t, 0, tp.ifWrites.len())
+	// The PutRequest was run asynchronously, so it has outstanding writes.
+	require.Equal(t, 1, tp.ifWrites.len())
+
+	// Clear outstanding write added by the put request from the set of inflight
+	// writes before inserting new writes below.
+	tp.ifWrites.clear(true /* reuse */)
 
 	// Add five keys into the in-flight writes set, one of which overlaps with
 	// the Put request and two others which also overlap with the DeleteRange
@@ -570,7 +576,7 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 5)
-		require.False(t, ba.AsyncConsensus)
+		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
 		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[2].GetInner())
@@ -604,7 +610,31 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
-	require.Equal(t, 2, tp.ifWrites.len())
+	// The put will be added to ifWrites, and the 2 from before that weren't
+	// covered by QueryIntent requests.
+	require.Equal(t, 3, tp.ifWrites.len())
+
+	// Now, test RefreshRangeRequests, which cannot be pipelined.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.RefreshRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyD}})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 2)
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.RefreshRangeRequest{}, ba.Requests[1].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 0, tp.ifWrites.len())
 }
 
 // TestTxnPipelinerNonTransactionalRequests tests that non-transaction requests
@@ -913,7 +943,7 @@ func TestTxnPipelinerIntentMissingError(t *testing.T) {
 		t.Run(fmt.Sprintf("errIdx=%d", errIdx), func(t *testing.T) {
 			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 7)
-				require.False(t, ba.AsyncConsensus)
+				require.True(t, ba.AsyncConsensus)
 				require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
 				require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[2].GetInner())
@@ -937,6 +967,67 @@ func TestTxnPipelinerIntentMissingError(t *testing.T) {
 			require.Equal(t, kvpb.RETRY_ASYNC_WRITE_FAILURE, pErr.GetDetail().(*kvpb.TransactionRetryError).Reason)
 		})
 	}
+}
+
+// TestTxnPipelinerDeleteRangeRequests ensures the txnPipelineer correctly
+// decides whether to pipeline DeleteRangeRequests. In particular, it ensures
+// DeleteRangeRequests can only be pipelined iff the batch doesn't contain an
+// EndTxn request.
+func TestTxnPipelinerDeleteRangeRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
+
+	txn := makeTxnProto()
+	keyA, keyB, keyD, keyE := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("d"), roachpb.Key("e")
+
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyD}})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.True(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[0].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		resp := br.Responses[0].GetInner()
+		resp.(*kvpb.DeleteRangeResponse).Keys = []roachpb.Key{keyB}
+		return br, nil
+	})
+
+	br, pErr := tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 1, tp.ifWrites.len())
+
+	// Now, create a batch which has (another) DeleteRangRequest and an
+	// EndTxnRequest as well.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyD, EndKey: keyE}})
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 3)
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
+		require.Equal(t, ba.Requests[1].GetInner().(*kvpb.QueryIntentRequest).Key, keyB)
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		resp := br.Responses[1].GetInner()
+		resp.(*kvpb.QueryIntentResponse).FoundUnpushedIntent = true
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 0, tp.ifWrites.len()) // should be cleared out
 }
 
 // TestTxnPipelinerEnableDisableMixTxn tests that the txnPipeliner behaves
