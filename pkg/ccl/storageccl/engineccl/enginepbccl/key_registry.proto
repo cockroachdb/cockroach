@@ -17,6 +17,12 @@ enum EncryptionType {
   AES128_CTR = 1;
   AES192_CTR = 2;
   AES256_CTR = 3;
+  // AES in counter mode with OpenSSL-compatible behavior for counter wraparound.
+  // This version is faster than the original implementation becasue it is able
+  // to offload more work to highly-optimized library implementations.
+  AES_128_CTR_V2 = 4;
+  AES_192_CTR_V2 = 5;
+  AES_256_CTR_V2 = 6;
 }
 
 // DataKeysRegistry contains all data keys (including the raw key) as well

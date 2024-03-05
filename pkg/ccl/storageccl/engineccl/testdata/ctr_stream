@@ -127,14 +127,33 @@ ba f1 04 5a 3c 96 0e a4 13 aa 61 a2 81 9e aa 0b
 70 0b 5a 9f fe fd 97 da 11 bf ea 5d 53 5e 54 5e
 dd 3b 2d 67 71 8b 10 ac 14 a9 91 29 13 4b 91 1f
 
-# V1 has a bug when the 32-bit counter wraps around.
-encrypt offset=68719476736 skip-v1=true
+# V1 and V2 diverge when the low 32 bits overflow.
+# See below that the first line (one 16-byte block)
+# of v1 and v2 are the same and then the overflow
+# makes subsequent rows differ.
+create-iv name=near-overflow
+00 00 00 00 00 00 00 00 00 00 00 00 ff ff ff ff
 ----
-35 cf c5 43 7e 0b 72 07 d7 c0 c0 fe 97 09 b9 bf
-de 97 8c 3c 9b 9c da f4 bf e8 78 6a 75 cc bd 13
-c2 c8 28 6b 19 ae d5 96 6d aa eb 6f 5c 25 c3 f3
-23 50 60 1f 05 dd 13 d5 3c d4 d0 bc 55 d8 11 6d
-e4 dc aa 44 1f f0 a5 e6 b4 53 a3 5d 72 ca 94 b7
-5e 90 a3 4b 85 5e 77 32 62 0c 63 46 5c 63 23 10
-42 bc 8e 63 df ca b4 d7 b7 05 60 96 3d 08 5e 0d
-0f 0e 97 bf 1f 0c 92 3b 87 62 fc 0b f5 c9 bc e4
+ok
+
+encrypt offset=0 iv=near-overflow only-version=v1
+----
+de 67 4c 32 f0 97 b4 f4 b0 cf 86 36 7f 9b 05 bb
+ed 2f 5b d0 36 7b 42 8b 48 2d 86 ae aa ad 28 65
+d6 34 64 4b f6 b9 ac 9c 5a af 35 be 2d 19 00 21
+61 22 5d 5a 2c 29 84 da 05 66 7c 4f d2 de 89 08
+c1 c8 df 90 01 59 4c 1c b6 fe 01 a0 0e 25 9f 70
+1c fb 8e 2b 46 b1 eb 19 5c 06 1b 2f 47 68 a7 ce
+d5 f4 12 81 cb aa 93 21 30 db 52 9c 6f 99 3d 1b
+64 67 27 a2 f7 2f ad db 5c b7 90 0c 08 1a f8 51
+
+encrypt offset=0 iv=near-overflow only-version=v2
+----
+de 67 4c 32 f0 97 b4 f4 b0 cf 86 36 7f 9b 05 bb
+bf b6 8a 5f 7e 70 a4 ce 15 c5 1f 18 53 a5 2c c6
+96 11 3b 8d 2e ba 33 f1 48 f0 67 04 ef cd 36 58
+5c 8b 3d d7 d1 65 09 58 e4 b3 0a 97 ab 9c af 2d
+b4 dd 3d 13 0b 18 63 3d 47 60 04 a1 cf c9 3f 6a
+99 6d 14 71 a1 69 5e 19 f7 f4 44 08 9d c0 d7 01
+f4 d1 60 3e 16 ad 55 43 e5 a6 76 27 38 36 10 78
+95 72 a7 92 cb 7e f6 27 66 b6 8f 2c 52 cb f9 10
