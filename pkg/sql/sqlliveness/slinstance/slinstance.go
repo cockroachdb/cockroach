@@ -329,7 +329,7 @@ func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
 	// don't cancel their ctx.
 	ctx, cancel := l.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
-	t := timeutil.NewTimer()
+	var t timeutil.Timer
 	defer t.Stop()
 
 	t.Reset(0)

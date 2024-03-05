@@ -5304,7 +5304,7 @@ func TestOptimisticEvalRetry(t *testing.T) {
 		})
 	}()
 	removedLocks := false
-	timer := timeutil.NewTimer()
+	var timer timeutil.Timer
 	timer.Reset(time.Second * 2)
 	defer timer.Stop()
 	done := false

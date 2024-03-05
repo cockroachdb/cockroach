@@ -157,33 +157,19 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
 
 func (r *Registry) poll(ctx context.Context) {
 	var (
-		timer *timeutil.Timer
-		// We need to store timer.C reference separately because timer.Stop()
-		// (called when polling is disabled) puts timer into the pool and
-		// prohibits further usage of stored timer.C.
-		timerC              <-chan time.Time
+		timer               timeutil.Timer
 		lastPoll            time.Time
 		deadline            time.Time
 		pollIntervalChanged = make(chan struct{}, 1)
 		maybeResetTimer     = func() {
 			if interval := pollingInterval.Get(&r.st.SV); interval == 0 {
 				// Setting the interval to zero stops the polling.
-				if timer != nil {
-					timer.Stop()
-					timer = nil
-				}
-				// nil out the channel so that it'd block forever in the loop
-				// below (until the polling interval is changed).
-				timerC = nil
+				timer.Stop()
 			} else {
 				newDeadline := lastPoll.Add(interval)
 				if deadline.IsZero() || !deadline.Equal(newDeadline) {
 					deadline = newDeadline
-					if timer == nil {
-						timer = timeutil.NewTimer()
-					}
 					timer.Reset(timeutil.Until(deadline))
-					timerC = timer.C
 				}
 			}
 		}
@@ -208,7 +194,7 @@ func (r *Registry) poll(ctx context.Context) {
 		select {
 		case <-pollIntervalChanged:
 			continue // go back around and maybe reset the timer
-		case <-timerC:
+		case <-timer.C:
 			timer.Read = true
 		case <-ctx.Done():
 			return

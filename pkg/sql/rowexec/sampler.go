@@ -254,7 +254,7 @@ func (s *samplerProcessor) mainLoop(
 
 	var invKeys [][]byte
 	invRow := rowenc.EncDatumRow{rowenc.EncDatum{}}
-	timer := timeutil.NewTimer()
+	var timer timeutil.Timer
 	defer timer.Stop()
 
 	for {

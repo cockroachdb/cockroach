@@ -299,7 +299,7 @@ func (s *EventsExporter) Start(ctx context.Context, stopper *stop.Stopper) error
 		defer func() {
 			_ = s.conn.Close() // nolint:grpcconnclose
 		}()
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		defer timer.Stop()
 		if s.flushInterval != 0 {
 			timer.Reset(s.flushInterval)

@@ -1406,7 +1406,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 		// against this in checkRequestTimeRLocked). So instead of assuming
 		// anything, we iterate and check again.
 		pErr = func() (pErr *kvpb.Error) {
-			slowTimer := timeutil.NewTimer()
+			var slowTimer timeutil.Timer
 			defer slowTimer.Stop()
 			slowTimer.Reset(base.SlowRequestThreshold)
 			tBegin := timeutil.Now()
