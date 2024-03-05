@@ -77,7 +77,7 @@ func registerRebalanceLoad(r registry.Registry) {
 		// This test asserts on the distribution of CPU utilization between nodes
 		// in the cluster, having backups also running could lead to unrelated
 		// flakes - disable backup schedule.
-		startOpts := option.DefaultStartOptsNoBackups()
+		startOpts := option.NewStartOpts(option.NoBackupSchedule)
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		appNode := c.Node(c.Spec().NodeCount)
 		numNodes := len(roachNodes)

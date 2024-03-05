@@ -229,7 +229,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 		// splitting can significantly change the underlying layout of the table and
 		// affect benchmark results.
 		c.Wipe(ctx, roachNodes)
-		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), roachNodes)
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), roachNodes)
 		time.Sleep(restartWait)
 
 		// We currently only support one loadGroup.

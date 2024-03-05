@@ -66,7 +66,7 @@ func registerElasticIO(r registry.Registry) {
 			err := c.StartGrafana(ctx, t.L(), promCfg)
 			require.NoError(t, err)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workAndPromNode))
-			startOpts := option.DefaultStartOptsNoBackups()
+			startOpts := option.NewStartOpts(option.NoBackupSchedule)
 			roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				"--vmodule=io_load_listener=2")

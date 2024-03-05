@@ -47,7 +47,10 @@ func registerIndexOverload(r registry.Registry) {
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := c.Spec().NodeCount
 
-			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, crdbNodes))
+			c.Start(
+				ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule),
+				install.MakeClusterSettings(), c.Range(1, crdbNodes),
+			)
 
 			{
 				promCfg := &prometheus.Config{}

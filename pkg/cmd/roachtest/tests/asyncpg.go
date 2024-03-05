@@ -25,7 +25,7 @@ import (
 
 var asyncpgRunTestCmd = fmt.Sprintf(`
 source venv/bin/activate &&
-cd /mnt/data1/asyncpg && 
+cd /mnt/data1/asyncpg &&
 PGPORT={pgport:1} PGHOST=localhost PGUSER=%s PGPASSWORD=%s PGSSLROOTCERT=$HOME/%s/ca.crt PGSSLMODE=require PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
 `, install.DefaultUser, install.DefaultPassword, install.CockroachNodeCertsDir)
 
@@ -47,7 +47,7 @@ func registerAsyncpg(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 
-		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {

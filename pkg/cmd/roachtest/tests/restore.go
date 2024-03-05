@@ -879,7 +879,7 @@ func (rd *restoreDriver) defaultClusterSettings() []install.ClusterSettingOption
 }
 
 func (rd *restoreDriver) roachprodOpts() option.StartOpts {
-	opts := option.DefaultStartOptsNoBackups()
+	opts := option.NewStartOpts(option.NoBackupSchedule)
 	opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs, rd.sp.extraArgs...)
 	return opts
 }

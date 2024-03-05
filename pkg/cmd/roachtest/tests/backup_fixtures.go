@@ -154,7 +154,7 @@ func (bd *backupDriver) prepareCluster(ctx context.Context) {
 
 	require.NoError(bd.t, clusterupgrade.StartWithSettings(ctx, bd.t.L(), bd.c,
 		bd.sp.hardware.getCRDBNodes(),
-		option.DefaultStartOptsNoBackups(),
+		option.NewStartOpts(option.NoBackupSchedule),
 		install.BinaryOption(binaryPath)))
 
 	bd.assertCorrectCockroachBinary(ctx)

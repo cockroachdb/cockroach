@@ -436,7 +436,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 	// TODO(DarrylWong): enable metamorphic contants once issue is resolved
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true")
-	startOpts := option.DefaultStartOptsNoBackups()
+	startOpts := option.NewStartOpts(option.NoBackupSchedule)
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 		"--vmodule=split_queue=2,store_rebalancer=2,allocator=2,replicate_queue=2,"+
 			"decider=3,replica_split_load=1",

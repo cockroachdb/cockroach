@@ -138,7 +138,7 @@ func runMultiTenantFairness(
 
 	t.L().Printf("starting cockroach (<%s)", time.Minute)
 	c.Start(ctx, t.L(),
-		option.DefaultStartOptsNoBackups(),
+		option.NewStartOpts(option.NoBackupSchedule),
 		install.MakeClusterSettings(),
 		crdbNode,
 	)
