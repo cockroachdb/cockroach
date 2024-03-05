@@ -28,30 +28,34 @@ func TestGenEncryptionKey(t *testing.T) {
 
 	dir := t.TempDir()
 
-	for _, keySize := range []int{128, 192, 256} {
-		t.Run(fmt.Sprintf("size=%d", keySize), func(t *testing.T) {
-			keyName := fmt.Sprintf("aes-%d.key", keySize)
-			keyPath := filepath.Join(dir, keyName)
+	for _, keyVersion := range []int{1, 2} {
+		for _, keySize := range []int{128, 192, 256} {
+			t.Run(fmt.Sprintf("version=%d/size=%d", keyVersion, keySize), func(t *testing.T) {
+				keyName := fmt.Sprintf("aes-%d-v%d.key", keySize, keyVersion)
+				keyPath := filepath.Join(dir, keyName)
 
-			err := genEncryptionKey(keyPath, keySize, false)
-			require.NoError(t, err)
+				err := genEncryptionKey(keyPath, keySize, false, keyVersion)
+				require.NoError(t, err)
 
-			info, err := os.Stat(keyPath)
-			require.NoError(t, err)
-			// 32-byte id plus the key.
-			assert.EqualValues(t, 32+(keySize/8), info.Size())
+				if keyVersion == 1 {
+					info, err := os.Stat(keyPath)
+					require.NoError(t, err)
+					// 32-byte id plus the key.
+					assert.EqualValues(t, 32+(keySize/8), info.Size())
+				}
 
-			key, err := engineccl.LoadKeyFromFile(vfs.Default, keyPath)
-			require.NoError(t, err)
-			assert.EqualValues(t, keySize/8, len(key.Key))
-			// Key ID is hex encoded on load so it's 64 bytes here but 32 in the file size.
-			assert.EqualValues(t, 64, len(key.Info.KeyId))
+				key, err := engineccl.LoadKeyFromFile(vfs.Default, keyPath)
+				require.NoError(t, err)
+				assert.EqualValues(t, keySize/8, len(key.Key))
+				// Key ID is hex encoded on load so it's 64 bytes here but 32 in the file size.
+				assert.EqualValues(t, 64, len(key.Info.KeyId))
 
-			err = genEncryptionKey(keyPath, keySize, false)
-			require.ErrorContains(t, err, fmt.Sprintf("%s: file exists", keyName))
+				err = genEncryptionKey(keyPath, keySize, false, keyVersion)
+				require.ErrorContains(t, err, fmt.Sprintf("%s: file exists", keyName))
 
-			err = genEncryptionKey(keyPath, keySize, true /* overwrite */)
-			require.NoError(t, err)
-		})
+				err = genEncryptionKey(keyPath, keySize, true /* overwrite */, keyVersion)
+				require.NoError(t, err)
+			})
+		}
 	}
 }
