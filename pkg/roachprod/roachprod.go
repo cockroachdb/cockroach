@@ -1754,10 +1754,23 @@ func GrafanaURL(
 	return urls[0], nil
 }
 
+const ServiceAccountJson = "GRAFANA_SERVICE_ACCOUNT_JSON"
+const ServiceAccountAudience = "GRAFANA_SERVICE_ACCOUNT_AUDIENCE"
+
 func AddGrafanaAnnotation(
 	ctx context.Context, host string, secure bool, req grafana.AddAnnotationRequest,
 ) error {
-	return grafana.AddAnnotation(ctx, host, secure, req)
+	// Read in the service account key and audience, so we can retrieve the identity token.
+	grafanaAudience := os.Getenv(ServiceAccountAudience)
+	if grafanaAudience == "" {
+		return errors.Newf("%s env variable was not found", ServiceAccountAudience)
+	}
+	grafanaKey := os.Getenv(ServiceAccountJson)
+	if grafanaKey == "" {
+		return errors.Newf("%s env variable was not found", ServiceAccountJson)
+	}
+
+	return grafana.AddAnnotation(ctx, host, secure, req, grafanaAudience, grafanaKey)
 }
 
 // PrometheusSnapshot takes a snapshot of prometheus and stores the snapshot and

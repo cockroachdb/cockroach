@@ -26,6 +26,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
@@ -242,6 +243,15 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 	defer func() {
 		prefix := fmt.Sprintf("FINISHED [%s]", timeutil.Since(start))
 		tr.logStep(prefix, ss, l)
+		annotation := fmt.Sprintf("(%d): %s", ss.ID, ss.impl.Description())
+		if tr.cluster != nil {
+			err := tr.cluster.AddGrafanaAnnotation(tr.ctx, tr.logger, grafana.AddAnnotationRequest{
+				Text: annotation, StartTime: start.UnixMilli(), EndTime: timeutil.Now().UnixMilli(),
+			})
+			if err != nil {
+				l.Printf("WARN: Adding Grafana annotation failed: %s", err)
+			}
+		}
 	}()
 
 	if err := panicAsError(l, func() error {

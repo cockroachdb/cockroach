@@ -13,7 +13,6 @@ package grafana
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -24,16 +23,13 @@ import (
 	"google.golang.org/api/idtoken"
 )
 
-const ServiceAccountJson = "GRAFANA_SERVICE_ACCOUNT_JSON"
-const ServiceAccountAudience = "GRAFANA_SERVICE_ACCOUNT_AUDIENCE"
-
 // newGrafanaClient is a helper function that creates an HTTP client to
 // create grafana api calls with.  If secure is true, it tries to get a
 // GCS identity token by using the service account specified by the env
 // variable ServiceAccountJson. This identity token is passed in
 // every request to authenticate with grafana.
 func newGrafanaClient(
-	ctx context.Context, host string, secure bool,
+	ctx context.Context, host string, secure bool, audience string, key string,
 ) (*grafana.GrafanaHTTPAPI, error) {
 	headers := map[string]string{}
 	scheme := "http"
@@ -41,17 +37,7 @@ func newGrafanaClient(
 	if secure {
 		scheme = "https"
 
-		// Read in the service account key and audience, so we can retrieve the identity token.
-		grafanaKey := os.Getenv(ServiceAccountJson)
-		if grafanaKey == "" {
-			return nil, errors.Newf("%s env variable was not found", ServiceAccountJson)
-		}
-		grafanaAudience := os.Getenv(ServiceAccountAudience)
-		if grafanaAudience == "" {
-			return nil, errors.Newf("%s env variable was not found", ServiceAccountAudience)
-		}
-
-		ts, err := idtoken.NewTokenSource(ctx, grafanaAudience, idtoken.WithCredentialsJSON([]byte(grafanaKey)))
+		ts, err := idtoken.NewTokenSource(ctx, audience, idtoken.WithCredentialsJSON([]byte(key)))
 		if err != nil {
 			return nil, errors.Wrap(err, "Error creating GCS oauth token source from specified credential")
 		}
@@ -77,12 +63,19 @@ func newGrafanaClient(
 // AddAnnotation creates an HTTP client and sends a POST request to the
 // specified host name to create an annotation. If successful, it returns
 // the result.
-func AddAnnotation(ctx context.Context, host string, secure bool, req AddAnnotationRequest) error {
+func AddAnnotation(
+	ctx context.Context,
+	host string,
+	secure bool,
+	req AddAnnotationRequest,
+	audience string,
+	key string,
+) error {
 	// Cleanup the host name. The Grafana OpenAPI already appends the scheme
 	// and leading slash.
 	host = strings.Trim(host[strings.Index(host, ":")+1:], "/")
 
-	httpClient, err := newGrafanaClient(ctx, host, secure)
+	httpClient, err := newGrafanaClient(ctx, host, secure, audience, key)
 	if err != nil {
 		return err
 	}
