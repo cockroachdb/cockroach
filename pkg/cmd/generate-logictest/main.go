@@ -358,6 +358,14 @@ func generate() error {
 		if err != nil {
 			return err
 		}
+		readCommittedCalc := logictestbase.ConfigCalculator{
+			ConfigOverrides: []string{"local-read-committed"},
+			RunCCLConfigs:   true,
+		}
+		err = t.addCclLogicTests("TestReadCommittedCCLLogic", readCommittedCalc)
+		if err != nil {
+			return err
+		}
 		tenantCalc := logictestbase.ConfigCalculator{
 			ConfigOverrides:       []string{"3node-tenant"},
 			ConfigFilterOverrides: []string{"3node-tenant-multiregion"},
@@ -368,6 +376,10 @@ func generate() error {
 			return err
 		}
 		err = t.addLogicTests("TestTenantLogic", tenantCalc)
+		if err != nil {
+			return err
+		}
+		err = t.addExecBuildLogicTests("TestReadCommittedExecBuild", readCommittedCalc)
 		if err != nil {
 			return err
 		}
