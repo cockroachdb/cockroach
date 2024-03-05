@@ -1159,6 +1159,59 @@ var grafanaURLCmd = &cobra.Command{
 	}),
 }
 
+var grafanaAnnotationCmd = &cobra.Command{
+	Use:   `grafana-annotation <host> <text> --secure --tags [<tag1>, ...] --dashboard-uid <dashboard-uid> --time-range [<start-time> <end-time>]`,
+	Short: `adds an annotation to the specified grafana instance`,
+	Long: fmt.Sprintf(`Adds an annotation to the specified grafana instance
+
+--secure indicates if the grafana instance needs an authentication token to connect
+to. If set, a service account json will be read in from the environment variable 
+%s to attempt authentication through google IDP.
+
+--tags specifies the tags the annotation should have.
+
+--dashboard-uid specifies the dashboard you want the annotation to be created in. If
+left empty, creates the annotation in the organization instead.
+
+--time-range can be used to specify in epoch millisecond time the annotation's timestamp. 
+If left empty, creates the annotation at the current time. If only start-time is specified,
+creates an annotation at start-time. If both start-time and end-time are specified,
+creates an annotation over time range.
+
+Example:
+#Create an annotation over time range 1-100 on the centralized grafana instance, which needs authentication.
+roachprod grafana-annotation grafana.testeng.crdb.io example-annotation-event --secure --tags my-cluster --tags test-run-1 --dashboard-uid overview --time-range 1,100
+`, grafana.ServiceAccountJson),
+	Args: cobra.ExactArgs(2),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		req := grafana.AddAnnotationRequest{
+			Text:         args[1],
+			Tags:         grafanaTags,
+			DashboardUID: grafanaDashboardUID,
+		}
+
+		switch len(grafanaTimeRange) {
+		case 0:
+			// Grafana API will default to adding annotation at current time.
+		case 1:
+			// Okay to only specify the start time.
+			req.StartTime = grafanaTimeRange[0]
+		case 2:
+			req.StartTime = grafanaTimeRange[0]
+			req.EndTime = grafanaTimeRange[1]
+		default:
+			return errors.Newf("Too many arguments for --time-range, expected 1 or 2, got: %d", len(grafanaTimeRange))
+		}
+
+		res, err := roachprod.AddGrafanaAnnotation(context.Background(), args[0] /* host */, secure, req)
+		if err != nil {
+			return err
+		}
+		fmt.Println(res)
+		return nil
+	}),
+}
+
 var jaegerStartCmd = &cobra.Command{
 	Use:   `jaeger-start <cluster>`,
 	Short: `starts a jaeger container on the last node in the cluster`,
@@ -1504,6 +1557,7 @@ func main() {
 		grafanaStopCmd,
 		grafanaDumpCmd,
 		grafanaURLCmd,
+		grafanaAnnotationCmd,
 		rootStorageCmd,
 		snapshotCmd,
 		updateCmd,
