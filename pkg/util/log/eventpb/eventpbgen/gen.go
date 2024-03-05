@@ -84,7 +84,7 @@ type fieldInfo struct {
 	Inherited           bool
 	IsEnum              bool
 	AllowZeroValue      bool
-	Nullable            bool
+	NotNullable         bool
 }
 
 var (
@@ -464,7 +464,7 @@ func readInput(
 					MixedRedactable:     mixed,
 					IsEnum:              isEnum,
 					AllowZeroValue:      allowZeroValue,
-					Nullable:            !notNullable,
+					NotNullable:         notNullable,
 				}
 				curMsg.Fields = append(curMsg.Fields, fi)
 				curMsg.AllFields = append(curMsg.AllFields, fi)
@@ -718,7 +718,7 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      }
    }
    {{- else if eq .FieldType "nestedMessage"}}
-   {{ if .Nullable -}}
+   {{ if not .NotNullable -}}
    if m.{{.FieldName}} != nil {
    {{- end }}
      if printComma { b = append(b, ',')}; printComma = true
@@ -726,7 +726,7 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      b = append(b, '{')
      printComma, b = m.{{.FieldName}}.AppendJSONFields(false, b)
      b = append(b, '}')
-   {{ if .Nullable -}}
+   {{ if not .NotNullable -}}
    }
    {{- end }}
    {{- else}}

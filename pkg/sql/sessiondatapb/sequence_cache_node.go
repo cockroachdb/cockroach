@@ -44,13 +44,13 @@ func NewSequenceCacheNode() *SequenceCacheNode {
 func (sc *SequenceCacheNode) NextValue(
 	seqID catid.DescID, clientVersion uint32, fetchNextValues func() (int64, int64, int64, error),
 ) (int64, error) {
-	sc.mu.RWMutex.RLock()
+	sc.mu.RLock()
 	cacheEntry, found := sc.cache[seqID]
-	sc.mu.RWMutex.RUnlock()
+	sc.mu.RUnlock()
 
 	createSequenceCacheNodeEntry := func() {
-		sc.mu.RWMutex.Lock()
-		defer sc.mu.RWMutex.Unlock()
+		sc.mu.Lock()
+		defer sc.mu.Unlock()
 		// There is a hazard that multiple threads could add the entry, so check if it exists again with the writer lock
 		_, found = sc.cache[seqID]
 		if !found {

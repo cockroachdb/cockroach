@@ -113,8 +113,8 @@ const (
 // TELEMETRY. Currently the criteria is if the statement is not of type DML and is
 // not BEGIN or COMMIT.
 func shouldForceLogStatement(ast tree.Statement) bool {
-	switch ast.StatementTag() {
-	case "BEGIN", "COMMIT":
+	switch ast.(type) {
+	case *tree.BeginTransaction, *tree.CommitTransaction:
 		return false
 	default:
 		return ast.StatementType() != tree.TypeDML
