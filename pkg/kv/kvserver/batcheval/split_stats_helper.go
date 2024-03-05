@@ -133,6 +133,11 @@ type splitStatsHelperInput struct {
 	// input stats contain estimates, this is the only side that needs to
 	// be scanned.
 	ScanRightFirst bool
+
+	// ConsiderEstimate controls whether the LHS and RHS
+	// statistics will be calculated without iterations if both
+	// sides happen to contain estimates.
+	ConsiderEstimates bool
 }
 
 // makeSplitStatsHelper initializes a splitStatsHelper. The values in the input
@@ -143,6 +148,32 @@ type splitStatsHelperInput struct {
 func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error) {
 	h := splitStatsHelper{
 		in: input,
+	}
+
+	// If we are already using estimates, let's keep using
+	// estimates.
+	fastComputeEstimates := h.in.AbsPreSplitBothStored.ContainsEstimates > 0 || h.in.DeltaBatchEstimated.ContainsEstimates > 0
+	fastComputeEstimates = h.in.ConsiderEstimates && fastComputeEstimates
+	if fastComputeEstimates {
+		rhs := h.in.AbsPreSplitBothStored
+		rhs.Scale(0.5)
+
+		lhs := h.in.AbsPreSplitBothStored
+		lhs.Subtract(rhs)
+		lhs.Add(h.in.DeltaBatchEstimated)
+
+		h.absPostSplitRight = &rhs
+		h.absPostSplitRight.ContainsEstimates += 1
+		if h.absPostSplitRight.ContainsEstimates <= 0 {
+			h.absPostSplitRight.ContainsEstimates = 1
+		}
+
+		h.absPostSplitLeft = &lhs
+		h.absPostSplitLeft.ContainsEstimates += 1
+		if h.absPostSplitLeft.ContainsEstimates <= 0 {
+			h.absPostSplitLeft.ContainsEstimates = 1
+		}
+		return h, nil
 	}
 
 	// Scan to compute the stats for the first side.

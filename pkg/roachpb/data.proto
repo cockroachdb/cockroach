@@ -130,6 +130,10 @@ message SplitTrigger {
   RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
 
   reserved 3, 4;
+
+  // ConsiderEstimates is true if we should consider estimating MVCC
+  // stats when calculating them in the splitTrigger.
+  bool consider_estimates = 5;
 }
 
 // A MergeTrigger is run after a successful commit of an AdminMerge
@@ -181,7 +185,7 @@ message MergeTrigger {
   // the two sides are collocated at merge time, we don't need to use the
   // read_summary and simply use this field.
   util.hlc.Timestamp right_closed_timestamp = 6 [(gogoproto.nullable) = false];
-  
+
   // RightReadSummary is a summary of the reads that have been performed on the
   // right-hand side up to the point of the Subsume request, which serializes
   // with past reads and begins blocking future reads. It is suitable for use to
