@@ -366,6 +366,8 @@ go_test(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/cli/exit",
+        "//pkg/cloud",
+        "//pkg/cloud/nodelocal",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",

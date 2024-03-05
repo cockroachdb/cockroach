@@ -202,6 +202,29 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.AbortSpanBytes -= oms.AbortSpanBytes
 }
 
+// Scale scales all statistics by the given factor.
+func (ms *MVCCStats) Scale(factor float32) {
+	ms.LockAge = int64(float32(ms.LockAge) * factor)
+	ms.GCBytesAge = int64(float32(ms.GCBytesAge) * factor)
+	ms.LiveBytes = int64(float32(ms.LiveBytes) * factor)
+	ms.KeyBytes = int64(float32(ms.KeyBytes) * factor)
+	ms.ValBytes = int64(float32(ms.ValBytes) * factor)
+	ms.IntentBytes = int64(float32(ms.IntentBytes) * factor)
+	ms.LiveCount = int64(float32(ms.LiveCount) * factor)
+	ms.KeyCount = int64(float32(ms.KeyCount) * factor)
+	ms.ValCount = int64(float32(ms.ValCount) * factor)
+	ms.IntentCount = int64(float32(ms.IntentCount) * factor)
+	ms.LockBytes = int64(float32(ms.LockBytes) * factor)
+	ms.LockCount = int64(float32(ms.LockCount) * factor)
+	ms.RangeKeyCount = int64(float32(ms.RangeKeyCount) * factor)
+	ms.RangeKeyBytes = int64(float32(ms.RangeKeyBytes) * factor)
+	ms.RangeValCount = int64(float32(ms.RangeValCount) * factor)
+	ms.RangeValBytes = int64(float32(ms.RangeValBytes) * factor)
+	ms.SysBytes = int64(float32(ms.SysBytes) * factor)
+	ms.SysCount = int64(float32(ms.SysCount) * factor)
+	ms.AbortSpanBytes = int64(float32(ms.AbortSpanBytes) * factor)
+}
+
 // IsInline returns true if the value is inlined in the metadata.
 func (meta MVCCMetadata) IsInline() bool {
 	return meta.RawBytes != nil

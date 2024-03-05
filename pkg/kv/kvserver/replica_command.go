@@ -59,6 +59,13 @@ import (
 // why this value was chosen in particular, but it seems to work.
 const mergeApplicationTimeout = 5 * time.Second
 
+// estimatedSplits wraps "kv.range_split.estimated_stats.enabled".
+var estimatedSplits = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.range_split.estimated_stats.enabled",
+	"allow splits to estimate states in some cases",
+	true)
+
 // sendSnapshotTimeout is the timeout for sending snapshots. While a snapshot is
 // in transit, Raft log truncation is halted to allow the recipient to catch up.
 // If the snapshot takes very long to transfer for whatever reason this can
@@ -228,14 +235,27 @@ func splitTxnAttempt(
 		return err
 	}
 
+	shouldConsiderEstimates := estimatedSplits.Get(&store.ClusterSettings().SV)
+	if shouldConsiderEstimates {
+		_, _, externalBytes, err := store.TODOEngine().ApproximateDiskBytes(
+			desc.StartKey.AsRawKey(),
+			desc.EndKey.AsRawKey())
+		if err != nil {
+			log.Warningf(ctx, "failed to get approximate disk bytes: %v", err)
+			shouldConsiderEstimates = false
+		}
+		shouldConsiderEstimates = externalBytes > 0
+	}
+
 	// End the transaction manually, instead of letting RunTransaction
 	// loop do it, in order to provide a split trigger.
 	b.AddRawRequest(&kvpb.EndTxnRequest{
 		Commit: true,
 		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 			SplitTrigger: &roachpb.SplitTrigger{
-				LeftDesc:  *leftDesc,
-				RightDesc: *rightDesc,
+				LeftDesc:          *leftDesc,
+				RightDesc:         *rightDesc,
+				ConsiderEstimates: shouldConsiderEstimates,
 			},
 		},
 	})
