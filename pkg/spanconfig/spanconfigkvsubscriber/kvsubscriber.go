@@ -263,7 +263,7 @@ func (s *KVSubscriber) Start(ctx context.Context, stopper *stop.Stopper) error {
 					}
 				})
 
-			timer := timeutil.NewTimer()
+			var timer timeutil.Timer
 			defer timer.Stop()
 
 			for {
@@ -273,7 +273,6 @@ func (s *KVSubscriber) Start(ctx context.Context, stopper *stop.Stopper) error {
 				} else {
 					// Disable the mechanism.
 					timer.Stop()
-					timer = timeutil.NewTimer()
 				}
 				select {
 				case <-timer.C:

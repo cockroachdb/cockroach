@@ -123,7 +123,8 @@ func (w *lockTableWaiterImpl) WaitOn(
 	ctxDoneC := ctx.Done()
 	shouldQuiesceC := w.stopper.ShouldQuiesce()
 	// Used to delay liveness and deadlock detection pushes.
-	var timer *timeutil.Timer
+	var timer timeutil.Timer
+	defer timer.Stop()
 	var timerC <-chan time.Time
 	var timerWaitingState waitingState
 	// Used to enforce lock timeouts.
@@ -227,10 +228,6 @@ func (w *lockTableWaiterImpl) WaitOn(
 					delay, deadlockOrLivenessPush, timeoutPush, priorityPush, waitPolicyPush)
 
 				if delay > 0 {
-					if timer == nil {
-						timer = timeutil.NewTimer()
-						defer timer.Stop()
-					}
 					timer.Reset(delay)
 					timerC = timer.C
 				} else {
@@ -309,10 +306,8 @@ func (w *lockTableWaiterImpl) WaitOn(
 			// it should push. It may be the case that the transaction is part
 			// of a dependency cycle or that the lock holder's coordinator node
 			// has crashed.
+			timer.Read = true
 			timerC = nil
-			if timer != nil {
-				timer.Read = true
-			}
 			if w.onPushTimer != nil {
 				w.onPushTimer()
 			}

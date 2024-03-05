@@ -208,7 +208,7 @@ func (s *eventStore) startResolver(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "contention-event-resolver", func(ctx context.Context) {
 
 		initialDelay := s.resolutionIntervalWithJitter()
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		defer timer.Stop()
 
 		timer.Reset(initialDelay)

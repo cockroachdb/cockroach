@@ -200,8 +200,8 @@ func jitter(dur time.Duration) time.Duration {
 //
 // Common usage pattern:
 //
-//	lc, cleanup := makeLoopController(...)
-//	defer cleanup()
+//	lc := makeLoopController(...)
+//	defer lc.cleanup()
 //	for {
 //	  select {
 //	  case <- lc.update:
@@ -212,7 +212,7 @@ func jitter(dur time.Duration) time.Duration {
 //	  }
 //	}
 type loopController struct {
-	timer   *timeutil.Timer
+	timer   timeutil.Timer
 	lastRun time.Time
 	updated chan struct{}
 	// getInterval returns the value of the associated cluster setting.
@@ -220,13 +220,12 @@ type loopController struct {
 }
 
 // makeLoopController returns a structure that controls the execution of a job
-// at regular intervals. Moreover, it returns a cleanup function that should be
-// deferred to execute before destroying the instantiated structure.
+// at regular intervals. The structure's cleanup method should be deferred to
+// execute before destroying the instantiated structure.
 func makeLoopController(
 	st *cluster.Settings, s *settings.DurationSetting, overrideKnob *time.Duration,
-) (loopController, func()) {
+) loopController {
 	lc := loopController{
-		timer:   timeutil.NewTimer(),
 		lastRun: timeutil.Now(),
 		updated: make(chan struct{}, 1),
 		// getInterval returns the value of the associated cluster setting. If
@@ -253,7 +252,7 @@ func makeLoopController(
 	intervalBaseSetting.SetOnChange(&st.SV, onChange)
 
 	lc.timer.Reset(jitter(lc.getInterval()))
-	return lc, func() { lc.timer.Stop() }
+	return lc
 }
 
 // onUpdate is called when the associated interval setting gets updated.
@@ -265,4 +264,9 @@ func (lc *loopController) onUpdate() {
 func (lc *loopController) onExecute() {
 	lc.lastRun = timeutil.Now()
 	lc.timer.Reset(jitter(lc.getInterval()))
+}
+
+// cleanup stops the loop controller's timer.
+func (lc *loopController) cleanup() {
+	lc.timer.Stop()
 }
