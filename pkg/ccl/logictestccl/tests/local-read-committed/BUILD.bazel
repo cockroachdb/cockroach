@@ -7,9 +7,10 @@ go_test(
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/ccl/logictestccl:testdata",  # keep
+        "//pkg/sql/opt/exec/execbuilder:testdata",  # keep
     ],
     exec_properties = {"test.Pool": "large"},
-    shard_count = 20,
+    shard_count = 31,
     tags = [
         "ccl_test",
         "cpu:1",
@@ -21,6 +22,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/logictest",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

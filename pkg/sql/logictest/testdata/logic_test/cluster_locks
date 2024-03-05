@@ -1,4 +1,8 @@
-# LogicTest: local
+# LogicTest: local-read-committed
+
+# Begin with SERIALIZABLE; later in the test the default is changed to READ COMMITTED
+statement ok
+SET default_transaction_isolation = 'SERIALIZABLE'
 
 # Create a table, write a row, lock it, then switch users.
 statement ok
