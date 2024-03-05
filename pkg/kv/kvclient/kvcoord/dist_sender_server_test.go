@@ -2228,6 +2228,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		},
 		{
 			name: "forwarded timestamp with delete range",
+			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put") // ensure DeleteRange is not a no-op
+			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				_, err := db.Get(ctx, "a") // read key to set ts cache
 				return err
@@ -2552,6 +2555,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			name: "forwarded timestamp with too many refreshes in batch commit " +
 				"with refresh",
 			refreshSpansCondenseFilter: disableCondensingRefreshSpans,
+			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put") // ensure DeleteRange is not a no-op
+			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				_, err := db.Get(ctx, "a") // set ts cache
 				return err
