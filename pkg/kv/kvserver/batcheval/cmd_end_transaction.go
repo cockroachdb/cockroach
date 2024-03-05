@@ -1104,6 +1104,7 @@ func splitTrigger(
 		RightUserIsEmpty:         emptyRHS,
 		MaxCountDiff:             MaxMVCCStatCountDiff.Get(&rec.ClusterSettings().SV),
 		MaxBytesDiff:             MaxMVCCStatBytesDiff.Get(&rec.ClusterSettings().SV),
+		UseEstimatesBecauseExternalBytesArePresent: split.UseEstimatesBecauseExternalBytesArePresent,
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }
@@ -1198,7 +1199,12 @@ func splitTriggerHelper(
 	preComputedStatsDiff := !statsInput.AbsPreSplitBothStored.HasUserDataCloseTo(
 		statsInput.PreSplitStats, statsInput.MaxCountDiff, statsInput.MaxBytesDiff)
 
-	if noPreComputedStats || emptyLeftOrRight || preComputedStatsDiff {
+	shouldUseCrudeEstimates := statsInput.UseEstimatesBecauseExternalBytesArePresent &&
+		statsInput.AbsPreSplitBothStored.ContainsEstimates > 0
+
+	shouldRecomputeStats := (noPreComputedStats || emptyLeftOrRight || preComputedStatsDiff)
+	shouldRecomputeStats = shouldRecomputeStats && !shouldUseCrudeEstimates
+	if shouldRecomputeStats {
 		var reason redact.RedactableString
 		if noPreComputedStats {
 			reason = "there are no pre-split LHS stats (or they're empty)"
@@ -1211,6 +1217,8 @@ func splitTriggerHelper(
 		}
 		log.Infof(ctx, "falling back to accurate stats computation because %v", reason)
 		h, err = makeSplitStatsHelper(statsInput)
+	} else if statsInput.UseEstimatesBecauseExternalBytesArePresent {
+		h, err = makeCrudelyEstimatedSplitStatsHelper(statsInput)
 	} else {
 		h, err = makeEstimatedSplitStatsHelper(statsInput)
 	}

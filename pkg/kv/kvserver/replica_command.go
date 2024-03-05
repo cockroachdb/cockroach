@@ -84,6 +84,15 @@ var EnableMVCCStatsRecomputationInSplit = settings.RegisterBoolSetting(
 // why this value was chosen in particular, but it seems to work.
 const mergeApplicationTimeout = 5 * time.Second
 
+// EnableEstimatedStatsForExternalBytes controls whether we should bypass normal
+// stats recalcuation during splits if the underlying store has external bytes
+// (i.e. has external files in its stores).
+var EnableEstimatedStatsForExternalBytes = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.range_split.estimated_stats_for_external_bytes.enabled",
+	"allow splits to use estimated stats when the range being split has external bytes in its underlying store",
+	true)
+
 // sendSnapshotTimeout is the timeout for sending snapshots. While a snapshot is
 // in transit, Raft log truncation is halted to allow the recipient to catch up.
 // If the snapshot takes very long to transfer for whatever reason this can
@@ -200,6 +209,7 @@ func splitTxnAttempt(
 	reason redact.RedactableString,
 	preSplitLeftUserStats enginepb.MVCCStats,
 	preSplitStats enginepb.MVCCStats,
+	useEstimatedStatsForExternalBytes bool,
 ) error {
 	txn.SetDebugName(splitTxnName)
 
@@ -258,6 +268,7 @@ func splitTxnAttempt(
 				RightDesc:             *rightDesc,
 				PreSplitLeftUserStats: preSplitLeftUserStats,
 				PreSplitStats:         preSplitStats,
+				UseEstimatesBecauseExternalBytesArePresent: useEstimatedStatsForExternalBytes,
 			},
 		},
 	})
@@ -464,12 +475,34 @@ func (r *Replica) adminSplitWithDescriptor(
 
 	leftDesc, rightDesc := prepareSplitDescs(rightRangeID, splitKey, args.ExpirationTime, desc)
 
+	// TODO(ssd): Calculating MVCC stats on a range with external files in
+	// the underlying store is expensive. Here, we check whether the
+	// underlying store has external bytes and, if it does, instruct
+	// splitTrigger to use a crude estimate. We need to revisit this
+	// heuristic once we start to prioritize the performance of the
+	// foreground workload during an Online restore operation.
+	useEstimatedStatsForExternalBytes := EnableEstimatedStatsForExternalBytes.Get(&r.store.ClusterSettings().SV)
+	if useEstimatedStatsForExternalBytes {
+		// If we don't already have estimated stats, let's not make the
+		// problem worse by introducing them, regardless of whether or
+		// not we have internal bytes.
+		if r.GetMVCCStats().ContainsEstimates == 0 {
+			useEstimatedStatsForExternalBytes = false
+		} else if hasExternal, err := r.HasExternalBytes(); err != nil {
+			log.Warningf(ctx, "failed to get approximate disk bytes: %v", err)
+			useEstimatedStatsForExternalBytes = false
+		} else {
+			useEstimatedStatsForExternalBytes = hasExternal
+		}
+	}
+
 	// If MVCC stats estimates are enabled, pre-compute some stats here to pass to
 	// splitTrigger (where we hold latches, so it's more expensive to do so).
 	var userOnlyLeftStats enginepb.MVCCStats
 	var totalStats enginepb.MVCCStats
 	if EnableEstimatedMVCCStatsInSplit.Get(&r.store.ClusterSettings().SV) &&
-		r.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1_EstimatedMVCCStatsInSplit) {
+		r.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1_EstimatedMVCCStatsInSplit) &&
+		!useEstimatedStatsForExternalBytes {
 		// If the stats contain estimates, re-compute them to prevent estimates
 		// from compounding across splits. See makeEstimatedSplitStatsHelper for more
 		// details on how splits introduce stats estimates.
@@ -503,7 +536,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return splitTxnAttempt(ctx, r.store, txn, leftDesc, rightDesc, desc, reason, userOnlyLeftStats, totalStats)
+		return splitTxnAttempt(ctx, r.store, txn, leftDesc, rightDesc, desc, reason, userOnlyLeftStats, totalStats, useEstimatedStatsForExternalBytes)
 	}); err != nil {
 		// The ConditionFailedError can occur because the descriptors acting
 		// as expected values in the CPuts used to update the left or right
