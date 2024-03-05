@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1792,6 +1793,10 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 func TestSetSessionArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// Enable enterprise features so READ COMMITTED can be tested.
+	defer ccl.TestingEnableEnterprise()()
+
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)

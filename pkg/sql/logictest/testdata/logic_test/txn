@@ -190,8 +190,20 @@ SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
 
+onlyif config enterprise-configs
+query T noticetrace
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+----
+
+skipif config enterprise-configs
+skipif config local-mixed-23.1
+query T noticetrace
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+----
+NOTICE: READ COMMITTED isolation level is not allowed without an enterprise license
+
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; COMMIT
+COMMIT
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; COMMIT
@@ -203,7 +215,22 @@ statement ok
 BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; COMMIT
 
 statement ok
-BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; COMMIT
+BEGIN TRANSACTION
+
+onlyif config enterprise-configs
+query T noticetrace
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED
+----
+
+skipif config enterprise-configs
+skipif config local-mixed-23.1
+query T noticetrace
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED
+----
+NOTICE: READ COMMITTED isolation level is not allowed without an enterprise license
+
+statement ok
+COMMIT
 
 # It is an error to change the isolation level of a running transaction.
 
@@ -213,7 +240,7 @@ BEGIN TRANSACTION
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
-skipif config local-mixed-23.1
+onlyif config enterprise-configs
 skipif config local-read-committed
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED
@@ -231,7 +258,7 @@ BEGIN TRANSACTION
 statement ok
 SELECT * FROM kv LIMIT 1
 
-skipif config local-mixed-23.1
+onlyif config enterprise-configs
 skipif config local-read-committed
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET transaction_isolation = 'READ COMMITTED'
@@ -298,8 +325,8 @@ serializable
 statement ok
 COMMIT
 
-# Since read_committed_isolation.enabled is true, setting isolation level
-# to REPEATABLE READ should map to SNAPSHOT.
+# Since read_committed_isolation.enabled is false, setting isolation level
+# to READ COMMITTED should map to SERIALIZABLE.
 statement ok
 SET default_transaction_isolation = 'read committed'
 
@@ -326,25 +353,27 @@ BEGIN
 statement ok
 SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 
-skipif config local-mixed-23.1
+onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 snapshot
 
-skipif config local-mixed-23.1
+onlyif config enterprise-configs
 query T
 SHOW transaction_isolation
 ----
 snapshot
 
-onlyif config local-mixed-23.1
+skipif config enterprise-configs
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
 
-onlyif config local-mixed-23.1
+skipif config enterprise-configs
+skipif config local-mixed-23.1
 query T
 SHOW transaction_isolation
 ----
@@ -362,13 +391,14 @@ SET transaction_isolation = 'this is made up'
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
 
-skipif config local-mixed-23.1
+onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 snapshot
 
-onlyif config local-mixed-23.1
+skipif config enterprise-configs
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -394,13 +424,14 @@ SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-skipif config local-mixed-23.1
+onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 read committed
 
-onlyif config local-mixed-23.1
+skipif config enterprise-configs
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -418,25 +449,27 @@ serializable
 statement ok
 SET transaction_isolation = 'READ COMMITTED'
 
-skipif config local-mixed-23.1
+onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 read committed
 
-onlyif config local-mixed-23.1
+skipif config enterprise-configs
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
 
-skipif config local-mixed-23.1
+onlyif config enterprise-configs
 query T
 SHOW transaction_isolation
 ----
 read committed
 
-onlyif config local-mixed-23.1
+skipif config enterprise-configs
+skipif config local-mixed-23.1
 query T
 SHOW transaction_isolation
 ----
@@ -739,7 +772,7 @@ SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
 
-skipif config local-mixed-23.1
+onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -767,14 +800,34 @@ statement ok
 COMMIT
 
 # With the snapshot_isolation.enabled cluster setting set to true,
-# REPEATABLE READ gets mapped to SNAPSHOT.
+# REPEATABLE READ gets mapped to SNAPSHOT if there is a valid license.
+onlyif config enterprise-configs
+query T noticetrace
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
+----
+
+skipif config enterprise-configs
+skipif config local-mixed-23.1
+query T noticetrace
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
+----
+NOTICE: SNAPSHOT isolation level is not allowed without an enterprise license
+
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
+onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 snapshot
+
+skipif config enterprise-configs
+skipif config local-mixed-23.1
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+serializable
 
 statement ok
 SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
@@ -782,10 +835,18 @@ SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
 
+onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 read committed
+
+skipif config enterprise-configs
+skipif config local-mixed-23.1
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+serializable
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
@@ -812,13 +873,14 @@ serializable
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
+onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 read committed
 
 # SHOW without a transaction should create an auto-transaction with the new default level
-skipif config local-mixed-23.1
+onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -835,18 +897,43 @@ serializable
 statement ok
 SET default_transaction_isolation = 'read uncommitted'
 
+onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
 read committed
 
-statement ok
+skipif config enterprise-configs
+skipif config local-mixed-23.1
+query T
+SHOW default_transaction_isolation
+----
+serializable
+
+onlyif config enterprise-configs
+query T noticetrace
 SET default_transaction_isolation = 'read committed'
+----
 
+skipif config enterprise-configs
+skipif config local-mixed-23.1
+query T noticetrace
+SET default_transaction_isolation = 'read committed'
+----
+NOTICE: READ COMMITTED isolation level is not allowed without an enterprise license
+
+onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
 read committed
+
+skipif config enterprise-configs
+skipif config local-mixed-23.1
+query T
+SHOW default_transaction_isolation
+----
+serializable
 
 statement ok
 SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
@@ -856,18 +943,34 @@ SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
 statement ok
 SET default_transaction_isolation = 'repeatable read'
 
+onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
 snapshot
 
+skipif config enterprise-configs
+skipif config local-mixed-23.1
+query T
+SHOW default_transaction_isolation
+----
+serializable
+
 statement ok
 SET DEFAULT_TRANSACTION_ISOLATION TO 'SNAPSHOT'
 
+onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 snapshot
+
+skipif config enterprise-configs
+skipif config local-mixed-23.1
+query T
+SHOW default_transaction_isolation
+----
+serializable
 
 statement ok
 SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
@@ -908,7 +1011,7 @@ COMMIT
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-skipif config local-mixed-23.1
+onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -1614,7 +1717,7 @@ ROLLBACK
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
-skipif config local-mixed-23.1
+onlyif config enterprise-configs
 statement error pq: cluster_logical_timestamp\(\): unsupported in READ COMMITTED isolation
 SELECT cluster_logical_timestamp();
 

@@ -22,6 +22,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
@@ -1117,8 +1119,21 @@ func (s *Server) newConnExecutor(
 	ex.dataMutatorIterator.onTempSchemaCreation = func() {
 		ex.hasCreatedTemporarySchema = true
 	}
-	ex.dataMutatorIterator.upgradedIsolationLevel = func() {
+	ex.dataMutatorIterator.upgradedIsolationLevel = func(
+		ctx context.Context, upgradedFrom tree.IsolationLevel, requiresNotice bool,
+	) {
 		ex.metrics.ExecutedStatementCounters.TxnUpgradedCount.Inc(1)
+		if requiresNotice {
+			const msgFmt = "%s isolation level is not allowed without an enterprise license"
+			displayLevel := upgradedFrom
+			if upgradedFrom == tree.ReadUncommittedIsolation {
+				displayLevel = tree.ReadCommittedIsolation
+			} else if upgradedFrom == tree.RepeatableReadIsolation {
+				displayLevel = tree.SnapshotIsolation
+			}
+			log.Warningf(ctx, msgFmt, displayLevel)
+			ex.planner.BufferClientNotice(ctx, pgnotice.Newf(msgFmt, displayLevel))
+		}
 	}
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
@@ -3469,6 +3484,7 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 		level = tree.IsolationLevel(ex.sessionData().DefaultTxnIsolationLevel)
 	}
 	upgraded := false
+	hasLicense := base.CCLDistributionAndEnterpriseEnabled(ex.server.cfg.Settings)
 	allowLevelCustomization := ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2)
 	ret := isolation.Serializable
 	if allowLevelCustomization {
@@ -3479,28 +3495,38 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 			upgraded = true
 			fallthrough
 		case tree.ReadCommittedIsolation:
-			// READ COMMITTED is only allowed if the cluster setting is enabled.
-			// Otherwise  it is mapped to SERIALIZABLE.
+			// READ COMMITTED is only allowed if the cluster setting is enabled and
+			// the cluster has a license. Otherwise it is mapped to SERIALIZABLE.
 			allowReadCommitted := allowReadCommittedIsolation.Get(&ex.server.cfg.Settings.SV)
-			if allowReadCommitted {
+			if allowReadCommitted && hasLicense {
 				ret = isolation.ReadCommitted
 			} else {
 				upgraded = true
 				ret = isolation.Serializable
+				if allowReadCommitted && !hasLicense {
+					const msg = "READ COMMITTED isolation level is not allowed without an enterprise license"
+					log.Warningf(ctx, msg)
+					ex.planner.BufferClientNotice(ctx, pgnotice.Newf(msg))
+				}
 			}
 		case tree.RepeatableReadIsolation:
 			// REPEATABLE READ is mapped to SNAPSHOT.
 			upgraded = true
 			fallthrough
 		case tree.SnapshotIsolation:
-			// SNAPSHOT is only allowed if the cluster setting is enabled. Otherwise
-			// it is mapped to SERIALIZABLE.
+			// SNAPSHOT is only allowed if the cluster setting is enabled and the
+			// cluster has a license. Otherwise it is mapped to SERIALIZABLE.
 			allowSnapshot := allowSnapshotIsolation.Get(&ex.server.cfg.Settings.SV)
-			if allowSnapshot {
+			if allowSnapshot && hasLicense {
 				ret = isolation.Snapshot
 			} else {
 				upgraded = true
 				ret = isolation.Serializable
+				if allowSnapshot && !hasLicense {
+					const msg = "SNAPSHOT isolation level is not allowed without an enterprise license"
+					log.Warningf(ctx, msg)
+					ex.planner.BufferClientNotice(ctx, pgnotice.Newf(msg))
+				}
 			}
 		case tree.SerializableIsolation:
 			ret = isolation.Serializable

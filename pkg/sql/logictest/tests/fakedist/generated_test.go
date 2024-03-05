@@ -813,13 +813,6 @@ func TestLogic_fk(
 	runLogicTest(t, "fk")
 }
 
-func TestLogic_fk_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "fk_read_committed")
-}
-
 func TestLogic_float(
 	t *testing.T,
 ) {
@@ -958,13 +951,6 @@ func TestLogic_hash_sharded_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "hash_sharded_index")
-}
-
-func TestLogic_hash_sharded_index_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "hash_sharded_index_read_committed")
 }
 
 func TestLogic_hidden_columns(
@@ -1464,13 +1450,6 @@ func TestLogic_propagate_input_ordering(
 	runLogicTest(t, "propagate_input_ordering")
 }
 
-func TestLogic_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "read_committed")
-}
-
 func TestLogic_reassign_owned_by(
 	t *testing.T,
 ) {
@@ -1700,13 +1679,6 @@ func TestLogic_select_for_update(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_for_update")
-}
-
-func TestLogic_select_for_update_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "select_for_update_read_committed")
 }
 
 func TestLogic_select_index(
@@ -2358,13 +2330,6 @@ func TestLogic_unique(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "unique")
-}
-
-func TestLogic_unique_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "unique_read_committed")
 }
 
 func TestLogic_update(

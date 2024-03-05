@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -27,6 +28,9 @@ func (p *planner) SetSessionCharacteristics(
 ) (planNode, error) {
 	originalLevel := n.Modes.Isolation
 	upgradedLevel := false
+	allowReadCommitted := allowReadCommittedIsolation.Get(&p.execCfg.Settings.SV)
+	allowSnapshot := allowSnapshotIsolation.Get(&p.execCfg.Settings.SV)
+	hasLicense := base.CCLDistributionAndEnterpriseEnabled(p.ExecCfg().Settings)
 	if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
 		// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... '.
 		switch n.Modes.Isolation {
@@ -37,7 +41,7 @@ func (p *planner) SetSessionCharacteristics(
 			fallthrough
 		case tree.ReadCommittedIsolation:
 			level := tree.SerializableIsolation
-			if allowReadCommittedIsolation.Get(&p.execCfg.Settings.SV) {
+			if allowReadCommitted && hasLicense {
 				level = tree.ReadCommittedIsolation
 			} else {
 				upgradedLevel = true
@@ -48,7 +52,7 @@ func (p *planner) SetSessionCharacteristics(
 			fallthrough
 		case tree.SnapshotIsolation:
 			level := tree.SerializableIsolation
-			if allowSnapshotIsolation.Get(&p.execCfg.Settings.SV) {
+			if allowSnapshot && hasLicense {
 				level = tree.SnapshotIsolation
 			} else {
 				upgradedLevel = true
@@ -110,7 +114,7 @@ func (p *planner) SetSessionCharacteristics(
 
 	if upgradedLevel {
 		if f := p.sessionDataMutatorIterator.upgradedIsolationLevel; f != nil {
-			f()
+			f(ctx, originalLevel, !hasLicense && (allowSnapshot || allowReadCommitted))
 		}
 		telemetry.Inc(sqltelemetry.IsolationLevelUpgradedCounter(ctx, originalLevel))
 	}
