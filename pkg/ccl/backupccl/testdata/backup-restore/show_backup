@@ -4,15 +4,6 @@
 new-cluster name=s1 allow-implicit-access localities=eu-central-1,eu-north-1,us-east-1
 ----
 
-link-backup cluster=s1 src-path=show_backup_validate,invalidDependOnBy_21.1 dest-path=invalidDependOnBy_21.1
-----
-
-# This backup intentionally has a dangling invalid depend on by reference.
-query-sql regex=invalid\sdepended-on-by
-SELECT * FROM [SHOW BACKUP VALIDATE FROM 'invalidDependOnBy_21.1' IN 'nodelocal://1/'];
-----
-true
-
 link-backup cluster=s1 src-path=show_backup_validate,valid-22.2 dest-path=valid-22.2
 ----
 

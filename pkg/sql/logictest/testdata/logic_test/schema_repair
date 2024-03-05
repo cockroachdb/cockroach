@@ -381,27 +381,28 @@ SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', desc_bytes)-
 $$;
 CREATE FUNCTION stripped(j JSON) RETURNS JSONB STABLE LANGUAGE SQL AS $$
 SELECT jsonb_build_object(
-  'nextConstraintId', (j->>'nextConstraintId')::INT,
+  'indexNotVisible', (j#>>'{indexes, 0, notVisible}')::BOOL,
+  'indexInvisibility', (j#>>'{indexes, 0, invisibility}')::FLOAT8,
   'version', (j->>'version')::INT,
   'modificationTime', j->'modificationTime'
 ) $$;
 
 statement ok
-CREATE TABLE t (a INT PRIMARY KEY)
+CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX (b))
 
 query T
 SELECT stripped(tbl_json(desc_bytes('t')))
 ----
-{"modificationTime": {}, "nextConstraintId": 2, "version": 1}
+{"indexInvisibility": null, "indexNotVisible": null, "modificationTime": {}, "version": 1}
 
 # Post-deserialization changes are idempotent.
 query T
 SELECT stripped(tbl_json(crdb_internal.descriptor_with_post_deserialization_changes(desc_bytes('t'))))
 ----
-{"modificationTime": {}, "nextConstraintId": 2, "version": 1}
+{"indexInvisibility": null, "indexNotVisible": null, "modificationTime": {}, "version": 1}
 
-# Erase all constraint IDs from the descriptor.
-# These will be reinstated by descriptor post-deserialization changes.
+# Set the NotVisible flag. This will cause the descriptor post-deserialization
+# changes to set the Invisibility field.
 statement ok
 SELECT
 	crdb_internal.unsafe_upsert_descriptor(
@@ -409,13 +410,9 @@ SELECT
 		crdb_internal.json_to_pb(
 			'cockroach.sql.sqlbase.Descriptor',
 			json_set(
-				json_set(
-					crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
-					ARRAY['table', 'nextConstraintId'],
-					'0'::JSONB
-				),
-				ARRAY['table', 'primaryIndex', 'constraintId'],
-				'0'::JSONB
+				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
+				'{table, indexes, 0, notVisible}',
+				'true'::JSONB
 			)
 		),
 		true
@@ -428,12 +425,12 @@ WHERE
 query T
 SELECT stripped(tbl_json(desc_bytes('t')))
 ----
-{"modificationTime": {}, "nextConstraintId": null, "version": 2}
+{"indexInvisibility": null, "indexNotVisible": true, "modificationTime": {}, "version": 2}
 
 query T
 SELECT stripped(tbl_json(crdb_internal.descriptor_with_post_deserialization_changes(desc_bytes('t'))))
 ----
-{"modificationTime": {}, "nextConstraintId": 2, "version": 2}
+{"indexInvisibility": 1, "indexNotVisible": true, "modificationTime": {}, "version": 2}
 
 # Check that existing modification times (possible for pre-19.2 descriptors) are not affected.
 query T
@@ -456,7 +453,7 @@ SELECT
 		)
 	)
 ----
-{"modificationTime": {"logical": 1, "wallTime": "123456789"}, "nextConstraintId": 2, "version": 2}
+{"indexInvisibility": 1, "indexNotVisible": true, "modificationTime": {"logical": 1, "wallTime": "123456789"}, "version": 2}
 
 # Perform a schema change to persist post-deserialization changes.
 statement ok
@@ -465,7 +462,7 @@ ALTER TABLE t RENAME TO t_renamed
 query T
 SELECT stripped(tbl_json(desc_bytes('t_renamed')))
 ----
-{"modificationTime": {}, "nextConstraintId": 2, "version": 3}
+{"indexInvisibility": 1, "indexNotVisible": true, "modificationTime": {}, "version": 3}
 
 statement ok
 DROP TABLE t_renamed
