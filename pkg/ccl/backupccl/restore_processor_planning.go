@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -32,14 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-)
-
-var memoryMonitorSSTs = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"bulkio.restore.memory_monitor_ssts",
-	"if true, restore will limit number of simultaneously open SSTs to keep memory usage under the configured memory fraction",
-	false,
-	settings.WithName("bulkio.restore.sst_memory_limit.enabled"),
 )
 
 type restoreJobMetadata struct {
@@ -101,7 +92,6 @@ func distRestore(
 		fileEncryption = &kvpb.FileEncryptionOptions{Key: md.encryption.Key}
 	}
 
-	memMonSSTs := memoryMonitorSSTs.Get(execCtx.ExecCfg().SV())
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 
 		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
@@ -116,14 +106,13 @@ func distRestore(
 		p := planCtx.NewPhysicalPlan()
 
 		restoreDataSpec := execinfrapb.RestoreDataSpec{
-			JobID:             int64(md.jobID),
-			RestoreTime:       md.restoreTime,
-			Encryption:        fileEncryption,
-			TableRekeys:       md.dataToRestore.getRekeys(),
-			TenantRekeys:      md.dataToRestore.getTenantRekeys(),
-			PKIDs:             md.dataToRestore.getPKIDs(),
-			ValidateOnly:      md.dataToRestore.isValidateOnly(),
-			MemoryMonitorSSTs: memMonSSTs,
+			JobID:        int64(md.jobID),
+			RestoreTime:  md.restoreTime,
+			Encryption:   fileEncryption,
+			TableRekeys:  md.dataToRestore.getRekeys(),
+			TenantRekeys: md.dataToRestore.getTenantRekeys(),
+			PKIDs:        md.dataToRestore.getPKIDs(),
+			ValidateOnly: md.dataToRestore.isValidateOnly(),
 		}
 
 		// Plan SplitAndScatter in a round-robin fashion.
