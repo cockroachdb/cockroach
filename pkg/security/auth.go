@@ -18,11 +18,13 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/go-ldap/ldap/v3"
 )
 
 var certPrincipalMap struct {
@@ -30,11 +32,14 @@ var certPrincipalMap struct {
 	m map[string]string
 }
 
-// CertificateUserScope indicates the scope of a user certificate i.e.
-// which tenant the user is allowed to authenticate on. Older client certificates
+// CertificateUserScope indicates the scope of a user certificate i.e. which
+// tenant the user is allowed to authenticate on. Older client certificates
 // without a tenant scope are treated as global certificates which can
-// authenticate on any tenant strictly for backward compatibility with the
-// older certificates.
+// authenticate on any tenant strictly for backward compatibility with the older
+// certificates. A certificate must specify the SQL user name in either the CN
+// or a DNS SAN entry, so one certificate has multiple candidate usernames. The
+// GetCertificateUserScope function expands a cert into a set of "scopes" with
+// each possible username (and tenant ID).
 type CertificateUserScope struct {
 	Username string
 	TenantID roachpb.TenantID
@@ -100,7 +105,10 @@ func getCertificatePrincipals(cert *x509.Certificate) []string {
 	return results
 }
 
-// GetCertificateUserScope extracts the certificate scopes from a client certificate.
+// GetCertificateUserScope extracts the certificate scopes from a client
+// certificate. It tries to get CRDB prefixed SAN URIs and extracts tenantID and
+// user information. If there is no such URI, then it gets principal transformed
+// CN and SAN DNSNames with global scope.
 func GetCertificateUserScope(
 	peerCert *x509.Certificate,
 ) (userScopes []CertificateUserScope, _ error) {
@@ -148,6 +156,7 @@ func UserAuthCertHook(
 	tlsState *tls.ConnectionState,
 	tenantID roachpb.TenantID,
 	certManager *CertificateManager,
+	roleSubject *ldap.DN,
 ) (UserAuthHook, error) {
 	var certUserScope []CertificateUserScope
 	if !insecureMode {
@@ -190,7 +199,12 @@ func UserAuthCertHook(
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
-		if ValidateUserScope(certUserScope, systemIdentity.Normalized(), tenantID) {
+		certSubject, err := distinguishedname.ParseDNFromCertificate(peerCert, systemIdentity)
+		if err != nil && roleSubject != nil {
+			return errors.Errorf("could not parse certificate subject DN")
+		}
+
+		if ValidateUserScope(certUserScope, systemIdentity.Normalized(), tenantID, roleSubject, certSubject) {
 			if certManager != nil {
 				certManager.MaybeUpsertClientExpiration(
 					ctx,
@@ -200,7 +214,12 @@ func UserAuthCertHook(
 			}
 			return nil
 		}
-		return errors.WithDetailf(errors.Errorf("certificate authentication failed for user %q", systemIdentity),
+		return errors.WithDetailf(
+			errors.Errorf(
+				"certificate authentication failed for user %q (DN: %s)",
+				systemIdentity,
+				roleSubject,
+			),
 			"The client certificate is valid for %s.", FormatUserScopes(certUserScope))
 	}, nil
 }
@@ -294,17 +313,24 @@ func (i *PasswordUserAuthError) FormatError(p errors.Printer) error {
 	return i.err
 }
 
-// ValidateUserScope returns true if the user is a valid user for the tenant based on the certificate
-// user scope. It also returns true if the certificate is a global certificate. A client certificate
-// is considered global only when it doesn't contain a tenant SAN which is only possible for older
-// client certificates created prior to introducing tenant based scoping for the client.
+// ValidateUserScope returns true if the user is a valid user for the tenant
+// based on the certificate user scope. It also returns true if the certificate
+// is a global certificate. A client certificate is considered global only when
+// it doesn't contain a tenant SAN which is only possible for older client
+// certificates created prior to introducing tenant based scoping for the
+// client. Additionally, if subject role option is set for a user, we check if
+// certificate parsed subject DN matches the set subject.
 func ValidateUserScope(
-	certUserScope []CertificateUserScope, user string, tenantID roachpb.TenantID,
+	certUserScope []CertificateUserScope,
+	user string,
+	tenantID roachpb.TenantID,
+	roleSubject *ldap.DN,
+	certSubject *ldap.DN,
 ) bool {
 	for _, scope := range certUserScope {
-		if scope.Username == user {
-			// If username matches, allow authentication to succeed if the tenantID is a match
-			// or if the certificate scope is global.
+		if scope.Username == user && (roleSubject == nil || distinguishedname.MatchDN(roleSubject, certSubject)) {
+			// If username and subject DN match, allow authentication to succeed if
+			// the tenantID is a match or if the certificate scope is global.
 			if scope.TenantID == tenantID || scope.Global {
 				return true
 			}
