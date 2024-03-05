@@ -11,6 +11,12 @@
 package distinguishedname
 
 import (
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
+	"slices"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 	"github.com/go-ldap/ldap/v3"
@@ -55,4 +61,73 @@ func ParseDN(dnStr string) (*ldap.DN, error) {
 		return nil, errors.Wrapf(err, "failed to parse distinguished name %s", dnStr)
 	}
 	return dn, nil
+}
+
+// ParseDNFromCertificate parses the distinguished name for the subject from
+// X.509 certificate provided. It retains the sequence of fields as provided in
+// the certificate subject and also parses all fields mentioned in RFC4514 which
+// ldap/v3 library currently supports.
+func ParseDNFromCertificate(cert *x509.Certificate) (*ldap.DN, error) {
+	var RDNSeq pkix.RDNSequence
+	_, err := asn1.Unmarshal(cert.RawSubject, &RDNSeq)
+	if err != nil {
+		return nil, err
+	}
+
+	// This is required because RDNSeq.String() reverses the order of fields.
+	// The x509 library possibly intended to use cert.Subject.ToRDNSequence and
+	// RDNSequence.String() in succession which is done in the library function
+	// cert.Subject.String(). But since x509 is incapable of handling all fields
+	// defined in RFC 4514, we need to directly parse cert.RawSubject here.
+	slices.Reverse(RDNSeq)
+	subjectDN, err := ParseDN(RDNSeq.String())
+	if err != nil {
+		return nil, err
+	}
+
+	const (
+		// Go only parses a subset of the possible fields in a DN (golang/go#25667).
+		// We add the remaining ones defined in section 3 of RFC 4514
+		// (https://datatracker.ietf.org/doc/html/rfc4514#section-3)
+		encodedUserID          = "0.9.2342.19200300.100.1.1"
+		encodedDomainComponent = "0.9.2342.19200300.100.1.25"
+	)
+
+	for _, dn := range subjectDN.RDNs {
+		for _, attr := range dn.Attributes {
+			switch attr.Type {
+			case encodedUserID:
+				attr.Type = "UID"
+			case encodedDomainComponent:
+				attr.Type = "DC"
+			}
+		}
+	}
+
+	return subjectDN, nil
+}
+
+func hasOnlyCNAttribute(rdn *ldap.RelativeDN) bool {
+	const commonName = "CN"
+	return len(rdn.Attributes) == 1 && strings.EqualFold(rdn.Attributes[0].Type, commonName)
+}
+
+// MatchDNWithoutCN matches 2 distinguished names and returns true if they
+// differ by only the Common Name(CN) field. MatchDNWithoutCN expects both DNs
+// to have same number and type of fields.
+func MatchDNWithoutCN(d *ldap.DN, other *ldap.DN) bool {
+	if len(d.RDNs) != len(other.RDNs) {
+		return false
+	}
+	for i := range d.RDNs {
+		// TODO(souravcrl): handle case for multivalued RDNs as described in
+		// https://ldap.com/ldap-dns-and-rdns/
+		if hasOnlyCNAttribute(d.RDNs[i]) && hasOnlyCNAttribute(other.RDNs[i]) {
+			continue
+		}
+		if !d.RDNs[i].Equal(other.RDNs[i]) {
+			return false
+		}
+	}
+	return true
 }
