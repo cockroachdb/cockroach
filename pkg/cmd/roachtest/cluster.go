@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -665,6 +666,11 @@ type clusterImpl struct {
 
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
+
+	// grafanaTags contains the cluster and test information that grafana will separate
+	// test runs by. This is used by the roachtest grafana API to create appropriately
+	// tagged grafana annotations. If empty, grafana is not available.
+	grafanaTags []string
 }
 
 // Name returns the cluster name, i.e. something like `teamcity-....`
@@ -2844,6 +2850,37 @@ func (c *clusterImpl) StartGrafana(
 
 func (c *clusterImpl) StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error {
 	return roachprod.StopGrafana(ctx, l, c.name, dumpDir)
+}
+
+// AddGrafanaAnnotation creates a grafana annotation. If internal is false, it creates
+// an annotation for the centralized grafana instance. If true, it creates the annotation
+// for the internal grafana instance spun up in roachtests through StartGrafana.
+func (c *clusterImpl) AddGrafanaAnnotation(
+	ctx context.Context, l *logger.Logger, internal bool, req grafana.AddAnnotationRequest,
+) (string, error) {
+	var host string
+	var err error
+	if internal {
+		host, err = roachprod.GrafanaURL(ctx, l, c.name, false /* openInBrowser */)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		// If grafanaTags is empty, then grafana is not set up for this cluster.
+		if len(c.grafanaTags) == 0 {
+			return "", errors.New("Grafana is not available for this cluster")
+		}
+		// Add grafanaTags so we can filter annotations by test or by cluster.
+		req.Tags = append(req.Tags, c.grafanaTags...)
+
+		// CentralizedGrafanaHost is the host name for the centralized grafana instance that
+		// is set up for every roachtest run on GCE.
+		const CentralizedGrafanaHost = "grafana.testeng.crdb.io"
+		host = CentralizedGrafanaHost
+	}
+	// The internal grafana instance does not require auth.
+	secure := !internal
+	return roachprod.AddGrafanaAnnotation(ctx, host, secure, req)
 }
 
 func (c *clusterImpl) WipeForReuse(

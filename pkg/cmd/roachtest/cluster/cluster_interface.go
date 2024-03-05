@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
@@ -171,6 +172,7 @@ type Cluster interface {
 
 	StartGrafana(ctx context.Context, l *logger.Logger, promCfg *prometheus.Config) error
 	StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error
+	AddGrafanaAnnotation(ctx context.Context, l *logger.Logger, internal bool, req grafana.AddAnnotationRequest) (string, error)
 
 	// Volume snapshot related APIs.
 	//

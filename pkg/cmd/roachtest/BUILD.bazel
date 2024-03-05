@@ -22,6 +22,7 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/cmd/internal/issues",
+        "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
