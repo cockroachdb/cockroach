@@ -58,7 +58,7 @@ func registerRubyPG(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		startOpts := option.DefaultStartOptsInMemory()
+		startOpts := option.NewStartOpts(sqlClientsInMemoryDB)
 		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
 		// TODO(darrylwong): ruby-pg is currently being updated to run on Ubuntu 22.04.
 		// Once complete, fix up ruby_pg_helpers to accept a tls connection.

@@ -360,7 +360,7 @@ func runDecommission(
 			db := c.Conn(ctx, t.L(), pinnedNode)
 			defer db.Close()
 
-			startOpts := option.DefaultStartSingleNodeOpts()
+			startOpts := option.NewStartOpts(option.SkipInit)
 			startOpts.RoachprodOpts.JoinTargets = []int{pinnedNode}
 			extraArgs := []string{
 				fmt.Sprintf("--attrs=node%d", node),
@@ -744,7 +744,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 				targetNodeA, targetNodeB, runNode)
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Nodes(targetNodeA, targetNodeB))
 			// The node is in a decomissioned state, so don't attempt to run scheduled backups.
-			c.Start(ctx, t.L(), withDecommissionVMod(option.DefaultStartSingleNodeOpts()),
+			c.Start(ctx, t.L(), withDecommissionVMod(option.NewStartOpts(option.SkipInit)),
 				settings, c.Nodes(targetNodeA, targetNodeB))
 
 			if _, err := h.recommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode); err == nil {
@@ -807,7 +807,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 
 			// Bring targetNode it back up to verify that its replicas still get
 			// removed.
-			c.Start(ctx, t.L(), option.DefaultStartSingleNodeOpts(), settings, c.Node(targetNode))
+			c.Start(ctx, t.L(), option.NewStartOpts(option.SkipInit), settings, c.Node(targetNode))
 		}
 
 		// Run decommission a second time to wait until the replicas have
@@ -885,7 +885,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 				t.Fatal(err)
 			}
 			joinAddr := internalAddrs[0]
-			startOpts := option.DefaultStartSingleNodeOpts()
+			startOpts := option.NewStartOpts(option.SkipInit)
 			startOpts.RoachprodOpts.ExtraArgs = append(
 				startOpts.RoachprodOpts.ExtraArgs,
 				"--join",

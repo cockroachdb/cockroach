@@ -498,7 +498,7 @@ func (rd *replicationDriver) setupC2C(
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 
 	// TODO(msbutler): allow for backups once this test stabilizes a bit more.
-	srcStartOps := option.DefaultStartOptsNoBackups()
+	srcStartOps := option.NewStartOpts(option.NoBackupSchedule)
 	srcStartOps.RoachprodOpts.InitTarget = 1
 
 	roachtestutil.SetDefaultAdminUIPort(c, &srcStartOps.RoachprodOpts)
@@ -506,7 +506,7 @@ func (rd *replicationDriver) setupC2C(
 	c.Start(ctx, t.L(), srcStartOps, srcClusterSetting, srcCluster)
 
 	// TODO(msbutler): allow for backups once this test stabilizes a bit more.
-	dstStartOps := option.DefaultStartOptsNoBackups()
+	dstStartOps := option.NewStartOpts(option.NoBackupSchedule)
 	dstStartOps.RoachprodOpts.InitTarget = rd.rs.srcNodes + 1
 	roachtestutil.SetDefaultAdminUIPort(c, &dstStartOps.RoachprodOpts)
 	dstClusterSetting := install.MakeClusterSettings()
