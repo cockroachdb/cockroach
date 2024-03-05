@@ -851,8 +851,8 @@ func registerTPCC(r registry.Registry) {
 
 		LoadWarehousesGCE: 3500,
 		LoadWarehousesAWS: 3900,
-		EstimatedMaxGCE:   2900,
-		EstimatedMaxAWS:   3500,
+		EstimatedMaxGCE:   3100,
+		EstimatedMaxAWS:   3600,
 		Clouds:            registry.AllClouds,
 		Suites:            registry.Suites(registry.Nightly),
 	})
@@ -863,7 +863,7 @@ func registerTPCC(r registry.Registry) {
 		LoadWarehousesGCE: 3500,
 		LoadWarehousesAWS: 3900,
 		EstimatedMaxGCE:   2900,
-		EstimatedMaxAWS:   3500,
+		EstimatedMaxAWS:   3400,
 		Clouds:            registry.AllClouds,
 		Suites:            registry.Suites(registry.Nightly),
 		SharedProcessMT:   true,
@@ -887,8 +887,8 @@ func registerTPCC(r registry.Registry) {
 
 		LoadWarehousesGCE: 6500,
 		LoadWarehousesAWS: 6500,
-		EstimatedMaxGCE:   5000,
-		EstimatedMaxAWS:   5000,
+		EstimatedMaxGCE:   6300,
+		EstimatedMaxAWS:   6300,
 
 		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Nightly),
@@ -902,8 +902,8 @@ func registerTPCC(r registry.Registry) {
 
 		LoadWarehousesGCE: 3000,
 		LoadWarehousesAWS: 3000,
-		EstimatedMaxGCE:   2000,
-		EstimatedMaxAWS:   2000,
+		EstimatedMaxGCE:   2500,
+		EstimatedMaxAWS:   2500,
 
 		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Nightly),
@@ -916,8 +916,8 @@ func registerTPCC(r registry.Registry) {
 
 		LoadWarehousesGCE: 2000,
 		LoadWarehousesAWS: 2000,
-		EstimatedMaxGCE:   900,
-		EstimatedMaxAWS:   900,
+		EstimatedMaxGCE:   1700,
+		EstimatedMaxAWS:   1700,
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Nightly),
@@ -944,8 +944,8 @@ func registerTPCC(r registry.Registry) {
 
 		LoadWarehousesGCE: 3500,
 		LoadWarehousesAWS: 3900,
-		EstimatedMaxGCE:   2900,
-		EstimatedMaxAWS:   3500,
+		EstimatedMaxGCE:   3100,
+		EstimatedMaxAWS:   3600,
 		EncryptionEnabled: true,
 		Clouds:            registry.AllClouds,
 		Suites:            registry.Suites(registry.Nightly),
@@ -984,8 +984,8 @@ func registerTPCC(r registry.Registry) {
 
 		LoadWarehousesGCE: 3500,
 		LoadWarehousesAWS: 3900,
-		EstimatedMaxGCE:   2900,
-		EstimatedMaxAWS:   3500,
+		EstimatedMaxGCE:   3100,
+		EstimatedMaxAWS:   3600,
 		ExpirationLeases:  true,
 		Clouds:            registry.AllClouds,
 		Suites:            registry.Suites(registry.Nightly),
