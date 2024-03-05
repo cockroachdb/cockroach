@@ -320,7 +320,7 @@ func retrieveAuthInfo(
 
 	// Use fully qualified table name to avoid looking up "".system.role_options.
 	const getLoginDependencies = `SELECT option, value FROM system.public.role_options ` +
-		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL', 'NOSQLLOGIN', 'REPLICATION')`
+		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL', 'NOSQLLOGIN', 'REPLICATION', 'SUBJECT')`
 
 	roleOptsIt, err := ie.QueryIteratorEx(
 		ctx, "get-login-dependencies", nil, /* txn */

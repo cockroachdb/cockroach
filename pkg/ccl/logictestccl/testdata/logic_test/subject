@@ -8,14 +8,14 @@ statement error failed to parse distinguished name foo: DN ended with incomplete
 CREATE ROLE role_with_subject SUBJECT 'foo'
 
 statement ok
-CREATE ROLE role_with_subject SUBJECT 'foo=bar'
+CREATE ROLE role_with_subject SUBJECT 'CN=bar'
 
 query T
 SELECT value FROM system.role_options
 WHERE username = 'role_with_subject'
 AND option = 'SUBJECT'
 ----
-foo=bar
+CN=bar
 
 statement ok
 ALTER ROLE role_with_subject SUBJECT 'O=US, CN=role_with_subject'
@@ -60,8 +60,11 @@ AND option = 'SUBJECT'
 ----
 O=US\,A, CN=role_with_subject
 
-statement error SUBJECT CN must match "role_with_subject" but got "different_role"
+statement ok
 ALTER ROLE role_with_subject SUBJECT 'O=US\,A, CN=different_role'
 
-statement error SUBJECT must have only one CN attribute
+statement ok
 ALTER ROLE role_with_subject SUBJECT 'CN=role_with_subject, O=US\,A, CN=different_role'
+
+statement error SUBJECT contains illegal field type "OrgUnit", should be one of ["CN" "L" "ST" "O" "OU" "C" "STREET" "DC" "UID"]
+ALTER ROLE role_with_subject SUBJECT 'CN=role_with_subject, O=US\,A, CN=different_role, OrgUnit=Marketing';
