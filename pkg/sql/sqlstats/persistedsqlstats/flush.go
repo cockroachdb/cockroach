@@ -111,7 +111,7 @@ func (s *PersistedSQLStats) Flush(ctx context.Context, stopper *stop.Stopper) {
 func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, error) {
 	// Doing a count check on every flush for every node adds a lot of overhead.
 	// To reduce the overhead only do the check once an hour by default.
-	intervalToCheck := sqlStatsLimitTableCheckInterval.Get(&s.cfg.Settings.SV)
+	intervalToCheck := SQLStatsLimitTableCheckInterval.Get(&s.cfg.Settings.SV)
 	if !s.lastSizeCheck.IsZero() && s.lastSizeCheck.Add(intervalToCheck).After(timeutil.Now()) {
 		log.Infof(ctx, "PersistedSQLStats.StmtsLimitSizeReached skipped with last check at: %s and check interval: %s", s.lastSizeCheck, intervalToCheck)
 		return false, nil
