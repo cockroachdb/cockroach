@@ -155,8 +155,8 @@ func TestCTRStreamDataDriven(t *testing.T) {
 						d.MaybeScanArgs(t, "key", &keyName)
 						ivName := "default"
 						d.MaybeScanArgs(t, "iv", &ivName)
-						skipV1 := false
-						d.MaybeScanArgs(t, "skip-v1", &skipV1)
+						var onlyVersion string
+						d.MaybeScanArgs(t, "only-version", &onlyVersion)
 						iv := ivs[ivName]
 						var fcs FileStream
 						if impl == "v1" {
@@ -178,7 +178,7 @@ func TestCTRStreamDataDriven(t *testing.T) {
 						}
 
 						outputString := string(output)
-						if skipV1 && impl == "v1" {
+						if onlyVersion != "" && impl != onlyVersion {
 							return d.Expected
 						}
 						_, isDuplicate := seenCiphertexts[outputString]
@@ -320,9 +320,9 @@ func TestFileCipherStreamCreator(t *testing.T) {
 	// Make the active key = nil, so encryption/decryption is a noop.
 	km.activeID = "bar"
 	encSettings, fs5, err := fcs.CreateNew(context.Background())
+	require.NoError(t, err)
 	require.Equal(t, "", encSettings.KeyId)
 	require.Equal(t, enginepbccl.EncryptionType_Plaintext, encSettings.EncryptionType)
-	require.NoError(t, err)
 	fs5.Encrypt(5, data)
 	if diff := pretty.Diff(data, testData); diff != nil {
 		t.Fatalf("%s\n%s", strings.Join(diff, "\n"), data)
