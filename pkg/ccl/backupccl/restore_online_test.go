@@ -48,6 +48,9 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	// TODO(dt): remove this when OR supports synthesis.
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.elide_common_prefix.enabled = false`)
 
+	createStmt := `SELECT create_statement FROM [SHOW CREATE TABLE data.bank]`
+	createStmtRes := sqlDB.QueryStr(t, createStmt)
+
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 
 	params := base.TestClusterArgs{
@@ -63,6 +66,8 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	var downloadJobID jobspb.JobID
 	rSQLDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&downloadJobID)
 	jobutils.WaitForJobToSucceed(t, rSQLDB, downloadJobID)
+
+	rSQLDB.CheckQueryResults(t, createStmt, createStmtRes)
 }
 
 // TestOnlineRestoreTenant runs an online restore of a tenant and ensures the

@@ -1867,7 +1867,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
 		return errors.Wrap(err, "inserting table statistics")
 	}
-
 	publishDescriptors := func(ctx context.Context, txn descs.Txn) (err error) {
 		return r.publishDescriptors(
 			ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(),
@@ -1999,7 +1998,7 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 	downloadJobRecord := jobs.Record{
 		Description: fmt.Sprintf("Background Data Download for %s", r.job.Payload().Description),
 		Username:    r.job.Payload().UsernameProto.Decode(),
-		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans},
+		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans, TableDescs: details.TableDescs},
 		Progress:    jobspb.RestoreProgress{},
 	}
 

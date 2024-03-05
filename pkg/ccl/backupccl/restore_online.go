@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -502,13 +504,30 @@ func (r *restoreResumer) cleanupAfterDownload(
 	ctx, sp := tracing.ChildSpan(ctx, "backupccl.cleanupAfterDownload")
 	defer sp.Finish()
 
-	executor := r.execCfg.InternalDB.Executor()
-
-	// Re-enable automatic stats collection on restored tables.
+	// Try to restore automatic stats collection preference on each restored
+	// table.
 	for _, table := range details.TableDescs {
-		_, err := executor.Exec(ctx, "enable-stats", nil, `ALTER TABLE $1 SET (sql_stats_automatic_collection_enabled = true);`, table.Name)
-		if err != nil {
-			log.Warningf(ctx, "could not enable automatic stats on table %s", table)
+		if err := sql.DescsTxn(ctx, r.execCfg, func(
+			ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+		) error {
+			b := txn.KV().NewBatch()
+			newTableDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, table.ID)
+			if err != nil {
+				return err
+			}
+			newTableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
+			if err := descsCol.WriteDescToBatch(
+				ctx, false /* kvTrace */, newTableDesc, b); err != nil {
+				return err
+			}
+			if err := txn.KV().Run(ctx, b); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			// Re-enabling stats is best effort. The user may have dropped the table
+			// since it came online.
+			log.Warningf(ctx, "failed to re-enable auto stats on table %d", table.ID)
 		}
 	}
 	return nil
