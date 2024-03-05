@@ -410,7 +410,7 @@ func scramAuthenticator(
 // certificate.
 func authCert(
 	_ context.Context,
-	_ AuthConn,
+	c AuthConn,
 	tlsState tls.ConnectionState,
 	execCfg *sql.ExecutorConfig,
 	hbaEntry *hba.Entry,
@@ -442,6 +442,7 @@ func authCert(
 			&tlsState,
 			execCfg.RPCContext.TenantID,
 			cm,
+			c.GetRoleSubject(),
 		)
 		if err != nil {
 			return err

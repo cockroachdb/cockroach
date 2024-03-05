@@ -15,6 +15,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"fmt"
 	"net/url"
 	"strings"
@@ -22,9 +23,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/go-ldap/ldap/v3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,23 +40,30 @@ import (
 // the two, prefix the SAN with the type dns: or uri:. For example,
 // "foo" creates a single peer certificate with the CommonName "foo". The spec
 // "foo,dns:bar,dns:blah" creates a single peer certificate with the CommonName "foo" and a
-// DNSNames "bar" and "blah". "(Tenants)foo,dns:bar" creates a single
+// DNSNames "bar" and "blah". "(OU=Tenants)foo,dns:bar" creates a single
 // tenant client certificate with OU=Tenants, CN=foo and DNSName=bar.
 // A spec with "foo,dns:bar,uri:crdb://tenant/123" creates a single peer certificate
 // with CommonName foo, DNSName bar and URI set to crdb://tenant/123.
 // Contrast that with "foo;bar" which creates two peer certificates with the
 // CommonNames "foo" and "bar" respectively.
+// To create a certificate with full DN subject, required spec would be
+// "(O=Cockroach,OU=Order Processing Team)foo,dns:bar" which creates a
+// certificate with O=Cockroach,OU=Order Processing Team,CN=foo, DNSName=bar.
 func makeFakeTLSState(t *testing.T, spec string) *tls.ConnectionState {
 	tls := &tls.ConnectionState{}
 	uriPrefix := "uri:"
 	dnsPrefix := "dns:"
 	if spec != "" {
 		for _, peerSpec := range strings.Split(spec, ";") {
-			var ou []string
+			subjectDN := map[string][]string{}
 			if strings.HasPrefix(peerSpec, "(") {
-				ouAndRest := strings.Split(peerSpec[1:], ")")
-				ou = ouAndRest[:1]
-				peerSpec = ouAndRest[1]
+				subjectDNAndRest := strings.Split(peerSpec[1:], ")")
+				fieldsSubjectDN := strings.Split(subjectDNAndRest[0], ",")
+				for _, field := range fieldsSubjectDN {
+					fieldKeyAndValue := strings.Split(field, "=")
+					subjectDN[fieldKeyAndValue[0]] = fieldKeyAndValue[1:]
+				}
+				peerSpec = subjectDNAndRest[1]
 			}
 			names := strings.Split(peerSpec, ",")
 			if len(names) == 0 {
@@ -62,18 +72,20 @@ func makeFakeTLSState(t *testing.T, spec string) *tls.ConnectionState {
 			peerCert := &x509.Certificate{}
 			peerCert.Subject = pkix.Name{
 				CommonName:         names[0],
-				OrganizationalUnit: ou,
+				Organization:       subjectDN["O"],
+				OrganizationalUnit: subjectDN["OU"],
 			}
+			peerCert.RawSubject, _ = asn1.Marshal(peerCert.Subject)
 			for i := 1; i < len(names); i++ {
 				if strings.HasPrefix(names[i], dnsPrefix) {
 					peerCert.DNSNames = append(peerCert.DNSNames, strings.TrimPrefix(names[i], dnsPrefix))
 				} else if strings.HasPrefix(names[i], uriPrefix) {
 					rawURI := strings.TrimPrefix(names[i], uriPrefix)
-					url, err := url.Parse(rawURI)
+					uri, err := url.Parse(rawURI)
 					if err != nil {
 						t.Fatalf("unable to create tls spec due to invalid URI %s", rawURI)
 					}
-					peerCert.URIs = append(peerCert.URIs, url)
+					peerCert.URIs = append(peerCert.URIs, uri)
 				} else {
 					t.Fatalf("subject altername names are expected to have uri: or dns: prefix")
 				}
@@ -263,54 +275,65 @@ func TestAuthenticationHook(t *testing.T) {
 	fooUser := username.MakeSQLUsernameFromPreNormalizedString("foo")
 	barUser := username.MakeSQLUsernameFromPreNormalizedString("bar")
 	blahUser := username.MakeSQLUsernameFromPreNormalizedString("blah")
+	subjectDNString := "O=Cockroach,OU=Order Processing Team"
 
 	testCases := []struct {
-		insecure           bool
-		tlsSpec            string
-		username           username.SQLUsername
-		principalMap       string
-		buildHookSuccess   bool
-		publicHookSuccess  bool
-		privateHookSuccess bool
-		tenantID           roachpb.TenantID
-		expectedErr        string
+		insecure               bool
+		tlsSpec                string
+		username               username.SQLUsername
+		principalMap           string
+		buildHookSuccess       bool
+		publicHookSuccess      bool
+		privateHookSuccess     bool
+		tenantID               roachpb.TenantID
+		isSubjectRoleOptionSet bool
+		expectedErr            string
 	}{
 		// Insecure mode, empty username.
-		{true, "", username.SQLUsername{}, "", true, false, false, roachpb.SystemTenantID, `user is missing`},
+		{true, "", username.SQLUsername{}, "", true, false, false, roachpb.SystemTenantID, false, `user is missing`},
 		// Insecure mode, non-empty username.
-		{true, "", fooUser, "", true, true, false, roachpb.SystemTenantID, `user "foo" is not allowed`},
+		{true, "", fooUser, "", true, true, false, roachpb.SystemTenantID, false, `user "foo" is not allowed`},
 		// Secure mode, no TLS state.
-		{false, "", username.SQLUsername{}, "", false, false, false, roachpb.SystemTenantID, `no client certificates in request`},
+		{false, "", username.SQLUsername{}, "", false, false, false, roachpb.SystemTenantID, false, `no client certificates in request`},
 		// Secure mode, bad user.
 		{false, "foo", username.NodeUserName(), "", true, false, false, roachpb.SystemTenantID,
-			`certificate authentication failed for user "node"`},
+			false, `certificate authentication failed for user "node"`},
 		// Secure mode, node user.
-		{false, username.NodeUser, username.NodeUserName(), "", true, true, true, roachpb.SystemTenantID, ``},
+		{false, username.NodeUser, username.NodeUserName(), "", true, true, true, roachpb.SystemTenantID, false, ``},
 		// Secure mode, node cert and unrelated user.
 		{false, username.NodeUser, fooUser, "", true, false, false, roachpb.SystemTenantID,
-			`certificate authentication failed for user "foo"`},
+			false, `certificate authentication failed for user "foo"`},
 		// Secure mode, root user.
 		{false, username.RootUser, username.NodeUserName(), "", true, false, false, roachpb.SystemTenantID,
-			`certificate authentication failed for user "node"`},
+			false, `certificate authentication failed for user "node"`},
 		// Secure mode, tenant cert, foo user.
-		{false, "(Tenants)foo", fooUser, "", true, false, false, roachpb.SystemTenantID,
-			`using tenant client certificate as user certificate is not allowed`},
+		{false, "(OU=Tenants)foo", fooUser, "", true, false, false, roachpb.SystemTenantID,
+			false, `using tenant client certificate as user certificate is not allowed`},
 		// Secure mode, multiple cert principals.
-		{false, "foo,dns:bar", fooUser, "", true, true, false, roachpb.SystemTenantID, `user "foo" is not allowed`},
-		{false, "foo,dns:bar", barUser, "", true, true, false, roachpb.SystemTenantID, `user "bar" is not allowed`},
+		{false, "foo,dns:bar", fooUser, "", true, true, false, roachpb.SystemTenantID, false, `user "foo" is not allowed`},
+		{false, "foo,dns:bar", barUser, "", true, true, false, roachpb.SystemTenantID, false, `user "bar" is not allowed`},
 		// Secure mode, principal map.
-		{false, "foo,dns:bar", blahUser, "foo:blah", true, true, false, roachpb.SystemTenantID, `user "blah" is not allowed`},
-		{false, "foo,dns:bar", blahUser, "bar:blah", true, true, false, roachpb.SystemTenantID, `user "blah" is not allowed`},
+		{false, "foo,dns:bar", blahUser, "foo:blah", true, true, false, roachpb.SystemTenantID, false, `user "blah" is not allowed`},
+		{false, "foo,dns:bar", blahUser, "bar:blah", true, true, false, roachpb.SystemTenantID, false, `user "blah" is not allowed`},
 		{false, "foo,uri:crdb://tenant/123/user/foo", fooUser, "", true, true, false, roachpb.MustMakeTenantID(123),
-			`user "foo" is not allowed`},
+			false, `user "foo" is not allowed`},
 		{false, "foo,uri:crdb://tenant/123/user/foo", fooUser, "", true, false, false, roachpb.SystemTenantID,
-			`certificate authentication failed for user "foo"`},
+			false, `certificate authentication failed for user "foo"`},
 		{false, "foo", fooUser, "", true, true, false, roachpb.MustMakeTenantID(123),
-			`user "foo" is not allowed`},
+			false, `user "foo" is not allowed`},
 		{false, "foo,uri:crdb://tenant/1/user/foo", fooUser, "", true, false, false, roachpb.MustMakeTenantID(123),
-			`certificate authentication failed for user "foo"`},
+			false, `certificate authentication failed for user "foo"`},
 		{false, "foo,uri:crdb://tenant/123/user/foo", blahUser, "", true, false, false, roachpb.MustMakeTenantID(123),
-			`certificate authentication failed for user "blah"`},
+			false, `certificate authentication failed for user "blah"`},
+		// Secure mode, client cert having full DN, foo user with subject role option not set.
+		{false, "(" + subjectDNString + ")foo", fooUser, "", true, true, false, roachpb.MustMakeTenantID(123),
+			false, ``},
+		// Secure mode, client cert having full DN, foo user with subject role option set.
+		{false, "(" + subjectDNString + ")foo", fooUser, "", true, true, false, roachpb.MustMakeTenantID(123),
+			true, ``},
+		// Secure mode, client cert having full DN, foo user with subject role option set, subject role option string != TLS DN.
+		{false, "foo", fooUser, "", true, false, false, roachpb.MustMakeTenantID(123),
+			true, `certificate authentication failed for user "foo"`},
 	}
 
 	ctx := context.Background()
@@ -321,11 +344,18 @@ func TestAuthenticationHook(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			var roleSubject *ldap.DN
+			if tc.isSubjectRoleOptionSet {
+				roleSubject, _ = distinguishedname.ParseDN(subjectDNString + ",CN=" + tc.username.Normalized())
+			}
+
 			hook, err := security.UserAuthCertHook(
 				tc.insecure,
 				makeFakeTLSState(t, tc.tlsSpec),
 				tc.tenantID,
 				nil, /* certManager */
+				roleSubject,
 			)
 			if (err == nil) != tc.buildHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.buildHookSuccess, err)

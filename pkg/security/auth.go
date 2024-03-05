@@ -14,15 +14,20 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/go-ldap/ldap/v3"
 )
 
 var certPrincipalMap struct {
@@ -43,6 +48,9 @@ type CertificateUserScope struct {
 	// on any tenant. This is ONLY for backward compatibility with old
 	// client certificates without a tenant scope.
 	Global bool
+	// optionally cert subject also needs to be provided if a role subject option
+	// is set for the user.
+	Subject *ldap.DN
 }
 
 // UserAuthHook authenticates a user based on their username and whether their
@@ -100,10 +108,54 @@ func getCertificatePrincipals(cert *x509.Certificate) []string {
 	return results
 }
 
-// GetCertificateUserScope extracts the certificate scopes from a client certificate.
+// generateSubjectDNSequence generates a distinguished name for the subject from
+// X.509 certificate provided. It retains the sequence of fields as provided in
+// the certificate subject and also parses all fields mentioned in RFC4514
+// which ldap/v3 library currently supports.
+func generateSubjectDNSequence(cert *x509.Certificate) (*ldap.DN, error) {
+	var RDNSeq pkix.RDNSequence
+	_, err := asn1.Unmarshal(cert.RawSubject, &RDNSeq)
+	if err != nil {
+		RDNSeq = cert.Subject.ToRDNSequence()
+	}
+
+	slices.Reverse(RDNSeq)
+	subjectDN, err := distinguishedname.ParseDN(RDNSeq.String())
+	if err != nil {
+		return nil, err
+	}
+
+	const (
+		encodedUserID          = "0.9.2342.19200300.100.1.1"
+		encodedDomainComponent = "0.9.2342.19200300.100.1.25"
+	)
+
+	for _, dn := range subjectDN.RDNs {
+		for _, attr := range dn.Attributes {
+			switch attr.Type {
+			case encodedUserID:
+				attr.Type = "UID"
+			case encodedDomainComponent:
+				attr.Type = "DC"
+			}
+		}
+	}
+
+	return subjectDN, nil
+}
+
+// GetCertificateUserScope extracts the certificate scopes from a client
+// certificate. It tries to get CRDB prefixed SAN URIs and extracts tenantID and
+// user information. If there is no such URI, then it gets principal transformed
+// CN and SAN DNSNames with global scope.
 func GetCertificateUserScope(
 	peerCert *x509.Certificate,
 ) (userScopes []CertificateUserScope, _ error) {
+	subjectDN, err := generateSubjectDNSequence(peerCert)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, uri := range peerCert.URIs {
 		uriString := uri.String()
 		if URISANHasCRDBPrefix(uriString) {
@@ -114,6 +166,7 @@ func GetCertificateUserScope(
 			scope := CertificateUserScope{
 				Username: user,
 				TenantID: tenantID,
+				Subject:  subjectDN,
 			}
 			userScopes = append(userScopes, scope)
 		}
@@ -124,6 +177,7 @@ func GetCertificateUserScope(
 			scope := CertificateUserScope{
 				Username: user,
 				Global:   true,
+				Subject:  subjectDN,
 			}
 			userScopes = append(userScopes, scope)
 		}
@@ -148,6 +202,7 @@ func UserAuthCertHook(
 	tlsState *tls.ConnectionState,
 	tenantID roachpb.TenantID,
 	certManager *CertificateManager,
+	roleSubject *ldap.DN,
 ) (UserAuthHook, error) {
 	var certUserScope []CertificateUserScope
 	if !insecureMode {
@@ -190,7 +245,7 @@ func UserAuthCertHook(
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
-		if ValidateUserScope(certUserScope, systemIdentity.Normalized(), tenantID) {
+		if ValidateUserScope(certUserScope, systemIdentity.Normalized(), tenantID, roleSubject) {
 			if certManager != nil {
 				certManager.MaybeUpsertClientExpiration(
 					ctx,
@@ -200,9 +255,20 @@ func UserAuthCertHook(
 			}
 			return nil
 		}
-		return errors.WithDetailf(errors.Errorf("certificate authentication failed for user %q", systemIdentity),
+		return errors.WithDetailf(errors.Errorf("certificate authentication failed for user %q (DN: %s)",
+			systemIdentity,
+			formatSubjectDN(roleSubject)),
 			"The client certificate is valid for %s.", FormatUserScopes(certUserScope))
 	}, nil
+}
+
+// formatSubjectDN returns a formatted subject distinguished name
+func formatSubjectDN(subject *ldap.DN) string {
+	if subject != nil {
+		return subject.String()
+	}
+
+	return ""
 }
 
 // FormatUserScopes formats a list of scopes in a human-readable way,
@@ -294,17 +360,22 @@ func (i *PasswordUserAuthError) FormatError(p errors.Printer) error {
 	return i.err
 }
 
-// ValidateUserScope returns true if the user is a valid user for the tenant based on the certificate
-// user scope. It also returns true if the certificate is a global certificate. A client certificate
-// is considered global only when it doesn't contain a tenant SAN which is only possible for older
-// client certificates created prior to introducing tenant based scoping for the client.
+// ValidateUserScope returns true if the user is a valid user for the tenant
+// based on the certificate user scope. It also returns true if the certificate
+// is a global certificate. A client certificate is considered global only when
+// it doesn't contain a tenant SAN which is only possible for older client
+// certificates created prior to introducing tenant based scoping for the
+// client.
 func ValidateUserScope(
-	certUserScope []CertificateUserScope, user string, tenantID roachpb.TenantID,
+	certUserScope []CertificateUserScope,
+	user string,
+	tenantID roachpb.TenantID,
+	roleSubject *ldap.DN,
 ) bool {
 	for _, scope := range certUserScope {
-		if scope.Username == user {
-			// If username matches, allow authentication to succeed if the tenantID is a match
-			// or if the certificate scope is global.
+		if scope.Username == user && (roleSubject == nil || roleSubject.Equal(scope.Subject)) {
+			// If username and subject DN match, allow authentication to succeed if
+			// the tenantID is a match or if the certificate scope is global.
 			if scope.TenantID == tenantID || scope.Global {
 				return true
 			}

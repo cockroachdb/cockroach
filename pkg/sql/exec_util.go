@@ -125,6 +125,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/go-ldap/ldap/v3"
 )
 
 func init() {
@@ -2192,6 +2193,9 @@ type SessionArgs struct {
 	// JWTAuthEnabled indicates if the customer is passing a JWT token in the
 	// password field.
 	JWTAuthEnabled bool
+	// RoleSubject refers to subject set for a given user role. This is nil if no
+	// subject is set for the role assigned to user
+	RoleSubject *ldap.DN
 }
 
 // SessionRegistry stores a set of all sessions on this node.
