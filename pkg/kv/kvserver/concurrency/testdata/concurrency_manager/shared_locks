@@ -124,7 +124,7 @@ sequence req=req5
 [5] sequence req5: acquiring latches
 [5] sequence req5: scanning lock table for conflicting locks
 [5] sequence req5: waiting in lock wait-queues
-[5] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[5] sequence req5: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
 [5] sequence req5: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req5: pushing txn 00000001 to abort
 [5] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -135,7 +135,7 @@ on-txn-updated txn=txn1 status=committed
 ----
 [-] update txn: committing txn1
 [5] sequence req5: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
-[5] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[5] sequence req5: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
 [5] sequence req5: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req5: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req5: pushing txn 00000002 to abort
@@ -147,7 +147,7 @@ on-txn-updated txn=txn2 status=aborted
 ----
 [-] update txn: aborting txn2
 [5] sequence req5: resolving intent ‹"a"› for txn 00000002 with ABORTED status
-[5] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[5] sequence req5: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
 [5] sequence req5: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req5: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req5: pushing txn 00000003 to abort
@@ -168,14 +168,13 @@ num=1
            txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 5, strength: Exclusive, txn: 00000005-0000-0000-0000-000000000000
-   distinguished req: 5
 
 # Unlock the key entirely, ensure req5 can proceed.
 on-txn-updated txn=txn3 status=committed
 ----
 [-] update txn: committing txn3
 [5] sequence req5: resolving intent ‹"a"› for txn 00000003 with COMMITTED status
-[5] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[5] sequence req5: lock wait-queue event: wait for txn 00000004 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
 [5] sequence req5: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req5: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req5: pushing txn 00000004 to abort
@@ -272,7 +271,7 @@ sequence req=req8
 [10] sequence req8: acquiring latches
 [10] sequence req8: scanning lock table for conflicting locks
 [10] sequence req8: waiting in lock wait-queues
-[10] sequence req8: lock wait-queue event: wait for (distinguished) txn 00000006 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[10] sequence req8: lock wait-queue event: wait for txn 00000006 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
 [10] sequence req8: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [10] sequence req8: pushing timestamp of txn 00000006 above 11.000000000,1
 [10] sequence req8: pusher pushed pushee to 11.000000000,2
@@ -325,7 +324,7 @@ sequence req=req9
 [13] sequence req9: acquiring latches
 [13] sequence req9: scanning lock table for conflicting locks
 [13] sequence req9: waiting in lock wait-queues
-[13] sequence req9: lock wait-queue event: wait for (distinguished) txn 00000006 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[13] sequence req9: lock wait-queue event: wait for txn 00000006 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
 [13] sequence req9: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [13] sequence req9: pushing txn 00000006 to abort
 [13] sequence req9: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -337,7 +336,6 @@ num=1
   holder: txn: 00000006-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 9, strength: Shared, txn: 00000008-0000-0000-0000-000000000000
-   distinguished req: 9
 
 # Note that txn7 is read-committed, so it can push the timestamp of intents as
 # if it was high priority.
@@ -497,7 +495,7 @@ sequence req=req16
 [6] sequence req16: acquiring latches
 [6] sequence req16: scanning lock table for conflicting locks
 [6] sequence req16: waiting in lock wait-queues
-[6] sequence req16: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[6] sequence req16: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
 [6] sequence req16: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [6] sequence req16: pushing txn 00000001 to abort
 [6] sequence req16: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -522,7 +520,6 @@ num=1
    queued locking requests:
     active: true req: 16, strength: Exclusive, txn: 00000003-0000-0000-0000-000000000000
     active: true req: 17, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
-   distinguished req: 16
 
 # Now, test non-transactional write requests. Note that we test these last
 # because non-transactional requests race with conflicting requests, which means
@@ -554,14 +551,13 @@ num=1
     active: true req: 16, strength: Exclusive, txn: 00000003-0000-0000-0000-000000000000
     active: true req: 17, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
     active: true req: 18, strength: Intent, txn: none
-   distinguished req: 16
 
 # Cleanup by releasing the shared locks and finishing the waiting requests.
 on-txn-updated txn=txn1 status=aborted
 ----
 [-] update txn: aborting txn1
 [6] sequence req16: resolving intent ‹"a"› for txn 00000001 with ABORTED status
-[6] sequence req16: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
+[6] sequence req16: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
 [6] sequence req16: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [6] sequence req16: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [6] sequence req16: pushing txn 00000002 to abort
@@ -589,7 +585,7 @@ on-txn-updated txn=txn2 status=aborted
 [6] sequence req16: scanning lock table for conflicting locks
 [6] sequence req16: sequencing complete, returned guard
 [7] sequence req17: resolving intent ‹"a"› for txn 00000002 with ABORTED status
-[7] sequence req17: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
+[7] sequence req17: lock wait-queue event: wait for txn 00000003 running request @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
 [7] sequence req17: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [7] sequence req17: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [7] sequence req17: pushing txn 00000003 to detect request deadlock
@@ -608,7 +604,7 @@ finish req=req16
 [7] sequence req17: acquiring latches
 [7] sequence req17: scanning lock table for conflicting locks
 [7] sequence req17: sequencing complete, returned guard
-[8] sequence req18: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key ‹"a"› (queuedLockingRequests: 2, queuedReaders: 0)
+[8] sequence req18: lock wait-queue event: wait for txn 00000004 running request @ key ‹"a"› (queuedLockingRequests: 2, queuedReaders: 0)
 [8] sequence req18: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [8] sequence req18: not pushing
 [8] sequence req18: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
@@ -664,7 +660,7 @@ sequence req=req20
 [2] sequence req20: acquiring latches
 [2] sequence req20: scanning lock table for conflicting locks
 [2] sequence req20: waiting in lock wait-queues
-[2] sequence req20: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req20: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
 [2] sequence req20: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [2] sequence req20: pushing txn 00000001 to abort
 [2] sequence req20: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -740,7 +736,6 @@ num=1
     active: true req: 22, strength: Shared, txn: none
     active: true req: 23, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
     active: true req: 24, strength: Shared, txn: 00000005-0000-0000-0000-000000000000
-   distinguished req: 20
 
 on-txn-updated txn=txn1 status=committed
 ----
@@ -764,7 +759,7 @@ on-txn-updated txn=txn1 status=committed
 [4] sequence req22: scanning lock table for conflicting locks
 [4] sequence req22: sequencing complete, returned guard
 [5] sequence req23: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
-[5] sequence req23: lock wait-queue event: wait for (distinguished) txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 5, queuedReaders: 0)
+[5] sequence req23: lock wait-queue event: wait for txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 5, queuedReaders: 0)
 [5] sequence req23: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req23: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req23: pushing txn 00000002 to detect request deadlock
@@ -790,12 +785,11 @@ num=1
     active: false req: 21, strength: Shared, txn: 00000003-0000-0000-0000-000000000000
     active: true req: 23, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
     active: true req: 24, strength: Shared, txn: 00000005-0000-0000-0000-000000000000
-   distinguished req: 23
 
 finish req=req20
 ----
 [-] finish req20: finishing request
-[5] sequence req23: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
+[5] sequence req23: lock wait-queue event: wait for txn 00000003 running request @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
 [5] sequence req23: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req23: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req23: pushing txn 00000003 to detect request deadlock
@@ -820,7 +814,6 @@ num=1
     active: false req: 21, strength: Shared, txn: 00000003-0000-0000-0000-000000000000
     active: true req: 23, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
     active: true req: 24, strength: Shared, txn: 00000005-0000-0000-0000-000000000000
-   distinguished req: 23
 
 finish req=req21
 ----
@@ -830,7 +823,7 @@ finish req=req21
 [5] sequence req23: acquiring latches
 [5] sequence req23: scanning lock table for conflicting locks
 [5] sequence req23: sequencing complete, returned guard
-[6] sequence req24: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key ‹"a"› (queuedLockingRequests: 2, queuedReaders: 0)
+[6] sequence req24: lock wait-queue event: wait for txn 00000004 running request @ key ‹"a"› (queuedLockingRequests: 2, queuedReaders: 0)
 [6] sequence req24: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [6] sequence req24: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [6] sequence req24: pushing txn 00000004 to detect request deadlock
@@ -843,7 +836,6 @@ num=1
    queued locking requests:
     active: false req: 23, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
     active: true req: 24, strength: Shared, txn: 00000005-0000-0000-0000-000000000000
-   distinguished req: 24
 
 finish req=req23
 ----
@@ -897,7 +889,7 @@ sequence req=req26
 [2] sequence req26: acquiring latches
 [2] sequence req26: scanning lock table for conflicting locks
 [2] sequence req26: waiting in lock wait-queues
-[2] sequence req26: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req26: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
 [2] sequence req26: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [2] sequence req26: pushing txn 00000001 to abort
 [2] sequence req26: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -927,7 +919,6 @@ num=1
    queued locking requests:
     active: true req: 26, strength: Exclusive, txn: 00000002-0000-0000-0000-000000000000
     active: true req: 27, strength: Shared, txn: 00000003-0000-0000-0000-000000000000
-   distinguished req: 26
 
 on-txn-updated txn=txn1 status=aborted
 ----
@@ -939,7 +930,7 @@ on-txn-updated txn=txn1 status=aborted
 [2] sequence req26: scanning lock table for conflicting locks
 [2] sequence req26: sequencing complete, returned guard
 [3] sequence req27: resolving intent ‹"a"› for txn 00000001 with ABORTED status
-[3] sequence req27: lock wait-queue event: wait for (distinguished) txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 2, queuedReaders: 0)
+[3] sequence req27: lock wait-queue event: wait for txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 2, queuedReaders: 0)
 [3] sequence req27: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [3] sequence req27: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req27: pushing txn 00000002 to detect request deadlock
@@ -1015,7 +1006,7 @@ sequence req=req30
 [3] sequence req30: acquiring latches
 [3] sequence req30: scanning lock table for conflicting locks
 [3] sequence req30: waiting in lock wait-queues
-[3] sequence req30: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"b"› (queuedLockingRequests: 1, queuedReaders: 0)
+[3] sequence req30: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"b"› (queuedLockingRequests: 1, queuedReaders: 0)
 [3] sequence req30: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req30: pushing txn 00000002 to abort
 [3] sequence req30: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -1031,7 +1022,7 @@ sequence req=req31
 [4] sequence req31: acquiring latches
 [4] sequence req31: scanning lock table for conflicting locks
 [4] sequence req31: waiting in lock wait-queues
-[4] sequence req31: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence req31: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
 [4] sequence req31: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence req31: pushing txn 00000001 to abort
 [4] sequence req31: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -1044,12 +1035,10 @@ num=2
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 31, strength: Exclusive, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 31
  lock: "b"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 30, strength: Exclusive, txn: 00000001-0000-0000-0000-000000000000
-   distinguished req: 30
 
 # Break the deadlock by aborting txn1.
 on-txn-updated txn=txn1 status=aborted
@@ -1131,7 +1120,7 @@ sequence req=req3
 [3] sequence req3: acquiring latches
 [3] sequence req3: scanning lock table for conflicting locks
 [3] sequence req3: waiting in lock wait-queues
-[3] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"b"› (queuedLockingRequests: 1, queuedReaders: 0)
+[3] sequence req3: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"b"› (queuedLockingRequests: 1, queuedReaders: 0)
 [3] sequence req3: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req3: pushing txn 00000002 to abort
 [3] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -1147,7 +1136,7 @@ sequence req=req4
 [4] sequence req4: acquiring latches
 [4] sequence req4: scanning lock table for conflicting locks
 [4] sequence req4: waiting in lock wait-queues
-[4] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence req4: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
 [4] sequence req4: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence req4: pushing txn 00000001 to abort
 [4] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -1160,12 +1149,10 @@ num=2
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 35, strength: Shared, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 35
  lock: "b"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 34, strength: Shared, txn: 00000001-0000-0000-0000-000000000000
-   distinguished req: 34
 
 # Break the deadlock by aborting txn1.
 on-txn-updated txn=txn1 status=aborted
@@ -1278,7 +1265,7 @@ sequence req=req4
 [4] sequence req4: acquiring latches
 [4] sequence req4: scanning lock table for conflicting locks
 [4] sequence req4: waiting in lock wait-queues
-[4] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"b"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence req4: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"b"› (queuedLockingRequests: 1, queuedReaders: 0)
 [4] sequence req4: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence req4: pushing txn 00000003 to abort
 [4] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -1293,7 +1280,6 @@ num=2
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 39, strength: Shared, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 39
 
 # Setup complete.
 
@@ -1307,7 +1293,7 @@ sequence req=req5
 [5] sequence req5: acquiring latches
 [5] sequence req5: scanning lock table for conflicting locks
 [5] sequence req5: waiting in lock wait-queues
-[5] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[5] sequence req5: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
 [5] sequence req5: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req5: pushing txn 00000001 to abort
 [5] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -1317,7 +1303,7 @@ on-txn-updated txn=txn1 status=committed
 [-] update txn: committing txn1
 [4] sequence req4: dependency cycle detected 00000002->00000003->00000002
 [5] sequence req5: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
-[5] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[5] sequence req5: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
 [5] sequence req5: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req5: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req5: pushing txn 00000002 to abort

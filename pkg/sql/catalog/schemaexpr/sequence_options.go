@@ -224,6 +224,13 @@ func AssignSequenceOptions(
 				return errors.Newf(
 					"CACHE (%d) must be greater than zero", v)
 			}
+		case tree.SeqOptCacheNode:
+			if v := *option.IntVal; v >= 1 {
+				opts.NodeCacheSize = v
+			} else {
+				return errors.Newf(
+					"PER NODE CACHE (%d) must be greater than zero", v)
+			}
 		case tree.SeqOptIncrement:
 			// Do nothing; this has already been set.
 		case tree.SeqOptMinValue:

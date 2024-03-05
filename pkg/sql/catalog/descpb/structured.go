@@ -290,9 +290,10 @@ func (opts *TableDescriptor_SequenceOpts) HasOwner() bool {
 	return !opts.SequenceOwner.Equal(TableDescriptor_SequenceOpts_SequenceOwner{})
 }
 
-// EffectiveCacheSize returns the CacheSize field of a sequence option with
-// the exception that it will return 1 if the CacheSize field is 0.
-// A cache size of 1 indicates that there is no caching. The returned value
+// EffectiveCacheSize returns the CacheSize or NodeCacheSize field of a sequence option with
+// the exception that it will return 1 if both fields are set to 0.
+// A cache size of 1 indicates that there is no caching. A node cache size of 0 indicates there is no
+// node-level caching. The returned value
 // will always be greater than or equal to 1.
 //
 // Prior to #51259, sequence caching was unimplemented and cache sizes were
@@ -300,8 +301,11 @@ func (opts *TableDescriptor_SequenceOpts) HasOwner() bool {
 // size of 0, it should be treated in the same was as sequences with cache
 // sizes of 1.
 func (opts *TableDescriptor_SequenceOpts) EffectiveCacheSize() int64 {
-	if opts.CacheSize == 0 {
+	if opts.CacheSize == 0 && opts.NodeCacheSize == 0 {
 		return 1
+	}
+	if opts.CacheSize == 1 && opts.NodeCacheSize != 0 {
+		return opts.NodeCacheSize
 	}
 	return opts.CacheSize
 }

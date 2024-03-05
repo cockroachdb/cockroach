@@ -93,7 +93,7 @@ sequence req=req2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
-[2] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
 [2] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
@@ -104,7 +104,6 @@ num=2
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 2, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 2
  lock: "k2"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
@@ -174,7 +173,7 @@ sequence req=req2
 [7] sequence req2: acquiring latches
 [7] sequence req2: scanning lock table for conflicting locks
 [7] sequence req2: waiting in lock wait-queues
-[7] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[7] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
 [7] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [7] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
@@ -289,7 +288,7 @@ sequence req=req3
 [13] sequence req3: acquiring latches
 [13] sequence req3: scanning lock table for conflicting locks
 [13] sequence req3: waiting in lock wait-queues
-[13] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[13] sequence req3: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
 [13] sequence req3: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [13] sequence req3: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
@@ -402,7 +401,7 @@ sequence req=req2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
-[2] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
 [2] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
@@ -413,7 +412,6 @@ num=1
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 6, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 6
 
 on-split
 ----
@@ -447,7 +445,7 @@ sequence req=req2
 [4] sequence req2: acquiring latches
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: waiting in lock wait-queues
-[4] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
 [4] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
@@ -574,7 +572,7 @@ sequence req=req2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
-[2] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
 [2] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
@@ -592,7 +590,6 @@ num=1
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 8, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 8
 
 on-merge
 ----
@@ -667,7 +664,7 @@ sequence req=req2
 [8] sequence req2: acquiring latches
 [8] sequence req2: scanning lock table for conflicting locks
 [8] sequence req2: waiting in lock wait-queues
-[8] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[8] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
 [8] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [8] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
@@ -780,7 +777,7 @@ sequence req=req2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
-[2] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
 [2] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
@@ -791,7 +788,6 @@ num=1
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 12, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
-   distinguished req: 12
 
 on-snapshot-applied
 ----
@@ -825,7 +821,7 @@ sequence req=req2
 [4] sequence req2: acquiring latches
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: waiting in lock wait-queues
-[4] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
 [4] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 

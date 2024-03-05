@@ -1078,6 +1078,8 @@ message TableDescriptor {
     // AS option value for CREATE SEQUENCE, which specifies the default
     // min and max values a sequence can take on.
     optional string as_integer_type = 8 [(gogoproto.nullable) = false];
+    // The number of values that a node can cache.
+    optional int64 node_cache_size = 9 [(gogoproto.nullable) = false];
   }
 
   // The presence of sequence_opts indicates that this descriptor is for a sequence.

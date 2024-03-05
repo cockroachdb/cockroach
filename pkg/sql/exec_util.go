@@ -596,11 +596,12 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 	"default handling of SERIAL in table definitions",
 	"rowid",
 	map[int64]string{
-		int64(sessiondatapb.SerialUsesRowID):              "rowid",
-		int64(sessiondatapb.SerialUsesUnorderedRowID):     "unordered_rowid",
-		int64(sessiondatapb.SerialUsesVirtualSequences):   "virtual_sequence",
-		int64(sessiondatapb.SerialUsesSQLSequences):       "sql_sequence",
-		int64(sessiondatapb.SerialUsesCachedSQLSequences): "sql_sequence_cached",
+		int64(sessiondatapb.SerialUsesRowID):                  "rowid",
+		int64(sessiondatapb.SerialUsesUnorderedRowID):         "unordered_rowid",
+		int64(sessiondatapb.SerialUsesVirtualSequences):       "virtual_sequence",
+		int64(sessiondatapb.SerialUsesSQLSequences):           "sql_sequence",
+		int64(sessiondatapb.SerialUsesCachedSQLSequences):     "sql_sequence_cached",
+		int64(sessiondatapb.SerialUsesCachedNodeSQLSequences): "sql_sequence_cached_node",
 	},
 	settings.WithPublic)
 
@@ -1277,6 +1278,9 @@ type ExecutorConfig struct {
 
 	// Role membership cache.
 	RoleMemberCache *MembershipCache
+
+	// Node-level sequence cache
+	SequenceCacheNode *sessiondatapb.SequenceCacheNode
 
 	// SessionInitCache cache; contains information used during authentication
 	// and per-role default settings.
