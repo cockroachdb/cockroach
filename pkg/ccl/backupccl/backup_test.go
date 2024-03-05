@@ -9477,7 +9477,7 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 
 	// Wait for the GC to complete.
 	jobutils.WaitForJobToSucceed(t, sqlRunner, gcJobID)
-	waitForTableSplit(t, conn, "foo", "test")
+	waitForTableSplit(t, conn, "foo", "test", 1)
 
 	// This backup should succeed since the spans being backed up have a default
 	// GC TTL of 25 hours.
@@ -9753,7 +9753,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	require.NoError(t, err)
 
 	rRand, _ := randutil.NewTestRand()
-	waitForTableSplit(t, conn, "foo", "defaultdb")
+	waitForTableSplit(t, conn, "foo", "defaultdb", 1)
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "defaultdb", func(r *kvserver.Replica) (bool, error) {
 		conf, err := r.LoadSpanConfig(ctx)
 		if err != nil {
@@ -9842,7 +9842,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
 
 	// Wait for the span config fields to apply.
-	waitForTableSplit(t, conn, "foo", "test")
+	waitForTableSplit(t, conn, "foo", "test", 1)
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "test", func(r *kvserver.Replica) (bool, error) {
 		conf, err := r.LoadSpanConfig(ctx)
 		if err != nil {
@@ -10895,7 +10895,7 @@ func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
 	`)
 
 	// Wait for splits to be created on the new tables.
-	waitForTableSplit(t, tc.Conns[0], "t2", "da")
+	waitForTableSplit(t, tc.Conns[0], "t2", "da", 1)
 
 	sqlDB.Exec(t, `BACKUP DATABASE db INTO 'userfile:///a' WITH revision_history;`)
 
@@ -11513,4 +11513,45 @@ func TestRestoreMemoryMonitoringMinWorkerMemory(t *testing.T) {
 	expectedFingerprints := sqlDB.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data.bank")
 	actualFingerprints := sqlDB.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE restore.bank")
 	require.Equal(t, expectedFingerprints, actualFingerprints)
+}
+
+// TestBoundBackupExportOnRanges tests that export requests never get sent
+// across range boundaries, even if the ranges are empty.
+func TestBoundBackupExportOnRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const numAccounts = 1
+
+	waitForSplits := make(chan struct{})
+	var responseCount atomic.Int32
+	params := base.TestClusterArgs{}
+	knobs := base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
+				RunBeforeBackupFlow: func(ctx context.Context) {
+					<-waitForSplits
+				},
+				RunAfterExportingSpanEntry: func(ctx context.Context, response *kvpb.ExportResponse) {
+					responseCount.Add(1)
+				},
+			},
+		},
+	}
+	params.ServerArgs.Knobs = knobs
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+	defer cleanupFn()
+
+	rowsPerRange := 2
+	numRanges := 30
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.presplit_request_spans.enabled=true")
+	var jobID int
+	sqlDB.QueryRow(t, "BACKUP DATABASE data INTO 'userfile:///backup' WITH detached").Scan(&jobID)
+	sqlDB.Exec(t, `ALTER TABLE data.bank SPLIT AT (SELECT * FROM generate_series($1::INT, $2::INT, $3::INT))`,
+		rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange)
+	waitForTableSplit(t, tc.Conns[0], "bank", "data", numRanges)
+
+	close(waitForSplits)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobspb.JobID(jobID))
+	exportRequestCount := responseCount.Load()
+	require.Equal(t, int32(numRanges), exportRequestCount)
 }

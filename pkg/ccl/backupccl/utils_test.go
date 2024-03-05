@@ -286,7 +286,9 @@ func uriFmtStringAndArgs(uris []string, startIndex int) (string, []interface{}) 
 // waitForTableSplit waits for the dbName.tableName range to split. This is
 // often used by tests that rely on SpanConfig fields being applied to the table
 // span.
-func waitForTableSplit(t *testing.T, conn *gosql.DB, tableName, dbName string) {
+func waitForTableSplit(
+	t *testing.T, conn *gosql.DB, tableName, dbName string, passingRangeCount int,
+) {
 	t.Helper()
 	query := fmt.Sprintf(`SELECT count(*)
   FROM crdb_internal.ranges
@@ -299,8 +301,8 @@ func waitForTableSplit(t *testing.T, conn *gosql.DB, tableName, dbName string) {
 		if err := conn.QueryRow(query).Scan(&count); err != nil {
 			return err
 		}
-		if count == 0 {
-			return errors.New("waiting for table split")
+		if count < passingRangeCount {
+			return errors.Newf("waiting for table split into at least %d ranges", passingRangeCount)
 		}
 		return nil
 	})
