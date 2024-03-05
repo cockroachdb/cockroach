@@ -15,11 +15,6 @@ import (
 	"time"
 )
 
-var timerPool = sync.Pool{
-	New: func() interface{} {
-		return &Timer{}
-	},
-}
 var timeTimerPool sync.Pool
 
 // The Timer type represents a single event. When the Timer expires,
@@ -48,23 +43,18 @@ var timeTimerPool sync.Pool
 //
 // Note that unlike the standard library's Timer type, this Timer will
 // not begin counting down until Reset is called for the first time, as
-// there is no constructor function.
+// there is no constructor function. The zero value for Timer is ready
+// to use.
+//
+// TODO(nvanbenschoten): follow https://github.com/golang/go/issues/37196
+// and remove this abstraction once it's no longer needed. There's some
+// recent progress in https://go-review.googlesource.com/c/go/+/568341.
 type Timer struct {
 	timer *time.Timer
 	// C is a local "copy" of timer.C that can be used in a select case before
 	// the timer has been initialized (via Reset).
 	C    <-chan time.Time
 	Read bool
-	// fromPool indicates whether this Timer came from timerPool. If false, then
-	// it won't be put into the timerPool on Stop.
-	fromPool bool
-}
-
-// NewTimer allocates a new timer.
-func NewTimer() *Timer {
-	t := timerPool.Get().(*Timer)
-	t.fromPool = true
-	return t
 }
 
 // Reset changes the timer to expire after duration d and returns
@@ -95,8 +85,6 @@ func (t *Timer) Reset(d time.Duration) {
 // the timer, false if the timer has already expired, been stopped previously,
 // or had never been initialized with a call to Timer.Reset. Stop does not
 // close the channel, to prevent a read from succeeding incorrectly.
-// Note that a Timer must never be used again after calls to Stop as the timer
-// object will be put into an object pool for reuse.
 func (t *Timer) Stop() bool {
 	var res bool
 	if t.timer != nil {
@@ -107,10 +95,6 @@ func (t *Timer) Stop() bool {
 			timeTimerPool.Put(t.timer)
 		}
 	}
-	if !t.fromPool {
-		return res
-	}
 	*t = Timer{}
-	timerPool.Put(t)
 	return res
 }

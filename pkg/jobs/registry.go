@@ -1021,8 +1021,8 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		defer cancel()
 
 		cancelLoopTask(ctx)
-		lc, cleanup := makeLoopController(r.settings, cancelIntervalSetting, r.knobs.IntervalOverrides.Cancel)
-		defer cleanup()
+		lc := makeLoopController(r.settings, cancelIntervalSetting, r.knobs.IntervalOverrides.Cancel)
+		defer lc.cleanup()
 		for {
 			select {
 			case <-lc.updated:
@@ -1053,8 +1053,8 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		lc, cleanup := makeLoopController(r.settings, gcIntervalSetting, r.knobs.IntervalOverrides.Gc)
-		defer cleanup()
+		lc := makeLoopController(r.settings, gcIntervalSetting, r.knobs.IntervalOverrides.Gc)
+		defer lc.cleanup()
 
 		// Retention duration of terminal job records.
 		retentionDuration := func() time.Duration {
@@ -1092,8 +1092,8 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
-		lc, cleanup := makeLoopController(r.settings, adoptIntervalSetting, r.knobs.IntervalOverrides.Adopt)
-		defer cleanup()
+		lc := makeLoopController(r.settings, adoptIntervalSetting, r.knobs.IntervalOverrides.Adopt)
+		defer lc.cleanup()
 		for {
 			select {
 			case <-lc.updated:

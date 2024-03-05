@@ -518,12 +518,9 @@ func (b *RequestBatcher) run(ctx context.Context) {
 			}
 		}
 		deadline time.Time
-		timer    = timeutil.NewTimer()
+		timer    timeutil.Timer
 	)
-	// In any case, stop the timer when the function returns.
-	// We can't defer timer.Stop directly because we re-assign
-	// timer in maybeSetTimer below.
-	defer func() { timer.Stop() }()
+	defer timer.Stop()
 
 	maybeSetTimer := func() {
 		var nextDeadline time.Time
@@ -538,7 +535,6 @@ func (b *RequestBatcher) run(ctx context.Context) {
 				// Clear the current timer due to a sole batch already sent before
 				// the timer fired.
 				timer.Stop()
-				timer = timeutil.NewTimer()
 			}
 		}
 	}

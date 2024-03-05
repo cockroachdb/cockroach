@@ -1043,7 +1043,7 @@ func (t *RaftTransport) startDroppingFlowTokensForDisconnectedNodes(ctx context.
 					}
 				})
 
-			timer := timeutil.NewTimer()
+			var timer timeutil.Timer
 			defer timer.Stop()
 
 			for {
@@ -1053,7 +1053,6 @@ func (t *RaftTransport) startDroppingFlowTokensForDisconnectedNodes(ctx context.
 				} else {
 					// Disable the mechanism.
 					timer.Stop()
-					timer = timeutil.NewTimer()
 				}
 				select {
 				case <-timer.C:

@@ -60,7 +60,7 @@ func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
 		ctx, cancel := c.stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		defer timer.Stop()
 
 		for {

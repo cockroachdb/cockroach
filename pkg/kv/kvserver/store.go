@@ -2344,7 +2344,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 			return rangeIDs
 		}
 
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		defer timer.Stop()
 		errInterrupted := errors.New("waiting interrupted")
 		wait := func(ctx context.Context, until time.Time, interrupt <-chan struct{}) error {

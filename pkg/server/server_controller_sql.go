@@ -134,7 +134,7 @@ func (c *serverController) waitForTenantServer(
 	// waiting longer isn't going to help.
 	opts := singleflight.DoOpts{Stop: c.stopper, InheritCancelation: false}
 	futureRes, _ := c.tenantWaiter.DoChan(ctx, string(name), opts, func(ctx context.Context) (interface{}, error) {
-		t := timeutil.NewTimer()
+		var t timeutil.Timer
 		defer t.Stop()
 		t.Reset(multitenant.WaitForClusterStartTimeout.Get(&c.st.SV))
 		for {

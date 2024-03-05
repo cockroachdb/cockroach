@@ -318,7 +318,7 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 			d := func() time.Duration {
 				return withJitter(interval.Get(&p.settings.SV), rnd)
 			}
-			t := timeutil.NewTimer()
+			var t timeutil.Timer
 			defer t.Stop()
 			t.Reset(d())
 

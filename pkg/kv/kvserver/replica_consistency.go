@@ -394,7 +394,7 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksu
 
 	// Wait for the checksum computation to start.
 	dur := r.checksumInitialWait(ctx)
-	t := timeutil.NewTimer()
+	var t timeutil.Timer
 	t.Reset(dur)
 	defer t.Stop()
 	var taskCancel context.CancelFunc
