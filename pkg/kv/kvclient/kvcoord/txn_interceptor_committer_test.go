@@ -52,6 +52,7 @@ func TestTxnCommitterElideEndTxn(t *testing.T) {
 
 	txn := makeTxnProto()
 	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
 
 	// Test with both commits and rollbacks.
 	testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
@@ -65,7 +66,7 @@ func TestTxnCommitterElideEndTxn(t *testing.T) {
 		ba := &kvpb.BatchRequest{}
 		ba.Header = kvpb.Header{Txn: &txn}
 		ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
-		ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+		ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
 		ba.Add(&kvpb.EndTxnRequest{Commit: commit, LockSpans: nil})
 
 		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
