@@ -53,9 +53,20 @@ use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
 disks=()
 mount_prefix="/mnt/data"
 
+# if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
+# then the disks will be selected for RAID'ing. If there are both EC2 NVMe Instance Storage and
+# EBS, RAID'ing in this case can cause performance differences. So, to avoid this,
+# EC2 NVMe Instance Storage are ignored.
+# Keep track of the EBS volumes for RAID'ing
+ebs_volumes=()
+
 # On different machine types, the drives are either called nvme... or xvdd.
 for d in $(ls /dev/nvme?n1 /dev/xvdd); do
   if ! mount | grep ${d}; then
+		if udevadm info --query=property --name=${d} | grep "ID_MODEL=Amazon Elastic Block Store"; then
+			echo "EBS Volume ${d} identified!"
+			ebs_volumes+=("${d}")
+		fi
     disks+=("${d}")
     echo "Disk ${d} not mounted, need to mount..."
   else
@@ -69,7 +80,8 @@ if [ "${#disks[@]}" -eq "0" ]; then
   echo "No disks mounted, creating ${mountpoint}"
   mkdir -p ${mountpoint}
   chmod 777 ${mountpoint}
-elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+elif [ "${#disks[@]}" -eq "1" ] || [ "${#ebs_volumes[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+	# only 1 disk or 1 ebs volume - cannot select RAID'ing
   disknum=1
   for disk in "${disks[@]}"
   do
@@ -84,11 +96,18 @@ elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
     tune2fs -m 0 ${disk}
   done
 else
+	# use only EBS volumes if available and ignore EC2 NVMe Instance Storage
+	disks_for_raiding=()
+	if [ "${#ebs_volumes[@]}" -gt "0" ]; then
+		disks_for_raiding=("${ebs_volumes[@]}")
+	else
+		disks_for_raiding=("${disks[@]}")
+	fi
   mountpoint="${mount_prefix}1"
-  echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
+  echo "${#disks_for_raiding[@]} disks mounted, creating ${mountpoint} using RAID 0"
   mkdir -p ${mountpoint}
   raiddisk="/dev/md0"
-  mdadm --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
+  mdadm --create ${raiddisk} --level=0 --raid-devices=${#disks_for_raiding[@]} "${disks_for_raiding[@]}"
   mkfs.ext4 -F ${raiddisk}
   mount -o ${mount_opts} ${raiddisk} ${mountpoint}
   chmod 777 ${mountpoint}

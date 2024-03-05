@@ -72,7 +72,17 @@ for d in $(ls /dev/nvme?n? /dev/disk/by-id/google-persistent-disk-[1-9]); do
   zpool list -v -P | grep ${d} > /dev/null
   if [ $? -ne 0 ]; then
 {{ else }}
-for d in $(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-disk-[1-9]); do
+# if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
+# then the disks will be selected for RAID'ing. If there are both Local SSDs and Persistent disks,
+# RAID'ing in this case can cause performance differences. So, to avoid this, local SSDs are ignored.
+disk_list=()
+if [ -n "$use_multiple_disks" ] || [ "$(ls /dev/disk/by-id/google-persistent-disk-[1-9]|wc -l)" -eq "0" ]; then
+	disk_list=$(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-disk-[1-9])
+else
+  echo "Only persistent disks are selected."
+	disk_list=$(ls /dev/disk/by-id/google-persistent-disk-[1-9])
+fi
+for d in ${disk_list}; do
   if ! mount | grep ${d}; then
 {{ end }}
     disks+=("${d}")
