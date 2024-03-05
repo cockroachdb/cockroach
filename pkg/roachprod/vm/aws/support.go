@@ -50,19 +50,43 @@ mount_opts="defaults"
 
 use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
 
-disks=()
+all_disks=()
 mount_prefix="/mnt/data"
+
+# if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
+# then the disks will be selected for RAID'ing. If there are both EC2 NVMe Instance Storage and
+# EBS, RAID'ing in this case can cause performance differences. So, to avoid this,
+# EC2 NVMe Instance Storage are ignored.
+# Scenarios: 
+#   (local SSD = 0, Network Disk - 1)  - no RAID'ing and mount network disk
+#   (local SSD = 1, Network Disk - 0)  - no RAID'ing and mount local SSD
+#   (local SSD >= 1, Network Disk = 1) - no RAID'ing and mount network disk
+#   (local SSD > 1, Network Disk = 0)  - local SSDs selected for RAID'ing
+#   (local SSD >= 0, Network Disk > 1) - network disks selected for RAID'ing
+# Keep track of the EBS volumes for RAID'ing
+ebs_volumes=()
 
 # On different machine types, the drives are either called nvme... or xvdd.
 for d in $(ls /dev/nvme?n1 /dev/xvdd); do
   if ! mount | grep ${d}; then
-    disks+=("${d}")
+		if udevadm info --query=property --name=${d} | grep "ID_MODEL=Amazon Elastic Block Store"; then
+			echo "EBS Volume ${d} identified!"
+			ebs_volumes+=("${d}")
+		fi
+    all_disks+=("${d}")
     echo "Disk ${d} not mounted, need to mount..."
   else
     echo "Disk ${d} already mounted, skipping..."
   fi
 done
 
+# use only EBS volumes if available and ignore EC2 NVMe Instance Storage
+disks=()
+if [ "${#ebs_volumes[@]}" -gt "0" ]; then
+	disks=("${ebs_volumes[@]}")
+else
+	disks=("${all_disks[@]}")
+fi
 
 if [ "${#disks[@]}" -eq "0" ]; then
   mountpoint="${mount_prefix}1"
