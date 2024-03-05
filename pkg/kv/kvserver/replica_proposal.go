@@ -664,11 +664,13 @@ func addSSTablePreApply(
 			syntheticSuffix = storage.EncodeMVCCTimestampSuffix(sst.RemoteRewriteTimestamp)
 		}
 		externalFile := pebble.ExternalFile{
-			Locator:         remote.Locator(sst.RemoteFileLoc),
-			ObjName:         sst.RemoteFilePath,
-			Size:            sst.ApproximatePhysicalSize,
-			SmallestUserKey: start.Encode(),
-			LargestUserKey:  end.Encode(),
+			Locator: remote.Locator(sst.RemoteFileLoc),
+			ObjName: sst.RemoteFilePath,
+			Size:    sst.ApproximatePhysicalSize,
+			Bounds: pebble.KeyRange{
+				Start: start.Encode(),
+				End:   end.Encode(),
+			},
 			SyntheticSuffix: syntheticSuffix,
 			// TODO(dt): pass pebble the backing file size to avoid a stat call.
 
