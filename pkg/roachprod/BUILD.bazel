@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/cli/exit",
+        "//pkg/cmd/roachprod/grafana",
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/install",
