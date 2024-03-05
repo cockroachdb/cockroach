@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -241,7 +242,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	ctx := context.Background()
 	const numServers int = 3
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := fs.NewStickyRegistry()
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	locs := make(map[int]storage.Location)
 	for i := 0; i < numServers; i++ {

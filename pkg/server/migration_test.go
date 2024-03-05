@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -112,7 +113,7 @@ func TestSyncAllEngines(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	vfsRegistry := NewStickyVFSRegistry(UseStrictMemFS)
+	vfsRegistry := fs.NewStickyRegistry(fs.UseStrictMemFS)
 	storeSpec := base.DefaultTestStoreSpec
 	storeSpec.StickyVFSID = "sync-all-engines"
 	testServerArgs := base.TestServerArgs{

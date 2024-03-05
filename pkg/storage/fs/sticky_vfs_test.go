@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server
+package fs_test
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -30,14 +31,11 @@ func TestStickyVFS(t *testing.T) {
 	var (
 		ctx       = context.Background()
 		attrs     = roachpb.Attributes{}
-		cacheSize = int64(1 << 20)   /* 1 MiB */
 		storeSize = int64(512 << 20) /* 512 MiB */
 		settings  = cluster.MakeTestingClusterSettings()
-		registry  = NewStickyVFSRegistry()
+		registry  = fs.NewStickyRegistry()
 	)
 
-	cfg1 := MakeConfig(ctx, settings)
-	cfg1.CacheSize = cacheSize
 	spec1 := base.StoreSpec{
 		StickyVFSID: "engine1",
 		Attributes:  attrs,

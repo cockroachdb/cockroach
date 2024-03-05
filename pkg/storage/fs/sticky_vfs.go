@@ -8,47 +8,47 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server
+package fs
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-// StickyVFSOption is a config option for a sticky engine
-// registry that can be passed to NewStickyVFSRegistry.
-type StickyVFSOption func(cfg *stickyConfig)
+// StickyOption is a config option for a sticky vfs
+// registry that can be passed to NewStickyRegistry.
+type StickyOption func(cfg *stickyConfig)
 
 type stickyConfig struct {
 	newFS func() *vfs.MemFS // by default vfs.NewMem
 }
 
-// UseStrictMemFS option instructs StickyVFSRegistry to produce strict in-memory
+// UseStrictMemFS option instructs StickyRegistry to produce strict in-memory
 // filesystems, i.e. to use vfs.NewStrictMem instead of vfs.NewMem.
-var UseStrictMemFS = StickyVFSOption(func(cfg *stickyConfig) {
+var UseStrictMemFS = StickyOption(func(cfg *stickyConfig) {
 	cfg.newFS = vfs.NewStrictMem
 })
 
-// StickyVFSRegistry manages the lifecycle of sticky in-memory filesystems. It
+// StickyRegistry manages the lifecycle of sticky in-memory filesystems. It
 // is intended for use in demos and/or tests, where we want in-memory storage
 // nodes to persist between killed nodes.
-type StickyVFSRegistry interface {
+type StickyRegistry interface {
 	// Get returns the named in-memory FS, constructing a new one if this is the
 	// first time a FS with the provided ID has been requested.
 	Get(stickyVFSID string) *vfs.MemFS
 }
 
-// stickyVFSRegistryImpl is the bookkeeper for all active sticky filesystems,
-// keyed by their id. It implements the StickyVFSRegistry interface.
-type stickyVFSRegistryImpl struct {
+// stickyRegistryImpl is the bookkeeper for all active sticky filesystems,
+// keyed by their id. It implements the StickyRegistry interface.
+type stickyRegistryImpl struct {
 	entries map[string]*vfs.MemFS
 	mu      syncutil.Mutex
 	cfg     stickyConfig
 }
 
-// NewStickyVFSRegistry creates a new StickyVFSRegistry.
-func NewStickyVFSRegistry(opts ...StickyVFSOption) StickyVFSRegistry {
-	registry := &stickyVFSRegistryImpl{
+// NewStickyRegistry creates a new StickyRegistry.
+func NewStickyRegistry(opts ...StickyOption) StickyRegistry {
+	registry := &stickyRegistryImpl{
 		entries: map[string]*vfs.MemFS{},
 	}
 	for _, opt := range opts {
@@ -61,8 +61,8 @@ func NewStickyVFSRegistry(opts ...StickyVFSOption) StickyVFSRegistry {
 	return registry
 }
 
-// Get implements the StickyVFSRegistry interface.
-func (registry *stickyVFSRegistryImpl) Get(stickyVFSID string) *vfs.MemFS {
+// Get implements the StickyRegistry interface.
+func (registry *stickyRegistryImpl) Get(stickyVFSID string) *vfs.MemFS {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
