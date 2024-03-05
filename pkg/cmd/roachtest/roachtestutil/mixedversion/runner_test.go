@@ -54,15 +54,20 @@ func Test_runSingleStep(t *testing.T) {
 	require.Contains(t, err.Error(), "panic (stack trace above): runtime error: index out of range [0] with length 0")
 }
 
+func testAddAnnotation() error {
+	return nil
+}
+
 func testTestRunner() *testRunner {
 	runnerCtx, cancel := context.WithCancel(ctx)
 	return &testRunner{
-		ctx:        runnerCtx,
-		cancel:     cancel,
-		logger:     nilLogger,
-		crdbNodes:  nodes,
-		background: newBackgroundRunner(runnerCtx, nilLogger),
-		seed:       seed,
+		ctx:            runnerCtx,
+		cancel:         cancel,
+		logger:         nilLogger,
+		crdbNodes:      nodes,
+		background:     newBackgroundRunner(runnerCtx, nilLogger),
+		seed:           seed,
+		_addAnnotation: testAddAnnotation,
 	}
 }
 
