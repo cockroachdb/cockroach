@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -2116,7 +2117,7 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 				ScanMaxIdleTime:   time.Millisecond,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyVFSRegistry:         server.NewStickyVFSRegistry(),
+						StickyVFSRegistry:         fs.NewStickyRegistry(),
 						DefaultZoneConfigOverride: &zcfg,
 					},
 				},

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -54,7 +55,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := fs.NewStickyRegistry()
 
 	testCases := []struct {
 		serverIdx         int
@@ -179,7 +180,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		demoCtx:           demoCtx,
 		stopper:           stop.NewStopper(),
 		demoDir:           certsDir,
-		stickyVFSRegistry: server.NewStickyVFSRegistry(),
+		stickyVFSRegistry: fs.NewStickyRegistry(),
 		infoLog:           log.Infof,
 		warnLog:           log.Warningf,
 		shoutLog:          log.Ops.Shoutf,
@@ -291,7 +292,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		demoCtx:           demoCtx,
 		stopper:           stop.NewStopper(),
 		demoDir:           certsDir,
-		stickyVFSRegistry: server.NewStickyVFSRegistry(),
+		stickyVFSRegistry: fs.NewStickyRegistry(),
 		infoLog:           log.Infof,
 		warnLog:           log.Warningf,
 		shoutLog:          log.Ops.Shoutf,
@@ -355,7 +356,7 @@ func TestTenantCapabilities(t *testing.T) {
 		demoCtx:           demoCtx,
 		stopper:           stop.NewStopper(),
 		demoDir:           certsDir,
-		stickyVFSRegistry: server.NewStickyVFSRegistry(),
+		stickyVFSRegistry: fs.NewStickyRegistry(),
 		infoLog:           log.Infof,
 		warnLog:           log.Warningf,
 		shoutLog:          log.Ops.Shoutf,

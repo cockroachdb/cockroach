@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -792,7 +793,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: fs.NewStickyRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{

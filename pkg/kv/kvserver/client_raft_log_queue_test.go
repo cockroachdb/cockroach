@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -170,7 +171,7 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 
 	// Use sticky engine registry to "survive" a node restart. Use the strict
 	// in-memory engine to be able to stop flushes and emulate data loss.
-	vfsReg := server.NewStickyVFSRegistry(server.UseStrictMemFS)
+	vfsReg := fs.NewStickyRegistry(fs.UseStrictMemFS)
 	// Use the sticky listener registry so that server port assignments survive
 	// node restarts, and don't get erroneously used by other clusters.
 	netReg := listenerutil.NewListenerRegistry()

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -89,7 +90,7 @@ type transientCluster struct {
 	adminPassword string
 	adminUser     username.SQLUsername
 
-	stickyVFSRegistry server.StickyVFSRegistry
+	stickyVFSRegistry fs.StickyRegistry
 
 	drainAndShutdown func(ctx context.Context, adminClient serverpb.AdminClient) error
 
@@ -212,7 +213,7 @@ func NewDemoCluster(
 		}
 	}
 
-	c.stickyVFSRegistry = server.NewStickyVFSRegistry()
+	c.stickyVFSRegistry = fs.NewStickyRegistry()
 	return c, nil
 }
 
@@ -908,7 +909,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 	serverIdx int,
 	joinAddr string,
 	demoDir string,
-	stickyVFSRegistry server.StickyVFSRegistry,
+	stickyVFSRegistry fs.StickyRegistry,
 ) base.TestServerArgs {
 	// Assign a path to the store spec, to be saved.
 	storeSpec := base.DefaultTestStoreSpec

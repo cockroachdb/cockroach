@@ -401,6 +401,7 @@ go_test(
         "//pkg/sql/protoreflect",
         "//pkg/sql/sem/catconstants",
         "//pkg/storage",
+        "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/jobutils",
