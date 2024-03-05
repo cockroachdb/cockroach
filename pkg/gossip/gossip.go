@@ -1229,8 +1229,7 @@ func (g *Gossip) bootstrap(rpcContext *rpc.Context) {
 func (g *Gossip) manage(rpcContext *rpc.Context) {
 	ctx := g.AnnotateCtx(context.Background())
 	_ = g.server.stopper.RunAsyncTask(ctx, "gossip-manage", func(ctx context.Context) {
-		cullTimer := timeutil.NewTimer()
-		stallTimer := timeutil.NewTimer()
+		var cullTimer, stallTimer timeutil.Timer
 		defer cullTimer.Stop()
 		defer stallTimer.Stop()
 

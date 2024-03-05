@@ -147,7 +147,7 @@ func startSampleEnvironment(
 			goMemStats.Store(&status.GoMemStats{})
 			var collectingMemStats int32 // atomic, 1 when stats call is ongoing
 
-			timer := timeutil.NewTimer()
+			var timer timeutil.Timer
 			defer timer.Stop()
 			timer.Reset(cfg.minSampleInterval)
 

@@ -71,7 +71,7 @@ func (DefaultTimeSource) Since(t time.Time) time.Duration {
 
 // NewTimer returns a TimerI wrapping *Timer.
 func (DefaultTimeSource) NewTimer() TimerI {
-	return (*timer)(NewTimer())
+	return (*timer)(new(Timer))
 }
 
 // NewTicker creates a new ticker.

@@ -195,7 +195,7 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 
 	// We use the probe interval as the scan interval, since we can sort of
 	// consider this to be probing the replicas for a stall.
-	timer := timeutil.NewTimer()
+	var timer timeutil.Timer
 	defer timer.Stop()
 	timer.Reset(CircuitBreakerProbeInterval.Get(&d.settings.SV))
 
@@ -670,7 +670,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 
 		// Continually probe the replica until it succeeds. We probe immediately
 		// since we only trip the breaker on probe failure.
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		defer timer.Stop()
 		timer.Reset(CircuitBreakerProbeInterval.Get(&r.d.settings.SV))
 

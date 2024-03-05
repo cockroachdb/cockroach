@@ -157,7 +157,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
 
 func (r *Registry) poll(ctx context.Context) {
 	var (
-		timer *timeutil.Timer
+		timer timeutil.Timer
 		// We need to store timer.C reference separately because timer.Stop()
 		// (called when polling is disabled) puts timer into the pool and
 		// prohibits further usage of stored timer.C.
@@ -168,10 +168,7 @@ func (r *Registry) poll(ctx context.Context) {
 		maybeResetTimer     = func() {
 			if interval := pollingInterval.Get(&r.st.SV); interval == 0 {
 				// Setting the interval to zero stops the polling.
-				if timer != nil {
-					timer.Stop()
-					timer = nil
-				}
+				timer.Stop()
 				// nil out the channel so that it'd block forever in the loop
 				// below (until the polling interval is changed).
 				timerC = nil
@@ -179,9 +176,6 @@ func (r *Registry) poll(ctx context.Context) {
 				newDeadline := lastPoll.Add(interval)
 				if deadline.IsZero() || !deadline.Equal(newDeadline) {
 					deadline = newDeadline
-					if timer == nil {
-						timer = timeutil.NewTimer()
-					}
 					timer.Reset(timeutil.Until(deadline))
 					timerC = timer.C
 				}

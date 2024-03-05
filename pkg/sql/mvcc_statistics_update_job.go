@@ -131,7 +131,7 @@ func (j *mvccStatisticsUpdateJob) runTenantGlobalMetricsExporter(
 		return nil
 	}
 
-	timer := timeutil.NewTimer()
+	var timer timeutil.Timer
 	defer timer.Stop()
 
 	// Fire the timer immediately to start the initial update.

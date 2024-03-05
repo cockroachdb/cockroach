@@ -169,7 +169,7 @@ func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 		default:
 		}
 	})
-	timer := timeutil.NewTimer()
+	var timer timeutil.Timer
 	defer timer.Stop()
 	timer.Reset(0) // Read immediately upon startup
 	var lastReset time.Time
