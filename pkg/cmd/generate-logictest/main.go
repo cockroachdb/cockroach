@@ -183,7 +183,9 @@ func (t *testdir) dump() error {
 		if cfg.Name == "3node-tenant" || strings.HasPrefix(cfg.Name, "multiregion-") {
 			tplCfg.SkipCclUnderRace = true
 		}
-		if strings.Contains(cfg.Name, "5node") || strings.Contains(cfg.Name, "fakedist") {
+		if strings.Contains(cfg.Name, "5node") ||
+			strings.Contains(cfg.Name, "fakedist") ||
+			(strings.HasPrefix(cfg.Name, "local-") && !tplCfg.Ccl) {
 			tplCfg.UseHeavyPool = true
 		}
 		subdir := filepath.Join(t.dir, cfg.Name)
