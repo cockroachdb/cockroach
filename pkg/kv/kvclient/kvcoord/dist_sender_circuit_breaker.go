@@ -747,6 +747,8 @@ func (r *ReplicaCircuitBreaker) sendProbe(ctx context.Context, transport Transpo
 	sendCtx, cancel := context.WithTimeout(ctx, timeout) // nolint:context
 	defer cancel()
 
+	transport.Reset()
+
 	ba := &kvpb.BatchRequest{}
 	ba.RangeID = r.rangeID
 	ba.Replica = transport.NextReplica()
@@ -755,8 +757,6 @@ func (r *ReplicaCircuitBreaker) sendProbe(ctx context.Context, transport Transpo
 			Key: r.startKey,
 		},
 	})
-
-	transport.Reset()
 
 	log.VEventf(ctx, 2, "sending probe: %s", ba)
 	br, err := transport.SendNext(sendCtx, ba)
