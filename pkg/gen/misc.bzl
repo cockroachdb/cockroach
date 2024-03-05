@@ -2,7 +2,6 @@
 
 MISC_SRCS = [
     "//pkg/ccl/backupccl:data_driven_generated_test.go",
-    "//pkg/ccl/backupccl:restore_mid_schema_change_generated_test.go",
     "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl:generated_test.go",
     "//pkg/internal/team:TEAMS.yaml",
     "//pkg/kv/kvpb:batch_generated.go",
