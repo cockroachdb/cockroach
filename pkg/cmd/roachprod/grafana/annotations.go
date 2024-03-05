@@ -42,13 +42,13 @@ func newGrafanaClient(
 		scheme = "https"
 
 		// Read in the service account key and audience, so we can retrieve the identity token.
-		grafanaKey := os.Getenv(ServiceAccountJson)
-		if grafanaKey == "" {
-			return nil, errors.Newf("%s env variable was not found", ServiceAccountJson)
-		}
 		grafanaAudience := os.Getenv(ServiceAccountAudience)
 		if grafanaAudience == "" {
 			return nil, errors.Newf("%s env variable was not found", ServiceAccountAudience)
+		}
+		grafanaKey := os.Getenv(ServiceAccountJson)
+		if grafanaKey == "" {
+			return nil, errors.Newf("%s env variable was not found", ServiceAccountJson)
 		}
 
 		ts, err := idtoken.NewTokenSource(ctx, grafanaAudience, idtoken.WithCredentialsJSON([]byte(grafanaKey)))
