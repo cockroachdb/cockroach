@@ -35,6 +35,7 @@ go_library(
             "//pkg/sql/pgwire/identmap",
             "//pkg/sql/sem/tree",
             "@com_github_cockroachdb_errors//:errors",
+            "@com_github_go_ldap_ldap_v3//:ldap",
         ],
         "//conditions:default": [],
     }),
