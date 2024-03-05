@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -404,6 +405,7 @@ var varGen = map[string]sessionVar{
 		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
 			allowReadCommitted := allowReadCommittedIsolation.Get(&m.settings.SV)
 			allowSnapshot := allowSnapshotIsolation.Get(&m.settings.SV)
+			hasLicense := base.CCLDistributionAndEnterpriseEnabled(m.settings)
 			var allowedValues = []string{"serializable"}
 			if allowSnapshot {
 				allowedValues = append(allowedValues, "snapshot")
@@ -414,6 +416,7 @@ var varGen = map[string]sessionVar{
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
 			originalLevel := level
 			upgraded := false
+			upgradedDueToLicense := false
 			if !ok {
 				return newVarValueError(`default_transaction_isolation`, s, allowedValues...)
 			}
@@ -423,27 +426,30 @@ var varGen = map[string]sessionVar{
 				fallthrough
 			case tree.ReadCommittedIsolation:
 				level = tree.SerializableIsolation
-				if allowReadCommitted {
+				if allowReadCommitted && hasLicense {
 					level = tree.ReadCommittedIsolation
 				} else {
 					upgraded = true
+					if allowReadCommitted && !hasLicense {
+						upgradedDueToLicense = true
+					}
 				}
 			case tree.RepeatableReadIsolation:
 				upgraded = true
 				fallthrough
 			case tree.SnapshotIsolation:
 				level = tree.SerializableIsolation
-				if allowSnapshot {
+				if allowSnapshot && hasLicense {
 					level = tree.SnapshotIsolation
 				} else {
 					upgraded = true
+					if allowSnapshot && !hasLicense {
+						upgradedDueToLicense = true
+					}
 				}
 			}
-			if upgraded {
-				if f := m.upgradedIsolationLevel; f != nil {
-					f()
-				}
-				telemetry.Inc(sqltelemetry.IsolationLevelUpgradedCounter(ctx, originalLevel))
+			if f := m.upgradedIsolationLevel; upgraded && f != nil {
+				f(ctx, originalLevel, upgradedDueToLicense)
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
 			return nil

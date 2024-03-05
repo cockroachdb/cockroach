@@ -305,6 +305,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		Name:                       "local-read-committed",
 		NumNodes:                   1,
 		OverrideDistSQLMode:        "off",
+		IsCCLConfig:                true,
 		EnableDefaultReadCommitted: true,
 	},
 	{
@@ -601,12 +602,22 @@ var (
 		"3node-tenant",
 		"3node-tenant-multiregion",
 	}
+	// EnterpriseConfigName is a special alias for all enterprise configs.
+	EnterpriseConfigName = "enterprise-configs"
+	// EnterpriseConfigNames is the list of all enterprise configs.
+	EnterpriseConfigNames = []string{
+		"3node-tenant",
+		"3node-tenant-multiregion",
+		"local-read-committed",
+	}
 	// DefaultConfig is the default test configuration.
 	DefaultConfig = parseTestConfig(DefaultConfigNames)
 	// FiveNodeDefaultConfig is the five-node default test configuration.
 	FiveNodeDefaultConfig = parseTestConfig(FiveNodeDefaultConfigNames)
 	// ThreeNodeTenantDefaultConfig is the three-node tenant default test configuration.
 	ThreeNodeTenantDefaultConfig = parseTestConfig(ThreeNodeTenantDefaultConfigNames)
+	// EnterpriseConfig is the enterprise test configuration.
+	EnterpriseConfig = parseTestConfig(EnterpriseConfigNames)
 )
 
 // logger is an interface implemented by testing.TB as well as stdlogger below.
@@ -794,6 +805,8 @@ func processConfigs(
 				configs = append(configs, applyBlocklistToConfigs(FiveNodeDefaultConfig, blocklist)...)
 			case ThreeNodeTenantDefaultConfigName:
 				configs = append(configs, applyBlocklistToConfigs(ThreeNodeTenantDefaultConfig, blocklist)...)
+			case EnterpriseConfigName:
+				configs = append(configs, applyBlocklistToConfigs(EnterpriseConfig, blocklist)...)
 			default:
 				t.Fatalf("%s: unknown config name %s", path, configName)
 			}
@@ -867,6 +880,8 @@ func getDefaultConfigListNames(name string) []string {
 		return FiveNodeDefaultConfigNames
 	case ThreeNodeTenantDefaultConfigName:
 		return ThreeNodeTenantDefaultConfigNames
+	case EnterpriseConfigName:
+		return EnterpriseConfigNames
 	}
 	return []string{}
 }
