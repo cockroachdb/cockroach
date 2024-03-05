@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -792,7 +793,11 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 	requireRUEs := func(t *testing.T, dbs []*kv.DB) {
 		t.Helper()
 		for _, db := range dbs {
+			backoffMetric := (db.NonTransactionalSender().(*kv.CrossRangeTxnWrapperSender)).Wrapped().(*kvcoord.DistSender).Metrics().InLeaseTransferBackoffs
+			initialBackoff := backoffMetric.Count()
 			err := db.Put(ctx, key, value)
+			// Verify that we did not perform any backoff while executing this request.
+			require.EqualValues(t, 0, backoffMetric.Count()-initialBackoff)
 			require.Error(t, err)
 			require.True(t, errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil)),
 				"expected ReplicaUnavailableError, got %v", err)
