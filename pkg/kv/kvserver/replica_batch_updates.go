@@ -78,8 +78,8 @@ func maybeStripInFlightWrites(ba *kvpb.BatchRequest) (*kvpb.BatchRequest, error)
 		for _, ru := range otherReqs {
 			req := ru.GetInner()
 			switch {
-			case kvpb.IsIntentWrite(req) && !kvpb.IsRange(req):
-				// Concurrent point write.
+			case kvpb.CanParallelCommit(req):
+				// Concurrent point write being committed in parallel.
 				writes++
 			case req.Method() == kvpb.QueryIntent:
 				// Earlier pipelined point write that hasn't been proven yet.
@@ -109,8 +109,8 @@ func maybeStripInFlightWrites(ba *kvpb.BatchRequest) (*kvpb.BatchRequest, error)
 		req := ru.GetInner()
 		seq := req.Header().Sequence
 		switch {
-		case kvpb.IsIntentWrite(req) && !kvpb.IsRange(req):
-			// Concurrent point write.
+		case kvpb.CanParallelCommit(req):
+			// Concurrent point write being committed in parallel.
 		case req.Method() == kvpb.QueryIntent:
 			// Earlier pipelined point write that hasn't been proven yet. We
 			// could remove from the in-flight writes set when we see these,

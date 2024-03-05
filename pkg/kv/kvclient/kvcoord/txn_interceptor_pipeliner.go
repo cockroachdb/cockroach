@@ -459,18 +459,31 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *kvpb.Batch
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
 
-		// Determine whether the current request prevents us from performing async
-		// consensus on the batch.
-		if !kvpb.IsIntentWrite(req) || kvpb.IsRange(req) {
-			// Only allow batches consisting of solely transactional point
-			// writes to perform consensus asynchronously.
-			// TODO(nvanbenschoten): We could allow batches with reads and point
-			// writes to perform async consensus, but this would be a bit
-			// tricky. Any read would need to chain on to any write that came
-			// before it in the batch and overlaps. For now, it doesn't seem
-			// worth it.
+		if req.Method() == kvpb.DeleteRange {
+			// Special handling for DeleteRangeRequests.
+			deleteRangeReq := req.(*kvpb.DeleteRangeRequest)
+			// We'll need the list of keys deleted to verify whether replication
+			// succeeded or not. Override ReturnKeys.
+			//
+			// NB: This means we'll return keys to the client even if it explicitly
+			// set this to false. If this proves to be a problem in practice, we can
+			// always add some tracking here and strip the response. Alternatively, we
+			// can disable DeleteRange pipelining entirely for requests that set this
+			// field to false.
+			//
+			// TODO(arul): Get rid of this flag entirely and always treat it as true.
+			// Now that we're overriding ReturnKeys here, the number of cases where
+			// this will be false are very few -- it's only when DeleteRange is part
+			// of the same batch as an EndTxn request.
+			deleteRangeReq.ReturnKeys = true
+		}
+
+		if !kvpb.CanPipeline(req) {
+			// The current request cannot be pipelined, so it prevents us from
+			// performing async consensus on the batch.
 			return false
 		}
+
 		// Inhibit async consensus if the batch would push us over the maximum
 		// tracking memory budget. If we allowed async consensus on this batch, its
 		// writes would need to be tracked precisely. By inhibiting async consensus,
@@ -730,12 +743,17 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 				// Record any writes that were performed asynchronously. We'll
 				// need to prove that these succeeded sometime before we commit.
 				header := req.Header()
-				tp.ifWrites.insert(header.Key, header.Sequence)
-				// The request is not expected to be a ranged one, as we're only
-				// tracking one key in the ifWrites. Ranged requests do not admit
-				// ba.AsyncConsensus.
 				if kvpb.IsRange(req) {
-					log.Fatalf(ctx, "unexpected range request with AsyncConsensus: %s", req)
+					switch req.Method() {
+					case kvpb.DeleteRange:
+						for _, key := range resp.(*kvpb.DeleteRangeResponse).Keys {
+							tp.ifWrites.insert(key, header.Sequence)
+						}
+					default:
+						log.Fatalf(ctx, "unexpected ranged request with AsyncConsensus: %s", req)
+					}
+				} else {
+					tp.ifWrites.insert(header.Key, header.Sequence)
 				}
 			} else {
 				// If the lock acquisitions weren't performed asynchronously
