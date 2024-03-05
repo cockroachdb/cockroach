@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
+	"github.com/go-ldap/ldap/v3"
 )
 
 // AuthBehaviors encapsulates the per-connection behaviors that may be
@@ -51,9 +52,10 @@ func (b *AuthBehaviors) Authenticate(
 	systemIdentity username.SQLUsername,
 	clientConnection bool,
 	pwRetrieveFn PasswordRetrievalFn,
+	roleSubject *ldap.DN,
 ) error {
 	if found := b.authenticator; found != nil {
-		return found(ctx, systemIdentity, clientConnection, pwRetrieveFn)
+		return found(ctx, systemIdentity, clientConnection, pwRetrieveFn, roleSubject)
 	}
 	return errors.New("no Authenticator provided to AuthBehaviors")
 }
