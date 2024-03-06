@@ -20,14 +20,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
 
-// TestRestoreMidSchemaChanges attempts to RESTORE several BACKUPs that are
+func TestRestoreMidSchemaChangeClusterSchemaOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRaceWithIssue(t, 56584)
+
+	runTestRestoreMidSchemaChange(t, true, true)
+}
+
+func TestRestoreMidSchemaChangeCluster(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRaceWithIssue(t, 56584)
+
+	runTestRestoreMidSchemaChange(t, false, true)
+}
+func TestRestoreMidSchemaChangeSchemaOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRaceWithIssue(t, 56584)
+
+	runTestRestoreMidSchemaChange(t, true, false)
+}
+func TestRestoreMidSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRaceWithIssue(t, 56584)
+
+	runTestRestoreMidSchemaChange(t, false, false)
+}
+
+// runTestRestoreMidSchemaChange attempts to RESTORE several BACKUPs that are
 // already constructed and store in
 // ccl/backupccl/testdata/restore_mid_schema_change. These backups were taken on
 // tables that were in the process of performing a schema change. In particular,
@@ -49,8 +81,6 @@ import (
 // tables or a cluster backup. Most backups contain a single table whose name
 // matches the backup name. If the backup is expected to contain several tables,
 // the table names will be backupName1, backupName2, ...
-//
-//lint:ignore U1000 unused
 func runTestRestoreMidSchemaChange(t *testing.T, isSchemaOnly, isClusterRestore bool) {
 	var (
 		testdataBase = datapathutils.TestDataPath(t, "restore_mid_schema_change")
