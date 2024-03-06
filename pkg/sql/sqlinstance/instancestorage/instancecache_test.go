@@ -89,8 +89,7 @@ func TestRangeFeed(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		storage := newStorage(t, tenant.Codec())
-
-		require.NoError(t, storage.generateAvailableInstanceRows(ctx, [][]byte{enum.One}, tenant.Clock().Now().Add(int64(time.Minute), 0)))
+		require.NoError(t, storage.generateAvailableInstanceRows(ctx, [][]byte{enum.One}))
 
 		feed, err := storage.newInstanceCache(ctx, tenant.Stopper())
 		require.NoError(t, err)

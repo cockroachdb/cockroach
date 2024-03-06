@@ -492,8 +492,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 			}
 			if _, err := r.cfg.sqlInstanceStorage.CreateNodeInstance(
 				ctx,
-				s.ID(),
-				s.Expiration(),
+				s,
 				r.cfg.AdvertiseAddr,
 				r.cfg.SQLAdvertiseAddr,
 				r.cfg.Locality,
@@ -1504,8 +1503,7 @@ func (s *SQLServer) preStart(
 				// Write/acquire our instance row.
 				return s.sqlInstanceStorage.CreateNodeInstance(
 					ctx,
-					session.ID(),
-					session.Expiration(),
+					session,
 					s.cfg.AdvertiseAddr,
 					s.cfg.SQLAdvertiseAddr,
 					s.distSQLServer.Locality,
@@ -1515,8 +1513,7 @@ func (s *SQLServer) preStart(
 			}
 			return s.sqlInstanceStorage.CreateInstance(
 				ctx,
-				session.ID(),
-				session.Expiration(),
+				session,
 				s.cfg.AdvertiseAddr,
 				s.cfg.SQLAdvertiseAddr,
 				s.distSQLServer.Locality,

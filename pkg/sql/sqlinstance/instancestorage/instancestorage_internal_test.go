@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -304,12 +305,10 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 	regions := [][]byte{enum.One}
 
 	t.Run("nothing preallocated", func(t *testing.T) {
-		stopper, storage, _, clock := setup(t, sqlDB, s)
+		stopper, storage, _, _ := setup(t, sqlDB, s)
 		defer stopper.Stop(ctx)
 
-		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-
-		require.NoError(t, storage.generateAvailableInstanceRows(ctx, regions, sessionExpiry))
+		require.NoError(t, storage.generateAvailableInstanceRows(ctx, regions))
 
 		instances, err := storage.GetAllInstancesDataForTest(ctx)
 		sortInstancesForTest(instances)
@@ -327,7 +326,11 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 		stopper, storage, slStorage, clock := setup(t, sqlDB, s)
 		defer stopper.Stop(ctx)
 
-		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
+		start := clock.Now()
+		session := &sqllivenesstestutils.FakeSession{
+			StartTS: start,
+			ExpTS:   start.Add(expiration.Nanoseconds(), 0),
+		}
 
 		region := enum.One
 		instanceIDs := [...]base.SQLInstanceID{1, 3, 5, 8}
@@ -344,17 +347,17 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 				"",
 				"",
 				sqlliveness.SessionID([]byte{}),
-				sessionExpiry,
+				session.Expiration(),
 				roachpb.Locality{},
 				roachpb.Version{},
 			))
 		}
 		for _, i := range []int{2, 3} {
-			claim(ctx, t, instanceIDs[i], rpcAddresses[i], sqlAddresses[i], sessionIDs[i], sessionExpiry, storage, slStorage)
+			claim(ctx, t, instanceIDs[i], rpcAddresses[i], sqlAddresses[i], sessionIDs[i], session.Expiration(), storage, slStorage)
 		}
 
 		// Generate available rows.
-		require.NoError(t, storage.generateAvailableInstanceRows(ctx, regions, sessionExpiry))
+		require.NoError(t, storage.generateAvailableInstanceRows(ctx, regions))
 
 		instances, err := storage.GetAllInstancesDataForTest(ctx)
 		sortInstancesForTest(instances)
@@ -402,7 +405,7 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 
 		// Claim 1 and 3, and make them expire.
 		for i := 0; i < 2; i++ {
-			claim(ctx, t, instanceIDs[i], rpcAddresses[i], sqlAddresses[i], sessionIDs[i], sessionExpiry, storage, slStorage)
+			claim(ctx, t, instanceIDs[i], rpcAddresses[i], sqlAddresses[i], sessionIDs[i], session.Expiration(), storage, slStorage)
 			require.NoError(t, slStorage.Delete(ctx, sessionIDs[i]))
 		}
 
