@@ -281,3 +281,25 @@ $left
 (Ne $left:* (False))
 =>
 $left
+
+# NormalizeCmpGreatest normalizes the comparison condition into nested AND clauses
+# such that certain the query has the potential of leveraging indicies, while
+# allowing other normalizations to further optimize the condition clauses.
+[NormalizeCmpGreatest, Normalize]
+(Le | Lt
+    (Function $args:* $private:(FunctionPrivate "greatest"))
+    $right:(Const)
+)
+=>
+(NormalizeCmpGreatestLeast (OpName) $private $args $right)
+
+# NormalizeCmpLeast normalizes the comparison condition into nested OR clauses
+# such that certain the query has the potential of leveraging indicies, while
+# allowing other normalizations to further optimize the condition clauses.
+[NormalizeCmpLeast, Normalize]
+(Le | Lt
+    (Function $args:* $private:(FunctionPrivate "least"))
+    $right:(Const)
+)
+=>
+(NormalizeCmpGreatestLeast (OpName) $private $args $right)
