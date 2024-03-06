@@ -598,13 +598,16 @@ environment variables to the cockroach process.
 		startOpts.AdminUIPort = 0
 
 		startOpts.Target = install.StartSharedProcessForVirtualCluster
-		if externalProcessNodes != "" {
+		// If the user passed an `--external-nodes` option, we are
+		// starting a separate process virtual cluster.
+		if startOpts.VirtualClusterLocation != "" {
 			startOpts.Target = install.StartServiceForVirtualCluster
 		}
 
 		startOpts.VirtualClusterName = args[0]
-		return roachprod.StartServiceForVirtualCluster(context.Background(),
-			config.Logger, externalProcessNodes, storageCluster, startOpts, clusterSettingsOpts...)
+		return roachprod.StartServiceForVirtualCluster(
+			context.Background(), config.Logger, storageCluster, startOpts, clusterSettingsOpts...,
+		)
 	}),
 }
 

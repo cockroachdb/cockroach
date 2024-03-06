@@ -74,9 +74,13 @@ func runMultiTenantDistSQL(
 	for i := 0; i < numInstances; i++ {
 		node := (i % c.Spec().NodeCount) + 1
 		sqlInstance := i / c.Spec().NodeCount
-		instStartOps := option.DefaultStartVirtualClusterOpts(tenantName, sqlInstance)
+		instStartOps := option.StartVirtualClusterOpts(
+			tenantName, c.Node(node),
+			option.StorageCluster(storageNodes),
+			option.VirtualClusterInstance(sqlInstance),
+		)
 		t.L().Printf("Starting instance %d on node %d", i, node)
-		c.StartServiceForVirtualCluster(ctx, t.L(), c.Node(node), instStartOps, settings, storageNodes)
+		c.StartServiceForVirtualCluster(ctx, t.L(), instStartOps, settings)
 		nodes.Add(i + 1)
 	}
 

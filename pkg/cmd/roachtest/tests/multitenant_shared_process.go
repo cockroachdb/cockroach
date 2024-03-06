@@ -47,8 +47,8 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 			clusterSettings := install.MakeClusterSettings()
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), clusterSettings, crdbNodes)
 
-			startOpts := option.DefaultStartSharedVirtualClusterOpts(appTenantName)
-			c.StartServiceForVirtualCluster(ctx, t.L(), crdbNodes, startOpts, clusterSettings, crdbNodes)
+			startOpts := option.StartSharedVirtualClusterOpts(appTenantName)
+			c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, clusterSettings)
 
 			t.Status(`initialize tpcc workload`)
 			initCmd := fmt.Sprintf(`./workload init tpcc --data-loader import --warehouses %d {pgurl%s:%s}`,
