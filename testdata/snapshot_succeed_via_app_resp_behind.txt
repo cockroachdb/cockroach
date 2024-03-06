@@ -124,7 +124,7 @@ stabilize 1
   DEBUG 1 received MsgAppResp(rejected, hint: (index 5, term 1)) from 3 for index 10
   DEBUG 1 decreased progress of 3 to [StateProbe match=0 next=6]
   DEBUG 1 [firstindex: 11, commit: 12] sent snapshot[index: 12, term: 1] to 3 [StateProbe match=0 next=6]
-  DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=6 paused pendingSnap=12]
+  DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=13 paused pendingSnap=12]
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
@@ -152,7 +152,7 @@ stabilize 1
 ----
 > 1 receiving messages
   3->1 MsgAppResp Term:1 Log:0/11
-  DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=11 next=12 paused pendingSnap=12]
+  DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=11 next=13 paused pendingSnap=12]
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
