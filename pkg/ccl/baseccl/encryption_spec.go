@@ -199,13 +199,11 @@ func PopulateStoreSpecWithEncryption(
 			}
 
 			// Found a matching path.
-			if storeSpecs.Specs[i].UseFileRegistry {
+			if len(storeSpecs.Specs[i].EncryptionOptions) > 0 {
 				return fmt.Errorf("store with path %s already has an encryption setting",
 					storeSpecs.Specs[i].Path)
 			}
 
-			// Tell the store we absolutely need the file registry.
-			storeSpecs.Specs[i].UseFileRegistry = true
 			opts, err := es.ToEncryptionOptions()
 			if err != nil {
 				return err
@@ -223,7 +221,6 @@ func PopulateStoreSpecWithEncryption(
 
 // EncryptionOptionsForStore takes a store directory and returns its EncryptionOptions
 // if a matching entry if found in the StoreEncryptionSpecList.
-// The caller should appropriately set UseFileRegistry on a non-nil result.
 func EncryptionOptionsForStore(
 	dir string, encryptionSpecs StoreEncryptionSpecList,
 ) ([]byte, error) {
@@ -232,12 +229,10 @@ func EncryptionOptionsForStore(
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not find absolute path for %s ", dir)
 	}
-
 	for _, es := range encryptionSpecs.Specs {
 		if es.Path == path {
 			return es.ToEncryptionOptions()
 		}
 	}
-
 	return nil, nil
 }
