@@ -1011,8 +1011,10 @@ func attachToExistingCluster(
 		}
 	}
 
-	if err := r.registerCluster(c); err != nil {
-		return nil, err
+	if r != nil {
+		if err := r.registerCluster(c); err != nil {
+			return nil, err
+		}
 	}
 
 	if !opt.skipStop {

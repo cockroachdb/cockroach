@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -273,6 +274,11 @@ func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegi
 		// Signal runner.Run() to stop.
 		cancel()
 		<-time.After(5 * time.Second)
+		if cr == nil {
+			shout(ctx, l, os.Stderr, "5s elapsed. No clusters registered; nothing to destroy.")
+			l.Printf("all stacks:\n\n%s\n", allstacks.Get())
+			os.Exit(2)
+		}
 		shout(ctx, l, os.Stderr, "5s elapsed. Will brutally destroy all clusters.")
 		// Make sure there are no leftover clusters.
 		destroyCh := make(chan struct{})
@@ -326,4 +332,104 @@ func testRunnerLogger(
 	}
 	shout(ctx, l, os.Stdout, "test runner logs in: %s", runnerLogPath)
 	return l, teeOpt
+}
+
+// runOperations sequentially runs operations matched by the passed-in filter.
+func runOperations(register func(registry.Registry), filter string) error {
+	//lint:ignore SA1019 deprecated
+	rand.Seed(roachtestflags.GlobalSeed)
+	r := makeTestRegistry()
+
+	register(&r)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	// NB: root logger with no path always tees to Stdout.
+	l, err := logger.RootLogger("", logger.NoTee)
+	if err != nil {
+		return err
+	}
+	if len(roachtestflags.ClusterNames) == 0 {
+		return errors.New("roachtest: run-operation must be called with --cluster")
+	}
+	clusterName := roachtestflags.ClusterNames
+	// TODO(bilal): This is excessive for just getting the number of nodes in the
+	// cluster. We should expose a roachprod.Nodes method or so.
+	nodes, err := roachprod.PgURL(ctx, l, clusterName, roachtestflags.CertsDir, roachprod.PGURLOptions{})
+	if err != nil {
+		return errors.Wrap(err, "roachtest: run-operation: error when getting number of nodes")
+	}
+
+	c, err := attachToExistingCluster(ctx, clusterName, l, spec.ClusterSpec{NodeCount: len(nodes)}, attachOpt{
+		skipValidation: true,
+		skipStop:       true,
+		skipWipe:       true,
+	}, nil /* clusterRegistry */)
+	if err != nil {
+		return errors.Wrap(err, "roachtest: run-operation: error when attaching cluster")
+	}
+
+	specs, err := opsToRun(r, filter)
+	if err != nil {
+		return err
+	}
+	var opSpec *registry.OperationSpec
+	if len(specs) > 1 {
+		opSpec = &specs[rand.Intn(len(specs))]
+		l.Printf("more than one operation found for filter %s, randomly selected %s to run", filter, opSpec.Name)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Cancel this context if we get an interrupt.
+	CtrlC(ctx, l, cancel, nil /* registry */)
+	// Install goroutine leak checker and run it at the end of the entire operation
+	// run. This is good hygiene for operations, as operations can one day be
+	// called from roachtests as well.
+	defer leaktest.AfterTest(l)()
+
+	op := &operationImpl{
+		spec:         opSpec,
+		cockroach:    roachtestflags.CockroachBinaryPath,
+		l:            l,
+		cleanupState: make(map[string]string),
+	}
+	op.mu.cancel = cancel
+	var cleanup registry.OperationCleanup
+	{
+		ctx, cancel = context.WithTimeout(ctx, opSpec.Timeout)
+		defer cancel()
+
+		cleanup = opSpec.Run(ctx, op, c)
+	}
+	if op.Failed() {
+		op.Status("operation failed")
+		return op.mu.failures[0]
+	}
+
+	if cleanup == nil {
+		op.Status("operation ran successfully")
+		return nil
+	}
+
+	op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", roachtestflags.WaitBeforeCleanup))
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(roachtestflags.WaitBeforeCleanup):
+	}
+	op.Status("running cleanup")
+	{
+		ctx, cancel = context.WithTimeout(ctx, opSpec.Timeout)
+		defer cancel()
+
+		cleanup.Cleanup(ctx, op, c)
+	}
+
+	if op.Failed() {
+		op.Status("operation cleanup failed")
+		return op.mu.failures[0]
+	}
+
+	return nil
 }
