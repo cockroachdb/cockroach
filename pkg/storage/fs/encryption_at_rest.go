@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
 )
@@ -28,19 +27,19 @@ var NewEncryptedEnvFunc func(
 	fs vfs.FS, fr *FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
 ) (*EncryptionEnv, error)
 
-// ResolveEncryptedEnvOptions creates the EncryptionEnv and associated file
+// resolveEncryptedEnvOptions creates the EncryptionEnv and associated file
 // registry if this store has encryption-at-rest enabled; otherwise returns a
 // nil EncryptionEnv.
-func ResolveEncryptedEnvOptions(
-	ctx context.Context, cfg *base.StorageConfig, unencryptedFS vfs.FS, readOnly bool,
+func resolveEncryptedEnvOptions(
+	ctx context.Context, unencryptedFS vfs.FS, dir string, encryptionOpts []byte, rw RWMode,
 ) (*FileRegistry, *EncryptionEnv, error) {
-	if !cfg.HasEncryptionConfig() {
+	if len(encryptionOpts) == 0 {
 		// There's no encryption config. This is valid if the user doesn't
 		// intend to use encryption-at-rest, and the store has never had
 		// encryption-at-rest enabled. Validate that there's no file registry.
 		// If there is, the caller is required to specify an
 		// --enterprise-encryption flag for this store.
-		if err := checkNoRegistryFile(unencryptedFS, cfg.Dir); err != nil {
+		if err := checkNoRegistryFile(unencryptedFS, dir); err != nil {
 			return nil, nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
 				"specified. You need a CCL build and must fully specify the --enterprise-encryption flag")
 		}
@@ -53,13 +52,12 @@ func ResolveEncryptedEnvOptions(
 	if NewEncryptedEnvFunc == nil {
 		return nil, nil, fmt.Errorf("encryption is enabled but no function to create the encrypted env")
 	}
-
-	fileRegistry := &FileRegistry{FS: unencryptedFS, DBDir: cfg.Dir, ReadOnly: readOnly,
+	fileRegistry := &FileRegistry{FS: unencryptedFS, DBDir: dir, ReadOnly: rw == ReadOnly,
 		NumOldRegistryFiles: DefaultNumOldFileRegistryFiles}
 	if err := fileRegistry.Load(ctx); err != nil {
 		return nil, nil, err
 	}
-	env, err := NewEncryptedEnvFunc(unencryptedFS, fileRegistry, cfg.Dir, readOnly, cfg.EncryptionOptions)
+	env, err := NewEncryptedEnvFunc(unencryptedFS, fileRegistry, dir, rw == ReadOnly, encryptionOpts)
 	if err != nil {
 		return nil, nil, errors.WithSecondaryError(err, fileRegistry.Close())
 	}

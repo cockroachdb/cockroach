@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/pebble/vfs"
@@ -39,15 +40,15 @@ func TestAutoDecryptFS(t *testing.T) {
 	path2 := filepath.Join(dir, "foo", "path2")
 
 	var buf bytes.Buffer
-	resolveFn := func(dir string) (vfs.FS, error) {
+	resolveFn := func(dir string) (*fs.Env, error) {
 		if dir != path1 && dir != path2 {
 			t.Fatalf("unexpected dir %s", dir)
 		}
-		fs := vfs.NewMem()
-		require.NoError(t, fs.MkdirAll(dir, 0755))
-		return vfs.WithLogging(fs, func(format string, args ...interface{}) {
+		env := fs.InMemory()
+		env.DefaultFS = vfs.WithLogging(env.DefaultFS, func(format string, args ...interface{}) {
 			fmt.Fprintf(&buf, dir+": "+format+"\n", args...)
-		}), nil
+		})
+		return env, nil
 	}
 
 	var fs autoDecryptFS

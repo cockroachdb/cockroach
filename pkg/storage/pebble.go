@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -60,28 +59,6 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	humanize "github.com/dustin/go-humanize"
 )
-
-// Default for MaxSyncDuration below.
-var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT", 20*time.Second)
-
-// MaxSyncDuration is the threshold above which an observed engine sync duration
-// triggers either a warning or a fatal error.
-var MaxSyncDuration = settings.RegisterDurationSetting(
-	settings.SystemVisible,
-	"storage.max_sync_duration",
-	"maximum duration for disk operations; any operations that take longer"+
-		" than this setting trigger a warning log entry or process crash",
-	maxSyncDurationDefault,
-	settings.WithPublic)
-
-// MaxSyncDurationFatalOnExceeded governs whether disk stalls longer than
-// MaxSyncDuration fatal the Cockroach process. Defaults to true.
-var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
-	settings.ApplicationLevel, // used for temp storage in virtual cluster servers
-	"storage.max_sync_duration.fatal.enabled",
-	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
-	true,
-	settings.WithPublic)
 
 // ValueBlocksEnabled controls whether older versions of MVCC keys in the same
 // sstable will have their values written to value blocks. This only affects
@@ -791,38 +768,6 @@ func shortAttributeExtractorForValues(
 	return 0, nil
 }
 
-// wrapFilesystemMiddleware wraps the Option's vfs.FS with disk-health checking
-// and ENOSPC detection. Returns the new FS and a Closer that should be invoked
-// when the filesystem will no longer be used.
-func wrapFilesystemMiddleware(opts *pebble.Options) (vfs.FS, io.Closer) {
-	// Set disk-health check interval to min(5s, maxSyncDurationDefault). This
-	// is mostly to ease testing; the default of 5s is too infrequent to test
-	// conveniently. See the disk-stalled roachtest for an example of how this
-	// is used.
-	diskHealthCheckInterval := 5 * time.Second
-	if diskHealthCheckInterval.Seconds() > maxSyncDurationDefault.Seconds() {
-		diskHealthCheckInterval = maxSyncDurationDefault
-	}
-	// Instantiate a file system with disk health checking enabled. This FS
-	// wraps the filesystem with a layer that times all write-oriented
-	// operations.
-	fs, closer := vfs.WithDiskHealthChecks(opts.FS, diskHealthCheckInterval,
-		nil, /* statsCollector */
-		func(info vfs.DiskSlowInfo) {
-			opts.EventListener.DiskSlow(pebble.DiskSlowInfo{
-				Path:      info.Path,
-				OpType:    info.OpType,
-				Duration:  info.Duration,
-				WriteSize: info.WriteSize,
-			})
-		})
-	// If we encounter ENOSPC, exit with an informative exit code.
-	fs = vfs.OnDiskFull(fs, func() {
-		exit.WithCode(exit.DiskFull())
-	})
-	return fs, closer
-}
-
 type pebbleLogger struct {
 	ctx   context.Context
 	depth int
@@ -852,11 +797,15 @@ func (l pebbleLogger) Errorf(format string, args ...interface{}) {
 
 // PebbleConfig holds all configuration parameters and knobs used in setting up
 // a new Pebble instance.
+//
+// TODO(jackson): Unexport and delete base.StorageConfig.
 type PebbleConfig struct {
 	// StorageConfig contains storage configs for all storage engines.
 	// A non-nil cluster.Settings must be provided in the StorageConfig for a
 	// Pebble instance that will be used to write intents.
 	base.StorageConfig
+	// Env holds the initialized virtual filesystem that the Engine should use.
+	Env *fs.Env
 	// Pebble specific options.
 	Opts *pebble.Options
 	// SharedStorage is a cloud.ExternalStorage that can be used by all Pebble
@@ -887,19 +836,17 @@ type Pebble struct {
 
 	db *pebble.DB
 
-	closed       bool
-	readOnly     bool
-	path         string
-	auxDir       string
-	ballastPath  string
-	ballastSize  int64
-	maxSize      int64
-	attrs        roachpb.Attributes
-	properties   roachpb.StoreProperties
-	settings     *cluster.Settings
-	encryption   *fs.EncryptionEnv
-	fileLock     *pebble.Lock
-	fileRegistry *fs.FileRegistry
+	closed      bool
+	readOnly    bool
+	path        string
+	auxDir      string
+	ballastPath string
+	ballastSize int64
+	maxSize     int64
+	attrs       roachpb.Attributes
+	properties  roachpb.StoreProperties
+	settings    *cluster.Settings
+	env         *fs.Env
 
 	// Stats updated by pebble.EventListener invocations, and returned in
 	// GetMetrics. Updated and retrieved atomically.
@@ -921,7 +868,6 @@ type Pebble struct {
 		AggregatedBatchCommitStats
 	}
 	// Relevant options copied over from pebble.Options.
-	unencryptedFS vfs.FS
 	logCtx        context.Context
 	logger        pebble.LoggerAndTracer
 	eventListener *pebble.EventListener
@@ -935,9 +881,6 @@ type Pebble struct {
 	// minVersion is the minimum CockroachDB version that can open this store.
 	minVersion roachpb.Version
 
-	// closer is populated when the database is opened. The closer is associated
-	// with the filesystem.
-	closer io.Closer
 	// onClose is a slice of functions to be invoked before the engine closes.
 	onClose []func(*Pebble)
 
@@ -1047,12 +990,12 @@ func (r remoteStorageAdaptor) CreateStorage(locator remote.Locator) (remote.Stor
 // storage.
 var ConfigureForSharedStorage func(opts *pebble.Options, storage remote.Storage) error
 
-// NewPebble creates a new Pebble instance, at the specified path.
+// newPebble creates a new Pebble instance, at the specified path.
 // Do not use directly (except in test); use Open instead.
 //
 // Direct users of NewPebble: cfs.opts.{Logger,LoggerAndTracer} must not be
 // set.
-func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
+func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	if cfg.Settings == nil {
 		return nil, errors.AssertionFailedf("NewPebble requires cfg.Settings to be set")
 	}
@@ -1075,40 +1018,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 			opts.FormatMajorVersion, MinimumSupportedFormatVersion,
 		)
 	}
-
-	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
-	// EnsureDefaults here to make sure we have a working FS.
+	opts.FS = cfg.Env.DefaultFS
+	opts.Lock = cfg.Env.DirectoryLock
 	opts.EnsureDefaults()
-
-	// Wrap the FS with disk health-checking and ENOSPC-detection.
-	var filesystemCloser io.Closer
-	opts.FS, filesystemCloser = wrapFilesystemMiddleware(opts)
-	defer func() {
-		if err != nil {
-			filesystemCloser.Close()
-		}
-	}()
-	if !opts.ReadOnly {
-		if err := opts.FS.MkdirAll(cfg.Dir, os.ModePerm); err != nil {
-			return nil, err
-		}
-	}
-
-	// Acquire the database lock in the store directory to ensure that no other
-	// process is simultaneously accessing the same store. We manually acquire
-	// the database lock here (rather than allowing Pebble to acquire the lock)
-	// so that we hold the lock when we initialize encryption-at-rest subsystem.
-	opts.Lock, err = pebble.LockDirectory(cfg.Dir, opts.FS)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		// If we fail to open the database, release the file lock before
-		// returning.
-		if err != nil {
-			err = errors.WithSecondaryError(err, opts.Lock.Close())
-		}
-	}()
 
 	// The context dance here is done so that we have a clean context without
 	// timeouts that has a copy of the log tags.
@@ -1151,18 +1063,6 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	}
 	ballastPath := base.EmergencyBallastFile(opts.FS.PathJoin, cfg.Dir)
 
-	// For some purposes, we want to always use an unencrypted
-	// filesystem.
-	unencryptedFS := opts.FS
-	fileRegistry, encryptionEnv, err :=
-		fs.ResolveEncryptedEnvOptions(ctx, &cfg.StorageConfig, opts.FS, opts.ReadOnly)
-	if err != nil {
-		return nil, err
-	}
-	if encryptionEnv != nil {
-		opts.FS = encryptionEnv.FS
-	}
-
 	opts.Logger = nil // Defensive, since LoggerAndTracer will be used.
 	if opts.LoggerAndTracer == nil {
 		opts.LoggerAndTracer = pebbleLogger{
@@ -1176,13 +1076,13 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// disk space, the ballast will be reestablished from Capacity when the
 	// store's capacity is queried periodically.
 	if !opts.ReadOnly {
-		du, err := unencryptedFS.GetDiskUsage(cfg.Dir)
+		du, err := cfg.Env.UnencryptedFS.GetDiskUsage(cfg.Dir)
 		// If the FS is an in-memory FS, GetDiskUsage returns
 		// vfs.ErrUnsupported and we skip ballast creation.
 		if err != nil && !errors.Is(err, vfs.ErrUnsupported) {
 			return nil, errors.Wrap(err, "retrieving disk usage")
 		} else if err == nil {
-			resized, err := maybeEstablishBallast(unencryptedFS, ballastPath, cfg.BallastSize, du)
+			resized, err := maybeEstablishBallast(cfg.Env.UnencryptedFS, ballastPath, cfg.BallastSize, du)
 			if err != nil {
 				return nil, errors.Wrap(err, "resizing ballast")
 			}
@@ -1193,7 +1093,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		}
 	}
 
-	storeProps := computeStoreProperties(ctx, cfg.Dir, opts.ReadOnly, encryptionEnv != nil /* encryptionEnabled */)
+	storeProps := computeStoreProperties(ctx, cfg.Dir, opts.ReadOnly, cfg.Env.Encryption != nil /* encryptionEnabled */)
 
 	p = &Pebble{
 		FS:                opts.FS,
@@ -1206,14 +1106,10 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		attrs:             cfg.Attrs,
 		properties:        storeProps,
 		settings:          cfg.Settings,
-		encryption:        encryptionEnv,
-		fileLock:          opts.Lock,
-		fileRegistry:      fileRegistry,
-		unencryptedFS:     unencryptedFS,
+		env:               cfg.Env,
 		logger:            opts.LoggerAndTracer,
 		logCtx:            logCtx,
 		storeIDPebbleLog:  storeIDContainer,
-		closer:            filesystemCloser,
 		onClose:           cfg.onClose,
 		replayer:          replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
 		singleDelLogEvery: log.Every(5 * time.Minute),
@@ -1281,18 +1177,19 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// significantly in the future, we can improve the logic here by queueing up
 	// most of the logging work (except for the Fatalf call), and have it be done
 	// by a single goroutine.
-	lel := pebble.MakeLoggingEventListener(pebbleLogger{
-		ctx:   logCtx,
-		depth: 2, // skip over the EventListener stack frame
+	// TODO(jackson): Refactor this indirection; there's no need the DiskSlow
+	// callback needs to go through the EventListener and this structure is
+	// confusing.
+	cfg.Env.OnDiskSlow(func(info pebble.DiskSlowInfo) {
+		el := opts.EventListener
+		p.async(func() { el.DiskSlow(info) })
 	})
-	oldDiskSlow := lel.DiskSlow
-	lel.DiskSlow = func(info pebble.DiskSlowInfo) {
-		// Run oldDiskSlow asynchronously.
-		p.async(func() { oldDiskSlow(info) })
-	}
 	el := pebble.TeeEventListener(
 		p.makeMetricEtcEventListener(logCtx),
-		lel,
+		pebble.MakeLoggingEventListener(pebbleLogger{
+			ctx:   logCtx,
+			depth: 2, // skip over the EventListener stack frame
+		}),
 	)
 
 	p.eventListener = &el
@@ -1320,7 +1217,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	}
 
 	// Read the current store cluster version.
-	storeClusterVersion, minVerFileExists, err := getMinVersion(unencryptedFS, cfg.Dir)
+	storeClusterVersion, minVerFileExists, err := getMinVersion(p.env.UnencryptedFS, cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -1353,7 +1250,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		if opts.ErrorIfNotExists || opts.ReadOnly {
 			// Make sure the message is not confusing if the store does exist but
 			// there is no min version file.
-			filename := unencryptedFS.PathJoin(cfg.Dir, MinVersionFilename)
+			filename := p.env.UnencryptedFS.PathJoin(cfg.Dir, MinVersionFilename)
 			return nil, errors.Errorf(
 				"pebble: database %q does not exist (missing required file %q)",
 				cfg.StorageConfig.Dir, filename,
@@ -1444,7 +1341,7 @@ func (p *Pebble) writePreventStartupFile(ctx context.Context, corruptionError er
   A file preventing this node from restarting was placed at:
   %s`, corruptionError.Error(), path)
 
-	if err := fs.WriteFile(p.unencryptedFS, path, []byte(preventStartupMsg)); err != nil {
+	if err := fs.WriteFile(p.env.UnencryptedFS, path, []byte(preventStartupMsg)); err != nil {
 		log.Warningf(ctx, "%v", err)
 	}
 }
@@ -1477,8 +1374,8 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			atomic.AddInt64((*int64)(&p.writeStallDuration), stallDuration)
 		},
 		DiskSlow: func(info pebble.DiskSlowInfo) {
-			maxSyncDuration := MaxSyncDuration.Get(&p.settings.SV)
-			fatalOnExceeded := MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
+			maxSyncDuration := fs.MaxSyncDuration.Get(&p.settings.SV)
+			fatalOnExceeded := fs.MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
 			if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
 				atomic.AddInt64(&p.diskStallCount, 1)
 				// Note that the below log messages go to the main cockroach log, not
@@ -1519,6 +1416,9 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 		},
 	}
 }
+
+// Env implements Engine.
+func (p *Pebble) Env() *fs.Env { return p.env }
 
 func (p *Pebble) String() string {
 	dir := p.path
@@ -1567,16 +1467,10 @@ func (p *Pebble) Close() {
 	}
 
 	handleErr(p.db.Close())
-	if p.fileRegistry != nil {
-		handleErr(p.fileRegistry.Close())
+	if p.env != nil {
+		handleErr(p.env.Close())
+		p.env = nil
 	}
-	if p.encryption != nil {
-		handleErr(p.encryption.Closer.Close())
-	}
-	if p.closer != nil {
-		handleErr(p.closer.Close())
-	}
-	handleErr(p.fileLock.Close())
 }
 
 // aggregateIterStats is propagated to all of an engine's iterators, aggregating
@@ -1943,7 +1837,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 			return roachpb.StoreCapacity{}, err
 		}
 	}
-	du, err := p.unencryptedFS.GetDiskUsage(dir)
+	du, err := p.env.UnencryptedFS.GetDiskUsage(dir)
 	if errors.Is(err, vfs.ErrUnsupported) {
 		// This is an in-memory instance. Pretend we're empty since we
 		// don't know better and only use this for testing. Using any
@@ -1973,14 +1867,14 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	// enough available capacity to resize it. Capacity is called periodically
 	// by the kvserver, and that drives the automatic resizing of the ballast.
 	if !p.readOnly {
-		resized, err := maybeEstablishBallast(p.unencryptedFS, p.ballastPath, p.ballastSize, du)
+		resized, err := maybeEstablishBallast(p.env.UnencryptedFS, p.ballastPath, p.ballastSize, du)
 		if err != nil {
 			return roachpb.StoreCapacity{}, errors.Wrap(err, "resizing ballast")
 		}
 		if resized {
 			p.logger.Infof("resized ballast %s to size %s",
 				p.ballastPath, humanizeutil.IBytes(p.ballastSize))
-			du, err = p.unencryptedFS.GetDiskUsage(dir)
+			du, err = p.env.UnencryptedFS.GetDiskUsage(dir)
 			if err != nil {
 				return roachpb.StoreCapacity{}, err
 			}
@@ -2081,14 +1975,14 @@ func (p *Pebble) GetMetrics() Metrics {
 func (p *Pebble) GetEncryptionRegistries() (*fs.EncryptionRegistries, error) {
 	rv := &fs.EncryptionRegistries{}
 	var err error
-	if p.encryption != nil {
-		rv.KeyRegistry, err = p.encryption.StatsHandler.GetDataKeysRegistry()
+	if p.env.Encryption != nil {
+		rv.KeyRegistry, err = p.env.Encryption.StatsHandler.GetDataKeysRegistry()
 		if err != nil {
 			return nil, err
 		}
 	}
-	if p.fileRegistry != nil {
-		rv.FileRegistry, err = protoutil.Marshal(p.fileRegistry.GetRegistrySnapshot())
+	if p.env.Registry != nil {
+		rv.FileRegistry, err = protoutil.Marshal(p.env.Registry.GetRegistrySnapshot())
 		if err != nil {
 			return nil, err
 		}
@@ -2101,17 +1995,17 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 	// TODO(sumeer): make the stats complete. There are no bytes stats. The TotalFiles is missing
 	// files that are not in the registry (from before encryption was enabled).
 	stats := &fs.EnvStats{}
-	if p.encryption == nil {
+	if p.env.Encryption == nil {
 		return stats, nil
 	}
-	stats.EncryptionType = p.encryption.StatsHandler.GetActiveStoreKeyType()
+	stats.EncryptionType = p.env.Encryption.StatsHandler.GetActiveStoreKeyType()
 	var err error
-	stats.EncryptionStatus, err = p.encryption.StatsHandler.GetEncryptionStatus()
+	stats.EncryptionStatus, err = p.env.Encryption.StatsHandler.GetEncryptionStatus()
 	if err != nil {
 		return nil, err
 	}
-	fr := p.fileRegistry.GetRegistrySnapshot()
-	activeKeyID, err := p.encryption.StatsHandler.GetActiveDataKeyID()
+	fr := p.env.Registry.GetRegistrySnapshot()
+	activeKeyID, err := p.env.Encryption.StatsHandler.GetActiveDataKeyID()
 	if err != nil {
 		return nil, err
 	}
@@ -2137,7 +2031,7 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 	}
 
 	for filePath, entry := range fr.Files {
-		keyID, err := p.encryption.StatsHandler.GetKeyIDFromSettings(entry.EncryptionSettings)
+		keyID, err := p.env.Encryption.StatsHandler.GetKeyIDFromSettings(entry.EncryptionSettings)
 		if err != nil {
 			return nil, err
 		}
@@ -2398,7 +2292,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 	}
 
 	// Write out the min version file.
-	if err := writeMinVersionFile(p.unencryptedFS, dir, p.MinVersion()); err != nil {
+	if err := writeMinVersionFile(p.env.UnencryptedFS, dir, p.MinVersion()); err != nil {
 		return errors.Wrapf(err, "writing min version file for checkpoint")
 	}
 
@@ -2486,7 +2380,7 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 
 	// Writing the min version file commits this storage engine to the
 	// provided cluster version.
-	if err := writeMinVersionFile(p.unencryptedFS, p.path, version); err != nil {
+	if err := writeMinVersionFile(p.env.UnencryptedFS, p.path, version); err != nil {
 		return err
 	}
 
