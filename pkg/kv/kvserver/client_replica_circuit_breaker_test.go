@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -1012,7 +1013,7 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 	raftCfg.SetDefaults()
 	raftCfg.RaftHeartbeatIntervalTicks = 1
 	raftCfg.RaftElectionTimeoutTicks = 2
-	reg := server.NewStickyVFSRegistry()
+	reg := fs.NewStickyRegistry()
 	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{

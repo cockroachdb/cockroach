@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -139,7 +140,7 @@ func runCircuitBreakerTestForKey(
 
 	lReg := listenerutil.NewListenerRegistry()
 	defer lReg.Close()
-	reg := server.NewStickyVFSRegistry()
+	reg := fs.NewStickyRegistry()
 
 	// TODO: Disable expiration based leases metamorphism since it currently
 	// breaks closed timestamps and prevent rangefeeds from advancing checkpoint

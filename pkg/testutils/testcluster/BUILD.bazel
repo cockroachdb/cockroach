@@ -64,6 +64,7 @@ go_test(
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",
