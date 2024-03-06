@@ -234,6 +234,32 @@ func DecodeMVCCValue(buf []byte) (MVCCValue, error) {
 	return decodeExtendedMVCCValue(buf)
 }
 
+// DecodeValueFromMVCCValue decodes and MVCCValue and returns the
+// roachpb.Value portion without parsing the MVCCValueHeader.
+//
+// NB: Caller assumes that this function does not copy or re-allocate
+// the underlying byte slice.
+func DecodeValueFromMVCCValue(buf []byte) (roachpb.Value, error) {
+	if len(buf) == 0 {
+		// Tombstone with no header.
+		return roachpb.Value{}, nil
+	}
+	if len(buf) <= tagPos {
+		return roachpb.Value{}, errMVCCValueMissingTag
+	}
+	if buf[tagPos] != extendedEncodingSentinel {
+		return roachpb.Value{RawBytes: buf}, nil
+	}
+
+	// Extended encoding
+	headerLen := binary.BigEndian.Uint32(buf)
+	headerSize := extendedPreludeSize + headerLen
+	if len(buf) < int(headerSize) {
+		return roachpb.Value{}, errMVCCValueMissingHeader
+	}
+	return roachpb.Value{RawBytes: buf[headerSize:]}, nil
+}
+
 // DecodeMVCCValueAndErr is a helper that can be called using the ([]byte,
 // error) pair returned from the iterator UnsafeValue(), Value() methods.
 func DecodeMVCCValueAndErr(buf []byte, err error) (MVCCValue, error) {
