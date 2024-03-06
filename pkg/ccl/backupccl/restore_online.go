@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -87,23 +86,7 @@ func sendAddRemoteSSTs(
 	if err := grp.Wait(); err != nil {
 		return errors.Wrap(err, "failed to generate and send remote file spans")
 	}
-
-	downloadSpans := dataToRestore.getSpans()
-
-	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
-	downloadJobRecord := jobs.Record{
-		Description: fmt.Sprintf("Background Data Download for %s", job.Payload().Description),
-		Username:    job.Payload().UsernameProto.Decode(),
-		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans},
-		Progress:    jobspb.RestoreProgress{},
-	}
-
-	return execCtx.ExecCfg().InternalDB.DescsTxn(ctx, func(
-		ctx context.Context, txn descs.Txn,
-	) error {
-		_, err := execCtx.ExecCfg().JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, job.ID()+1, txn)
-		return err
-	})
+	return nil
 }
 
 func sendAddRemoteSSTWorker(
