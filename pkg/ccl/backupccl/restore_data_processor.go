@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -554,7 +553,10 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			return summary, err
 		}
 		valueScratch = append(valueScratch[:0], v...)
-		value := roachpb.Value{RawBytes: valueScratch}
+		value, err := storage.DecodeValueFromMVCCValue(valueScratch)
+		if err != nil {
+			return summary, err
+		}
 
 		key.Key, ok, err = kr.RewriteKey(key.Key, key.Timestamp.WallTime)
 
@@ -581,8 +583,12 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		if verbose {
 			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
-		// TODO(msbutler): ingest the ImportEpoch from an in progress import
-		if err := batcher.AddMVCCKey(ctx, key, value.RawBytes); err != nil {
+
+		// NB: Using valueScratch here assumes that
+		// DecodeValueFromMVCCValue, ClearChecksum, and
+		// InitChecksum don't copy/reallocate the slice they
+		// were given.
+		if err := batcher.AddMVCCKey(ctx, key, valueScratch); err != nil {
 			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
 	}
