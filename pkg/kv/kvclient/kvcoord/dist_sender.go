@@ -2852,6 +2852,13 @@ func (ds *DistSender) sendToReplicas(
 					if updatedLeaseholder {
 						leaseholderUnavailable = false
 						routeToLeaseholder = true
+						// Reset the transport to try all the replicas in order
+						// again. Requests to non-leaseholders are sent with
+						// proxy information pointing to the leaseholder and
+						// with new leaseholder information, we need to ensure
+						// that all other replicas are tried at least once more
+						// before giving up.
+						transport.Reset()
 					}
 					// If the leaseholder is the replica that we've just tried, and
 					// we've tried this replica a bunch of times already, let's move on
