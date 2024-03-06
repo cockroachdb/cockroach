@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "fs",
     srcs = [
+        "file_registry.go",
         "fs.go",
         "safewrite.go",
         "sticky_vfs.go",
@@ -11,18 +12,25 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/fs",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/storage/enginepb",
+        "//pkg/util/envutil",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_pebble//record",
         "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_cockroachdb_pebble//vfs/atomicfs",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
 go_test(
     name = "fs_test",
     srcs = [
+        "file_registry_test.go",
         "safewrite_test.go",
         "sticky_vfs_test.go",
         "temp_dir_test.go",
@@ -33,11 +41,16 @@ go_test(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/stop",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//require",
     ],
 )
