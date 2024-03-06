@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage
+package fs
 
 import (
 	"context"
@@ -35,11 +35,11 @@ import (
 
 // DefaultNumOldFileRegistryFiles is the default number of old registry files
 // kept for debugging. Production callers should use this to initialize
-// PebbleFileRegistry.NumOldRegistryFiles. The value of two is meant to
-// slightly align the history with what we keep for the Pebble MANIFEST. We
-// keep one Pebble MANIFEST, which is also 128MB in size, however the entry
-// size per file in the MANIFEST is smaller (based on some unit test data it
-// is about half), so we keep double the history for the file registry.
+// FileRegistry.NumOldRegistryFiles. The value of two is meant to slightly align
+// the history with what we keep for the Pebble MANIFEST. We keep one Pebble
+// MANIFEST, which is also 128MB in size, however the entry size per file in the
+// MANIFEST is smaller (based on some unit test data it is about half), so we
+// keep double the history for the file registry.
 var DefaultNumOldFileRegistryFiles = envutil.EnvOrDefaultInt(
 	"COCKROACH_STORE_NUM_OLD_FILE_REGISTRY_FILES", 2)
 
@@ -49,8 +49,8 @@ var CanRegistryElideFunc func(entry *enginepb.FileEntry) bool
 
 const defaultSoftMaxRegistrySize = 128 << 20 // 128 MB
 
-// PebbleFileRegistry keeps track of files for the data-FS and store-FS
-// for Pebble (see encrypted_fs.go for high-level comment).
+// FileRegistry keeps track of files for the data-FS and store-FS for
+// encryption-at-rest (see encrypted_fs.go for high-level comment).
 //
 // It is created even when file registry is disabled, so that it can be
 // used to ensure that a registry file did not exist previously, since
@@ -61,7 +61,7 @@ const defaultSoftMaxRegistrySize = 128 << 20 // 128 MB
 // by marshaled enginepb.RegistryUpdateBatch byte slices that correspond
 // to a batch of updates to the file registry. The updates are replayed
 // in Load.
-type PebbleFileRegistry struct {
+type FileRegistry struct {
 	// Initialize the following before calling Load().
 
 	// The FS to write the file registry file.
@@ -133,7 +133,7 @@ func CheckNoRegistryFile(fs vfs.FS, dbDir string) error {
 // Load loads the contents of the file registry from a file, if the file
 // exists, else it is a noop.  Load should be called exactly once if the
 // file registry will be used.
-func (r *PebbleFileRegistry) Load(ctx context.Context) error {
+func (r *FileRegistry) Load(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.SoftMaxSize == 0 {
@@ -199,7 +199,7 @@ func (r *PebbleFileRegistry) Load(ctx context.Context) error {
 	return nil
 }
 
-func (r *PebbleFileRegistry) loadRegistryFromFile() error {
+func (r *FileRegistry) loadRegistryFromFile() error {
 	// The file registry uses an 'atomic marker' file to denote which of
 	// the new records-based file registries is currently active.  It's
 	// okay to load the marker unconditionally, because LocateMarker
@@ -227,7 +227,7 @@ func (r *PebbleFileRegistry) loadRegistryFromFile() error {
 	return nil
 }
 
-func (r *PebbleFileRegistry) maybeLoadExistingRegistry() (bool, error) {
+func (r *FileRegistry) maybeLoadExistingRegistry() (bool, error) {
 	if r.mu.registryFilename == "" {
 		return false, nil
 	}
@@ -281,7 +281,7 @@ func (r *PebbleFileRegistry) maybeLoadExistingRegistry() (bool, error) {
 	return true, nil
 }
 
-func (r *PebbleFileRegistry) maybeElideEntries(ctx context.Context) error {
+func (r *FileRegistry) maybeElideEntries(ctx context.Context) error {
 	if r.ReadOnly {
 		return nil
 	}
@@ -330,7 +330,7 @@ func (r *PebbleFileRegistry) maybeElideEntries(ctx context.Context) error {
 }
 
 // GetFileEntry gets the file entry corresponding to filename, if there is one, else returns nil.
-func (r *PebbleFileRegistry) GetFileEntry(filename string) *enginepb.FileEntry {
+func (r *FileRegistry) GetFileEntry(filename string) *enginepb.FileEntry {
 	filename = r.tryMakeRelativePath(filename)
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -340,7 +340,7 @@ func (r *PebbleFileRegistry) GetFileEntry(filename string) *enginepb.FileEntry {
 // SetFileEntry sets filename => entry in the registry map and persists the registry.
 // It should not be called for entries corresponding to unencrypted files since the
 // absence of a file in the file registry implies that it is unencrypted.
-func (r *PebbleFileRegistry) SetFileEntry(filename string, entry *enginepb.FileEntry) error {
+func (r *FileRegistry) SetFileEntry(filename string, entry *enginepb.FileEntry) error {
 	// We don't need to store nil entries since that's the default zero value.
 	if entry == nil {
 		return r.MaybeDeleteEntry(filename)
@@ -356,7 +356,7 @@ func (r *PebbleFileRegistry) SetFileEntry(filename string, entry *enginepb.FileE
 }
 
 // MaybeDeleteEntry deletes the entry for filename, if it exists, and persists the registry, if changed.
-func (r *PebbleFileRegistry) MaybeDeleteEntry(filename string) error {
+func (r *FileRegistry) MaybeDeleteEntry(filename string) error {
 	filename = r.tryMakeRelativePath(filename)
 
 	r.mu.Lock()
@@ -373,7 +373,7 @@ func (r *PebbleFileRegistry) MaybeDeleteEntry(filename string) error {
 // for src but an entry exists for dst, dst's entry is deleted. These
 // semantics are necessary for handling plaintext files that exist on
 // the filesystem without a corresponding entry in the registry.
-func (r *PebbleFileRegistry) MaybeCopyEntry(src, dst string) error {
+func (r *FileRegistry) MaybeCopyEntry(src, dst string) error {
 	src = r.tryMakeRelativePath(src)
 	dst = r.tryMakeRelativePath(dst)
 
@@ -394,7 +394,7 @@ func (r *PebbleFileRegistry) MaybeCopyEntry(src, dst string) error {
 
 // MaybeLinkEntry copies the entry under src to dst, if src exists. If src does not exist, but dst
 // exists, dst is deleted. Persists the registry if changed.
-func (r *PebbleFileRegistry) MaybeLinkEntry(src, dst string) error {
+func (r *FileRegistry) MaybeLinkEntry(src, dst string) error {
 	src = r.tryMakeRelativePath(src)
 	dst = r.tryMakeRelativePath(dst)
 
@@ -412,7 +412,7 @@ func (r *PebbleFileRegistry) MaybeLinkEntry(src, dst string) error {
 	return r.processBatchLocked(batch)
 }
 
-func (r *PebbleFileRegistry) tryMakeRelativePath(filename string) string {
+func (r *FileRegistry) tryMakeRelativePath(filename string) string {
 	// Logic copied from file_registry.cc.
 	//
 	// This may not work for Windows.
@@ -442,7 +442,7 @@ func (r *PebbleFileRegistry) tryMakeRelativePath(filename string) string {
 	return filename
 }
 
-func (r *PebbleFileRegistry) processBatchLocked(batch *enginepb.RegistryUpdateBatch) error {
+func (r *FileRegistry) processBatchLocked(batch *enginepb.RegistryUpdateBatch) error {
 	if r.ReadOnly {
 		return errors.New("cannot write file registry since db is read-only")
 	}
@@ -457,7 +457,7 @@ func (r *PebbleFileRegistry) processBatchLocked(batch *enginepb.RegistryUpdateBa
 }
 
 // processBatch processes a batch of updates to the file registry.
-func (r *PebbleFileRegistry) applyBatch(batch *enginepb.RegistryUpdateBatch) {
+func (r *FileRegistry) applyBatch(batch *enginepb.RegistryUpdateBatch) {
 	for _, update := range batch.Updates {
 		if update.Entry == nil {
 			delete(r.mu.entries, update.Filename)
@@ -470,7 +470,7 @@ func (r *PebbleFileRegistry) applyBatch(batch *enginepb.RegistryUpdateBatch) {
 	}
 }
 
-func (r *PebbleFileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateBatch) error {
+func (r *FileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateBatch) error {
 	nilWriter := r.mu.registryWriter == nil
 
 	// Create a new file registry file if one doesn't exist yet, or the current
@@ -528,7 +528,7 @@ func makeRegistryFilename(iter uint64) string {
 	return fmt.Sprintf("%s_%06d", registryFilenameBase, iter)
 }
 
-func (r *PebbleFileRegistry) createNewRegistryFile() error {
+func (r *FileRegistry) createNewRegistryFile() error {
 	// Create a new registry file. It won't be active until the marker
 	// is moved to the new filename.
 	filename := makeRegistryFilename(r.mu.marker.NextIter())
@@ -611,7 +611,9 @@ func (r *PebbleFileRegistry) createNewRegistryFile() error {
 	return err
 }
 
-func (r *PebbleFileRegistry) getRegistryCopy() *enginepb.FileRegistry {
+// GetRegistrySnapshot constructs an enginepb.FileRegistry representing a
+// snapshot of the file registry state.
+func (r *FileRegistry) GetRegistrySnapshot() *enginepb.FileRegistry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	rv := &enginepb.FileRegistry{
@@ -627,7 +629,7 @@ func (r *PebbleFileRegistry) getRegistryCopy() *enginepb.FileRegistry {
 }
 
 // List returns a mapping of file in the registry to their enginepb.FileEntry.
-func (r *PebbleFileRegistry) List() map[string]*enginepb.FileEntry {
+func (r *FileRegistry) List() map[string]*enginepb.FileEntry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Perform a defensive deep-copy of the internal map here, as there may be
@@ -639,7 +641,7 @@ func (r *PebbleFileRegistry) List() map[string]*enginepb.FileEntry {
 	return m
 }
 
-func (r *PebbleFileRegistry) parseRegistryFileName(f string) (uint64, error) {
+func (r *FileRegistry) parseRegistryFileName(f string) (uint64, error) {
 	fileNum, err := strconv.ParseUint(f[len(registryFilenameBase)+1:], 10, 64)
 	if err != nil {
 		return 0, errors.Errorf("could not parse number from file registry filename %s", f)
@@ -647,7 +649,7 @@ func (r *PebbleFileRegistry) parseRegistryFileName(f string) (uint64, error) {
 	return fileNum, nil
 }
 
-func (r *PebbleFileRegistry) tryRemoveOldRegistryFilesLocked() error {
+func (r *FileRegistry) tryRemoveOldRegistryFilesLocked() error {
 	n := len(r.mu.obsoleteRegistryFiles)
 	if n <= r.NumOldRegistryFiles {
 		return nil
@@ -667,7 +669,7 @@ func (r *PebbleFileRegistry) tryRemoveOldRegistryFilesLocked() error {
 
 // Close closes the record writer and record file used for the registry.
 // It should be called when a Pebble instance is closed.
-func (r *PebbleFileRegistry) Close() error {
+func (r *FileRegistry) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	err := r.closeRegistry()
@@ -675,7 +677,7 @@ func (r *PebbleFileRegistry) Close() error {
 	return err
 }
 
-func (r *PebbleFileRegistry) closeRegistry() error {
+func (r *FileRegistry) closeRegistry() error {
 	var err1, err2 error
 	if r.mu.registryWriter != nil {
 		err1 = r.mu.registryWriter.Close()

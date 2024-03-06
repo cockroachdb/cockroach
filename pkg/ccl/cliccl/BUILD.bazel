@@ -35,6 +35,7 @@ go_library(
         "//pkg/cli/exit",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
         "//pkg/util/log",
         "//pkg/util/log/severity",
         "//pkg/util/protoutil",
