@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -72,7 +73,7 @@ func TestReader(t *testing.T) {
 	})
 	t.Run("read-without-waiting", func(t *testing.T) {
 		storage, slStorage, clock, reader := setup(t)
-		sessionID := makeSession()
+		session := makeSession()
 		const rpcAddr = "rpcAddr"
 		const sqlAddr = "sqlAddr"
 		binaryVersion := roachpb.Version{Major: 23, Minor: 2}
@@ -80,10 +81,11 @@ func TestReader(t *testing.T) {
 		// Set a high enough expiration to ensure the session stays
 		// live through the test.
 		const expiration = 10 * time.Minute
-		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-		instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality, binaryVersion)
+		session.StartTS = clock.Now()
+		session.ExpTS = session.StartTS.Add(expiration.Nanoseconds(), 0)
+		instance, err := storage.CreateInstance(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion)
 		require.NoError(t, err)
-		err = slStorage.Insert(ctx, sessionID, sessionExpiry)
+		err = slStorage.Insert(ctx, session.ID(), session.Expiration())
 		require.NoError(t, err)
 		reader.Start(ctx, instance)
 
@@ -99,7 +101,7 @@ func TestReader(t *testing.T) {
 		storage, slStorage, clock, reader := setup(t)
 		reader.Start(ctx, sqlinstance.InstanceInfo{})
 		require.NoError(t, reader.WaitForStarted(ctx))
-		sessionID := makeSession()
+		session := makeSession()
 		const rpcAddr = "rpcAddr"
 		const sqlAddr = "sqlAddr"
 		binaryVersion := roachpb.Version{Major: 25, Minor: 3}
@@ -108,12 +110,13 @@ func TestReader(t *testing.T) {
 		// live through the test.
 		const expiration = 10 * time.Minute
 		{
-			sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality, binaryVersion)
+			session.StartTS = clock.Now()
+			session.ExpTS = session.StartTS.Add(expiration.Nanoseconds(), 0)
+			instance, err := storage.CreateInstance(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion)
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = slStorage.Insert(ctx, sessionID, sessionExpiry)
+			err = slStorage.Insert(ctx, session.ID(), session.Expiration())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -150,7 +153,7 @@ func TestReader(t *testing.T) {
 		instanceIDs := []base.SQLInstanceID{1, 2, 3}
 		rpcAddresses := []string{"addr1", "addr2", "addr3"}
 		sqlAddresses := []string{"addr4", "addr5", "addr6"}
-		sessionIDs := []sqlliveness.SessionID{makeSession(), makeSession(), makeSession()}
+		sessions := []*sqllivenesstestutils.FakeSession{makeSession(), makeSession(), makeSession()}
 		localities := []roachpb.Locality{
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region2"}}},
@@ -229,11 +232,15 @@ func TestReader(t *testing.T) {
 		}
 
 		expectationsFromOffset := func(offset int) expectations {
+			sessionIDs := make([]sqlliveness.SessionID, 0, len(sessions[offset:]))
+			for _, session := range sessions[offset:] {
+				sessionIDs = append(sessionIDs, session.ID())
+			}
 			return expectations{
 				instanceIDs:    instanceIDs[offset:],
 				rpcAddresses:   rpcAddresses[offset:],
 				sqlAddresses:   sqlAddresses[offset:],
-				sessionIDs:     sessionIDs[offset:],
+				sessionIDs:     sessionIDs,
 				localities:     localities[offset:],
 				binaryVersions: binaryVersions[offset:],
 			}
@@ -242,12 +249,13 @@ func TestReader(t *testing.T) {
 		{
 			// Set up mock data within instance and session storage.
 			for index, rpcAddr := range rpcAddresses {
-				sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-				_, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddr, sqlAddresses[index], localities[index], binaryVersions[index])
+				sessions[index].StartTS = clock.Now()
+				sessions[index].ExpTS = sessions[index].StartTS.Add(expiration.Nanoseconds(), 0)
+				_, err := storage.CreateInstance(ctx, sessions[index], rpcAddr, sqlAddresses[index], localities[index], binaryVersions[index])
 				if err != nil {
 					t.Fatal(err)
 				}
-				err = slStorage.Insert(ctx, sessionIDs[index], sessionExpiry)
+				err = slStorage.Insert(ctx, sessions[index].SessionID, sessions[index].Expiration())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -260,7 +268,7 @@ func TestReader(t *testing.T) {
 
 		// Release an instance and verify only active instances are returned.
 		{
-			err := storage.ReleaseInstance(ctx, sessionIDs[0], instanceIDs[0])
+			err := storage.ReleaseInstance(ctx, sessions[0].ID(), instanceIDs[0])
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -271,7 +279,7 @@ func TestReader(t *testing.T) {
 
 		// Verify instances with expired sessions are filtered out.
 		{
-			err := slStorage.Delete(ctx, sessionIDs[1])
+			err := slStorage.Delete(ctx, sessions[1].ID())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -284,14 +292,15 @@ func TestReader(t *testing.T) {
 		// the latest instance information is returned. This heuristic is used
 		// when instance information isn't released correctly prior to SQL instance shutdown.
 		{
-			sessionID := makeSession()
+			session := makeSession()
 			locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region4"}}}
-			sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddresses[2], sqlAddresses[2], locality, binaryVersions[2])
+			session.StartTS = clock.Now()
+			session.ExpTS = session.StartTS.Add(expiration.Nanoseconds(), 0)
+			instance, err := storage.CreateInstance(ctx, session, rpcAddresses[2], sqlAddresses[2], locality, binaryVersions[2])
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = slStorage.Insert(ctx, sessionID, sessionExpiry)
+			err = slStorage.Insert(ctx, session.ID(), session.Expiration())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -300,7 +309,7 @@ func TestReader(t *testing.T) {
 					[]base.SQLInstanceID{instance.InstanceID}, /* instanceIDs */
 					[]string{rpcAddresses[2]},                 /* rpcAddresses */
 					[]string{sqlAddresses[2]},                 /* sqlAddresses */
-					[]sqlliveness.SessionID{sessionID},        /* sessionIDs */
+					[]sqlliveness.SessionID{session.ID()},     /* sessions */
 					[]roachpb.Locality{locality},              /* localities */
 					[]roachpb.Version{binaryVersions[2]},      /* binaryVersions */
 				})
@@ -318,7 +327,7 @@ func TestReader(t *testing.T) {
 		instanceIDs := [...]base.SQLInstanceID{1, 2, 3}
 		rpcAddresses := [...]string{"addr1", "addr2", "addr3"}
 		sqlAddresses := [...]string{"addr4", "addr5", "addr6"}
-		sessionIDs := [...]sqlliveness.SessionID{makeSession(), makeSession(), makeSession()}
+		sessions := [...]*sqllivenesstestutils.FakeSession{makeSession(), makeSession(), makeSession()}
 		localities := [...]roachpb.Locality{
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region2"}}},
@@ -330,12 +339,13 @@ func TestReader(t *testing.T) {
 		{
 			// Set up mock data within instance and session storage.
 			for index, rpcAddr := range rpcAddresses {
-				sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-				_, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddr, sqlAddresses[index], localities[index], binaryVersions[index])
+				sessions[index].StartTS = clock.Now()
+				sessions[index].ExpTS = sessions[index].StartTS.Add(expiration.Nanoseconds(), 0)
+				_, err := storage.CreateInstance(ctx, sessions[index], rpcAddr, sqlAddresses[index], localities[index], binaryVersions[index])
 				if err != nil {
 					t.Fatal(err)
 				}
-				err = slStorage.Insert(ctx, sessionIDs[index], sessionExpiry)
+				err = slStorage.Insert(ctx, sessions[index].ID(), sessions[index].Expiration())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -367,7 +377,7 @@ func TestReader(t *testing.T) {
 
 		// Verify request for released instance data results in an error.
 		{
-			err := storage.ReleaseInstance(ctx, sessionIDs[0], instanceIDs[0])
+			err := storage.ReleaseInstance(ctx, sessions[0].ID(), instanceIDs[0])
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -381,7 +391,7 @@ func TestReader(t *testing.T) {
 		}
 		// Verify request for instance with expired session results in an error.
 		{
-			err := slStorage.Delete(ctx, sessionIDs[1])
+			err := slStorage.Delete(ctx, sessions[1].ID())
 			if err != nil {
 				t.Fatal(err)
 			}
