@@ -122,20 +122,22 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	defer func() { fs.NewEncryptedEnvFunc = oldNewEncryptedEnvFunc }()
 	fs.NewEncryptedEnvFunc = fauxNewEncryptedEnvFunc
 
+	ctx := context.Background()
 	st := cluster.MakeClusterSettings()
-	fs := vfs.NewMem()
-	p, err := Open(
-		context.Background(),
-		Location{dir: "", fs: fs},
-		st,
-		EncryptionAtRest(nil))
+	baseFS := vfs.NewMem()
+	env, err := fs.InitEnv(ctx, baseFS, "", fs.EnvConfig{
+		EncryptionOptions: []byte("foo"),
+	})
+	require.NoError(t, err)
+
+	p, err := Open(ctx, env, st)
 	require.NoError(t, err)
 	defer p.Close()
 	require.NoError(t, p.SetMinVersion(st.Version.LatestVersion()))
 
 	// Reading the file directly through the unencrypted MemFS should
 	// succeed and yield the correct version.
-	v, ok, err := getMinVersion(fs, "")
+	v, ok, err := getMinVersion(env.UnencryptedFS, "")
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, st.Version.LatestVersion(), v)
