@@ -390,7 +390,6 @@ func maybeFillInDescriptor(
 	}
 	set(catalog.UpgradedPrivileges, fixedPrivileges)
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
-	set(catalog.SetCheckConstraintColumnIDs, maybeSetCheckConstraintColumnIDs(desc))
 	set(catalog.StrippedDanglingSelfBackReferences, maybeStripDanglingSelfBackReferences(desc))
 	set(catalog.FixSecondaryIndexEncodingType, maybeFixSecondaryIndexEncodingType(desc))
 	return changes, nil
@@ -821,60 +820,6 @@ func cleanedIDs(input []descpb.ID) []descpb.ID {
 		return nil
 	}
 	return s
-}
-
-// maybeSetCheckConstraintColumnIDs ensures that all check constraints have a
-// ColumnIDs slice which is populated if it should be.
-func maybeSetCheckConstraintColumnIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
-	// Collect valid column names.
-	nonDropColumnIDs := make(map[string]descpb.ColumnID, len(desc.Columns))
-	for i := range desc.Columns {
-		nonDropColumnIDs[desc.Columns[i].Name] = desc.Columns[i].ID
-	}
-	for _, m := range desc.Mutations {
-		if col := m.GetColumn(); col != nil && m.Direction != descpb.DescriptorMutation_DROP {
-			nonDropColumnIDs[col.Name] = col.ID
-		}
-	}
-	var colIDsUsed catalog.TableColSet
-	visitFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		if vBase, ok := expr.(tree.VarName); ok {
-			v, err := vBase.NormalizeVarName()
-			if err != nil {
-				return false, nil, err
-			}
-			if c, ok := v.(*tree.ColumnItem); ok {
-				colID, found := nonDropColumnIDs[string(c.ColumnName)]
-				if !found {
-					return false, nil, errors.New("column not found")
-				}
-				colIDsUsed.Add(colID)
-			}
-			return false, v, nil
-		}
-		return true, expr, nil
-	}
-
-	for _, ck := range desc.Checks {
-		if len(ck.ColumnIDs) > 0 {
-			continue
-		}
-		parsed, err := parser.ParseExpr(ck.Expr)
-		if err != nil {
-			// We do this on a best-effort basis.
-			continue
-		}
-		colIDsUsed = catalog.TableColSet{}
-		if _, err := tree.SimpleVisit(parsed, visitFn); err != nil {
-			// We do this on a best-effort basis.
-			continue
-		}
-		if !colIDsUsed.Empty() {
-			ck.ColumnIDs = colIDsUsed.Ordered()
-			hasChanged = true
-		}
-	}
-	return hasChanged
 }
 
 // maybeStripDanglingSelfBackReferences removes any references to things
