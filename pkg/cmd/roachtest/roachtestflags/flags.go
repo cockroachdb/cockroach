@@ -98,6 +98,31 @@ var (
 		Usage: `Absolute path to cockroach binary to use`,
 	})
 
+	CockroachBinaryPath string = "cockroach"
+	_                          = registerRunOpsFlag(&CockroachBinaryPath, FlagInfo{
+		Name:  "cockroach-binary",
+		Usage: `Relative path to cockroach binary to use, on the cluster specified in --cluster`,
+	})
+
+	CertsDir string
+	_        = registerRunOpsFlag(&CertsDir, FlagInfo{
+		Name:  "certs-dir",
+		Usage: `Absolute path to certificates directory, if the cluster specified in --cluster is secure`,
+	})
+
+	VirtualCluster string
+	_              = registerRunOpsFlag(&VirtualCluster, FlagInfo{
+		Name:  "virtual-cluster",
+		Usage: `Specifies virtual cluster to connect to, within the specified --cluster.`,
+	})
+
+	WaitBeforeCleanup time.Duration = 5 * time.Minute
+	_                               = registerRunOpsFlag(&WaitBeforeCleanup, FlagInfo{
+		Name: "wait-before-cleanup",
+		Usage: `Specifies the amount of time to wait before running any cleanup work defined
+            by the operation. Note that this time does not count towards the timeout.`,
+	})
+
 	CockroachEAPath string
 	_               = registerRunFlag(&CockroachEAPath, FlagInfo{
 		Name: "cockroach-ea",
@@ -141,11 +166,13 @@ var (
 
 	// ArtifactsDir is a path to a local dir where the test logs and artifacts
 	// collected from cluster will be placed.
-	ArtifactsDir string = "artifacts"
-	_                   = registerRunFlag(&ArtifactsDir, FlagInfo{
+	ArtifactsDir  string = "artifacts"
+	ArtifactsFlag        = FlagInfo{
 		Name:  "artifacts",
 		Usage: `Path to artifacts directory`,
-	})
+	}
+	_ = registerRunFlag(&ArtifactsDir, ArtifactsFlag)
+	_ = registerRunOpsFlag(&ArtifactsDir, ArtifactsFlag)
 
 	// LiteralArtifactsDir is a path to the literal on-agent directory where
 	// artifacts are stored. May be different from `artifacts`. Only used for
@@ -242,11 +269,12 @@ var (
 			https://docs.microsoft.com/en-us/azure/virtual-machines/windows/sizes)`,
 	})
 
-	CPUQuota int = 300
-	_            = registerRunFlag(&CPUQuota, FlagInfo{
+	CPUQuota         int = 300
+	cpuQuotaFlagInfo     = FlagInfo{
 		Name:  "cpu-quota",
 		Usage: `The number of cloud CPUs roachtest is allowed to use at any one time.`,
-	})
+	}
+	_ = registerRunFlag(&CPUQuota, cpuQuotaFlagInfo)
 
 	HTTPPort int = 0
 	_            = registerRunFlag(&HTTPPort, FlagInfo{
@@ -405,6 +433,12 @@ func AddRunFlags(cmdFlags *pflag.FlagSet) {
 	globalMan.AddFlagsToCommand(runCmdID, cmdFlags)
 }
 
+// AddRunOpsFlags adds all flags registered for the run-operations command to
+// the given command flag set.
+func AddRunOpsFlags(cmdFlags *pflag.FlagSet) {
+	globalMan.AddFlagsToCommand(runOpsCmdID, cmdFlags)
+}
+
 // Changed returns true if a flag associated with a given value was present.
 //
 // For example: roachtestflags.Changed(&roachtestflags.Cloud) returns true if
@@ -423,5 +457,10 @@ func registerListFlag(valPtr interface{}, info FlagInfo) struct{} {
 
 func registerRunFlag(valPtr interface{}, info FlagInfo) struct{} {
 	globalMan.RegisterFlag(runCmdID, valPtr, info)
+	return struct{}{}
+}
+
+func registerRunOpsFlag(valPtr interface{}, info FlagInfo) struct{} {
+	globalMan.RegisterFlag(runOpsCmdID, valPtr, info)
 	return struct{}{}
 }
