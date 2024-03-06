@@ -505,7 +505,7 @@ type encryptedTestFS struct {
 	errorProb       float64
 	errorRand       *rand.Rand
 
-	encEnv *storage.EncryptionEnv
+	encEnv *fs.EncryptionEnv
 }
 
 func (etfs *encryptedTestFS) fs() vfs.FS {

@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "fs",
     srcs = [
+        "encryption_at_rest.go",
         "file_registry.go",
         "fs.go",
         "safewrite.go",
@@ -12,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/fs",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/storage/enginepb",
         "//pkg/util/envutil",
         "//pkg/util/log",
@@ -35,6 +37,7 @@ go_test(
         "sticky_vfs_test.go",
         "temp_dir_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":fs"],
     deps = [
         "//pkg/base",

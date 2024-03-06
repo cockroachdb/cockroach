@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1613,7 +1614,7 @@ func pebbleCryptoInitializer(ctx context.Context) {
 			if err := PopulateStorageConfigHook(&storageConfig); err != nil {
 				return nil, err
 			}
-			_, encryptedEnv, err := storage.ResolveEncryptedEnvOptions(
+			_, encryptedEnv, err := fs.ResolveEncryptedEnvOptions(
 				ctx, &storageConfig, vfs.Default, false /* readOnly */)
 			if err != nil {
 				return nil, err
