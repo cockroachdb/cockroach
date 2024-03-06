@@ -508,12 +508,17 @@ type MVCCBlockIntervalSyntheticReplacer struct{}
 func (mbsr MVCCBlockIntervalSyntheticReplacer) AdjustIntervalWithSyntheticSuffix(
 	lower uint64, upper uint64, suffix []byte,
 ) (adjustedLower uint64, adjustedUpper uint64, err error) {
-	// Remove the sentinel byte.
-	synthDecoded, _ := binary.Uvarint(suffix[1:])
-	if upper >= synthDecoded {
+	synthDecoded, err := DecodeMVCCTimestampSuffix(suffix)
+	if err != nil {
+		return 0, 0, errors.AssertionFailedf("could not decode synthetic suffix")
+	}
+	synthDecodedWalltime := uint64(synthDecoded.WallTime)
+	if upper >= synthDecodedWalltime {
 		return 0, 0, errors.AssertionFailedf("the synthetic suffix %d is less than or equal to the original upper bound %d", synthDecoded, upper)
 	}
-	return synthDecoded, synthDecoded + 1, nil
+	// The returned bound includes the synthetic suffix, regardless of its logical
+	// component.
+	return synthDecodedWalltime, synthDecodedWalltime + 1, nil
 }
 
 // pebbleDataBlockMVCCTimeIntervalPointCollector implements
@@ -640,6 +645,10 @@ func (tc *pebbleDataBlockMVCCTimeIntervalCollector) FinishDataBlock() (
 	tc.min = tc.min[:0]
 	// The actual value encoded into walltime is an int64, so +1 will not
 	// overflow.
+	//
+	// Note that the timestamp with a wall time tc.max+1 and no logical component is
+	// a valid exclusive upper bound for timestamps with wall time tc.max and any
+	// logical component.
 	upper = decodeWallTime(tc.max) + 1
 	tc.max = tc.max[:0]
 	if lower >= upper {
