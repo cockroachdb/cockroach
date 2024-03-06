@@ -271,6 +271,75 @@ func TestURLsForApplication(t *testing.T) {
 			},
 		},
 		{
+			name: "customized linux",
+			args: args{
+				application: "customized",
+				version:     "v22.1.11",
+				os:          "linux",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-v22.1.11.linux-amd64.tgz",
+			},
+		},
+		{
+			name: "customized linux FIPS",
+			args: args{
+				application: "customized",
+				version:     "v22.1.11",
+				os:          "linux",
+				arch:        "fips",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-v22.1.11.linux-amd64-fips.tgz",
+			},
+		},
+		{
+			name: "customized linux arm64",
+			args: args{
+				application: "customized",
+				version:     "v22.1.11",
+				os:          "linux",
+				arch:        "arm64",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-v22.1.11.linux-arm64.tgz",
+			},
+		},
+		{
+			name: "customized darwin",
+			args: args{
+				application: "customized",
+				version:     "v22.1.11",
+				os:          "darwin",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-v22.1.11.darwin-10.9-amd64.tgz",
+			},
+		},
+		{
+			name: "customized darwin arm64",
+			args: args{
+				application: "customized",
+				version:     "v22.1.11",
+				os:          "darwin",
+				arch:        "arm64",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-v22.1.11.darwin-11.0-arm64.tgz",
+			},
+		},
+		{
+			name: "customized windows",
+			args: args{
+				application: "customized",
+				version:     "v22.1.11",
+				os:          "windows",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-v22.1.11.windows-6.2-amd64.zip",
+			},
+		},
+		{
 			name: "unsupported arch 'arm63'",
 			args: args{
 				application: "release",
