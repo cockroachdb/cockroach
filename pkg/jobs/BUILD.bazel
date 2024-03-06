@@ -111,7 +111,7 @@ go_test(
     ],
     embed = [":jobs"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
         "//conditions:default": {"test.Pool": "default"},
     }),
     shard_count = 16,
