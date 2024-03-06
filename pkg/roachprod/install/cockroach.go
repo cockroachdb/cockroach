@@ -136,10 +136,11 @@ type StartOpts struct {
 	EncryptedStores bool
 
 	// -- Options that apply only to the StartServiceForVirtualCluster target --
-	VirtualClusterName string
-	VirtualClusterID   int
-	SQLInstance        int
-	StorageCluster     *SyncedCluster
+	VirtualClusterName     string
+	VirtualClusterID       int
+	VirtualClusterLocation string // where separate process virtual clusters will be started
+	SQLInstance            int
+	StorageCluster         *SyncedCluster
 }
 
 func (s *StartOpts) IsVirtualCluster() bool {

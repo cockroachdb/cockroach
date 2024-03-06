@@ -25,7 +25,6 @@ import (
 func StartServiceForVirtualCluster(
 	ctx context.Context,
 	l *logger.Logger,
-	externalCluster string,
 	storageCluster string,
 	startOpts install.StartOpts,
 	clusterSettingsOpts ...install.ClusterSettingOption,
@@ -38,25 +37,21 @@ func StartServiceForVirtualCluster(
 
 	startOpts.StorageCluster = sc
 
-	var startCluster *install.SyncedCluster
-	if externalCluster == "" {
-		// If we are starting a service in shared process mode, `Start` is
-		// called on the storage cluster itself.
-		startCluster = sc
-	} else {
+	// If we are starting a service in shared process mode, `Start` is
+	// called on the storage cluster itself.
+	startCluster := sc
+
+	if startOpts.Target == install.StartServiceForVirtualCluster {
+		l.Printf("Starting SQL/HTTP instances for the virtual cluster")
 		// If we are starting a service in external process mode, `Start`
 		// is called on the nodes where the SQL server processed should be
 		// created.
-		ec, err := newCluster(l, externalCluster, clusterSettingsOpts...)
+		ec, err := newCluster(l, startOpts.VirtualClusterLocation, clusterSettingsOpts...)
 		if err != nil {
 			return err
 		}
 
 		startCluster = ec
-	}
-
-	if startOpts.Target == install.StartServiceForVirtualCluster {
-		l.Printf("Starting SQL/HTTP instances for the virtual cluster")
 	}
 	return startCluster.Start(ctx, l, startOpts)
 }
