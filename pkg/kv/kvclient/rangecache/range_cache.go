@@ -398,6 +398,8 @@ func (et *EvictionToken) syncRLocked(
 // cached.
 //
 // It returns an error if the token is no longer valid.
+// TODO(baptist): Take a RangeInfo as arguments. NotLeaseHolderError could also
+// return a RangeInfo instead of the individual fields.
 func (et *EvictionToken) SyncTokenAndMaybeUpdateCache(
 	ctx context.Context, l *roachpb.Lease, rangeDesc *roachpb.RangeDescriptor,
 ) error {
@@ -538,6 +540,14 @@ func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newDescs ...
 		log.Eventf(ctx, "evicting cached range descriptor")
 	}
 	et.clear()
+}
+
+// ToRangeInfo extracts the RangeInfo from this token.
+func (et EvictionToken) ToRangeInfo() roachpb.RangeInfo {
+	if !et.Valid() {
+		return roachpb.RangeInfo{}
+	}
+	return et.entry.toRangeInfo()
 }
 
 // LookupWithEvictionToken attempts to locate a descriptor, and possibly also a
