@@ -22,8 +22,9 @@ import (
 )
 
 const (
-	edgeBinaryServer    = "https://storage.googleapis.com/cockroach-edge-artifacts-prod/"
-	releaseBinaryServer = "https://storage.googleapis.com/cockroach-release-artifacts-prod/"
+	edgeBinaryServer       = "https://storage.googleapis.com/cockroach-edge-artifacts-prod/"
+	releaseBinaryServer    = "https://storage.googleapis.com/cockroach-release-artifacts-prod/"
+	customizedBinaryServer = "https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/"
 )
 
 type archInfo struct {
@@ -157,8 +158,26 @@ func getEdgeURL(urlPathBase, SHA, arch string, ext string) (*url.URL, error) {
 	return edgeBinaryLocation, nil
 }
 
-func cockroachReleaseURL(version string, arch string, archiveExtension string) (*url.URL, error) {
-	binURL, err := url.Parse(releaseBinaryServer)
+type releaseType int
+
+const (
+	releaseTypeRelease releaseType = iota
+	releaseTypeCustomized
+)
+
+func cockroachReleaseURL(
+	relType releaseType, version string, arch string, archiveExtension string,
+) (*url.URL, error) {
+	var binServer string
+	switch relType {
+	case releaseTypeRelease:
+		binServer = releaseBinaryServer
+	case releaseTypeCustomized:
+		binServer = customizedBinaryServer
+	default:
+		return nil, fmt.Errorf("unsupported release type")
+	}
+	binURL, err := url.Parse(binServer)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +242,9 @@ func StageApplication(
 		)
 		return err
 	case "release":
-		return StageCockroachRelease(ctx, l, c, version, archInfo.ReleaseArchitecture, archInfo.ReleaseArchiveExtension, destDir)
+		return StageCockroachRelease(ctx, l, c, releaseTypeRelease, version, archInfo.ReleaseArchitecture, archInfo.ReleaseArchiveExtension, destDir)
+	case "customized":
+		return StageCockroachRelease(ctx, l, c, releaseTypeCustomized, version, archInfo.ReleaseArchitecture, archInfo.ReleaseArchiveExtension, destDir)
 	default:
 		return fmt.Errorf("unknown application %s", applicationName)
 	}
@@ -273,7 +294,13 @@ func URLsForApplication(
 		}
 		return []*url.URL{u}, nil
 	case "release":
-		u, err := cockroachReleaseURL(version, archInfo.ReleaseArchitecture, archInfo.ReleaseArchiveExtension)
+		u, err := cockroachReleaseURL(releaseTypeRelease, version, archInfo.ReleaseArchitecture, archInfo.ReleaseArchiveExtension)
+		if err != nil {
+			return nil, err
+		}
+		return []*url.URL{u}, nil
+	case "customized":
+		u, err := cockroachReleaseURL(releaseTypeCustomized, version, archInfo.ReleaseArchitecture, archInfo.ReleaseArchiveExtension)
 		if err != nil {
 			return nil, err
 		}
@@ -343,6 +370,7 @@ func StageCockroachRelease(
 	ctx context.Context,
 	l *logger.Logger,
 	c *SyncedCluster,
+	relType releaseType,
 	version, arch, archiveExtension, dir string,
 ) error {
 	if len(version) == 0 {
@@ -350,8 +378,7 @@ func StageCockroachRelease(
 			"release application cannot be staged without specifying a specific version",
 		)
 	}
-
-	binURL, err := cockroachReleaseURL(version, arch, archiveExtension)
+	binURL, err := cockroachReleaseURL(relType, version, arch, archiveExtension)
 	if err != nil {
 		return err
 	}
