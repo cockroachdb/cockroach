@@ -3,13 +3,13 @@
 set -xeuo pipefail
 
 # When updating to a new Go version, update all of these variables.
-GOVERS=1.21.5
+GOVERS=1.21.8
 GOLINK=https://go.dev/dl/go$GOVERS.src.tar.gz
-SRCSHASUM=285cbbdf4b6e6e62ed58f370f3f6d8c30825d6e56c5853c66d3c23bcdb09db19
+SRCSHASUM=dc806cf75a87e1414b5b4c3dcb9dd3e9cc98f4cfccec42b7af617d5a658a3c43
 # We use this for bootstrapping (this is NOT re-published). Note the version
 # matches the version we're publishing, although it doesn't technically have to.
 GOLINUXLINK=https://go.dev/dl/go$GOVERS.linux-amd64.tar.gz
-LINUXSHASUM=e2bc0b3e4b64111ec117295c088bde5f00eeed1567999ff77bc859d7df70078e
+LINUXSHASUM=538b3b143dc7f32b093c8ffe0e050c260b57fc9d57a12c4140a639a8dd2b4e4f
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

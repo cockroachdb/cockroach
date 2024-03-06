@@ -14,7 +14,7 @@ http_archive(
         # cockroachdb/rules_go as of 48e8a9727cbf64165ed4c9f895744f3c82d39bc8
         # (upstream release-0.42 plus a few patches).
         "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-385-g48e8a97.zip",
-    ]
+    ],
 )
 
 # Like the above, but for JS.
@@ -165,14 +165,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.21.5.darwin-amd64.tar.gz", "6878b009493b8b2e5518b090209f63af478a6bdf889c6db4d3c6b68e43839e8e"),
-        "darwin_arm64": ("go1.21.5.darwin-arm64.tar.gz", "1f3673055f681982bda589bfb23938cb83bef4030efd3516bed0dc3ebd125f41"),
-        "linux_amd64": ("go1.21.5.linux-amd64.tar.gz", "78e55b80d0a5ef27e8e0913321cae31ba9509c05ed79c429e489ae3a25c74885"),
-        "linux_arm64": ("go1.21.5.linux-arm64.tar.gz", "89fe32d10a4a3831154bc740bfbc89405a5a8de0655e0cbe91e5ad952dfd6a52"),
-        "windows_amd64": ("go1.21.5.windows-amd64.tar.gz", "350b40fb129d0eac7eafd5ea2044c6dd1ce8b5a43572f22ef02b53e3d999f28a"),
+        "darwin_amd64": ("go1.21.8.darwin-amd64.tar.gz", "7d28491dead040b9acde3201e87a147866b35e4bb9c80333aa80958021a92693"),
+        "darwin_arm64": ("go1.21.8.darwin-arm64.tar.gz", "5c5ec043da9ce22307aaaa30fb0f5bc903fe0701bd41c0a1d56cb87947312675"),
+        "linux_amd64": ("go1.21.8.linux-amd64.tar.gz", "f4b6150a0fb7f52c64daf13ff08179097f3006d6e25faa066f98b0578d48fbfd"),
+        "linux_arm64": ("go1.21.8.linux-arm64.tar.gz", "585e2965eddbf061c14e06c3cb4eba7421a97eace44af800ee8fddb23696df2e"),
+        "windows_amd64": ("go1.21.8.windows-amd64.tar.gz", "1e555016f2693d969f8eb528e55f2c6db8f06bd4dff8491edd46e085be3a7dcb"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231206-175156/{}"],
-    version = "1.21.5",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240306-030357/{}"],
+    version = "1.21.8",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -615,11 +615,6 @@ distdir_repositories()
 # Download and register the FIPS enabled Go toolchain at the end to avoid toolchain conflicts for gazelle.
 go_download_sdk(
     name = "go_sdk_fips",
-    sdks = {
-        "linux_amd64": ("go1.21.5fips.linux-amd64.tar.gz", "4368ab9cf7c8d75d6d33927917426d587f5be39fb18a87fbe2d59281a8569819"),
-    },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231206-175156/{}"],
-    version = "1.21.5fips",
     # In the golang-fips toolchain, FIPS-ready crypto packages are used by default, regardless of build tags.
     # The boringcrypto experiment does almost nothing in this toolchain, but it does enable the use of the
     # crypto/boring.Enabled() method which is the only application-visible way to inspect whether FIPS mode
@@ -630,4 +625,9 @@ go_download_sdk(
     # because A) we also want to detect the case when the kernel is not in FIPS mode and B) we want to be
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
+    sdks = {
+        "linux_amd64": ("go1.21.8fips.linux-amd64.tar.gz", "c6c37d9df6be984170db9804586f95f89f791a944bc1a64e4031829dc35b3649"),
+    },
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240306-030357/{}"],
+    version = "1.21.8fips",
 )
