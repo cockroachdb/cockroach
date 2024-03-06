@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,7 +47,7 @@ func TestEncryptedFS(t *testing.T) {
 	memFS := vfs.NewMem()
 
 	require.NoError(t, memFS.MkdirAll("/bar", os.ModePerm))
-	fileRegistry := &storage.PebbleFileRegistry{FS: memFS, DBDir: "/bar"}
+	fileRegistry := &fs.FileRegistry{FS: memFS, DBDir: "/bar"}
 	require.NoError(t, fileRegistry.Load(context.Background()))
 
 	// Using a StoreKeyManager for the test since it is easy to create. Write a key for the
@@ -202,7 +203,7 @@ func TestEncryptedFSUnencryptedFiles(t *testing.T) {
 	memFS := vfs.NewMem()
 	require.NoError(t, memFS.MkdirAll("/foo", os.ModeDir))
 
-	fileRegistry := &storage.PebbleFileRegistry{FS: memFS, DBDir: "/foo"}
+	fileRegistry := &fs.FileRegistry{FS: memFS, DBDir: "/foo"}
 	require.NoError(t, fileRegistry.Load(context.Background()))
 
 	keyManager := &StoreKeyManager{fs: memFS, activeKeyFilename: "plain", oldKeyFilename: "plain"}
@@ -529,7 +530,7 @@ func (etfs *encryptedTestFS) restart() error {
 	fsMeta := errorfs.Wrap(etfs.mem, ei)
 	// TODO(sumeer): Do deterministic rollover of file registry after small
 	// number of operations.
-	fileRegistry := &storage.PebbleFileRegistry{
+	fileRegistry := &fs.FileRegistry{
 		FS: fsMeta, DBDir: "", ReadOnly: false, NumOldRegistryFiles: 2}
 	if err := fileRegistry.Load(context.Background()); err != nil {
 		return err

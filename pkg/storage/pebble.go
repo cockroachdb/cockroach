@@ -904,7 +904,7 @@ type Pebble struct {
 	settings     *cluster.Settings
 	encryption   *EncryptionEnv
 	fileLock     *pebble.Lock
-	fileRegistry *PebbleFileRegistry
+	fileRegistry *fs.FileRegistry
 
 	// Stats updated by pebble.EventListener invocations, and returned in
 	// GetMetrics. Updated and retrieved atomically.
@@ -985,7 +985,7 @@ var WorkloadCollectorEnabled = envutil.EnvOrDefaultBool("COCKROACH_STORAGE_WORKL
 // NewPebble(). The optionBytes is a binary serialized baseccl.EncryptionOptions, so that non-CCL
 // code does not depend on CCL code.
 var NewEncryptedEnvFunc func(
-	fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
+	fs vfs.FS, fr *fs.FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
 ) (*EncryptionEnv, error)
 
 // SetCompactionConcurrency will return the previous compaction concurrency.
@@ -1074,17 +1074,17 @@ func (r remoteStorageAdaptor) CreateStorage(locator remote.Locator) (remote.Stor
 // registry if this store has encryption-at-rest enabled; otherwise returns a
 // nil EncryptionEnv.
 func ResolveEncryptedEnvOptions(
-	ctx context.Context, cfg *base.StorageConfig, fs vfs.FS, readOnly bool,
-) (*PebbleFileRegistry, *EncryptionEnv, error) {
-	var fileRegistry *PebbleFileRegistry
+	ctx context.Context, cfg *base.StorageConfig, unencryptedFS vfs.FS, readOnly bool,
+) (*fs.FileRegistry, *EncryptionEnv, error) {
+	var fileRegistry *fs.FileRegistry
 	if cfg.UseFileRegistry {
-		fileRegistry = &PebbleFileRegistry{FS: fs, DBDir: cfg.Dir, ReadOnly: readOnly,
-			NumOldRegistryFiles: DefaultNumOldFileRegistryFiles}
+		fileRegistry = &fs.FileRegistry{FS: unencryptedFS, DBDir: cfg.Dir, ReadOnly: readOnly,
+			NumOldRegistryFiles: fs.DefaultNumOldFileRegistryFiles}
 		if err := fileRegistry.Load(ctx); err != nil {
 			return nil, nil, err
 		}
 	} else {
-		if err := CheckNoRegistryFile(fs, cfg.Dir); err != nil {
+		if err := fs.CheckNoRegistryFile(unencryptedFS, cfg.Dir); err != nil {
 			return nil, nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
 				"specified. You need a CCL build and must fully specify the --enterprise-encryption flag")
 		}
@@ -1101,7 +1101,7 @@ func ResolveEncryptedEnvOptions(
 		}
 		var err error
 		env, err = NewEncryptedEnvFunc(
-			fs,
+			unencryptedFS,
 			fileRegistry,
 			cfg.Dir,
 			readOnly,
@@ -2159,7 +2159,7 @@ func (p *Pebble) GetEncryptionRegistries() (*EncryptionRegistries, error) {
 		}
 	}
 	if p.fileRegistry != nil {
-		rv.FileRegistry, err = protoutil.Marshal(p.fileRegistry.getRegistryCopy())
+		rv.FileRegistry, err = protoutil.Marshal(p.fileRegistry.GetRegistrySnapshot())
 		if err != nil {
 			return nil, err
 		}
@@ -2181,7 +2181,7 @@ func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	fr := p.fileRegistry.getRegistryCopy()
+	fr := p.fileRegistry.GetRegistrySnapshot()
 	activeKeyID, err := p.encryption.StatsHandler.GetActiveDataKeyID()
 	if err != nil {
 		return nil, err

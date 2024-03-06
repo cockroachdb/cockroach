@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
@@ -141,7 +142,7 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 }
 
 func fauxNewEncryptedEnvFunc(
-	fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
+	fs vfs.FS, fr *fs.FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
 ) (*EncryptionEnv, error) {
 	return &EncryptionEnv{
 		Closer: nopCloser{},
