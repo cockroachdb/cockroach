@@ -935,6 +935,8 @@ type Engine interface {
 	Properties() roachpb.StoreProperties
 	// Compact forces compaction over the entire database.
 	Compact() error
+	// Env returns the filesystem environment used by the Engine.
+	Env() *fs.Env
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
