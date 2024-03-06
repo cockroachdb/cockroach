@@ -2849,6 +2849,17 @@ func (ds *DistSender) sendToReplicas(
 					if updatedLeaseholder {
 						leaseholderUnavailable = false
 						routeToLeaseholder = true
+						// If we changed the leaseholder, reset the transport to try all the
+						// replicas in order again. After a leaseholder change, requests to
+						// followers will be marked as potential proxy requests and point to
+						// the new leaseholder. We need to try all the replicas again before
+						// giving up.
+						// NB: We reset and retry here because if we release a SendError to
+						// the caller, it will call Evict and evict the leaseholder
+						// information we just learned from this error.
+						// TODO(baptist): If sendPartialBatch didn't evict valid range
+						// information we would not need to reset the transport here.
+						transport.Reset()
 					}
 					// If the leaseholder is the replica that we've just tried, and
 					// we've tried this replica a bunch of times already, let's move on
