@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 var (
@@ -40,6 +42,10 @@ var (
 	MaxConcurrency = 32
 	// CockroachDevLicense is used by both roachprod and tools that import it.
 	CockroachDevLicense = envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
+
+	// SSHPublicKeyPath is the path to the public key that is expected
+	// to exist in order to set up new roachprod clusters.
+	SSHPublicKeyPath = os.ExpandEnv("${HOME}/.ssh/id_rsa.pub")
 )
 
 func init() {
@@ -124,3 +130,17 @@ func IsLocalClusterName(clusterName string) bool {
 }
 
 var localClusterRegex = regexp.MustCompile(`^local(|-[a-zA-Z0-9\-]+)$`)
+
+// SSHPublicKey returns the contents of the default public key
+// expected by roachprod.
+func SSHPublicKey() (string, error) {
+	sshKey, err := os.ReadFile(SSHPublicKeyPath)
+	if err != nil {
+		if oserror.IsNotExist(err) {
+			return "", errors.Wrapf(err, "please run ssh-keygen externally to create your %s file", SSHPublicKeyPath)
+		}
+		return "", errors.Wrap(err, "failed to read public SSH key")
+	}
+
+	return string(sshKey), nil
+}
