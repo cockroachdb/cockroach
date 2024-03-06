@@ -760,6 +760,7 @@ func maybeCreateAndAddShardCol(
 	shardCheckConstraint := &scpb.CheckConstraint{
 		TableID:      tbl.TableID,
 		ConstraintID: shardColCkConstraintID,
+		ColumnIDs:    []catid.ColumnID{shardColID},
 		Expression: scpb.Expression{
 			Expr:                catpb.Expression(checkConstraintBucketValues.String()),
 			ReferencedColumnIDs: []catid.ColumnID{shardColID},
