@@ -94,7 +94,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		FS:                  vfs.Default,
 		DBDir:               dir,
 		ReadOnly:            true,
-		NumOldRegistryFiles: storage.DefaultNumOldFileRegistryFiles,
+		NumOldRegistryFiles: fs.DefaultNumOldFileRegistryFiles,
 	}
 	if err := fr.Load(cmd.Context()); err != nil {
 		return errors.Wrapf(err, "could not load file registry")
