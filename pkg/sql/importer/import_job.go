@@ -276,23 +276,23 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				if err != nil {
 					return errors.Wrap(err, "checking if existing table is empty")
 				}
-				importType := descpb.TableDescriptor_IMPORT_INTO_NON_EMPTY
-				if len(res) == 0 {
-					details.Tables[i].WasEmpty = true
-					importType = descpb.TableDescriptor_IMPORT_INTO_EMPTY
-				}
+				details.Tables[i].WasEmpty = len(res) == 0
 
 				// Update the descriptor in the job record and in the database
 				details.Tables[i].Desc.ImportStartWallTime = details.Walltime
 				details.Tables[i].Desc.ImportEpoch++
-				details.Tables[i].Desc.ImportTypeInProgress = importType
 
-				if err := bindTableDescImportProperties(ctx, p, tblDesc.GetID(), details.Walltime, importType); err != nil {
+				if err := bindTableDescImportProperties(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
 					return err
 				}
 			}
 		}
 
+		// TODO(ssd): We should consider the txn management
+		// here. Each table's desc and the job are all updated
+		// in different txns. If we fail any of them, we
+		// unnecessarily bump the ImportEpoch for some of the
+		// tables on retry.
 		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
 			return err
 		}
@@ -720,11 +720,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 // bindTableDescImportProperties updates the table descriptor at the start of an
 // import for a table that existed before the import.
 func bindTableDescImportProperties(
-	ctx context.Context,
-	p sql.JobExecContext,
-	id catid.DescID,
-	startWallTime int64,
-	importType descpb.TableDescriptor_ImportType,
+	ctx context.Context, p sql.JobExecContext, id catid.DescID, startWallTime int64,
 ) error {
 	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
@@ -733,7 +729,7 @@ func bindTableDescImportProperties(
 		if err != nil {
 			return err
 		}
-		if err := mutableDesc.InitializeImportOnExistingTable(startWallTime, importType); err != nil {
+		if err := mutableDesc.InitializeImport(startWallTime); err != nil {
 			return err
 		}
 		if err := descsCol.WriteDesc(

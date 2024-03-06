@@ -1,6 +1,6 @@
-# Test that Import INTO properly increments the importEpoch descriptor field only when the user runs
-# an IMPORT INTO on a non-empty table. NB: this test will be expanded to run
-# backup and restore in a follow up PR.
+# Test that IMPORT INTO properly increments the importEpoch descriptor field.
+#
+# NB: This test will be expanded to run backup and restore in a follow up PR.
 
 new-cluster name=s1
 ----
@@ -14,11 +14,11 @@ INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
 ----
 
 exec-sql
-CREATE VIEW import_epoch (epoch, type)
+CREATE VIEW import_epoch (epoch)
 AS WITH tbls AS (
    	SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS orig FROM system.descriptor
    )
-   SELECT orig->'table'->'importEpoch', orig->'table'->'importTypeInProgress' FROM tbls WHERE id = '109';
+   SELECT orig->'table'->'importEpoch' FROM tbls WHERE id = '109';
 ----
 
 exec-sql
@@ -38,7 +38,7 @@ foo 109
 query-sql
 SELECT * FROM import_epoch
 ----
-<nil> <nil>
+1
 
 exec-sql
 EXPORT INTO CSV 'nodelocal://1/export2/' FROM SELECT * FROM baz WHERE i = 2;
@@ -52,7 +52,7 @@ IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export2/export*-n*.0.csv')
 query-sql
 SELECT * FROM import_epoch
 ----
-1 <nil>
+2
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
@@ -73,7 +73,7 @@ job paused at pausepoint
 query-sql
 SELECT * FROM import_epoch
 ----
-2 "IMPORT_INTO_NON_EMPTY"
+3
 
 # Cancel the job so that the cleanup hook runs.
 job cancel=a
@@ -82,4 +82,4 @@ job cancel=a
 query-sql
 SELECT * FROM import_epoch
 ----
-2 <nil>
+3

@@ -1206,21 +1206,11 @@ message TableDescriptor {
   optional bool schema_locked = 58 [(gogoproto.nullable) = false, (gogoproto.customname) = "SchemaLocked"];
 
   // ImportEpoch is the count of IMPORT INTO jobs that have been attempted on this
-  // table once it __already had data__. The ImportEpoch can include an in progress import, as the
+  // table once. The ImportEpoch can include an in progress import, as the
   // field gets incremented while preparing the table for ingestion.
   optional uint32 import_epoch = 59 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportEpoch"];
 
-  // ImportType indicates the kind of import into currently occurring on the table. 
-  enum ImportType {
-    NO_IMPORT = 0;
-    IMPORT_INTO_EMPTY = 1;
-    IMPORT_INTO_NON_EMPTY = 2;
-  }
-
-  // ImportTypeInProgress describes the type of in-progress import, if any.
-  optional ImportType import_type_in_progress = 60 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportTypeInProgress"];
-
-  // Next ID: 61
+  // Next ID: 60
 }
 
 // SurvivalGoal is the survival goal for a database.
