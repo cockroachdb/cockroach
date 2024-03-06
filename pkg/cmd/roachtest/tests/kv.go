@@ -131,8 +131,10 @@ func registerKV(r registry.Registry) {
 			}
 		}
 		if opts.sharedProcessMT {
-			startOpts = option.DefaultStartSharedVirtualClusterOpts(appTenantName)
-			c.StartServiceForVirtualCluster(ctx, t.L(), c.Range(1, nodes), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+			startOpts = option.StartSharedVirtualClusterOpts(appTenantName)
+			c.StartServiceForVirtualCluster(
+				ctx, t.L(), startOpts, install.MakeClusterSettings(),
+			)
 		}
 
 		t.Status("running workload")

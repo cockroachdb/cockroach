@@ -165,7 +165,6 @@ func runMultiTenantFairness(
 	_, err := systemConn.ExecContext(ctx, `SET CLUSTER SETTING server.child_metrics.enabled = true`)
 	require.NoError(t, err)
 
-	const sqlInstance = 0
 	virtualClusters := map[string]option.NodeListOption{
 		"app-fairness-n2": c.Node(2),
 		"app-fairness-n3": c.Node(3),
@@ -180,8 +179,8 @@ func runMultiTenantFairness(
 	for j, name := range virtualClusterNames {
 		node := virtualClusters[name]
 		c.StartServiceForVirtualCluster(
-			ctx, t.L(), node,
-			option.DefaultStartVirtualClusterOpts(name, sqlInstance),
+			ctx, t.L(),
+			option.StartVirtualClusterOpts(name, node),
 			install.MakeClusterSettings(),
 		)
 
@@ -205,8 +204,8 @@ func runMultiTenantFairness(
 		)
 
 		initKV := fmt.Sprintf(
-			"%s workload init kv {pgurl:%d:%s:%d}",
-			test.DefaultCockroachPath, node[0], name, sqlInstance,
+			"%s workload init kv {pgurl:%d:%s}",
+			test.DefaultCockroachPath, node[0], name,
 		)
 
 		c.Run(ctx, node, initKV)
@@ -219,7 +218,7 @@ func runMultiTenantFairness(
 	t.L().Printf("loading per-tenant data (<%s)", 10*time.Minute)
 	m1 := c.NewMonitor(ctx, c.All())
 	for name, node := range virtualClusters {
-		pgurl := fmt.Sprintf("{pgurl:%d:%s:%d}", node[0], name, sqlInstance)
+		pgurl := fmt.Sprintf("{pgurl:%d:%s}", node[0], name)
 		name := name
 		node := node
 		m1.Go(func(ctx context.Context) error {
@@ -262,7 +261,7 @@ func runMultiTenantFairness(
 	m2 := c.NewMonitor(ctx, crdbNode)
 	var n int
 	for name, node := range virtualClusters {
-		pgurl := fmt.Sprintf("{pgurl:%d:%s:%d}", node[0], name, sqlInstance)
+		pgurl := fmt.Sprintf("{pgurl:%d:%s}", node[0], name)
 		n++
 
 		name := name
@@ -304,7 +303,7 @@ func runMultiTenantFairness(
 	for j, name := range virtualClusterNames {
 		node := virtualClusters[name]
 
-		vcdb := c.Conn(ctx, t.L(), node[0], option.VirtualClusterName(name), option.SQLInstance(sqlInstance))
+		vcdb := c.Conn(ctx, t.L(), node[0], option.VirtualClusterName(name))
 		defer vcdb.Close()
 
 		_, err := vcdb.ExecContext(ctx, "USE kv")
