@@ -5683,21 +5683,32 @@ func TestDistSenderDescEvictionAfterLeaseUpdate(t *testing.T) {
 
 	// We'll send a request that first gets a NLHE, and then a RangeNotFoundError. We
 	// then expect an updated descriptor to be used and return success.
+	// Initially the routing is (*1, 2,) - no LH
+	// 1) Send to n1 -> NLHE with LH=2 (updated - reset), transport -> (*2, 1,) - LH=2
+	// 2) Send to n2 -> not found, transport -> (2, *1,) - LH=2
+	// 3) Send to n1 -> NLHE with LH=2 (not updated - backoff), transport -> (1, *2,) - LH=2
+	// 4) Send to n2 -> not found, transport -> (1, 2, *) - LH=2
+	// Evict/Refresh transport is now (*3) - no LH
+	// 5) Send to n3 - success
 	call := 0
 	var transportFn = func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 		br := &kvpb.BatchResponse{}
 		switch call {
-		case 0:
+		case 0, 2:
 			expRepl := desc1.Replicas().Descriptors()[0]
 			require.Equal(t, expRepl, ba.Replica)
-			br.Error = kvpb.NewError(&kvpb.NotLeaseHolderError{
-				Lease: &roachpb.Lease{Replica: desc1.Replicas().Descriptors()[1]},
-			})
-		case 1:
+			br.Error = kvpb.NewError(
+				kvpb.NewNotLeaseHolderError(
+					roachpb.Lease{Replica: desc1.Replicas().Descriptors()[1]},
+					1,
+					&desc1,
+					"store not leaseholder",
+				))
+		case 1, 3:
 			expRep := desc1.Replicas().Descriptors()[1]
 			require.Equal(t, ba.Replica, expRep)
 			br.Error = kvpb.NewError(kvpb.NewRangeNotFoundError(ba.RangeID, ba.Replica.StoreID))
-		case 2:
+		case 4:
 			expRep := desc2.Replicas().Descriptors()[0]
 			require.Equal(t, ba.Replica, expRep)
 			br = ba.CreateReply()
@@ -5745,7 +5756,7 @@ func TestDistSenderDescEvictionAfterLeaseUpdate(t *testing.T) {
 
 	_, err := ds.Send(ctx, ba)
 	require.NoError(t, err.GoError())
-	require.Equal(t, call, 3)
+	require.Equal(t, call, 5)
 	require.Equal(t, rangeLookups, 2)
 }
 
