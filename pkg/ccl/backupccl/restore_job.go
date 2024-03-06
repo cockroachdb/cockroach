@@ -1926,6 +1926,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	r.restoreStats = resTotal
+	if err := r.maybeWriteDownloadJob(ctx, p.ExecCfg(), preData, mainData); err != nil {
+		return err
+	}
 
 	// Emit an event now that the restore job has completed.
 	emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
@@ -1972,6 +1975,40 @@ func clusterRestoreDuringUpgradeErr(
 	return errors.Errorf("cluster restore not supported during major version upgrade: restore started at cluster version %s but binary version is %s",
 		clusterVersion,
 		binaryVersion)
+}
+
+func (r *restoreResumer) maybeWriteDownloadJob(
+	ctx context.Context,
+	execConfig *sql.ExecutorConfig,
+	preRestoreData *restorationDataBase,
+	mainRestoreData *mainRestorationData,
+) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
+	if !details.ExperimentalOnline {
+		return nil
+	}
+
+	downloadSpans := mainRestoreData.getSpans()
+	if !preRestoreData.isEmpty() {
+		// Order the pre restore data first so they are downloaded first.
+		downloadSpans = preRestoreData.getSpans()
+		downloadSpans = append(downloadSpans, mainRestoreData.getSpans()...)
+	}
+
+	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
+	downloadJobRecord := jobs.Record{
+		Description: fmt.Sprintf("Background Data Download for %s", r.job.Payload().Description),
+		Username:    r.job.Payload().UsernameProto.Decode(),
+		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans},
+		Progress:    jobspb.RestoreProgress{},
+	}
+
+	return execConfig.InternalDB.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
+	) error {
+		_, err := execConfig.JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, r.job.ID()+1, txn)
+		return err
+	})
 }
 
 // validateJobDetails returns an error if this job cannot be resumed.
