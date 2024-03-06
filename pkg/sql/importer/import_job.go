@@ -280,7 +280,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 				// Update the descriptor in the job record and in the database
 				details.Tables[i].Desc.ImportStartWallTime = details.Walltime
-				details.Tables[i].Desc.ImportEpoch++
 
 				if err := bindTableDescImportProperties(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
 					return err
@@ -288,11 +287,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 		}
 
-		// TODO(ssd): We should consider the txn management
-		// here. Each table's desc and the job are all updated
-		// in different txns. If we fail any of them, we
-		// unnecessarily bump the ImportEpoch for some of the
-		// tables on retry.
 		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
 			return err
 		}
@@ -419,7 +413,6 @@ func (r *importResumer) prepareTablesForIngestion(
 				IsNew:      table.IsNew,
 				TargetCols: table.TargetCols,
 			}
-
 			hasExistingTables = true
 		} else {
 			// PGDUMP imports support non-public schemas.
@@ -507,7 +500,7 @@ func prepareExistingTablesForIngestion(
 	// Take the table offline for import.
 	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
 	// ensure that filtering by state handles IMPORTING correctly.
-	importing.SetOffline(tabledesc.OfflineReasonImporting)
+	importing.OfflineForImport()
 
 	// TODO(dt): de-validate all the FKs.
 	if err := descsCol.WriteDesc(
