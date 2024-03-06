@@ -508,12 +508,15 @@ type MVCCBlockIntervalSyntheticReplacer struct{}
 func (mbsr MVCCBlockIntervalSyntheticReplacer) AdjustIntervalWithSyntheticSuffix(
 	lower uint64, upper uint64, suffix []byte,
 ) (adjustedLower uint64, adjustedUpper uint64, err error) {
-	// Remove the sentinel byte.
-	synthDecoded, _ := binary.Uvarint(suffix[1:])
-	if upper >= synthDecoded {
+	synthDecoded, err := DecodeMVCCTimestampSuffix(suffix)
+	if err != nil {
+		return 0, 0, errors.AssertionFailedf("could not decode synthetic suffix")
+	}
+	synthDecodedWalltime := uint64(synthDecoded.WallTime)
+	if upper >= synthDecodedWalltime {
 		return 0, 0, errors.AssertionFailedf("the synthetic suffix %d is less than or equal to the original upper bound %d", synthDecoded, upper)
 	}
-	return synthDecoded, synthDecoded + 1, nil
+	return synthDecodedWalltime, synthDecodedWalltime + 1, nil
 }
 
 // pebbleDataBlockMVCCTimeIntervalPointCollector implements
