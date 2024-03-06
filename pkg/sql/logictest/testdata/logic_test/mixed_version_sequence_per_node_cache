@@ -47,6 +47,9 @@ upgrade 1
 
 upgrade 2
 
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version();
+
 query T nodeidx=1
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
