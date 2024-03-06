@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -729,7 +730,50 @@ func TestRestoreEntryCoverTinyFiles(t *testing.T) {
 	runTestRestoreEntryCoverForSpanAndFileCounts(t, 5, 5<<10, []int{5}, []int{1000, 5000})
 }
 
-//lint:ignore U1000 unused
+func TestRestoreEntryCover1(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	runTestRestoreEntryCover(t, 1)
+}
+
+func TestRestoreEntryCover2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	runTestRestoreEntryCover(t, 2)
+}
+
+func TestRestoreEntryCover5(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	runTestRestoreEntryCover(t, 5)
+}
+
+func TestRestoreEntryCover9(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	runTestRestoreEntryCover(t, 9)
+}
+
+func TestRestoreEntryCover12(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "excessive memory usage")
+
+	runTestRestoreEntryCover(t, 12)
+}
+
+func TestRestoreEntryCover20(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "excessive memory usage")
+
+	runTestRestoreEntryCover(t, 20)
+}
+
 func runTestRestoreEntryCover(t *testing.T, numBackups int) {
 	spans := []int{1, 2, 3, 5, 9, 11, 12}
 	files := []int{0, 1, 2, 3, 4, 10, 12, 50}
