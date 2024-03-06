@@ -537,7 +537,7 @@ func (o *OS) CurrentUserAndGroup() (uid string, gid string, err error) {
 
 // UserCacheDir returns the cache directory for the current user if possible.
 func (o *OS) UserCacheDir() (dir string, err error) {
-	command := "echo $HOME"
+	command := "echo $HOME/.cache"
 	if !o.knobs.silent {
 		o.logger.Print(command)
 	}
@@ -546,6 +546,20 @@ func (o *OS) UserCacheDir() (dir string, err error) {
 		return os.UserCacheDir()
 	})
 
+}
+
+// UserCacheDir returns the cache directory for the current user if possible.
+func (o *OS) HomeDir() (dir string, err error) {
+	command := "echo $HOME"
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
+
+	dir, err = o.Next(command, func() (dir string, err error) {
+		return os.UserHomeDir()
+	})
+
+	return strings.TrimSpace(dir), err
 }
 
 // Next is a thin interceptor for all os activity, running them through

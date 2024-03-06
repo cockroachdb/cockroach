@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -941,10 +942,10 @@ type Engine interface {
 	GetMetrics() Metrics
 	// GetEncryptionRegistries returns the file and key registries when encryption is enabled
 	// on the store.
-	GetEncryptionRegistries() (*EncryptionRegistries, error)
+	GetEncryptionRegistries() (*fs.EncryptionRegistries, error)
 	// GetEnvStats retrieves stats about the engine's environment
 	// For RocksDB, this includes details of at-rest encryption.
-	GetEnvStats() (*EnvStats, error)
+	GetEnvStats() (*fs.EnvStats, error)
 	// GetAuxiliaryDir returns a path under which files can be stored
 	// persistently, and from which data can be ingested by the engine.
 	//
@@ -1382,34 +1383,6 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 		})
 	}
 	return e
-}
-
-// EnvStats is a set of RocksDB env stats, including encryption status.
-type EnvStats struct {
-	// TotalFiles is the total number of files reported by rocksdb.
-	TotalFiles uint64
-	// TotalBytes is the total size of files reported by rocksdb.
-	TotalBytes uint64
-	// ActiveKeyFiles is the number of files using the active data key.
-	ActiveKeyFiles uint64
-	// ActiveKeyBytes is the size of files using the active data key.
-	ActiveKeyBytes uint64
-	// EncryptionType is an enum describing the active encryption algorithm.
-	// See: ccl/storageccl/engineccl/enginepbccl/key_registry.proto
-	EncryptionType int32
-	// EncryptionStatus is a serialized enginepbccl/stats.proto::EncryptionStatus protobuf.
-	EncryptionStatus []byte
-}
-
-// EncryptionRegistries contains the encryption-related registries:
-// Both are serialized protobufs.
-type EncryptionRegistries struct {
-	// FileRegistry is the list of files with encryption status.
-	// serialized storage/engine/enginepb/file_registry.proto::FileRegistry
-	FileRegistry []byte
-	// KeyRegistry is the list of keys, scrubbed of actual key data.
-	// serialized ccl/storageccl/engineccl/enginepbccl/key_registry.proto::DataKeysRegistry
-	KeyRegistry []byte
 }
 
 // GetIntent will look up an intent given a key. It there is no intent for a

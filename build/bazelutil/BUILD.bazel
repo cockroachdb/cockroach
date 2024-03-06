@@ -2,7 +2,6 @@ exports_files(["nogo_config.json"])
 
 load("@bazel_skylib//rules:analysis_test.bzl", "analysis_test")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load(":lint.bzl", "lint_binary")
 
 analysis_test(
     name = "test_nogo_configured",
@@ -23,11 +22,6 @@ genrule(
         "//build/toolchains:force_build_cdeps": "echo 1 > $@",
         "//conditions:default": "touch $@",
     }),
-)
-
-lint_binary(
-    name = "lint",
-    test = "//pkg/testutils/lint:lint_test",
 )
 
 # This noop target is a workaround for https://github.com/bazelbuild/bazel-gazelle/issues/1078.
