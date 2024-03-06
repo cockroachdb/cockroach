@@ -136,8 +136,6 @@ func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // EncodeMVCCValueForExport strips fields from the MVCCValueHeader that
 // should not get exported out of the cluster.
-//
-//gcassert:inline
 func EncodeMVCCValueForExport(mvccValue MVCCValue) ([]byte, error) {
 	// Consider a fast path, where only the roachpb.Value gets exported.
 	// Currently, this only occurs if the value was not imported.
