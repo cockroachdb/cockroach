@@ -1941,6 +1941,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	r.restoreStats = resTotal
+	if err := r.maybeWriteDownloadJob(ctx, p.ExecCfg(), preData, mainData); err != nil {
+		return err
+	}
 
 	// Emit an event now that the restore job has completed.
 	emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
@@ -2250,7 +2253,7 @@ func (r *restoreResumer) publishDescriptors(
 	for i := range details.TableDescs {
 		mutTable := all.LookupDescriptor(details.TableDescs[i].GetID()).(*tabledesc.Mutable)
 
-		if details.ExperimentalOnline {
+		if details.ExperimentalOnline && mutTable.IsTable() {
 			// We disable automatic stats refresh on all restored tables until the
 			// download job finishes.
 			boolean := false

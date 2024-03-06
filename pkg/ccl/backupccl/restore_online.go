@@ -94,27 +94,7 @@ func sendAddRemoteSSTs(
 	if err := grp.Wait(); err != nil {
 		return errors.Wrap(err, "failed to generate and send remote file spans")
 	}
-
-	if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("restore.after.link_phase"); err != nil {
-		return err
-	}
-
-	downloadSpans := dataToRestore.getSpans()
-
-	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
-	downloadJobRecord := jobs.Record{
-		Description: fmt.Sprintf("Background Data Download for %s", job.Payload().Description),
-		Username:    job.Payload().UsernameProto.Decode(),
-		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans},
-		Progress:    jobspb.RestoreProgress{},
-	}
-
-	return execCtx.ExecCfg().InternalDB.DescsTxn(ctx, func(
-		ctx context.Context, txn descs.Txn,
-	) error {
-		_, err := execCtx.ExecCfg().JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, job.ID()+1, txn)
-		return err
-	})
+	return nil
 }
 
 func assertCommonPrefix(span roachpb.Span, elidedPrefixType execinfrapb.ElidePrefix) error {
@@ -487,6 +467,40 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 		return errors.Newf("failed to download spans on %d nodes; n%d returned %v", len(resp.ErrorsByNodeID), n, err)
 	}
 	return nil
+}
+
+func (r *restoreResumer) maybeWriteDownloadJob(
+	ctx context.Context,
+	execConfig *sql.ExecutorConfig,
+	preRestoreData *restorationDataBase,
+	mainRestoreData *mainRestorationData,
+) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
+	if !details.ExperimentalOnline {
+		return nil
+	}
+
+	downloadSpans := mainRestoreData.getSpans()
+	if !preRestoreData.isEmpty() {
+		// Order the pre restore data first so they are downloaded first.
+		downloadSpans = preRestoreData.getSpans()
+		downloadSpans = append(downloadSpans, mainRestoreData.getSpans()...)
+	}
+
+	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
+	downloadJobRecord := jobs.Record{
+		Description: fmt.Sprintf("Background Data Download for %s", r.job.Payload().Description),
+		Username:    r.job.Payload().UsernameProto.Decode(),
+		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans},
+		Progress:    jobspb.RestoreProgress{},
+	}
+
+	return execConfig.InternalDB.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
+	) error {
+		_, err := execConfig.JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, r.job.ID()+1, txn)
+		return err
+	})
 }
 
 // waitForDownloadToComplete waits until there are no more ExternalFileBytes
