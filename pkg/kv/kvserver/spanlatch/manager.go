@@ -495,8 +495,7 @@ func ignoreNothing(ts, other hlc.Timestamp) bool { return false }
 // wait waits for all interfering latches in the provided snapshot to complete
 // before returning.
 func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
-	timer := timeutil.NewTimer()
-	timer.Reset(base.SlowRequestThreshold)
+	var timer timeutil.Timer
 	defer timer.Stop()
 
 	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
@@ -510,7 +509,7 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 					// Wait for writes at equal or lower timestamps.
 					a2 := spanset.SpanReadWrite
 					it := tr[a2].MakeIter()
-					if err := m.iterAndWait(ctx, timer, &it, lg.pp, a, a2, latch, ignoreLater); err != nil {
+					if err := m.iterAndWait(ctx, &timer, &it, lg.pp, a, a2, latch, ignoreLater); err != nil {
 						return err
 					}
 				case spanset.SpanReadWrite:
@@ -522,13 +521,13 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 					// to release their latches, so we wait on them first.
 					a2 := spanset.SpanReadWrite
 					it := tr[a2].MakeIter()
-					if err := m.iterAndWait(ctx, timer, &it, lg.pp, a, a2, latch, ignoreNothing); err != nil {
+					if err := m.iterAndWait(ctx, &timer, &it, lg.pp, a, a2, latch, ignoreNothing); err != nil {
 						return err
 					}
 					// Wait for reads at equal or higher timestamps.
 					a2 = spanset.SpanReadOnly
 					it = tr[a2].MakeIter()
-					if err := m.iterAndWait(ctx, timer, &it, lg.pp, a, a2, latch, ignoreEarlier); err != nil {
+					if err := m.iterAndWait(ctx, &timer, &it, lg.pp, a, a2, latch, ignoreEarlier); err != nil {
 						return err
 					}
 				default:
@@ -584,6 +583,7 @@ func (m *Manager) waitForSignal(
 	}()
 	log.Eventf(ctx, "waiting to acquire %s latch %s, held by %s latch %s", waitType, wait, heldType, held)
 	poisonCh := held.g.poison.signalChan()
+	t.Reset(base.SlowRequestThreshold)
 	for {
 		select {
 		case <-held.g.done.signalChan():
@@ -606,7 +606,6 @@ func (m *Manager) waitForSignal(
 			}
 		case <-t.C:
 			t.Read = true
-			defer t.Reset(base.SlowRequestThreshold)
 
 			log.Warningf(ctx, "have been waiting %s to acquire %s latch %s, held by %s latch %s",
 				base.SlowRequestThreshold, waitType, wait, heldType, held)

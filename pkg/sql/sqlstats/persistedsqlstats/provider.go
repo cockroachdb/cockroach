@@ -167,7 +167,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 		})
 
 		initialDelay := s.nextFlushInterval()
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		timer.Reset(initialDelay)
 
 		log.Infof(ctx, "starting sql-stats-worker with initial delay: %s", initialDelay)

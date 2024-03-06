@@ -147,7 +147,7 @@ func clearSpanData(
 	var n int
 	lastKey := span.Key
 	ri := kvcoord.MakeRangeIterator(distSender)
-	timer := timeutil.NewTimer()
+	var timer timeutil.Timer
 	defer timer.Stop()
 
 	for ri.Seek(ctx, span.Key, kvcoord.Ascending); ; ri.Next(ctx) {

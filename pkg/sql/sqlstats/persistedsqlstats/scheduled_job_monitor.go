@@ -84,7 +84,7 @@ func (j *jobMonitor) start(
 		stopCtx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		// Ensure schedule at startup.
 		timer.Reset(0)
 		defer timer.Stop()

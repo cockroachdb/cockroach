@@ -215,7 +215,7 @@ type streamIngestionProcessor struct {
 	batcher *bulk.SSTBatcher
 	// rangeBatcher is used to flush range KVs into SST to the storage layer.
 	rangeBatcher      *rangeKeyBatcher
-	maxFlushRateTimer *timeutil.Timer
+	maxFlushRateTimer timeutil.Timer
 
 	// client is a streaming client which provides a stream of events from a given
 	// address.
@@ -266,7 +266,7 @@ type streamIngestionProcessor struct {
 	// Aggregator that aggregates StructuredEvents emitted in the
 	// backupDataProcessors' trace recording.
 	agg      *bulkutil.TracingAggregator
-	aggTimer *timeutil.Timer
+	aggTimer timeutil.Timer
 }
 
 // partitionEvent augments a normal event with the partition it came from.
@@ -311,10 +311,9 @@ func newStreamIngestionDataProcessor(
 	}
 
 	sip := &streamIngestionProcessor{
-		flowCtx:           flowCtx,
-		spec:              spec,
-		frontier:          frontier,
-		maxFlushRateTimer: timeutil.NewTimer(),
+		flowCtx:  flowCtx,
+		spec:     spec,
+		frontier: frontier,
 		cutoverProvider: &cutoverFromJobProgress{
 			jobID: jobspb.JobID(spec.JobID),
 			db:    flowCtx.Cfg.DB,
@@ -373,7 +372,6 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
 	log.Infof(ctx, "starting ingest proc")
 	sip.agg = bulkutil.TracingAggregatorForContext(ctx)
-	sip.aggTimer = timeutil.NewTimer()
 
 	// If the aggregator is nil, we do not want the timer to fire.
 	if sip.agg != nil {
@@ -578,9 +576,7 @@ func (sip *streamIngestionProcessor) close() {
 	if sip.batcher != nil {
 		sip.batcher.Close(sip.Ctx())
 	}
-	if sip.maxFlushRateTimer != nil {
-		sip.maxFlushRateTimer.Stop()
-	}
+	sip.maxFlushRateTimer.Stop()
 	sip.aggTimer.Stop()
 
 	sip.InternalClose()

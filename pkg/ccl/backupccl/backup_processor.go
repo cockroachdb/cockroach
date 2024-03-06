@@ -148,7 +148,7 @@ type backupDataProcessor struct {
 	// Aggregator that aggregates StructuredEvents emitted in the
 	// backupDataProcessors' trace recording.
 	agg      *bulk.TracingAggregator
-	aggTimer *timeutil.Timer
+	aggTimer timeutil.Timer
 
 	// completedSpans tracks how many spans have been successfully backed up by
 	// the backup processor.
@@ -206,7 +206,6 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 	// Construct an Aggregator to aggregate and render AggregatorEvents emitted in
 	// bps' trace recording.
 	bp.agg = bulk.TracingAggregatorForContext(ctx)
-	bp.aggTimer = timeutil.NewTimer()
 	// If the aggregator is nil, we do not want the timer to fire.
 	if bp.agg != nil {
 		bp.aggTimer.Reset(15 * time.Second)
@@ -471,7 +470,7 @@ func runBackupProcessor(
 		// priority becomes true when we're sending re-attempts of reads far enough
 		// in the past that we want to run them with priority.
 		var priority bool
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		defer timer.Stop()
 
 		ctxDone := ctx.Done()

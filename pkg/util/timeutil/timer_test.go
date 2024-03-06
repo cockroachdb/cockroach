@@ -11,14 +11,9 @@
 package timeutil
 
 import (
-	"context"
 	"fmt"
-	"math/rand"
-	"sync"
 	"testing"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 const timeStep = 10 * time.Millisecond
@@ -72,7 +67,6 @@ func TestTimerStop(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestTimerUninitializedStopNoop(t *testing.T) {
@@ -145,60 +139,17 @@ func TestTimerMakesProgressInLoop(t *testing.T) {
 	}
 }
 
-// TestIllegalTimerShare is a regression test for sharing the same Timer between
-// multiple users when it was originally allocated on the stack of one of them
-// but then later was put into timerPool on Stop() (see #119593).
-func TestIllegalTimerShare(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	resetTimer := func(t *Timer, rng *rand.Rand) {
-		t.Reset(time.Duration(rng.Intn(100)+1) * time.Nanosecond)
-	}
-
-	var wg sync.WaitGroup
-	// Simulate a pattern of usage of the stack-allocated Timer that is being
-	// stopped each time when the Timer fires.
-	fromStack := func() {
-		defer wg.Done()
-		rng, _ := randutil.NewTestRand()
-		var t Timer
-		defer t.Stop()
-		resetTimer(&t, rng)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				t.Read = true
-				t.Stop()
-				resetTimer(&t, rng)
-			}
+func BenchmarkTimer(b *testing.B) {
+	run := func() {
+		var timer Timer
+		defer timer.Stop()
+		for i := 0; i < 10; i++ {
+			timer.Reset(10 * time.Microsecond)
+			<-timer.C
+			timer.Read = true
 		}
 	}
-	// Simulate the most common pattern where the Timer is taken from the
-	// timerPool, fires repeatedly, and then is stopped in a defer.
-	fromPool := func() {
-		defer wg.Done()
-		rng, _ := randutil.NewTestRand()
-		t := NewTimer()
-		defer t.Stop()
-		resetTimer(t, rng)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				t.Read = true
-				resetTimer(t, rng)
-			}
-		}
+	for i := 0; i < b.N; i++ {
+		run()
 	}
-	// Spin up a few goroutines per each access pattern.
-	wg.Add(6)
-	for i := 0; i < 3; i++ {
-		go fromStack()
-		go fromPool()
-	}
-	wg.Wait()
 }

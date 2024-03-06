@@ -61,7 +61,7 @@ func (mp *metricsPoller) Resume(ctx context.Context, execCtx interface{}) error 
 	exec := execCtx.(sql.JobExecContext)
 	metrics := exec.ExecCfg().JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypePollJobsStats].(pollerMetrics)
 
-	t := timeutil.NewTimer()
+	var t timeutil.Timer
 	defer t.Stop()
 
 	runTask := func(name string, task func(ctx context.Context, execCtx sql.JobExecContext) error) error {

@@ -15,11 +15,6 @@ import (
 	"time"
 )
 
-var timerPool = sync.Pool{
-	New: func() interface{} {
-		return &Timer{}
-	},
-}
 var timeTimerPool sync.Pool
 
 // The Timer type represents a single event. When the Timer expires,
@@ -48,23 +43,18 @@ var timeTimerPool sync.Pool
 //
 // Note that unlike the standard library's Timer type, this Timer will
 // not begin counting down until Reset is called for the first time, as
-// there is no constructor function.
+// there is no constructor function. The zero value for Timer is ready
+// to use.
+//
+// TODO(nvanbenschoten): follow https://github.com/golang/go/issues/37196
+// and remove this abstraction once it's no longer needed. There's some
+// recent progress in https://go-review.googlesource.com/c/go/+/568341.
 type Timer struct {
 	timer *time.Timer
 	// C is a local "copy" of timer.C that can be used in a select case before
 	// the timer has been initialized (via Reset).
 	C    <-chan time.Time
 	Read bool
-	// fromPool indicates whether this Timer came from timerPool. If false, then
-	// it won't be put into the timerPool on Stop.
-	fromPool bool
-}
-
-// NewTimer allocates a new timer.
-func NewTimer() *Timer {
-	t := timerPool.Get().(*Timer)
-	t.fromPool = true
-	return t
 }
 
 // Reset changes the timer to expire after duration d and returns
@@ -84,9 +74,7 @@ func (t *Timer) Reset(d time.Duration) {
 		t.C = t.timer.C
 		return
 	}
-	if !t.timer.Stop() && !t.Read {
-		<-t.C
-	}
+	t.stopAndDrain()
 	t.timer.Reset(d)
 	t.Read = false
 }
@@ -95,22 +83,31 @@ func (t *Timer) Reset(d time.Duration) {
 // the timer, false if the timer has already expired, been stopped previously,
 // or had never been initialized with a call to Timer.Reset. Stop does not
 // close the channel, to prevent a read from succeeding incorrectly.
-// Note that a Timer must never be used again after calls to Stop as the timer
-// object will be put into an object pool for reuse.
 func (t *Timer) Stop() bool {
 	var res bool
 	if t.timer != nil {
-		res = t.timer.Stop()
-		if res {
-			// Only place the timer back in the pool if we successfully stopped
-			// it. Otherwise, we'd have to read from the channel if !t.Read.
-			timeTimerPool.Put(t.timer)
-		}
-	}
-	if !t.fromPool {
-		return res
+		res = t.stopAndDrain()
+		timeTimerPool.Put(t.timer)
 	}
 	*t = Timer{}
-	timerPool.Put(t)
+	return res
+}
+
+// stopAndDrain stops the underlying *time.Timer and drains the channel if the
+// timer has already expired but the channel has not been read from. It returns
+// true if the call stops the timer and false if the timer has already expired.
+// t.timer must not be nil and must not have already been stopped.
+func (t *Timer) stopAndDrain() bool {
+	res := t.timer.Stop()
+	if !res && !t.Read {
+		// The timer expired, but the channel has not been read from. Drain it.
+		<-t.C
+		// Even though we did not stop the timer before it expired, the channel was
+		// never read from and we had to drain it ourselves, so we consider the stop
+		// attempt successful. For any caller consulting this return value, this is
+		// an indication that after the call to Stop, the timer channel will remain
+		// empty until the next call to Reset.
+		res = true
+	}
 	return res
 }

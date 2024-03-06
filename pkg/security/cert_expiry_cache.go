@@ -188,7 +188,7 @@ func (c *ClientCertExpirationCache) startPurgePastExpirations(ctx context.Contex
 	return c.stopper.RunAsyncTask(ctx, "purge-cert-expiry-cache", func(context.Context) {
 		const period = time.Hour
 
-		timer := timeutil.NewTimer()
+		var timer timeutil.Timer
 		defer timer.Stop()
 
 		timer.Reset(jitteredInterval(period))

@@ -1492,7 +1492,7 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 		} else {
 			refreshTimerDuration = m.storage.jitteredLeaseDuration()
 		}
-		refreshTimer := timeutil.NewTimer()
+		var refreshTimer timeutil.Timer
 		defer refreshTimer.Stop()
 		refreshTimer.Reset(refreshTimerDuration / 2)
 		for {
