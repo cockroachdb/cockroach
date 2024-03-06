@@ -167,10 +167,8 @@ func fillEncryptionOptionsForStore(cfg *base.StorageConfig) error {
 	if err != nil {
 		return err
 	}
-
 	if opts != nil {
 		cfg.EncryptionOptions = opts
-		cfg.UseFileRegistry = true
 	}
 	return nil
 }
