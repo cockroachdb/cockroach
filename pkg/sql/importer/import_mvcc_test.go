@@ -70,8 +70,9 @@ func TestMVCCValueHeaderImportEpoch(t *testing.T) {
 			Key:    startKey,
 			EndKey: endKey,
 		},
-		MVCCFilter: kvpb.MVCCFilter_All,
-		StartTime:  hlc.Timestamp{},
+		MVCCFilter:             kvpb.MVCCFilter_All,
+		StartTime:              hlc.Timestamp{},
+		IncludeMVCCValueHeader: true,
 	}
 
 	header := kvpb.Header{Timestamp: s.Clock().Now()}
