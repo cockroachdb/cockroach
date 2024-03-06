@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -778,7 +779,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	mkEngine := func(t *testing.T) (e storage.Engine, cleanup func()) {
 		dir, cleanupDir := testutils.TempDir(t)
-		e, err := storage.Open(ctx, storage.Filesystem(dir), st, storage.CacheSize(0))
+		e, err := storage.Open(ctx, fs.MustInitPhysicalTestingEnv(dir), st, storage.CacheSize(0))
 		if err != nil {
 			t.Fatal(err)
 		}

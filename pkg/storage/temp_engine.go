@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -65,21 +66,30 @@ func NewPebbleTempEngine(
 func newPebbleTempEngine(
 	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (*pebbleTempEngine, vfs.FS, error) {
-	var loc Location
+	var baseFS vfs.FS
+	var dir string
 	var cacheSize int64 = 128 << 20 // 128 MiB, arbitrary, but not "too big"
 	if tempStorage.InMemory {
 		cacheSize = 8 << 20 // 8 MiB, smaller for in-memory, still non-zero
-		loc = InMemory()
+		baseFS = vfs.NewMem()
 	} else {
-		loc = Filesystem(tempStorage.Path)
+		baseFS = vfs.Default
+		dir = tempStorage.Path
+	}
+	env, err := fs.InitEnv(ctx, baseFS, dir, fs.EnvConfig{
+		RW: fs.ReadWrite,
+		// Adopt the encryption options of the provided store spec so that
+		// temporary data is encrypted if the store is encrypted.
+		EncryptionOptions: storeSpec.EncryptionOptions,
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 
-	p, err := Open(ctx, loc,
+	p, err := Open(ctx, env,
 		tempStorage.Settings,
 		CacheSize(cacheSize),
 		func(cfg *engineConfig) error {
-			cfg.EncryptionOptions = storeSpec.EncryptionOptions
-
 			// The Pebble temp engine does not use MVCC Encoding. Instead, the
 			// caller-provided key is used as-is (with the prefix prepended). See
 			// pebbleMap.makeKey and pebbleMap.makeKeyWithSequence on how this works.
@@ -100,6 +110,6 @@ func newPebbleTempEngine(
 	_ = p.SetStoreID(ctx, base.TempStoreID)
 	return &pebbleTempEngine{
 		db:     p.db,
-		closer: p.closer,
+		closer: env,
 	}, p, nil
 }
