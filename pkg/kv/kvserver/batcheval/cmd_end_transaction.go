@@ -1199,6 +1199,17 @@ func splitTriggerHelper(
 		statsInput.PreSplitStats, statsInput.MaxCountDiff, statsInput.MaxBytesDiff)
 
 	if noPreComputedStats || emptyLeftOrRight || preComputedStatsDiff {
+		var reason redact.RedactableString
+		if noPreComputedStats {
+			reason = "there are no pre-split LHS stats (or they're empty)"
+		} else if emptyLeftOrRight {
+			reason = "the in-split LHS or RHS is empty"
+		} else {
+			reason = redact.Sprintf("the pre-split user stats differ too much "+
+				"from the in-split stats; pre-split: %+v, in-split: %+v",
+				statsInput.PreSplitStats, statsInput.AbsPreSplitBothStored)
+		}
+		log.Infof(ctx, "falling back to accurate stats computation because %v", reason)
 		h, err = makeSplitStatsHelper(statsInput)
 	} else {
 		h, err = makeEstimatedSplitStatsHelper(statsInput)
@@ -1321,6 +1332,10 @@ func splitTriggerHelper(
 		RHSDelta: *h.AbsPostSplitRight(),
 	}
 
+	pd.Local.Metrics = &result.Metrics{
+		SplitsWithEstimatedStats:     h.splitsWithEstimates,
+		SplitEstimatedTotalBytesDiff: h.estimatedTotalBytesDiff,
+	}
 	deltaPostSplitLeft := h.DeltaPostSplitLeft()
 	return deltaPostSplitLeft, pd, nil
 }
