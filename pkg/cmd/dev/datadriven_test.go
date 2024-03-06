@@ -63,7 +63,7 @@ func TestDataDriven(t *testing.T) {
 		osOpts := []os.Option{
 			os.WithLogger(log.New(logger, "", 0)),
 			os.WithDryrun(),
-			os.WithIntercept("echo $HOME", testFixturesDirPlaceholder),
+			os.WithIntercept("echo $HOME/.cache", testFixturesDirPlaceholder),
 		}
 
 		if !verbose { // suppress all internal output unless told otherwise

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
@@ -117,9 +118,9 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	// Replace the NewEncryptedEnvFunc global for the duration of this
 	// test. We'll use it to initialize a test caesar cipher
 	// encryption-at-rest implementation.
-	oldNewEncryptedEnvFunc := NewEncryptedEnvFunc
-	defer func() { NewEncryptedEnvFunc = oldNewEncryptedEnvFunc }()
-	NewEncryptedEnvFunc = fauxNewEncryptedEnvFunc
+	oldNewEncryptedEnvFunc := fs.NewEncryptedEnvFunc
+	defer func() { fs.NewEncryptedEnvFunc = oldNewEncryptedEnvFunc }()
+	fs.NewEncryptedEnvFunc = fauxNewEncryptedEnvFunc
 
 	st := cluster.MakeClusterSettings()
 	fs := vfs.NewMem()
@@ -141,11 +142,11 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 }
 
 func fauxNewEncryptedEnvFunc(
-	fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
-) (*EncryptionEnv, error) {
-	return &EncryptionEnv{
+	unencryptedFS vfs.FS, fr *fs.FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
+) (*fs.EncryptionEnv, error) {
+	return &fs.EncryptionEnv{
 		Closer: nopCloser{},
-		FS:     fauxEncryptedFS{FS: fs},
+		FS:     fauxEncryptedFS{FS: unencryptedFS},
 	}, nil
 }
 

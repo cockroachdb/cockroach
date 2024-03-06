@@ -244,7 +244,7 @@ func (afs *autoDecryptFS) GetDiskUsage(path string) (vfs.DiskUsage, error) {
 //
 // Assumes that path is absolute and clean (i.e. filepath.Abs was run on it);
 // the returned FS also assumes that any paths used are absolute and clean. This
-// is needed when using encryptedFS, since the PebbleFileRegistry used in that
+// is needed when using encryptedFS, since the FileRegistry used in that
 // context attempts to convert function input paths to relative paths using the
 // DBDir. Both the DBDir and function input paths in a CockroachDB node are
 // absolute paths, but when using the Pebble tool, the function input paths are

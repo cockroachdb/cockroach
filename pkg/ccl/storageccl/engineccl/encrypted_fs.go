@@ -14,8 +14,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/pebble/vfs"
@@ -107,7 +107,7 @@ func (f *encryptedFile) ReadAt(p []byte, off int64) (n int, err error) {
 // encryptedFS implements vfs.FS.
 type encryptedFS struct {
 	vfs.FS
-	fileRegistry  *storage.PebbleFileRegistry
+	fileRegistry  *fs.FileRegistry
 	streamCreator *FileCipherStreamCreator
 }
 
@@ -292,8 +292,8 @@ func (e *encryptionStatsHandler) GetKeyIDFromSettings(settings []byte) (string, 
 
 // init initializes function hooks used in non-CCL code.
 func init() {
-	storage.NewEncryptedEnvFunc = newEncryptedEnv
-	storage.CanRegistryElideFunc = canRegistryElide
+	fs.NewEncryptedEnvFunc = newEncryptedEnv
+	fs.CanRegistryElideFunc = canRegistryElide
 }
 
 // newEncryptedEnv creates an encrypted environment and returns the vfs.FS to use for reading and
@@ -302,8 +302,8 @@ func init() {
 //
 // See the comment at the top of this file for the structure of this environment.
 func newEncryptedEnv(
-	fs vfs.FS, fr *storage.PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
-) (*storage.EncryptionEnv, error) {
+	unencryptedFS vfs.FS, fr *fs.FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
+) (*fs.EncryptionEnv, error) {
 	options := &baseccl.EncryptionOptions{}
 	if err := protoutil.Unmarshal(optionBytes, options); err != nil {
 		return nil, err
@@ -312,7 +312,7 @@ func newEncryptedEnv(
 		return nil, fmt.Errorf("unknown encryption key source: %d", options.KeySource)
 	}
 	storeKeyManager := &StoreKeyManager{
-		fs:                fs,
+		fs:                unencryptedFS,
 		activeKeyFilename: options.KeyFiles.CurrentKey,
 		oldKeyFilename:    options.KeyFiles.OldKey,
 	}
@@ -320,7 +320,7 @@ func newEncryptedEnv(
 		return nil, err
 	}
 	storeFS := &encryptedFS{
-		FS:           fs,
+		FS:           unencryptedFS,
 		fileRegistry: fr,
 		streamCreator: &FileCipherStreamCreator{
 			envType:    enginepb.EnvType_Store,
@@ -337,7 +337,7 @@ func newEncryptedEnv(
 		return nil, err
 	}
 	dataFS := &encryptedFS{
-		FS:           fs,
+		FS:           unencryptedFS,
 		fileRegistry: fr,
 		streamCreator: &FileCipherStreamCreator{
 			envType:    enginepb.EnvType_Data,
@@ -355,7 +355,7 @@ func newEncryptedEnv(
 		}
 	}
 
-	return &storage.EncryptionEnv{
+	return &fs.EncryptionEnv{
 		Closer: dataKeyManager,
 		FS:     dataFS,
 		StatsHandler: &encryptionStatsHandler{

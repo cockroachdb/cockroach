@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -89,11 +90,11 @@ func (f fileEntry) String() string {
 func runList(cmd *cobra.Command, args []string) error {
 	dir := args[0]
 
-	fr := &storage.PebbleFileRegistry{
+	fr := &fs.FileRegistry{
 		FS:                  vfs.Default,
 		DBDir:               dir,
 		ReadOnly:            true,
-		NumOldRegistryFiles: storage.DefaultNumOldFileRegistryFiles,
+		NumOldRegistryFiles: fs.DefaultNumOldFileRegistryFiles,
 	}
 	if err := fr.Load(cmd.Context()); err != nil {
 		return errors.Wrapf(err, "could not load file registry")
