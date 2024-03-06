@@ -23,6 +23,7 @@ type cmdID int
 const (
 	listCmdID cmdID = iota
 	runCmdID
+	runOpsCmdID
 	numCmdIDs
 )
 

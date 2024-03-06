@@ -15,10 +15,12 @@ import (
 	"math/rand"
 	"os"
 	"os/user"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
@@ -179,9 +181,28 @@ the cluster nodes on start.
 	}
 	roachtestflags.AddRunFlags(benchCmd.Flags())
 
+	var runOperationCmd = &cobra.Command{
+		// Don't display usage when the command fails.
+		SilenceUsage: true,
+		Use:          "run-operation [clusterName] [regex...]",
+		Short:        "run one operation on an existing cluster",
+		Long: `Run an automated operation on an existing roachprod cluster.
+If multiple operations are matched by the passed-in regex filter, one operation
+is chosen at random and run. The provided cluster name must already exist in roachprod;
+this command does no setup/teardown of clusters.`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Printf("\nRunning operation %s.\n\n", args[0])
+			cmd.SilenceUsage = true
+			return runOperation(operations.RegisterOperations, args[1], args[0])
+		},
+	}
+	roachtestflags.AddRunOpsFlags(runOperationCmd.Flags())
+
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
+	rootCmd.AddCommand(runOperationCmd)
 
 	var err error
 	config.OSUser, err = user.Current()
@@ -261,6 +282,23 @@ func testsToRun(
 	}
 
 	return selectSpecs(notSkipped, selectProbability, true, print), nil
+}
+
+func opsToRun(r testRegistryImpl, filter string) ([]registry.OperationSpec, error) {
+	regex, err := regexp.Compile(filter)
+	if err != nil {
+		return nil, err
+	}
+	var filteredOps []registry.OperationSpec
+	for _, opSpec := range r.AllOperations() {
+		if regex.MatchString(opSpec.Name) {
+			filteredOps = append(filteredOps, opSpec)
+		}
+	}
+	if len(filteredOps) == 0 {
+		return nil, errors.New("no matching operations to run")
+	}
+	return filteredOps, nil
 }
 
 // selectSpecs returns a random sample of the given test specs.
