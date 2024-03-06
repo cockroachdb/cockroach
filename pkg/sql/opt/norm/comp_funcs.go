@@ -154,3 +154,51 @@ func (c *CustomFuncs) MakeIntersectionFunction(args memo.ScalarListExpr) opt.Sca
 		},
 	)
 }
+
+// NormalizeCmpGreatestLeast rewrites the comparison operation with greatest or least function
+// into individual comparison clauses, like this,
+//
+//	greatest(x, y) < 42
+//
+// into:
+//
+//	(x < 42) AND (y < 42)
+//
+// and for least,
+//
+//	least(x, y) < 42
+//
+// into:
+//
+//	(x < 42) OR (y < 42)
+func (c *CustomFuncs) NormalizeCmpGreatestLeast(
+	op opt.Operator, private *memo.FunctionPrivate, args memo.ScalarListExpr, right opt.ScalarExpr,
+) opt.ScalarExpr {
+	var result opt.ScalarExpr
+	for i := range args {
+		var node opt.ScalarExpr
+
+		switch op {
+		case opt.LeOp:
+			node = c.f.ConstructLe(args[i], right)
+		case opt.LtOp:
+			node = c.f.ConstructLt(args[i], right)
+		default:
+			panic(errors.AssertionFailedf("unexpected operator %s", op))
+		}
+
+		if result == nil {
+			result = node
+		} else {
+			switch private.Name {
+			case "greatest":
+				result = c.f.ConstructAnd(result, node)
+			case "least":
+				result = c.f.ConstructOr(result, node)
+			default:
+				panic(errors.AssertionFailedf("unexpected function name %s", private.Name))
+			}
+		}
+	}
+	return result
+}
