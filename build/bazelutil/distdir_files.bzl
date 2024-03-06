@@ -322,7 +322,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/apd/v3/com_github_cockroachdb_apd_v3-v3.2.1.zip": "6ad54bb71a36fba8ca6725a00d916e51815a4c68de54096313ca6fffda6c87c2",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/bubbletea/com_github_cockroachdb_bubbletea-v0.23.1-bracketed-paste2.zip": "d7916a0e7d8d814566e8f8d162c3764aea947296396a0a669564ff3ee53414bc",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/cmux/com_github_cockroachdb_cmux-v0.0.0-20170110192607-30d10be49292.zip": "88f6f9cf33eb535658540b46f6222f029398e590a3ff9cc873d7d561ac6debf0",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/cockroach-go/v2/com_github_cockroachdb_cockroach_go_v2-v2.3.5.zip": "70860a2615f3df73f7d00b4801b1fffe30a3306ae1cda1e9bf5245bb74e86d9a",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/cockroach-go/v2/com_github_cockroachdb_cockroach_go_v2-v2.3.7.zip": "028c29c79c2d373bca3ce9a475291285fdcb68a2f908190f738d5ce605edbd07",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/crlfmt/com_github_cockroachdb_crlfmt-v0.0.0-20221214225007-b2fc5c302548.zip": "fedc01bdd6d964da0425d5eaac8efadc951e78e13f102292cc0774197f09ab63",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/datadriven/com_github_cockroachdb_datadriven-v1.0.3-0.20230801171734-e384cf455877.zip": "3f1ac51e496ac26ae297c9846bb78eb416fd50b7566b892fb7087af9273766fe",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/errors/com_github_cockroachdb_errors-v1.11.1.zip": "6c8101703839a0d69685485d3d0d6040f51b83382bbc53c362c47732246249bf",

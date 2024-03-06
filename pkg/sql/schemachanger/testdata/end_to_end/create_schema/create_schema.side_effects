@@ -1,20 +1,22 @@
 /* setup */
+CREATE USER foo WITH LOGIN PASSWORD 'bar';
 ----
-
+...
 
 /* test */
-CREATE SCHEMA sc;
+CREATE SCHEMA sc AUTHORIZATION foo;
 ----
 begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE SCHEMA
 increment telemetry for sql.schema.create_schema
+checking role/user "foo" exists
 write *eventpb.CreateSchema to event log:
-  owner: root
+  owner: foo
   schemaName: defaultdb.sc
   sql:
     descriptorId: 104
-    statement: CREATE SCHEMA ‹defaultdb›.‹sc›
+    statement: CREATE SCHEMA ‹defaultdb›.‹sc› AUTHORIZATION foo
     tag: CREATE SCHEMA
     user: root
 ## StatementPhase stage 1 of 1 with 8 MutationType ops
@@ -27,7 +29,7 @@ upsert descriptor #104
   +  name: sc
   +  parentId: 100
   +  privileges:
-  +    ownerProto: root
+  +    ownerProto: foo
   +    users:
   +    - privileges: "2"
   +      userProto: admin
@@ -60,7 +62,7 @@ upsert descriptor #104
   +  name: sc
   +  parentId: 100
   +  privileges:
-  +    ownerProto: root
+  +    ownerProto: foo
   +    users:
   +    - privileges: "2"
   +      userProto: admin

@@ -1,7 +1,8 @@
 /* setup */
+CREATE USER foo WITH LOGIN PASSWORD 'bar';
 
 /* test */
-EXPLAIN (DDL, SHAPE) CREATE SCHEMA sc;
+EXPLAIN (DDL, SHAPE) CREATE SCHEMA sc AUTHORIZATION foo;
 ----
-Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›;
+Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc› AUTHORIZATION foo;
  └── execute 1 system table mutations transaction
