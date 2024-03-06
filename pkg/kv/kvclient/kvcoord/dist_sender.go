@@ -2736,6 +2736,12 @@ func (ds *DistSender) sendToReplicas(
 				// the next replica.
 				if lh != nil && !errLease.Empty() {
 					updatedLeaseholder := !lh.IsSame(*oldLeaseholder)
+					if updatedLeaseholder {
+						// When we update the leaseholder, we want to start over
+						// to try all the replicas again since we may make
+						// different decisions.
+						transport.Reset()
+					}
 					// If the leaseholder is the replica that we've just tried, and
 					// we've tried this replica a bunch of times already, let's move on
 					// and not try it again. This prevents us getting stuck on a replica
