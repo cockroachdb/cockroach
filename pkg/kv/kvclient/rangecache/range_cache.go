@@ -401,6 +401,8 @@ func (et *EvictionToken) syncRLocked(
 // DistSender and then using its value to determine whether we need to backoff,
 // we should instead check if we're retrying the same replica. This will allow
 // us to eschew plumbing this state back up to the caller.
+// TODO(baptist): Take a RangeInfo as arguments. NotLeaseHolderError could also
+// return a RangeInfo instead of the individual fields.
 func (et *EvictionToken) SyncTokenAndMaybeUpdateCache(
 	ctx context.Context, l *roachpb.Lease, rangeDesc *roachpb.RangeDescriptor,
 ) (updatedLeaseholder bool) {
@@ -538,6 +540,14 @@ func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newDescs ...
 		log.Eventf(ctx, "evicting cached range descriptor")
 	}
 	et.clear()
+}
+
+// ToRangeInfo extracts the RangeInfo from this token.
+func (et EvictionToken) ToRangeInfo() roachpb.RangeInfo {
+	if !et.Valid() {
+		return roachpb.RangeInfo{}
+	}
+	return et.entry.toRangeInfo()
 }
 
 // LookupWithEvictionToken attempts to locate a descriptor, and possibly also a
