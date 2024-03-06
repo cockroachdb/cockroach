@@ -328,7 +328,7 @@ func (s *authenticationServer) UserLogout(
 
 	// Send back a header which will cause the browser to destroy the cookie.
 	// See https://tools.ietf.org/search/rfc6265, page 7.
-	cookie := makeCookieWithValue("", false /* forHTTPSOnly */)
+	cookie := CreateSessionCookie("", false /* forHTTPSOnly */)
 	cookie.MaxAge = -1
 
 	// Set the cookie header on the outgoing response.
@@ -550,17 +550,7 @@ func EncodeSessionCookie(
 		return nil, errors.Wrap(err, "session cookie could not be encoded")
 	}
 	value := base64.StdEncoding.EncodeToString(cookieValueBytes)
-	return makeCookieWithValue(value, forHTTPSOnly), nil
-}
-
-func makeCookieWithValue(value string, forHTTPSOnly bool) *http.Cookie {
-	return &http.Cookie{
-		Name:     SessionCookieName,
-		Value:    value,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   forHTTPSOnly,
-	}
+	return CreateSessionCookie(value, forHTTPSOnly), nil
 }
 
 // getSession decodes the cookie from the request, looks up the corresponding session, and

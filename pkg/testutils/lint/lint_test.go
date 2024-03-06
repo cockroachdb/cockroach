@@ -2508,4 +2508,39 @@ func TestLint(t *testing.T) {
 		repoRoot := filepath.Join("../../../")
 		codeowners.LintEverythingIsOwned(t, verbose, co, repoRoot, "pkg")
 	})
+
+	t.Run("cookie construction is forbidden", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`\.Cookie\{`,
+			"--",
+			":!*_test.go",
+			":!*authserver/cookie.go",
+			":!*roachtest*",
+			":!*testserver*",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use constructors in `authserver/cookie.go` instead", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
 }
