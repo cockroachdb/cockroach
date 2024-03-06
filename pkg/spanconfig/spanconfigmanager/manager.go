@@ -144,7 +144,7 @@ func (m *Manager) run(ctx context.Context) {
 
 	// Periodically check if the span config reconciliation job exists and start
 	// it if it doesn't.
-	timer := timeutil.NewTimer()
+	var timer timeutil.Timer
 	defer timer.Stop()
 
 	triggerJobCheck()

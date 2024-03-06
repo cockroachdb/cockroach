@@ -91,7 +91,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	m.Go(func(ctx context.Context) error {
 		defer close(done)
-		testTimer := timeutil.NewTimer()
+		var testTimer timeutil.Timer
 		testTimer.Reset(workloadDuration)
 		select {
 		case <-earlyExit:
@@ -104,7 +104,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	randomPoller := func(f func(ctx context.Context, t test.Test, c cluster.Cluster, rng *rand.Rand) error) func(ctx context.Context) error {
 
 		return func(ctx context.Context) error {
-			pTimer := timeutil.NewTimer()
+			var pTimer timeutil.Timer
 			defer pTimer.Stop()
 			for {
 				waitTime := time.Duration(rng.Intn(pollerMinFrequencySeconds)+1) * time.Second

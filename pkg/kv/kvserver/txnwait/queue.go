@@ -600,7 +600,7 @@ func (q *Queue) waitForPush(
 	defer func() { metrics.PusherWaitTime.RecordValue(timeutil.Since(tBegin).Nanoseconds()) }()
 
 	slowTimerThreshold := time.Minute
-	slowTimer := timeutil.NewTimer()
+	var slowTimer timeutil.Timer
 	defer slowTimer.Stop()
 	slowTimer.Reset(slowTimerThreshold)
 
