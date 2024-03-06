@@ -43,8 +43,8 @@ func runMultiTenantTPCH(
 	// TPCH dataset using the provided connection and then runs each TPCH query
 	// one at a time (using the given url as a parameter to the 'workload run'
 	// command). The runtimes are accumulated in the perf helper.
-	runTPCH := func(node int, virtualClusterName string, sqlInstance int, setupIdx int) {
-		conn := c.Conn(ctx, t.L(), node, option.VirtualClusterName(virtualClusterName), option.SQLInstance(sqlInstance))
+	runTPCH := func(node int, virtualClusterName string, setupIdx int) {
+		conn := c.Conn(ctx, t.L(), node, option.VirtualClusterName(virtualClusterName))
 		setting := fmt.Sprintf("SET CLUSTER SETTING sql.distsql.direct_columnar_scans.enabled = %t", enableDirectScans)
 		t.Status(setting)
 		if _, err := conn.Exec(setting); err != nil {
@@ -73,8 +73,6 @@ func runMultiTenantTPCH(
 		}
 	}
 
-	const sqlInstance = 0
-
 	systemConn := c.Conn(ctx, t.L(), 1)
 	defer systemConn.Close()
 
@@ -84,7 +82,7 @@ func runMultiTenantTPCH(
 	if _, err := systemConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
 		t.Fatal(err)
 	}
-	runTPCH(gatewayNode, install.SystemInterfaceName, sqlInstance, 0 /* setupIdx */)
+	runTPCH(gatewayNode, install.SystemInterfaceName, 0 /* setupIdx */)
 
 	// Restart and wipe the cluster to remove advantage of the second TPCH run.
 	c.Wipe(ctx)
@@ -95,15 +93,15 @@ func runMultiTenantTPCH(
 	}
 
 	// Now we create a tenant and run all TPCH queries within it.
-	startOpts := option.DefaultStartSharedVirtualClusterOpts(appTenantName)
+	startOpts := option.StartSharedVirtualClusterOpts(appTenantName)
 	var separateProcessNode option.NodeListOption
 	if !sharedProcess {
 		separateProcessNode = c.All().RandNode()
 		gatewayNode = separateProcessNode[0]
-		startOpts = option.DefaultStartVirtualClusterOpts(appTenantName, sqlInstance)
+		startOpts = option.StartVirtualClusterOpts(appTenantName, separateProcessNode)
 	}
 	c.StartServiceForVirtualCluster(
-		ctx, t.L(), separateProcessNode, startOpts, install.MakeClusterSettings(),
+		ctx, t.L(), startOpts, install.MakeClusterSettings(),
 	)
 
 	// Allow the tenant to be able to split tables. We need to run a dummy
@@ -120,7 +118,9 @@ func runMultiTenantTPCH(
 		t.Fatal(err)
 	}
 
-	virtualClusterConn := c.Conn(ctx, t.L(), gatewayNode, option.VirtualClusterName(appTenantName), option.SQLInstance(sqlInstance))
+	virtualClusterConn := c.Conn(
+		ctx, t.L(), gatewayNode, option.VirtualClusterName(appTenantName),
+	)
 	defer virtualClusterConn.Close()
 
 	testutils.SucceedsSoon(t, func() error {
@@ -131,7 +131,7 @@ func runMultiTenantTPCH(
 		return err
 	})
 
-	runTPCH(gatewayNode, appTenantName, sqlInstance, 1 /* setupIdx */)
+	runTPCH(gatewayNode, appTenantName, 1 /* setupIdx */)
 
 	// Analyze the runtimes of both setups.
 	perfHelper.compareSetups(t, numRunsPerQuery, nil /* timesCallback */)
