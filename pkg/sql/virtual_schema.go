@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const virtualSchemaNotImplementedMessage = "virtual schema table not implemented: %s.%s"
@@ -597,15 +598,18 @@ func (e *virtualDefEntry) validateRow(datums tree.Datums, columns colinfo.Result
 	}
 	for i := range columns {
 		col := &columns[i]
+		// Names of virtual tables and columns in them don't contain any PII, so
+		// we can always mark them safe for redaction.
+		colName := redact.SafeString(col.Name)
 		datum := datums[i]
 		if datum == tree.DNull {
 			if !e.desc.PublicColumns()[i].IsNullable() {
 				return errors.AssertionFailedf("column %s.%s not nullable, but found NULL value",
-					e.desc.GetName(), col.Name)
+					redact.SafeString(e.desc.GetName()), colName)
 			}
 		} else if !datum.ResolvedType().Equivalent(col.Typ) {
 			return errors.AssertionFailedf("datum column %q expected to be type %s; found type %s",
-				col.Name, col.Typ, datum.ResolvedType())
+				colName, col.Typ.SQLStringForError(), datum.ResolvedType().SQLStringForError())
 		}
 	}
 	return nil
