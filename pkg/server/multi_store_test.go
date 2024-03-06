@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -46,7 +47,7 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 
 	ctx := context.Background()
 
-	ser := server.NewStickyVFSRegistry()
+	ser := fs.NewStickyRegistry()
 
 	const (
 		numNodes                     = 3

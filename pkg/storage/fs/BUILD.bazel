@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "fs.go",
         "safewrite.go",
+        "sticky_vfs.go",
         "temp_dir.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/fs",
@@ -12,6 +13,7 @@ go_library(
     deps = [
         "//pkg/util/log",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//vfs",
@@ -22,10 +24,15 @@ go_test(
     name = "fs_test",
     srcs = [
         "safewrite_test.go",
+        "sticky_vfs_test.go",
         "temp_dir_test.go",
     ],
     embed = [":fs"],
     deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/storage",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/stop",

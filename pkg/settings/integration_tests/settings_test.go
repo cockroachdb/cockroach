@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -303,7 +304,7 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 
 	// We're going to restart the test server, but expecting storage to
 	// persist. Define a sticky VFS for this purpose.
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := fs.NewStickyRegistry()
 	// We'll also need stable listeners to enable port reuse across restarts.
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()

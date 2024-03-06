@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -666,10 +667,10 @@ func TestRejectBadVersionApplication(t *testing.T) {
 
 func prepTestCluster(
 	t *testing.T, nodes int,
-) (*testcluster.TestCluster, server.StickyVFSRegistry, map[int]loqrecovery.PlanStore) {
+) (*testcluster.TestCluster, fs.StickyRegistry, map[int]loqrecovery.PlanStore) {
 	skip.UnderStressRace(t, "cluster frequently fails to start under stress race")
 
-	reg := server.NewStickyVFSRegistry()
+	reg := fs.NewStickyRegistry()
 
 	lReg := listenerutil.NewListenerRegistry()
 
