@@ -98,10 +98,10 @@ Create a ballast file to fill the store directory up to a given amount
 	RunE: runDebugBallast,
 }
 
-// PopulateStorageConfigHook is a callback set by CCL code.
-// It populates any needed fields in the StorageConfig.
+// PopulateEnvConfigHook is a callback set by CCL code.
+// It populates any needed fields in the EnvConfig.
 // It must stay unset in OSS code.
-var PopulateStorageConfigHook func(*base.StorageConfig) error
+var PopulateEnvConfigHook func(dir string, cfg *fs.EnvConfig) error
 
 // EncryptedStorePathsHook is a callback set by CCL code.
 // It returns the store paths that are encrypted.
@@ -181,19 +181,26 @@ func OpenEngine(
 	if err != nil {
 		return nil, err
 	}
-	if rw == fs.ReadOnly {
-		opts = append(opts, storage.ReadOnly)
+	envConfig := fs.EnvConfig{RW: rw}
+	if PopulateEnvConfigHook != nil {
+		if err := PopulateEnvConfigHook(dir, &envConfig); err != nil {
+			return nil, err
+		}
 	}
+	env, err := fs.InitEnv(context.Background(), vfs.Default, dir, envConfig)
+	if err != nil {
+		return nil, err
+	}
+
 	db, err := storage.Open(
 		context.Background(),
-		storage.Filesystem(dir),
+		env,
 		serverCfg.Settings,
 		storage.MaxOpenFiles(int(maxOpenFiles)),
 		storage.CacheSize(server.DefaultCacheSize),
-		storage.Hook(PopulateStorageConfigHook),
 		storage.CombineOptions(opts...))
 	if err != nil {
-		return nil, err
+		return nil, errors.WithSecondaryError(err, env.Close())
 	}
 
 	stopper.AddCloser(db)
@@ -1607,23 +1614,18 @@ func initPebbleCmds(cmd *cobra.Command, pebbleTool *tool.T) {
 }
 
 func pebbleCryptoInitializer(ctx context.Context) {
-	if EncryptedStorePathsHook != nil && PopulateStorageConfigHook != nil {
+	if EncryptedStorePathsHook != nil && PopulateEnvConfigHook != nil {
 		encryptedPaths := EncryptedStorePathsHook()
-		resolveFn := func(dir string) (vfs.FS, error) {
-			storageConfig := base.StorageConfig{
-				Settings: serverCfg.Settings,
-				Dir:      dir,
-			}
-			if err := PopulateStorageConfigHook(&storageConfig); err != nil {
+		resolveFn := func(dir string) (*fs.Env, error) {
+			var envConfig fs.EnvConfig
+			if err := PopulateEnvConfigHook(dir, &envConfig); err != nil {
 				return nil, err
 			}
-			_, encryptedEnv, err := fs.ResolveEncryptedEnvOptions(
-				ctx, &storageConfig, vfs.Default, false /* readOnly */)
+			env, err := fs.InitEnv(ctx, vfs.Default, dir, envConfig)
 			if err != nil {
 				return nil, err
 			}
-			return encryptedEnv.FS, nil
-
+			return env, nil
 		}
 		pebbleToolFS.Init(encryptedPaths, resolveFn)
 	}

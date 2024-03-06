@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -678,7 +679,7 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 
 	eng, err := Open(
 		context.Background(),
-		Filesystem(dir),
+		fs.MustInitPhysicalTestingEnv(dir),
 		cluster.MakeTestingClusterSettings())
 	if err != nil {
 		return nil, err

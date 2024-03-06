@@ -10,6 +10,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/colcontainer",
         "//pkg/storage",
+        "//pkg/storage/fs",
         "//pkg/testutils",
     ],
 )

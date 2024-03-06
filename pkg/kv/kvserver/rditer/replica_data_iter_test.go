@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -543,7 +544,7 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 
 	// Write data for ranges.
 	eng, err := storage.Open(ctx,
-		storage.Filesystem(b.TempDir()),
+		fs.MustInitPhysicalTestingEnv(b.TempDir()),
 		cluster.MakeTestingClusterSettings(),
 		storage.CacheSize(1e9))
 	require.NoError(b, err)

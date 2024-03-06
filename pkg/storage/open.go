@@ -13,13 +13,12 @@ package storage
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/vfs"
 )
 
 // A ConfigOption may be passed to Open to configure the storage engine.
@@ -35,12 +34,6 @@ func CombineOptions(opts ...ConfigOption) ConfigOption {
 		}
 		return nil
 	}
-}
-
-// ReadOnly configures an engine to be opened in read-only mode.
-var ReadOnly ConfigOption = func(cfg *engineConfig) error {
-	cfg.Opts.ReadOnly = true
-	return nil
 }
 
 // MustExist configures an engine to error on Open if the target directory
@@ -222,27 +215,6 @@ func PebbleOptions(pebbleOptions string, parseHooks *pebble.ParseHooks) ConfigOp
 	}
 }
 
-// EncryptionAtRest configures an engine to use encryption-at-rest. It is used
-// for configuring in-memory engines, which are used in tests. It is not safe
-// to modify the given slice afterwards as it is captured by reference.
-func EncryptionAtRest(encryptionOptions []byte) ConfigOption {
-	return func(cfg *engineConfig) error {
-		cfg.EncryptionOptions = encryptionOptions
-		return nil
-	}
-}
-
-// Hook configures a hook to initialize additional storage options. It's used
-// to initialize encryption-at-rest details in CCL builds.
-func Hook(hookFunc func(*base.StorageConfig) error) ConfigOption {
-	return func(cfg *engineConfig) error {
-		if hookFunc == nil {
-			return nil
-		}
-		return hookFunc(&cfg.PebbleConfig.StorageConfig)
-	}
-}
-
 // If enables the given option if enable is true.
 func If(enable bool, opt ConfigOption) ConfigOption {
 	if enable {
@@ -251,37 +223,10 @@ func If(enable bool, opt ConfigOption) ConfigOption {
 	return func(cfg *engineConfig) error { return nil }
 }
 
-// A Location describes where the storage engine's data will be written. A
-// Location may be in-memory or on the filesystem.
-type Location struct {
-	dir string
-	fs  vfs.FS
-}
-
-// MakeLocation constructs a Location from a directory and a vfs.FS. Typically
-// callers should prefer `Filesystem` or `InMemory` rather than directly
-// invoking MakeLocation.
-func MakeLocation(dir string, fs vfs.FS) Location {
-	return Location{dir: dir, fs: fs}
-}
-
-// Filesystem constructs a Location that instructs the storage engine to read
-// and store data on the filesystem in the provided directory.
-func Filesystem(dir string) Location {
-	return Location{
-		dir: dir,
-		fs:  vfs.Default,
-	}
-}
-
-// InMemory constructs a Location that instructs the storage engine to store
-// data in-memory.
-func InMemory() Location {
-	return Location{
-		dir: "",
-		fs:  vfs.NewMem(),
-	}
-}
+// InMemory re-exports fs.InMemory.
+//
+// TODO(jackson): Update callers to use fs.InMemory directly.
+var InMemory = fs.InMemory
 
 type engineConfig struct {
 	PebbleConfig
@@ -293,15 +238,20 @@ type engineConfig struct {
 }
 
 // Open opens a new Pebble storage engine, reading and writing data to the
-// provided Location, configured with the provided options.
+// provided fs.Env, configured with the provided options.
+//
+// If succesful, the returned Engine takes ownership over the provided fs.Env.
+// When the Engine is closed, the fs.Env is closed too.
 func Open(
-	ctx context.Context, loc Location, settings *cluster.Settings, opts ...ConfigOption,
+	ctx context.Context, env *fs.Env, settings *cluster.Settings, opts ...ConfigOption,
 ) (*Pebble, error) {
 	var cfg engineConfig
-	cfg.Dir = loc.dir
+	cfg.Dir = env.Dir
+	cfg.Env = env
 	cfg.Settings = settings
 	cfg.Opts = DefaultPebbleOptions()
-	cfg.Opts.FS = loc.fs
+	cfg.Opts.FS = env.DefaultFS
+	cfg.Opts.ReadOnly = env.IsReadOnly()
 	for _, opt := range opts {
 		if err := opt(&cfg); err != nil {
 			return nil, err
@@ -311,7 +261,7 @@ func Open(
 		cfg.Opts.Cache = pebble.NewCache(*cfg.cacheSize)
 		defer cfg.Opts.Cache.Unref()
 	}
-	p, err := NewPebble(ctx, cfg.PebbleConfig)
+	p, err := newPebble(ctx, cfg.PebbleConfig)
 	if err != nil {
 		return nil, err
 	}

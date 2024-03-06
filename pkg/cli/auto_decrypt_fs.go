@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
@@ -30,11 +32,11 @@ var _ vfs.FS = (*autoDecryptFS)(nil)
 
 type encryptedDir struct {
 	once       sync.Once
-	fs         vfs.FS
+	env        *fs.Env
 	resolveErr error
 }
 
-type resolveEncryptedDirFn func(dir string) (vfs.FS, error)
+type resolveEncryptedDirFn func(dir string) (*fs.Env, error)
 
 // Init sets up the given paths as encrypted and provides a callback that can
 // resolve an encrypted directory path into an FS.
@@ -52,6 +54,14 @@ func (afs *autoDecryptFS) Init(encryptedDirs []string, resolveFn resolveEncrypte
 		}
 		afs.encryptedDirs[dir] = &encryptedDir{}
 	}
+}
+
+func (afs *autoDecryptFS) Close() error {
+	var err error
+	for _, eDir := range afs.encryptedDirs {
+		err = errors.CombineErrors(err, eDir.env.Close())
+	}
+	return err
 }
 
 func (afs *autoDecryptFS) Create(name string) (vfs.File, error) {
@@ -257,9 +267,9 @@ func (afs *autoDecryptFS) maybeSwitchFS(path string) (vfs.FS, error) {
 	for {
 		if e := afs.encryptedDirs[path]; e != nil {
 			e.once.Do(func() {
-				e.fs, e.resolveErr = afs.resolveFn(path)
+				e.env, e.resolveErr = afs.resolveFn(path)
 			})
-			return e.fs, e.resolveErr
+			return e.env.DefaultFS, e.resolveErr
 		}
 		parent := filepath.Dir(path)
 		if path == parent {
