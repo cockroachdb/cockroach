@@ -57,6 +57,9 @@ SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
 24.1
 
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version();
+
 # Since clusterversion.V24_1 is currently a placeholder and points to the latest Key,
 # this query will fail once latest or V24_1 is updated. Will have to change this query
 # to match that new internal version.
