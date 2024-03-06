@@ -7,12 +7,11 @@ select crdb_internal.active_version()
 
 upgrade all
 
-# We have seen that upgrades can take a long time in CI. Give some extra time
-# for the upgrade to complete.
-retry_duration 10m
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
 
 # Verify that the cluster is upgrading to 24.1.
-query T retry
+query T
 SELECT crdb_internal.release_series(version) FROM [SHOW CLUSTER SETTING version]
 ----
 24.1
