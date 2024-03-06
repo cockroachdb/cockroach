@@ -543,13 +543,15 @@ func TestEngineMustExist(t *testing.T) {
 	tempDir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 
-	_, err := Open(context.Background(), Filesystem(tempDir), cluster.MakeClusterSettings(), MustExist)
+	env := fs.MustInitPhysicalTestingEnv(tempDir)
+	_, err := Open(context.Background(), env, cluster.MakeClusterSettings(), MustExist)
 	if err == nil {
 		t.Fatal("expected error related to missing directory")
 	}
 	if !strings.Contains(fmt.Sprint(err), "does not exist") {
 		t.Fatal(err)
 	}
+	require.NoError(t, env.Close())
 }
 
 func TestEngineTimeBound(t *testing.T) {
@@ -1047,7 +1049,7 @@ func TestCreateCheckpoint(t *testing.T) {
 
 	db, err := Open(
 		context.Background(),
-		Filesystem(dir),
+		fs.MustInitPhysicalTestingEnv(dir),
 		cluster.MakeTestingClusterSettings())
 	assert.NoError(t, err)
 	defer db.Close()
@@ -1064,7 +1066,7 @@ func TestCreateCheckpoint(t *testing.T) {
 	// Verify that we can open the checkpoint.
 	db2, err := Open(
 		context.Background(),
-		Filesystem(checkpointDir),
+		fs.MustInitPhysicalTestingEnv(checkpointDir),
 		cluster.MakeTestingClusterSettings(),
 		MustExist)
 	require.NoError(t, err)
@@ -1074,6 +1076,12 @@ func TestCreateCheckpoint(t *testing.T) {
 	if err := db.CreateCheckpoint(checkpointDir, nil); !testutils.IsError(err, "exists") {
 		t.Fatal(err)
 	}
+}
+
+func mustInitTestEnv(t testing.TB, baseFS vfs.FS, dir string) *fs.Env {
+	e, err := fs.InitEnv(context.Background(), baseFS, dir, fs.EnvConfig{})
+	require.NoError(t, err)
+	return e
 }
 
 func TestCreateCheckpoint_SpanConstrained(t *testing.T) {
@@ -1090,7 +1098,7 @@ func TestCreateCheckpoint_SpanConstrained(t *testing.T) {
 	dir := "foo"
 	db, err := Open(
 		ctx,
-		MakeLocation(dir, mem),
+		mustInitTestEnv(t, mem, dir),
 		cluster.MakeTestingClusterSettings(),
 		TargetFileSize(2<<10 /* 2 KB */),
 	)
@@ -1141,7 +1149,7 @@ func TestCreateCheckpoint_SpanConstrained(t *testing.T) {
 		// Verify that we can open the checkpoint.
 		cDB, err := Open(
 			ctx,
-			MakeLocation(dir, mem),
+			mustInitTestEnv(t, mem, dir),
 			cluster.MakeTestingClusterSettings(),
 			MustExist)
 		require.NoError(t, err)
@@ -1378,7 +1386,7 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 
 	dir, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
-	db, err := Open(context.Background(), Filesystem(dir), cluster.MakeClusterSettings(), CacheSize(testCacheSize))
+	db, err := Open(context.Background(), fs.MustInitPhysicalTestingEnv(dir), cluster.MakeClusterSettings(), CacheSize(testCacheSize))
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -1436,15 +1444,15 @@ func TestFS(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	engineDest := map[string]Location{
+	engineDest := map[string]*fs.Env{
 		"in_memory":  InMemory(),
-		"filesystem": Filesystem(dir),
+		"filesystem": fs.MustInitPhysicalTestingEnv(dir),
 	}
 	for name, loc := range engineDest {
 		t.Run(name, func(t *testing.T) {
-			fs, err := Open(context.Background(), loc, cluster.MakeClusterSettings(), CacheSize(testCacheSize), ForTesting)
+			e, err := Open(context.Background(), loc, cluster.MakeClusterSettings(), CacheSize(testCacheSize), ForTesting)
 			require.NoError(t, err)
-			defer fs.Close()
+			defer e.Close()
 
 			path := func(rel string) string {
 				return filepath.Join(dir, rel)
@@ -1452,52 +1460,52 @@ func TestFS(t *testing.T) {
 			expectLS := func(dir string, want []string) {
 				t.Helper()
 
-				got, err := fs.List(dir)
+				got, err := e.List(dir)
 				sort.Strings(got)
 				require.NoError(t, err)
 				if !reflect.DeepEqual(got, want) {
-					t.Fatalf("fs.List(%q) = %#v, want %#v", dir, got, want)
+					t.Fatalf("e.List(%q) = %#v, want %#v", dir, got, want)
 				}
 			}
 
 			// Create a/ and assert that it's empty.
-			require.NoError(t, fs.MkdirAll(path("a"), os.ModePerm))
+			require.NoError(t, e.MkdirAll(path("a"), os.ModePerm))
 			expectLS(path("a"), []string{})
-			if _, err := fs.Stat(path("a/b/c")); !oserror.IsNotExist(err) {
-				t.Fatal(`fs.Stat("a/b/c") should not exist`)
+			if _, err := e.Stat(path("a/b/c")); !oserror.IsNotExist(err) {
+				t.Fatal(`e.Stat("a/b/c") should not exist`)
 			}
 
 			// Create a/b/ and a/b/c/ in a single MkdirAll call.
 			// Then ensure that a duplicate call returns a nil error.
-			require.NoError(t, fs.MkdirAll(path("a/b/c"), os.ModePerm))
-			require.NoError(t, fs.MkdirAll(path("a/b/c"), os.ModePerm))
+			require.NoError(t, e.MkdirAll(path("a/b/c"), os.ModePerm))
+			require.NoError(t, e.MkdirAll(path("a/b/c"), os.ModePerm))
 			expectLS(path("a"), []string{"b"})
 			expectLS(path("a/b"), []string{"c"})
 			expectLS(path("a/b/c"), []string{})
-			_, err = fs.Stat(path("a/b/c"))
+			_, err = e.Stat(path("a/b/c"))
 			require.NoError(t, err)
 
 			// Create a file at a/b/c/foo.
-			f, err := fs.Create(path("a/b/c/foo"))
+			f, err := e.Create(path("a/b/c/foo"))
 			require.NoError(t, err)
 			require.NoError(t, f.Close())
 			expectLS(path("a/b/c"), []string{"foo"})
 
 			// Create a file at a/b/c/bar.
-			f, err = fs.Create(path("a/b/c/bar"))
+			f, err = e.Create(path("a/b/c/bar"))
 			require.NoError(t, err)
 			require.NoError(t, f.Close())
 			expectLS(path("a/b/c"), []string{"bar", "foo"})
-			_, err = fs.Stat(path("a/b/c/bar"))
+			_, err = e.Stat(path("a/b/c/bar"))
 			require.NoError(t, err)
 
 			// RemoveAll a file.
-			require.NoError(t, fs.RemoveAll(path("a/b/c/bar")))
+			require.NoError(t, e.RemoveAll(path("a/b/c/bar")))
 			expectLS(path("a/b/c"), []string{"foo"})
 
 			// RemoveAll a directory that contains subdirectories and
 			// descendant files.
-			require.NoError(t, fs.RemoveAll(path("a/b")))
+			require.NoError(t, e.RemoveAll(path("a/b")))
 			expectLS(path("a"), []string{})
 		})
 	}

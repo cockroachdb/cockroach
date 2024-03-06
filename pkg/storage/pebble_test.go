@@ -269,7 +269,7 @@ func TestPebbleMetricEventListener(t *testing.T) {
 	ctx := context.Background()
 
 	settings := cluster.MakeTestingClusterSettings()
-	MaxSyncDurationFatalOnExceeded.Override(ctx, &settings.SV, false)
+	fs.MaxSyncDurationFatalOnExceeded.Override(ctx, &settings.SV, false)
 	p, err := Open(ctx, InMemory(), settings, CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err)
 	defer p.Close()
@@ -557,14 +557,8 @@ func TestPebbleBackgroundError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	loc := Location{
-		dir: "",
-		fs: &errorFS{
-			FS:         vfs.NewMem(),
-			errorCount: 3,
-		},
-	}
-	eng, err := Open(context.Background(), loc, cluster.MakeClusterSettings())
+	env := mustInitTestEnv(t, &errorFS{FS: vfs.NewMem(), errorCount: 3}, "")
+	eng, err := Open(context.Background(), env, cluster.MakeClusterSettings())
 	require.NoError(t, err)
 	defer eng.Close()
 
@@ -1225,12 +1219,10 @@ func TestIncompatibleVersion(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	loc := Location{
-		dir: "",
-		fs:  vfs.NewMem(),
-	}
+	memFS := vfs.NewMem()
+	env := mustInitTestEnv(t, memFS, "")
 
-	p, err := Open(ctx, loc, cluster.MakeTestingClusterSettings())
+	p, err := Open(ctx, env, cluster.MakeTestingClusterSettings())
 	require.NoError(t, err)
 	p.Close()
 
@@ -1238,15 +1230,17 @@ func TestIncompatibleVersion(t *testing.T) {
 	version := roachpb.Version{Major: 21, Minor: 1}
 	b, err := protoutil.Marshal(&version)
 	require.NoError(t, err)
-	require.NoError(t, fs.SafeWriteToFile(loc.fs, loc.dir, MinVersionFilename, b))
+	require.NoError(t, fs.SafeWriteToFile(memFS, "", MinVersionFilename, b))
 
-	_, err = Open(ctx, loc, cluster.MakeTestingClusterSettings())
+	env = mustInitTestEnv(t, memFS, "")
+	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())
 	require.Error(t, err)
 	msg := err.Error()
 	if !strings.Contains(msg, "is too old for running version") &&
 		!strings.Contains(msg, "cannot be opened by development version") {
 		t.Fatalf("unexpected error %v", err)
 	}
+	require.NoError(t, env.Close())
 }
 
 func TestNoMinVerFile(t *testing.T) {
@@ -1254,23 +1248,21 @@ func TestNoMinVerFile(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	loc := Location{
-		dir: "",
-		fs:  vfs.NewMem(),
-	}
-
+	memFS := vfs.NewMem()
+	env := mustInitTestEnv(t, memFS, "")
 	st := cluster.MakeTestingClusterSettings()
-	p, err := Open(ctx, loc, st)
+	p, err := Open(ctx, env, st)
 	require.NoError(t, err)
 	p.Close()
 
 	// Remove the min version filename.
-	require.NoError(t, loc.fs.Remove(loc.fs.PathJoin(loc.dir, MinVersionFilename)))
+	require.NoError(t, memFS.Remove(MinVersionFilename))
 
 	// We are still allowed the open the store if we haven't written anything to it.
 	// This is useful in case the initial Open crashes right before writinng the
 	// min version file.
-	p, err = Open(ctx, loc, st)
+	env = mustInitTestEnv(t, memFS, "")
+	p, err = Open(ctx, env, st)
 	require.NoError(t, err)
 
 	// Now write something to the store.
@@ -1280,10 +1272,12 @@ func TestNoMinVerFile(t *testing.T) {
 	p.Close()
 
 	// Remove the min version filename.
-	require.NoError(t, loc.fs.Remove(loc.fs.PathJoin(loc.dir, MinVersionFilename)))
+	require.NoError(t, memFS.Remove(MinVersionFilename))
 
-	_, err = Open(ctx, loc, st)
+	env = mustInitTestEnv(t, memFS, "")
+	_, err = Open(ctx, env, st)
 	require.ErrorContains(t, err, "store has no min-version file")
+	require.NoError(t, env.Close())
 }
 
 func TestApproximateDiskBytes(t *testing.T) {
@@ -1339,7 +1333,9 @@ func TestConvertFilesToBatchAndCommit(t *testing.T) {
 	var engs [batchEngine + 1]Engine
 	mem := vfs.NewMem()
 	for i := range engs {
-		engs[i] = InMemFromFS(ctx, mem, fmt.Sprintf("eng-%d", i), st)
+		var err error
+		engs[i], err = Open(ctx, mustInitTestEnv(t, mem, fmt.Sprintf("eng-%d", i)), st)
+		require.NoError(t, err)
 		defer engs[i].Close()
 	}
 	// Populate points that will have MVCC value and an intent.

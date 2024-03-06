@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testfixtures"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -57,7 +58,7 @@ func loadTestData(
 	dir := testfixtures.ReuseOrGenerate(tb, name, func(dir string) {
 		eng, err := storage.Open(
 			ctx,
-			storage.Filesystem(dir),
+			fs.MustInitPhysicalTestingEnv(dir),
 			cluster.MakeTestingClusterSettings())
 		if err != nil {
 			tb.Fatal(err)
@@ -115,7 +116,7 @@ func loadTestData(
 	log.Infof(context.Background(), "using test data: %s", dir)
 	eng, err := storage.Open(
 		ctx,
-		storage.Filesystem(dir),
+		fs.MustInitPhysicalTestingEnv(dir),
 		cluster.MakeTestingClusterSettings(),
 		storage.MustExist,
 	)

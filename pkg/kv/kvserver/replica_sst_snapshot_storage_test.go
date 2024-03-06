@@ -398,7 +398,7 @@ func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine)
 	dir, cleanup := testutils.TempDir(t)
 	eng, err := storage.Open(
 		ctx,
-		storage.Filesystem(dir),
+		fs.MustInitPhysicalTestingEnv(dir),
 		cluster.MakeClusterSettings(),
 		storage.CacheSize(1<<20 /* 1 MiB */))
 	if err != nil {

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -111,7 +112,7 @@ LIMIT
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	eng, err := storage.Open(ctx, storage.Filesystem(p), st)
+	eng, err := storage.Open(ctx, fs.MustInitPhysicalTestingEnv(p), st)
 	require.NoError(t, err)
 	defer eng.Close()
 

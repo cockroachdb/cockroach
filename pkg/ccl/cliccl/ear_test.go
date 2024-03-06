@@ -25,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -53,7 +55,10 @@ func TestDecrypt(t *testing.T) {
 	require.NoError(t, err)
 	encOpts, err := encSpec.ToEncryptionOptions()
 	require.NoError(t, err)
-	p, err := storage.Open(ctx, storage.Filesystem(dir), cluster.MakeClusterSettings(), storage.EncryptionAtRest(encOpts))
+
+	env, err := fs.InitEnv(ctx, vfs.Default, dir, fs.EnvConfig{EncryptionOptions: encOpts})
+	require.NoError(t, err)
+	p, err := storage.Open(ctx, env, cluster.MakeClusterSettings())
 	require.NoError(t, err)
 
 	// Find a manifest file to check.
@@ -133,7 +138,9 @@ func TestList(t *testing.T) {
 	require.NoError(t, err)
 	encOpts, err := encSpec.ToEncryptionOptions()
 	require.NoError(t, err)
-	p, err := storage.Open(ctx, storage.Filesystem(dir), cluster.MakeClusterSettings(), storage.EncryptionAtRest(encOpts))
+	env, err := fs.InitEnv(ctx, vfs.Default, dir, fs.EnvConfig{EncryptionOptions: encOpts})
+	require.NoError(t, err)
+	p, err := storage.Open(ctx, env, cluster.MakeClusterSettings())
 	require.NoError(t, err)
 
 	// Write a key and flush, to create a table in the store.

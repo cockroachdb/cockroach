@@ -15,7 +15,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"io/fs"
+	stdfs "io/fs"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,7 +44,7 @@ func TestPebbleIterator_Corruption(t *testing.T) {
 	// Create a Pebble DB that can be used to back a pebbleIterator.
 	dir := t.TempDir()
 	dataDir := filepath.Join(dir, "data")
-	p, err := Open(context.Background(), Filesystem(dataDir), cluster.MakeClusterSettings())
+	p, err := Open(context.Background(), fs.MustInitPhysicalTestingEnv(dataDir), cluster.MakeClusterSettings())
 	require.NoError(t, err)
 	defer p.Close()
 
@@ -53,7 +54,7 @@ func TestPebbleIterator_Corruption(t *testing.T) {
 	require.NoError(t, p.Flush())
 
 	// Corrupt the SSTs in the DB.
-	err = filepath.Walk(dataDir, func(path string, info fs.FileInfo, err error) error {
+	err = filepath.Walk(dataDir, func(path string, info stdfs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
