@@ -2688,6 +2688,7 @@ func (ds *DistSender) sendToReplicas(
 				}
 			case *kvpb.NotLeaseHolderError:
 				ds.metrics.NotLeaseHolderErrCount.Inc(1)
+				var lhRUE bool // lease holder replica unavailable error
 				// If we got some lease information, we use it. If not, we loop around
 				// and try the next replica.
 				if tErr.Lease != nil {
@@ -2705,7 +2706,6 @@ func (ds *DistSender) sendToReplicas(
 					if lh := routing.Leaseholder(); lh != nil {
 						// If we've already tried this replica and it's unavailable due to
 						// a tripped replica circuit breaker, skip it to avoid loops.
-						var lhRUE bool
 						if err := replicaUnavailableError; err != nil {
 							if rue := (*kvpb.ReplicaUnavailableError)(nil); errors.As(err, &rue) {
 								lhRUE = lh.IsSame(rue.Replica)
@@ -2753,6 +2753,11 @@ func (ds *DistSender) sendToReplicas(
 					// there's a lease transfer in progress and the would-be leaseholder
 					// has not yet applied the new lease.
 					//
+					// If the leaseholder is unavailable (lhRUE), we don't backoff since
+					// we aren't trying the leaseholder again, instead we want to cycle
+					// through the remaining replicas to see if they have the lease before
+					// we return to sendPartialBatch.
+					//
 					// TODO(arul): The idea here is for the client to not keep sending
 					// the would-be leaseholder multiple requests and backoff a bit to let
 					// it apply the its lease. Instead of deriving this information like
@@ -2761,7 +2766,7 @@ func (ds *DistSender) sendToReplicas(
 					// the replica we just tried), in which case we should backoff. With
 					// this scheme we'd no longer have to track "updatedLeaseholder" state
 					// when syncing the NLHE with the range cache.
-					shouldBackoff := !updatedLeaseholder && !intentionallySentToFollower
+					shouldBackoff := !updatedLeaseholder && !intentionallySentToFollower && !lhRUE
 					if shouldBackoff {
 						ds.metrics.InLeaseTransferBackoffs.Inc(1)
 						log.VErrEventf(ctx, 2, "backing off due to NotLeaseHolderErr with stale info")
