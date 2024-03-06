@@ -1514,6 +1514,10 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	require.Equal(t, desc1, *tok.Desc())
 	require.Nil(t, tok.Leaseholder())
 	requireTokenDoesNotHaveClosedTimestampPolicy(t, tok)
+	tokRI := tok.RangeInfo()
+	require.Equal(t, desc1, tokRI.Desc)
+	require.Equal(t, roachpb.Lease{}, tokRI.Lease)
+	require.Equal(t, UnknownClosedTimestampPolicy, tokRI.ClosedTimestampPolicy)
 
 	// EvictAndReplace() with a new descriptor.
 	ri.Desc = desc2
@@ -1525,6 +1529,10 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	require.Nil(t, tok.Leaseholder())
 	// Note that we now have a definitive closed timestamp policy.
 	require.Equal(t, lag, tok.ClosedTimestampPolicy(lead))
+	tokRI = tok.RangeInfo()
+	require.Equal(t, desc2, tokRI.Desc)
+	require.Equal(t, roachpb.Lease{}, tokRI.Lease)
+	require.Equal(t, lag, tokRI.ClosedTimestampPolicy)
 
 	// EvictAndReplace() with a new lease.
 	ri.Lease = roachpb.Lease{
@@ -1539,6 +1547,10 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	require.Equal(t, rep1, *tok.Leaseholder())
 	require.Equal(t, roachpb.LeaseSequence(1), tok.LeaseSeq())
 	require.Equal(t, lag, tok.ClosedTimestampPolicy(lead))
+	tokRI = tok.RangeInfo()
+	require.Equal(t, desc2, tokRI.Desc)
+	require.Equal(t, ri.Lease, tokRI.Lease)
+	require.Equal(t, lag, tokRI.ClosedTimestampPolicy)
 
 	// EvictAndReplace() with a new closed timestamp policy.
 	ri.ClosedTimestampPolicy = lead
