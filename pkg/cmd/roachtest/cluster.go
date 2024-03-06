@@ -1368,9 +1368,8 @@ func (c *clusterImpl) FetchDebugZip(
 			cmd := roachtestutil.NewCommand("%s debug zip", test.DefaultCockroachPath).
 				Option("include-range-info").
 				Flag("exclude-files", fmt.Sprintf("'%s'", excludeFiles)).
-				Flag("url", nodePgUrl[0]).
+				Flag("url", fmt.Sprintf("'%s'", nodePgUrl[0])).
 				MaybeFlag(c.IsSecure(), "certs-dir", install.CockroachNodeCertsDir).
-				MaybeFlag(c.IsSecure(), "certs-dir", "certs").
 				Arg(zipName).
 				String()
 			if err = c.RunE(ctx, c.Node(node), cmd); err != nil {
