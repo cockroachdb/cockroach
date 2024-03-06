@@ -1321,6 +1321,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 	opts := []testserver.TestServerOpt{
 		testserver.ThreeNodeOpt(),
 		testserver.StoreOnDiskOpt(),
+		testserver.CacheSizeOpt(0.1),
 		testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
 		testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
 		testserver.PollListenURLTimeoutOpt(120),
