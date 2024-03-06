@@ -455,7 +455,7 @@ func NewMonitorInheritWithLimit(
 }
 
 // noReserved is safe to be used by multiple monitors as the "reserved" account
-// since only its 'used' field will ever be read.
+// since only its 'used' and 'reserved' fields will ever be read.
 var noReserved = BoundAccount{}
 
 // StartNoReserved is the same as Start when there is no pre-reserved budget.
@@ -627,6 +627,18 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 			parent.mu.numChildren--
 		}()
 	}
+	// If this monitor still has children, let's lose the reference to them as
+	// well as break the references between them to aid GC.
+	if mm.mu.head != nil {
+		nextChild := mm.mu.head
+		mm.mu.head = nil
+		for nextChild != nil {
+			next := nextChild.parentMu.nextSibling
+			nextChild.parentMu.prevSibling = nil
+			nextChild.parentMu.nextSibling = nil
+			nextChild = next
+		}
+	}
 
 	// Disable the pool for further allocations, so that further
 	// uses outside of monitor control get errors.
@@ -635,6 +647,9 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	// Release the reserved budget to its original pool, if any.
 	if mm.reserved != &noReserved {
 		mm.reserved.Clear(ctx)
+		// Make sure to lose reference to the reserved account because it has a
+		// pointer to the parent monitor.
+		mm.reserved = &noReserved
 	}
 }
 
