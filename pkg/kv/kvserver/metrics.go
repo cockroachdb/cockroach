@@ -2291,6 +2291,27 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Fsync Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaStorageWALFailoverSwitchCount = metric.Metadata{
+		Name: "storage.wal.failover.switch.count",
+		Help: "Count of the number of times WAL writing has switched from primary to secondary " +
+			"and vice versa.",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaStorageWALFailoverPrimaryDuration = metric.Metadata{
+		Name: "storage.wal.failover.primary.duration",
+		Help: "Cumulative time spent writing to the primary WAL directory. Only populated " +
+			"when WAL failover is configured",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaStorageWALFailoverSecondaryDuration = metric.Metadata{
+		Name: "storage.wal.failover.secondary.duration",
+		Help: "Cumulative time spent writing to the secondary WAL directory. Only populated " +
+			"when WAL failover is configured",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaReplicaReadBatchDroppedLatchesBeforeEval = metric.Metadata{
 		Name:        "kv.replica_read_batch_evaluate.dropped_latches_before_eval",
 		Help:        `Number of times read-only batches dropped latches before evaluation.`,
@@ -2462,6 +2483,11 @@ type StoreMetrics struct {
 	BatchCommitWALRotWaitDuration     *metric.Gauge
 	BatchCommitCommitWaitDuration     *metric.Gauge
 	categoryIterMetrics               pebbleCategoryIterMetricsContainer
+	WALBytesWritten                   *metric.Gauge
+	WALBytesIn                        *metric.Gauge
+	WALFailoverSwitchCount            *metric.Gauge
+	WALFailoverPrimaryDuration        *metric.Gauge
+	WALFailoverSecondaryDuration      *metric.Gauge
 
 	RdbCheckpoints *metric.Gauge
 
@@ -2539,8 +2565,6 @@ type StoreMetrics struct {
 	RaftTimeoutCampaign        *metric.Counter
 	RaftStorageReadBytes       *metric.Counter
 	RaftStorageError           *metric.Counter
-	WALBytesWritten            *metric.Gauge
-	WALBytesIn                 *metric.Gauge
 
 	// Raft message metrics.
 	//
@@ -3143,8 +3167,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		categoryIterMetrics: pebbleCategoryIterMetricsContainer{
 			registry: storeRegistry,
 		},
-		WALBytesWritten: metric.NewGauge(metaWALBytesWritten),
-		WALBytesIn:      metric.NewGauge(metaWALBytesIn),
+		WALBytesWritten:              metric.NewGauge(metaWALBytesWritten),
+		WALBytesIn:                   metric.NewGauge(metaWALBytesIn),
+		WALFailoverSwitchCount:       metric.NewGauge(metaStorageWALFailoverSwitchCount),
+		WALFailoverPrimaryDuration:   metric.NewGauge(metaStorageWALFailoverPrimaryDuration),
+		WALFailoverSecondaryDuration: metric.NewGauge(metaStorageWALFailoverSecondaryDuration),
 
 		// Ingestion metrics
 		IngestCount: metric.NewGauge(metaIngestCount),
@@ -3533,6 +3560,9 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.IngestCount.Update(int64(m.Ingest.Count))
 	sm.WALBytesWritten.Update(int64(m.WAL.BytesWritten))
 	sm.WALBytesIn.Update(int64(m.WAL.BytesIn))
+	sm.WALFailoverSwitchCount.Update(m.WAL.Failover.DirSwitchCount)
+	sm.WALFailoverPrimaryDuration.Update(m.WAL.Failover.PrimaryWriteDuration.Nanoseconds())
+	sm.WALFailoverSecondaryDuration.Update(m.WAL.Failover.SecondaryWriteDuration.Nanoseconds())
 	sm.BatchCommitCount.Update(int64(m.BatchCommitStats.Count))
 	sm.BatchCommitDuration.Update(int64(m.BatchCommitStats.TotalDuration))
 	sm.BatchCommitSemWaitDuration.Update(int64(m.BatchCommitStats.SemaphoreWaitDuration))
