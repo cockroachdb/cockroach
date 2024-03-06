@@ -15,10 +15,12 @@ import (
 	"math/rand"
 	"os"
 	"os/user"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
@@ -179,9 +181,25 @@ the cluster nodes on start.
 	}
 	roachtestflags.AddRunFlags(benchCmd.Flags())
 
+	var runOperationCmd = &cobra.Command{
+		// Don't display usage when the command fail.
+		SilenceUsage: true,
+		Use:          "run-operation [regex...]",
+		Short:        "run operations on cockroach cluster",
+		Long:         `Run automated operations on existing clusters.`,
+		Args:         cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Printf("\nRunning operation %s.\n\n", args[0])
+			cmd.SilenceUsage = true
+			return runOperations(operations.RegisterOperations, args[0])
+		},
+	}
+	roachtestflags.AddRunOpsFlags(runOperationCmd.Flags())
+
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
+	rootCmd.AddCommand(runOperationCmd)
 
 	var err error
 	config.OSUser, err = user.Current()
@@ -261,6 +279,23 @@ func testsToRun(
 	}
 
 	return selectSpecs(notSkipped, selectProbability, true, print), nil
+}
+
+func opsToRun(r testRegistryImpl, filter string) ([]registry.OperationSpec, error) {
+	regex, err := regexp.Compile(filter)
+	if err != nil {
+		return nil, err
+	}
+	var filteredOps []registry.OperationSpec
+	for _, opSpec := range r.AllOperations() {
+		if regex.MatchString(opSpec.Name) {
+			filteredOps = append(filteredOps, opSpec)
+		}
+	}
+	if len(filteredOps) == 0 {
+		return nil, errors.New("no matching operations to run")
+	}
+	return filteredOps, nil
 }
 
 // selectSpecs returns a random sample of the given test specs.

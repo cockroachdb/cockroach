@@ -975,6 +975,7 @@ type attachOpt struct {
 	// Implies skipWipe.
 	skipStop bool
 	skipWipe bool
+	certsDir string
 }
 
 // attachToExistingCluster creates a cluster object based on machines that have
@@ -1002,7 +1003,8 @@ func attachToExistingCluster(
 			// If we're attaching to an existing cluster, we're not going to destroy it.
 			owned: false,
 		},
-		r: r,
+		localCertsDir: opt.certsDir,
+		r:             r,
 	}
 
 	if !opt.skipValidation {
@@ -1011,8 +1013,10 @@ func attachToExistingCluster(
 		}
 	}
 
-	if err := r.registerCluster(c); err != nil {
-		return nil, err
+	if r != nil {
+		if err := r.registerCluster(c); err != nil {
+			return nil, err
+		}
 	}
 
 	if !opt.skipStop {
