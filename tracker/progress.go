@@ -35,6 +35,9 @@ type Progress struct {
 	// entries with indices in (Match, Next) interval are already in flight.
 	//
 	// Invariant: 0 <= Match < Next.
+	// NB: it follows that Next >= 1.
+	//
+	// In StateSnapshot, Next == PendingSnapshot + 1.
 	Next uint64
 
 	// State defines how the leader should interact with the follower.
@@ -141,6 +144,7 @@ func (pr *Progress) BecomeReplicate() {
 func (pr *Progress) BecomeSnapshot(snapshoti uint64) {
 	pr.ResetState(StateSnapshot)
 	pr.PendingSnapshot = snapshoti
+	pr.Next = snapshoti + 1
 }
 
 // UpdateOnEntriesSend updates the progress on the given number of consecutive

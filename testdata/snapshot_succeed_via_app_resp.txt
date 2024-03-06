@@ -87,7 +87,7 @@ stabilize 1
 > 1 receiving messages
   3->1 MsgHeartbeatResp Term:1 Log:0/0
   DEBUG 1 [firstindex: 12, commit: 11] sent snapshot[index: 11, term: 1] to 3 [StateProbe match=0 next=11]
-  DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=11 paused pendingSnap=11]
+  DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=12 paused pendingSnap=11]
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
@@ -98,7 +98,7 @@ status 1
 ----
 1: StateReplicate match=11 next=12
 2: StateReplicate match=11 next=12
-3: StateSnapshot match=0 next=11 paused pendingSnap=11
+3: StateSnapshot match=0 next=12 paused pendingSnap=11
 
 # Follower applies the snapshot. Note how it reacts with a MsgAppResp upon completion.
 # The snapshot fully catches the follower up (i.e. there are no more log entries it
