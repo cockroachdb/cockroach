@@ -397,8 +397,9 @@ func TestImportEpochIngestion(t *testing.T) {
 			Key:    startKey.Key,
 			EndKey: endKey.Key,
 		},
-		MVCCFilter: kvpb.MVCCFilter_All,
-		StartTime:  hlc.Timestamp{},
+		MVCCFilter:             kvpb.MVCCFilter_All,
+		StartTime:              hlc.Timestamp{},
+		IncludeMVCCValueHeader: true,
 	}
 
 	header := kvpb.Header{Timestamp: s.Clock().Now()}
