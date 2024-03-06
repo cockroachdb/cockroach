@@ -1316,6 +1316,10 @@ func splitTriggerHelper(
 		RHSDelta: *h.AbsPostSplitRight(),
 	}
 
+	pd.Local.Metrics = &result.Metrics{
+		SplitsWithEstimatedStats:     h.splitsWithEstimates,
+		SplitEstimatedTotalBytesDiff: h.estimatedTotalBytesDiff,
+	}
 	deltaPostSplitLeft := h.DeltaPostSplitLeft()
 	return deltaPostSplitLeft, pd, nil
 }

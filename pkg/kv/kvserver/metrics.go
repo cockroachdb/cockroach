@@ -2267,6 +2267,20 @@ Note that the measurement does not include the duration for replicating the eval
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaSplitEstimatedStats = metric.Metadata{
+		Name:        "kv.split.estimated_stats",
+		Help:        "Number of splits that computed estimated MVCC stats.",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaSplitEstimatedTotalBytesDiff = metric.Metadata{
+		Name:        "kv.split.total_bytes_estimates",
+		Help:        "Number of total bytes difference between the pre-split and post-split MVCC stats.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+
 	metaStorageFlushUtilization = metric.Metadata{
 		Name:        "storage.flush.utilization",
 		Help:        "The percentage of time the storage engine is actively flushing memtables to disk.",
@@ -2687,6 +2701,9 @@ type StoreMetrics struct {
 
 	ReplicaReadBatchDroppedLatchesBeforeEval *metric.Counter
 	ReplicaReadBatchWithoutInterleavingIter  *metric.Counter
+
+	SplitsWithEstimatedStats     *metric.Counter
+	SplitEstimatedTotalBytesDiff *metric.Counter
 
 	FlushUtilization *metric.GaugeFloat64
 	FsyncLatency     *metric.ManualWindowHistogram
@@ -3423,6 +3440,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		ReplicaReadBatchDroppedLatchesBeforeEval: metric.NewCounter(metaReplicaReadBatchDroppedLatchesBeforeEval),
 		ReplicaReadBatchWithoutInterleavingIter:  metric.NewCounter(metaReplicaReadBatchWithoutInterleavingIter),
+
+		// Estimated MVCC stats in split
+		SplitsWithEstimatedStats:     metric.NewCounter(metaSplitEstimatedStats),
+		SplitEstimatedTotalBytesDiff: metric.NewCounter(metaSplitEstimatedTotalBytesDiff),
 	}
 
 	storeRegistry.AddMetricStruct(sm)
@@ -3648,6 +3669,12 @@ func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.M
 
 	sm.AddSSTableAsWrites.Inc(int64(metric.AddSSTableAsWrites))
 	metric.AddSSTableAsWrites = 0
+
+	sm.SplitsWithEstimatedStats.Inc(int64(metric.SplitsWithEstimatedStats))
+	metric.SplitsWithEstimatedStats = 0
+
+	sm.SplitEstimatedTotalBytesDiff.Inc(int64(metric.SplitEstimatedTotalBytesDiff))
+	metric.SplitEstimatedTotalBytesDiff = 0
 
 	if metric != (result.Metrics{}) {
 		log.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)

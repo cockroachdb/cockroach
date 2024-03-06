@@ -10,7 +10,13 @@
 
 package batcheval
 
-import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+import (
+	"context"
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
 
 // splitStatsHelper codifies and explains the stats computations related to a
 // split. The quantities known during a split (i.e. while the split trigger
@@ -109,8 +115,10 @@ import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 type splitStatsHelper struct {
 	in splitStatsHelperInput
 
-	absPostSplitLeft  *enginepb.MVCCStats
-	absPostSplitRight *enginepb.MVCCStats
+	absPostSplitLeft        *enginepb.MVCCStats
+	absPostSplitRight       *enginepb.MVCCStats
+	splitsWithEstimates     int
+	estimatedTotalBytesDiff int
 }
 
 // splitStatsScanFn scans a post-split keyspace to compute its stats. The
@@ -264,6 +272,9 @@ func makeEstimatedSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelpe
 	// compounded estimates from previous splits).
 	if !h.in.AbsPreSplitBothStored.HasUserDataCloseTo(
 		h.in.PreSplitStats, h.in.MaxCountDiff, h.in.MaxBytesDiff) {
+		log.VEventf(context.Background(), 2,
+			"split falling back to accurate stats computation because of large difference in pre- and post-split MVCC stats; pre: %v, post: %v",
+			h.in.PreSplitStats, h.in.AbsPreSplitBothStored)
 		return makeSplitStatsHelper(input)
 	}
 
@@ -312,7 +323,9 @@ func makeEstimatedSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelpe
 	if !h.in.RightIsEmpty {
 		h.absPostSplitRight.ContainsEstimates++
 	}
-
+	h.splitsWithEstimates = 1
+	h.estimatedTotalBytesDiff = int(math.Abs(
+		float64(h.in.AbsPreSplitBothStored.Total()) - float64(h.in.PreSplitStats.Total())))
 	return h, nil
 }
 
