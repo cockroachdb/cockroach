@@ -2741,8 +2741,11 @@ func (ds *DistSender) sendToReplicas(
 					// cause an extra pass through sendToReplicas, but it
 					// prevents accidentally returning a replica unavailable
 					// error too aggressively.
+					// We also want to to try all the replicas again since we
+					// may the request depends on the leaseholder.
 					if updatedLeaseholder {
 						leaseholderUnavailable = false
+						transport.Reset()
 					}
 					// If the leaseholder is the replica that we've just tried, and
 					// we've tried this replica a bunch of times already, let's move on
