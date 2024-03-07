@@ -141,7 +141,7 @@ func (i *immediateVisitor) MakeValidatedCheckConstraintPublic(
 	}
 
 	if !found {
-		return errors.AssertionFailedf("failed to find check constraint %d in table %q (%d)",
+		return errors.AssertionFailedf("failed to find mutation for check constraint %d in table %q (%d)",
 			op.ConstraintID, tbl.GetName(), tbl.GetID())
 	}
 
@@ -245,18 +245,18 @@ func (i *immediateVisitor) RemoveCheckConstraint(
 		return err
 	}
 	var found bool
-	for i, c := range tbl.Checks {
+	for idx, c := range tbl.Checks {
 		if c.ConstraintID == op.ConstraintID {
-			tbl.Checks = append(tbl.Checks[:i], tbl.Checks[i+1:]...)
+			tbl.Checks = append(tbl.Checks[:idx], tbl.Checks[idx+1:]...)
 			found = true
 			break
 		}
 	}
-	for i, m := range tbl.Mutations {
+	for idx, m := range tbl.Mutations {
 		if c := m.GetConstraint(); c != nil &&
 			c.ConstraintType == descpb.ConstraintToUpdate_CHECK &&
 			c.Check.ConstraintID == op.ConstraintID {
-			tbl.Mutations = append(tbl.Mutations[:i], tbl.Mutations[i+1:]...)
+			tbl.Mutations = append(tbl.Mutations[:idx], tbl.Mutations[idx+1:]...)
 			found = true
 			break
 		}

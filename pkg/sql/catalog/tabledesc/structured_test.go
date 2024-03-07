@@ -355,17 +355,19 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 			// upgrades, in particular the primary index will have its format version
 			// properly set.
 			desc: descpb.TableDescriptor{
-				FormatVersion: descpb.BaseFormatVersion,
-				ID:            51,
-				Name:          "tbl",
-				ParentID:      52,
-				NextColumnID:  3,
-				NextIndexID:   2,
+				FormatVersion:    descpb.BaseFormatVersion,
+				ID:               51,
+				Name:             "tbl",
+				ParentID:         52,
+				NextColumnID:     3,
+				NextIndexID:      2,
+				NextConstraintID: 2,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 					{ID: 2, Name: "bar"},
 				},
 				PrimaryIndex: descpb.IndexDescriptor{
+					ConstraintID:        1,
 					ID:                  descpb.IndexID(1),
 					Name:                "primary",
 					KeyColumnIDs:        []descpb.ColumnID{1, 2},

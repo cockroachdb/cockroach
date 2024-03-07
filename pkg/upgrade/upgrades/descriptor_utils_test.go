@@ -58,8 +58,10 @@ func TestCreateSystemTable(t *testing.T) {
 				DefaultColumnID: 0,
 			},
 		},
-		NextFamilyID: 1,
+		NextFamilyID:     1,
+		NextConstraintID: 2,
 		PrimaryIndex: descpb.IndexDescriptor{
+			ConstraintID:   1,
 			Name:           tabledesc.LegacyPrimaryKeyIndexName,
 			ID:             1,
 			Unique:         true,
