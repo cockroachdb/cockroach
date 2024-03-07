@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/isql",
         "//pkg/sql/privilege",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/syntheticprivilege",

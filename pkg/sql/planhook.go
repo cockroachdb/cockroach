@@ -109,7 +109,7 @@ type PlanHookState interface {
 	LeaseMgr() *lease.Manager
 	ExprEvaluator(op string) exprutil.Evaluator
 	User() username.SQLUsername
-	AuthorizationAccessor
+	eval.AuthorizationAccessor
 	// The role create/drop call into OSS code to reuse plan nodes.
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
 	GetAllRoles(ctx context.Context) (map[username.SQLUsername]bool, error)

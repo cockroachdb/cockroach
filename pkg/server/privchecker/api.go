@@ -15,10 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -69,7 +69,7 @@ type SQLPrivilegeChecker interface {
 
 	// SetSQLAuthzAccessorFactory sets the accessor factory that can be
 	// used by HasGlobalPrivilege.
-	SetAuthzAccessorFactory(factory func(opName string) (sql.AuthorizationAccessor, func()))
+	SetAuthzAccessorFactory(factory func(opName string) (eval.AuthorizationAccessor, func()))
 
 	// HasGlobalPrivilege is a convenience wrapper
 	HasGlobalPrivilege(ctx context.Context, user username.SQLUsername, privilege privilege.Kind) (bool, error)

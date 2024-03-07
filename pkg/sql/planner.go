@@ -442,6 +442,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.StreamManagerFactory = p
 	p.extendedEvalCtx.PrivilegedAccessor = p
 	p.extendedEvalCtx.SessionAccessor = p
+	p.extendedEvalCtx.AuthorizationAccessor = p
 	p.extendedEvalCtx.ClientNoticeSender = p
 	p.extendedEvalCtx.Sequence = p
 	p.extendedEvalCtx.Tenant = p

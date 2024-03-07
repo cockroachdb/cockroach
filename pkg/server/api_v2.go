@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/gorilla/mux"
@@ -207,7 +208,7 @@ func registerRoutes(
 		}
 
 		// Tell the authz server how to connect to SQL.
-		authzAccessorFactory := func(ctx context.Context, opName string) (sql.AuthorizationAccessor, func()) {
+		authzAccessorFactory := func(ctx context.Context, opName string) (eval.AuthorizationAccessor, func()) {
 			txn := a.db.NewTxn(ctx, opName)
 			p, cleanup := sql.NewInternalPlanner(
 				opName,
@@ -217,7 +218,7 @@ func registerRoutes(
 				a.sqlServer.execCfg,
 				sql.NewInternalSessionData(ctx, a.sqlServer.execCfg.Settings, opName),
 			)
-			return p.(sql.AuthorizationAccessor), cleanup
+			return p.(eval.AuthorizationAccessor), cleanup
 		}
 
 		if route.requiresAuth {

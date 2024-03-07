@@ -93,7 +93,7 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 	return node, nil
 }
 
-func CanManageTenant(ctx context.Context, p AuthorizationAccessor) error {
+func CanManageTenant(ctx context.Context, p eval.AuthorizationAccessor) error {
 	isAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
 		return err

@@ -2564,6 +2564,7 @@ var builtinOidsArray = []string{
 	2596: `array_agg(arg1: refcursor[]) -> refcursor[][]`,
 	2597: `array_agg(arg1: tuple[]) -> tuple[][]`,
 	2598: `setseed(seed: float) -> void`,
+	2599: `crdb_internal.user_can_view_job(job_id: int, job_payload: bytes) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
