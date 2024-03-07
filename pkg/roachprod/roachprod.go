@@ -2417,7 +2417,22 @@ func CreateLoadBalancer(
 	}
 
 	// Create a load balancer for the service's port.
-	return vm.FanOut(c.VMs, func(provider vm.Provider, vms vm.List) error {
-		return provider.CreateLoadBalancer(l, vms, port)
+	err = vm.FanOut(c.VMs, func(provider vm.Provider, vms vm.List) error {
+		createErr := provider.CreateLoadBalancer(l, vms, port)
+		if createErr != nil {
+			l.Errorf("Cleaning up partially-created load balancer (prev err: %s)", createErr)
+			cleanupErr := provider.DeleteLoadBalancer(l, vms, port)
+			if cleanupErr != nil {
+				l.Errorf("Error while cleaning up partially-created load balancer: %s", cleanupErr)
+			} else {
+				l.Printf("Cleaned up partially-created load balancer")
+			}
+			return errors.CombineErrors(createErr, cleanupErr)
+		}
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+	return nil
 }

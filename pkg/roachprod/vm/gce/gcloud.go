@@ -1561,9 +1561,10 @@ func listBackendServices(project string) ([]jsonBackendService, error) {
 }
 
 type jsonForwardingRule struct {
-	Name     string `json:"name"`
-	SelfLink string `json:"selfLink"`
-	Target   string `json:"target"`
+	Name      string `json:"name"`
+	IPAddress string `json:"IPAddress"`
+	SelfLink  string `json:"selfLink"`
+	Target    string `json:"target"`
 }
 
 func listForwardingRules(project string) ([]jsonForwardingRule, error) {
@@ -1605,11 +1606,24 @@ func listHealthChecks(project string) ([]jsonHealthCheck, error) {
 }
 
 // deleteLoadBalancerResources deletes all load balancer resources associated
-// with a given cluster and project. This function does not return an error if
-// the resources do not exist. Multiple load balancers can be associated with a
-// single cluster, so we need to delete all of them. Health checks associated
-// with the cluster are also deleted.
-func deleteLoadBalancerResources(project, clusterName string) error {
+// with a given cluster and project. If a portFilter is specified only the load
+// balancer resources associated with the specified port will be deleted. This
+// function does not return an error if the resources do not exist. Multiple
+// load balancers can be associated with a single cluster, so we need to delete
+// all of them. Health checks associated with the cluster are also deleted.
+func deleteLoadBalancerResources(project, clusterName, portFilter string) error {
+	// Convenience function to determine if a load balancer resource should be
+	// excluded from deletion.
+	shouldExclude := func(name string, expectedResourceType string) bool {
+		cluster, resourceType, port, ok := loadBalancerNameParts(name)
+		if !ok || cluster != clusterName || resourceType != expectedResourceType {
+			return true
+		}
+		if portFilter != "" && strconv.Itoa(port) != portFilter {
+			return true
+		}
+		return false
+	}
 	// List all the components of the load balancer resources tied to the cluster.
 	services, err := listBackendServices(project)
 	if err != nil {
@@ -1618,6 +1632,9 @@ func deleteLoadBalancerResources(project, clusterName string) error {
 	filteredServices := make([]jsonBackendService, 0)
 	// Find all backend services tied to the managed instance group.
 	for _, service := range services {
+		if shouldExclude(service.Name, "load-balancer") {
+			continue
+		}
 		for _, backend := range service.Backends {
 			if strings.HasSuffix(backend.Group, fmt.Sprintf("instanceGroups/%s", instanceGroupName(clusterName))) {
 				filteredServices = append(filteredServices, service)
@@ -1631,6 +1648,9 @@ func deleteLoadBalancerResources(project, clusterName string) error {
 	}
 	filteredProxies := make([]jsonTargetTCPProxy, 0)
 	for _, proxy := range proxies {
+		if shouldExclude(proxy.Name, "proxy") {
+			continue
+		}
 		for _, service := range filteredServices {
 			if proxy.Service == service.SelfLink {
 				filteredProxies = append(filteredProxies, proxy)
@@ -1656,13 +1676,10 @@ func deleteLoadBalancerResources(project, clusterName string) error {
 	}
 	filteredHealthChecks := make([]jsonHealthCheck, 0)
 	for _, healthCheck := range healthChecks {
-		cluster, resourceType, _, ok := loadBalancerNameParts(healthCheck.Name)
-		if !ok {
+		if shouldExclude(healthCheck.Name, "health-check") {
 			continue
 		}
-		if cluster == clusterName && resourceType == "health-check" {
-			filteredHealthChecks = append(filteredHealthChecks, healthCheck)
-		}
+		filteredHealthChecks = append(filteredHealthChecks, healthCheck)
 	}
 
 	// Delete all the components of the load balancer.
@@ -1742,6 +1759,15 @@ func deleteLoadBalancerResources(project, clusterName string) error {
 		})
 	}
 	return g.Wait()
+}
+
+// DeleteLoadBalancer implements the vm.Provider interface.
+func (p *Provider) DeleteLoadBalancer(_ *logger.Logger, vms vm.List, port int) error {
+	clusterName, err := vms[0].ClusterName()
+	if err != nil {
+		return err
+	}
+	return deleteLoadBalancerResources(vms[0].Project, clusterName, strconv.Itoa(port))
 }
 
 // loadBalancerNameParts returns the cluster name, resource type, and port of a

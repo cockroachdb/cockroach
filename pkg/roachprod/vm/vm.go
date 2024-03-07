@@ -490,6 +490,9 @@ type Provider interface {
 	// CreateLoadBalancer creates a load balancer, for a specific port, that
 	// delegates to the given cluster.
 	CreateLoadBalancer(l *logger.Logger, vms List, port int) error
+
+	// DeleteLoadBalancer deletes a load balancers created for a specific port.
+	DeleteLoadBalancer(l *logger.Logger, vms List, port int) error
 }
 
 // DeleteCluster is an optional capability for a Provider which can
