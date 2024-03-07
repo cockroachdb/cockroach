@@ -19,9 +19,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/datadriven"
-
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/datadriven"
 )
 
 func (env *InteractionEnv) handleRaftLog(t *testing.T, d datadriven.TestData) error {

@@ -96,7 +96,9 @@ func toConfChangeSingle(cs pb.ConfState) (out []pb.ConfChangeSingle, in []pb.Con
 	return out, in
 }
 
-func chain(chg Changer, ops ...func(Changer) (tracker.Config, tracker.ProgressMap, error)) (tracker.Config, tracker.ProgressMap, error) {
+func chain(
+	chg Changer, ops ...func(Changer) (tracker.Config, tracker.ProgressMap, error),
+) (tracker.Config, tracker.ProgressMap, error) {
 	for _, op := range ops {
 		cfg, trk, err := op(chg)
 		if err != nil {

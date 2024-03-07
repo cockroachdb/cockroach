@@ -18,9 +18,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/datadriven"
-
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/datadriven"
 )
 
 func (env *InteractionEnv) handleStatus(t *testing.T, d datadriven.TestData) error {

@@ -21,10 +21,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/datadriven"
-
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/datadriven"
 )
 
 func TestConfChangeDataDriven(t *testing.T) {

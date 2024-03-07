@@ -17,9 +17,8 @@ package raft
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEntryID(t *testing.T) {

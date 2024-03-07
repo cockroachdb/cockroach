@@ -17,11 +17,10 @@ package rafttest
 import (
 	"testing"
 
-	"github.com/cockroachdb/datadriven"
-	"github.com/stretchr/testify/require"
-
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 func (env *InteractionEnv) handleSendSnapshot(t *testing.T, d datadriven.TestData) error {

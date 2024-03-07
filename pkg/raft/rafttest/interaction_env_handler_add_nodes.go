@@ -20,10 +20,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/datadriven"
-
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/datadriven"
 )
 
 func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) error {

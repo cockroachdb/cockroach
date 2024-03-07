@@ -18,9 +18,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStorageTerm(t *testing.T) {
