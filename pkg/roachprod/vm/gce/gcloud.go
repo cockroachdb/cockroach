@@ -1111,6 +1111,9 @@ func (p *Provider) Create(
 	time := timeutil.Now().Format(time.RFC3339)
 	time = strings.ToLower(strings.ReplaceAll(time, ":", "_"))
 	m[vm.TagCreated] = time
+	if providerOpts.useSpot {
+		m[vm.TagSpotInstance] = "true"
+	}
 
 	var labelPairs []string
 	addLabel := func(key, value string) {
