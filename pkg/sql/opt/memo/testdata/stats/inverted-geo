@@ -106,8 +106,8 @@ memo (optimized, ~14KB, required=[presentation: i:1])
  │    │    ├── best: (select G6="[ordering: +1] [limit hint: 9.00]" G7)
  │    │    └── cost: 2656.90
  │    └── []
- │         ├── best: (select G6 G7)
- │         └── cost: 4148.55
+ │         ├── best: (select G8 G7)
+ │         └── cost: 3671.93
  ├── G5: (const 1)
  ├── G6: (scan t,cols=(1,2))
  │    ├── [ordering: +1] [limit hint: 9.00]
@@ -118,12 +118,12 @@ memo (optimized, ~14KB, required=[presentation: i:1])
  │         └── cost: 2128.52
  ├── G7: (filters G9)
  ├── G8: (index-join G10 t,cols=(1,2))
- │    ├── [ordering: +1] [limit hint: 5.34]
+ │    ├── [ordering: +1] [limit hint: 1.53]
  │    │    ├── best: (sort G8)
- │    │    └── cost: 8759.99
+ │    │    └── cost: 3399.85
  │    └── []
  │         ├── best: (index-join G10 t,cols=(1,2))
- │         └── cost: 8469.67
+ │         └── cost: 3329.20
  ├── G9: (function G11 st_intersects)
  ├── G10: (inverted-filter G12 g_inverted_key)
  │    └── []
@@ -165,12 +165,12 @@ project
       │    ├── limit hint: 1.00
       │    ├── sort
       │    │    ├── columns: i:1(int) g:2(geometry)
-      │    │    ├── stats: [rows=1.4e-06]
+      │    │    ├── stats: [rows=4e-07]
       │    │    ├── ordering: +1
       │    │    ├── limit hint: 0.00
       │    │    └── index-join t
       │    │         ├── columns: i:1(int) g:2(geometry)
-      │    │         ├── stats: [rows=1.4e-06]
+      │    │         ├── stats: [rows=4e-07]
       │    │         └── inverted-filter
       │    │              ├── columns: rowid:3(int!null)
       │    │              ├── inverted expression: /6
@@ -178,7 +178,7 @@ project
       │    │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │              ├── pre-filterer expression
       │    │              │    └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool]
-      │    │              ├── stats: [rows=1.4e-06]
+      │    │              ├── stats: [rows=4e-07]
       │    │              ├── key: (3)
       │    │              └── scan t@t_g_idx
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
@@ -385,12 +385,12 @@ project
       │    ├── limit hint: 1.00
       │    ├── sort
       │    │    ├── columns: i:1(int) g:2(geometry)
-      │    │    ├── stats: [rows=1.42e-06]
+      │    │    ├── stats: [rows=4e-07]
       │    │    ├── ordering: +1
       │    │    ├── limit hint: 0.00
       │    │    └── index-join t
       │    │         ├── columns: i:1(int) g:2(geometry)
-      │    │         ├── stats: [rows=1.42e-06]
+      │    │         ├── stats: [rows=4e-07]
       │    │         └── inverted-filter
       │    │              ├── columns: rowid:3(int!null)
       │    │              ├── inverted expression: /6
@@ -398,7 +398,7 @@ project
       │    │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │              ├── pre-filterer expression
       │    │              │    └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool]
-      │    │              ├── stats: [rows=1.42e-06]
+      │    │              ├── stats: [rows=4e-07]
       │    │              ├── key: (3)
       │    │              └── scan t@t_g_idx
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
@@ -466,7 +466,7 @@ select
  ├── stats: [rows=11.11111, distinct(1)=10.5717, null(1)=10, distinct(2)=4, null(2)=0]
  ├── index-join t
  │    ├── columns: i:1(int) g:2(geometry)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=76.92308]
  │    └── inverted-filter
  │         ├── columns: rowid:3(int!null)
  │         ├── inverted expression: /6
@@ -477,7 +477,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
- │         ├── stats: [rows=100]
+ │         ├── stats: [rows=76.92308]
  │         ├── key: (3)
  │         └── scan t@t_g_idx
  │              ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
@@ -508,7 +508,7 @@ project
       ├── stats: [rows=11.11111, distinct(2)=4, null(2)=0]
       ├── index-join t
       │    ├── columns: i:1(int) g:2(geometry)
-      │    ├── stats: [rows=100]
+      │    ├── stats: [rows=76.92308]
       │    └── inverted-filter
       │         ├── columns: rowid:3(int!null)
       │         ├── inverted expression: /6
@@ -519,7 +519,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=100]
+      │         ├── stats: [rows=76.92308]
       │         ├── key: (3)
       │         └── scan t@t_g_idx
       │              ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
