@@ -2564,6 +2564,8 @@ var builtinOidsArray = []string{
 	2596: `array_agg(arg1: refcursor[]) -> refcursor[][]`,
 	2597: `array_agg(arg1: tuple[]) -> tuple[][]`,
 	2598: `setseed(seed: float) -> void`,
+	2599: `levenshtein_less_equal(source: string, target: string, max_d: int) -> int`,
+	2600: `levenshtein_less_equal(source: string, target: string, ins_cost: int, del_cost: int, sub_cost: int, max_d: int) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
