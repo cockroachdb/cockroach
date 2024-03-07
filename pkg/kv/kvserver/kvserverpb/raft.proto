@@ -196,6 +196,11 @@ message SnapshotRequest {
     // metadata present in the snapshot, but not file contents.
     bool shared_replicate = 12;
 
+    // If true, the snapshot could contain external files. Such files
+    // will have their metadata present in the snapshot but not the
+    // file contents.
+    bool external_replicate = 13;
+
     reserved 1, 4, 6, 7, 8, 9;
   }
 
@@ -242,6 +247,54 @@ message SnapshotRequest {
     uint64 size = 10;
   }
 
+  // ExternalTable represents one SSTable present in external storage.
+  // Intended to be the protobuf version of pebble.ExternalFile.
+  message ExternalTable {
+    // Used by the Pebble objstorage package to generate new blob storage drivers.
+    // Reserved for future use.
+    bytes locator = 1;
+
+    // ObjName is the unique name of this sstable on Locator.
+    string object_name = 2;
+
+    // Physical size of the sstable in bytes.
+    uint64 size = 3;
+
+    // StartKey is the loose, inclusive start key of the sstable.
+    bytes StartKey = 4;
+    // StartKey is the loose, exclusive end key of the sstable.
+    bytes EndKey = 5;
+
+    // HasPointKey denote whether this file contains point keys.
+    bool has_point_key = 6;
+
+    // HasRangeKey denote whether this file contains range keys.
+    bool has_range_key = 7;
+
+    // ContentPrefix and SyntheticPrefix denote a prefix replacement rule causing
+    // a file, in which all keys have prefix ContentPrefix, to appear whenever it
+    // is accessed as if those keys all instead have prefix SyntheticPrefix.
+    //
+    // SyntheticPrefix must be a prefix of both Bounds.Start and Bounds.End.
+    bytes content_prefix = 8;
+    bytes synthetic_prefix = 9;
+
+    // SyntheticSuffix will replace the suffix of every key in the file during
+    // iteration. Note that the file itself is not modified, rather, every key
+    // returned by an iterator will have the synthetic suffix.
+    //
+    // SyntheticSuffix can only be used under the following conditions:
+    //  - the synthetic suffix must sort before any non-empty suffixes in the
+    //    backing sst (the entire sst, not just the part restricted to Bounds).
+    //  - the backing sst must not contain multiple keys with the same prefix.
+    bytes synthetic_suffix = 10;
+
+    // LSM level of the original sstable. This sstable will go into the same
+    // level in the destination LSM.
+    int32 level = 11;
+
+  }
+
   Header header = 1;
 
   // A BatchRepr. Multiple kv_batches may be sent across multiple request messages.
@@ -258,6 +311,8 @@ message SnapshotRequest {
   // the end of the snapshot (i.e. before the final = true request), and this
   // flag must be set to true before any user keys are streamed.
   bool transition_from_shared_to_regular_replicate = 6;
+
+  repeated ExternalTable external_tables = 7 [(gogoproto.nullable) = false];
 
   reserved 3;
 }
