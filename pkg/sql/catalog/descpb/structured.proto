@@ -1558,8 +1558,7 @@ message SchemaDescriptor {
     optional uint32 id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
 
-    // ArgTypes contains only IN / INOUT parameters when IsProcedure is false,
-    // and all parameters when IsProcedure is true.
+    // ArgTypes contains only input parameters.
     repeated sql.sem.types.T arg_types = 2;
 
     optional sql.sem.types.T return_type = 3;
@@ -1567,6 +1566,12 @@ message SchemaDescriptor {
     optional bool return_set = 4 [(gogoproto.nullable) = false];
 
     optional bool is_procedure = 5 [(gogoproto.nullable) = false];
+
+    // ToInputParamOrdinal is only set when IsProcedure is true (and when the
+    // proto was created on at least 24.1 version). It contains a mapping from
+    // all parameters to their ordinal in ArgTypes - OUT parameters get a
+    // special value of -1.
+    repeated int32 to_input_param_ordinal = 6;
   }
 
   // Function contains a group of UDFs with the same name.

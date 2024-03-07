@@ -272,6 +272,14 @@ type Overload struct {
 	// the signature of the function), RoutineParams contains all parameters as
 	// well as their class.
 	RoutineParams RoutineParams
+	// ToInputParamOrdinal is only set when Type is ProcedureRoutine (and when
+	// the corresponding FunctionSignature proto was created on at least 24.1
+	// version). It contains a mapping from all parameters to their ordinal in
+	// Types - OUT parameters get a special value of -1.
+	//
+	// On the main code path it is only set when UDFContainsOnlySignature is
+	// true (meaning that we only had access to the FunctionSignature proto).
+	ToInputParamOrdinal []int32
 }
 
 // params implements the overloadImpl interface.
@@ -282,6 +290,10 @@ func (b Overload) returnType() ReturnTyper { return b.ReturnType }
 
 // preferred implements the overloadImpl interface.
 func (b Overload) preferred() bool { return b.PreferredOverload }
+
+func (b Overload) toInputParamOrdinal() []int32 {
+	return b.ToInputParamOrdinal
+}
 
 // FixedReturnType returns a fixed type that the function returns, returning Any
 // if the return type is based on the function's arguments.
@@ -351,6 +363,9 @@ type overloadImpl interface {
 	returnType() ReturnTyper
 	// allows manually resolving preference between multiple compatible overloads.
 	preferred() bool
+	// toInputParamOrdinal is only used for stored procedures. See comment on
+	// Overload.ToInputParamOrdinal for more details.
+	toInputParamOrdinal() []int32
 }
 
 var _ overloadImpl = &Overload{}
@@ -828,16 +843,36 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 
 	// Filter out incorrect parameter length overloads.
 	exprsLen := len(s.exprs)
-	matchLen := func(params TypeList) bool { return params.MatchLen(exprsLen) }
-	s.overloadIdxs = filterParams(s.overloadIdxs, s.params, matchLen)
+	matchLen := func(ov overloadImpl, params TypeList) bool {
+		if ov.toInputParamOrdinal() == nil {
+			return params.MatchLen(exprsLen)
+		}
+		return len(ov.toInputParamOrdinal()) == exprsLen
+	}
+	s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, matchLen)
+
+	makeFilter := func(i int, fn func(params TypeList, ordinal int) bool) func(overloadImpl, TypeList) bool {
+		return func(ov overloadImpl, params TypeList) bool {
+			ordinal := i
+			if isOutParam := ov.toInputParamOrdinal(); i < len(isOutParam) {
+				if isOutParam[i] < 0 {
+					// If this expression is for the OUT parameter - we should
+					// ignore it.
+					return true
+				}
+				ordinal = int(isOutParam[i])
+			}
+			return fn(params, ordinal)
+		}
+	}
 
 	// Filter out overloads which constants cannot become.
 	for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 		constExpr := s.exprs[i].(Constant)
-		filter := func(params TypeList) bool {
-			return canConstantBecome(constExpr, params.GetAt(i))
-		}
-		s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
+		filter := makeFilter(i, func(params TypeList, ordinal int) bool {
+			return canConstantBecome(constExpr, params.GetAt(ordinal))
+		})
+		s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 	}
 
 	// TODO(nvanbenschoten): We should add a filtering step here to filter
@@ -865,7 +900,16 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		var sameType *types.T
 		for _, ovIdx := range s.overloadIdxs {
 			ov := s.overloads[ovIdx]
-			typ := ov.params().GetAt(i)
+			ordinal := i
+			if toInputParamOrdinal := ov.toInputParamOrdinal(); i < len(toInputParamOrdinal) {
+				if toInputParamOrdinal[i] < 0 {
+					// If this expression is for the OUT parameter - we should
+					// ignore it.
+					continue
+				}
+				ordinal = int(toInputParamOrdinal[i])
+			}
+			typ := ov.params().GetAt(ordinal)
 			if sameType == nil {
 				sameType = typ
 			} else if !typ.Identical(sameType) {
@@ -887,11 +931,10 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			ambiguousCollatedTypes = true
 		}
 		rt := typ.ResolvedType()
-		s.overloadIdxs = filterParams(s.overloadIdxs, s.params, func(
-			params TypeList,
-		) bool {
-			return params.MatchAt(rt, i)
+		filter := makeFilter(i, func(params TypeList, ordinal int) bool {
+			return params.MatchAt(rt, ordinal)
 		})
+		s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 	}
 
 	// If we typed any exprs as AnyCollatedString but have a concrete collated
@@ -977,10 +1020,10 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 				}
 				if allConstantsAreHomogenous {
 					for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
-						filter := func(params TypeList) bool {
-							return params.GetAt(i).Equivalent(homogeneousTyp)
-						}
-						s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
+						filter := makeFilter(i, func(params TypeList, ordinal int) bool {
+							return params.GetAt(ordinal).Equivalent(homogeneousTyp)
+						})
+						s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 					}
 				}
 			}
@@ -994,10 +1037,10 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 				natural := naturalConstantType(s.exprs[i].(Constant))
 				if natural != nil {
-					filter := func(params TypeList) bool {
-						return params.GetAt(i).Equivalent(natural)
-					}
-					s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
+					filter := makeFilter(i, func(params TypeList, ordinal int) bool {
+						return params.GetAt(ordinal).Equivalent(natural)
+					})
+					s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 				}
 			}
 		}); ok {
@@ -1057,12 +1100,12 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		}
 		for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 			constExpr := s.exprs[i].(Constant)
-			filter := func(params TypeList) bool {
+			filter := makeFilter(i, func(params TypeList, ordinal int) bool {
 				semaCtx := MakeSemaContext()
-				_, err := constExpr.ResolveAsType(ctx, &semaCtx, params.GetAt(i))
+				_, err := constExpr.ResolveAsType(ctx, &semaCtx, params.GetAt(ordinal))
 				return err == nil
-			}
-			s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
+			})
+			s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 		}
 		if ok, err := checkReturn(ctx, semaCtx, s); ok {
 			return err
@@ -1076,10 +1119,10 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			// instead of unsupported error (0 overloads) when applicable.
 			prevOverloadIdxs := s.overloadIdxs
 			for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
-				filter := func(params TypeList) bool {
-					return params.GetAt(i).Equivalent(bestConstType)
-				}
-				s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
+				filter := makeFilter(i, func(params TypeList, ordinal int) bool {
+					return params.GetAt(ordinal).Equivalent(bestConstType)
+				})
+				s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 			}
 			if ok, err := checkReturn(ctx, semaCtx, s); ok {
 				if len(s.overloadIdxs) == 0 {
@@ -1120,10 +1163,10 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			if _, err := s.exprs[i].TypeCheck(ctx, semaCtx, homogeneousTyp); err != nil {
 				return err
 			}
-			filter := func(params TypeList) bool {
-				return params.GetAt(i).Equivalent(homogeneousTyp)
-			}
-			s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
+			filter := makeFilter(i, func(params TypeList, ordinal int) bool {
+				return params.GetAt(ordinal).Equivalent(homogeneousTyp)
+			})
+			s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 		}
 		if ok, err := checkReturn(ctx, semaCtx, s); ok {
 			return err
@@ -1234,11 +1277,11 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 				if rightIsNull {
 					rightType = leftType
 				}
-				filter := func(params TypeList) bool {
+				filter := func(_ overloadImpl, params TypeList) bool {
 					return params.GetAt(0).Equivalent(leftType) &&
 						params.GetAt(1).Equivalent(rightType)
 				}
-				s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
+				s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 			}
 		}); ok {
 			return err
@@ -1277,11 +1320,11 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 				if rightIsNull {
 					rightType = types.String
 				}
-				filter := func(params TypeList) bool {
+				filter := func(_ overloadImpl, params TypeList) bool {
 					return params.GetAt(0).Equivalent(leftType) &&
 						params.GetAt(1).Equivalent(rightType)
 				}
-				s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
+				s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 			}
 		}); ok {
 			return err
@@ -1317,10 +1360,12 @@ func filterAttempt(
 	return false, nil
 }
 
-func filterParams(idxs []uint8, params []TypeList, fn func(i TypeList) bool) []uint8 {
+func filterParams(
+	idxs []uint8, overloads []overloadImpl, params []TypeList, fn func(overloadImpl, TypeList) bool,
+) []uint8 {
 	i, n := 0, len(idxs)
 	for i < n {
-		if fn(params[idxs[i]]) {
+		if fn(overloads[idxs[i]], params[idxs[i]]) {
 			i++
 		} else if n--; i != n {
 			idxs[i], idxs[n] = idxs[n], idxs[i]
@@ -1329,10 +1374,10 @@ func filterParams(idxs []uint8, params []TypeList, fn func(i TypeList) bool) []u
 	return idxs[:n]
 }
 
-func filterOverloads(idxs []uint8, params []overloadImpl, fn func(overloadImpl) bool) []uint8 {
+func filterOverloads(idxs []uint8, overloads []overloadImpl, fn func(overloadImpl) bool) []uint8 {
 	i, n := 0, len(idxs)
 	for i < n {
-		if fn(params[idxs[i]]) {
+		if fn(overloads[idxs[i]]) {
 			i++
 		} else if n--; i != n {
 			idxs[i], idxs[n] = idxs[n], idxs[i]
@@ -1387,9 +1432,17 @@ func checkReturn(
 
 	case 1:
 		idx := s.overloadIdxs[0]
+		toInputParamOrdinal := s.overloads[idx].toInputParamOrdinal()
 		p := s.params[idx]
 		for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
-			des := p.GetAt(i)
+			ordinal := i
+			if i < len(toInputParamOrdinal) {
+				if toInputParamOrdinal[i] < 0 {
+					continue
+				}
+				ordinal = int(toInputParamOrdinal[i])
+			}
+			des := p.GetAt(ordinal)
 			typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, des)
 			if err != nil {
 				return false, pgerror.Wrapf(
@@ -1420,8 +1473,16 @@ func checkReturnPlaceholdersAtIdx(
 	ctx context.Context, semaCtx *SemaContext, s *overloadTypeChecker, idx uint8,
 ) (ok bool, _ error) {
 	p := s.params[idx]
+	toInputParamOrdinal := s.overloads[idx].toInputParamOrdinal()
 	for i, ok := s.placeholderIdxs.Next(0); ok; i, ok = s.placeholderIdxs.Next(i + 1) {
-		des := p.GetAt(i)
+		ordinal := i
+		if i < len(toInputParamOrdinal) {
+			if toInputParamOrdinal[i] < 0 {
+				continue
+			}
+			ordinal = int(toInputParamOrdinal[i])
+		}
+		des := p.GetAt(ordinal)
 		typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, des)
 		if err != nil {
 			if des.IsAmbiguous() {
