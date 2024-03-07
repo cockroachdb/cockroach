@@ -148,7 +148,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		b.semaCtx.Annotations = oldSemaCtxAnn
 	}
 
-	// TODO(100405): check this logic for procedures.
 	if language == tree.RoutineLangPLpgSQL {
 		paramNameSeen := make(map[tree.Name]struct{})
 		for _, param := range cf.Params {
@@ -210,8 +209,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			}
 		}
 
-		// Add this parameter to the base scope of the body if needed.
-		if tree.IsParamIncludedIntoSignature(param.Class, cf.IsProcedure) {
+		// Add all input parameters to the base scope of the body.
+		if tree.IsInParamClass(param.Class) {
 			paramColName := funcParamColName(param.Name, i)
 			col := b.synthesizeColumn(bodyScope, paramColName, typ, nil /* expr */, nil /* scalar */)
 			col.setParamOrd(i)
@@ -234,10 +233,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 	// Determine OUT parameter based return type.
 	var outParamType *types.T
-	if len(outParamTypes) == 1 {
-		outParamType = outParamTypes[0]
-	} else if len(outParamTypes) > 1 {
+	if (cf.IsProcedure && len(outParamTypes) > 0) || len(outParamTypes) > 1 {
 		outParamType = types.MakeLabeledTuple(outParamTypes, outParamNames)
+	} else if len(outParamTypes) == 1 {
+		outParamType = outParamTypes[0]
 	}
 
 	var funcReturnType *types.T
@@ -356,7 +355,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// TODO(mgartner): stmtScope.cols does not describe the result
 		// columns of the statement. We should use physical.Presentation
 		// instead.
-		err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols)
+		isSQLProcedure := cf.IsProcedure && language == tree.RoutineLangSQL
+		err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols, isSQLProcedure)
 		if err != nil {
 			panic(err)
 		}
@@ -406,7 +406,11 @@ func formatFuncBodyStmt(
 }
 
 func validateReturnType(
-	ctx context.Context, semaCtx *tree.SemaContext, expected *types.T, cols []scopeColumn,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	expected *types.T,
+	cols []scopeColumn,
+	isSQLProcedure bool,
 ) error {
 	// The return type must be supported by the current cluster version.
 	checkUnsupportedType(ctx, semaCtx, expected)
@@ -438,8 +442,14 @@ func validateReturnType(
 	}
 
 	if len(cols) == 1 {
-		if !expected.Equivalent(cols[0].typ) &&
-			!cast.ValidCast(cols[0].typ, expected, cast.ContextAssignment) {
+		typeToCheck := expected
+		if isSQLProcedure && types.IsRecordType(expected) && len(expected.TupleContents()) == 1 {
+			// For SQL procedures with output parameters we get a record type
+			// even with a single column.
+			typeToCheck = expected.TupleContents()[0]
+		}
+		if !typeToCheck.Equivalent(cols[0].typ) &&
+			!cast.ValidCast(cols[0].typ, typeToCheck, cast.ContextAssignment) {
 			return pgerror.WithCandidateCode(
 				errors.WithDetailf(
 					errors.Newf("return type mismatch in function declared to return %s", expected.Name()),

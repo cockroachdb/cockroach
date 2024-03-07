@@ -484,6 +484,36 @@ func (desc *Mutable) RemoveFunction(name string, id descpb.ID) {
 	}
 }
 
+// ReplaceOverload updates the function signature that matches the existing
+// overload with the new one. An error is returned if the function doesn't exist
+// or a match is not found.
+func (desc *Mutable) ReplaceOverload(
+	name string,
+	existing *tree.QualifiedOverload,
+	newSignature descpb.SchemaDescriptor_FunctionSignature,
+) error {
+	fn, ok := desc.Functions[name]
+	if !ok {
+		return errors.AssertionFailedf("unexpectedly didn't find a function %s", name)
+	}
+	for i := range fn.Signatures {
+		sig := fn.Signatures[i]
+		match := existing.Types.Length() == len(sig.ArgTypes) &&
+			len(existing.ToInputParamOrdinal) == len(sig.ToInputParamOrdinal)
+		for j := 0; match && j < len(sig.ArgTypes); j++ {
+			match = existing.Types.GetAt(j).Equivalent(sig.ArgTypes[j])
+		}
+		for j := 0; match && j < len(sig.ToInputParamOrdinal); j++ {
+			match = existing.ToInputParamOrdinal[j] == sig.ToInputParamOrdinal[j]
+		}
+		if match {
+			fn.Signatures[i] = newSignature
+			return nil
+		}
+	}
+	return errors.AssertionFailedf("unexpectedly didn't find overload match for function %s with types %v", name, existing.Types.Types())
+}
+
 // GetObjectType implements the Object interface.
 func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Schema
@@ -522,6 +552,7 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			},
 			Type:                     routineType,
 			UDFContainsOnlySignature: true,
+			ToInputParamOrdinal:      sig.ToInputParamOrdinal,
 		}
 		if funcDescPb.Signatures[i].ReturnSet {
 			overload.Class = tree.GeneratorClass

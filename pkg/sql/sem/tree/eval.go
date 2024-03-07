@@ -86,6 +86,10 @@ func (*UnaryOp) preferred() bool {
 	return false
 }
 
+func (*UnaryOp) toInputParamOrdinal() []int32 {
+	return nil
+}
+
 func unaryOpFixups(
 	ops map[UnaryOperatorSymbol]*UnaryOpOverloads,
 ) map[UnaryOperatorSymbol]*UnaryOpOverloads {
@@ -258,6 +262,10 @@ func (op *BinOp) returnType() ReturnTyper {
 
 func (op *BinOp) preferred() bool {
 	return op.PreferredOverload
+}
+
+func (op *BinOp) toInputParamOrdinal() []int32 {
+	return nil
 }
 
 // AppendToMaybeNullArray appends an element to an array. If the first
@@ -1400,6 +1408,10 @@ func (op *CmpOp) returnType() ReturnTyper {
 
 func (op *CmpOp) preferred() bool {
 	return op.PreferredOverload
+}
+
+func (op *CmpOp) toInputParamOrdinal() []int32 {
+	return nil
 }
 
 func cmpOpFixups(

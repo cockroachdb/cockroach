@@ -785,7 +785,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	signatureTypes := make(tree.ParamTypes, 0, len(desc.Params))
 	for _, param := range desc.Params {
 		class := ToTreeRoutineParamClass(param.Class)
-		if tree.IsParamIncludedIntoSignature(class, desc.IsProcedure()) {
+		if tree.IsInParamClass(class) {
 			signatureTypes = append(signatureTypes, tree.ParamType{Name: param.Name, Typ: param.Type})
 		}
 		ret.RoutineParams = append(ret.RoutineParams, tree.RoutineParam{

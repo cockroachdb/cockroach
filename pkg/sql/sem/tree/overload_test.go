@@ -113,6 +113,10 @@ func (to testOverload) preferred() bool {
 	return to.pref
 }
 
+func (to *testOverload) toInputParamOrdinal() []int32 {
+	return nil
+}
+
 func (to testOverload) withPreferred(pref bool) *testOverload {
 	to.pref = pref
 	return &to
@@ -487,7 +491,7 @@ func TestGetMostSignificantOverload(t *testing.T) {
 			}
 			overload, err := getMostSignificantOverload(
 				tc.overloads, impls, filters, tc.searchPath, &expr, nil, /* typedInputExprs */
-				func() string { return "some signature" },
+				func() string { return "some signature" }, nil, /* ambiguousErrorOverride */
 			)
 			if tc.expectedErr != "" {
 				require.Error(t, err)
