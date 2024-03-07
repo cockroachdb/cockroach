@@ -1910,6 +1910,37 @@ func (p *Provider) CreateLoadBalancer(_ *logger.Logger, vms vm.List, port int) e
 	return g.Wait()
 }
 
+// ListLoadBalancers returns the list of load balancers associated with the
+// given VMs. The VMs have to be part of a managed instance group. The load
+// balancers are returned as a list of service addresses.
+func (p *Provider) ListLoadBalancers(_ *logger.Logger, vms vm.List) ([]vm.ServiceAddress, error) {
+	// Only managed instance groups support load balancers.
+	if !isManaged(vms) {
+		return nil, nil
+	}
+	project := vms[0].Project
+	clusterName, err := vms[0].ClusterName()
+	if err != nil {
+		return nil, err
+	}
+	rules, err := listForwardingRules(project)
+	if err != nil {
+		return nil, err
+	}
+
+	addresses := make([]vm.ServiceAddress, 0)
+	for _, rule := range rules {
+		cluster, resourceType, port, ok := loadBalancerNameParts(rule.Name)
+		if !ok {
+			continue
+		}
+		if cluster == clusterName && resourceType == "forwarding-rule" {
+			addresses = append(addresses, vm.ServiceAddress{IP: rule.IPAddress, Port: port})
+		}
+	}
+	return addresses, nil
+}
+
 // Given a machine type, return the allowed number (> 0) of local SSDs, sorted in ascending order.
 // N.B. Only n1, n2, n2d and c2 instances are supported since we don't typically use other instance types.
 // Consult https://cloud.google.com/compute/docs/disks/#local_ssd_machine_type_restrictions for other types of instances.
@@ -2099,11 +2130,10 @@ func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 
 	var g errgroup.Group
 	for cluster, project := range clusterProjectMap {
-		cluster, project := cluster, project // capture loop variables
 		// Delete any load balancer resources associated with the cluster. Trying to
 		// delete the instance group before the load balancer resources will result
 		// in an error.
-		err := deleteLoadBalancerResources(project, cluster)
+		err := deleteLoadBalancerResources(project, cluster, "" /* portFilter */)
 		if err != nil {
 			return err
 		}
