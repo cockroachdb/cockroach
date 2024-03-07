@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/workloadindexrec"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -716,6 +717,18 @@ The last argument is a JSONB object containing the following optional fields:
 			"Scans a store's storage engine, computing statistics describing the internal keys within the span [start_key, end_key).",
 			volatility.Volatile,
 		),
+	),
+	"crdb_internal.execute_internally": makeBuiltin(
+		tree.FunctionProperties{
+			Undocumented: true,
+			Category:     builtinconstants.CategoryGenerator,
+		},
+		makeInternallyExecutedQueryGeneratorOverload(false /* withSessionBound */, false /* withOverrides */, false /* withTxn */),
+		makeInternallyExecutedQueryGeneratorOverload(true /* withSessionBound */, false /* withOverrides */, false /* withTxn */),
+		makeInternallyExecutedQueryGeneratorOverload(false /* withSessionBound */, true /* withOverrides */, false /* withTxn */),
+		makeInternallyExecutedQueryGeneratorOverload(true /* withSessionBound */, true /* withOverrides */, false /* withTxn */),
+		makeInternallyExecutedQueryGeneratorOverload(false /* withSessionBound */, true /* withOverrides */, true /* withTxn */),
+		makeInternallyExecutedQueryGeneratorOverload(true /* withSessionBound */, true /* withOverrides */, true /* withTxn */),
 	),
 }
 
@@ -3525,4 +3538,206 @@ func makeSpanStatsGenerator(
 	}
 
 	return &spanStatsValueGenerator{p: evalCtx.Planner, spans: spans}, nil
+}
+
+var internallyExecutedQueryGeneratorType = types.String
+
+func makeInternallyExecutedQueryGeneratorOverload(
+	withSessionBound, withOverrides, withTxn bool,
+) tree.Overload {
+	inputTypes := tree.ParamTypes{{Name: "query", Typ: types.String}}
+	if withSessionBound {
+		inputTypes = append(inputTypes, tree.ParamType{Name: "session_bound", Typ: types.Bool})
+	}
+	if withOverrides {
+		inputTypes = append(inputTypes, tree.ParamType{Name: "overrides", Typ: types.String})
+	}
+	if withTxn {
+		if !withOverrides {
+			// In order to not confuse two boolean arguments we require that
+			// whenever 'use_session_txn' is specified, 'overrides' must be
+			// specified too.
+			panic(errors.AssertionFailedf("'use_session_txn' requires 'overrides' to be used"))
+		}
+		inputTypes = append(inputTypes, tree.ParamType{Name: "use_session_txn", Typ: types.Bool})
+	}
+	return makeGeneratorOverload(
+		inputTypes,
+		internallyExecutedQueryGeneratorType,
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+			isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if !isAdmin {
+				return nil, errors.New("crdb_internal.execute_internally() requires admin privilege")
+			}
+			numExpectedArgs, queryIdx, sessionBoundIdx, overridesIdx, txnIdx := 1, 0, 1, 2, 3
+			if withSessionBound {
+				numExpectedArgs++
+			} else {
+				overridesIdx--
+				txnIdx--
+			}
+			if withOverrides {
+				numExpectedArgs++
+			}
+			if withTxn {
+				numExpectedArgs++
+			}
+			if len(args) != numExpectedArgs {
+				return nil, errors.Newf("expected %d argument, got %d", numExpectedArgs, len(args))
+			}
+			q, ok := args[queryIdx].(*tree.DString)
+			if !ok {
+				return nil, errors.Newf("expected string argument for 'query', got %s", args[queryIdx].ResolvedType())
+			}
+			query := string(*q)
+			// Sanity check that a single statement was provided. Note that the
+			// internal executor will parse the query too, but we'd get an
+			// assertion failure error if we gave it more than one statement -
+			// we catch those cases here.
+			stmts, err := parser.Parse(query)
+			if err != nil {
+				return nil, err
+			}
+			if len(stmts) != 1 {
+				return nil, errors.Newf("only one statement is supported, %d were given", len(stmts))
+			}
+			if stmts[0].AST.StatementReturnType() == tree.Ack {
+				// We want to disallow statements that modify txn state (like
+				// BEGIN and COMMIT). Such statements (as well as some others
+				// like changing cluster settings and dealing with prepared
+				// statements) have the Ack return type, so we'll lean on the
+				// safe side and prohibit them all.
+				return nil, errors.New("this statement is disallowed")
+			}
+			var sessionBound bool
+			if withSessionBound {
+				s, ok := args[sessionBoundIdx].(*tree.DBool)
+				if !ok {
+					return nil, errors.Newf("expected bool argument for 'session_bound', got %s", args[sessionBoundIdx].ResolvedType())
+				}
+				sessionBound = bool(*s)
+			}
+			var overrides string
+			if withOverrides {
+				o, ok := args[overridesIdx].(*tree.DString)
+				if !ok {
+					return nil, errors.Newf("expected string argument for 'overrides', got %s", args[overridesIdx].ResolvedType())
+				}
+				overrides = string(*o)
+			}
+			var useTxn bool
+			if withTxn {
+				t, ok := args[txnIdx].(*tree.DBool)
+				if !ok {
+					return nil, errors.Newf("expected string argument for 'use_session_txn', got %s", args[txnIdx].ResolvedType())
+				}
+				useTxn = bool(*t)
+				if sessionBound && useTxn {
+					return nil, errors.New("when session bound internal executor is used, it always uses the session txn - omit the last argument")
+				}
+			}
+			return newInternallyExecutedQueryIterator(evalCtx, query, sessionBound, overrides, useTxn), nil
+		},
+		"Executes the provided query via the Internal Executor and prints "+
+			"out the result, in which each row is converted to a single string. "+
+			"First argument is the single query to be executed. Optional "+
+			"'session_bound' argument specifies whether the Internal Executor "+
+			"should be bound to the current session ('false' by default). "+
+			"Optional 'overrides' argument is a comma-separated list of session "+
+			"variable overrides. Optional 'use_session_txn' argument is a boolean "+
+			"indicating whether the Internal Executor should use the session's txn "+
+			"(this is only applicable when 'session_bound' is 'false', and usage of "+
+			"this option requires specifying 'overrides' argument).",
+		volatility.Volatile,
+	)
+}
+
+type internallyExecutedQueryIterator struct {
+	evalCtx      *eval.Context
+	query        string
+	sessionBound bool
+	overrides    string
+	useTxn       bool
+	formatter    *tree.FmtCtx
+
+	rows eval.InternalRows
+	a    tree.DatumAlloc
+	buf  [1]tree.Datum
+}
+
+func newInternallyExecutedQueryIterator(
+	evalCtx *eval.Context, query string, sessionBound bool, overrides string, useTxn bool,
+) *internallyExecutedQueryIterator {
+	return &internallyExecutedQueryIterator{
+		evalCtx:      evalCtx,
+		query:        query,
+		sessionBound: sessionBound,
+		overrides:    overrides,
+		useTxn:       useTxn,
+		formatter:    tree.NewFmtCtx(tree.FmtExport),
+	}
+}
+
+// ExecuteQueryViaJobExecContext executes the provided query via the JobExecCtx
+// of the eval.Context. The method is initialized in the sql package to avoid
+// import cycles.
+var ExecuteQueryViaJobExecContext func(*eval.Context, context.Context, string, *kv.Txn, sessiondata.InternalExecutorOverride, string, ...interface{}) (eval.InternalRows, error)
+
+// Start implements the eval.ValueGenerator interface.
+func (qi *internallyExecutedQueryIterator) Start(ctx context.Context, txn *kv.Txn) error {
+	opName := "internally-executed-query-builtin"
+	var ieo sessiondata.InternalExecutorOverride
+	// Always use the session's user, even in "jobs-like" mode.
+	ieo.User = qi.evalCtx.SessionData().User()
+	ieo.MultiOverride = qi.overrides
+	var rows eval.InternalRows
+	var err error
+	if qi.sessionBound {
+		rows, err = qi.evalCtx.Planner.QueryIteratorEx(ctx, opName, ieo, qi.query)
+	} else {
+		var txnArg *kv.Txn
+		if qi.useTxn {
+			txnArg = txn
+		}
+		rows, err = ExecuteQueryViaJobExecContext(qi.evalCtx, ctx, opName, txnArg, ieo, qi.query)
+	}
+	if err != nil {
+		return err
+	}
+	qi.rows = rows
+	return nil
+}
+
+// Next implements the eval.ValueGenerator interface.
+func (qi *internallyExecutedQueryIterator) Next(ctx context.Context) (bool, error) {
+	return qi.rows.Next(ctx)
+}
+
+// Values implements the eval.ValueGenerator interface.
+func (qi *internallyExecutedQueryIterator) Values() (tree.Datums, error) {
+	datums := qi.rows.Cur()
+	qi.formatter.Reset()
+	for i, v := range datums {
+		if i > 0 {
+			qi.formatter.WriteString(", ")
+		}
+		qi.formatter.FormatNode(v)
+	}
+	qi.buf[0] = qi.a.NewDString(tree.DString(qi.formatter.String()))
+	return qi.buf[:], nil
+}
+
+// Close implements the eval.ValueGenerator interface.
+func (qi *internallyExecutedQueryIterator) Close(context.Context) {
+	if qi.rows != nil {
+		_ = qi.rows.Close()
+	}
+}
+
+// ResolvedType implements the eval.ValueGenerator interface.
+func (qi *internallyExecutedQueryIterator) ResolvedType() *types.T {
+	return internallyExecutedQueryGeneratorType
 }
