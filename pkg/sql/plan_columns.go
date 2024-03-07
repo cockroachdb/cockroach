@@ -100,6 +100,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.columns
 	case *showFingerprintsNode:
 		return n.columns
+	case *callNode:
+		return n.getResultColumns()
 
 	// Nodes with a fixed schema.
 	case *scrubNode:

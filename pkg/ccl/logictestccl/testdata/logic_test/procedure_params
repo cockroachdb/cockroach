@@ -20,11 +20,29 @@ CALL p(1, 2, 3);
 statement ok
 CREATE PROCEDURE p(IN param1 FLOAT, OUT param2 FLOAT) AS $$ BEGIN SELECT param1 INTO param2; END; $$ LANGUAGE PLpgSQL;
 
+query I colnames
+CALL p(1, 2);
+----
+param2
+1
+
+query R colnames
+CALL p(1.1, 2.2);
+----
+param2
+1.1
+
 statement error pgcode 42723 function "p" already exists with same argument types
 CREATE PROCEDURE p(OUT param1 INT, IN param2 INT) AS $$ BEGIN SELECT param2 INTO param1; END; $$ LANGUAGE PLpgSQL;
 
 statement ok
 CREATE OR REPLACE PROCEDURE p(OUT param2 INT, IN param1 INT) AS $$ BEGIN SELECT param1 INTO param2; END; $$ LANGUAGE PLpgSQL;
+
+query I colnames
+CALL p(1, 2);
+----
+param2
+2
 
 statement error pgcode 42723 function "p" already exists with same argument types
 CREATE PROCEDURE p(OUT param1 INT, IN param2 INT, OUT param3 INT) AS $$
@@ -35,6 +53,12 @@ END; $$ LANGUAGE PLpgSQL;
 
 statement ok
 CREATE PROCEDURE p(OUT param1 INT, IN param2 INT, IN param3 INT) AS $$ BEGIN SELECT param2 + param3 INTO param1; END; $$ LANGUAGE PLpgSQL;
+
+query I colnames
+CALL p(1, 2, 3);
+----
+param1
+5
 
 statement error pgcode 42723 function "p" already exists with same argument types
 CREATE PROCEDURE p(INOUT param1 INT, IN param2 INT) AS $$ BEGIN SELECT param1 + param2 INTO param1; END; $$ LANGUAGE PLpgSQL;
@@ -68,6 +92,12 @@ DROP PROCEDURE p(INT, INT, INT);
 statement ok
 DROP PROCEDURE p(INT, INT);
 
+query III colnames
+CALL p(-1, -2, -3);
+----
+param1  param2  param3
+1       2       3
+
 statement ok
 CREATE PROCEDURE p(OUT param1 INT, IN param2 INT, IN param3 INT) AS $$ BEGIN SELECT param2 + param3 INTO param1; END; $$ LANGUAGE PLpgSQL;
 
@@ -93,6 +123,35 @@ DROP PROCEDURE p;
 statement ok
 CREATE PROCEDURE p(OUT param INT) AS $$ BEGIN SELECT 1 INTO param; END $$ LANGUAGE PLpgSQL;
 
+statement error pgcode 42883 procedure p\(\) does not exist
+CALL p();
+
+query I colnames
+CALL p(NULL);
+----
+param
+1
+
+# Argument expressions for OUT parameters shouldn't be evaluated.
+query I colnames
+CALL p(1 // 0);
+----
+param
+1
+
+statement ok
+DROP PROCEDURE p;
+
+statement ok
+CREATE PROCEDURE p(IN INT, INOUT INT) AS $$ BEGIN END $$ LANGUAGE PLpgSQL;
+
+# Argument expressions for IN and INOUT parameters are evaluated.
+statement error pgcode 22012 division by zero
+CALL p(1 // 0, 1)
+
+statement error pgcode 22012 division by zero
+CALL p(1, 1 // 0)
+
 statement ok
 DROP PROCEDURE p;
 
@@ -103,6 +162,12 @@ BEGIN
   SELECT 2 INTO param2;
   SELECT 3 INTO param3;
 END $$ LANGUAGE PLpgSQL;
+
+query II colnames
+CALL p(-1, -2, NULL);
+----
+param2  param3
+2       3
 
 statement ok
 DROP PROCEDURE p;
@@ -128,7 +193,7 @@ DROP PROCEDURE p(OUT INT);
 statement ok
 CREATE PROCEDURE p(OUT param1 INT, OUT param2 INT) AS $$ BEGIN SELECT 1 INTO param2; END $$ LANGUAGE PLpgSQL;
 
-statement error pq: procedure p\(int\) does not exist
+statement error pgcode 42883 pq: procedure p\(int\) does not exist
 DROP PROCEDURE p(INT);
 
 statement ok
@@ -157,11 +222,28 @@ BEGIN
 END
 $$ LANGUAGE PLpgSQL;
 
+query II colnames
+CALL p(3, NULL);
+----
+param1  param2
+3       2
+
+query II noticetrace
+CALL p(3, NULL);
+----
+NOTICE: 2
+
 statement ok
 DROP PROCEDURE p;
 
 statement ok
 CREATE PROCEDURE p(INOUT param1 INT, OUT param2 INT) AS $$ BEGIN SELECT 3 INTO param1; END $$ LANGUAGE PLpgSQL;
+
+query II colnames
+CALL p(1, NULL);
+----
+param1  param2
+3       NULL
 
 statement ok
 CREATE OR REPLACE PROCEDURE p(INOUT param1 INT, OUT param2 INT) AS $$
@@ -174,6 +256,19 @@ BEGIN
 END
 $$ LANGUAGE PLpgSQL;
 
+query II colnames
+CALL p(1, NULL);
+----
+param1  param2
+3       4
+
+query II noticetrace
+CALL p(1, NULL);
+----
+NOTICE: 1 <NULL>
+NOTICE: 3 <NULL>
+NOTICE: 3 4
+
 statement ok
 DROP PROCEDURE p;
 
@@ -184,6 +279,12 @@ BEGIN
   SELECT 2 INTO param2;
 END
 $$ LANGUAGE PLpgSQL;
+
+query II colnames
+CALL p(3, NULL);
+----
+param1  param2
+1       2
 
 statement ok
 DROP PROCEDURE p;
@@ -216,7 +317,7 @@ DROP PROCEDURE p(OUT INT);
 statement ok
 CREATE PROCEDURE p(OUT param1 INT, OUT param2 INT) AS $$ BEGIN SELECT 1 INTO param2; END $$ LANGUAGE PLpgSQL;
 
-statement error pq: procedure p\(int\) does not exist
+statement error pgcode 42883 pq: procedure p\(int\) does not exist
 DROP PROCEDURE p(INT);
 
 statement ok
@@ -296,6 +397,12 @@ CREATE PROCEDURE p_same_name(IN a INT, OUT a INT) AS $$ BEGIN RETURN a; END $$ L
 statement ok
 CREATE PROCEDURE p_names(IN param_in INT, OUT param_out INT) AS $$ BEGIN SELECT param_in INTO param_out; END $$ LANGUAGE PLpgSQL;
 
+query I colnames
+CALL p_names(1, NULL);
+----
+param_out
+1
+
 statement error pgcode 42601 RETURN cannot have a parameter in a procedure
 CREATE PROCEDURE p_in_int(IN param INT) AS $$ BEGIN RETURN param; END; $$ LANGUAGE PLpgSQL;
 
@@ -347,6 +454,12 @@ subtest default_parameter_names
 statement ok
 CREATE PROCEDURE p_default_names(OUT INT, OUT param2 INT, IN INT, OUT INT) AS $$ BEGIN param2 = 2; END; $$ LANGUAGE PLpgSQL;
 
+query III colnames
+CALL p_default_names(NULL, NULL, 3, NULL);
+----
+column1  param2  column3
+NULL     2       NULL
+
 # However, attempting to access the parameter by the default names is invalid.
 statement error pgcode 42601 pq: \"column1\" is not a known variable
 CREATE OR REPLACE PROCEDURE p_default_names(OUT INT, OUT param2 INT, IN INT, OUT INT) AS $$ BEGIN SELECT 1 INTO column1; END; $$ LANGUAGE PLpgSQL;
@@ -371,6 +484,12 @@ CREATE PROCEDURE public.p_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT 
   END;
 $$
 
+query III colnames
+CALL p_default_names(NULL, NULL, 3, NULL);
+----
+column1  param2  column3
+NULL     NULL    3
+
 # Then we can omit the default OUT parameter name again (but still cannot use it
 # in the body).
 statement error pgcode 42601 pq: \"column3\" is not a known variable
@@ -390,6 +509,12 @@ CREATE PROCEDURE public.p_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT 
   END;
 $$
 
+query III colnames
+CALL p_default_names(NULL, NULL, 3, NULL);
+----
+column1  param2  column3
+NULL     2       NULL
+
 # Introducing the IN parameter name is ok.
 statement ok
 CREATE OR REPLACE PROCEDURE p_default_names(OUT INT, OUT param2 INT, IN in_param INT, OUT INT) AS $$ BEGIN SELECT in_param INTO param2; END; $$ LANGUAGE PLpgSQL;
@@ -405,8 +530,14 @@ CREATE PROCEDURE public.p_default_names(OUT INT8, OUT param2 INT8, IN in_param I
   END;
 $$
 
+query III colnames
+CALL p_default_names(NULL, NULL, 3, NULL);
+----
+column1  param2  column3
+NULL     3       NULL
+
 # But then the IN parameter name cannot be changed anymore.
-statement error cannot change name of input parameter "in_param"
+statement error pgcode 42P13 cannot change name of input parameter "in_param"
 CREATE OR REPLACE PROCEDURE p_default_names(OUT INT, OUT param2 INT, IN in_param_new INT, OUT INT) AS $$ BEGIN SELECT in_param_new INTO param2; END; $$ LANGUAGE PLpgSQL;
 
 subtest end
@@ -416,3 +547,9 @@ CREATE TYPE typ AS (a INT, b INT);
 
 statement ok
 CREATE PROCEDURE p_udt(OUT param typ) AS $$ BEGIN param := (1, 2); END $$ LANGUAGE PLpgSQL;
+
+query T colnames
+CALL p_udt(NULL);
+----
+param
+(1,2)

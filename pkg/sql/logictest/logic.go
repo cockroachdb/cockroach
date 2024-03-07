@@ -345,6 +345,9 @@ import (
 //    Runs the query that follows and expects an error
 //    that matches the given regexp.
 //
+//  - query empty
+//    Runs the query that follows and verifies that no rows are produced.
+//
 //  - awaitquery <name>
 //    Completes a pending query with the provided name, validating its
 //    results as expected per the given options to "query ... async ... <label>".
@@ -906,7 +909,9 @@ type logicQuery struct {
 	sorter logicSorter
 	// noSort is true if the nosort option was explicitly provided in the test.
 	noSort bool
-	// expectedErr and expectedErrCode are as in logicStatement.
+	// empty indicates whether the result is expected to be empty (i.e. 0 rows
+	// returned).
+	empty bool
 
 	// if set, the results are cross-checked against previous queries with the
 	// same label.
@@ -2665,14 +2670,19 @@ func (t *logicTest) processSubtest(
 			} else if len(fields) < 2 {
 				return errors.Errorf("%s: invalid test statement: %s", query.pos, s.Text())
 			} else {
-				// Parse "query <type-string> <options> <label>"
-				query.colTypes = fields[1]
-				if *Bigtest {
-					// bigtests put each expected value on its own line.
-					query.valsPerLine = 1
+				// Parse "query empty"
+				if len(fields) == 2 && fields[1] == "empty" {
+					query.empty = true
 				} else {
-					// Otherwise, expect number of values to match expected type count.
-					query.valsPerLine = len(query.colTypes)
+					// Parse "query <type-string> <options> <label>"
+					query.colTypes = fields[1]
+					if *Bigtest {
+						// bigtests put each expected value on its own line.
+						query.valsPerLine = 1
+					} else {
+						// Otherwise, expect number of values to match expected type count.
+						query.valsPerLine = len(query.colTypes)
+					}
 				}
 
 				if len(fields) >= 3 {
@@ -3581,7 +3591,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		if err != nil {
 			return err
 		}
-		if len(query.colTypes) != len(cols) {
+		if len(query.colTypes) != len(cols) && !query.empty {
 			return fmt.Errorf("%s: expected %d columns, but found %d",
 				query.pos, len(query.colTypes), len(cols))
 		}
@@ -3720,6 +3730,10 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 			allDuplicateRows = false
 			break
 		}
+	}
+
+	if query.empty && rowCount != 0 {
+		return errors.Newf("expected empty result, found %d rows\n%v", rowCount, actualResults)
 	}
 
 	if rowCount > 1 && !allDuplicateRows && query.sorter == nil && !query.noSort &&
