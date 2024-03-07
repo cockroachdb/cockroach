@@ -143,18 +143,6 @@ stabilize
   4->1 MsgAppResp Term:1 Log:0/4
 > 1 receiving messages
   4->1 MsgAppResp Term:1 Log:0/4
-> 1 handling Ready
-  Ready MustSync=false:
-  Messages:
-  1->4 MsgApp Term:1 Log:1/4 Commit:4
-> 4 receiving messages
-  1->4 MsgApp Term:1 Log:1/4 Commit:4
-> 4 handling Ready
-  Ready MustSync=false:
-  Messages:
-  4->1 MsgAppResp Term:1 Log:0/4
-> 1 receiving messages
-  4->1 MsgAppResp Term:1 Log:0/4
 
 
 # Transfer leadership while in the joint config.
@@ -284,12 +272,10 @@ stabilize
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
-  4->1 MsgApp Term:2 Log:2/5 Commit:4
   4->1 MsgApp Term:2 Log:2/5 Commit:5
   4->2 MsgApp Term:2 Log:2/5 Commit:5
   4->3 MsgApp Term:2 Log:2/5 Commit:5
 > 1 receiving messages
-  4->1 MsgApp Term:2 Log:2/5 Commit:4
   4->1 MsgApp Term:2 Log:2/5 Commit:5
 > 2 receiving messages
   4->2 MsgApp Term:2 Log:2/5 Commit:5
@@ -301,7 +287,6 @@ stabilize
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
-  1->4 MsgAppResp Term:2 Log:0/5
   1->4 MsgAppResp Term:2 Log:0/5
 > 2 handling Ready
   Ready MustSync=false:
@@ -318,7 +303,6 @@ stabilize
   Messages:
   3->4 MsgAppResp Term:2 Log:0/5
 > 4 receiving messages
-  1->4 MsgAppResp Term:2 Log:0/5
   1->4 MsgAppResp Term:2 Log:0/5
   2->4 MsgAppResp Term:2 Log:0/5
   3->4 MsgAppResp Term:2 Log:0/5
