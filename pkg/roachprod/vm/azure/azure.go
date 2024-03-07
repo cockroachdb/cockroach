@@ -147,6 +147,10 @@ func (p *Provider) CreateLoadBalancer(*logger.Logger, vm.List, int) error {
 	panic("unimplemented")
 }
 
+func (p *Provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
+	panic("unimplemented")
+}
+
 // New constructs a new Provider instance.
 func New() *Provider {
 	p := &Provider{}
