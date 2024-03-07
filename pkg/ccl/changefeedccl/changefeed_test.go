@@ -2524,7 +2524,7 @@ func TestChangefeedSchemaChangeAllowBackfill_Legacy(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b STRING)`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (1, '1')`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (2, '2')`)
-			dropColumn := feed(t, f, `CREATE CHANGEFEED FOR drop_column WITH updated`)
+			dropColumn := feed(t, f, `CREATE CHANGEFEED FOR drop_column WITH updated, schema_change_policy = nobackfill`)
 			defer closeFeed(t, dropColumn)
 			assertPayloadsStripTs(t, dropColumn, []string{
 				`drop_column: [1]->{"after": {"a": 1, "b": "1"}}`,
