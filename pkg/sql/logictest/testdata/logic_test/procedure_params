@@ -12,6 +12,9 @@ DROP PROCEDURE p;
 statement ok
 CREATE PROCEDURE p(IN param1 INT, INOUT param2 INT, OUT param3 INT) AS $$ SELECT 1, 2; $$ LANGUAGE SQL;
 
+statement error pgcode 42883 procedure public.p does not exist
+CALL p(1, 2)
+
 statement ok
 DROP PROCEDURE p;
 

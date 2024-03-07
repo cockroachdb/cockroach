@@ -75,8 +75,7 @@ DROP FUNCTION IF EXISTS p_test_drop()
 statement ok
 DROP PROCEDURE IF EXISTS p_test_drop()
 
-# TODO(mgartner): This error message could be improved.
-statement error pgcode 42883 unknown signature: p_test_drop\(\)
+statement error pgcode 42883 procedure p_test_drop does not exist
 CALL p_test_drop()
 
 query T
