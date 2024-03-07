@@ -15,12 +15,13 @@
 package raft
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"go.etcd.io/raft/v3/quorum"
 	pb "go.etcd.io/raft/v3/raftpb"
@@ -80,28 +81,22 @@ func TestRawNodeStep(t *testing.T) {
 			s := NewMemoryStorage()
 			s.SetHardState(pb.HardState{Term: 1, Commit: 1})
 			s.Append([]pb.Entry{{Term: 1, Index: 1}})
-			if err := s.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{
+			require.NoError(t, s.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{
 				ConfState: pb.ConfState{
 					Voters: []uint64{1},
 				},
 				Index: 1,
 				Term:  1,
-			}}); err != nil {
-				t.Fatal(err)
-			}
+			}}), "#%d", i)
 			// Append an empty entry to make sure the non-local messages (like
 			// vote requests) are ignored and don't trigger assertions.
 			rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err, "#%d", i)
 			msgt := pb.MessageType(i)
 			err = rawNode.Step(pb.Message{Type: msgt})
 			// LocalMsg should be ignored.
 			if IsLocalMsg(msgt) {
-				if err != ErrStepLocalMsg {
-					t.Errorf("%d: step should ignore %s", msgt, msgn)
-				}
+				assert.Equal(t, ErrStepLocalMsg, err, "#%d", i)
 			}
 		})
 	}
@@ -228,9 +223,7 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			s := newTestMemoryStorage(withPeers(1))
 			rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
 			rawNode.Campaign()
 			proposed := false
@@ -248,15 +241,11 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 					var cc pb.ConfChangeI
 					if ent.Type == pb.EntryConfChange {
 						var ccc pb.ConfChange
-						if err = ccc.Unmarshal(ent.Data); err != nil {
-							t.Fatal(err)
-						}
+						require.NoError(t, ccc.Unmarshal(ent.Data))
 						cc = ccc
 					} else if ent.Type == pb.EntryConfChangeV2 {
 						var ccc pb.ConfChangeV2
-						if err = ccc.Unmarshal(ent.Data); err != nil {
-							t.Fatal(err)
-						}
+						require.NoError(t, ccc.Unmarshal(ent.Data))
 						cc = ccc
 					}
 					if cc != nil {
@@ -266,21 +255,15 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 				rawNode.Advance(rd)
 				// Once we are the leader, propose a command and a ConfChange.
 				if !proposed && rd.SoftState.Lead == rawNode.raft.id {
-					if err = rawNode.Propose([]byte("somedata")); err != nil {
-						t.Fatal(err)
-					}
+					require.NoError(t, rawNode.Propose([]byte("somedata")))
 					if ccv1, ok := tc.cc.AsV1(); ok {
 						ccdata, err = ccv1.Marshal()
-						if err != nil {
-							t.Fatal(err)
-						}
+						require.NoError(t, err)
 						rawNode.ProposeConfChange(ccv1)
 					} else {
 						ccv2 := tc.cc.AsV2()
 						ccdata, err = ccv2.Marshal()
-						if err != nil {
-							t.Fatal(err)
-						}
+						require.NoError(t, err)
 						rawNode.ProposeConfChange(ccv2)
 					}
 					proposed = true
@@ -292,34 +275,21 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 			// will not reflect any unstable entries that we'll only be presented
 			// with in the next Ready.
 			lastIndex, err = s.LastIndex()
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
 			entries, err := s.Entries(lastIndex-1, lastIndex+1, noLimit)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(entries) != 2 {
-				t.Fatalf("len(entries) = %d, want %d", len(entries), 2)
-			}
-			if !bytes.Equal(entries[0].Data, []byte("somedata")) {
-				t.Errorf("entries[0].Data = %v, want %v", entries[0].Data, []byte("somedata"))
-			}
+			require.NoError(t, err)
+			require.Len(t, entries, 2)
+			assert.Equal(t, []byte("somedata"), entries[0].Data)
+
 			typ := pb.EntryConfChange
 			if _, ok := tc.cc.AsV1(); !ok {
 				typ = pb.EntryConfChangeV2
 			}
-			if entries[1].Type != typ {
-				t.Fatalf("type = %v, want %v", entries[1].Type, typ)
-			}
-			if !bytes.Equal(entries[1].Data, ccdata) {
-				t.Errorf("data = %v, want %v", entries[1].Data, ccdata)
-			}
+			require.Equal(t, typ, entries[1].Type)
+			assert.Equal(t, ccdata, entries[1].Data)
 
-			if exp := &tc.exp; !reflect.DeepEqual(exp, cs) {
-				t.Fatalf("exp:\n%+v\nact:\n%+v", exp, cs)
-			}
+			require.Equal(t, &tc.exp, cs)
 
 			var maybePlusOne uint64
 			if autoLeave, ok := tc.cc.AsV2().EnterJoint(); ok && autoLeave {
@@ -331,9 +301,7 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 				// yet).
 				maybePlusOne = 1
 			}
-			if exp, act := lastIndex+maybePlusOne, rawNode.raft.pendingConfIndex; exp != act {
-				t.Fatalf("pendingConfIndex: expected %d, got %d", exp, act)
-			}
+			require.Equal(t, lastIndex+maybePlusOne, rawNode.raft.pendingConfIndex)
 
 			// Move the RawNode along. If the ConfChange was simple, nothing else
 			// should happen. Otherwise, we're in a joint state, which is either
@@ -342,38 +310,29 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 			rd := rawNode.Ready()
 			var context []byte
 			if !tc.exp.AutoLeave {
-				if len(rd.Entries) > 0 {
-					t.Fatal("expected no more entries")
-				}
+				require.Empty(t, rd.Entries)
 				rawNode.Advance(rd)
 				if tc.exp2 == nil {
 					return
 				}
 				context = []byte("manual")
 				t.Log("leaving joint state manually")
-				if err := rawNode.ProposeConfChange(pb.ConfChangeV2{Context: context}); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, rawNode.ProposeConfChange(pb.ConfChangeV2{Context: context}))
 				rd = rawNode.Ready()
 			}
 
 			// Check that the right ConfChange comes out.
-			if len(rd.Entries) != 1 || rd.Entries[0].Type != pb.EntryConfChangeV2 {
-				t.Fatalf("expected exactly one more entry, got %+v", rd)
-			}
+			require.Len(t, rd.Entries, 1)
+			require.Equal(t, pb.EntryConfChangeV2, rd.Entries[0].Type)
 			var cc pb.ConfChangeV2
-			if err := cc.Unmarshal(rd.Entries[0].Data); err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(cc, pb.ConfChangeV2{Context: context}) {
-				t.Fatalf("expected zero ConfChangeV2, got %+v", cc)
-			}
+			require.NoError(t, cc.Unmarshal(rd.Entries[0].Data))
+			require.Equal(t, pb.ConfChangeV2{Context: context}, cc)
+
 			// Lie and pretend the ConfChange applied. It won't do so because now
 			// we require the joint quorum and we're only running one node.
 			cs = rawNode.ApplyConfChange(cc)
-			if exp := tc.exp2; !reflect.DeepEqual(exp, cs) {
-				t.Fatalf("exp:\n%+v\nact:\n%+v", exp, cs)
-			}
+			require.Equal(t, tc.exp2, cs)
+
 			rawNode.Advance(rd)
 		})
 	}
@@ -395,9 +354,7 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 
 	s := newTestMemoryStorage(withPeers(1))
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	rawNode.Campaign()
 	proposed := false
@@ -415,9 +372,7 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 			var cc pb.ConfChangeI
 			if ent.Type == pb.EntryConfChangeV2 {
 				var ccc pb.ConfChangeV2
-				if err = ccc.Unmarshal(ent.Data); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, ccc.Unmarshal(ent.Data))
 				cc = &ccc
 			}
 			if cc != nil {
@@ -429,13 +384,9 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 		rawNode.Advance(rd)
 		// Once we are the leader, propose a command and a ConfChange.
 		if !proposed && rd.SoftState.Lead == rawNode.raft.id {
-			if err = rawNode.Propose([]byte("somedata")); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, rawNode.Propose([]byte("somedata")))
 			ccdata, err = testCc.Marshal()
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			rawNode.ProposeConfChange(testCc)
 			proposed = true
 		}
@@ -446,41 +397,23 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 	// will not reflect any unstable entries that we'll only be presented
 	// with in the next Ready.
 	lastIndex, err = s.LastIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	entries, err := s.Entries(lastIndex-1, lastIndex+1, noLimit)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 2 {
-		t.Fatalf("len(entries) = %d, want %d", len(entries), 2)
-	}
-	if !bytes.Equal(entries[0].Data, []byte("somedata")) {
-		t.Errorf("entries[0].Data = %v, want %v", entries[0].Data, []byte("somedata"))
-	}
-	if entries[1].Type != pb.EntryConfChangeV2 {
-		t.Fatalf("type = %v, want %v", entries[1].Type, pb.EntryConfChangeV2)
-	}
-	if !bytes.Equal(entries[1].Data, ccdata) {
-		t.Errorf("data = %v, want %v", entries[1].Data, ccdata)
-	}
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	assert.Equal(t, []byte("somedata"), entries[0].Data)
+	require.Equal(t, pb.EntryConfChangeV2, entries[1].Type)
+	assert.Equal(t, ccdata, entries[1].Data)
 
-	if !reflect.DeepEqual(&expCs, cs) {
-		t.Fatalf("exp:\n%+v\nact:\n%+v", expCs, cs)
-	}
+	require.Equal(t, &expCs, cs)
 
-	if rawNode.raft.pendingConfIndex != 0 {
-		t.Fatalf("pendingConfIndex: expected %d, got %d", 0, rawNode.raft.pendingConfIndex)
-	}
+	require.Zero(t, rawNode.raft.pendingConfIndex)
 
 	// Move the RawNode along. It should not leave joint because it's follower.
 	rd := rawNode.readyWithoutAccept()
 	// Check that the right ConfChange comes out.
-	if len(rd.Entries) != 0 {
-		t.Fatalf("expected zero entry, got %+v", rd)
-	}
+	require.Empty(t, rd.Entries)
 
 	// Make it leader again. It should leave joint automatically after moving apply index.
 	rawNode.Campaign()
@@ -500,22 +433,15 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 	t.Log(DescribeReady(rd, nil))
 	s.Append(rd.Entries)
 	// Check that the right ConfChange comes out.
-	if len(rd.Entries) != 1 || rd.Entries[0].Type != pb.EntryConfChangeV2 {
-		t.Fatalf("expected exactly one more entry, got %+v", rd)
-	}
+	require.Len(t, rd.Entries, 1)
+	require.Equal(t, pb.EntryConfChangeV2, rd.Entries[0].Type)
 	var cc pb.ConfChangeV2
-	if err := cc.Unmarshal(rd.Entries[0].Data); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(cc, pb.ConfChangeV2{Context: nil}) {
-		t.Fatalf("expected zero ConfChangeV2, got %+v", cc)
-	}
+	require.NoError(t, cc.Unmarshal(rd.Entries[0].Data))
+	require.Equal(t, pb.ConfChangeV2{Context: nil}, cc)
 	// Lie and pretend the ConfChange applied. It won't do so because now
 	// we require the joint quorum and we're only running one node.
 	cs = rawNode.ApplyConfChange(cc)
-	if exp := exp2Cs; !reflect.DeepEqual(&exp, cs) {
-		t.Fatalf("exp:\n%+v\nact:\n%+v", exp, cs)
-	}
+	require.Equal(t, exp2Cs, *cs)
 }
 
 // TestRawNodeProposeAddDuplicateNode ensures that two proposes to add the same node should
@@ -523,9 +449,8 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	rd := rawNode.Ready()
 	s.Append(rd.Entries)
 	rawNode.Advance(rd)
@@ -557,9 +482,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 
 	cc1 := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: 1}
 	ccdata1, err := cc1.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	proposeConfChangeAndApply(cc1)
 
 	// try to add the same node again
@@ -568,30 +491,18 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	// the new node join should be ok
 	cc2 := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: 2}
 	ccdata2, err := cc2.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	proposeConfChangeAndApply(cc2)
 
 	lastIndex, err := s.LastIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// the last three entries should be: ConfChange cc1, cc1, cc2
 	entries, err := s.Entries(lastIndex-2, lastIndex+1, noLimit)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 3 {
-		t.Fatalf("len(entries) = %d, want %d", len(entries), 3)
-	}
-	if !bytes.Equal(entries[0].Data, ccdata1) {
-		t.Errorf("entries[0].Data = %v, want %v", entries[0].Data, ccdata1)
-	}
-	if !bytes.Equal(entries[2].Data, ccdata2) {
-		t.Errorf("entries[2].Data = %v, want %v", entries[2].Data, ccdata2)
-	}
+	require.NoError(t, err)
+	require.Len(t, entries, 3)
+	assert.Equal(t, ccdata1, entries[0].Data)
+	assert.Equal(t, ccdata2, entries[2].Data)
 }
 
 // TestRawNodeReadIndex ensures that Rawnode.ReadIndex sends the MsgReadIndex message
@@ -607,25 +518,17 @@ func TestRawNodeReadIndex(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	c := newTestConfig(1, 10, 1, s)
 	rawNode, err := NewRawNode(c)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	rawNode.raft.readStates = wrs
 	// ensure the ReadStates can be read out
-	hasReady := rawNode.HasReady()
-	if !hasReady {
-		t.Errorf("HasReady() returns %t, want %t", hasReady, true)
-	}
+	assert.True(t, rawNode.HasReady())
 	rd := rawNode.Ready()
-	if !reflect.DeepEqual(rd.ReadStates, wrs) {
-		t.Errorf("ReadStates = %d, want %d", rd.ReadStates, wrs)
-	}
+	assert.Equal(t, wrs, rd.ReadStates)
 	s.Append(rd.Entries)
 	rawNode.Advance(rd)
 	// ensure raft.readStates is reset after advance
-	if rawNode.raft.readStates != nil {
-		t.Errorf("readStates = %v, want %v", rawNode.raft.readStates, nil)
-	}
+	assert.Nil(t, rawNode.raft.readStates)
 
 	wrequestCtx := []byte("somedata2")
 	rawNode.Campaign()
@@ -644,15 +547,9 @@ func TestRawNodeReadIndex(t *testing.T) {
 		rawNode.Advance(rd)
 	}
 	// ensure that MsgReadIndex message is sent to the underlying raft
-	if len(msgs) != 1 {
-		t.Fatalf("len(msgs) = %d, want %d", len(msgs), 1)
-	}
-	if msgs[0].Type != pb.MsgReadIndex {
-		t.Errorf("msg type = %d, want %d", msgs[0].Type, pb.MsgReadIndex)
-	}
-	if !bytes.Equal(msgs[0].Entries[0].Data, wrequestCtx) {
-		t.Errorf("data = %v, want %v", msgs[0].Entries[0].Data, wrequestCtx)
-	}
+	require.Len(t, msgs, 1)
+	assert.Equal(t, pb.MsgReadIndex, msgs[0].Type)
+	assert.Equal(t, wrequestCtx, msgs[0].Entries[0].Data)
 }
 
 // TestBlockProposal from node_test.go has no equivalent in rawNode because there is
@@ -670,7 +567,7 @@ func TestRawNodeReadIndex(t *testing.T) {
 func TestRawNodeStart(t *testing.T) {
 	entries := []pb.Entry{
 		{Term: 1, Index: 2, Data: nil},           // empty entry
-		{Term: 1, Index: 3, Data: []byte("foo")}, // empty entry
+		{Term: 1, Index: 3, Data: []byte("foo")}, // non-empty entry
 	}
 	want := Ready{
 		SoftState:        &SoftState{Lead: 1, RaftState: StateLeader},
@@ -699,37 +596,25 @@ func TestRawNodeStart(t *testing.T) {
 		ApplySnapshot(pb.Snapshot) error
 	}
 	bootstrap := func(storage appenderStorage, cs pb.ConfState) error {
-		if len(cs.Voters) == 0 {
-			return fmt.Errorf("no voters specified")
-		}
+		require.NotEmpty(t, cs.Voters, "no voters specified")
 		fi, err := storage.FirstIndex()
-		if err != nil {
-			return err
-		}
-		if fi < 2 {
-			return fmt.Errorf("FirstIndex >= 2 is prerequisite for bootstrap")
-		}
-		if _, err = storage.Entries(fi, fi, math.MaxUint64); err == nil {
-			// TODO(tbg): match exact error
-			return fmt.Errorf("should not have been able to load first index")
-		}
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, fi, uint64(2), "FirstIndex >= 2 is prerequisite for bootstrap")
+
+		_, err = storage.Entries(fi, fi, math.MaxUint64)
+		// TODO(tbg): match exact error
+		require.Error(t, err, "should not have been able to load first index")
+
 		li, err := storage.LastIndex()
-		if err != nil {
-			return err
-		}
-		if _, err = storage.Entries(li, li, math.MaxUint64); err == nil {
-			return fmt.Errorf("should not have been able to load last index")
-		}
+		require.NoError(t, err)
+
+		_, err = storage.Entries(li, li, math.MaxUint64)
+		require.Error(t, err, "should not have been able to load last index")
+
 		hs, ics, err := storage.InitialState()
-		if err != nil {
-			return err
-		}
-		if !IsEmptyHardState(hs) {
-			return fmt.Errorf("HardState not empty")
-		}
-		if len(ics.Voters) != 0 {
-			return fmt.Errorf("ConfState not empty")
-		}
+		require.NoError(t, err)
+		require.True(t, IsEmptyHardState(hs))
+		require.Empty(t, ics.Voters)
 
 		meta := pb.SnapshotMetadata{
 			Index:     1,
@@ -740,53 +625,34 @@ func TestRawNodeStart(t *testing.T) {
 		return storage.ApplySnapshot(snap)
 	}
 
-	if err := bootstrap(storage, pb.ConfState{Voters: []uint64{1}}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, bootstrap(storage, pb.ConfState{Voters: []uint64{1}}))
 
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, storage))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rawNode.HasReady() {
-		t.Fatalf("unexpected ready: %+v", rawNode.Ready())
-	}
+	require.NoError(t, err)
+	require.False(t, rawNode.HasReady())
+
 	rawNode.Campaign()
 	rd := rawNode.Ready()
 	storage.Append(rd.Entries)
 	rawNode.Advance(rd)
 	rawNode.Propose([]byte("foo"))
-	if !rawNode.HasReady() {
-		t.Fatal("expected a Ready")
-	}
+	require.True(t, rawNode.HasReady())
+
 	rd = rawNode.Ready()
-	if !reflect.DeepEqual(entries, rd.Entries) {
-		t.Fatalf("expected to see entries\n%s, not\n%s", DescribeEntries(entries, nil), DescribeEntries(rd.Entries, nil))
-	}
+	require.Equal(t, entries, rd.Entries)
 	storage.Append(rd.Entries)
 	rawNode.Advance(rd)
 
-	if !rawNode.HasReady() {
-		t.Fatal("expected a Ready")
-	}
+	require.True(t, rawNode.HasReady())
 	rd = rawNode.Ready()
-	if len(rd.Entries) != 0 {
-		t.Fatalf("unexpected entries: %s", DescribeEntries(rd.Entries, nil))
-	}
-	if rd.MustSync {
-		t.Fatalf("should not need to sync")
-	}
+	require.Empty(t, rd.Entries)
+	require.False(t, rd.MustSync)
 	rawNode.Advance(rd)
 
 	rd.SoftState, want.SoftState = nil, nil
 
-	if !reflect.DeepEqual(rd, want) {
-		t.Fatalf("unexpected Ready:\n%+v\nvs\n%+v", rd, want)
-	}
-
-	if rawNode.HasReady() {
-		t.Errorf("unexpected Ready: %+v", rawNode.Ready())
-	}
+	require.Equal(t, want, rd)
+	assert.False(t, rawNode.HasReady())
 }
 
 func TestRawNodeRestart(t *testing.T) {
@@ -807,17 +673,11 @@ func TestRawNodeRestart(t *testing.T) {
 	storage.SetHardState(st)
 	storage.Append(entries)
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, storage))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	rd := rawNode.Ready()
-	if !reflect.DeepEqual(rd, want) {
-		t.Errorf("g = %+v,\n             w   %+v", rd, want)
-	}
+	assert.Equal(t, want, rd)
 	rawNode.Advance(rd)
-	if rawNode.HasReady() {
-		t.Errorf("unexpected Ready: %+v", rawNode.Ready())
-	}
+	assert.False(t, rawNode.HasReady())
 }
 
 func TestRawNodeRestartFromSnapshot(t *testing.T) {
@@ -845,54 +705,36 @@ func TestRawNodeRestartFromSnapshot(t *testing.T) {
 	s.ApplySnapshot(snap)
 	s.Append(entries)
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rd := rawNode.Ready(); !reflect.DeepEqual(rd, want) {
-		t.Errorf("g = %+v,\n             w   %+v", rd, want)
-	} else {
+	require.NoError(t, err)
+	rd := rawNode.Ready()
+	if assert.Equal(t, want, rd) {
 		rawNode.Advance(rd)
 	}
-	if rawNode.HasReady() {
-		t.Errorf("unexpected Ready: %+v", rawNode.HasReady())
-	}
+	assert.False(t, rawNode.HasReady())
 }
 
 // TestNodeAdvance from node_test.go has no equivalent in rawNode because there is
 // no dependency check between Ready() and Advance()
-
 func TestRawNodeStatus(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	rn, err := NewRawNode(newTestConfig(1, 10, 1, s))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if status := rn.Status(); status.Progress != nil {
-		t.Fatalf("expected no Progress because not leader: %+v", status.Progress)
-	}
-	if err := rn.Campaign(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.Nil(t, rn.Status().Progress)
+	require.NoError(t, rn.Campaign())
+
 	rd := rn.Ready()
 	s.Append(rd.Entries)
 	rn.Advance(rd)
 	status := rn.Status()
-	if status.Lead != 1 {
-		t.Fatal("not lead")
-	}
-	if status.RaftState != StateLeader {
-		t.Fatal("not leader")
-	}
-	if exp, act := *rn.raft.trk.Progress[1], status.Progress[1]; !reflect.DeepEqual(exp, act) {
-		t.Fatalf("want: %+v\ngot:  %+v", exp, act)
-	}
+	require.Equal(t, uint64(1), status.Lead)
+	require.Equal(t, StateLeader, status.RaftState)
+	require.Equal(t, *rn.raft.trk.Progress[1], status.Progress[1])
+
 	expCfg := tracker.Config{Voters: quorum.JointConfig{
 		quorum.MajorityConfig{1: {}},
 		nil,
 	}}
-	if !reflect.DeepEqual(expCfg, status.Config) {
-		t.Fatalf("want: %+v\ngot:  %+v", expCfg, status.Config)
-	}
+	require.Equal(t, expCfg, status.Config)
 }
 
 // TestRawNodeCommitPaginationAfterRestart is the RawNode version of
@@ -949,19 +791,16 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 	})
 
 	rawNode, err := NewRawNode(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	for highestApplied := uint64(0); highestApplied != 11; {
 		rd := rawNode.Ready()
 		n := len(rd.CommittedEntries)
-		if n == 0 {
-			t.Fatalf("stopped applying entries at index %d", highestApplied)
-		}
-		if next := rd.CommittedEntries[0].Index; highestApplied != 0 && highestApplied+1 != next {
-			t.Fatalf("attempting to apply index %d after index %d, leaving a gap", next, highestApplied)
-		}
+		require.NotZero(t, n, "stopped applying entries at index %d", highestApplied)
+		next := rd.CommittedEntries[0].Index
+		require.False(t, highestApplied != 0 && highestApplied+1 != next,
+			"attempting to apply index %d after index %d, leaving a gap", next, highestApplied)
+
 		highestApplied = rd.CommittedEntries[n-1].Index
 		rawNode.Advance(rd)
 		rawNode.Step(pb.Message{
@@ -989,9 +828,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 	cfg := newTestConfig(1, 10, 1, s)
 	cfg.MaxUncommittedEntriesSize = uint64(maxEntrySize)
 	rawNode, err := NewRawNode(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Become the leader and apply empty entry.
 	rawNode.Campaign()
@@ -1015,18 +852,14 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 	// MaxUncommittedEntriesSize limit.
 	checkUncommitted := func(exp entryPayloadSize) {
 		t.Helper()
-		if a := rawNode.raft.uncommittedSize; exp != a {
-			t.Fatalf("expected %d uncommitted entry bytes, found %d", exp, a)
-		}
+		require.Equal(t, exp, rawNode.raft.uncommittedSize)
 	}
 	checkUncommitted(maxEntrySize)
 
 	// Recover from the partition. The uncommitted tail of the Raft log should
 	// disappear as entries are committed.
 	rd := rawNode.Ready()
-	if len(rd.Entries) != maxEntries {
-		t.Fatalf("expected %d entries, got %d", maxEntries, len(rd.Entries))
-	}
+	require.Len(t, rd.Entries, maxEntries)
 	s.Append(rd.Entries)
 	rawNode.Advance(rd)
 
@@ -1034,12 +867,8 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 	checkUncommitted(maxEntrySize)
 
 	rd = rawNode.Ready()
-	if len(rd.Entries) != 0 {
-		t.Fatalf("unexpected entries: %s", DescribeEntries(rd.Entries, nil))
-	}
-	if len(rd.CommittedEntries) != maxEntries {
-		t.Fatalf("expected %d entries, got %d", maxEntries, len(rd.CommittedEntries))
-	}
+	require.Empty(t, rd.Entries)
+	require.Len(t, rd.CommittedEntries, maxEntries)
 	rawNode.Advance(rd)
 
 	checkUncommitted(0)
@@ -1124,27 +953,23 @@ func TestRawNodeConsumeReady(t *testing.T) {
 	// Inject first message, make sure it's visible via readyWithoutAccept.
 	rn.raft.msgs = append(rn.raft.msgs, m1)
 	rd := rn.readyWithoutAccept()
-	if len(rd.Messages) != 1 || !reflect.DeepEqual(rd.Messages[0], m1) {
-		t.Fatalf("expected only m1 sent, got %+v", rd.Messages)
-	}
-	if len(rn.raft.msgs) != 1 || !reflect.DeepEqual(rn.raft.msgs[0], m1) {
-		t.Fatalf("expected only m1 in raft.msgs, got %+v", rn.raft.msgs)
-	}
+	require.Len(t, rd.Messages, 1)
+	require.Equal(t, m1, rd.Messages[0])
+	require.Len(t, rn.raft.msgs, 1)
+	require.Equal(t, m1, rn.raft.msgs[0])
+
 	// Now call Ready() which should move the message into the Ready (as opposed
 	// to leaving it in both places).
 	rd = rn.Ready()
-	if len(rn.raft.msgs) > 0 {
-		t.Fatalf("messages not reset: %+v", rn.raft.msgs)
-	}
-	if len(rd.Messages) != 1 || !reflect.DeepEqual(rd.Messages[0], m1) {
-		t.Fatalf("expected only m1 sent, got %+v", rd.Messages)
-	}
+	require.Empty(t, rn.raft.msgs)
+	require.Len(t, rd.Messages, 1)
+	require.Equal(t, m1, rd.Messages[0])
+
 	// Add a message to raft to make sure that Advance() doesn't drop it.
 	rn.raft.msgs = append(rn.raft.msgs, m2)
 	rn.Advance(rd)
-	if len(rn.raft.msgs) != 1 || !reflect.DeepEqual(rn.raft.msgs[0], m2) {
-		t.Fatalf("expected only m2 in raft.msgs, got %+v", rn.raft.msgs)
-	}
+	require.Len(t, rn.raft.msgs, 1)
+	require.Equal(t, m2, rn.raft.msgs[0])
 }
 
 func BenchmarkRawNode(b *testing.B) {
