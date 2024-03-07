@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -134,10 +136,14 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 
 	o := f.ResolvedOverload()
 	if o.Type != tree.ProcedureRoutine {
+		typeNames := make([]string, len(f.Exprs))
+		for i, expr := range f.Exprs {
+			typeNames[i] = expr.(tree.TypedExpr).ResolvedType().String()
+		}
 		panic(errors.WithHint(
 			pgerror.Newf(
 				pgcode.WrongObjectType,
-				"%s(%s) is not a procedure", def.Name, o.Types.String(),
+				"%s(%s) is not a procedure", def.Name, strings.Join(typeNames, ", "),
 			),
 			"To call a function, use SELECT.",
 		))
@@ -234,6 +240,7 @@ func (b *Builder) buildRoutine(
 	bodyScope := b.allocScope()
 	var params opt.ColList
 	if o.Types.Length() > 0 {
+		// Add all input parameters to the scope.
 		paramTypes, ok := o.Types.(tree.ParamTypes)
 		if !ok {
 			panic(unimplemented.NewWithIssue(88947,

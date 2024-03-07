@@ -24,6 +24,7 @@ sql/colfetcher
 sql/execinfrapb
 sql/opt
 sql/row
+sql/sem/tree
 storage
 storage/enginepb
 storage/pebbleiter
