@@ -12,9 +12,9 @@ package raftutil
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // ReplicaIsBehind returns whether the given peer replica is considered behind

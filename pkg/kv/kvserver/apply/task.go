@@ -13,8 +13,8 @@ package apply
 import (
 	"context"
 
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/errors"
 )
 
 // StateMachine represents an instance of a replicated state machine being

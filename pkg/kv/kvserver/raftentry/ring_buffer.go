@@ -14,9 +14,9 @@ import (
 	"math/bits"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 // ringBuf is a ring buffer of raft entries.

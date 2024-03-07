@@ -13,9 +13,9 @@ package raftutil
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReplicaIsBehind(t *testing.T) {

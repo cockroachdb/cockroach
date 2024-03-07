@@ -13,9 +13,9 @@ package roachpb
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 // ReplicaSet is a set of replicas, usually the nodes/stores on which
