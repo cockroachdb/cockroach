@@ -72,6 +72,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":kvnemesis"],
+    exec_properties = {"test.Pool": "large"},
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",
