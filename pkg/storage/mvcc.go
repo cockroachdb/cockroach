@@ -2662,6 +2662,7 @@ func mvccPutInternal(
 	versionValue.Value = value
 	versionValue.LocalTimestamp = opts.LocalTimestamp
 	versionValue.OmitInRangefeeds = opts.OmitInRangefeeds
+	versionValue.ImportEpoch = opts.ImportEpoch
 
 	if buildutil.CrdbTestBuild {
 		if seq, seqOK := kvnemesisutil.FromContext(ctx); seqOK {
@@ -3786,6 +3787,29 @@ func MVCCPredicateDeleteRange(
 		return nil, &kvpb.LockConflictError{Locks: locks}
 	}
 
+	var stopRunBasedOnPredicate func(k MVCCKey, iter *MVCCIncrementalIterator) (bool, error)
+	if predicates.ImportEpoch > 0 {
+		// TODO(ssd): We will likely eventually want something
+		// that consturcts our iterator opetions based on the
+		// predicate so that we can use a block-property
+		// filter for import epochs.
+		stopRunBasedOnPredicate = func(k MVCCKey, it *MVCCIncrementalIterator) (bool, error) {
+			rawV, err := it.UnsafeValue()
+			if err != nil {
+				return true, err
+			}
+			v, err := DecodeMVCCValue(rawV)
+			if err != nil {
+				return true, err
+			}
+			return v.ImportEpoch != predicates.ImportEpoch, nil
+		}
+	} else {
+		stopRunBasedOnPredicate = func(k MVCCKey, _ *MVCCIncrementalIterator) (bool, error) {
+			return k.Timestamp.LessEq(predicates.StartTime), nil
+		}
+	}
+
 	// continueRun returns three bools: the first is true if the current run
 	// should continue; the second is true if the latest key is a point tombstone;
 	// the third is true if the latest key is a range tombstone. If a non-nil
@@ -3837,11 +3861,12 @@ func MVCCPredicateDeleteRange(
 		}
 
 		// The latest key is a live point key. Conduct predicate filtering.
-		if k.Timestamp.LessEq(predicates.StartTime) {
+		if stop, err := stopRunBasedOnPredicate(k, iter); err != nil {
+			return false, false, false, err
+		} else if stop {
 			return false, false, false, nil
 		}
 
-		// TODO (msbutler): use MVCCValueHeader to match on job ID predicate
 		return true, false, false, nil
 	}
 
@@ -4580,6 +4605,7 @@ type MVCCWriteOptions struct {
 	Stats                          *enginepb.MVCCStats
 	ReplayWriteTimestampProtection bool
 	OmitInRangefeeds               bool
+	ImportEpoch                    uint32
 	// MaxLockConflicts is a maximum number of conflicting locks collected before
 	// returning LockConflictError. Even single-key writes can encounter multiple
 	// conflicting shared locks, so the limit is important to bound the number of

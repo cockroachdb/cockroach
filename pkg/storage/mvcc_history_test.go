@@ -1457,8 +1457,13 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 	if e.hasArg("maxBytes") {
 		e.scanArg("maxBytes", &maxBytes)
 	}
+	importEpoch := 0
+	if e.hasArg("import_epoch") {
+		e.scanArg("import_epoch", &importEpoch)
+	}
 	predicates := kvpb.DeleteRangePredicates{
-		StartTime: e.getTsWithName("startTime"),
+		StartTime:   e.getTsWithName("startTime"),
+		ImportEpoch: uint32(importEpoch),
 	}
 	rangeThreshold := 64
 	if e.hasArg("rangeThreshold") {
@@ -1595,12 +1600,18 @@ func cmdPut(e *evalCtx) error {
 		val.InitChecksum(key)
 	}
 
+	importEpoch := 0
+	if e.hasArg("import_epoch") {
+		e.scanArg("import_epoch", &importEpoch)
+	}
+
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("put", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCWriteOptions{
 			Txn:                            txn,
 			LocalTimestamp:                 localTs,
+			ImportEpoch:                    uint32(importEpoch),
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
