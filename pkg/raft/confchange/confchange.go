@@ -48,7 +48,9 @@ type Changer struct {
 // (Section 4.3) corresponds to `C_{new,old}`.
 //
 // [1]: https://github.com/ongardie/dissertation/blob/master/online-trim.pdf
-func (c Changer) EnterJoint(autoLeave bool, ccs ...pb.ConfChangeSingle) (tracker.Config, tracker.ProgressMap, error) {
+func (c Changer) EnterJoint(
+	autoLeave bool, ccs ...pb.ConfChangeSingle,
+) (tracker.Config, tracker.ProgressMap, error) {
 	cfg, trk, err := c.checkAndCopy()
 	if err != nil {
 		return c.err(err)
@@ -147,7 +149,9 @@ func (c Changer) Simple(ccs ...pb.ConfChangeSingle) (tracker.Config, tracker.Pro
 // apply a change to the configuration. By convention, changes to voters are
 // always made to the incoming majority config Voters[0]. Voters[1] is either
 // empty or preserves the outgoing majority configuration while in a joint state.
-func (c Changer) apply(cfg *tracker.Config, trk tracker.ProgressMap, ccs ...pb.ConfChangeSingle) error {
+func (c Changer) apply(
+	cfg *tracker.Config, trk tracker.ProgressMap, ccs ...pb.ConfChangeSingle,
+) error {
 	for _, cc := range ccs {
 		if cc.NodeID == 0 {
 			// etcd replaces the NodeID with zero if it decides (downstream of
@@ -244,7 +248,9 @@ func (c Changer) remove(cfg *tracker.Config, trk tracker.ProgressMap, id uint64)
 }
 
 // initProgress initializes a new progress for the given node or learner.
-func (c Changer) initProgress(cfg *tracker.Config, trk tracker.ProgressMap, id uint64, isLearner bool) {
+func (c Changer) initProgress(
+	cfg *tracker.Config, trk tracker.ProgressMap, id uint64, isLearner bool,
+) {
 	if !isLearner {
 		incoming(cfg.Voters)[id] = struct{}{}
 	} else {
@@ -348,7 +354,9 @@ func (c Changer) checkAndCopy() (tracker.Config, tracker.ProgressMap, error) {
 
 // checkAndReturn calls checkInvariants on the input and returns either the
 // resulting error or the input.
-func checkAndReturn(cfg tracker.Config, trk tracker.ProgressMap) (tracker.Config, tracker.ProgressMap, error) {
+func checkAndReturn(
+	cfg tracker.Config, trk tracker.ProgressMap,
+) (tracker.Config, tracker.ProgressMap, error) {
 	if err := checkInvariants(cfg, trk); err != nil {
 		return tracker.Config{}, tracker.ProgressMap{}, err
 	}

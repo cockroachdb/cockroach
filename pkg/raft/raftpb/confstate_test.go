@@ -14,9 +14,7 @@
 
 package raftpb
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestConfState_Equivalent(t *testing.T) {
 	type testCase struct {

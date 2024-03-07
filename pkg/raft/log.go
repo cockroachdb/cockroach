@@ -70,7 +70,9 @@ func newLog(storage Storage, logger Logger) *raftLog {
 
 // newLogWithSize returns a log using the given storage and max
 // message size.
-func newLogWithSize(storage Storage, logger Logger, maxApplyingEntsSize entryEncodingSize) *raftLog {
+func newLogWithSize(
+	storage Storage, logger Logger, maxApplyingEntsSize entryEncodingSize,
+) *raftLog {
 	firstIndex, err := storage.FirstIndex()
 	if err != nil {
 		panic(err) // TODO(bdarnell)

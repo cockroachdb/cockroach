@@ -18,10 +18,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/datadriven"
-
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/datadriven"
 )
 
 func (env *InteractionEnv) handleStabilize(t *testing.T, d datadriven.TestData) error {
@@ -114,7 +113,9 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 
 // splitMsgs extracts messages for the given recipient of the given type (-1 for
 // all types) from msgs, and returns them along with the remainder of msgs.
-func splitMsgs(msgs []raftpb.Message, to uint64, typ raftpb.MessageType, drop bool) (toMsgs []raftpb.Message, rmdr []raftpb.Message) {
+func splitMsgs(
+	msgs []raftpb.Message, to uint64, typ raftpb.MessageType, drop bool,
+) (toMsgs []raftpb.Message, rmdr []raftpb.Message) {
 	// NB: this method does not reorder messages.
 	for _, msg := range msgs {
 		if msg.To == to && !(drop && isLocalMsg(msg)) && (typ < 0 || msg.Type == typ) {

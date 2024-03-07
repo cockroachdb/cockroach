@@ -17,10 +17,9 @@ package raft_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/datadriven"
-
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/rafttest"
+	"github.com/cockroachdb/datadriven"
 )
 
 func TestInteraction(t *testing.T) {
