@@ -1288,9 +1288,16 @@ func (expr *FuncExpr) TypeCheck(
 		favoredOverload = def.Overloads[0]
 	} else {
 		// Get overloads from the most significant schema in search path.
+		var ambiguousErrorOverride func() error
+		if expr.InCall {
+			ambiguousErrorOverride = func() error {
+				return pgerror.Newf(pgcode.AmbiguousFunction, "procedure %s(%s) is not unique", def.Name, typeNames())
+			}
+		}
 		favoredOverload, err = getMostSignificantOverload(
 			def.Overloads, s.overloads, s.overloadIdxs, searchPath, expr, s.typedExprs,
 			func() string { return getFuncSig(expr, s.typedExprs, desired) },
+			ambiguousErrorOverride,
 		)
 		if err != nil {
 			return nil, err
@@ -3421,8 +3428,12 @@ func getMostSignificantOverload(
 	expr *FuncExpr,
 	typedInputExprs []TypedExpr,
 	getFuncSig func() string,
+	ambiguousErrorOverride func() error,
 ) (QualifiedOverload, error) {
 	ambiguousError := func() error {
+		if ambiguousErrorOverride != nil {
+			return ambiguousErrorOverride()
+		}
 		return pgerror.Newf(
 			pgcode.AmbiguousFunction,
 			"ambiguous call: %s, candidates are:\n%s",
