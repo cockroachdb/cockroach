@@ -306,47 +306,72 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 // in which case the savepoint will be rolled back either by a parent PLpgSQL
 // block (if the error is eventually caught), or when the transaction aborts.
 func (g *routineGenerator) handleException(ctx context.Context, err error) error {
-	blockState := g.expr.BlockState
-	if err == nil || blockState == nil || blockState.ExceptionHandler == nil {
-		return err
-	}
 	caughtCode := pgerror.GetPGCode(err)
 	if caughtCode == pgcode.Uncategorized {
 		// It is not safe to catch an uncategorized error.
 		return err
 	}
-	if !g.p.Txn().CanUseSavepoint(ctx, blockState.SavepointTok.(kv.SavepointToken)) {
-		// The current transaction state does not allow roll-back.
-		// TODO(111446): some retryable errors allow the transaction to be rolled
-		// back partially (e.g. for read committed). We should be able to take
-		// advantage of that mechanism here as well.
-		return err
-	}
-	// Unset the exception handler to indicate that it has already encountered an
-	// error.
-	exceptionHandler := blockState.ExceptionHandler
-	blockState.ExceptionHandler = nil
-	for i, code := range exceptionHandler.Codes {
-		caughtException := code == caughtCode
-		if code.String() == "OTHERS" {
-			// The special OTHERS condition matches any error code apart from
-			// query_canceled and assert_failure (though they can still be caught
-			// explicitly).
-			caughtException = caughtCode != pgcode.QueryCanceled && caughtCode != pgcode.AssertFailure
+	// Attempt to catch the error, starting with the exception handler for the
+	// current block, and propagating the error up to ancestor exception handlers
+	// if necessary.
+	for blockState := g.expr.BlockState; blockState != nil; blockState = blockState.Parent {
+		if blockState.ExceptionHandler == nil {
+			// This block has no exception handler.
+			continue
 		}
-		if caughtException {
+		if !g.p.Txn().CanUseSavepoint(ctx, blockState.SavepointTok.(kv.SavepointToken)) {
+			// The current transaction state does not allow roll-back.
+			// TODO(111446): some retryable errors allow the transaction to be rolled
+			// back partially (e.g. for read committed). We should be able to take
+			// advantage of that mechanism here as well.
+			return err
+		}
+		// Unset the exception handler to indicate that it has already encountered an
+		// error.
+		exceptionHandler := blockState.ExceptionHandler
+		blockState.ExceptionHandler = nil
+		var branch *tree.RoutineExpr
+		for i, code := range exceptionHandler.Codes {
+			caughtException := code == caughtCode
+			if code.String() == "OTHERS" {
+				// The special OTHERS condition matches any error code apart from
+				// query_canceled and assert_failure (though they can still be caught
+				// explicitly).
+				caughtException = caughtCode != pgcode.QueryCanceled && caughtCode != pgcode.AssertFailure
+			}
+			if caughtException {
+				branch = exceptionHandler.Actions[i]
+				break
+			}
+		}
+		if branch != nil {
 			cursErr := g.closeCursors(blockState)
 			if cursErr != nil {
+				// This error is unexpected, so return immediately.
 				return errors.CombineErrors(err, cursErr)
 			}
 			spErr := g.p.Txn().RollbackToSavepoint(ctx, blockState.SavepointTok.(kv.SavepointToken))
 			if spErr != nil {
+				// This error is unexpected, so return immediately.
 				return errors.CombineErrors(err, spErr)
 			}
-			g.reset(ctx, g.p, exceptionHandler.Actions[i], g.args)
-			return g.startInternal(ctx, g.p.Txn())
+			// Truncate the arguments using the number of variables in scope for the
+			// current block. This is necessary because the error may originate from
+			// a child block, but propagate up to a parent block. See the BlockState
+			// comments for further details.
+			args := g.args[:blockState.VariableCount]
+			g.reset(ctx, g.p, branch, args)
+
+			// If handling the exception results in another error, that error can in
+			// turn be caught by a parent exception handler. Otherwise, the exception
+			// was handled, so just return.
+			err = g.startInternal(ctx, g.p.Txn())
+			if err == nil {
+				return nil
+			}
 		}
 	}
+	// We reached the end of the exception handlers without handling this error.
 	return err
 }
 

@@ -953,8 +953,10 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		}
 	}
 
-	if udf.Def.BlockState != nil {
-		b.initRoutineExceptionHandler(udf.Def.BlockState, udf.Def.ExceptionBlock)
+	blockState := udf.Def.BlockState
+	if blockState != nil {
+		blockState.VariableCount = len(udf.Def.Params)
+		b.initRoutineExceptionHandler(blockState, udf.Def.ExceptionBlock)
 	}
 
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
@@ -984,7 +986,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.SetReturning,
 		udf.TailCall,
 		false, /* procedure */
-		udf.Def.BlockState,
+		blockState,
 		udf.Def.CursorDeclaration,
 	), nil
 }
@@ -995,8 +997,6 @@ func (b *Builder) initRoutineExceptionHandler(
 	blockState *tree.BlockState, exceptionBlock *memo.ExceptionBlock,
 ) {
 	if exceptionBlock == nil {
-		// Building the exception block is currently the only necessary
-		// initialization.
 		return
 	}
 	exceptionHandler := &tree.RoutineExceptionHandler{
