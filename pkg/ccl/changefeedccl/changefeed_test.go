@@ -6171,7 +6171,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 								t.Fatal("did not get signal to proceed")
 							}
 						},
-						// Handle tarnsient changefeed error.  We expect to see node drain error.
+						// Handle transient changefeed error.  We expect to see node drain error.
 						// When we do, notify drainNotification, and reset node drain channel.
 						HandleDistChangefeedError: func(err error) error {
 							errCh <- err
