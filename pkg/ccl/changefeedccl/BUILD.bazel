@@ -57,6 +57,7 @@ go_library(
         "//pkg/ccl/changefeedccl/kvevent",
         "//pkg/ccl/changefeedccl/kvfeed",
         "//pkg/ccl/changefeedccl/schemafeed",
+        "//pkg/ccl/kvccl/kvfollowerreadsccl",
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
         "//pkg/cloud/externalconn",

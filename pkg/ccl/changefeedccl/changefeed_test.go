@@ -6190,7 +6190,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 								t.Fatal("did not get signal to proceed")
 							}
 						},
-						// Handle tarnsient changefeed error.  We expect to see node drain error.
+						// Handle transient changefeed error.  We expect to see node drain error.
 						// When we do, notify drainNotification, and reset node drain channel.
 						HandleDistChangefeedError: func(err error) error {
 							errCh <- err
@@ -6227,6 +6227,10 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 	serverutils.SetClusterSetting(t, tc, "kv.closed_timestamp.target_duration", 10*time.Millisecond)
 	serverutils.SetClusterSetting(t, tc, "changefeed.experimental_poll_interval", 10*time.Millisecond)
 	serverutils.SetClusterSetting(t, tc, "changefeed.aggregator.heartbeat", 10*time.Millisecond)
+	// Randomizing replica assignment can cause timeouts or other
+	// failures due to assumptions in the testing knobs about balanced
+	// assignments.
+	serverutils.SetClusterSetting(t, tc, "changefeed.random_replica_selection.enabled", false)
 
 	sqlutils.CreateTable(
 		t, db, "foo",
