@@ -185,7 +185,8 @@ func (t *testdir) dump() error {
 		}
 		if strings.Contains(cfg.Name, "5node") ||
 			strings.Contains(cfg.Name, "fakedist") ||
-			(strings.HasPrefix(cfg.Name, "local-") && !tplCfg.Ccl) {
+			(strings.HasPrefix(cfg.Name, "local-") && !tplCfg.Ccl) ||
+			(cfg.Name == "local" && !tplCfg.Ccl) {
 			tplCfg.UseHeavyPool = true
 		}
 		subdir := filepath.Join(t.dir, cfg.Name)
