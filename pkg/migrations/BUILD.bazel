@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "migrations",
+    srcs = ["migrations_utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/migrations",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/protectedts",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/clusterunique",
+        "//pkg/sql/isql",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessionprotectedts",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/uuid",
+    ],
+)

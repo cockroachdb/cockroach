@@ -164,6 +164,17 @@ func (smf *DummyStreamManagerFactory) GetStreamIngestManager(
 	return nil, errors.WithStack(errors.New("Stream manager factory not implemented"))
 }
 
+// DummyMigrationsManagerFactory implements the eval.MigrationsManagerFactory
+// interface by returning errors.
+type DummyMigrationsManagerFactory struct{}
+
+// GetMigrationsManager implements the eval.MigrationsManagerFactory interface.
+func (d DummyMigrationsManagerFactory) GetMigrationsManager(
+	ctx context.Context,
+) (eval.MigrationsManager, error) {
+	return nil, errors.WithStack(errors.New("Migrations manager factory not implemented"))
+}
+
 // DummyEvalPlanner implements the eval.Planner interface by returning
 // errors.
 type DummyEvalPlanner struct {

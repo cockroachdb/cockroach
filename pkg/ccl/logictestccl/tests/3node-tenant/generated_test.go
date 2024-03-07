@@ -1208,6 +1208,13 @@ func TestTenantLogic_merge_join(
 	runLogicTest(t, "merge_join")
 }
 
+func TestTenantLogic_migrations(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "migrations")
+}
+
 func TestTenantLogic_multi_statement(
 	t *testing.T,
 ) {

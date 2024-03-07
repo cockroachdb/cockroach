@@ -2564,6 +2564,7 @@ var builtinOidsArray = []string{
 	2596: `array_agg(arg1: refcursor[]) -> refcursor[][]`,
 	2597: `array_agg(arg1: tuple[]) -> tuple[][]`,
 	2598: `setseed(seed: float) -> void`,
+	2599: `crdb_internal.protect_table_for_session(table_id: int, timestamp: decimal) -> void`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

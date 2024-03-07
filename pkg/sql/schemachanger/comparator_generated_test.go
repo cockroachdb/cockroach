@@ -1018,6 +1018,11 @@ func TestSchemaChangeComparator_merge_join_dist(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/merge_join_dist"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_migrations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/migrations"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_mixed_version_bootstrap_tenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_bootstrap_tenant"
