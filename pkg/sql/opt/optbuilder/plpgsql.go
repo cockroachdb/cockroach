@@ -222,6 +222,9 @@ type plBlock struct {
 	label string
 
 	// vars is an ordered list of variables declared in a PL/pgSQL block.
+	//
+	// INVARIANT: the variables of a parent (ancestor) block *always* form a
+	// prefix of the variables of a child (descendant) block.
 	vars []ast.Variable
 
 	// varTypes maps from the name of each variable in the scope to its type.
@@ -280,11 +283,6 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 	if astBlock.Label != "" {
 		panic(blockLabelErr)
 	}
-	if b.block().hasExceptionHandler {
-		// The parent block has an exception handler. Exception handlers and nested
-		// blocks are not yet compatible.
-		panic(nestedBlockExceptionErr)
-	}
 	b.ensureScopeHasExpr(s)
 	block := b.pushBlock(plBlock{
 		label:     astBlock.Label,
@@ -294,6 +292,15 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		cursors:   make(map[ast.Variable]ast.CursorDeclaration),
 	})
 	defer b.popBlock()
+	if len(astBlock.Exceptions) > 0 || b.hasExceptionHandler() {
+		// If the current block or some ancestor block has an exception handler, it
+		// is necessary to maintain the BlockState with a reference to the parent
+		// BlockState (if any).
+		block.state = &tree.BlockState{}
+		if parent := b.parentBlock(); parent != nil {
+			block.state.Parent = parent.state
+		}
+	}
 	// First, handle the variable declarations.
 	for i := range astBlock.Decls {
 		switch dec := astBlock.Decls[i].(type) {
@@ -352,7 +359,6 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		// The routine is volatile to prevent inlining. Only the block and
 		// variable-assignment routines need to be volatile; see the buildExceptions
 		// comment for details.
-		block.state = &tree.BlockState{}
 		block.hasExceptionHandler = true
 		blockCon := b.makeContinuation("exception_block")
 		blockCon.def.ExceptionBlock = exceptions
@@ -1682,6 +1688,15 @@ func (b *plpgsqlBuilder) block() *plBlock {
 	return &b.blocks[len(b.blocks)-1]
 }
 
+// parentBlock returns the parent block for the current PL/pgSQL block. It
+// returns nil if the current block does not have a parent.
+func (b *plpgsqlBuilder) parentBlock() *plBlock {
+	if len(b.blocks) <= 1 {
+		return nil
+	}
+	return &b.blocks[len(b.blocks)-2]
+}
+
 // pushBlock puts the given block on the stack. It is used when entering the
 // scope of a PL/pgSQL block.
 func (b *plpgsqlBuilder) pushBlock(bs plBlock) *plBlock {
@@ -1841,9 +1856,6 @@ var (
 	)
 	nonCompositeErr = pgerror.New(pgcode.DatatypeMismatch,
 		"cannot return non-composite value from function returning composite type",
-	)
-	nestedBlockExceptionErr = unimplemented.New("exception handler for nested blocks",
-		"PL/pgSQL blocks cannot yet be nested within a block that has an exception handler",
 	)
 	returnWithOUTParameterErr = pgerror.New(pgcode.DatatypeMismatch,
 		"RETURN cannot have a parameter in function with OUT parameters",
