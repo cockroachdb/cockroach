@@ -104,10 +104,10 @@ func registerOnlineRestore(r registry.Registry) {
 						sp.skip = "used for ad hoc experiments"
 					}
 
-					sp.namePrefix = sp.namePrefix + fmt.Sprintf("workload=%t/", runWorkload)
+					sp.namePrefix = sp.namePrefix + fmt.Sprintf("workload=%t", runWorkload)
 					if !useWorkarounds {
 						sp.skip = "used for ad hoc experiments"
-						sp.namePrefix = sp.namePrefix + fmt.Sprintf("workarounds=%t", useWorkarounds)
+						sp.namePrefix = sp.namePrefix + fmt.Sprintf("/workarounds=%t", useWorkarounds)
 					}
 
 					sp.initTestName()
