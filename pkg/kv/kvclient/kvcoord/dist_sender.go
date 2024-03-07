@@ -201,6 +201,30 @@ errors as 'roachpb.InternalErrType'.
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderProxySentCount = metric.Metadata{
+		Name:        "distsender.rpc.proxy.sent",
+		Help:        `This counts the number of proxy attempts for Send requests which originated on this client`,
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDistSenderProxyErrCount = metric.Metadata{
+		Name:        "distsender.rpc.proxy.err",
+		Help:        `This counts the number of failures of proxy attempts for Send requests which originated on this client`,
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDistSenderProxyForwardSentCount = metric.Metadata{
+		Name:        "distsender.rpc.proxy.forward.sent",
+		Help:        `This counts the number of requests forwarded by another node through this Send stack`,
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDistSenderProxyForwardErrCount = metric.Metadata{
+		Name:        "distsender.rpc.proxy.forward.err",
+		Help:        `This counts the number of failed responses to requests forwarded by another node through this Send stack`,
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderRangefeedTotalRanges = metric.Metadata{
 		Name: "distsender.rangefeed.total_ranges",
 		Help: `Number of ranges executing rangefeed
@@ -330,6 +354,10 @@ type DistSenderMetrics struct {
 	RangeLookups                       *metric.Counter
 	SlowRPCs                           *metric.Gauge
 	SlowReplicaRPCs                    *metric.Counter
+	ProxySentCount                     *metric.Counter
+	ProxyErrCount                      *metric.Counter
+	ProxyForwardSentCount              *metric.Counter
+	ProxyForwardErrCount               *metric.Counter
 	MethodCounts                       [kvpb.NumMethods]*metric.Counter
 	ErrCounts                          [kvpb.NumErrors]*metric.Counter
 	DistSenderRangeFeedMetrics
@@ -363,6 +391,10 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		RangeLookups:                       metric.NewCounter(metaDistSenderRangeLookups),
 		SlowRPCs:                           metric.NewGauge(metaDistSenderSlowRPCs),
 		SlowReplicaRPCs:                    metric.NewCounter(metaDistSenderSlowReplicaRPCs),
+		ProxySentCount:                     metric.NewCounter(metaDistSenderProxySentCount),
+		ProxyErrCount:                      metric.NewCounter(metaDistSenderProxyErrCount),
+		ProxyForwardSentCount:              metric.NewCounter(metaDistSenderProxyForwardSentCount),
+		ProxyForwardErrCount:               metric.NewCounter(metaDistSenderProxyForwardErrCount),
 		DistSenderRangeFeedMetrics:         makeDistSenderRangeFeedMetrics(),
 	}
 	for i := range m.MethodCounts {
@@ -2337,6 +2369,7 @@ func (ds *DistSender) sendToReplicas(
 	// list to only the requested proxy. If we fail on that request we fail back
 	// to the caller so they can try something else.
 	if ba.ProxyRangeInfo != nil {
+		ds.metrics.ProxyForwardSentCount.Inc(1)
 		log.VErrEventf(ctx, 3, "processing a proxy request")
 		// We don't know who the leaseholder is, and it is likely that the
 		// client had stale information. Return our information to them through
@@ -2345,6 +2378,7 @@ func (ds *DistSender) sendToReplicas(
 			log.VEventf(ctx, 2, "proxy failed, unknown leaseholder %v", routing)
 			br := kvpb.BatchResponse{}
 			br.Error = kvpb.NewError(kvpb.NewNotLeaseHolderError(roachpb.Lease{}, 0, routing.Desc(), "client requested a proxy but we can't figure out the leaseholder"))
+			ds.metrics.ProxyForwardErrCount.Inc(1)
 			return &br, nil
 		}
 		if ba.ProxyRangeInfo.Lease.Sequence != routing.Lease().Sequence ||
@@ -2353,6 +2387,7 @@ func (ds *DistSender) sendToReplicas(
 			log.VEventf(ctx, 2, "proxy failed, update client information %v != %v", ba.ProxyRangeInfo, routing)
 			br := kvpb.BatchResponse{}
 			br.Error = kvpb.NewError(kvpb.NewNotLeaseHolderError(*routing.Lease(), 0, routing.Desc(), msg))
+			ds.metrics.ProxyForwardErrCount.Inc(1)
 			return &br, nil
 		}
 
@@ -2363,6 +2398,7 @@ func (ds *DistSender) sendToReplicas(
 		// This should never happen. We validated the routing above and the token
 		// is still valid.
 		if idx == -1 {
+			ds.metrics.ProxyForwardErrCount.Inc(1)
 			return nil, errors.Newf("proxy requested, but inconsistent routing %v %v", desc, *routing.Leaseholder())
 		}
 		replicas = replicas[idx : idx+1]
@@ -2559,6 +2595,7 @@ func (ds *DistSender) sendToReplicas(
 			rangeInfo := routing.RangeInfo()
 			requestToSend.ProxyRangeInfo = &rangeInfo
 			log.VEventf(ctx, 1, "attempt proxy request %v using %v", requestToSend, rangeInfo)
+			ds.metrics.ProxySentCount.Inc(1)
 		}
 
 		tBegin := timeutil.Now() // for slow log message
@@ -2588,6 +2625,13 @@ func (ds *DistSender) sendToReplicas(
 
 		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchResponse(comparisonResult, int64(br.Size()))
 		ds.maybeIncrementErrCounters(br, err)
+		if err != nil {
+			if ba.ProxyRangeInfo != nil {
+				ds.metrics.ProxyErrCount.Inc(1)
+			} else if requestToSend.ProxyRangeInfo != nil {
+				ds.metrics.ProxyForwardErrCount.Inc(1)
+			}
+		}
 
 		if cbErr != nil {
 			log.VErrEventf(ctx, 2, "circuit breaker error: %s", cbErr)
