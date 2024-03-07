@@ -232,6 +232,10 @@ CREATE DATABASE db;
   to:   [Schema:{DescID: 107}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [Namespace:{DescID: 107, Name: public, ReferencedDescID: 106}, PUBLIC]
+  to:   [SchemaParent:{DescID: 107, ReferencedDescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: namespace exist before schema parent
 - from: [Owner:{DescID: 106}, PUBLIC]
   to:   [Database:{DescID: 106}, PUBLIC]
   kind: Precedence
