@@ -898,7 +898,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				Size_:            sst.Size,
 			})
 			return nil
-		})
+		}, nil /* visitExternalFile */)
 		if err != nil && errors.Is(err, pebble.ErrInvalidSkipSharedIteration) {
 			transitionFromSharedToRegularReplicate = true
 			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
