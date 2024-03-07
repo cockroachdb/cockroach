@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -108,23 +107,6 @@ func validateTenantInfo(
 	if info.ServiceMode != mtinfopb.ServiceModeNone && info.DataState != mtinfopb.DataStateReady {
 		return errors.Newf("cannot use tenant service mode %v with data state %v",
 			info.ServiceMode, info.DataState)
-	}
-
-	// Sanity check. Note that this interlock is not a guarantee that
-	// the cluster setting will never be set to an invalid tenant. There
-	// is a race condition between changing the cluster setting and the
-	// check here. Generally, other subsystems should always tolerate
-	// when the cluster setting is set to a tenant without service (or
-	// even one that doesn't exist).
-	if multitenant.VerifyTenantService.Get(&settings.SV) &&
-		info.ServiceMode == mtinfopb.ServiceModeNone &&
-		info.Name != "" &&
-		multitenant.DefaultTenantSelect.Get(&settings.SV) == string(info.Name) {
-		return errors.WithHintf(
-			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				"cannot stop service while tenant is selected as default"),
-			"Update the cluster setting %q to a different value.",
-			multitenant.DefaultClusterSelectSettingName)
 	}
 
 	return nil
