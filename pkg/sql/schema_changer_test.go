@@ -561,6 +561,9 @@ INSERT INTO t.test VALUES (1,1), (2,2), (3,3)
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "very long-running test under deadlock")
+
 	// protects backfillNotification
 	var mu syncutil.Mutex
 	var backfillNotification chan struct{}
