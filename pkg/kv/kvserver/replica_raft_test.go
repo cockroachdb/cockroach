@@ -86,6 +86,8 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 				numEntriesProcessed:      2,
 				numEntriesProcessedBytes: 3,
 				numEmptyEntries:          5,
+				numAddSST:                3,
+				numAddSSTCopies:          1,
 			},
 			stateAssertions:      4,
 			numConfChangeEntries: 6,
