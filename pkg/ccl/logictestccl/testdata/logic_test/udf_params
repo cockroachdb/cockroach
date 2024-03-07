@@ -2,7 +2,6 @@
 
 subtest types
 
-# PLpgSQL UDFs
 statement error pgcode 42P13 pq: function result type must be int because of OUT parameters
 CREATE FUNCTION f(OUT param INT) RETURNS FLOAT AS $$ BEGIN SELECT 1; END $$ LANGUAGE PLpgSQL;
 
@@ -199,31 +198,6 @@ CREATE FUNCTION f(OUT param INT) RETURNS INT AS $$ BEGIN SELECT 1 INTO param; EN
 
 statement ok
 DROP FUNCTION f(OUT INT, OUT text, OUT INT);
-
-# Stored Procedures
-statement ok
-CREATE PROCEDURE p(OUT param INT) AS $$ BEGIN SELECT 1; END $$ LANGUAGE PLpgSQL;
-
-statement ok
-DROP PROCEDURE p;
-
-statement ok
-CREATE PROCEDURE p(IN param1 INT, INOUT param2 INT, OUT param3 INT) AS $$ BEGIN SELECT 1, 2; END $$ LANGUAGE PLpgSQL;
-
-statement ok
-DROP PROCEDURE p;
-
-statement ok
-CREATE PROCEDURE p(INOUT param1 INT, OUT param2 INT) AS $$ BEGIN SELECT 1, 2, 3; END $$ LANGUAGE PLpgSQL;
-
-statement ok
-DROP PROCEDURE p;
-
-statement ok
-CREATE PROCEDURE p(INOUT param INT) AS $$ BEGIN SELECT 'hello'; END $$ LANGUAGE PLpgSQL;
-
-statement ok
-DROP PROCEDURE p;
 
 subtest end
 
