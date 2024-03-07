@@ -97,7 +97,7 @@ index-join t
       │    └── union spans
       │         ├── [{}, {}]
       │         └── ["", [])
-      ├── stats: [rows=1110]
+      ├── stats: [rows=1000]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -167,7 +167,7 @@ index-join t
       │    └── union spans
       │         ├── ["c"/"d", "c"/"d"]
       │         └── ["e"/"f", "e"/"f"]
-      ├── stats: [rows=110]
+      ├── stats: [rows=99.0991]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -196,7 +196,7 @@ index-join t
       │    └── union spans
       │         ├── [[], []]
       │         └── [Arr/, Arr/]
-      ├── stats: [rows=1110]
+      ├── stats: [rows=1000]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -246,7 +246,7 @@ index-join t
       │    └── union spans
       │         ├── [Arr/2, Arr/2]
       │         └── [Arr/3, Arr/3]
-      ├── stats: [rows=110]
+      ├── stats: [rows=99.0991]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -325,7 +325,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=110]
+ │    ├── stats: [rows=99.0991]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -335,7 +335,7 @@ select
  │         │    └── union spans
  │         │         ├── [{}, {}]
  │         │         └── ["c"/"d", "c"/"d"]
- │         ├── stats: [rows=110]
+ │         ├── stats: [rows=99.0991]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -362,7 +362,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=120]
+ │    ├── stats: [rows=108.108]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -373,7 +373,7 @@ select
  │         │         ├── [{}, {}]
  │         │         ├── ["c"/"d", "c"/"d"]
  │         │         └── ["e"/"f", "e"/"f"]
- │         ├── stats: [rows=120]
+ │         ├── stats: [rows=108.108]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -401,7 +401,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=120]
+ │    ├── stats: [rows=108.108]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -416,7 +416,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["e"/"f", "e"/"f"]
- │         ├── stats: [rows=120]
+ │         ├── stats: [rows=108.108]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -445,7 +445,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=110]
+ │    ├── stats: [rows=99.0991]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -456,7 +456,7 @@ select
  │         │         ├── [2, 2]
  │         │         ├── [[], []]
  │         │         └── [Arr/2, Arr/2]
- │         ├── stats: [rows=110]
+ │         ├── stats: [rows=99.0991]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -484,7 +484,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=120]
+ │    ├── stats: [rows=108.108]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -497,7 +497,7 @@ select
  │         │         ├── [[], []]
  │         │         ├── [Arr/2, Arr/2]
  │         │         └── [Arr/3, Arr/3]
- │         ├── stats: [rows=120]
+ │         ├── stats: [rows=108.108]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -527,7 +527,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=120]
+ │    ├── stats: [rows=108.108]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -546,7 +546,7 @@ select
  │         │              └── union spans
  │         │                   ├── [3, 3]
  │         │                   └── [Arr/3, Arr/3]
- │         ├── stats: [rows=120]
+ │         ├── stats: [rows=108.108]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
