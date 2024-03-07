@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -329,6 +330,12 @@ var enableBalancedRangeDistribution = settings.RegisterBoolSetting(
 	settings.WithName("changefeed.balance_range_distribution.enabled"),
 	settings.WithPublic)
 
+var useBulkOracle = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.random_replica_selection.enabled",
+	"randomize the selection of which replica backs up each range",
+	false)
+
 func makePlan(
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
@@ -354,8 +361,13 @@ func makePlan(
 			}
 		}
 
-		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil /* planner */, blankTxn,
-			sql.DistributionType(distMode), physicalplan.DefaultReplicaChooser, locFilter)
+		evalCtx := execCtx.ExtendedEvalContext()
+		oracle := physicalplan.DefaultReplicaChooser
+		if useBulkOracle.Get(&evalCtx.Settings.SV) {
+			oracle = kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), locFilter)
+		}
+		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil, /* planner */
+			blankTxn, sql.DistributionType(distMode), oracle, locFilter)
 		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans)
 		if err != nil {
 			return nil, nil, err
