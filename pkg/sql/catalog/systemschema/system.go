@@ -76,6 +76,7 @@ CREATE TABLE system.role_options (
 	user_id OID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (username, option),
 	INDEX users_user_id_idx (user_id ASC),
+	UNIQUE INDEX value_idx_unique_subject (value ASC) WHERE option = 'SUBJECT':::STRING,
 	FAMILY "primary" (username, option, value, user_id)
 )`
 
@@ -2587,6 +2588,17 @@ var (
 				KeyColumnNames:      []string{"user_id"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
+			},
+			descpb.IndexDescriptor{
+				Name:                "value_idx_unique_subject",
+				ID:                  3,
+				Unique:              true,
+				Predicate:           "option = 'SUBJECT':::STRING",
+				KeyColumnNames:      []string{"value"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{3},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
 			},
