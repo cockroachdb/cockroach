@@ -332,6 +332,8 @@ import (
 //      - noticetrace: runs the query and compares only the notices that
 //						appear. Cannot be combined with kvtrace.
 //      - nodeidx=N: runs the query on node N of the cluster.
+//      - empty: indicates that the result set must be empty (i.e. 0 rows
+//            returned).
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -906,7 +908,9 @@ type logicQuery struct {
 	sorter logicSorter
 	// noSort is true if the nosort option was explicitly provided in the test.
 	noSort bool
-	// expectedErr and expectedErrCode are as in logicStatement.
+	// empty indicates whether the result is expected to be empty (i.e. 0 rows
+	// returned).
+	empty bool
 
 	// if set, the results are cross-checked against previous queries with the
 	// same label.
@@ -2778,6 +2782,9 @@ func (t *logicTest) processSubtest(
 						case "async":
 							query.expectAsync = true
 
+						case "empty":
+							query.empty = true
+
 						default:
 							if strings.HasPrefix(opt, "round-in-strings") {
 								significantFigures, err := floatcmp.ParseRoundInStringsDirective(opt)
@@ -3581,7 +3588,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		if err != nil {
 			return err
 		}
-		if len(query.colTypes) != len(cols) {
+		if len(query.colTypes) != len(cols) && !query.empty {
 			return fmt.Errorf("%s: expected %d columns, but found %d",
 				query.pos, len(query.colTypes), len(cols))
 		}
@@ -3720,6 +3727,10 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 			allDuplicateRows = false
 			break
 		}
+	}
+
+	if query.empty && rowCount != 0 {
+		return errors.Newf("expected empty result, found %d rows\n%v", rowCount, actualResults)
 	}
 
 	if rowCount > 1 && !allDuplicateRows && query.sorter == nil && !query.noSort &&

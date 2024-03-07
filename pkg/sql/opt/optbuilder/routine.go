@@ -211,8 +211,13 @@ func (b *Builder) buildRoutine(
 	if len(f.Exprs) > 0 {
 		args = make(memo.ScalarListExpr, len(f.Exprs))
 		for i, pexpr := range f.Exprs {
+			argExpr := pexpr.(tree.TypedExpr)
+			if isProcedure && o.RoutineParams[i].Class == tree.RoutineParamOut {
+				// OUT parameter expressions are ignored.
+				argExpr = tree.DNull
+			}
 			args[i] = b.buildScalar(
-				pexpr.(tree.TypedExpr),
+				argExpr,
 				inScope,
 				nil, /* outScope */
 				nil, /* outCol */
