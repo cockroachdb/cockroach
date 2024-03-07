@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+GCE_PROJECT=cockroach-drt  ROACHPROD_DNS="drt.crdb.io" roachprod "$@"
