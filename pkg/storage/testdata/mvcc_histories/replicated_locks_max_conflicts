@@ -109,7 +109,7 @@ data: "k1"/5.000000000,0 -> /BYTES/v1
 error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
 
 run error
-del_range_pred k=k1 k=k2 maxLockConflicts=2
+del_range_pred k=k1 k=k2 maxLockConflicts=2 ts=1
 ----
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
