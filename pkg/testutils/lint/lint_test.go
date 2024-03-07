@@ -289,6 +289,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`opentelemetry-proto/.*.proto$`),
 			// These files are copied from bazel upstream with its own license.
 			stream.GrepNot(`build/bazel/bes/.*.proto$`),
+			// These files are copied from raft upstream with its own license.
+			stream.GrepNot(`^raft/.*`),
 			// Generated files for plpgsql.
 			stream.GrepNot(`sql/plpgsql/parser/plpgsqllexbase/.*.go`),
 		), func(filename string) {
@@ -366,6 +368,7 @@ func TestLint(t *testing.T) {
 			`context.TODO\(\)`,
 			"--",
 			"*_test.go",
+			":!raft/*.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -595,6 +598,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!*/doc.go",
+			":!raft/*.go",
 			":!util/syncutil/mutex_sync.go",
 			":!util/syncutil/mutex_sync_race.go",
 			":!testutils/lint/passes/deferunlockcheck/testdata/src/github.com/cockroachdb/cockroach/pkg/util/syncutil/mutex_sync.go",
@@ -823,7 +827,10 @@ func TestLint(t *testing.T) {
 	t.Run("TestTodoStyle", func(t *testing.T) {
 		t.Parallel()
 		// TODO(tamird): enforce presence of name.
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", `\sTODO\([^)]+\)[^:]`, "--", "*.go")
+		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", `\sTODO\([^)]+\)[^:]`, "--",
+			"*.go",
+			":!raft/*.go",
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1261,6 +1268,7 @@ func TestLint(t *testing.T) {
 			":!sql/*.pb.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
+			":!raft/*.go",
 			":!rpc/codec.go",
 			":!rpc/codec_test.go",
 			":!settings/settings_test.go",
@@ -1307,6 +1315,7 @@ func TestLint(t *testing.T) {
 			"*.go",
 			":!*.pb.go",
 			":!clusterversion/setting.go",
+			":!raft/*.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!util/encoding/encoding.go",
@@ -1352,6 +1361,7 @@ func TestLint(t *testing.T) {
 			`proto\.Equal`,
 			"--",
 			"*.go",
+			":!raft/*.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1446,6 +1456,7 @@ func TestLint(t *testing.T) {
 			":!cmd",
 			":!cli/exit",
 			":!bench/cmd",
+			":!raft/*.go",
 			":!sql/opt/optgen",
 			":!sql/colexec/execgen",
 			":!kv/kvpb/gen/main.go",
