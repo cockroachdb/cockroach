@@ -227,7 +227,7 @@ select
  ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
- │    ├── stats: [rows=20]
+ │    ├── stats: [rows=4]
  │    └── inverted-filter
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted expression: /5
@@ -240,7 +240,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["\x12lah\x00\x01", "\x12lah\x00\x01"]
- │         ├── stats: [rows=20]
+ │         ├── stats: [rows=4]
  │         ├── key: (2)
  │         └── scan a@inv
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
@@ -265,7 +265,7 @@ select
  ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
- │    ├── stats: [rows=1980]
+ │    ├── stats: [rows=396]
  │    └── inverted-filter
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted expression: /5
@@ -278,7 +278,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["\x12zoo\x00\x01", "\x12zoo\x00\x01"]
- │         ├── stats: [rows=1980]
+ │         ├── stats: [rows=396]
  │         ├── key: (2)
  │         └── scan a@inv
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
@@ -391,7 +391,7 @@ select
  ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
- │    ├── stats: [rows=20]
+ │    ├── stats: [rows=4]
  │    └── inverted-filter
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted expression: /5
@@ -404,7 +404,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["\x12lah\x00\x01", "\x12lah\x00\x01"]
- │         ├── stats: [rows=20]
+ │         ├── stats: [rows=4]
  │         ├── key: (2)
  │         └── scan a@inv
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
@@ -429,7 +429,7 @@ select
  ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
- │    ├── stats: [rows=1980]
+ │    ├── stats: [rows=396]
  │    └── inverted-filter
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted expression: /5
@@ -442,7 +442,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["\x12zoo\x00\x01", "\x12zoo\x00\x01"]
- │         ├── stats: [rows=1980]
+ │         ├── stats: [rows=396]
  │         ├── key: (2)
  │         └── scan a@inv
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
