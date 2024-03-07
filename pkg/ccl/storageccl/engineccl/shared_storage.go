@@ -50,6 +50,7 @@ func iterateReplicaKeySpansShared(
 	visitRangeDel func(start, end []byte, seqNum uint64) error,
 	visitRangeKey func(start, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
 	if !reader.ConsistentIterators() {
 		panic("reader must provide consistent iterators")
@@ -65,7 +66,7 @@ func iterateReplicaKeySpansShared(
 		ReplicatedBySpan:      desc.RSpan(),
 	})
 	span := spans[0]
-	return reader.ScanInternal(ctx, span.Key, span.EndKey, visitPoint, visitRangeDel, visitRangeKey, visitSharedFile)
+	return reader.ScanInternal(ctx, span.Key, span.EndKey, visitPoint, visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
 func init() {

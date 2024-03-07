@@ -446,6 +446,7 @@ var IterateReplicaKeySpansShared func(
 	visitRangeDel func(start, end []byte, seqNum uint64) error,
 	visitRangeKey func(start, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error
 
 // IterateOptions instructs how points and ranges should be presented to visitor

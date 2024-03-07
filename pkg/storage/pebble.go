@@ -1666,12 +1666,13 @@ func (p *Pebble) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set CategoryAndQoS.
 	return p.db.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile, nil /* visitExternalFile */)
+		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
 // ConsistentIterators implements the Engine interface.
@@ -2246,13 +2247,17 @@ func (p *Pebble) IngestLocalFilesWithStats(
 
 // IngestAndExciseFiles implements the Engine interface.
 func (p *Pebble) IngestAndExciseFiles(
-	ctx context.Context, paths []string, shared []pebble.SharedSSTMeta, exciseSpan roachpb.Span,
+	ctx context.Context,
+	paths []string,
+	shared []pebble.SharedSSTMeta,
+	external []pebble.ExternalFile,
+	exciseSpan roachpb.Span,
 ) (pebble.IngestOperationStats, error) {
 	rawSpan := pebble.KeyRange{
 		Start: EngineKey{Key: exciseSpan.Key}.Encode(),
 		End:   EngineKey{Key: exciseSpan.EndKey}.Encode(),
 	}
-	return p.db.IngestAndExcise(paths, shared, nil /* external */, rawSpan)
+	return p.db.IngestAndExcise(paths, shared, external, rawSpan)
 }
 
 // IngestExternalFiles implements the Engine interface.
@@ -2834,8 +2839,9 @@ func (p *pebbleReadOnly) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
-	return p.parent.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile)
+	return p.parent.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
 // Writer methods are not implemented for pebbleReadOnly. Ideally, the code
@@ -3024,12 +3030,13 @@ func (p *pebbleSnapshot) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set CategoryAndQoS.
 	return p.snapshot.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile, nil /* visitExternalFile */)
+		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
 // pebbleEFOS represents an eventually file-only snapshot created using
@@ -3147,12 +3154,13 @@ func (p *pebbleEFOS) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set CategoryAndQoS.
 	return p.efos.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile, nil /* visitExternalFile */)
+		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
 // ExceedMaxSizeError is the error returned when an export request

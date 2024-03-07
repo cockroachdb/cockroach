@@ -452,8 +452,9 @@ func (s spanSetReader) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
-	return s.r.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile)
+	return s.r.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
 func (s spanSetReader) Close() {
@@ -788,6 +789,7 @@ func (s spanSetBatch) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
 	// Only used on Engine.
 	panic("unimplemented")
