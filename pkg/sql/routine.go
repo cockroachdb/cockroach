@@ -31,26 +31,65 @@ import (
 // A callNode executes a procedure.
 type callNode struct {
 	proc *tree.RoutineExpr
+	r    tree.Datums
 }
 
 var _ planNode = &callNode{}
 
 // startExec implements the planNode interface.
 func (d *callNode) startExec(params runParams) error {
-	// Until OUT and INOUT parameters are supported, all procedures return no
-	// results, so we can ignore the results of the routine.
-	_, err := eval.Expr(params.ctx, params.EvalContext(), d.proc)
-	return err
+	res, err := eval.Expr(params.ctx, params.EvalContext(), d.proc)
+	if err != nil {
+		return err
+	}
+	if d.proc.Typ.Family() == types.VoidFamily {
+		// With VOID return type we expect no rows to be produced, so we should
+		// get NULL value from the expression evaluation.
+		if res != tree.DNull {
+			return errors.AssertionFailedf("expected NULL, got %T", res)
+		}
+		return nil
+	}
+	tuple, ok := tree.AsDTuple(res)
+	if !ok {
+		return errors.AssertionFailedf("expected a tuple, got %T", res)
+	}
+	d.r = tuple.D
+	return nil
 }
 
 // Next implements the planNode interface.
-func (d *callNode) Next(params runParams) (bool, error) { return false, nil }
+func (d *callNode) Next(params runParams) (bool, error) {
+	return d.r != nil, nil
+}
 
 // Values implements the planNode interface.
-func (d *callNode) Values() tree.Datums { return nil }
+func (d *callNode) Values() tree.Datums {
+	r := d.r
+	d.r = nil
+	return r
+}
 
 // Close implements the planNode interface.
 func (d *callNode) Close(ctx context.Context) {}
+
+func (d *callNode) getResultColumns() colinfo.ResultColumns {
+	// The schema of the result row is specified in the tuple contents except
+	// when the return type is VOID (in which case the callNode returns
+	// nothing).
+	if d.proc.Typ.Family() == types.VoidFamily {
+		return colinfo.ResultColumns{}
+	}
+	names, typs := d.proc.Typ.TupleLabels(), d.proc.Typ.TupleContents()
+	cols := make(colinfo.ResultColumns, len(names))
+	for i := range cols {
+		cols[i] = colinfo.ResultColumn{
+			Name: names[i],
+			Typ:  typs[i],
+		}
+	}
+	return cols
+}
 
 // EvalRoutineExpr returns the result of evaluating the routine. It calls the
 // routine's ForEachPlan closure to generate a plan for each statement in the
@@ -244,10 +283,8 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 
 		var w rowResultWriter
 		openCursor := stmtIdx == 1 && g.expr.CursorDeclaration != nil
-		if isFinalPlan && !g.expr.Procedure {
-			// The result of this statement is the routine's output. This is never the
-			// case for a procedure, which does not output any rows (since we do not
-			// yet support OUT or INOUT parameters).
+		if isFinalPlan {
+			// The result of this statement is the routine's output.
 			w = rrw
 		} else if openCursor {
 			// The result of the first statement will be used to open a SQL cursor.
