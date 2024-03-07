@@ -3744,6 +3744,14 @@ func MVCCPredicateDeleteRange(
 	maxLockConflicts int64,
 	targetLockConflictBytes int64,
 ) (*roachpb.Span, error) {
+	if endTime.IsEmpty() {
+		return nil, errors.AssertionFailedf("MVCCPredicateDeleteRange expects non-empty endTime")
+	}
+	if ms == nil {
+		return nil, errors.AssertionFailedf(
+			"MVCCStats passed in to MVCCPredicateDeleteRange must be non-nil to ensure proper stats" +
+				" computation during Delete operations")
+	}
 
 	if maxBatchSize == 0 {
 		// Set maxBatchSize to a large number to ensure MVCCPredicateDeleteRange
@@ -3769,12 +3777,6 @@ func MVCCPredicateDeleteRange(
 	// keyAlloc if we do send the point deletes.
 	var keyAlloc bufalloc.ByteAllocator
 	buf := make([]roachpb.Key, 0, rangeTombstoneThreshold)
-
-	if ms == nil {
-		return nil, errors.AssertionFailedf(
-			"MVCCStats passed in to MVCCPredicateDeleteRange must be non-nil to ensure proper stats" +
-				" computation during Delete operations")
-	}
 
 	// Check for any overlapping locks, and return them to be resolved.
 	if locks, err := ScanLocks(
@@ -3858,16 +3860,12 @@ func MVCCPredicateDeleteRange(
 	}
 	defer pointTombstoneIter.Close()
 
-	inlineDelete := endTime.IsEmpty()
-	var ltScanner *lockTableKeyScanner
-	if !inlineDelete {
-		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, nil /* txn */, lock.Intent, maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory)
-		if err != nil {
-			return nil, err
-		}
-		defer ltScanner.close()
+	ltScanner, err := newLockTableKeyScanner(
+		ctx, rw, nil /* txn */, lock.Intent, maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory)
+	if err != nil {
+		return nil, err
 	}
+	defer ltScanner.close()
 
 	pointTombstoneBuf := newPutBuffer()
 	defer pointTombstoneBuf.release()
