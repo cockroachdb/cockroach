@@ -254,9 +254,6 @@ type StoreSpec struct {
 	// storage engine has been closed. This only applies to in-memory storage
 	// engine.
 	StickyVFSID string
-	// UseFileRegistry is true if the "file registry" store version is desired.
-	// This is set by CCL code when encryption-at-rest is in use.
-	UseFileRegistry bool
 	// RocksDBOptions contains RocksDB specific options using a semicolon
 	// separated key-value syntax ("key1=value1; key2=value2").
 	RocksDBOptions string

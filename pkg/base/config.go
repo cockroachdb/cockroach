@@ -800,17 +800,19 @@ type StorageConfig struct {
 	BallastSize int64
 	// Settings instance for cluster-wide knobs. Must not be nil.
 	Settings *cluster.Settings
-	// UseFileRegistry is true if the file registry is needed (eg: encryption-at-rest).
-	// This may force the store version to versionFileRegistry if currently lower.
-	UseFileRegistry bool
-	// EncryptionOptions is a serialized protobuf set by Go CCL code and passed
-	// through to C CCL code to set up encryption-at-rest.  Must be set if and
-	// only if encryption is enabled, otherwise left empty.
+	// EncryptionOptions is a serialized protobuf set by Go CCL code describing
+	// the encryption-at-rest configuration. If encryption-at-rest has ever been
+	// enabled on the store, this field must be set.
 	EncryptionOptions []byte
 }
 
-// IsEncrypted returns whether the StorageConfig has encryption enabled.
-func (sc StorageConfig) IsEncrypted() bool {
+// HasEncryptionConfig returns whether the StorageConfig includes configuration
+// settings for encryption-at-rest. The existence of this config does not mean
+// that the store is configured to use encryption. If the store has ever had
+// encryption-at-rest enabled, the operator is required to provide the
+// --enterprise-encryption flag, which results in the StorageConfig carrying an
+// encryption config.
+func (sc StorageConfig) HasEncryptionConfig() bool {
 	return len(sc.EncryptionOptions) > 0
 }
 
