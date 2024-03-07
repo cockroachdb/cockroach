@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
-	ast "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -309,52 +308,6 @@ func (b *Builder) buildRoutine(
 		stmt, err := plpgsql.Parse(o.Body)
 		if err != nil {
 			panic(err)
-		}
-		var hasReturn bool
-		if len(stmt.AST.Body) > 0 {
-			lastStmt := stmt.AST.Body[len(stmt.AST.Body)-1]
-			_, hasReturn = lastStmt.(*ast.Return)
-		}
-		if !hasReturn {
-			if rtyp.Family() == types.VoidFamily {
-				// Add a RETURN NULL statement if the return type of the
-				// function is VOID and the last statement is not already a
-				// RETURN statement. This ensures that all possible code paths
-				// lead to a RETURN statement.
-				// TODO(#108298): There is a parsing bug that affects some
-				// PLpgSQL functions with VOID return types.
-				stmt.AST.Body = append(stmt.AST.Body, &ast.Return{
-					Expr:     tree.DNull,
-					Implicit: true,
-				})
-			} else {
-				// If the last statement is not a RETURN, and we have OUT
-				// parameters, then we need to add an implicit RETURN statement
-				// ourselves.
-				var exprs tree.Exprs
-				for _, param := range o.RoutineParams {
-					if param.IsOutParam() {
-						if param.Name != "" {
-							exprs = append(exprs, tree.NewUnresolvedName(string(param.Name)))
-						} else {
-							// TODO(100962): this logic will likely need to be
-							// changed.
-							exprs = append(exprs, tree.DNull)
-						}
-					}
-				}
-				if len(exprs) > 1 {
-					stmt.AST.Body = append(stmt.AST.Body, &ast.Return{
-						Expr:     &tree.Tuple{Exprs: exprs},
-						Implicit: true,
-					})
-				} else if len(exprs) == 1 {
-					stmt.AST.Body = append(stmt.AST.Body, &ast.Return{
-						Expr:     exprs[0],
-						Implicit: true,
-					})
-				}
-			}
 		}
 		routineParams := make([]routineParam, 0, len(o.RoutineParams))
 		for _, param := range o.RoutineParams {
