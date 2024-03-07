@@ -1,0 +1,180 @@
+# Tests MVCCPredicateDeleteRange with ImportEpoch predicates
+#
+# We set up data the represents a timeline like.
+#
+# Import 1 from t [1,2]
+# More writes at t3
+# Import 2 from t [4,5]
+#
+#  T  E|
+#  5  2|           c5
+#  4  2|                   e4  f4  g4 h4
+#  3   |           x   d3
+#  2  1|       b2  c2                         j2
+#  1  1|  a1           d1                  i1
+#      |   a   b   c   d   e   f   g   h   i   j
+
+run stats ok
+put k=a ts=1 v=a1 import_epoch=1
+put k=b ts=2 v=b2 import_epoch=1
+put k=c ts=2 v=c2 import_epoch=1
+del k=c ts=3
+put k=c ts=5 v=c5 import_epoch=2
+put k=d ts=1 v=d1 import_epoch=1
+put k=d ts=3 v=d3
+put k=e ts=4 v=e4 import_epoch=2
+put k=f ts=4 v=f4 import_epoch=2
+put k=g ts=4 v=g4 import_epoch=2
+put k=h ts=5 v=h4 import_epoch=2
+put k=i ts=1 v=i1 import_epoch=1
+put k=j ts=2 v=j2 import_epoch=1
+----
+>> put k=a ts=1 v=a1 import_epoch=1
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+16 live_count=+1 live_bytes=+30
+>> put k=b ts=2 v=b2 import_epoch=1
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+16 live_count=+1 live_bytes=+30
+>> put k=c ts=2 v=c2 import_epoch=1
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+16 live_count=+1 live_bytes=+30
+>> del k=c ts=3
+del: "c": found key true
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-30 gc_bytes_age=+4074
+>> put k=c ts=5 v=c5 import_epoch=2
+stats: key_bytes=+12 val_count=+1 val_bytes=+16 live_count=+1 live_bytes=+30 gc_bytes_age=-194
+>> put k=d ts=1 v=d1 import_epoch=1
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+16 live_count=+1 live_bytes=+30
+>> put k=d ts=3 v=d3
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_bytes=-9 gc_bytes_age=+2716
+>> put k=e ts=4 v=e4 import_epoch=2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+16 live_count=+1 live_bytes=+30
+>> put k=f ts=4 v=f4 import_epoch=2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+16 live_count=+1 live_bytes=+30
+>> put k=g ts=4 v=g4 import_epoch=2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+16 live_count=+1 live_bytes=+30
+>> put k=h ts=5 v=h4 import_epoch=2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+16 live_count=+1 live_bytes=+30
+>> put k=i ts=1 v=i1 import_epoch=1
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+16 live_count=+1 live_bytes=+30
+>> put k=j ts=2 v=j2 import_epoch=1
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+16 live_count=+1 live_bytes=+30
+>> at end:
+data: "a"/1.000000000,0 -> {importEpoch=1}/BYTES/a1
+data: "b"/2.000000000,0 -> {importEpoch=1}/BYTES/b2
+data: "c"/5.000000000,0 -> {importEpoch=2}/BYTES/c5
+data: "c"/3.000000000,0 -> /<empty>
+data: "c"/2.000000000,0 -> {importEpoch=1}/BYTES/c2
+data: "d"/3.000000000,0 -> /BYTES/d3
+data: "d"/1.000000000,0 -> {importEpoch=1}/BYTES/d1
+data: "e"/4.000000000,0 -> {importEpoch=2}/BYTES/e4
+data: "f"/4.000000000,0 -> {importEpoch=2}/BYTES/f4
+data: "g"/4.000000000,0 -> {importEpoch=2}/BYTES/g4
+data: "h"/5.000000000,0 -> {importEpoch=2}/BYTES/h4
+data: "i"/1.000000000,0 -> {importEpoch=1}/BYTES/i1
+data: "j"/2.000000000,0 -> {importEpoch=1}/BYTES/j2
+stats: key_count=10 key_bytes=176 val_count=13 val_bytes=183 live_count=10 live_bytes=291 gc_bytes_age=6596
+
+# Now lets del_range_pred on epoch 2
+run stats ok log-ops
+del_range_pred k=a end=z ts=10 import_epoch=2 rangeThreshold=3
+----
+>> del_range_pred k=a end=z ts=10 import_epoch=2 rangeThreshold=3
+stats: key_bytes=+12 val_count=+1 range_key_count=+1 range_key_bytes=+14 range_val_count=+1 live_count=-5 live_bytes=-150 gc_bytes_age=+15840
+>> at end:
+rangekey: {e-h\x00}/[10.000000000,0=/<empty>]
+data: "a"/1.000000000,0 -> {importEpoch=1}/BYTES/a1
+data: "b"/2.000000000,0 -> {importEpoch=1}/BYTES/b2
+data: "c"/10.000000000,0 -> /<empty>
+data: "c"/5.000000000,0 -> {importEpoch=2}/BYTES/c5
+data: "c"/3.000000000,0 -> /<empty>
+data: "c"/2.000000000,0 -> {importEpoch=1}/BYTES/c2
+data: "d"/3.000000000,0 -> /BYTES/d3
+data: "d"/1.000000000,0 -> {importEpoch=1}/BYTES/d1
+data: "e"/4.000000000,0 -> {importEpoch=2}/BYTES/e4
+data: "f"/4.000000000,0 -> {importEpoch=2}/BYTES/f4
+data: "g"/4.000000000,0 -> {importEpoch=2}/BYTES/g4
+data: "h"/5.000000000,0 -> {importEpoch=2}/BYTES/h4
+data: "i"/1.000000000,0 -> {importEpoch=1}/BYTES/i1
+data: "j"/2.000000000,0 -> {importEpoch=1}/BYTES/j2
+logical op: write_value: key="c", ts=10.000000000,0
+logical op: delete_range: startKey="e" endKey="h\x00" ts=10.000000000,0
+stats: key_count=10 key_bytes=188 val_count=14 val_bytes=183 range_key_count=1 range_key_bytes=14 range_val_count=1 live_count=5 live_bytes=141 gc_bytes_age=22436
+
+# Let's try it again at t11
+run stats ok log-ops
+del_range_pred k=a end=z ts=11 import_epoch=2 rangeThreshold=3
+----
+>> del_range_pred k=a end=z ts=11 import_epoch=2 rangeThreshold=3
+stats: no change
+>> at end:
+rangekey: {e-h\x00}/[10.000000000,0=/<empty>]
+data: "a"/1.000000000,0 -> {importEpoch=1}/BYTES/a1
+data: "b"/2.000000000,0 -> {importEpoch=1}/BYTES/b2
+data: "c"/10.000000000,0 -> /<empty>
+data: "c"/5.000000000,0 -> {importEpoch=2}/BYTES/c5
+data: "c"/3.000000000,0 -> /<empty>
+data: "c"/2.000000000,0 -> {importEpoch=1}/BYTES/c2
+data: "d"/3.000000000,0 -> /BYTES/d3
+data: "d"/1.000000000,0 -> {importEpoch=1}/BYTES/d1
+data: "e"/4.000000000,0 -> {importEpoch=2}/BYTES/e4
+data: "f"/4.000000000,0 -> {importEpoch=2}/BYTES/f4
+data: "g"/4.000000000,0 -> {importEpoch=2}/BYTES/g4
+data: "h"/5.000000000,0 -> {importEpoch=2}/BYTES/h4
+data: "i"/1.000000000,0 -> {importEpoch=1}/BYTES/i1
+data: "j"/2.000000000,0 -> {importEpoch=1}/BYTES/j2
+stats: key_count=10 key_bytes=188 val_count=14 val_bytes=183 range_key_count=1 range_key_bytes=14 range_val_count=1 live_count=5 live_bytes=141 gc_bytes_age=22436
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# Restored Import
+#
+# We set up data that contains 2 imports that have all been restored
+# at ts [1,3]
+#
+run ok
+put k=a ts=1 v=a import_epoch=1
+put k=b ts=2 v=b import_epoch=2
+put k=c ts=2 v=c import_epoch=1
+put k=d ts=1 v=d import_epoch=1
+put k=e ts=3 v=e import_epoch=2
+put k=f ts=1 v=f import_epoch=2
+put k=g ts=2 v=g import_epoch=2
+put k=h ts=3 v=h import_epoch=2
+put k=i ts=4 v=i import_epoch=1
+put k=j ts=1 v=j import_epoch=1
+----
+>> at end:
+data: "a"/1.000000000,0 -> {importEpoch=1}/BYTES/a
+data: "b"/2.000000000,0 -> {importEpoch=2}/BYTES/b
+data: "c"/2.000000000,0 -> {importEpoch=1}/BYTES/c
+data: "d"/1.000000000,0 -> {importEpoch=1}/BYTES/d
+data: "e"/3.000000000,0 -> {importEpoch=2}/BYTES/e
+data: "f"/1.000000000,0 -> {importEpoch=2}/BYTES/f
+data: "g"/2.000000000,0 -> {importEpoch=2}/BYTES/g
+data: "h"/3.000000000,0 -> {importEpoch=2}/BYTES/h
+data: "i"/4.000000000,0 -> {importEpoch=1}/BYTES/i
+data: "j"/1.000000000,0 -> {importEpoch=1}/BYTES/j
+
+run stats ok log-ops
+del_range_pred k=a end=z ts=5 import_epoch=2 rangeThreshold=3
+----
+>> del_range_pred k=a end=z ts=5 import_epoch=2 rangeThreshold=3
+stats: key_bytes=+12 val_count=+1 range_key_count=+1 range_key_bytes=+14 range_val_count=+1 live_count=-5 live_bytes=-145 gc_bytes_age=+16245
+>> at end:
+rangekey: {e-h\x00}/[5.000000000,0=/<empty>]
+data: "a"/1.000000000,0 -> {importEpoch=1}/BYTES/a
+data: "b"/5.000000000,0 -> /<empty>
+data: "b"/2.000000000,0 -> {importEpoch=2}/BYTES/b
+data: "c"/2.000000000,0 -> {importEpoch=1}/BYTES/c
+data: "d"/1.000000000,0 -> {importEpoch=1}/BYTES/d
+data: "e"/3.000000000,0 -> {importEpoch=2}/BYTES/e
+data: "f"/1.000000000,0 -> {importEpoch=2}/BYTES/f
+data: "g"/2.000000000,0 -> {importEpoch=2}/BYTES/g
+data: "h"/3.000000000,0 -> {importEpoch=2}/BYTES/h
+data: "i"/4.000000000,0 -> {importEpoch=1}/BYTES/i
+data: "j"/1.000000000,0 -> {importEpoch=1}/BYTES/j
+logical op: write_value: key="b", ts=5.000000000,0
+logical op: delete_range: startKey="e" endKey="h\x00" ts=5.000000000,0
+stats: key_count=10 key_bytes=152 val_count=11 val_bytes=150 range_key_count=1 range_key_bytes=14 range_val_count=1 live_count=5 live_bytes=145 gc_bytes_age=16245

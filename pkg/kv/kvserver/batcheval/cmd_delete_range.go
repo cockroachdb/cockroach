@@ -121,6 +121,11 @@ func DeleteRange(
 			"GCRangeHint must only be used together with UseRangeTombstone")
 	}
 
+	if args.Predicates.ImportEpoch > 0 && !args.Predicates.StartTime.IsEmpty() {
+		return result.Result{}, errors.AssertionFailedf(
+			"DeleteRangePredicate should not have both non-zero ImportEpoch and non-empty StartTime")
+	}
+
 	// Use MVCC range tombstone if requested.
 	if args.UseRangeTombstone {
 		if cArgs.Header.Txn != nil {
