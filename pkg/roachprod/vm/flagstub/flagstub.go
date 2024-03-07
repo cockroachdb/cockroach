@@ -82,6 +82,10 @@ func (p *provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
 	return nil
 }
 
+func (p *provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddress, error) {
+	return nil, nil
+}
+
 // CleanSSH implements vm.Provider and is a no-op.
 func (p *provider) CleanSSH(l *logger.Logger) error {
 	return nil
