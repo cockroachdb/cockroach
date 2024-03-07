@@ -1621,7 +1621,7 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 		return nil
 	}
 
-	nodeNames, err := c.createNodeCertArguments()
+	nodeNames, err := c.createNodeCertArguments(l)
 	if err != nil {
 		return err
 	}
@@ -1668,6 +1668,47 @@ tar cvf %[5]s %[2]s
 	return c.distributeLocalCertsTar(ctx, l, tarfile, nodes, 0)
 }
 
+// RedistributeNodeCert will generate a new node cert to capture any new hosts
+// and distribute the updated certificate to all the nodes.
+func (c *SyncedCluster) RedistributeNodeCert(ctx context.Context, l *logger.Logger) error {
+	nodeNames, err := c.createNodeCertArguments(l)
+	if err != nil {
+		return err
+	}
+
+	// Generate only the node certificate on the first node.
+	display := fmt.Sprintf("%s: initializing node cert", c.Name)
+	if err := c.Parallel(ctx, l, WithNodes(c.Nodes[0:1]).WithDisplay(display),
+		func(ctx context.Context, node Node) (*RunResultDetails, error) {
+			var cmd string
+			if c.IsLocal() {
+				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
+			}
+			cmd += fmt.Sprintf(`
+rm -fr %[2]s/node*
+mkdir -p %[2]s
+%[1]s cert create-node %[4]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key
+tar cvf %[5]s %[2]s
+`, cockroachNodeBinary(c, 1), CockroachNodeCertsDir, DefaultUser, strings.Join(nodeNames, " "), certsTarName)
+
+			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("redist-node-cert"))
+		},
+	); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		exit.WithCode(exit.UnspecifiedError())
+	}
+
+	tarfile, cleanup, err := c.getFileFromFirstNode(ctx, l, certsTarName)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	// Skip the first node which is where we generated the certs.
+	nodes := allNodes(len(c.VMs))[1:]
+	return c.distributeLocalCertsTar(ctx, l, tarfile, nodes, 0)
+}
+
 // DistributeTenantCerts will generate and distribute certificates to all of the
 // nodes, using the host cluster to generate tenant certificates.
 func (c *SyncedCluster) DistributeTenantCerts(
@@ -1681,7 +1722,7 @@ func (c *SyncedCluster) DistributeTenantCerts(
 		return errors.New("host cluster missing certificate bundle")
 	}
 
-	nodeNames, err := c.createNodeCertArguments()
+	nodeNames, err := c.createNodeCertArguments(l)
 	if err != nil {
 		return err
 	}
@@ -1821,7 +1862,9 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 
 // createNodeCertArguments returns a list of strings appropriate for use as
 // SubjectAlternativeName arguments to the ./cockroach cert create-node command.
-func (c *SyncedCluster) createNodeCertArguments() ([]string, error) {
+// It gathers all the internal and external IP addresses and hostnames for every
+// node in the cluster, and finally any load balancer IPs.
+func (c *SyncedCluster) createNodeCertArguments(l *logger.Logger) ([]string, error) {
 	nodeNames := []string{"localhost"}
 	if c.IsLocal() {
 		// For local clusters, we only need to add one of the VM IP addresses.
@@ -1843,7 +1886,14 @@ func (c *SyncedCluster) createNodeCertArguments() ([]string, error) {
 			nodeNames = append(nodeNames, "ip-"+strings.ReplaceAll(ip, ".", "-"))
 		}
 	}
-
+	// Add any load balancers IPs to the list of names.
+	lbAddresses, err := c.ListLoadBalancers(l)
+	if err != nil {
+		return nil, err
+	}
+	for _, lb := range lbAddresses {
+		nodeNames = append(nodeNames, lb.IP)
+	}
 	return nodeNames, nil
 }
 

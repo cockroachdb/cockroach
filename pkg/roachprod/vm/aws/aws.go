@@ -1618,3 +1618,8 @@ func (p *Provider) CreateLoadBalancer(*logger.Logger, vm.List, int) error {
 func (p *Provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
 	panic("unimplemented")
 }
+
+func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddress, error) {
+	// This Provider has no concept of load balancers yet, return an empty list.
+	return nil, nil
+}
