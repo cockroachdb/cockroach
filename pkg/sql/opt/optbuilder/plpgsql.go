@@ -170,6 +170,8 @@ type plpgsqlBuilder struct {
 	outParams []ast.Variable
 
 	identCounter int
+
+	isProcedure bool
 }
 
 // routineParam is similar to tree.RoutineParam but stores the resolved type.
@@ -186,13 +188,15 @@ func newPLpgSQLBuilder(
 	colRefs *opt.ColSet,
 	routineParams []routineParam,
 	returnType *types.T,
+	isProcedure bool,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
 	b := &plpgsqlBuilder{
-		ob:         ob,
-		colRefs:    colRefs,
-		returnType: returnType,
-		blocks:     make([]plBlock, 0, initialBlocksCap),
+		ob:          ob,
+		colRefs:     colRefs,
+		returnType:  returnType,
+		blocks:      make([]plBlock, 0, initialBlocksCap),
+		isProcedure: isProcedure,
 	}
 	// Build the initial block for the routine parameters, which are considered
 	// PL/pgSQL variables.
@@ -396,7 +400,11 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				expr = b.makeReturnForOutParams()
 			} else if b.returnType.Family() == types.VoidFamily {
 				if expr != nil {
-					panic(returnWithVoidParameterErr)
+					if b.isProcedure {
+						panic(returnWithVoidParameterProcedureErr)
+					} else {
+						panic(returnWithVoidParameterErr)
+					}
 				}
 				expr = tree.DNull
 			}
@@ -1595,7 +1603,8 @@ func (b *plpgsqlBuilder) makeReturnForOutParams() tree.Expr {
 			exprs[i] = tree.DNull
 		}
 	}
-	if len(exprs) == 1 {
+	if len(exprs) == 1 && !b.isProcedure {
+		// For procedures, even a single column is wrapped in a tuple.
 		return exprs[0]
 	}
 	return &tree.Tuple{Exprs: exprs}
@@ -1850,5 +1859,7 @@ var (
 	returnWithVoidParameterErr = pgerror.New(pgcode.DatatypeMismatch,
 		"RETURN cannot have a parameter in function returning void",
 	)
+	returnWithVoidParameterProcedureErr = pgerror.New(pgcode.Syntax,
+		"RETURN cannot have a parameter in a procedure")
 	emptyReturnErr = pgerror.New(pgcode.Syntax, "missing expression at or near \"RETURN;\"")
 )

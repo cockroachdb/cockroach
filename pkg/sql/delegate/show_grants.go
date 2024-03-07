@@ -265,7 +265,7 @@ SELECT database_name,
 			if err != nil {
 				return nil, err
 			}
-			signatureTypes, err := fn.SignatureTypes(d.ctx, d.catalog)
+			signatureTypes, err := fn.SignatureTypes(d.ctx, d.catalog, routineType, false /* inDropOrReplaceContext */)
 			if err != nil {
 				return nil, err
 			}

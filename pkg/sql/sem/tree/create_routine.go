@@ -500,19 +500,28 @@ func (node *RoutineObj) Format(ctx *FmtCtx) {
 	}
 }
 
-// SignatureTypes returns a slice of IN parameter types of the routine. These
-// types should be used for function resolution (i.e. they define the
-// "signature" of the function overload).
+// SignatureTypes returns a slice of types that define a "signature" of the
+// function overload:
+//   - for functions only input parameters are included;
+//   - for procedures, all parameters are included, unless
+//     inDropOrReplaceContext is true, in which case only input parameters are
+//     included.
 func (node RoutineObj) SignatureTypes(
-	ctx context.Context, res TypeReferenceResolver,
+	ctx context.Context,
+	res TypeReferenceResolver,
+	routineType RoutineType,
+	inDropOrReplaceContext bool,
 ) ([]*types.T, error) {
 	var typs []*types.T
 	if node.Params != nil {
 		typs = make([]*types.T, 0, len(node.Params))
+		// Generally, for procedures all parameters are included into the
+		// signature; however, when we're in a DROP or a REPLACE context, then
+		// only input parameters should be included, so we pass
+		// isProcedure=false to get that behavior.
+		isProcedure := routineType == ProcedureRoutine && !inDropOrReplaceContext
 		for _, arg := range node.Params {
-			if arg.IsInParam() {
-				// TODO(100405): we might need to include all parameters for
-				// procedures here.
+			if IsParamIncludedIntoSignature(arg.Class, isProcedure) {
 				typ, err := ResolveType(ctx, arg.Type, res)
 				if err != nil {
 					return nil, err
