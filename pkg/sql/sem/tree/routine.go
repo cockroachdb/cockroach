@@ -221,6 +221,37 @@ type RoutineOpenCursor struct {
 // BlockState is shared state between all routines that make up a PLpgSQL block.
 // It allows for coordination between the routines for exception handling.
 type BlockState struct {
+	// Parent is a pointer to this block's parent, if any. Note that this refers
+	// to a parent within the same routine; nested routine calls currently do not
+	// interact with one another directly (e.g. through TCO, see #119956).
+	Parent *BlockState
+
+	// VariableCount tracks the number of variables that are in scope for this
+	// block, so that the correct arguments can be supplied to an exception
+	// handler when an error originates from a "descendant" block. Example:
+	//
+	// DECLARE
+	//   x INT := 0;
+	// BEGIN
+	//   DECLARE
+	//     y INT := 1;
+	//   BEGIN
+	//     y = 1 // 0;
+	//   END;
+	// EXCEPTION WHEN division_by_zero THEN
+	//   RETURN 0;
+	// END
+	//
+	// In this example, the error is thrown from the inner block, where variables
+	// "x" and "y" are both in scope. Therefore, we will have access to values for
+	// both variables. However, the error will be caught by the outer block, for
+	// which only "x" is in scope. Therefore, the outer block must truncate the
+	// values before supplying them to its exception handler as arguments.
+	//
+	// NOTE: the list of variables in an outer block *always* form a prefix of the
+	// variables in a nested block.
+	VariableCount int
+
 	// ExceptionHandler is the exception handler for the current block, if any.
 	ExceptionHandler *RoutineExceptionHandler
 
