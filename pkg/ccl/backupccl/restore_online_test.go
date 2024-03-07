@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -35,8 +36,10 @@ func TestOnlineRestoreBasic(t *testing.T) {
 
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
+	ctx := context.Background()
+
 	const numAccounts = 1000
-	_, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
 		// Online restore is not supported in a secondary tenant yet.
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
@@ -55,9 +58,20 @@ func TestOnlineRestoreBasic(t *testing.T) {
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		},
 	}
-	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
+	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
 	defer cleanupFnRestored()
+	var preRestoreTs float64
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
+
 	bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage)
+
+	fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, tc.Conns[0], "data", fingerprintutils.Stripped())
+	require.NoError(t, err)
+	fpDst, err := fingerprintutils.FingerprintDatabase(ctx, rtc.Conns[0], "data", fingerprintutils.Stripped())
+	require.NoError(t, err)
+	require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+
+	assertMVCCOnlineRestore(t, rSQLDB, preRestoreTs)
 
 	// Wait for the download job to complete.
 	var downloadJobID jobspb.JobID
@@ -197,9 +211,6 @@ func TestOnlineRestoreErrors(t *testing.T) {
 func bankOnlineRestore(
 	t *testing.T, sqlDB *sqlutils.SQLRunner, numAccounts int, externalStorage string,
 ) {
-	var preRestoreTs float64
-	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
-
 	sqlDB.Exec(t, "CREATE DATABASE data")
 	sqlDB.Exec(t, fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage))
 
@@ -208,7 +219,12 @@ func bankOnlineRestore(
 	var restoreRowCount int
 	sqlDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
 	require.Equal(t, numAccounts, restoreRowCount)
+}
 
+// assertMVCCOnlineRestore checks that online restore conducted mvcc compatible
+// addsstable requests. Note that the restoring database is written to, so no
+// fingerprinting can be done after this command.
+func assertMVCCOnlineRestore(t *testing.T, sqlDB *sqlutils.SQLRunner, preRestoreTs float64) {
 	// Check that Online Restore was MVCC
 	var minRestoreMVCCTimestamp float64
 	sqlDB.QueryRow(t, "SELECT min(crdb_internal_mvcc_timestamp) FROM data.bank").Scan(&minRestoreMVCCTimestamp)
