@@ -219,10 +219,7 @@ func PebbleOptions(pebbleOptions string, parseHooks *pebble.ParseHooks) ConfigOp
 // to modify the given slice afterwards as it is captured by reference.
 func EncryptionAtRest(encryptionOptions []byte) ConfigOption {
 	return func(cfg *engineConfig) error {
-		if len(encryptionOptions) > 0 {
-			cfg.UseFileRegistry = true
-			cfg.EncryptionOptions = encryptionOptions
-		}
+		cfg.EncryptionOptions = encryptionOptions
 		return nil
 	}
 }
