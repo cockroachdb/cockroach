@@ -83,7 +83,7 @@ project
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=59.3784]
+      │    ├── stats: [rows=16.9653]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -96,7 +96,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=59.3784]
+      │         ├── stats: [rows=16.9653]
       │         ├── key: (1)
       │         └── scan t@m,inverted
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
@@ -133,7 +133,7 @@ project
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=59.3784]
+      │    ├── stats: [rows=16.9653]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -146,7 +146,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=59.3784]
+      │         ├── stats: [rows=16.9653]
       │         ├── key: (1)
       │         └── scan t@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:8(encodedkey!null)
@@ -195,7 +195,7 @@ project
       ├── fd: (1)-->(2,3)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=118.757]
+      │    ├── stats: [rows=33.9305]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -208,7 +208,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=118.757]
+      │         ├── stats: [rows=33.9305]
       │         ├── key: (1)
       │         └── scan t@m,inverted
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
@@ -248,7 +248,7 @@ project
       ├── fd: (1)-->(2,3)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=121.57]
+      │    ├── stats: [rows=34.7341]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -261,7 +261,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=121.57]
+      │         ├── stats: [rows=34.7341]
       │         ├── key: (1)
       │         └── scan t@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:9(encodedkey!null)
@@ -310,7 +310,7 @@ project
       ├── fd: ()-->(4), (1)-->(2,3)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string) i:4(int)
-      │    ├── stats: [rows=2.50393]
+      │    ├── stats: [rows=0.715409]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4)
       │    └── inverted-filter
@@ -323,7 +323,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=2.50393]
+      │         ├── stats: [rows=0.715409]
       │         ├── key: (1)
       │         └── scan t@mp,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:10(encodedkey!null)
@@ -365,7 +365,7 @@ project
       ├── fd: (1)-->(2-4)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string) i:4(int)
-      │    ├── stats: [rows=10.1111]
+      │    ├── stats: [rows=2.88887]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4)
       │    └── inverted-filter
@@ -378,7 +378,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=10.1111]
+      │         ├── stats: [rows=2.88887]
       │         ├── key: (1)
       │         └── scan t@mp,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:10(encodedkey!null)
