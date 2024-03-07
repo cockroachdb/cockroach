@@ -14,9 +14,7 @@
 
 package raft
 
-import (
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-)
+import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 
 func applyToStore(_ []pb.Entry)      {}
 func sendMessages(_ []pb.Message)    {}

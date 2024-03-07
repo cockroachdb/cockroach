@@ -18,9 +18,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFindConflict(t *testing.T) {

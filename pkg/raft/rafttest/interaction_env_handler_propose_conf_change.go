@@ -19,9 +19,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/cockroachdb/datadriven"
-
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/datadriven"
 )
 
 func (env *InteractionEnv) handleProposeConfChange(t *testing.T, d datadriven.TestData) error {

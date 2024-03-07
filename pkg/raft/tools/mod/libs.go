@@ -21,6 +21,4 @@
 
 package libs
 
-import (
-	_ "github.com/gogo/protobuf/proto"
-)
+import _ "github.com/gogo/protobuf/proto"
