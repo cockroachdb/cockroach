@@ -166,11 +166,10 @@ type plpgsqlBuilder struct {
 	// variables from a parent block can be referenced in a child block.
 	blocks []plBlock
 
-	identCounter int
+	// outParams is the set of OUT parameters for the routine.
+	outParams []ast.Variable
 
-	// hasOutParam indicates whether the routine has at least one OUT / INOUT
-	// parameter.
-	hasOutParam bool
+	identCounter int
 }
 
 // routineParam is similar to tree.RoutineParam but stores the resolved type.
@@ -209,7 +208,7 @@ func newPLpgSQLBuilder(
 			b.addVariable(param.name, param.typ)
 		}
 		if tree.IsOutParamClass(param.class) {
-			b.hasOutParam = true
+			b.outParams = append(b.outParams, param.name)
 		}
 	}
 	return b
@@ -332,13 +331,12 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 			block.cursors[dec.Name] = *dec
 		}
 	}
-	// Perform type-checking for RECORD-returning routines. This happens after
-	// building the variable declarations, so that expressions that reference
-	// those variables can be type-checked.
-	if types.IsRecordType(b.returnType) {
-		// Infer the concrete type by examining the RETURN statements. This has to
-		// happen after building the declaration block because RETURN statements can
-		// reference declared variables.
+	if types.IsRecordType(b.returnType) && !b.hasOutParam() {
+		// For a RECORD-returning routine, infer the concrete type by examining the
+		// RETURN statements. This has to happen after building the declaration
+		// block because RETURN statements can reference declared variables. Only
+		// perform this step if there are no OUT parameters, since OUT parameters
+		// will have already determined the return type.
 		recordVisitor := newRecordTypeVisitor(b.ob.ctx, b.ob.semaCtx, s, astBlock)
 		ast.Walk(recordVisitor, astBlock)
 		b.returnType = recordVisitor.typ
@@ -387,14 +385,27 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			return b.buildBlock(t, s)
 
 		case *ast.Return:
-			if b.hasOutParam && !t.Implicit {
-				// TODO(yuzefovich): we should not error out here if we have an
-				// empty RETURN (which is currently not supported by parser).
-				panic(returnWithOUTParameterErr)
+			// If the routine has OUT-parameters or a VOID return type, the RETURN
+			// statement must have no expression. Otherwise, the RETURN statement must
+			// have a non-empty expression.
+			expr := t.Expr
+			if b.hasOutParam() {
+				if expr != nil {
+					panic(returnWithOUTParameterErr)
+				}
+				expr = b.makeReturnForOutParams()
+			} else if b.returnType.Family() == types.VoidFamily {
+				if expr != nil {
+					panic(returnWithVoidParameterErr)
+				}
+				expr = tree.DNull
+			}
+			if expr == nil {
+				panic(emptyReturnErr)
 			}
 			// RETURN is handled by projecting a single column with the expression
 			// that is being returned.
-			returnScalar := b.buildPLpgSQLExpr(t.Expr, b.returnType, s)
+			returnScalar := b.buildPLpgSQLExpr(expr, b.returnType, s)
 			b.addBarrierIfVolatile(s, returnScalar)
 			returnColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_return"))
 			returnScope := s.push()
@@ -1217,10 +1228,24 @@ func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) *memo.ExceptionBlock 
 	}
 }
 
-// buildEndOfFunctionRaise builds a RAISE statement that throws an error when
-// control reaches the end of a PLpgSQL routine without reaching a RETURN
-// statement.
-func (b *plpgsqlBuilder) buildEndOfFunctionRaise(inScope *scope) *scope {
+// handleEndOfFunction handles the case when control flow reaches the end of a
+// PL/pgSQL routine without reaching a RETURN statement.
+func (b *plpgsqlBuilder) handleEndOfFunction(inScope *scope) *scope {
+	if b.hasOutParam() || b.returnType.Family() == types.VoidFamily {
+		// Routines with OUT-parameters and VOID return types need not explicitly
+		// specify a RETURN statement.
+		var returnExpr tree.Expr = tree.DNull
+		if b.hasOutParam() {
+			returnExpr = b.makeReturnForOutParams()
+		}
+		returnScope := inScope.push()
+		colName := scopeColName("_implicit_return")
+		returnScalar := b.buildPLpgSQLExpr(returnExpr, b.returnType, inScope)
+		b.ob.synthesizeColumn(returnScope, colName, b.returnType, nil /* expr */, returnScalar)
+		b.ob.constructProjectForScope(inScope, returnScope)
+		return returnScope
+	}
+	// Build a RAISE statement which throws an end-of-function error if executed.
 	makeConstStr := func(str string) opt.ScalarExpr {
 		return b.ob.factory.ConstructConstVal(tree.NewDString(str), types.String)
 	}
@@ -1424,7 +1449,7 @@ func (b *plpgsqlBuilder) appendPlpgSQLStmts(con *continuation, stmts []ast.State
 // given continuation function.
 func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 	if con == nil {
-		return b.buildEndOfFunctionRaise(s)
+		return b.handleEndOfFunction(s)
 	}
 	args := make(memo.ScalarListExpr, 0, len(con.def.Params))
 	addArg := func(name ast.Variable) {
@@ -1548,6 +1573,32 @@ func (b *plpgsqlBuilder) ensureScopeHasExpr(s *scope) {
 func (b *plpgsqlBuilder) makeIdentifier(id string) string {
 	b.identCounter++
 	return fmt.Sprintf("%s_%d", id, b.identCounter)
+}
+
+func (b *plpgsqlBuilder) hasOutParam() bool {
+	return len(b.outParams) > 0
+}
+
+// makeReturnForOutParams builds the implicit RETURN expression for a routine
+// with OUT-parameters.
+func (b *plpgsqlBuilder) makeReturnForOutParams() tree.Expr {
+	if len(b.outParams) == 0 {
+		panic(errors.AssertionFailedf("expected at least one out param"))
+	}
+	exprs := make(tree.Exprs, len(b.outParams))
+	for i, param := range b.outParams {
+		if param != "" {
+			exprs[i] = tree.NewUnresolvedName(string(param))
+		} else {
+			// TODO(100962): this logic will likely need to be
+			// changed.
+			exprs[i] = tree.DNull
+		}
+	}
+	if len(exprs) == 1 {
+		return exprs[0]
+	}
+	return &tree.Tuple{Exprs: exprs}
 }
 
 // continuation holds the information necessary to pick up execution from some
@@ -1796,4 +1847,8 @@ var (
 	returnWithOUTParameterErr = pgerror.New(pgcode.DatatypeMismatch,
 		"RETURN cannot have a parameter in function with OUT parameters",
 	)
+	returnWithVoidParameterErr = pgerror.New(pgcode.DatatypeMismatch,
+		"RETURN cannot have a parameter in function returning void",
+	)
+	emptyReturnErr = pgerror.New(pgcode.Syntax, "missing expression at or near \"RETURN;\"")
 )

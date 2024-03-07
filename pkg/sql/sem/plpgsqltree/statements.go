@@ -790,9 +790,6 @@ func (s *Continue) WalkStmt(visitor StatementVisitor) Statement {
 type Return struct {
 	StatementImpl
 	Expr Expr
-	// Implicit is set if this Return statement was not originally in the body
-	// and was added by us.
-	Implicit bool
 }
 
 func (s *Return) CopyNode() *Return {
