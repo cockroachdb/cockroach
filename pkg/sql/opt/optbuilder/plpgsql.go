@@ -170,6 +170,8 @@ type plpgsqlBuilder struct {
 	outParams []ast.Variable
 
 	identCounter int
+
+	isProcedure bool
 }
 
 // routineParam is similar to tree.RoutineParam but stores the resolved type.
@@ -186,13 +188,15 @@ func newPLpgSQLBuilder(
 	colRefs *opt.ColSet,
 	routineParams []routineParam,
 	returnType *types.T,
+	isProcedure bool,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
 	b := &plpgsqlBuilder{
-		ob:         ob,
-		colRefs:    colRefs,
-		returnType: returnType,
-		blocks:     make([]plBlock, 0, initialBlocksCap),
+		ob:          ob,
+		colRefs:     colRefs,
+		returnType:  returnType,
+		blocks:      make([]plBlock, 0, initialBlocksCap),
+		isProcedure: isProcedure,
 	}
 	// Build the initial block for the routine parameters, which are considered
 	// PL/pgSQL variables.
@@ -1595,7 +1599,8 @@ func (b *plpgsqlBuilder) makeReturnForOutParams() tree.Expr {
 			exprs[i] = tree.DNull
 		}
 	}
-	if len(exprs) == 1 {
+	if len(exprs) == 1 && !b.isProcedure {
+		// For procedures, even a single column is wrapped in a tuple.
 		return exprs[0]
 	}
 	return &tree.Tuple{Exprs: exprs}

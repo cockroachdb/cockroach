@@ -484,6 +484,30 @@ func (desc *Mutable) RemoveFunction(name string, id descpb.ID) {
 	}
 }
 
+// ReplaceOverload updates the function signature that matches oldArgTypes with
+// the new one. An error is returned if the function doesn't exist or a match is
+// not found.
+func (desc *Mutable) ReplaceOverload(
+	name string, oldArgTypes []*types.T, newSignature descpb.SchemaDescriptor_FunctionSignature,
+) error {
+	fn, ok := desc.Functions[name]
+	if !ok {
+		return errors.AssertionFailedf("unexpectedly didn't find a function %s", name)
+	}
+	for i := range fn.Signatures {
+		sig := fn.Signatures[i]
+		match := len(oldArgTypes) == len(sig.ArgTypes)
+		for j := 0; match && j < len(oldArgTypes); j++ {
+			match = oldArgTypes[j].Equivalent(sig.ArgTypes[j])
+		}
+		if match {
+			fn.Signatures[i] = newSignature
+			return nil
+		}
+	}
+	return errors.AssertionFailedf("unexpectedly didn't find overload for function %s with types %v", name, oldArgTypes)
+}
+
 // GetObjectType implements the Object interface.
 func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Schema
@@ -537,6 +561,16 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			)
 		}
 		overload.Types = paramTypes
+		if sig.IsProcedure {
+			// TODO(100405): if a procedure is created on 23.2 version, then it
+			// won't have InputTypes set, so we won't populate
+			// ProcedureInputTypes correctly. Is this ok?
+			procedureInputTypes := make(tree.ParamTypes, 0, len(sig.InputTypes))
+			for _, inputType := range sig.InputTypes {
+				procedureInputTypes = append(procedureInputTypes, tree.ParamType{Typ: inputType})
+			}
+			overload.ProcedureInputTypes = procedureInputTypes
+		}
 		prefixedOverload := tree.MakeQualifiedOverload(desc.GetName(), overload)
 		funcDef.Overloads = append(funcDef.Overloads, prefixedOverload)
 	}

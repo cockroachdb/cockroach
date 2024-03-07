@@ -1567,6 +1567,9 @@ message SchemaDescriptor {
     optional bool return_set = 4 [(gogoproto.nullable) = false];
 
     optional bool is_procedure = 5 [(gogoproto.nullable) = false];
+
+    // InputTypes contains only IN / INOUT parameters when IsProcedure is true.
+    repeated sql.sem.types.T input_types = 6;
   }
 
   // Function contains a group of UDFs with the same name.
