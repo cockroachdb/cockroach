@@ -209,15 +209,23 @@ func (b *Builder) buildRoutine(
 	// Build the argument expressions.
 	var args memo.ScalarListExpr
 	if len(f.Exprs) > 0 {
-		args = make(memo.ScalarListExpr, len(f.Exprs))
+		args = make(memo.ScalarListExpr, 0, len(f.Exprs))
 		for i, pexpr := range f.Exprs {
-			args[i] = b.buildScalar(
+			if isProcedure && o.RoutineParams[i].Class == tree.RoutineParamOut {
+				// For procedures, OUT parameters need to be specified in the
+				// CALL statement, but they are not evaluated and shouldn't be
+				// passed down to the UDF Call (since the body can only
+				// reference the input parameters which we refer to by their
+				// ordinals).
+				continue
+			}
+			args = append(args, b.buildScalar(
 				pexpr.(tree.TypedExpr),
 				inScope,
 				nil, /* outScope */
 				nil, /* outCol */
 				colRefs,
-			)
+			))
 		}
 	}
 
