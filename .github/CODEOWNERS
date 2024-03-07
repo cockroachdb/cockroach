@@ -332,6 +332,10 @@
 /pkg/kv/kvserver/txnwait/               @cockroachdb/kv-prs
 /pkg/kv/kvserver/uncertainty/           @cockroachdb/kv-prs
 
+# KV/replication team owns integration with raft.
+#
+/pkg/raft/ @cockroachdb/repl-prs
+
 /pkg/ccl/spanconfigccl/                            @cockroachdb/kv-prs @cockroachdb/sql-foundations
 /pkg/ccl/spanconfigccl/spanconfigkvaccessorccl/    @cockroachdb/kv-prs
 /pkg/ccl/spanconfigccl/spanconfiglimiterccl/       @cockroachdb/sql-foundations
