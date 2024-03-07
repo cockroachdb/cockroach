@@ -1,7 +1,85 @@
 # LogicTest: !local-mixed-23.1
 
+subtest types
+
 statement error pgcode 42601 pq: at or near "float": syntax error
 CREATE PROCEDURE p(OUT param INT) RETURNS FLOAT AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement ok
+CREATE PROCEDURE p(IN param1 INT, OUT param2 INT) AS $$ SELECT param1; $$ LANGUAGE SQL;
+
+statement error pgcode 42883 procedure p\(\) does not exist
+CALL p();
+
+statement error pgcode 42883 procedure p\(int\) does not exist
+CALL p(1);
+
+statement error pgcode 42883 procedure p\(int, int, int\) does not exist
+CALL p(1, 2, 3);
+
+statement ok
+CREATE PROCEDURE p(IN param1 FLOAT, OUT param2 FLOAT) AS $$ SELECT param1; $$ LANGUAGE SQL;
+
+statement error pgcode 42723 function "p" already exists with same argument types
+CREATE PROCEDURE p(OUT param1 INT, IN param2 INT) AS $$ SELECT param2; $$ LANGUAGE SQL;
+
+statement ok
+CREATE OR REPLACE PROCEDURE p(OUT param2 INT, IN param1 INT) AS $$ SELECT param1; $$ LANGUAGE SQL;
+
+statement error pgcode 42723 function "p" already exists with same argument types
+CREATE PROCEDURE p(OUT param1 INT, IN param2 INT, OUT param3 INT) AS $$ SELECT (1, param2); $$ LANGUAGE SQL;
+
+statement ok
+CREATE PROCEDURE p(OUT param1 INT, IN param2 INT, IN param3 INT) AS $$ SELECT param2 + param3; $$ LANGUAGE SQL;
+
+statement error pgcode 42723 function "p" already exists with same argument types
+CREATE PROCEDURE p(INOUT param1 INT, IN param2 INT) AS $$ SELECT param1 + param2; $$ LANGUAGE SQL;
+
+statement ok
+CREATE PROCEDURE p(OUT param1 INT, OUT param2 INT, OUT param3 INT) AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
+
+statement error pgcode 42725 procedure p\(int, int, int\) is not unique
+CALL p(1, 2, 3);
+
+statement error pgcode 42725 procedure name "p" is not unique
+DROP PROCEDURE p;
+
+# Postgres seems to special-case the DROP behavior when none of the parameter
+# classes are specified for the argument types - it permissively treats them as
+# IN or OUT in order to match the maximum number overloads. As a result, PG
+# often returns 'procedure name "p" is not unique' error. Replicating that
+# behavior is tricky and seems not worth it, so we, instead, treat all argument
+# types with unspecified parameter class as having the IN class.
+
+# Postgres returns 'procedure name "p" is not unique' error here.
+statement error pgcode 42883 procedure p\(int,int,int\) does not exist
+DROP PROCEDURE p(INT, INT, INT);
+
+# Postgres returns 'procedure name "p" is not unique' error here.
+statement ok
+DROP PROCEDURE p(INT, INT);
+
+statement ok
+CREATE PROCEDURE p(OUT param1 INT, IN param2 INT, IN param3 INT) AS $$ SELECT param2 + param3; $$ LANGUAGE SQL;
+
+statement ok
+DROP PROCEDURE p(OUT INT, INT, INT);
+
+statement error pgcode 42725 procedure name "p" is not unique
+DROP PROCEDURE p;
+
+# Postgres here drops the overload with 3 OUT parameters.
+statement error pgcode 42883 procedure p\(int,int,int\) does not exist
+DROP PROCEDURE p(INT, INT, INT);
+
+statement ok
+DROP PROCEDURE p(OUT INT, OUT INT, OUT INT);
+
+statement ok
+DROP PROCEDURE p(OUT INT, INT);
+
+statement ok
+DROP PROCEDURE p;
 
 statement ok
 CREATE PROCEDURE p(OUT param INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
@@ -21,8 +99,41 @@ DROP PROCEDURE p;
 statement error pgcode 42P13 pq: return type mismatch in function declared to return record
 CREATE PROCEDURE p(INOUT param1 INT, OUT param2 INT) AS $$ SELECT 1, 2, 3; $$ LANGUAGE SQL;
 
-statement error pgcode 42P13 pq: return type mismatch in function declared to return int
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
 CREATE PROCEDURE p(INOUT param INT) AS $$ SELECT 'hello'; $$ LANGUAGE SQL;
+
+# Verify that function resolution works correctly when dropping procedures (OUT
+# arguments are ignored).
+statement ok
+CREATE PROCEDURE p(OUT param INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement ok
+DROP PROCEDURE p;
+
+statement ok
+CREATE PROCEDURE p(OUT param INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement ok
+DROP PROCEDURE p(OUT INT);
+
+statement ok
+CREATE PROCEDURE p(OUT param1 INT, OUT param2 INT) AS $$ SELECT 1, 2; $$ LANGUAGE SQL;
+
+statement ok
+DROP PROCEDURE p(OUT INT);
+
+statement ok
+CREATE PROCEDURE p(OUT param1 INT, OUT param2 INT) AS $$ SELECT 1, 2; $$ LANGUAGE SQL;
+
+statement error pq: procedure p\(int\) does not exist
+DROP PROCEDURE p(INT);
+
+statement ok
+DROP PROCEDURE p;
+
+subtest end
+
+subtest show_create
 
 statement ok
 CREATE PROCEDURE p(IN p1 INT, INOUT p2 INT, IN OUT p3 INT, OUT p4 INT) AS $$
@@ -37,3 +148,198 @@ CREATE PROCEDURE public.p(IN p1 INT8, INOUT p2 INT8, INOUT p3 INT8, OUT p4 INT8)
   AS $$
   SELECT p2, p3, p1;
 $$
+
+statement ok
+DROP PROCEDURE p;
+
+statement ok
+CREATE PROCEDURE p(OUT param INT) AS $$
+SELECT 1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p];
+----
+CREATE PROCEDURE public.p(OUT param INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement ok
+DROP PROCEDURE p;
+
+subtest end
+
+subtest parameter_names
+
+# Sharing of parameter names is only allowed across two different "parameter
+# namespaces" (IN vs OUT).
+
+statement error pgcode 42P13 pq: parameter name "a" used more than once
+CREATE PROCEDURE p_same_name(IN a INT, IN a INT) LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42P13 pq: parameter name "a" used more than once
+CREATE PROCEDURE p_same_name(IN a INT, INOUT a INT) LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42P13 pq: parameter name "a" used more than once
+CREATE PROCEDURE p_same_name(OUT a INT, INOUT a INT) LANGUAGE SQL AS $$ SELECT 1, 1 $$;
+
+statement ok
+CREATE PROCEDURE p_same_name(IN a INT, OUT a INT) LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE OR REPLACE PROCEDURE p_same_name(IN a INT, OUT a INT) LANGUAGE SQL AS $$ SELECT a $$;
+
+statement error pgcode 42703 pq: column "param_out" does not exist
+CREATE PROCEDURE p_names(IN param_in INT, OUT param_out INT) LANGUAGE SQL AS $$ SELECT param_out $$;
+
+statement ok
+CREATE PROCEDURE p_names(IN param_in INT, OUT param_out INT) LANGUAGE SQL AS $$ SELECT param_in $$;
+
+statement ok
+CREATE PROCEDURE p_out_int(OUT param INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement ok
+CREATE PROCEDURE p_in_int(IN param INT) AS $$ SELECT param; $$ LANGUAGE SQL;
+
+statement ok
+CREATE PROCEDURE p_inout_int(INOUT param INT) AS $$ SELECT param; $$ LANGUAGE SQL;
+
+# Unlike for functions, changing single OUT parameter name is not ok.
+statement error pgcode 42P13 pq: cannot change return type of existing function
+CREATE OR REPLACE PROCEDURE p_out_int(OUT param_new INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+# Changing IN or INOUT parameter name is not allowed.
+statement error pgcode 42P13 pq: cannot change name of input parameter "param"
+CREATE OR REPLACE PROCEDURE p_in_int(IN param_new INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement error pgcode 42P13 pq: cannot change return type of existing function
+CREATE OR REPLACE PROCEDURE p_inout_int(INOUT param_new INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+subtest end
+
+subtest changing_parameters
+
+statement ok
+CREATE PROCEDURE p_int(IN param INT) AS $$ SELECT param; $$ LANGUAGE SQL;
+
+statement error pgcode 42P13 pq: cannot change whether a procedure has output parameters
+CREATE OR REPLACE PROCEDURE p_int(IN param INT, OUT INT) AS $$ SELECT param; $$ LANGUAGE SQL;
+
+statement ok
+DROP PROCEDURE p_int;
+
+statement ok
+CREATE PROCEDURE p_int(IN param INT, OUT INT) AS $$ SELECT param; $$ LANGUAGE SQL;
+
+statement error pgcode 42P13 pq: cannot change whether a procedure has output parameters
+CREATE OR REPLACE PROCEDURE p_int(IN param INT) AS $$ SELECT param; $$ LANGUAGE SQL;
+
+# We can change the order of parameters across IN and OUT "namespaces" as long
+# as we preserve the right ordering within each "namespace".
+statement ok
+CREATE PROCEDURE p_3_in_2_out(IN param1 INT, IN param2 INT, IN param3 INT, OUT param1 INT, OUT param2 INT) AS $$ SELECT (param1, param2 + param3); $$ LANGUAGE SQL;
+
+statement ok
+CREATE OR REPLACE PROCEDURE p_3_in_2_out(IN param1 INT, OUT param1 INT, IN param2 INT, IN param3 INT, OUT param2 INT) AS $$ SELECT (param1, param2 + param3); $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_3_in_2_out];
+----
+CREATE PROCEDURE public.p_3_in_2_out(IN param1 INT8, OUT param1 INT8, IN param2 INT8, IN param3 INT8, OUT param2 INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT (param1, param2 + param3);
+$$
+
+# We can also merge some parameters as long as they have the same names.
+statement error pgcode 42P13 pq: cannot change return type of existing function
+CREATE OR REPLACE PROCEDURE p_3_in_2_out(INOUT param1 INT, IN param2 INT, INOUT param3 INT) AS $$ SELECT (1, 1); $$ LANGUAGE SQL;
+
+statement ok
+CREATE OR REPLACE PROCEDURE p_3_in_2_out(INOUT param1 INT, INOUT param2 INT, IN param3 INT) AS $$ SELECT (param1, param2 + param3); $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_3_in_2_out];
+----
+CREATE PROCEDURE public.p_3_in_2_out(INOUT param1 INT8, INOUT param2 INT8, IN param3 INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT (param1, param2 + param3);
+$$
+
+subtest end
+
+subtest default_parameter_names
+
+# Parameter names are optional. Each unnamed output parameter with ordinal 'i'
+# (among all output parameters) gets the default name that is "column" || i.
+
+statement ok
+CREATE PROCEDURE p_default_names(OUT INT, OUT param2 INT, IN INT, OUT INT) AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_default_names];
+----
+CREATE PROCEDURE public.p_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT (1:::INT8, 2:::INT8, 3:::INT8);
+$$
+
+# Introducing the OUT parameter name is disallowed because it'd change the
+# return type.
+statement error cannot change return type of existing function
+CREATE OR REPLACE PROCEDURE p_default_names(OUT INT, OUT param2 INT, IN INT, OUT param3 INT) AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
+
+# Introducing the name that matches the default OUT parameter name is allowed.
+statement ok
+CREATE OR REPLACE PROCEDURE p_default_names(OUT INT, OUT param2 INT, IN INT, OUT column3 INT) AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_default_names];
+----
+CREATE PROCEDURE public.p_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT column3 INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT (1:::INT8, 2:::INT8, 3:::INT8);
+$$
+
+# Then we can omit the default OUT parameter name again.
+statement ok
+CREATE OR REPLACE PROCEDURE p_default_names(OUT INT, OUT param2 INT, IN INT, OUT INT) AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_default_names];
+----
+CREATE PROCEDURE public.p_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT (1:::INT8, 2:::INT8, 3:::INT8);
+$$
+
+# Introducing the IN parameter name is ok.
+statement ok
+CREATE OR REPLACE PROCEDURE p_default_names(OUT INT, OUT param2 INT, IN in_param INT, OUT INT) AS $$ SELECT (in_param, 2, 3); $$ LANGUAGE SQL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_default_names];
+----
+CREATE PROCEDURE public.p_default_names(OUT INT8, OUT param2 INT8, IN in_param INT8, OUT INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT (in_param, 2, 3);
+$$
+
+# But then the IN parameter name cannot be changed anymore.
+statement error cannot change name of input parameter "in_param"
+CREATE OR REPLACE PROCEDURE p_default_names(OUT INT, OUT param2 INT, IN in_param_new INT, OUT INT) AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
+
+subtest end
+
+statement ok
+CREATE TYPE typ AS (a INT, b INT);
+
+statement ok
+CREATE PROCEDURE p_udt(OUT typ) AS $$ SELECT (1, 2); $$ LANGUAGE SQL;
