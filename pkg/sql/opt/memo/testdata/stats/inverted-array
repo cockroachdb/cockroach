@@ -69,7 +69,7 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans: [, NULL/NULL)
-      ├── stats: [rows=1020]
+      ├── stats: [rows=1000]
       ├── key: (1)
       └── scan t@a_idx,inverted
            ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
@@ -115,7 +115,7 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans: [2, 4)
-      ├── stats: [rows=20]
+      ├── stats: [rows=19.6078]
       ├── key: (1)
       └── scan t@a_idx,inverted
            ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
@@ -166,7 +166,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) a:2(int[])
- │    ├── stats: [rows=20]
+ │    ├── stats: [rows=19.6078]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -176,7 +176,7 @@ select
  │         │    └── union spans
  │         │         ├── [[], []]
  │         │         └── [2, 2]
- │         ├── stats: [rows=20]
+ │         ├── stats: [rows=19.6078]
  │         ├── key: (1)
  │         └── scan t@a_idx,inverted
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
@@ -203,7 +203,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) a:2(int[])
- │    ├── stats: [rows=30]
+ │    ├── stats: [rows=29.4118]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -213,7 +213,7 @@ select
  │         │    └── union spans
  │         │         ├── [[], []]
  │         │         └── [2, 4)
- │         ├── stats: [rows=30]
+ │         ├── stats: [rows=29.4118]
  │         ├── key: (1)
  │         └── scan t@a_idx,inverted
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
@@ -241,7 +241,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) a:2(int[])
- │    ├── stats: [rows=30]
+ │    ├── stats: [rows=29.4118]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -256,7 +256,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: [3, 3]
- │         ├── stats: [rows=30]
+ │         ├── stats: [rows=29.4118]
  │         ├── key: (1)
  │         └── scan t@a_idx,inverted
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
