@@ -673,7 +673,7 @@ func (r *Replica) applySnapshot(
 	if inSnap.doExcise {
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
 		if ingestStats, err =
-			r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, exciseSpan); err != nil {
+			r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, nil /* external */, exciseSpan); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s", inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
 	} else {

@@ -678,6 +678,7 @@ func (p *pebbleBatch) ScanInternal(
 	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
 	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
 	panic("ScanInternal only supported on Engine and Snapshot.")
 }
