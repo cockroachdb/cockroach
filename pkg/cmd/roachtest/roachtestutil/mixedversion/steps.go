@@ -214,6 +214,62 @@ func (s runHookStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand, 
 	return s.hook.fn(ctx, l, rng, h)
 }
 
+// setClusterSettingStep sets the cluster setting `name` to `value`.
+type setClusterSettingStep struct {
+	minVersion *clusterupgrade.Version
+	name       string
+	value      interface{}
+}
+
+func (s setClusterSettingStep) Background() shouldStop { return nil }
+
+func (s setClusterSettingStep) Description() string {
+	return fmt.Sprintf("set cluster setting %q to %v", s.name, s.value)
+}
+
+func (s setClusterSettingStep) Run(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
+) error {
+	stmt := fmt.Sprintf("SET CLUSTER SETTING %s = $1", s.name)
+	return h.ExecWithGateway(rng, nodesRunningAtLeast(s.minVersion, h), stmt, s.value)
+}
+
+// resetClusterSetting resets cluster setting `name`.
+type resetClusterSettingStep struct {
+	minVersion *clusterupgrade.Version
+	name       string
+}
+
+func (s resetClusterSettingStep) Background() shouldStop { return nil }
+
+func (s resetClusterSettingStep) Description() string {
+	return fmt.Sprintf("reset cluster setting %q", s.name)
+}
+
+func (s resetClusterSettingStep) Run(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
+) error {
+	stmt := fmt.Sprintf("RESET CLUSTER SETTING %s", s.name)
+	return h.ExecWithGateway(rng, nodesRunningAtLeast(s.minVersion, h), stmt)
+}
+
+// nodesRunningAtLeast returns a list of nodes running a version that
+// is guaranteed to be at least `minVersion`. It assumes that the
+// caller made sure that there *is* one such node.
+func nodesRunningAtLeast(minVersion *clusterupgrade.Version, h *Helper) option.NodeListOption {
+	// If we don't have a minimum version set, or if we are upgrading
+	// from a version that is at least `minVersion`, then every node is
+	// valid.
+	if minVersion == nil || h.Context.FromVersion.AtLeast(minVersion) {
+		return h.Context.CockroachNodes
+	}
+
+	// This case should correspond to the scenario where are upgrading
+	// from `minVersion`. The valid nodes should be those that are
+	// running the next version.
+	return h.Context.NodesInNextVersion()
+}
+
 // startOpts returns the start options used when starting (or
 // restarting) cockroach processes in mixedversion tests.  We disable
 // regular backups as some tests check for running jobs and the
