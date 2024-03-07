@@ -19,12 +19,13 @@ import (
 
 // All cluster settings necessary for the JWT authentication feature.
 const (
-	baseJWTAuthSettingName     = "server.jwt_authentication."
-	JWTAuthAudienceSettingName = baseJWTAuthSettingName + "audience"
-	JWTAuthEnabledSettingName  = baseJWTAuthSettingName + "enabled"
-	JWTAuthIssuersSettingName  = baseJWTAuthSettingName + "issuers"
-	JWTAuthJWKSSettingName     = baseJWTAuthSettingName + "jwks"
-	JWTAuthClaimSettingName    = baseJWTAuthSettingName + "claim"
+	baseJWTAuthSettingName          = "server.jwt_authentication."
+	JWTAuthAudienceSettingName      = baseJWTAuthSettingName + "audience"
+	JWTAuthEnabledSettingName       = baseJWTAuthSettingName + "enabled"
+	JWTAuthIssuersSettingName       = baseJWTAuthSettingName + "issuers"
+	JWTAuthJWKSSettingName          = baseJWTAuthSettingName + "jwks"
+	JWTAuthClaimSettingName         = baseJWTAuthSettingName + "claim"
+	JWKSAutoFetchEnabledSettingName = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
 )
 
 // JWTAuthClaim sets the JWT claim that is parsed to get the username.
@@ -56,7 +57,7 @@ var JWTAuthEnabled = func() *settings.BoolSetting {
 	s := settings.RegisterBoolSetting(
 		settings.TenantWritable,
 		JWTAuthEnabledSettingName,
-		"enables or disabled JWT login for the SQL interface",
+		"enables or disables JWT login for the SQL interface",
 		false,
 	)
 	s.SetReportable(true)
@@ -85,6 +86,19 @@ var JWTAuthIssuers = func() *settings.StringSetting {
 		"",
 		validateJWTAuthIssuers,
 	)
+	return s
+}()
+
+// JWKSAutoFetchEnabled enables or disables automatic fetching of JWKs from the issuer's well-known endpoint.
+var JWKSAutoFetchEnabled = func() *settings.BoolSetting {
+	s := settings.RegisterBoolSetting(
+		settings.TenantWritable,
+		JWKSAutoFetchEnabledSettingName,
+		"enables or disables automatic fetching of JWKs from the issuer's well-known endpoint. "+
+			"If this is enabled, the server.jwt_authentication.jwks will be ignored.",
+		false,
+	)
+	s.SetReportable(true)
 	return s
 }()
 
