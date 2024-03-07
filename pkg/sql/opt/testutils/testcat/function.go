@@ -83,6 +83,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 
 	// Resolve the parameter names and types.
 	signatureTypes := make(tree.ParamTypes, 0, len(c.Params))
+	var procedureInputTypes tree.ParamTypes
 	var outParamTypes []*types.T
 	var outParamNames []string
 	for i := range c.Params {
@@ -93,6 +94,12 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		}
 		if tree.IsParamIncludedIntoSignature(param.Class, c.IsProcedure) {
 			signatureTypes = append(signatureTypes, tree.ParamType{
+				Name: string(param.Name),
+				Typ:  typ,
+			})
+		}
+		if c.IsProcedure && tree.IsInParamClass(param.Class) {
+			procedureInputTypes = append(procedureInputTypes, tree.ParamType{
 				Name: string(param.Name),
 				Typ:  typ,
 			})
@@ -109,10 +116,10 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 
 	// Determine OUT parameter based return type.
 	var outParamType *types.T
-	if len(outParamTypes) == 1 {
-		outParamType = outParamTypes[0]
-	} else if len(outParamTypes) > 1 {
+	if (c.IsProcedure && len(outParamTypes) > 0) || len(outParamTypes) > 1 {
 		outParamType = types.MakeLabeledTuple(outParamTypes, outParamNames)
+	} else if len(outParamTypes) == 1 {
+		outParamType = outParamTypes[0]
 	}
 	// Resolve the return type.
 	var retType *types.T
@@ -158,15 +165,16 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	}
 	tc.currUDFOid++
 	overload := &tree.Overload{
-		Oid:               tc.currUDFOid,
-		Types:             signatureTypes,
-		ReturnType:        tree.FixedReturnType(retType),
-		Body:              body,
-		Volatility:        v,
-		CalledOnNullInput: calledOnNullInput,
-		Language:          language,
-		Type:              routineType,
-		RoutineParams:     c.Params,
+		Oid:                 tc.currUDFOid,
+		Types:               signatureTypes,
+		ReturnType:          tree.FixedReturnType(retType),
+		Body:                body,
+		Volatility:          v,
+		CalledOnNullInput:   calledOnNullInput,
+		Language:            language,
+		Type:                routineType,
+		RoutineParams:       c.Params,
+		ProcedureInputTypes: procedureInputTypes,
 	}
 	overload.ReturnsRecordType = types.IsRecordType(retType)
 	if c.ReturnType != nil && c.ReturnType.SetOf {

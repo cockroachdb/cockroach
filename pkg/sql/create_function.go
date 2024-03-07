@@ -95,7 +95,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 			if isNew {
 				err = n.createNewFunction(udfMutableDesc, mutScDesc, params)
 			} else {
-				err = n.replaceFunction(udfMutableDesc, params)
+				err = n.replaceFunction(udfMutableDesc, mutScDesc, params)
 			}
 			if err != nil {
 				return err
@@ -140,9 +140,14 @@ func (n *createFunctionNode) createNewFunction(
 		return err
 	}
 	signatureTypes := make([]*types.T, 0, len(udfDesc.Params))
+	var inputTypes []*types.T
 	for _, param := range udfDesc.Params {
-		if tree.IsParamIncludedIntoSignature(funcdesc.ToTreeRoutineParamClass(param.Class), udfDesc.IsProcedure()) {
+		class := funcdesc.ToTreeRoutineParamClass(param.Class)
+		if tree.IsParamIncludedIntoSignature(class, udfDesc.IsProcedure()) {
 			signatureTypes = append(signatureTypes, param.Type)
+		}
+		if udfDesc.IsProcedure() && tree.IsInParamClass(class) {
+			inputTypes = append(inputTypes, param.Type)
 		}
 	}
 	scDesc.AddFunction(
@@ -153,6 +158,7 @@ func (n *createFunctionNode) createNewFunction(
 			ReturnType:  returnType,
 			ReturnSet:   udfDesc.ReturnType.ReturnSet,
 			IsProcedure: udfDesc.IsProcedure(),
+			InputTypes:  inputTypes,
 		},
 	)
 	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {
@@ -162,22 +168,20 @@ func (n *createFunctionNode) createNewFunction(
 	return nil
 }
 
-func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params runParams) error {
+func (n *createFunctionNode) replaceFunction(
+	udfDesc *funcdesc.Mutable, scDesc *schemadesc.Mutable, params runParams,
+) error {
 	// TODO(chengxiong): add validation that the function is not referenced. This
 	// is needed when we start allowing function references from other objects.
 
-	if n.cf.IsProcedure && !udfDesc.IsProcedure() {
+	if n.cf.IsProcedure != udfDesc.IsProcedure() {
+		formatStr := "%q is a function"
+		if udfDesc.IsProcedure() {
+			formatStr = "%q is a procedure"
+		}
 		return errors.WithDetailf(
 			pgerror.Newf(pgcode.WrongObjectType, "cannot change routine kind"),
-			"%q is a function",
-			udfDesc.Name,
-		)
-	}
-
-	if !n.cf.IsProcedure && udfDesc.IsProcedure() {
-		return errors.WithDetailf(
-			pgerror.Newf(pgcode.WrongObjectType, "cannot change routine kind"),
-			"%q is a procedure",
+			formatStr,
 			udfDesc.Name,
 		)
 	}
@@ -192,6 +196,9 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	isSameUDT := types.IsOIDUserDefinedType(retType.Oid()) && retType.Oid() ==
 		udfDesc.ReturnType.Type.Oid()
 	if n.cf.ReturnType.SetOf != udfDesc.ReturnType.ReturnSet || (!retType.Equal(udfDesc.ReturnType.Type) && !isSameUDT) {
+		if udfDesc.IsProcedure() && (retType.Family() == types.VoidFamily || udfDesc.ReturnType.Type.Family() == types.VoidFamily) {
+			return pgerror.Newf(pgcode.InvalidFunctionDefinition, "cannot change whether a procedure has output parameters")
+		}
 		return pgerror.Newf(pgcode.InvalidFunctionDefinition, "cannot change return type of existing function")
 	}
 	if isSameUDT {
@@ -203,6 +210,18 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	// checked.
 	if err = n.validateParameters(udfDesc); err != nil {
 		return err
+	}
+	// origSignatureTypes stores the original signature types of this overload
+	// if we're dealing with a procedure.
+	var origSignatureTypes []*types.T
+	if udfDesc.IsProcedure() {
+		origSignatureTypes = make([]*types.T, 0, len(udfDesc.Params))
+		for _, param := range udfDesc.Params {
+			class := funcdesc.ToTreeRoutineParamClass(param.Class)
+			if tree.IsParamIncludedIntoSignature(class, true /* isProcedure */) {
+				origSignatureTypes = append(origSignatureTypes, param.Type)
+			}
+		}
 	}
 	// All parameter changes, if any, are allowed, so update the descriptor
 	// accordingly.
@@ -250,6 +269,47 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 		return err
 	}
 
+	if udfDesc.IsProcedure() {
+		// For procedures, it is possible to change the signature of the
+		// overload (by merging some parameters into INOUT parameter or doing
+		// the opposite), and in this case we need to update the schema
+		// descriptor.
+		signatureTypes := make([]*types.T, 0, len(udfDesc.Params))
+		var inputTypes []*types.T
+		for _, param := range udfDesc.Params {
+			class := funcdesc.ToTreeRoutineParamClass(param.Class)
+			if tree.IsParamIncludedIntoSignature(class, udfDesc.IsProcedure()) {
+				signatureTypes = append(signatureTypes, param.Type)
+			}
+			if udfDesc.IsProcedure() && tree.IsInParamClass(class) {
+				inputTypes = append(inputTypes, param.Type)
+			}
+		}
+		signatureChanged := len(origSignatureTypes) != len(signatureTypes)
+		for i := 0; !signatureChanged && i < len(origSignatureTypes); i++ {
+			signatureChanged = !origSignatureTypes[i].Equivalent(signatureTypes[i])
+		}
+		if signatureChanged {
+			if err = scDesc.ReplaceOverload(
+				udfDesc.GetName(),
+				origSignatureTypes,
+				descpb.SchemaDescriptor_FunctionSignature{
+					ID:          udfDesc.GetID(),
+					ArgTypes:    signatureTypes,
+					ReturnType:  retType,
+					ReturnSet:   udfDesc.ReturnType.ReturnSet,
+					IsProcedure: true,
+					InputTypes:  inputTypes,
+				},
+			); err != nil {
+				return err
+			}
+			if err = params.p.writeSchemaDescChange(params.ctx, scDesc, "Replace Function"); err != nil {
+				return err
+			}
+		}
+	}
+
 	return params.p.writeFuncSchemaChange(params.ctx, udfDesc)
 }
 
@@ -270,8 +330,10 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		FuncName: n.cf.Name,
 		Params:   n.cf.Params,
 	}
-	existing, err := params.p.matchRoutine(params.ctx, &routineObj,
-		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
+	existing, err := params.p.matchRoutine(
+		params.ctx, &routineObj, false, /* required */
+		tree.UDFRoutine|tree.ProcedureRoutine, true, /* inDropOrReplaceContext */
+	)
 	if err != nil {
 		return nil, false, err
 	}

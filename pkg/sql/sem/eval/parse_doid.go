@@ -125,18 +125,36 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 			}
 		}
 
-		signatureTypes, err := fn.SignatureTypes(ctx, evalCtx.Planner)
+		// Signature types depend on the routine type, but we don't know whether
+		// we have a function or a procedure, so we'll try the function first
+		// and then the procedure if necessary.
+		funcSignatureTypes, err := fn.SignatureTypes(ctx, evalCtx.Planner, tree.UDFRoutine, false /* inDropOrReplaceContext */)
 		if err != nil {
 			return nil, err
 		}
-		ol, err := fd.MatchOverload(
-			signatureTypes,
+		ol, err1 := fd.MatchOverload(
+			funcSignatureTypes,
 			fn.FuncName.Schema(),
 			&evalCtx.SessionData().SearchPath,
-			tree.BuiltinRoutine|tree.UDFRoutine|tree.ProcedureRoutine,
+			tree.BuiltinRoutine|tree.UDFRoutine,
 		)
-		if err != nil {
-			return nil, err
+		if err1 != nil {
+			procSignatureTypes, err := fn.SignatureTypes(ctx, evalCtx.Planner, tree.ProcedureRoutine, false /* inDropOrReplaceContext */)
+			if err != nil {
+				return nil, err
+			}
+			ol, err = fd.MatchOverload(
+				procSignatureTypes,
+				fn.FuncName.Schema(),
+				&evalCtx.SessionData().SearchPath,
+				tree.ProcedureRoutine,
+			)
+			if err != nil {
+				// We didn't find neither a function nor a procedure, and it's
+				// unclear which error to return, so we'll arbitrarily pick the
+				// function one.
+				return nil, err1
+			}
 		}
 		return tree.NewDOidWithTypeAndName(ol.Oid, t, fd.Name), nil
 	case oid.T_regtype:
