@@ -633,9 +633,14 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 			ReturnSet:   t.GetReturnType().ReturnSet,
 			IsProcedure: t.IsProcedure(),
 		}
-		for _, p := range t.Params {
-			if tree.IsParamIncludedIntoSignature(funcdesc.ToTreeRoutineParamClass(p.Class), ol.IsProcedure) {
+		for pIdx, p := range t.Params {
+			class := funcdesc.ToTreeRoutineParamClass(p.Class)
+			if tree.IsInParamClass(class) {
 				ol.ArgTypes = append(ol.ArgTypes, p.Type)
+			}
+			if class == tree.RoutineParamOut {
+				ol.OutParamOrdinals = append(ol.OutParamOrdinals, int32(pIdx))
+				ol.OutParamTypes = append(ol.OutParamTypes, p.Type)
 			}
 		}
 		sc.AddFunction(obj.GetName(), ol)

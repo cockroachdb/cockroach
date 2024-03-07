@@ -89,6 +89,14 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 					return iterutil.Map(err)
 				}
 			}
+			for _, typ := range sig.OutParamTypes {
+				if !catid.IsOIDUserDefined(typ.Oid()) {
+					continue
+				}
+				if err := fn(typ); err != nil {
+					return iterutil.Map(err)
+				}
+			}
 			if !catid.IsOIDUserDefined(sig.ReturnType.Oid()) {
 				continue
 			}
@@ -484,6 +492,37 @@ func (desc *Mutable) RemoveFunction(name string, id descpb.ID) {
 	}
 }
 
+// ReplaceOverload updates the function signature that matches the existing
+// overload with the new one. An error is returned if the function doesn't exist
+// or a match is not found.
+func (desc *Mutable) ReplaceOverload(
+	name string,
+	existing *tree.QualifiedOverload,
+	newSignature descpb.SchemaDescriptor_FunctionSignature,
+) error {
+	fn, ok := desc.Functions[name]
+	if !ok {
+		return errors.AssertionFailedf("unexpectedly didn't find a function %s", name)
+	}
+	for i := range fn.Signatures {
+		sig := fn.Signatures[i]
+		match := existing.Types.Length() == len(sig.ArgTypes) &&
+			len(existing.OutParamOrdinals) == len(sig.OutParamOrdinals)
+		for j := 0; match && j < len(sig.ArgTypes); j++ {
+			match = existing.Types.GetAt(j).Equivalent(sig.ArgTypes[j])
+		}
+		for j := 0; match && j < len(sig.OutParamOrdinals); j++ {
+			match = existing.OutParamOrdinals[j] == sig.OutParamOrdinals[j] &&
+				existing.OutParamTypes.GetAt(j).Equivalent(sig.OutParamTypes[j])
+		}
+		if match {
+			fn.Signatures[i] = newSignature
+			return nil
+		}
+	}
+	return errors.AssertionFailedf("unexpectedly didn't find overload match for function %s with types %v", name, existing.Types.Types())
+}
+
 // GetObjectType implements the Object interface.
 func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Schema
@@ -522,6 +561,7 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			},
 			Type:                     routineType,
 			UDFContainsOnlySignature: true,
+			OutParamOrdinals:         sig.OutParamOrdinals,
 		}
 		if funcDescPb.Signatures[i].ReturnSet {
 			overload.Class = tree.GeneratorClass
@@ -537,6 +577,13 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			)
 		}
 		overload.Types = paramTypes
+		if len(sig.OutParamTypes) > 0 {
+			outParamTypes := make(tree.ParamTypes, len(sig.OutParamTypes))
+			for j := range outParamTypes {
+				outParamTypes[j] = tree.ParamType{Typ: sig.OutParamTypes[j]}
+			}
+			overload.OutParamTypes = outParamTypes
+		}
 		prefixedOverload := tree.MakeQualifiedOverload(desc.GetName(), overload)
 		funcDef.Overloads = append(funcDef.Overloads, prefixedOverload)
 	}
