@@ -161,6 +161,7 @@ func (b *Builder) buildRoutine(
 	f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition, inScope *scope, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr, isMultiColDataSource bool) {
 	o := f.ResolvedOverload()
+	isProcedure := o.Type == tree.ProcedureRoutine
 	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
 
 	// Validate that the return types match the original return types defined in
@@ -231,7 +232,12 @@ func (b *Builder) buildRoutine(
 	bodyScope := b.allocScope()
 	var params opt.ColList
 	if o.Types.Length() > 0 {
-		paramTypes, ok := o.Types.(tree.ParamTypes)
+		// Add all input parameters to the scope.
+		inputTypes := o.Types
+		if isProcedure {
+			inputTypes = o.ProcedureInputTypes
+		}
+		paramTypes, ok := inputTypes.(tree.ParamTypes)
 		if !ok {
 			panic(unimplemented.NewWithIssue(88947,
 				"variadiac user-defined functions are not yet supported"))
@@ -322,7 +328,7 @@ func (b *Builder) buildRoutine(
 				class: param.Class,
 			})
 		}
-		plBuilder := newPLpgSQLBuilder(b, def.Name, colRefs, routineParams, rtyp)
+		plBuilder := newPLpgSQLBuilder(b, def.Name, colRefs, routineParams, rtyp, isProcedure)
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		finishResolveType(stmtScope)
 		var expr memo.RelExpr

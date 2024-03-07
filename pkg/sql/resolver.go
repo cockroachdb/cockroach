@@ -332,7 +332,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		descs := make([]DescriptorWithObjectType, 0, len(targetRoutines))
 		fnResolved := catalog.DescriptorIDSet{}
 		for _, f := range targetRoutines {
-			overload, err := p.matchRoutine(ctx, &f, true /* required */, routineType)
+			overload, err := p.matchRoutine(ctx, &f, true /* required */, routineType, false /* inDropOrReplaceContext */)
 			if err != nil {
 				return nil, err
 			}
@@ -345,13 +345,13 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			if err != nil {
 				return nil, err
 			}
-			if isFuncs && fnDesc.IsProcedure() {
+			if isFuncs == fnDesc.IsProcedure() {
+				arg := "function"
+				if fnDesc.IsProcedure() {
+					arg = "procedure"
+				}
 				return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",
-					fnDesc.Name, "function")
-			}
-			if !isFuncs && !fnDesc.IsProcedure() {
-				return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",
-					fnDesc.Name, "procedure")
+					fnDesc.Name, arg)
 			}
 			descs = append(descs, DescriptorWithObjectType{
 				descriptor: fnDesc,

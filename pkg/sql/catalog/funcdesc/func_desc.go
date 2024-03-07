@@ -716,10 +716,14 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	}
 
 	signatureTypes := make(tree.ParamTypes, 0, len(desc.Params))
+	var procedureInputTypes tree.ParamTypes
 	for _, param := range desc.Params {
 		class := ToTreeRoutineParamClass(param.Class)
 		if tree.IsParamIncludedIntoSignature(class, desc.IsProcedure()) {
 			signatureTypes = append(signatureTypes, tree.ParamType{Name: param.Name, Typ: param.Type})
+		}
+		if desc.IsProcedure() && tree.IsInParamClass(class) {
+			procedureInputTypes = append(procedureInputTypes, tree.ParamType{Name: param.Name, Typ: param.Type})
 		}
 		ret.RoutineParams = append(ret.RoutineParams, tree.RoutineParam{
 			Name:  tree.Name(param.Name),
@@ -733,6 +737,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	// when the return type is based on output parameters.
 	ret.ReturnsRecordType = types.IsRecordType(desc.ReturnType.Type)
 	ret.Types = signatureTypes
+	ret.ProcedureInputTypes = procedureInputTypes
 	ret.Volatility, err = desc.getOverloadVolatility()
 	if err != nil {
 		return nil, err
