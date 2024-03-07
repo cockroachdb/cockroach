@@ -31,6 +31,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_pkg_errors//:errors",
+        "@org_golang_x_exp//maps",
     ],
 )
 
@@ -55,6 +56,7 @@ go_test(
         "//pkg/roachprod/vm",
         "//pkg/testutils/datapathutils",
         "//pkg/util/intsets",
+        "//pkg/util/randutil",
         "//pkg/util/version",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",

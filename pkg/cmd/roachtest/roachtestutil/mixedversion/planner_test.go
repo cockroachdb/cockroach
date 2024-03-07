@@ -60,6 +60,11 @@ func TestTestPlanner(t *testing.T) {
 	mutatorsAvailable := append([]mutator{
 		concurrentUserHooksMutator{},
 		removeUserHooksMutator{},
+		newClusterSettingMutator(
+			"test_cluster_setting", []int{1, 2, 3},
+			clusterSettingMinimumVersion("v23.2.0"),
+			clusterSettingMaxChanges(10),
+		),
 	}, planMutators...)
 
 	// Tests run from an empty list of mutators; the only way to add
