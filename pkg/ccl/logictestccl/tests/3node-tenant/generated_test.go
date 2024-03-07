@@ -1453,6 +1453,13 @@ func TestTenantLogic_procedure(
 	runLogicTest(t, "procedure")
 }
 
+func TestTenantLogic_procedure_params(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_params")
+}
+
 func TestTenantLogic_procedure_privileges(
 	t *testing.T,
 ) {
@@ -2655,6 +2662,13 @@ func TestTenantLogicCCL_plpgsql_unsupported(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_unsupported")
+}
+
+func TestTenantLogicCCL_procedure_params(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "procedure_params")
 }
 
 func TestTenantLogicCCL_procedure_plpgsql(

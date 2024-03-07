@@ -1283,6 +1283,11 @@ func TestSchemaChangeComparator_procedure(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/procedure"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_procedure_params(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/procedure_params"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_procedure_privileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/procedure_privileges"
