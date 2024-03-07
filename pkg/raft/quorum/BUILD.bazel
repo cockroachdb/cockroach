@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "quorum",
@@ -6,7 +7,7 @@ go_library(
         "joint.go",
         "majority.go",
         "quorum.go",
-        "voteresult_string.go",  # keep
+        ":gen-voteresult-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/raft/quorum",
     visibility = ["//visibility:public"],
@@ -22,4 +23,10 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":quorum"],
     deps = ["@com_github_cockroachdb_datadriven//:datadriven"],
+)
+
+stringer(
+    name = "gen-voteresult-stringer",
+    src = "quorum.go",
+    typ = "VoteResult",
 )
