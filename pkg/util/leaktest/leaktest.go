@@ -158,6 +158,7 @@ func AfterTest(t T) func() {
 					continue
 				}
 				atomic.StoreUint32(&leakDetectorDisabled, 1)
+				err = errors.Wrapf(err, "\nall stacks: \n\n%s\n", allstacks.Get())
 				t.Errorf("%v", err)
 			}
 			break
