@@ -83,6 +83,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 
 	// Resolve the parameter names and types.
 	signatureTypes := make(tree.ParamTypes, 0, len(c.Params))
+	var procedureInputTypes tree.ParamTypes
 	var outParamTypes []*types.T
 	var outParamNames []string
 	for i := range c.Params {
@@ -93,6 +94,12 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		}
 		if tree.IsParamIncludedIntoSignature(param.Class, c.IsProcedure) {
 			signatureTypes = append(signatureTypes, tree.ParamType{
+				Name: string(param.Name),
+				Typ:  typ,
+			})
+		}
+		if c.IsProcedure && tree.IsInParamClass(param.Class) {
+			procedureInputTypes = append(procedureInputTypes, tree.ParamType{
 				Name: string(param.Name),
 				Typ:  typ,
 			})
@@ -109,39 +116,43 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 
 	// Determine OUT parameter based return type.
 	var outParamType *types.T
-	if len(outParamTypes) == 1 {
-		outParamType = outParamTypes[0]
-	} else if len(outParamTypes) > 1 {
+	if (c.IsProcedure && len(outParamTypes) > 0) || len(outParamTypes) > 1 {
 		outParamType = types.MakeLabeledTuple(outParamTypes, outParamNames)
+	} else if len(outParamTypes) == 1 {
+		outParamType = outParamTypes[0]
 	}
 	// Resolve the return type.
 	var retType *types.T
-	var err error
-	if c.ReturnType != nil {
-		retType, err = tree.ResolveType(context.Background(), c.ReturnType.Type, tc)
-		if err != nil {
-			panic(err)
+	if c.IsProcedure {
+		if c.ReturnType != nil {
+			panic(errors.AssertionFailedf("CreateRoutine.ReturnType is expected to be empty for procedures"))
 		}
-	}
-	if outParamType != nil {
-		if retType != nil && !retType.Equivalent(outParamType) {
-			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "function result type must be %s because of OUT parameters", outParamType.Name()))
+		retType = types.Void
+		if outParamType != nil {
+			retType = outParamType
 		}
-		// Override the return types so that we do return type validation and SHOW
-		// CREATE correctly.
-		retType = outParamType
 		c.ReturnType = &tree.RoutineReturnType{
-			Type: outParamType,
+			Type: retType,
 		}
-	} else if retType == nil {
-		if c.IsProcedure {
-			// A procedure doesn't need a return type. Use a VOID return type to avoid
-			// errors in shared logic later.
-			retType = types.Void
-			c.ReturnType = &tree.RoutineReturnType{
-				Type: types.Void,
+	} else {
+		if c.ReturnType != nil {
+			var err error
+			retType, err = tree.ResolveType(context.Background(), c.ReturnType.Type, tc)
+			if err != nil {
+				panic(err)
 			}
-		} else {
+		}
+		if outParamType != nil {
+			if retType != nil && !retType.Equivalent(outParamType) {
+				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "function result type must be %s because of OUT parameters", outParamType.Name()))
+			}
+			// Override the return types so that we do return type validation
+			// and SHOW CREATE correctly.
+			retType = outParamType
+			c.ReturnType = &tree.RoutineReturnType{
+				Type: outParamType,
+			}
+		} else if retType == nil {
 			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "function result type must be specified"))
 		}
 	}
@@ -158,15 +169,16 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	}
 	tc.currUDFOid++
 	overload := &tree.Overload{
-		Oid:               tc.currUDFOid,
-		Types:             signatureTypes,
-		ReturnType:        tree.FixedReturnType(retType),
-		Body:              body,
-		Volatility:        v,
-		CalledOnNullInput: calledOnNullInput,
-		Language:          language,
-		Type:              routineType,
-		RoutineParams:     c.Params,
+		Oid:                 tc.currUDFOid,
+		Types:               signatureTypes,
+		ReturnType:          tree.FixedReturnType(retType),
+		Body:                body,
+		Volatility:          v,
+		CalledOnNullInput:   calledOnNullInput,
+		Language:            language,
+		Type:                routineType,
+		RoutineParams:       c.Params,
+		ProcedureInputTypes: procedureInputTypes,
 	}
 	overload.ReturnsRecordType = types.IsRecordType(retType)
 	if c.ReturnType != nil && c.ReturnType.SetOf {

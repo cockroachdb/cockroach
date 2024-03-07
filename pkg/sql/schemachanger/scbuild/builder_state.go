@@ -1293,12 +1293,12 @@ func (b *builderState) ResolveRoutine(
 		panic(err)
 	}
 
-	signatureTypes, err := routineObj.SignatureTypes(b.ctx, b.cr)
+	signatureTypes, err := routineObj.SignatureTypes(b.ctx, b.cr, routineType, p.IsDropRoutine)
 	if err != nil {
 		return nil
 	}
-	ol, err := fd.MatchOverload(
-		signatureTypes, routineObj.FuncName.Schema(), b.semaCtx.SearchPath, routineType,
+	ol, err := fd.MatchOverloadEx(
+		signatureTypes, routineObj.FuncName.Schema(), b.semaCtx.SearchPath, routineType, p.IsDropRoutine,
 	)
 	if err != nil {
 		if p.IsExistenceOptional && errors.Is(err, tree.ErrRoutineUndefined) {

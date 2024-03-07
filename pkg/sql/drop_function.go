@@ -61,7 +61,7 @@ func (p *planner) DropFunction(ctx context.Context, n *tree.DropRoutine) (ret pl
 	}
 	fnResolved := intsets.MakeFast()
 	for _, fn := range n.Routines {
-		ol, err := p.matchRoutine(ctx, &fn, !n.IfExists, routineType)
+		ol, err := p.matchRoutine(ctx, &fn, !n.IfExists, routineType, true /* inDropOrReplaceContext */)
 		if err != nil {
 			return nil, err
 		}
@@ -123,7 +123,11 @@ func (n *dropFunctionNode) Close(ctx context.Context)           {}
 // returned if the function is not found. An error is also returning if a
 // builtin function is matched.
 func (p *planner) matchRoutine(
-	ctx context.Context, routineObj *tree.RoutineObj, required bool, routineType tree.RoutineType,
+	ctx context.Context,
+	routineObj *tree.RoutineObj,
+	required bool,
+	routineType tree.RoutineType,
+	inDropOrReplaceContext bool,
 ) (*tree.QualifiedOverload, error) {
 	path := p.CurrentSearchPath()
 	unresolvedName := routineObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
@@ -141,11 +145,11 @@ func (p *planner) matchRoutine(
 		return nil, err
 	}
 
-	signatureTypes, err := routineObj.SignatureTypes(ctx, p)
+	signatureTypes, err := routineObj.SignatureTypes(ctx, p, routineType, inDropOrReplaceContext)
 	if err != nil {
 		return nil, err
 	}
-	ol, err := fnDef.MatchOverload(signatureTypes, routineObj.FuncName.Schema(), &path, routineType)
+	ol, err := fnDef.MatchOverloadEx(signatureTypes, routineObj.FuncName.Schema(), &path, routineType, inDropOrReplaceContext)
 	if err != nil {
 		if !required && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil, nil
