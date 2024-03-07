@@ -386,6 +386,7 @@ type IncomingSnapshot struct {
 	raftAppliedIndex kvpb.RaftIndex      // logging only
 	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
 	sharedSSTs       []pebble.SharedSSTMeta
+	externalSSTs     []pebble.ExternalFile
 	doExcise         bool
 	// clearedSpans represents the key spans in the existing store that will be
 	// cleared by doing the Ingest*. This is tracked so that we can convert the
@@ -673,7 +674,7 @@ func (r *Replica) applySnapshot(
 	if inSnap.doExcise {
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
 		if ingestStats, err =
-			r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, nil /* external */, exciseSpan); err != nil {
+			r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s", inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
 	} else {
