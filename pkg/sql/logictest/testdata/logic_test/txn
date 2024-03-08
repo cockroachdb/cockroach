@@ -1420,6 +1420,26 @@ ROLLBACK
 statement ok
 SET default_transaction_read_only = false
 
+# Test that we cannot change to READ WRITE during AS OF SYSTEM TIME transactions.
+
+statement ok
+BEGIN AS OF SYSTEM TIME '-1us'
+
+statement error AS OF SYSTEM TIME specified with READ WRITE mode
+SET transaction_read_only = false
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN AS OF SYSTEM TIME '-1us'
+
+statement error AS OF SYSTEM TIME specified with READ WRITE mode
+SET TRANSACTION READ WRITE
+
+statement ok
+ROLLBACK
+
 # Transaction AS OF SYSTEM TIME clauses can be assigned a default value.
 
 query T
