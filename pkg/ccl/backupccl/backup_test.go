@@ -184,9 +184,8 @@ func TestBackupRestoreSingleNodeLocal(t *testing.T) {
 	params := base.TestClusterArgs{}
 	knobs := base.TestingKnobs{
 		SQLExecutor: &sql.ExecutorTestingKnobs{
-			AfterBackupChunk: func() error {
+			AfterBackupChunk: func() {
 				chunks++
-				return nil
 			},
 		},
 	}
@@ -1640,10 +1639,10 @@ func TestRestoreRetryProcErr(t *testing.T) {
 
 // TestBackupJobRetryReset tests that the job level retry counter
 // resets after the backup progresses. To do so, the test does the following:
-// 1. Intercept the backup job after a backup chunk completes and return a retryable
-// error until the retry counter reaches desired count.
-// 2. Intercept the backup job after receiving retryable error to simulate backup job progress.
-// 3. Assert that more than max retries have been sent, implying that the retry counter reset after progress was made.
+// 1. Intercept the backup job before the flow begins and send a retryable error
+// 2. After we send MaxRetries-1, allow the job to complete the flow and send a progress update
+// 3. After progress has been recorded, intercept the backup job again and send retryable errors until the job failed.
+// 4. Assert that more than max retries have been sent, implying that the retry counter reset after progress was made.
 func TestBackupJobRetryReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1651,32 +1650,36 @@ func TestBackupJobRetryReset(t *testing.T) {
 		syncutil.Mutex
 		retryCount int
 	}{}
-	targetRetryCount := 2
-	maxRetries := 1
+	waitForProgress := make(chan struct{})
+	maxRetries := 4
+
 	params := base.TestClusterArgs{}
 	knobs := base.TestingKnobs{
-		SQLExecutor: &sql.ExecutorTestingKnobs{
-			AfterBackupChunk: func() error {
-				mu.Lock()
-				defer mu.Unlock()
-				if mu.retryCount >= targetRetryCount {
-					return nil
-				}
-				mu.retryCount++
-				return syscall.ECONNRESET
-			},
-			BeforeBackupResetRetry: func() bool {
-				mu.Lock()
-				defer mu.Unlock()
-				return mu.retryCount < targetRetryCount
-			},
-		},
 		BackupRestore: &sql.BackupRestoreTestingKnobs{
 			BackupDistSQLRetryPolicy: &retry.Options{
 				InitialBackoff: time.Microsecond,
 				Multiplier:     2,
 				MaxBackoff:     2 * time.Microsecond,
 				MaxRetries:     maxRetries,
+			},
+			RunBeforeBackupFlow: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				if mu.retryCount >= maxRetries-1 {
+					return nil
+				}
+				mu.retryCount++
+				// Send a retryable error
+				return syscall.ECONNRESET
+			},
+			RunAfterBackupFlow: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				// Wait for at least 1% backup job progress, then continue sending retryable errors
+				<-waitForProgress
+				mu.retryCount++
+				// Send a retryable error
+				return syscall.ECONNRESET
 			},
 		},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -1690,9 +1693,17 @@ func TestBackupJobRetryReset(t *testing.T) {
 	defer cleanupFn()
 	var backupJobId jobspb.JobID
 	sqlDB.QueryRow(t, `BACKUP DATABASE data INTO $1 WITH DETACHED`, localFoo).Scan(&backupJobId)
-
-	jobutils.WaitForJobToSucceed(t, sqlDB, backupJobId)
-	require.Greater(t, mu.retryCount, maxRetries)
+	testutils.SucceedsSoon(t, func() error {
+		jobProgress := jobutils.GetJobProgress(t, sqlDB, backupJobId)
+		if jobProgress.GetFractionCompleted() < 0.01 {
+			return errors.Newf("backup has not made progress yet")
+		}
+		return nil
+	})
+	close(waitForProgress)
+	// Job will fail with exhausted retries: connection reset by peer
+	jobutils.WaitForJobToFail(t, sqlDB, backupJobId)
+	require.Greater(t, mu.retryCount, maxRetries+2)
 }
 
 func createAndWaitForJob(
