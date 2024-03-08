@@ -1202,6 +1202,10 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 					return err
 				}
 			}
+			if err := ex.state.setReadOnlyMode(tree.ReadOnly); err != nil {
+				return err
+			}
+			p.extendedEvalCtx.TxnReadOnly = ex.state.readOnly
 			return nil
 		}
 		if *p.extendedEvalCtx.AsOfSystemTime == *asOf {
