@@ -203,6 +203,9 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 	// Metrics should be exported for out-of-process secondary tenants, and are
 	// correct, i.e. sql_aggregated_livebytes in SQL = sum(livebytes in KV).
 	t.Run("external secondary tenants", func(t *testing.T) {
+		// Flaky test.
+		skip.WithIssue(t, 120775)
+
 		// Exact match for non stress tests, and allow values to differ by up to
 		// 5% in stress situations.
 		confidenceLevel := 0.0
