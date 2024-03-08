@@ -1,0 +1,171 @@
+# LogicTest: cockroach-go-testserver-23.2
+
+query T
+select crdb_internal.active_version()
+----
+{"internal": 0, "major": 23, "minor": 2, "patch": 0}
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE system.public.lease]
+----
+CREATE TABLE public.lease (
+  "descID" INT8 NOT NULL,
+  version INT8 NOT NULL,
+  "nodeID" INT8 NOT NULL,
+  expiration TIMESTAMP NOT NULL,
+  crdb_region BYTES NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (crdb_region ASC, "descID" ASC, version ASC, expiration ASC, "nodeID" ASC)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE system.public.replication_constraint_stats]
+----
+CREATE TABLE public.replication_constraint_stats (
+  zone_id INT8 NOT NULL,
+  subzone_id INT8 NOT NULL,
+  type STRING NOT NULL,
+  config STRING NOT NULL,
+  report_id INT8 NOT NULL,
+  violation_start TIMESTAMPTZ NULL,
+  violating_ranges INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC, type ASC, config ASC)
+);
+ALTER TABLE system.public.replication_constraint_stats CONFIGURE ZONE USING
+  gc.ttlseconds = 600,
+  constraints = '[]',
+  lease_preferences = '[]'
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE system.public.replication_stats]
+----
+CREATE TABLE public.replication_stats (
+  zone_id INT8 NOT NULL,
+  subzone_id INT8 NOT NULL,
+  report_id INT8 NOT NULL,
+  total_ranges INT8 NOT NULL,
+  unavailable_ranges INT8 NOT NULL,
+  under_replicated_ranges INT8 NOT NULL,
+  over_replicated_ranges INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC)
+);
+ALTER TABLE system.public.replication_stats CONFIGURE ZONE USING
+  gc.ttlseconds = 600,
+  constraints = '[]',
+  lease_preferences = '[]'
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE system.public.tenant_usage]
+----
+CREATE TABLE public.tenant_usage (
+  tenant_id INT8 NOT NULL,
+  instance_id INT8 NOT NULL,
+  next_instance_id INT8 NOT NULL,
+  last_update TIMESTAMP NOT NULL,
+  ru_burst_limit FLOAT8 NULL,
+  ru_refill_rate FLOAT8 NULL,
+  ru_current FLOAT8 NULL,
+  current_share_sum FLOAT8 NULL,
+  total_consumption BYTES NULL,
+  instance_lease BYTES NULL,
+  instance_seq INT8 NULL,
+  instance_shares FLOAT8 NULL,
+  CONSTRAINT "primary" PRIMARY KEY (tenant_id ASC, instance_id ASC)
+);
+ALTER TABLE system.public.tenant_usage CONFIGURE ZONE USING
+  gc.ttlseconds = 7200,
+  constraints = '[]',
+  lease_preferences = '[]'
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE system.public.span_configurations]
+----
+CREATE TABLE public.span_configurations (
+  start_key BYTES NOT NULL,
+  end_key BYTES NOT NULL,
+  config BYTES NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (start_key ASC),
+  CONSTRAINT check_bounds CHECK (start_key < end_key)
+)
+
+upgrade all
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE system.public.lease]
+----
+CREATE TABLE public.lease (
+  desc_id INT8 NOT NULL,
+  version INT8 NOT NULL,
+  sql_instance_id INT8 NOT NULL,
+  session_id BYTES NOT NULL,
+  crdb_region BYTES NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (crdb_region ASC, desc_id ASC, version ASC, session_id ASC)
+) WITH (exclude_data_from_backup = true);
+ALTER TABLE system.public.lease CONFIGURE ZONE USING
+  gc.ttlseconds = 600
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE system.public.replication_constraint_stats]
+----
+CREATE TABLE public.replication_constraint_stats (
+  zone_id INT8 NOT NULL,
+  subzone_id INT8 NOT NULL,
+  type STRING NOT NULL,
+  config STRING NOT NULL,
+  report_id INT8 NOT NULL,
+  violation_start TIMESTAMPTZ NULL,
+  violating_ranges INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC, type ASC, config ASC)
+) WITH (exclude_data_from_backup = true);
+ALTER TABLE system.public.replication_constraint_stats CONFIGURE ZONE USING
+  gc.ttlseconds = 600
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE system.public.replication_stats]
+----
+CREATE TABLE public.replication_stats (
+  zone_id INT8 NOT NULL,
+  subzone_id INT8 NOT NULL,
+  report_id INT8 NOT NULL,
+  total_ranges INT8 NOT NULL,
+  unavailable_ranges INT8 NOT NULL,
+  under_replicated_ranges INT8 NOT NULL,
+  over_replicated_ranges INT8 NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC)
+) WITH (exclude_data_from_backup = true);
+ALTER TABLE system.public.replication_stats CONFIGURE ZONE USING
+  gc.ttlseconds = 600
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE system.public.tenant_usage]
+----
+CREATE TABLE public.tenant_usage (
+  tenant_id INT8 NOT NULL,
+  instance_id INT8 NOT NULL,
+  next_instance_id INT8 NOT NULL,
+  last_update TIMESTAMP NOT NULL,
+  ru_burst_limit FLOAT8 NULL,
+  ru_refill_rate FLOAT8 NULL,
+  ru_current FLOAT8 NULL,
+  current_share_sum FLOAT8 NULL,
+  total_consumption BYTES NULL,
+  instance_lease BYTES NULL,
+  instance_seq INT8 NULL,
+  instance_shares FLOAT8 NULL,
+  CONSTRAINT "primary" PRIMARY KEY (tenant_id ASC, instance_id ASC)
+) WITH (exclude_data_from_backup = true);
+ALTER TABLE system.public.tenant_usage CONFIGURE ZONE USING
+  gc.ttlseconds = 7200
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE system.public.span_configurations]
+----
+CREATE TABLE public.span_configurations (
+  start_key BYTES NOT NULL,
+  end_key BYTES NOT NULL,
+  config BYTES NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (start_key ASC),
+  CONSTRAINT check_bounds CHECK (start_key < end_key)
+) WITH (exclude_data_from_backup = true)

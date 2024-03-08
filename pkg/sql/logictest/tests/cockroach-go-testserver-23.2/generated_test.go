@@ -105,3 +105,10 @@ func TestLogic_mixed_version_upgrade_preserve_ttl(
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "mixed_version_upgrade_preserve_ttl")
 }
+
+func TestLogic_upgrade_system_table_changes(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "upgrade_system_table_changes")
+}

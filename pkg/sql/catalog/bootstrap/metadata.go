@@ -547,7 +547,7 @@ func InitialZoneConfigKVs(
 
 	// Lease table zone config
 	leaseZoneConfig := zonepb.NewZoneConfig()
-	leaseZoneConfig.GC = &zonepb.GCPolicy{TTLSeconds: 10 * 60}
+	leaseZoneConfig.GC = &zonepb.GCPolicy{TTLSeconds: int32(systemschema.LeaseTableTTL.Seconds())}
 
 	add(keys.MetaRangesID, metaRangeZoneConf)
 	add(keys.LivenessRangesID, livenessZoneConf)
