@@ -272,7 +272,7 @@ go_test(
         "//pkg/sql/logictest:testdata",  # keep{{ end }}{{ if .ExecBuildLogicTest }}
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}
     ],
-    exec_properties = {{ if .UseHeavyPool }}select({
+    exec_properties = {{ if .SqliteLogicTest }}{"test.Pool": "default"},{{ else if .UseHeavyPool }}select({
         "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
         "//conditions:default": {"test.Pool": "large"},
     }),{{ else }}{"test.Pool": "large"},{{ end }}
