@@ -222,7 +222,7 @@ func registerOnlineRestore(r registry.Registry) {
 									if workloadDuration > maxWorkloadDuration {
 										workloadDuration = maxWorkloadDuration
 									}
-									fmt.Printf("let workload run for %.2f minutes", workloadDuration.Minutes())
+									t.L().Printf("let workload run for another %.2f minutes", workloadDuration.Minutes())
 									time.Sleep(workloadDuration)
 								}
 								return nil
@@ -403,7 +403,7 @@ func waitForDownloadJob(
 			}
 			if status == string(jobs.StatusSucceeded) {
 				postDownloadDelay := time.Minute
-				l.Printf("Download job completed; let workload run for %.2f minute", postDownloadDelay.Minutes())
+				l.Printf("Download job completed; let workload run for %.2f minute before proceeding", postDownloadDelay.Minutes())
 				time.Sleep(postDownloadDelay)
 				downloadJobEndTimeLowerBound = timeutil.Now().Add(-pollingInterval).Add(-postDownloadDelay)
 				return downloadJobEndTimeLowerBound, nil
