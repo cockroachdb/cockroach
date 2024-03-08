@@ -16,6 +16,16 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
+// RWMode is an enum for whether a filesystem is read-write or read-only.
+type RWMode int8
+
+const (
+	// ReadWrite indicates a filesystem may be both read from and written to.
+	ReadWrite RWMode = iota
+	// ReadOnly indicates a filesystem is read-only.
+	ReadOnly
+)
+
 // CreateWithSync creates a file wrapped with logic to periodically sync
 // whenever more than bytesPerSync bytes accumulate. This syncing does not
 // provide any persistency guarantees, but can prevent latency spikes.

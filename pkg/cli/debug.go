@@ -175,11 +175,14 @@ func (f *keyFormat) Type() string {
 // OpenEngine opens the engine at 'dir'. Depending on the supplied options,
 // an empty engine might be initialized.
 func OpenEngine(
-	dir string, stopper *stop.Stopper, opts ...storage.ConfigOption,
+	dir string, stopper *stop.Stopper, rw fs.RWMode, opts ...storage.ConfigOption,
 ) (storage.Engine, error) {
 	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
 	if err != nil {
 		return nil, err
+	}
+	if rw == fs.ReadOnly {
+		opts = append(opts, storage.ReadOnly)
 	}
 	db, err := storage.Open(
 		context.Background(),
@@ -278,7 +281,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenEngine(args[0], stopper, storage.MustExist, storage.ReadOnly)
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -462,7 +465,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenEngine(args[0], stopper, storage.ReadOnly, storage.MustExist)
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -582,7 +585,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenEngine(args[0], stopper, storage.ReadOnly, storage.MustExist)
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -751,7 +754,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenEngine(args[0], stopper, storage.ReadOnly, storage.MustExist)
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -824,7 +827,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	db, err := OpenEngine(args[0], stopper, storage.ReadOnly, storage.MustExist)
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -934,7 +937,7 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenEngine(args[0], stopper,
+	db, err := OpenEngine(args[0], stopper, fs.ReadWrite,
 		storage.MustExist,
 		storage.DisableAutomaticCompactions,
 		storage.MaxConcurrentCompactions(debugCompactOpts.maxConcurrency),
@@ -1255,7 +1258,7 @@ func runDebugIntentCount(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
-	db, err := OpenEngine(args[0], stopper, storage.MustExist, storage.ReadOnly)
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
