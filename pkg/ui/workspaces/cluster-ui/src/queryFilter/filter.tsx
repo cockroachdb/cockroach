@@ -194,7 +194,7 @@ export const handleFiltersFromQueryString = (
         app: filters.app,
         timeNumber: filters.timeNumber,
         timeUnit: filters.timeUnit,
-        fullScan: filters.fullScan.toString(),
+        fullScan: filters.fullScan?.toString(),
         sqlType: filters.sqlType,
         database: filters.database,
         regions: filters.regions,
@@ -237,7 +237,7 @@ export const updateFiltersQueryParamsOnTab = (
         app: filters.app,
         timeNumber: filters.timeNumber,
         timeUnit: filters.timeUnit,
-        fullScan: filters.fullScan.toString(),
+        fullScan: filters.fullScan?.toString(),
         sqlType: filters.sqlType,
         database: filters.database,
         regions: filters.regions,
@@ -376,7 +376,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     const isInteger = /^[0-9]+$/;
     return (value === "" || isInteger.test(value)) && value.length <= 3
       ? value
-      : this.state.filters.timeNumber;
+      : this.state.filters.timeNumber ?? "";
   };
 
   clearInput = (): void => {
@@ -428,15 +428,19 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       border: "none",
     });
 
-    const appsOptions = !hideAppNames
-      ? appNames.map(app => ({
-          label: app,
-          value: app,
-          isSelected: this.isOptionSelected(app, filters.app),
-        }))
-      : [];
+    const appFilters = filters.app ?? "";
+    const appsOptions =
+      !hideAppNames && appNames
+        ? appNames.map(app => ({
+            label: app,
+            value: app,
+            isSelected: this.isOptionSelected(app, appFilters),
+          }))
+        : [];
+
+    const selectedApps = appFilters.split(",");
     const appValue = appsOptions.filter(option => {
-      return filters.app?.split(",").includes(option.label);
+      return selectedApps.includes(option.label);
     });
     const appFilter = (
       <div>
@@ -451,15 +455,19 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
-    const databasesOptions = showDB
-      ? dbNames.map(db => ({
-          label: db,
-          value: db,
-          isSelected: this.isOptionSelected(db, filters.database),
-        }))
-      : [];
+    const databaseFilters = filters.database ?? "";
+    const databasesOptions =
+      showDB && dbNames
+        ? dbNames.map(db => ({
+            label: db,
+            value: db,
+            isSelected: this.isOptionSelected(db, databaseFilters),
+          }))
+        : [];
+
+    const selectedDatabases = databaseFilters.split(",");
     const databaseValue = databasesOptions.filter(option => {
-      return filters.database?.split(",").includes(option.label);
+      return selectedDatabases.includes(option.label);
     });
     const dbFilter = (
       <div>
@@ -474,15 +482,19 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
-    const usernameOptions = showUsername
-      ? usernames.map(username => ({
-          label: username,
-          value: username,
-          isSelected: this.isOptionSelected(username, filters.username),
-        }))
-      : [];
+    const usernameFilters = filters.username ?? "";
+    const usernameOptions =
+      showUsername && usernames
+        ? usernames.map(username => ({
+            label: username,
+            value: username,
+            isSelected: this.isOptionSelected(username, usernameFilters),
+          }))
+        : [];
+
+    const selectedUsernames = usernameFilters.split(",");
     const usernameValue = usernameOptions.filter(option => {
-      return filters.username.split(",").includes(option.label);
+      return selectedUsernames.includes(option.label);
     });
     const usernameFilter = (
       <div>
@@ -497,18 +509,22 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
-    const sessionStatusOptions = showSessionStatus
-      ? sessionStatuses.map(sessionStatus => ({
-          label: sessionStatus,
-          value: sessionStatus,
-          isSelected: this.isOptionSelected(
-            sessionStatus,
-            filters.sessionStatus,
-          ),
-        }))
-      : [];
+    const sessionStatusFilters = filters.sessionStatus ?? "";
+    const sessionStatusOptions =
+      showSessionStatus && sessionStatuses
+        ? sessionStatuses.map(sessionStatus => ({
+            label: sessionStatus,
+            value: sessionStatus,
+            isSelected: this.isOptionSelected(
+              sessionStatus,
+              sessionStatusFilters,
+            ),
+          }))
+        : [];
+
+    const selectedSessionStatuses = sessionStatusFilters.split(",");
     const sessionStatusValue = sessionStatusOptions.filter(option => {
-      return filters.sessionStatus.split(",").includes(option.label);
+      return selectedSessionStatuses.includes(option.label);
     });
     const sessionStatusFilter = (
       <div>
@@ -525,18 +541,22 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
-    const executionStatusOptions = showExecutionStatus
-      ? executionStatuses.map(executionStatus => ({
-          label: executionStatus,
-          value: executionStatus,
-          isSelected: this.isOptionSelected(
-            executionStatus,
-            filters.executionStatus,
-          ),
-        }))
-      : [];
+    const executionStatusFilters = filters.executionStatus ?? "";
+    const executionStatusOptions =
+      showExecutionStatus && executionStatuses
+        ? executionStatuses.map(executionStatus => ({
+            label: executionStatus,
+            value: executionStatus,
+            isSelected: this.isOptionSelected(
+              executionStatus,
+              executionStatusFilters,
+            ),
+          }))
+        : [];
+
+    const selectedExecutionStatuses = executionStatusFilters.split(",");
     const executionStatusValue = executionStatusOptions.filter(option =>
-      filters.executionStatus.split(",").includes(option.label),
+      selectedExecutionStatuses.includes(option.label),
     );
     const executionStatusFilter = (
       <div>
@@ -553,19 +573,19 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
-    const schemaInsightTypeOptions = showSchemaInsightTypes
-      ? schemaInsightTypes.map(schemaInsight => ({
-          label: schemaInsight,
-          value: schemaInsight,
-          isSelected: this.isOptionSelected(
-            schemaInsight,
-            filters.schemaInsightType,
-          ),
-        }))
-      : [];
-    const schemaInsightTypeValue = schemaInsightTypeOptions.filter(option => {
-      return filters.schemaInsightType.split(",").includes(option.label);
-    });
+    const schemaInsightType = filters.schemaInsightType ?? "";
+    const schemaInsightTypeOptions =
+      showSchemaInsightTypes && schemaInsightTypes
+        ? schemaInsightTypes.map(schemaInsight => ({
+            label: schemaInsight,
+            value: schemaInsight,
+            isSelected: this.isOptionSelected(schemaInsight, schemaInsightType),
+          }))
+        : [];
+    const selectedSchemaInsightTypes = schemaInsightType.split(",");
+    const schemaInsightTypeValue = schemaInsightTypeOptions.filter(option =>
+      selectedSchemaInsightTypes.includes(option.label),
+    );
     const schemaInsightTypeFilter = (
       <div>
         <div className={filterLabel.margin}>
@@ -581,19 +601,23 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
-    const workloadInsightTypeOptions = showWorkloadInsightTypes
-      ? workloadInsightTypes.map(workloadInsight => ({
-          label: workloadInsight,
-          value: workloadInsight,
-          isSelected: this.isOptionSelected(
-            workloadInsight,
-            filters.workloadInsightType,
-          ),
-        }))
-      : [];
+    const workloadInsightTypeFilters = filters.workloadInsightType ?? "";
+    const workloadInsightTypeOptions =
+      showWorkloadInsightTypes && workloadInsightTypes
+        ? workloadInsightTypes.map(workloadInsight => ({
+            label: workloadInsight,
+            value: workloadInsight,
+            isSelected: this.isOptionSelected(
+              workloadInsight,
+              workloadInsightTypeFilters,
+            ),
+          }))
+        : [];
+
+    const selectedWorkloadInsightTypes = workloadInsightTypeFilters.split(",");
     const workloadInsightTypeValue = workloadInsightTypeOptions.filter(
       option => {
-        return filters.workloadInsightType?.split(",").includes(option.label);
+        return selectedWorkloadInsightTypes.includes(option.label);
       },
     );
     const workloadInsightTypeFilter = (
@@ -611,15 +635,18 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
-    const regionsOptions = showRegions
-      ? regions.map(region => ({
-          label: region,
-          value: region,
-          isSelected: this.isOptionSelected(region, filters.regions),
-        }))
-      : [];
+    const regionsFilters = filters.regions ?? "";
+    const regionsOptions =
+      showRegions && regions
+        ? regions.map(region => ({
+            label: region,
+            value: region,
+            isSelected: this.isOptionSelected(region, regionsFilters),
+          }))
+        : [];
+    const selectedRegions = regionsFilters.split(",");
     const regionsValue = regionsOptions.filter(option =>
-      filters.regions.split(",").includes(option.label),
+      selectedRegions.includes(option.label),
     );
     const regionsFilter = (
       <div>
@@ -634,15 +661,19 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
-    const nodesOptions = showNodes
-      ? nodes.map(node => ({
-          label: node,
-          value: node,
-          isSelected: this.isOptionSelected(node, filters.nodes),
-        }))
-      : [];
+    const nodeFilters = filters.nodes ?? "";
+    const nodesOptions =
+      showNodes && nodes
+        ? nodes.map(node => ({
+            label: node,
+            value: node,
+            isSelected: this.isOptionSelected(node, nodeFilters),
+          }))
+        : [];
+
+    const selectedNodes = nodeFilters.split(",");
     const nodesValue = nodesOptions.filter(option => {
-      return filters.nodes.split(",").includes(option.label);
+      return selectedNodes.includes(option.label);
     });
     const nodesFilter = (
       <div>
@@ -657,33 +688,35 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
+    const sqlTypeFilters = filters.sqlType ?? "";
     const sqlTypes = showSqlType
       ? [
           {
             label: "DDL",
             value: "TypeDDL",
-            isSelected: this.isOptionSelected("DDL", filters.sqlType),
+            isSelected: this.isOptionSelected("DDL", sqlTypeFilters),
           },
           {
             label: "DML",
             value: "TypeDML",
-            isSelected: this.isOptionSelected("DML", filters.sqlType),
+            isSelected: this.isOptionSelected("DML", sqlTypeFilters),
           },
           {
             label: "DCL",
             value: "TypeDCL",
-            isSelected: this.isOptionSelected("DCL", filters.sqlType),
+            isSelected: this.isOptionSelected("DCL", sqlTypeFilters),
           },
           {
             label: "TCL",
             value: "TypeTCL",
-            isSelected: this.isOptionSelected("TCL", filters.sqlType),
+            isSelected: this.isOptionSelected("TCL", sqlTypeFilters),
           },
         ]
       : [];
 
+    const selectedSqlTypes = sqlTypeFilters.split(",");
     const sqlTypeValue = sqlTypes?.filter(option => {
-      return filters.sqlType?.split(",").includes(option.label);
+      return selectedSqlTypes.includes(option.label);
     });
     const sqlTypeFilter = (
       <div>
@@ -794,7 +827,7 @@ export function SelectedFilters(
         filters={filters}
         name={filter}
         values={filters[filter]}
-        unit={filters["timeUnit"]}
+        unit={filters["timeUnit"] ?? ""}
         key={filter}
         onRemoveFilter={onRemoveFilter}
       />
