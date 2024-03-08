@@ -203,6 +203,14 @@ func MaxConcurrentCompactions(n int) ConfigOption {
 	}
 }
 
+// LBaseMaxBytes configures the maximum number of bytes for LBase.
+func LBaseMaxBytes(v int64) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.Opts.LBaseMaxBytes = v
+		return nil
+	}
+}
+
 // PebbleOptions contains Pebble-specific options in the same format as a
 // Pebble OPTIONS file. For example:
 // [Options]

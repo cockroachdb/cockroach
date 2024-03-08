@@ -17,7 +17,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -25,13 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testfixtures"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,6 +53,7 @@ func BenchmarkRefreshRange(b *testing.B) {
 		"linear-keys": {
 			numKeys:    numKeys,
 			valueBytes: valueBytes,
+			rwMode:     fs.ReadWrite,
 		},
 		// random-keys is our worst case. We write keys in
 		// random order but with timestamps that keep marching
@@ -66,6 +66,7 @@ func BenchmarkRefreshRange(b *testing.B) {
 			randomKeyOrder: true,
 			numKeys:        numKeys,
 			valueBytes:     valueBytes,
+			rwMode:         fs.ReadWrite,
 		},
 		// mixed-case is a middling case.
 		//
@@ -84,7 +85,7 @@ func BenchmarkRefreshRange(b *testing.B) {
 			randomKeyOrder: true,
 			numKeys:        numKeys,
 			valueBytes:     valueBytes,
-			readOnlyEngine: true,
+			rwMode:         fs.ReadOnly,
 			lBaseMaxBytes:  256,
 		},
 	}
@@ -168,7 +169,7 @@ type benchDataOptions struct {
 	numKeys        int
 	valueBytes     int
 	randomKeyOrder bool
-	readOnlyEngine bool
+	rwMode         fs.RWMode
 	lBaseMaxBytes  int64
 }
 
@@ -178,23 +179,22 @@ type benchOptions struct {
 	dataOpts    benchDataOptions
 }
 
-type engineMaker func(testing.TB, string, int64, bool) storage.Engine
+type engineMaker func(testing.TB, string, int64, fs.RWMode) storage.Engine
 
-func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, readOnly bool) storage.Engine {
-	opts := storage.DefaultPebbleOptions()
-	opts.FS = vfs.Default
-	opts.LBaseMaxBytes = lBaseMaxBytes
-	opts.ReadOnly = readOnly
-	peb, err := storage.NewPebble(
+func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, rw fs.RWMode) storage.Engine {
+	opts := []storage.ConfigOption{storage.LBaseMaxBytes(lBaseMaxBytes)}
+	if rw == fs.ReadOnly {
+		opts = append(opts, storage.ReadOnly)
+	}
+	eng, err := storage.Open(
 		context.Background(),
-		storage.PebbleConfig{
-			StorageConfig: base.StorageConfig{Dir: dir, Settings: cluster.MakeTestingClusterSettings()},
-			Opts:          opts,
-		})
+		storage.Filesystem(dir),
+		cluster.MakeTestingClusterSettings(),
+		opts...)
 	if err != nil {
 		b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
 	}
-	return peb
+	return eng
 }
 
 // setupData data writes numKeys keys. One version of each key
@@ -203,8 +203,8 @@ func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, readOnly boo
 // and continuing to t=5ns*(numKeys+1). The goal of this is to
 // approximate an append-only type workload.
 //
-// A read-only engine is returned if opts.readOnlyEngine is set. The goal of
-// this is to prevent read-triggered compactions that might change the
+// A read-only engine is returned if opts.rwMode is set to fs.ReadOnly. The goal
+// of this is to prevent read-triggered compactions that might change the
 // distribution of data across levels.
 //
 // The creation of the database is time-consuming, especially for larger numbers
@@ -221,14 +221,14 @@ func setupData(
 		orderStr = "random"
 	}
 	readOnlyStr := ""
-	if opts.readOnlyEngine {
+	if opts.rwMode == fs.ReadOnly {
 		readOnlyStr = "_readonly"
 	}
 	name := fmt.Sprintf("refresh_range_bench_data_%s_%s%s_%d_%d_%d",
 		verStr, orderStr, readOnlyStr, opts.numKeys, opts.valueBytes, opts.lBaseMaxBytes)
 
 	dir := testfixtures.ReuseOrGenerate(b, name, func(dir string) {
-		eng := emk(b, dir, opts.lBaseMaxBytes, false)
+		eng := emk(b, dir, opts.lBaseMaxBytes, fs.ReadWrite)
 		log.Infof(ctx, "creating refresh range benchmark data: %s", dir)
 
 		// Generate the same data every time.
@@ -291,5 +291,5 @@ func setupData(
 	})
 
 	testutils.ReadAllFiles(filepath.Join(dir, "*"))
-	return emk(b, dir, opts.lBaseMaxBytes, opts.readOnlyEngine), dir
+	return emk(b, dir, opts.lBaseMaxBytes, opts.rwMode), dir
 }
