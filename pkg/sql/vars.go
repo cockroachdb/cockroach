@@ -1489,8 +1489,7 @@ var varGen = map[string]sessionVar{
 			if err != nil {
 				return err
 			}
-			m.SetReadOnly(b)
-			return nil
+			return m.SetReadOnly(b)
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.TxnReadOnly), nil
