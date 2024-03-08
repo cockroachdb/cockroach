@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/strutil"
@@ -324,7 +325,7 @@ func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
 	} else {
 		var stores []storage.Engine
 		for _, storeSpec := range debugRecoverCollectInfoOpts.Stores.Specs {
-			db, err := OpenEngine(storeSpec.Path, stopper, storage.MustExist, storage.ReadOnly)
+			db, err := OpenEngine(storeSpec.Path, stopper, fs.ReadOnly, storage.MustExist)
 			if err != nil {
 				return errors.WithHint(errors.Wrapf(err,
 					"failed to open store at path %q", storeSpec.Path),
@@ -811,7 +812,7 @@ func applyRecoveryToLocalStore(
 	batches := make(map[roachpb.StoreID]storage.Batch)
 	stores := make([]storage.Engine, len(debugRecoverExecuteOpts.Stores.Specs))
 	for i, storeSpec := range debugRecoverExecuteOpts.Stores.Specs {
-		store, err := OpenEngine(storeSpec.Path, stopper, storage.MustExist)
+		store, err := OpenEngine(storeSpec.Path, stopper, fs.ReadWrite, storage.MustExist)
 		if err != nil {
 			return errors.Wrapf(err, "failed to open store at path %q. ensure that store path is "+
 				"correct and that it is not used by another process", storeSpec.Path)

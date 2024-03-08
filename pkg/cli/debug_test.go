@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -72,11 +73,11 @@ func TestOpenReadOnlyStore(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("readOnly=%t", test.readOnly), func(t *testing.T) {
-			var opts []storage.ConfigOption
+			var rwMode fs.RWMode
 			if test.readOnly {
-				opts = append(opts, storage.ReadOnly)
+				rwMode = fs.ReadOnly
 			}
-			db, err := OpenEngine(storePath, stopper, opts...)
+			db, err := OpenEngine(storePath, stopper, rwMode)
 			if err != nil {
 				t.Fatal(err)
 			}
