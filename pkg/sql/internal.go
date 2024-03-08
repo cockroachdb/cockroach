@@ -381,9 +381,11 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.
-		ex.dataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-			m.SetReadOnly(true)
-		})
+		if err := ex.dataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
+			return m.SetReadOnly(true)
+		}); err != nil {
+			return nil, err
+		}
 	}
 
 	// The new transaction stuff below requires active monitors and traces, so
