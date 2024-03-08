@@ -310,7 +310,7 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 			l0TokensProduced: metric.NewCounter(l0TokensProduced),
 		}
 		res := ioll.adjustTokensInner(
-			ctx, tt.prev, tt.l0Metrics, 12, cumStoreCompactionStats{numOutLevelsGauge: 1},
+			ctx, tt.prev, tt.l0Metrics, 12, cumStoreCompactionStats{numOutLevelsGauge: 1}, 0,
 			pebble.ThroughputMetric{}, 100, 10, 0, 0.50)
 		buf.Printf("%s\n", res)
 	}
