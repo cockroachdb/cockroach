@@ -204,7 +204,7 @@ func (v *tableImplicitRecordType) AsTypesT() *types.T {
 	typs := make([]*types.T, len(cols))
 	names := make([]string, len(cols))
 	for i, col := range cols {
-		typs[i] = col.GetType()
+		typs[i] = col.GetType().CopyForHydrate()
 		names[i] = col.GetName()
 	}
 	// the catalog.TypeDescriptor will be an alias to this Tuple type, which contains
