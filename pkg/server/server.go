@@ -1894,6 +1894,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.runtime,
 		s.status.sessionRegistry,
 		s.sqlServer.execCfg.RootMemoryMonitor,
+		s.cfg.TestingKnobs,
 	); err != nil {
 		return err
 	}

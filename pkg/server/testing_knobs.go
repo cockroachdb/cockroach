@@ -186,6 +186,9 @@ type TestingKnobs struct {
 	// waiting for any active configuration environments to
 	// complete their tasks.
 	AutoConfigProfileStartupWaitTime *time.Duration
+
+	// EnvironmentSampleInterval overrides base.DefaultMetricsSampleInterval when used to construct sampleEnvironmentCfg.
+	EnvironmentSampleInterval time.Duration
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
