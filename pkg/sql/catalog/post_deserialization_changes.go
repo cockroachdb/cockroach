@@ -82,6 +82,10 @@ const (
 	// references.
 	RemovedDuplicateIDsInRefs
 
+	// AddedConstraintIDs indicates that table descriptors had constraint ID
+	// added.
+	AddedConstraintIDs
+
 	// RemovedSelfEntryInSchemas corresponds to a change which occurred in
 	// database descriptors to recover from an earlier bug whereby when
 	// dropping a schema, we'd mark the database itself as though it was the
