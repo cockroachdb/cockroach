@@ -200,6 +200,7 @@ func TestSystemTableLiterals(t *testing.T) {
 	require.Equal(t, expectedNumberOfSystemTables, len(testcases))
 
 	runTest := func(t *testing.T, name string, test testcase) {
+		t.Helper()
 		privs := *test.pkg.GetPrivileges()
 		desc := test.pkg
 		// Allocate an ID to dynamically allocated system tables.
