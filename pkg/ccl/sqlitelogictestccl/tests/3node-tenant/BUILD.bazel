@@ -8,7 +8,7 @@ go_test(
         "//c-deps:libgeos",  # keep
         "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep
     ],
-    exec_properties = {"test.Pool": "large"},
+    exec_properties = {"test.Pool": "default"},
     shard_count = 48,
     tags = [
         "ccl_test",
