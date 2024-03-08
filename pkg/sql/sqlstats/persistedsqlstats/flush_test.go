@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -972,6 +974,45 @@ func waitForFollowerReadTimestamp(t *testing.T, sqlConn *sqlutils.SQLRunner) {
 		sqlConn.QueryRow(t, `SELECT follower_read_timestamp()`).Scan(&followerReadTimestamp)
 		if followerReadTimestamp.Before(hlcTimestamp) {
 			return errors.New("waiting for follower_read_timestamp to be passed hlc timestamp")
+		}
+		return nil
+	})
+}
+
+func TestSQLStatsFlushDoesntWaitForFlushSigReceiver(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var sqlStmtFlushCount, sqlTxnFlushCount atomic.Int32
+	sqlStatsKnobs := &sqlstats.TestingKnobs{
+		AOSTClause: "AS OF SYSTEM TIME '-1us'",
+		OnStmtStatsFlushFinished: func() {
+			sqlStmtFlushCount.Add(1)
+		},
+		OnTxnStatsFlushFinished: func() {
+			sqlTxnFlushCount.Add(1)
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: sqlStatsKnobs,
+			},
+		},
+	})
+
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	ss := tc.Server(0).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	flushDoneCh := make(chan struct{})
+	ss.SetFlushDoneSignalCh(flushDoneCh)
+
+	// It should not block on the flush signal receiver.
+	persistedsqlstats.SQLStatsFlushInterval.Override(ctx, &tc.Server(0).ClusterSettings().SV, 100*time.Millisecond)
+	testutils.SucceedsSoon(t, func() error {
+		if sqlStmtFlushCount.Load() < 5 || sqlTxnFlushCount.Load() < 5 {
+			return errors.New("flush count hasn't been reached yet")
 		}
 		return nil
 	})
