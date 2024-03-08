@@ -125,12 +125,6 @@ func TestSessionBasedLeaseUpgrade(t *testing.T) {
 	expectedDesc := systemschema.LeaseTable().TableDesc()
 	expectedDesc.ModificationTime = leaseTableDesc.TableDesc().ModificationTime
 	expectedDesc.Version = leaseTableDesc.GetVersion()
-
-	// The V24_1_SystemDatabaseSurvivability sets this flag to true, but this
-	// test only upgrades up to V24_1_SessionBasedLeasingUpgradeDescriptor, so
-	// the flag should still be false.
-	expectedDesc.ExcludeDataFromBackup = false
-
 	if !leaseTableDesc.TableDesc().Equal(expectedDesc) {
 		diff := strings.Join(pretty.Diff(leaseTableDesc.TableDesc(), expectedDesc), "\n")
 		t.Errorf("system.lease table descriptor from upgrade does not match:\n%s", diff)

@@ -156,7 +156,7 @@ const (
   FAMILY       "primary" ("descID", version, "nodeID", expiration, crdb_region)
 );`
 
-	// LeaseTableSchema_V24_1 is the new session based leasing table format.
+	// LeaseTableSchema_V24_1 is the future session based leasing table format.
 	LeaseTableSchema_V24_1 = `CREATE TABLE system.lease (
   desc_id          INT8,
   version          INT8,
@@ -165,7 +165,7 @@ const (
   crdb_region      BYTES NOT NULL,
   CONSTRAINT       "primary" PRIMARY KEY (crdb_region, desc_id, version, session_id),
   FAMILY           "primary" (desc_id, version, sql_instance_id, session_id, crdb_region)
-) WITH (exclude_data_from_backup = true);`
+);`
 
 	// system.eventlog contains notable events from the cluster.
 	//
@@ -360,7 +360,7 @@ CREATE TABLE system.replication_constraint_stats (
 		INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC, type ASC, config ASC),
 	FAMILY "primary" (zone_id, subzone_id, type, config, report_id, violation_start, violating_ranges)
-) WITH (exclude_data_from_backup = true);`
+);`
 
 	// replication_critical_localities stores replication critical localities
 	ReplicationCriticalLocalitiesTableSchema = `
@@ -406,7 +406,7 @@ CREATE TABLE system.replication_stats (
 		under_replicated_ranges,
 		over_replicated_ranges
 	)
-) WITH (exclude_data_from_backup = true);`
+);`
 
 	// protected_ts_meta stores a single row of metadata for the protectedts
 	// subsystem.
@@ -817,7 +817,7 @@ CREATE TABLE system.tenant_usage (
   ),
 
 	CONSTRAINT "primary" PRIMARY KEY (tenant_id, instance_id)
-) WITH (exclude_data_from_backup = true)`
+)`
 
 	SQLInstancesTableSchema = `
 CREATE TABLE system.sql_instances (
@@ -1721,7 +1721,6 @@ var (
 // `TestSystemTableLiterals` which checks that they do indeed match, and has
 // suggestions on writing and maintaining them.
 var (
-	LeaseTableTTL = time.Minute * 10
 	// LeaseTable is the descriptor for the leases table with a session based
 	// leasing table format.
 	LeaseTable = func() SystemTable {
@@ -1756,11 +1755,7 @@ var (
 					},
 					KeyColumnIDs: []descpb.ColumnID{5, 1, 2, 4},
 				},
-			),
-			func(tbl *descpb.TableDescriptor) {
-				tbl.ExcludeDataFromBackup = true
-			},
-		)
+			))
 	}
 
 	// LeaseTable_V23_2 is the descriptor for the leases table with an expiry based
@@ -1797,8 +1792,7 @@ var (
 					},
 					KeyColumnIDs: []descpb.ColumnID{5, 1, 2, 4, 3},
 				},
-			),
-		)
+			))
 	}
 	V22_2_LeaseTable = func() SystemTable {
 		return makeSystemTable(
@@ -2375,11 +2369,7 @@ var (
 				},
 				KeyColumnIDs: []descpb.ColumnID{1, 2, 3, 4},
 			},
-		),
-		func(tbl *descpb.TableDescriptor) {
-			tbl.ExcludeDataFromBackup = true
-		},
-	)
+		))
 
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
@@ -2464,11 +2454,7 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 			},
-		),
-		func(tbl *descpb.TableDescriptor) {
-			tbl.ExcludeDataFromBackup = true
-		},
-	)
+		))
 
 	ProtectedTimestampsMetaTable = makeSystemTable(
 		ProtectedTimestampsMetaTableSchema,
@@ -3780,11 +3766,7 @@ var (
 				KeyColumnIDs: []descpb.ColumnID{1, 2},
 				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
-		),
-		func(tbl *descpb.TableDescriptor) {
-			tbl.ExcludeDataFromBackup = true
-		},
-	)
+		))
 
 	// SQLInstancesTable is the descriptor for the sqlinstances table. It
 	// stores information about all the SQL instances for a tenant and their
@@ -4246,7 +4228,8 @@ var (
 		),
 	)
 
-	SpanStatsTenantBoundariesTable = makeSystemTable(
+	SpanStatsTenantBoundariesTableTTL = 60 * time.Minute
+	SpanStatsTenantBoundariesTable    = makeSystemTable(
 		SpanStatsTenantBoundariesTableSchema,
 		systemTable(
 			catconstants.SpanStatsTenantBoundaries,
