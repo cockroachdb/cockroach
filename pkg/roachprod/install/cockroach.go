@@ -207,6 +207,26 @@ func (so StartOpts) GetJoinTargets() []Node {
 	return nodes
 }
 
+// allowServiceRegistration is a gating function that prevents the usage of
+// service registration, with DNS services, in scenarios where it is not
+// supported. This is currently the case for non-GCE clusters and for clusters
+// that are not part of the default GCE project. For custom projects the DNS
+// services get garbage collected, hence the registration is not allowed.
+func (c *SyncedCluster) allowServiceRegistration() bool {
+	if c.IsLocal() {
+		return true
+	}
+	for _, cVM := range c.VMs {
+		if cVM.Provider != gce.ProviderName {
+			return false
+		}
+		if cVM.Project != gce.DefaultProject() {
+			return false
+		}
+	}
+	return true
+}
+
 // maybeRegisterServices registers the SQL and Admin UI DNS services
 // for the cluster if no previous services for the virtual or storage
 // cluster are found. Any ports specified in the startOpts are used
@@ -361,12 +381,23 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		startOpts.AdminUIPort = 0
 	}
 
-	err := c.maybeRegisterServices(ctx, l, startOpts)
-	if err != nil {
-		return err
+	if c.allowServiceRegistration() {
+		err := c.maybeRegisterServices(ctx, l, startOpts)
+		if err != nil {
+			return err
+		}
+	} else {
+		l.Printf(strings.Join([]string{
+			"WARNING: Service registration and custom ports are not supported for this cluster.",
+			fmt.Sprintf("Setting ports to default SQL Port: %d, and Admin UI Port: %d.", config.DefaultSQLPort, config.DefaultAdminUIPort),
+			"Attempting to start any additional external SQL processes will fail.",
+		}, "\n"))
+		startOpts.SQLPort = config.DefaultSQLPort
+		startOpts.AdminUIPort = config.DefaultAdminUIPort
 	}
 
 	if startOpts.IsVirtualCluster() {
+		var err error
 		startOpts.VirtualClusterID, err = c.upsertVirtualClusterMetadata(ctx, l, startOpts)
 		if err != nil {
 			return err
