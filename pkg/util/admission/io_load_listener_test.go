@@ -45,6 +45,7 @@ func TestIOLoadListener(t *testing.T) {
 	var ioll *ioLoadListener
 	var cumFlushBytes int64
 	var cumFlushWork, cumFlushIdle time.Duration
+	var cumWALSecondaryWriteDuration time.Duration
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -53,6 +54,7 @@ func TestIOLoadListener(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				L0MinimumSizePerSubLevel.Override(ctx, &st.SV, 0)
+				walFailoverUnlimitedTokens.Override(ctx, &st.SV, false)
 				ioll = &ioLoadListener{
 					settings:              st,
 					kvRequester:           req,
@@ -71,6 +73,7 @@ func TestIOLoadListener(t *testing.T) {
 				cumFlushBytes = 0
 				cumFlushWork = time.Duration(0)
 				cumFlushIdle = time.Duration(0)
+				cumWALSecondaryWriteDuration = 0
 				return ""
 
 			case "prep-admission-stats":
@@ -101,6 +104,14 @@ func TestIOLoadListener(t *testing.T) {
 				var percent int
 				d.ScanArgs(t, "percent", &percent)
 				MinFlushUtilizationFraction.Override(ctx, &st.SV, float64(percent)/100)
+				return ""
+
+			case "set-unlimited-wal-failover-tokens":
+				unlimitedTokensEnabled := true
+				if d.HasArg("enabled") {
+					d.ScanArgs(t, "enabled", &unlimitedTokensEnabled)
+				}
+				walFailoverUnlimitedTokens.Override(ctx, &st.SV, unlimitedTokensEnabled)
 				return ""
 
 			case "set-min-size-per-sub-level":
@@ -163,6 +174,13 @@ func TestIOLoadListener(t *testing.T) {
 				metrics.Flush.WriteThroughput.Bytes = cumFlushBytes
 				metrics.Flush.WriteThroughput.IdleDuration = cumFlushIdle
 				metrics.Flush.WriteThroughput.WorkDuration = cumFlushWork
+
+				if d.HasArg("wal-secondary-write-sec") {
+					var writeDurSec int
+					d.ScanArgs(t, "wal-secondary-write-sec", &writeDurSec)
+					cumWALSecondaryWriteDuration += time.Duration(writeDurSec) * time.Second
+				}
+				metrics.WAL.Failover.SecondaryWriteDuration = cumWALSecondaryWriteDuration
 
 				var writeStallCount int
 				if d.HasArg("write-stall-count") {
@@ -310,7 +328,7 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 			l0TokensProduced: metric.NewCounter(l0TokensProduced),
 		}
 		res := ioll.adjustTokensInner(
-			ctx, tt.prev, tt.l0Metrics, 12, cumStoreCompactionStats{numOutLevelsGauge: 1},
+			ctx, tt.prev, tt.l0Metrics, 12, cumStoreCompactionStats{numOutLevelsGauge: 1}, 0,
 			pebble.ThroughputMetric{}, 100, 10, 0, 0.50)
 		buf.Printf("%s\n", res)
 	}
