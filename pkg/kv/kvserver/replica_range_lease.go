@@ -144,6 +144,18 @@ var LeaseCheckPreferencesOnAcquisitionEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+// RejectLeaseOnLeaderUnknown controls whether a replica that does not know the
+// current raft leader rejects a lease request.
+//
+// TODO(pav-kv): flip the default to true, and remove this setting when this
+// becomes the only behaviour.
+var RejectLeaseOnLeaderUnknown = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lease.reject_on_leader_unknown.enabled",
+	"reject lease requests on a replica that does not know the raft leader",
+	false,
+)
+
 var leaseStatusLogLimiter = func() *log.EveryN {
 	e := log.Every(15 * time.Second)
 	e.ShouldLog() // waste the first shot
