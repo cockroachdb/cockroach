@@ -314,9 +314,7 @@ func backup(
 			for i := int32(0); i < progDetails.CompletedSpans; i++ {
 				requestFinishedCh <- struct{}{}
 				if execCtx.ExecCfg().TestingKnobs.AfterBackupChunk != nil {
-					if err := execCtx.ExecCfg().TestingKnobs.AfterBackupChunk(); err != nil {
-						return err
-					}
+					execCtx.ExecCfg().TestingKnobs.AfterBackupChunk()
 				}
 			}
 
@@ -396,6 +394,13 @@ func backup(
 		), "running distributed backup to export %d ranges", errors.Safe(numTotalSpans))
 	}
 
+	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+	if testingKnobs != nil && testingKnobs.RunBeforeBackupFlow != nil {
+		if err := testingKnobs.RunBeforeBackupFlow(); err != nil {
+			return roachpb.RowCount{}, 0, err
+		}
+	}
+
 	if err := ctxgroup.GoAndWait(
 		ctx,
 		jobProgressLoop,
@@ -405,6 +410,12 @@ func backup(
 		runBackup,
 	); err != nil {
 		return roachpb.RowCount{}, 0, err
+	}
+
+	if testingKnobs != nil && testingKnobs.RunAfterBackupFlow != nil {
+		if err := testingKnobs.RunAfterBackupFlow(); err != nil {
+			return roachpb.RowCount{}, 0, err
+		}
 	}
 
 	backupID := uuid.MakeV4()
@@ -887,13 +898,9 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				b.job.ID(), reloadErr)
 		} else {
 			curProgress := reloadedJob.FractionCompleted()
-			var retryForTest bool
-			if p.ExecCfg().TestingKnobs.BeforeBackupResetRetry != nil {
-				retryForTest = p.ExecCfg().TestingKnobs.BeforeBackupResetRetry()
-			}
 			// If we made decent progress with the BACKUP, reset the last
 			// progress state.
-			if madeProgress := curProgress - lastProgress; retryForTest || madeProgress >= 0.01 {
+			if madeProgress := curProgress - lastProgress; madeProgress >= 0.01 {
 				log.Infof(ctx, "backport made %d%% progress, resetting retry duration", int(math.Round(float64(100*madeProgress))))
 				lastProgress = curProgress
 				r.Reset()
