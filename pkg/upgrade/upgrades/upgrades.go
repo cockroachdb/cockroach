@@ -138,7 +138,7 @@ var upgrades = []upgradebase.Upgrade{
 	),
 
 	upgrade.NewTenantUpgrade(
-		"set survivability goal on MR system database; fix-up gc.ttl and exclude_data_from_backup",
+		"set survivability goal on MR system database.",
 		clusterversion.V24_1_SystemDatabaseSurvivability.Version(),
 		upgrade.NoPrecondition,
 		alterSystemDatabaseSurvivalGoal,
