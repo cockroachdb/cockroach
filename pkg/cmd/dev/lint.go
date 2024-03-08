@@ -137,7 +137,9 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 		logCommand("bazel", args...)
 		return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 	} else if !short {
-		log.Printf("Skipping building cockroach-short with nogo due to provided test filter")
+		log.Printf("Skipping running extra lint checks with `nogo` due to provided test filter")
+	} else if short {
+		log.Printf("Skipping running extra lint checks with `nogo` due to --short")
 	}
 	return nil
 }
