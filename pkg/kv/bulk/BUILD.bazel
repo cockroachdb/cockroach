@@ -31,6 +31,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/mon",
+        "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
