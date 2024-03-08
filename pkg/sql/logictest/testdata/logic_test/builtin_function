@@ -4068,12 +4068,18 @@ SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[])
 query T
 SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{ "db": [ "defaultdb", "tpcc" ], "distSQLCount": 1, "failedCount": 2, "fullScanCount": 0, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 33, "vecCount": 0 }'::JSON, '{ "db": ["tpcc"], "distSQLCount": 23, "failedCount": 0, "fullScanCount": 99, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 3, "vecCount": 2 }'::JSON, '{"hello": "world"}'::JSON ])
 ----
-{"appNames": [], "db": ["defaultdb", "tpcc"], "distSQLCount": 47, "failedCount": 2, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 198, "implicitTxn": true, "query": "SELECT 1", "querySummary": "SELECT 1", "stmtType": "TypeDML", "totalCount": 39, "vecCount": 4}
+{"appNames": [], "db": ["defaultdb", "tpcc"], "distSQLCount": 24, "failedCount": 2, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 99, "implicitTxn": false, "query": "", "querySummary": "", "stmtType": "", "totalCount": 36, "vecCount": 2}
 
 query T
 SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{"aMalformedMetadaObj": 123}'::JSON, '{"key": "value"}'::JSON ])
 ----
 {"appNames": [], "db": [], "distSQLCount": 0, "failedCount": 0, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 0, "implicitTxn": false, "query": "", "querySummary": "", "stmtType": "", "totalCount": 0, "vecCount": 0}
+
+# Merge 2 objects with partial data to check that no value is reused between iterations.
+query T
+SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{"distSQLCount": 111, "failedCount": 222, "fullScanCount": 333 }'::JSON, '{"totalCount": 1, "vecCount": 2}'::JSON, '{"key": "value"}'::JSON ])
+----
+{"appNames": [], "db": [], "distSQLCount": 111, "failedCount": 222, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 333, "implicitTxn": false, "query": "", "querySummary": "", "stmtType": "", "totalCount": 1, "vecCount": 2}
 
 subtest end
 
