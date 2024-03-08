@@ -242,7 +242,10 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			requiredCols.Add(t.Table.ColumnID(idx.Column(i).Ordinal()))
 		}
 		if !t.Cols.SubsetOf(requiredCols) {
-			panic(errors.AssertionFailedf("lookup join with columns that are not required"))
+			panic(errors.AssertionFailedf(
+				"lookup join with columns %s that are not required; required: %s",
+				t.Cols, requiredCols,
+			))
 		}
 		if t.IsFirstJoinInPairedJoiner {
 			switch t.JoinType {
