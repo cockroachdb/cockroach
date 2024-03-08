@@ -2038,11 +2038,6 @@ func TestSchemaChangeComparator_upgrade_skip_version(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/upgrade_skip_version"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_upgrade_system_table_changes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/upgrade_system_table_changes"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
 func TestSchemaChangeComparator_upsert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/upsert"
