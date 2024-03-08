@@ -1,4 +1,4 @@
-name: EXPERIMENTAL GitHub actions testing
+name: GitHub Actions Essential CI
 on:
   pull_request:
     types: [ opened, reopened, synchronize, edited ]
@@ -7,7 +7,7 @@ concurrency:
   group: ${{ github.event.pull_request.number }}
   cancel-in-progress: true
 jobs:
-  acceptance:
+  EXPERIMENTAL_acceptance:
     runs-on: [self-hosted, basic_big_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +28,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  check_generated_code:
+  EXPERIMENTAL_check_generated_code:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -40,7 +40,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  docker_image_amd64:
+  EXPERIMENTAL_docker_image_amd64:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -56,7 +56,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  examples_orms:
+  EXPERIMENTAL_examples_orms:
     runs-on: [self-hosted, basic_runner_group_fips]
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +74,7 @@ jobs:
       - name: clean up
         run: ./cockroach/build/github/cleanup-engflow-keys.sh
         if: always()
-  lint:
+  EXPERIMENTAL_lint:
     runs-on: [self-hosted, basic_big_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -91,7 +91,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  local_roachtest:
+  EXPERIMENTAL_local_roachtest:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -109,7 +109,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  local_roachtest_fips:
+  EXPERIMENTAL_local_roachtest_fips:
     runs-on: [self-hosted, basic_runner_group_fips]
     steps:
       - uses: actions/checkout@v4
@@ -127,7 +127,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  macos_amd64_build:
+  EXPERIMENTAL_macos_amd64_build:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -143,7 +143,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  macos_arm64_build:
+  EXPERIMENTAL_macos_arm64_build:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -159,7 +159,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  unit_tests:
+  EXPERIMENTAL_unit_tests:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -177,7 +177,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  windows_build:
+  EXPERIMENTAL_windows_build:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
