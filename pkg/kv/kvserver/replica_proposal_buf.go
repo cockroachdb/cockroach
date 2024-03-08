@@ -127,11 +127,7 @@ type propBuf struct {
 type rangeLeaderInfo struct {
 	// iAmTheLeader is set if the local replica is the leader.
 	iAmTheLeader bool
-	// leaderKnown is set if the local Raft machinery knows who the leader is. If
-	// not set, all other fields are empty.
-	leaderKnown bool
-	// leader represents the Raft group's leader. Not set if leaderKnown is not
-	// set.
+	// leader represents the Raft group's leader if known.
 	leader roachpb.ReplicaID
 	// leaderEligibleForLease is set if the leader is known and its type of
 	// replica allows it to acquire a lease.
@@ -698,9 +694,8 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 		if li.iAmTheLeader {
 			return false
 		}
-		leaderKnownAndEligible := li.leaderKnown && li.leaderEligibleForLease
 		ownsCurrentLease := b.p.ownsValidLease(ctx, b.clock.NowAsClockTimestamp())
-		if leaderKnownAndEligible && !ownsCurrentLease && !b.testing.allowLeaseProposalWhenNotLeader {
+		if li.leaderEligibleForLease && !ownsCurrentLease && !b.testing.allowLeaseProposalWhenNotLeader {
 			log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
 				li.leader)
 			b.p.rejectProposalWithRedirectLocked(ctx, p, li.leader)
@@ -720,8 +715,6 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 		// also send lease extensions for an existing leaseholder.
 		if ownsCurrentLease {
 			log.VEventf(ctx, 2, "proposing lease extension even though we're not the leader; we hold the current lease")
-		} else if !li.leaderKnown {
-			log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is unknown")
 		} else {
 			log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is ineligible")
 		}
@@ -810,7 +803,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 func (b *propBuf) leaderStatusRLocked(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo {
 	leaderInfo := b.p.leaderStatus(ctx, raftGroup)
 	// Sanity check.
-	if leaderInfo.leaderKnown && leaderInfo.leader == b.p.getReplicaID() &&
+	if leaderInfo.leader == b.p.getReplicaID() &&
 		!leaderInfo.iAmTheLeader {
 		log.Fatalf(ctx,
 			"inconsistent Raft state: state %s while the current replica is also the lead: %d",
@@ -1402,7 +1395,6 @@ func (rp *replicaProposer) leaderStatus(
 	}
 	return rangeLeaderInfo{
 		iAmTheLeader:           iAmTheLeader,
-		leaderKnown:            leaderKnown,
 		leader:                 roachpb.ReplicaID(leader),
 		leaderEligibleForLease: leaderEligibleForLease,
 	}
