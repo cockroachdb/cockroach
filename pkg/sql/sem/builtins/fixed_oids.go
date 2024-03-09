@@ -2507,6 +2507,12 @@ var builtinOidsArray = []string{
 	2536: `percentile_disc_impl(arg1: float, arg2: refcursor) -> refcursor`,
 	2537: `percentile_disc_impl(arg1: float[], arg2: refcursor) -> refcursor[]`,
 	2543: `crdb_internal.fips_ready() -> bool`,
+	2599: `crdb_internal.execute_internally(query: string) -> string`,
+	2600: `crdb_internal.execute_internally(query: string, session_bound: bool) -> string`,
+	2601: `crdb_internal.execute_internally(query: string, overrides: string) -> string`,
+	2602: `crdb_internal.execute_internally(query: string, session_bound: bool, overrides: string) -> string`,
+	2603: `crdb_internal.execute_internally(query: string, overrides: string, use_session_txn: bool) -> string`,
+	2604: `crdb_internal.execute_internally(query: string, session_bound: bool, overrides: string, use_session_txn: bool) -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
