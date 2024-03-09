@@ -745,7 +745,7 @@ func (tpce tpceRestore) init(
 	spec.init(ctx, t, c, tpceCmdOptions{
 		customers:      tpce.customers,
 		racks:          sp.nodes,
-		connectionOpts: defaultTPCEConnectionOpts(),
+		connectionOpts: tpceConnectionOpts{fixtureBucket: defaultFixtureBucket},
 	})
 }
 
@@ -759,7 +759,7 @@ func (tpce tpceRestore) run(
 		customers:      tpce.customers,
 		racks:          sp.nodes,
 		threads:        sp.cpus * sp.nodes,
-		connectionOpts: defaultTPCEConnectionOpts(),
+		connectionOpts: tpceConnectionOpts{fixtureBucket: defaultFixtureBucket},
 	})
 	return err
 }
