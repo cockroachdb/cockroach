@@ -46,3 +46,19 @@ func init() {
 		},
 	)
 }
+
+func init() {
+	registerDepRule(
+		"namespace exist before schema parent",
+		scgraph.Precedence,
+		"dependent", "relation",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.Namespace)(nil)),
+				to.Type((*scpb.SchemaParent)(nil)),
+				JoinOnDescID(from, to, "schema-id"),
+				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
+			}
+		},
+	)
+}
