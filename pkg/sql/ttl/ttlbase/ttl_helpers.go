@@ -74,7 +74,9 @@ var (
 	changefeedReplicationDisabled = settings.RegisterBoolSetting(
 		settings.ApplicationLevel,
 		"sql.ttl.changefeed_replication.disabled",
-		"if true, deletes issued by TTL will not be replicated via changefeeds",
+		"if true, deletes issued by TTL will not be replicated via changefeeds "+
+			"(this setting will be ignored by changefeeds that have the ignore_disable_changefeed_replication option set; "+
+			"such changefeeds will continue to replicate all TTL deletes)",
 		false,
 		settings.WithPublic,
 	)
