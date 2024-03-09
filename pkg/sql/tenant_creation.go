@@ -601,6 +601,12 @@ HAVING ($1 = '' OR NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.name = $1)
 	if uint64(lastIDFromSequence+1) > nextIDFromTable {
 		nextID = uint64(lastIDFromSequence + 1)
 	}
+	// ID 2 is reserved for future use: it was a "template" tenant in 23.2 UA and
+	// used for an internal test in serverless, so we can reclaim it if we want it
+	// so long as we don't allow it to be used for real tenants.
+	if nextID == 2 {
+		nextID = 3
+	}
 
 	return roachpb.MakeTenantID(nextID)
 }
