@@ -467,26 +467,31 @@ func TestStoreConfigSetDefaultsNumStores(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testcases := map[string]struct {
-		conc        int
-		defaultConc int
-		numStores   int
-		expectConc  int
+		conc                   int
+		defaultConc            int
+		defaultMinConcPerStore int
+		numStores              int
+		expectConc             int
 	}{
-		"zero default is retained":         {defaultConc: 0, numStores: 4, expectConc: 0},
-		"negative default is retained":     {defaultConc: -1, numStores: 4, expectConc: -1},
-		"zero stores retains default":      {defaultConc: 4, expectConc: 4},
-		"explicit value not distributed":   {conc: 4, numStores: 2, expectConc: 4},
-		"explicit value overrides default": {conc: 4, defaultConc: 16, numStores: 2, expectConc: 4},
-		"default value is distributed":     {defaultConc: 16, numStores: 4, expectConc: 4},
-		"default value uses ceil division": {defaultConc: 16, numStores: 5, expectConc: 4},
-		"all stores have at least 1":       {defaultConc: 4, numStores: 10, expectConc: 1},
+		"zero default is retained":                            {defaultConc: 0, numStores: 4, expectConc: 0},
+		"negative default is retained":                        {defaultConc: -1, numStores: 4, expectConc: -1},
+		"zero stores retains default":                         {defaultConc: 4, expectConc: 4},
+		"explicit value not distributed":                      {conc: 4, numStores: 2, expectConc: 4},
+		"explicit value overrides default":                    {conc: 4, defaultConc: 16, numStores: 2, expectConc: 4},
+		"default value is distributed":                        {defaultConc: 16, numStores: 4, expectConc: 4},
+		"default value is distributed with per-store min":     {defaultConc: 16, defaultMinConcPerStore: 8, numStores: 4, expectConc: 8},
+		"default value uses ceil division":                    {defaultConc: 16, numStores: 5, expectConc: 4},
+		"default value uses ceil division with per-store min": {defaultConc: 16, defaultMinConcPerStore: 8, numStores: 5, expectConc: 8},
+		"all stores have at least 1":                          {defaultConc: 4, numStores: 10, expectConc: 1},
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			defer func(original int) {
-				defaultRaftSchedulerConcurrency = original // restore global default
-			}(defaultRaftSchedulerConcurrency)
+			defer func(originalConc, originalMinConcPerStore int) {
+				defaultRaftSchedulerConcurrency = originalConc // restore global default
+				defaultRaftSchedulerMinConcurrencyPerStore = originalMinConcPerStore
+			}(defaultRaftSchedulerConcurrency, defaultRaftSchedulerMinConcurrencyPerStore)
 			defaultRaftSchedulerConcurrency = tc.defaultConc
+			defaultRaftSchedulerMinConcurrencyPerStore = tc.defaultMinConcPerStore
 			cfg := StoreConfig{RaftSchedulerConcurrency: tc.conc}
 			cfg.SetDefaults(tc.numStores)
 			require.Equal(t, tc.expectConc, cfg.RaftSchedulerConcurrency)
