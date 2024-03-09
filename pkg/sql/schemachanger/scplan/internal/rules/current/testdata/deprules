@@ -3360,6 +3360,19 @@ deprules
     - $column-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($index, $index-Target, $index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: namespace exist before schema parent
+  from: dependent-Node
+  kind: Precedence
+  to: relation-Node
+  query:
+    - $dependent[Type] = '*scpb.Namespace'
+    - $relation[Type] = '*scpb.SchemaParent'
+    - joinOnDescID($dependent, $relation, $schema-id)
+    - ToPublicOrTransient($dependent-Target, $relation-Target)
+    - $dependent-Node[CurrentStatus] = PUBLIC
+    - $relation-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+    - joinTargetNode($relation, $relation-Target, $relation-Node)
 - name: non-data dependents removed before descriptor
   from: dependent-Node
   kind: Precedence
@@ -7430,6 +7443,19 @@ deprules
     - $column-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($index, $index-Target, $index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: namespace exist before schema parent
+  from: dependent-Node
+  kind: Precedence
+  to: relation-Node
+  query:
+    - $dependent[Type] = '*scpb.Namespace'
+    - $relation[Type] = '*scpb.SchemaParent'
+    - joinOnDescID($dependent, $relation, $schema-id)
+    - ToPublicOrTransient($dependent-Target, $relation-Target)
+    - $dependent-Node[CurrentStatus] = PUBLIC
+    - $relation-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+    - joinTargetNode($relation, $relation-Target, $relation-Node)
 - name: non-data dependents removed before descriptor
   from: dependent-Node
   kind: Precedence

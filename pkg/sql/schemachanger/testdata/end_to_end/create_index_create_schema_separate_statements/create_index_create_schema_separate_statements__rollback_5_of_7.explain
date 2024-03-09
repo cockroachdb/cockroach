@@ -16,7 +16,7 @@ Schema change plan for rolling back CREATE SCHEMA ‹defaultdb›.‹sc›; foll
       │    │    ├── PUBLIC           → ABSENT      IndexName:{DescID: 104 (t), Name: "idx", IndexID: 2 (idx-)}
       │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
       │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
-      │    │    ├── MERGE_ONLY       → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey)}
+      │    │    ├── MERGE_ONLY       → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
       │    │    ├── WRITE_ONLY       → DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
       │    │    ├── DESCRIPTOR_ADDED → DROPPED     Schema:{DescID: 105 (sc-)}
       │    │    ├── PUBLIC           → ABSENT      Namespace:{DescID: 105 (sc-), Name: "sc", ReferencedDescID: 100 (defaultdb)}
@@ -47,7 +47,7 @@ Schema change plan for rolling back CREATE SCHEMA ‹defaultdb›.‹sc›; foll
            ├── 5 elements transitioning toward ABSENT
            │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
            │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey)}
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
            │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
            │    └── DROPPED     → ABSENT Schema:{DescID: 105 (sc-)}
            └── 9 Mutation operations

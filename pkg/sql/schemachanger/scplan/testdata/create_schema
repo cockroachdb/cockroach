@@ -102,6 +102,10 @@ CREATE SCHEMA sc;
   to:   [Schema:{DescID: 105}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [Namespace:{DescID: 105, Name: sc, ReferencedDescID: 100}, PUBLIC]
+  to:   [SchemaParent:{DescID: 105, ReferencedDescID: 100}, PUBLIC]
+  kind: Precedence
+  rule: namespace exist before schema parent
 - from: [Owner:{DescID: 105}, PUBLIC]
   to:   [Schema:{DescID: 105}, PUBLIC]
   kind: Precedence
