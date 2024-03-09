@@ -128,6 +128,14 @@ const (
 var defaultRaftSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.GOMAXPROCS(0), 128))
 
+// defaultRaftSchedulerMinConcurrencyPerStore specifies the minimum number of
+// Raft scheduler worker goroutines for each store. The configuration prevents
+// defaultRaftSchedulerConcurrency from being spread so thin across stores in a
+// many-store system that any single store's worker pool cannot keep up with
+// imbalanced load.
+var defaultRaftSchedulerMinConcurrencyPerStore = envutil.EnvOrDefaultInt(
+	"COCKROACH_SCHEDULER_MIN_CONCURRENCY_PER_STORE", min(runtime.GOMAXPROCS(0), defaultRaftSchedulerConcurrency))
+
 // defaultRaftSchedulerShardSize specifies the default maximum number of
 // scheduler worker goroutines per mutex shard. By default, we spin up 8 workers
 // per CPU core, capped at 128, so 16 is equivalent to 2 CPUs per shard, or a
@@ -1317,9 +1325,12 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 		sc.RaftSchedulerConcurrency = defaultRaftSchedulerConcurrency
 		// If we have more than one store, evenly divide the default workers across
 		// stores, since the default value is a function of CPU count and should not
-		// scale with the number of stores.
+		// scale with the number of stores. However, we place a floor on the number
+		// of workers for each store to ensure that small imbalances in load do not
+		// starve a single store's Raft scheduler.
 		if numStores > 1 && sc.RaftSchedulerConcurrency > 1 {
 			sc.RaftSchedulerConcurrency = (sc.RaftSchedulerConcurrency-1)/numStores + 1 // ceil division
+			sc.RaftSchedulerConcurrency = max(sc.RaftSchedulerConcurrency, defaultRaftSchedulerMinConcurrencyPerStore)
 		}
 	}
 	if sc.RaftSchedulerConcurrencyPriority == 0 {
