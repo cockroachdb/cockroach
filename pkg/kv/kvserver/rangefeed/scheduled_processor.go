@@ -790,13 +790,13 @@ func (p *ScheduledProcessor) publishSSTable(
 	if sstWTS.IsEmpty() {
 		log.Fatalf(ctx, "received SSTable without write timestamp")
 	}
-	p.reg.PublishToOverlapping(ctx, sstSpan, &kvpb.RangeFeedEvent{
-		SST: &kvpb.RangeFeedSSTable{
-			Data:    sst,
-			Span:    sstSpan,
-			WriteTS: sstWTS,
-		},
-	}, false /* omitInRangefeeds */, alloc)
+	var event kvpb.RangeFeedEvent
+	event.MustSetValue(&kvpb.RangeFeedSSTable{
+		Data:    sst,
+		Span:    sstSpan,
+		WriteTS: sstWTS,
+	})
+	p.reg.PublishToOverlapping(ctx, sstSpan, &event, false /* omitInRangefeeds */, alloc)
 }
 
 func (p *ScheduledProcessor) publishCheckpoint(ctx context.Context, alloc *SharedBudgetAllocation) {
