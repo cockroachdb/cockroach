@@ -636,12 +636,13 @@ func runBackupProcessor(
 								resumeTS = resp.Files[fileCount-1].EndKeyTS
 							}
 							resumeSpan = spanAndTime{
-								span:       *resp.ResumeSpan,
-								firstKeyTS: resumeTS,
-								start:      span.start,
-								end:        span.end,
-								attempts:   span.attempts,
-								lastTried:  span.lastTried,
+								span:         *resp.ResumeSpan,
+								firstKeyTS:   resumeTS,
+								start:        span.start,
+								end:          span.end,
+								attempts:     span.attempts,
+								lastTried:    span.lastTried,
+								finishesSpec: span.finishesSpec,
 							}
 						}
 
