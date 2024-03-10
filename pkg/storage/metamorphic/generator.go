@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 )
@@ -54,7 +53,8 @@ func (e *engineConfig) create(path string, baseFS vfs.FS) (storage.Engine, error
 	}
 	eng, err := storage.Open(context.Background(), env, cluster.MakeTestingClusterSettings(), configOpts...)
 	if err != nil {
-		return nil, errors.WithSecondaryError(err, env.Close())
+		env.Close()
+		return nil, err
 	}
 	return eng, nil
 }
