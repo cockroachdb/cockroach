@@ -148,6 +148,7 @@ func NewFeedBudget(budget *mon.BoundAccount, limit int64, settings *settings.Val
 		stopC:      make(chan interface{}),
 		limit:      limit,
 		settings:   settings,
+		// add more fields to cache span size here
 	}
 	f.mu.memBudget = budget
 	return f
