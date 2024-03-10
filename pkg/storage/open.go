@@ -240,8 +240,10 @@ type engineConfig struct {
 // Open opens a new Pebble storage engine, reading and writing data to the
 // provided fs.Env, configured with the provided options.
 //
-// If succesful, the returned Engine takes ownership over the provided fs.Env.
-// When the Engine is closed, the fs.Env is closed too.
+// If succesful, the returned Engine takes ownership over the provided fs.Env's
+// reference. When the Engine is closed, the fs.Env is closed once too. If the
+// Env must be retained beyond the Engine's lifetime, the caller should Ref() it
+// first.
 func Open(
 	ctx context.Context, env *fs.Env, settings *cluster.Settings, opts ...ConfigOption,
 ) (*Pebble, error) {
