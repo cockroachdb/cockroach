@@ -180,6 +180,8 @@ func (p *ScheduledProcessor) processEvents(ctx context.Context) {
 				// data since registrations already have errors set.
 				p.consumeEvent(ctx, e)
 			}
+			e.alloc.ReleaseUsage(ctx, e)
+			e.alloc.AdjustMemUsage(ctx)
 			e.alloc.Release(ctx)
 			putPooledEvent(e)
 		default:
@@ -483,6 +485,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 			}()
 		}
 	}
+	alloc.TrackUsage(ctx, &e, nil)
 	ev := getPooledEvent(e)
 	ev.alloc = alloc
 	if timeout == 0 {
@@ -663,7 +666,7 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 	ctx context.Context, ops []enginepb.MVCCLogicalOp, alloc *SharedBudgetAllocation,
 ) {
 	for _, op := range ops {
-		// Publish RangeFeedValue updates, if necessary.
+		// Publish RangeFeedValue updates, if necessary.x
 		switch t := op.GetValue().(type) {
 		// OmitInRangefeeds is relevant only for transactional writes, so it's
 		// propagated only in the case of a MVCCCommitIntentOp and
