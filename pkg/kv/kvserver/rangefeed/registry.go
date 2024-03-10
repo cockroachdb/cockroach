@@ -468,6 +468,9 @@ func (reg *registry) PublishToOverlapping(
 	omitInRangefeeds bool,
 	alloc *SharedBudgetAllocation,
 ) {
+	// Update memory usage just once for the entire event but not for each
+	// registration.
+	alloc.TrackUsage(ctx, nil, event)
 	// Determine the earliest starting timestamp that a registration
 	// can have while still needing to hear about this event.
 	var minTS hlc.Timestamp
