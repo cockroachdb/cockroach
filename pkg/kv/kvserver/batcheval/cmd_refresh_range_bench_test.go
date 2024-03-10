@@ -189,7 +189,7 @@ func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, rw fs.RWMode
 	}
 	eng, err := storage.Open(context.Background(), env, cluster.MakeTestingClusterSettings(), storage.LBaseMaxBytes(lBaseMaxBytes))
 	if err != nil {
-		require.NoError(b, env.Close())
+		env.Close()
 		b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
 	}
 	return eng
