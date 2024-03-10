@@ -354,6 +354,18 @@ func registerBackup(r registry.Registry) {
 				}
 				return nil
 			})
+			m.Go(func(ctx context.Context) error {
+				var jobID jobspb.JobID
+				conn := c.Conn(ctx, t.L(), 2)
+				testutils.SucceedsSoon(t, func() error {
+					err := conn.QueryRowContext(ctx, `SELECT job_id [SHOW JOBS] where job_type = 'BACKUP'`).Scan(&jobID)
+					if err != nil {
+						return errors.Wrap(err, "could not get job id")
+					}
+					return nil
+				})
+				return AssertReasonableFractionCompleted(ctx, t.L(), c, jobID, 2)
+			})
 			m.Wait()
 		},
 	})
