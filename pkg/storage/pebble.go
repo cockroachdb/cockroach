@@ -1468,7 +1468,7 @@ func (p *Pebble) Close() {
 
 	handleErr(p.db.Close())
 	if p.env != nil {
-		handleErr(p.env.Close())
+		p.env.Close()
 		p.env = nil
 	}
 }

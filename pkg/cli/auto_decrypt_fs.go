@@ -17,7 +17,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
@@ -59,11 +58,10 @@ func (afs *autoDecryptFS) Init(encryptedDirs []string, resolveFn resolveEncrypte
 }
 
 func (afs *autoDecryptFS) Close() error {
-	var err error
 	for _, eDir := range afs.encryptedDirs {
-		err = errors.CombineErrors(err, eDir.env.Close())
+		eDir.env.Close()
 	}
-	return err
+	return nil
 }
 
 func (afs *autoDecryptFS) Create(name string) (vfs.File, error) {
