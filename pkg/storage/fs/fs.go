@@ -67,7 +67,8 @@ func InitEnvsFromStoreSpecs(
 		var err error
 		envs[i], err = InitEnvFromStoreSpec(ctx, specs[i], rw, stickyRegistry)
 		if err != nil {
-			return nil, errors.WithSecondaryError(err, envs.CloseAll())
+			envs.CloseAll()
+			return nil, err
 		}
 	}
 	return envs, nil
@@ -77,14 +78,12 @@ func InitEnvsFromStoreSpecs(
 type Envs []*Env
 
 // CloseAll closes all the envs.
-func (e Envs) CloseAll() error {
-	var err error
+func (e Envs) CloseAll() {
 	for i := range e {
 		if e[i] != nil {
-			err = errors.CombineErrors(err, e[i].Close())
+			e[i].Close()
 		}
 	}
-	return err
 }
 
 // InitEnvFromStoreSpec constructs a new Env from a store spec. See the
@@ -120,10 +119,14 @@ type EnvConfig struct {
 
 // InitEnv initializes a new virtual filesystem environment.
 //
-// The returned Env must be closed to avoid leaking goroutines and other
-// resources.
+// If successful the returned Env is returned with 1 reference. It must be
+// closed to avoid leaking goroutines and other resources.
 func InitEnv(ctx context.Context, fs vfs.FS, dir string, cfg EnvConfig) (*Env, error) {
 	e := &Env{Dir: dir, UnencryptedFS: fs, rw: cfg.RW}
+	e.refs.Store(1)
+	// Defer the Close(). The Close() will only actually release resources if we
+	// error out early without adding an additional ref just before returning.
+	defer e.Close()
 
 	// Set disk-health check interval to min(5s, maxSyncDurationDefault). This
 	// is mostly to ease testing; the default of 5s is too infrequent to test
@@ -149,7 +152,7 @@ func InitEnv(ctx context.Context, fs vfs.FS, dir string, cfg EnvConfig) (*Env, e
 	// database lock down below, which requires the directory already exist.
 	if cfg.RW == ReadWrite {
 		if err := e.UnencryptedFS.MkdirAll(dir, os.ModePerm); err != nil {
-			return nil, errors.WithSecondaryError(err, e.Close())
+			return nil, err
 		}
 	}
 
@@ -160,7 +163,7 @@ func InitEnv(ctx context.Context, fs vfs.FS, dir string, cfg EnvConfig) (*Env, e
 	var err error
 	e.DirectoryLock, err = pebble.LockDirectory(dir, e.UnencryptedFS)
 	if err != nil {
-		return nil, errors.WithSecondaryError(err, e.Close())
+		return nil, err
 	}
 
 	// Validate and configure encryption-at-rest. If no encryption-at-rest
@@ -169,13 +172,14 @@ func InitEnv(ctx context.Context, fs vfs.FS, dir string, cfg EnvConfig) (*Env, e
 	e.Registry, e.Encryption, err = resolveEncryptedEnvOptions(
 		ctx, e.UnencryptedFS, dir, cfg.EncryptionOptions, cfg.RW)
 	if err != nil {
-		return nil, errors.WithSecondaryError(err, e.Close())
+		return nil, err
 	}
 	if e.Encryption != nil {
 		e.DefaultFS = e.Encryption.FS
 	} else {
 		e.DefaultFS = e.UnencryptedFS
 	}
+	e.refs.Add(1)
 	return e, nil
 }
 
@@ -206,6 +210,13 @@ type Env struct {
 	rw                     RWMode
 	diskHealthChecksCloser io.Closer
 	onDiskSlowFunc         atomic.Pointer[func(vfs.DiskSlowInfo)]
+	refs                   atomic.Int32
+}
+
+// Ref adds an additional reference to the Env. Each reference requires a
+// corresponding call to Close.
+func (e *Env) Ref() {
+	e.refs.Add(1)
 }
 
 // IsReadOnly returns true if the environment is opened in read-only mode.
@@ -224,7 +235,12 @@ func (e *Env) RegisterOnDiskSlow(fn func(vfs.DiskSlowInfo)) {
 // Close closes all the open resources associated with the Env. If the Env had
 // an associated file registry (eg, encryption-at-rest is or was configured) it
 // will be closed. All disk-health monitoring goroutines will also exit.
-func (e *Env) Close() error {
+func (e *Env) Close() {
+	if v := e.refs.Add(-1); v > 0 {
+		// Refs remain.
+		return
+	}
+
 	var err error
 	if e.Encryption != nil {
 		err = errors.CombineErrors(err, e.Encryption.Closer.Close())
@@ -238,7 +254,9 @@ func (e *Env) Close() error {
 	if e.diskHealthChecksCloser != nil {
 		err = errors.CombineErrors(err, e.diskHealthChecksCloser.Close())
 	}
-	return err
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (e *Env) onDiskSlow(info vfs.DiskSlowInfo) {

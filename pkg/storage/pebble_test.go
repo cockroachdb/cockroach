@@ -1240,7 +1240,7 @@ func TestIncompatibleVersion(t *testing.T) {
 		!strings.Contains(msg, "cannot be opened by development version") {
 		t.Fatalf("unexpected error %v", err)
 	}
-	require.NoError(t, env.Close())
+	env.Close()
 }
 
 func TestNoMinVerFile(t *testing.T) {
@@ -1277,7 +1277,7 @@ func TestNoMinVerFile(t *testing.T) {
 	env = mustInitTestEnv(t, memFS, "")
 	_, err = Open(ctx, env, st)
 	require.ErrorContains(t, err, "store has no min-version file")
-	require.NoError(t, env.Close())
+	env.Close()
 }
 
 func TestApproximateDiskBytes(t *testing.T) {
