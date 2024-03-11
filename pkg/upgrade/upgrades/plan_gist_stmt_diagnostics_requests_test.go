@@ -134,10 +134,12 @@ func getOldStmtDiagReqsDescriptor() *descpb.TableDescriptor {
 				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
 			},
 		},
-		NextFamilyID: 1,
+		NextFamilyID:     1,
+		NextConstraintID: 2,
 		PrimaryIndex: descpb.IndexDescriptor{
 			Name:                tabledesc.PrimaryKeyIndexName("statement_diagnostics_requests"),
 			ID:                  1,
+			ConstraintID:        1,
 			Unique:              true,
 			KeyColumnNames:      []string{"id"},
 			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
