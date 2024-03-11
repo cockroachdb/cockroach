@@ -11,7 +11,6 @@
 package funcdesc
 
 import (
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -717,18 +716,10 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	}
 
 	signatureTypes := make(tree.ParamTypes, 0, len(desc.Params))
-	var outParamNames []string
 	for _, param := range desc.Params {
 		class := ToTreeRoutineParamClass(param.Class)
 		if tree.IsParamIncludedIntoSignature(class, desc.IsProcedure()) {
 			signatureTypes = append(signatureTypes, tree.ParamType{Name: param.Name, Typ: param.Type})
-		}
-		if tree.IsOutParamClass(class) {
-			paramName := param.Name
-			if paramName == "" {
-				paramName = fmt.Sprintf("column%d", len(outParamNames)+1)
-			}
-			outParamNames = append(outParamNames, paramName)
 		}
 		ret.RoutineParams = append(ret.RoutineParams, tree.RoutineParam{
 			Name:  tree.Name(param.Name),
@@ -737,12 +728,8 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 			// TODO(100962): populate DefaultVal.
 		})
 	}
-	returnType := desc.ReturnType.Type
-	if types.IsRecordType(returnType) {
-		ret.ReturnsRecordType = true
-		returnType = types.MakeLabeledTuple(returnType.TupleContents(), outParamNames)
-	}
-	ret.ReturnType = tree.FixedReturnType(returnType)
+	ret.ReturnType = tree.FixedReturnType(desc.ReturnType.Type)
+	ret.ReturnsRecordType = types.IsRecordType(desc.ReturnType.Type)
 	ret.Types = signatureTypes
 	ret.Volatility, err = desc.getOverloadVolatility()
 	if err != nil {
