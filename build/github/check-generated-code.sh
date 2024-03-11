@@ -25,7 +25,7 @@ if ! (./build/bazelutil/check.sh &> artifacts/check-out.log || (cat artifacts/ch
 fi
 rm artifacts/check-out.log
 
-ENGFLOW_ARGS="--config crosslinux --jobs 100 $(./build/github/engflow-args.sh) --remote_download_minimal --bes_keywords check-generated-code"
+ENGFLOW_ARGS="--config crosslinux --jobs 100 $(./build/github/engflow-args.sh) --remote_download_minimal"
 
 EXTRA_BAZEL_ARGS="$ENGFLOW_ARGS" \
     COCKROACH_BAZEL_FORCE_GENERATE=1 \
