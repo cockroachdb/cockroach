@@ -1,3 +1,3 @@
 echo
 ----
-raft ready handling: 5.00s [append=1.00s, apply=1.00s, sync=1.00s, snap=1.00s, other=1.00s], wrote [append-batch=5.0 KiB, append-ent=1.0 KiB (7), append-sst=5.0 MiB (3), apply=3 B (2 in 9 batches)], state_assertions=4, snapshot applied pebble stats: [commit-wait 17ms wal-q 5ms mem-stall 8ms l0-stall 11ms wal-rot 14ms sem 2ms]
+raft ready handling: 5.00s [append=1.00s, apply=1.00s, sync=1.00s, snap=1.00s, other=1.00s], wrote [append-batch=5.0 KiB, append-ent=1.0 KiB (7), append-sst=5.0 MiB (3), apply=3 B (2 in 9 batches), apply-sst=3 (copies=1)], state_assertions=4, snapshot applied pebble stats: [commit-wait 17ms wal-q 5ms mem-stall 8ms l0-stall 11ms wal-rot 14ms sem 2ms]

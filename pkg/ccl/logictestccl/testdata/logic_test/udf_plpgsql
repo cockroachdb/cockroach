@@ -2899,7 +2899,7 @@ CREATE OR REPLACE FUNCTION f(x INT) RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-subtest end
+subtest return_void
 
 statement ok
 CREATE FUNCTION f_empty() RETURNS VOID AS $$ BEGIN END; $$ LANGUAGE PLpgSQL;
@@ -2908,3 +2908,20 @@ query T
 SELECT f_empty()
 ----
 NULL
+
+# Regression test for #108298 - allow an empty RETURN expression for
+# void-returning routines.
+statement ok
+CREATE OR REPLACE FUNCTION f_empty() RETURNS VOID AS $$ BEGIN RETURN; END; $$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f_empty()
+----
+NULL
+
+# Regression test for #114849 - return expected error when a return expression
+# is supplied for a void-returning routine.
+statement error pgcode 42804 pq: RETURN cannot have a parameter in function returning void
+CREATE FUNCTION void_return_expr() RETURNS VOID AS $$ BEGIN RETURN 5; END; $$ LANGUAGE PLpgSQL;
+
+subtest end

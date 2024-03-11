@@ -112,7 +112,7 @@ call
                                │              ├── const: '' [type=string]
                                │              └── const: '00000' [type=string]
                                └── values
-                                    ├── columns: stmt_return_3:4(void)
+                                    ├── columns: "_implicit_return":4(void)
                                     ├── cardinality: [1 - 1]
                                     ├── stats: [rows=1]
                                     ├── key: ()
