@@ -226,6 +226,10 @@ type BaseConfig struct {
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
 
+	// WALFailover enables and configures automatic WAL failover when latency to
+	// a store's primary WAL increases.
+	WALFailover base.WALFailoverMode
+
 	// SharedStorage is specified to enable disaggregated shared storage.
 	SharedStorage                    string
 	EarlyBootExternalStorageAccessor *cloud.EarlyBootExternalStorageAccessor
@@ -307,6 +311,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.DisableMaxOffsetCheck = false
 	cfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
 	cfg.StorageEngine = storage.DefaultStorageEngine
+	cfg.WALFailover = base.WALFailoverDefault
 	cfg.TestingInsecureWebAccess = disableWebLogin
 	cfg.Stores = base.StoreSpecList{
 		Specs: []base.StoreSpec{storeSpec},
@@ -764,6 +769,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		log.Eventf(ctx, "initializing %+v", spec)
 
 		storageConfigOpts := []storage.ConfigOption{
+			walFailoverConfig,
 			storage.Attributes(spec.Attributes),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
 		}
