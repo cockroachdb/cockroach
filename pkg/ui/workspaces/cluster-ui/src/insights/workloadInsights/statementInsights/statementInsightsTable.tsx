@@ -154,7 +154,7 @@ export function makeStatementInsightsColumns(): ColumnDescriptor<StmtInsightEven
       title: insightsTableTitles.rowsProcessed(execType),
       className: cx("statements-table__col-rows-read"),
       cell: (item: StmtInsightEvent) =>
-        `${Count(item.rowsRead)} Reads / ${Count(item.rowsRead)} Writes`,
+        `${Count(item.rowsRead)} Reads / ${Count(item.rowsWritten)} Writes`,
       sort: (item: StmtInsightEvent) => item.rowsRead + item.rowsWritten,
       showByDefault: true,
     },
