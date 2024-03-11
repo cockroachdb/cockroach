@@ -141,7 +141,7 @@ func registerImportTPCC(r registry.Registry) {
 		m.Go(hc.Runner)
 
 		tick, perfBuf := initBulkJobPerfArtifacts(testName, timeout)
-		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081'`
+		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081' {pgurl:1}`
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
 			defer hc.Done()
@@ -355,13 +355,13 @@ func registerImportDecommissioned(r registry.Registry) {
 		// Decommission a node.
 		nodeToDecommission := 2
 		t.Status(fmt.Sprintf("decommissioning node %d", nodeToDecommission))
-		c.Run(ctx, c.Node(nodeToDecommission), `./cockroach node decommission --insecure --self --wait=all`)
+		c.Run(ctx, c.Node(nodeToDecommission), fmt.Sprintf(`./cockroach node decommission --self --wait=all --port={pgport:%d} --certs-dir=%s`, nodeToDecommission, install.CockroachNodeCertsDir))
 
 		// Wait for a bit for node liveness leases to expire.
 		time.Sleep(10 * time.Second)
 
 		t.Status("running workload")
-		c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
+		c.Run(ctx, c.Node(1), tpccImportCmd(warehouses, "{pgurl:1}"))
 	}
 
 	r.Add(registry.TestSpec{

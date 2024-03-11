@@ -687,9 +687,7 @@ func DefaultStartOpts() install.StartOpts {
 		ScheduleBackups:    false,
 		ScheduleBackupArgs: DefaultBackupSchedule,
 		InitTarget:         1,
-		// TODO(renato): change the defaults below to `0` (i.e., pick a
-		// random available port) once #111052 is addressed.
-		SQLPort:            config.DefaultSQLPort,
+		SQLPort:            0,
 		VirtualClusterName: install.SystemInterfaceName,
 		// TODO(DarrylWong): revert back to 0 once #117125 is addressed.
 		AdminUIPort: config.DefaultAdminUIPort,
@@ -926,6 +924,7 @@ type PGURLOptions struct {
 	External           bool
 	VirtualClusterName string
 	SQLInstance        int
+	Auth               install.PGAuthMode
 }
 
 // PgURL generates pgurls for the nodes in a cluster.
@@ -964,7 +963,7 @@ func PgURL(
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode, opts.Auth))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)

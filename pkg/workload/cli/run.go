@@ -298,7 +298,6 @@ func workerRun(
 
 func runInit(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
-
 	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err

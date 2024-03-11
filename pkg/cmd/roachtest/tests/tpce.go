@@ -54,8 +54,8 @@ type tpceConnectionOpts struct {
 
 const (
 	defaultFixtureBucket = "gs://cockroach-fixtures-us-east1/tpce-csv"
-	defaultUser          = "root"
-	defaultPassword      = ""
+	defaultUser          = install.DefaultUser
+	defaultPassword      = install.DefaultPassword
 )
 
 func defaultTPCEConnectionOpts() tpceConnectionOpts {
@@ -178,6 +178,7 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 			t.Status("installing cockroach")
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.StoreCount = opts.ssds
+			roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
 			settings := install.MakeClusterSettings(install.NumRacksOption(racks))
 			c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
 		}

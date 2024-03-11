@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,9 @@ func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluste
 	)
 
 	virtualClusterURL := func() string {
-		urls, err := c.ExternalPGUrl(ctx, t.L(), virtualClusterNode, virtualClusterName, sqlInstance)
+		urls, err := c.ExternalPGUrl(ctx, t.L(), virtualClusterNode, roachprod.PGURLOptions{
+			VirtualClusterName: virtualClusterName, SQLInstance: sqlInstance,
+		})
 		require.NoError(t, err)
 
 		return urls[0]

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -124,7 +125,11 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	m := c.NewMonitor(ctx)
 	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, c.Node(1), "./cockroach", "workload", "init", "kv", "--cycle-length", "20000")
+		cmd := roachtestutil.NewCommand("./cockroach workload init kv").
+			Flag("cycle-length", 20000).
+			Arg("{pgurl:1}").
+			String()
+		c.Run(ctx, c.Node(1), cmd)
 
 		execSQLOrFail("alter database kv configure zone using gc.ttlseconds = $1", 120)
 
@@ -136,8 +141,15 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 		wlFailure := make(chan error)
 		go func() {
 			defer close(wlFailure)
-			err := c.RunE(wlCtx, c.Node(1), "./cockroach", "workload", "run", "kv", "--cycle-length", "20000",
-				"--max-block-bytes", "2048", "--min-block-bytes", "2048", "--read-percent", "0", "--max-rate", "1800")
+			cmd = roachtestutil.NewCommand("./cockroach workload run kv").
+				Flag("cycle-length", 20000).
+				Flag("max-block-bytes", 2048).
+				Flag("min-block-bytes", 2048).
+				Flag("read-percent", 0).
+				Flag("max-rate", 1800).
+				Arg("{pgurl%s}", c.Node(1)).
+				String()
+			err := c.RunE(wlCtx, c.Node(1), cmd)
 			wlFailure <- err
 		}()
 
@@ -624,8 +636,13 @@ func sendBatchRequest(
 	if randomSeed != 0 {
 		debugEnv = fmt.Sprintf("COCKROACH_RANDOM_SEED=%d ", randomSeed)
 	}
+	cmd := roachtestutil.NewCommand("./cockroach debug send-kv-batch").
+		Arg(requestFileName).
+		Flag("certs-dir", install.CockroachNodeCertsDir).
+		Flag("host", fmt.Sprintf("localhost:{pgport:%d}", node)).
+		String()
 	res, err := c.RunWithDetailsSingleNode(
-		ctx, t.L(), c.Node(node), debugEnv+"./cockroach debug send-kv-batch --insecure", requestFileName)
+		ctx, t.L(), c.Node(node), debugEnv+cmd)
 	if err != nil {
 		return kvpb.BatchResponse{}, err
 	}

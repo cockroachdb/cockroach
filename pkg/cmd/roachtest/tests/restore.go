@@ -862,7 +862,7 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 }
 
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
-	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
+	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(false)))
 	rd.getAOST(ctx)
 }
 
@@ -1022,7 +1022,7 @@ func verifyMetrics(
 	if err != nil {
 		return err
 	}
-	url := "http://" + adminUIAddrs[0] + "/ts/query"
+	url := "https://" + adminUIAddrs[0] + "/ts/query"
 
 	request := tspb.TimeSeriesQueryRequest{
 		// Ask for one minute intervals. We can't just ask for the whole hour

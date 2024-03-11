@@ -51,7 +51,8 @@ func registerAllocator(r registry.Registry) {
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
 			if err := c.RunE(
-				ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "tpch", "--scale-factor", "10",
+				ctx, c.Node(1),
+				"./cockroach", "workload", "fixtures", "import", "tpch", "--scale-factor", "10", "{pgurl:1}",
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -84,14 +85,13 @@ func registerAllocator(r registry.Registry) {
 
 		// Start the remaining nodes to kick off upreplication/rebalancing.
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(start+1, nodes))
-
-		c.Run(ctx, c.Node(1), `./cockroach workload init kv --drop`)
+		c.Run(ctx, c.Node(1), "./cockroach workload init kv --drop {pgurl:1}")
 		for node := 1; node <= nodes; node++ {
 			node := node
 			// TODO(dan): Ideally, the test would fail if this queryload failed,
 			// but we can't put it in monitor as-is because the test deadlocks.
 			go func() {
-				const cmd = `./cockroach workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=127`
+				cmd := fmt.Sprintf("./cockroach workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=127 {pgurl%s}", c.Node(node))
 				l, err := t.L().ChildLogger(fmt.Sprintf(`kv-%d`, node))
 				if err != nil {
 					t.Fatal(err)
@@ -453,7 +453,7 @@ FROM crdb_internal.kv_store_status
 
 	decom := func(id int) {
 		c.Run(ctx, c.Node(1),
-			fmt.Sprintf("./cockroach node decommission --insecure --wait=none %d", id))
+			fmt.Sprintf("./cockroach node decommission --certs-dir=%s --port={pgport%s} --wait=none %d", install.CockroachNodeCertsDir, c.Node(id), id))
 	}
 
 	// Decommission a node. The ranges should down-replicate to 7 replicas.

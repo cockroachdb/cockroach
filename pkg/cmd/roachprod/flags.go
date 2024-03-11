@@ -171,7 +171,7 @@ func initFlags() {
 	pgurlCmd.Flags().BoolVar(&external,
 		"external", false, "return pgurls for external connections")
 	pgurlCmd.Flags().StringVar(&pgurlCertsDir,
-		"certs-dir", "./certs", "cert dir to use for secure connections")
+		"certs-dir", install.CockroachNodeCertsDir, "cert dir to use for secure connections")
 
 	pprofCmd.Flags().DurationVar(&pprofOpts.Duration,
 		"duration", 30*time.Second, "Duration of profile to capture")

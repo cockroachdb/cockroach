@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
 	"github.com/stretchr/testify/require"
@@ -512,7 +513,32 @@ func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tp
 		if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
 			t.Fatal(err)
 		}
-		conn = createInMemoryTenantWithConn(ctx, t, c, appTenantName, c.All(), false /* secure */)
+
+		startOpts := option.DefaultStartSharedVirtualClusterOpts(appTenantName)
+		c.StartServiceForVirtualCluster(ctx, t.L(), c.All(), startOpts, install.MakeClusterSettings(), c.All())
+
+		// Allow the tenant to be able to scatter tables. We need to run a dummy
+		// scatter in order to make sure the capability is propagated before
+		// starting the test.
+		if _, err := singleTenantConn.Exec(
+			`ALTER TENANT $1 SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_scatter.enabled=true`, appTenantName,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := singleTenantConn.Exec(
+			`ALTER TENANT $1 GRANT CAPABILITY can_admin_scatter=true`, appTenantName,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		conn = c.Conn(ctx, t.L(), c.All().RandNode()[0], option.TenantName(appTenantName))
+		testutils.SucceedsSoon(t, func() error {
+			if _, err := conn.Exec(`CREATE TABLE IF NOT EXISTS dummyscatter (a INT)`); err != nil {
+				return err
+			}
+			_, err := conn.Exec(`ALTER TABLE dummyscatter SCATTER`)
+			return err
+		})
 	} else {
 		conn = c.Conn(ctx, t.L(), 1)
 		disableMergeQueue = true

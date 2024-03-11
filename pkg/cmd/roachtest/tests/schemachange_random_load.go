@@ -97,7 +97,7 @@ func runSchemaChangeRandomLoad(
 
 	t.Status("starting cockroach nodes")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-	c.Run(ctx, loadNode, "./workload init schemachange")
+	c.Run(ctx, loadNode, "./workload init schemachange {pgurl:1}")
 
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "echo", "-n", "{store-dir}")
 	if err != nil {
@@ -113,6 +113,7 @@ func runSchemaChangeRandomLoad(
 		fmt.Sprintf("--max-ops %d", maxOps),
 		fmt.Sprintf("--concurrency %d", concurrency),
 		fmt.Sprintf("--txn-log %s", filepath.Join(storeDirectory, txnLogFile)),
+		fmt.Sprintf("{pgurl%s}", loadNode),
 	}
 	t.Status("running schemachange workload")
 	err = c.RunE(ctx, loadNode, runCmd...)

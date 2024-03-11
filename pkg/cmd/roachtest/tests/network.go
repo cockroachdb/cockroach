@@ -12,20 +12,25 @@ package tests
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq" // register postgres driver
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +49,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	// 3 will re-recreate a separate set of certs, which
 	// we don't want. Starting all nodes at once ensures
 	// that they use coherent certs.
-	settings := install.MakeClusterSettings(install.SecureOption(true))
+	settings := install.MakeClusterSettings()
 
 	// Don't create a backup schedule as this test shuts the cluster down immediately.
 	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, serverNodes)
@@ -74,11 +79,11 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	c.Start(ctx, t.L(), startOpts, settings, c.Range(2, n-1))
 
 	t.L().Printf("retrieving server addresses...")
-	serverAddrs, err := c.InternalAddr(ctx, t.L(), serverNodes)
+	serverUrls, err := c.InternalPGUrl(ctx, t.L(), serverNodes, roachprod.PGURLOptions{Auth: install.AuthUserPassword})
 	require.NoError(t, err)
 
 	t.L().Printf("fetching certs...")
-	certsDir := "/home/ubuntu/certs"
+	certsDir := fmt.Sprintf("/home/ubuntu/%s", install.CockroachNodeCertsDir)
 	localCertsDir, err := filepath.Abs("./network-certs")
 	require.NoError(t, err)
 	require.NoError(t, os.RemoveAll(localCertsDir))
@@ -101,12 +106,6 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 
 	// Wait for up-replication. This will also print a progress message.
 	err = WaitFor3XReplication(ctx, t, db)
-	require.NoError(t, err)
-
-	t.L().Printf("creating test user...")
-	_, err = db.Exec(`CREATE USER testuser WITH PASSWORD 'password' VALID UNTIL '2060-01-01'`)
-	require.NoError(t, err)
-	_, err = db.Exec(`GRANT admin TO testuser`)
 	require.NoError(t, err)
 
 	const expectedLeaseholder = 1
@@ -133,7 +132,10 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 			if timeutil.Since(tStart) > 30*time.Second {
 				t.L().Printf("still waiting for leases to move")
 				// The leases have not moved yet, so display some progress.
-				dumpRangesCmd := fmt.Sprintf(`./cockroach sql --certs-dir %s -e 'TABLE crdb_internal.ranges'`, certsDir)
+				dumpRangesCmd := roachtestutil.NewCommand("./cockroach sql -e 'TABLE crdb_internal.ranges'").
+					Flag("certs-dir", certsDir).
+					Flag("port", "{pgport:1}").
+					String()
 				t.L().Printf("SQL: %s", dumpRangesCmd)
 				err := c.RunE(ctx, c.Node(1), dumpRangesCmd)
 				require.NoError(t, err)
@@ -197,7 +199,7 @@ SELECT $1::INT = ALL (
 				}
 
 				// Construct a connection URL to server i.
-				url := fmt.Sprintf("postgres://testuser:password@%s/defaultdb?sslmode=require", serverAddrs[server-1])
+				url := serverUrls[server-1]
 
 				// Attempt a client connection to that server.
 				t.L().Printf("server %d, attempt %d; url: %s\n", server, attempt, url)
@@ -249,7 +251,7 @@ SELECT $1::INT = ALL (
 		})
 
 		t.L().Printf("blocking networking on node 1...")
-		const netConfigCmd = `
+		netConfigCmd := fmt.Sprintf(`
 # ensure any failure fails the entire script.
 set -e;
 
@@ -258,23 +260,35 @@ sudo iptables -P INPUT ACCEPT;
 sudo iptables -P OUTPUT ACCEPT;
 
 # Drop any node-to-node crdb traffic.
-sudo iptables -A INPUT -p tcp --dport 26257 -j DROP;
-sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP;
+sudo iptables -A INPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -A OUTPUT -p tcp --dport {pgport%s} -j DROP;
 
 sudo iptables-save
-`
+`,
+			c.Node(expectedLeaseholder), c.Node(expectedLeaseholder))
 		t.L().Printf("partitioning using iptables; config cmd:\n%s", netConfigCmd)
 		require.NoError(t, c.RunE(ctx, c.Node(expectedLeaseholder), netConfigCmd))
 
-		// (attempt to) restore iptables when test end, so that cluster
-		// can be investigated afterwards.
 		defer func() {
-			const restoreNet = `
+			// Check that iptable DROP actually blocked traffic.
+			t.L().Printf("verify that traffic to node %d is blocked", expectedLeaseholder)
+			packetsDropped, err := iptablesPacketsDropped(ctx, t.L(), c, c.Node(expectedLeaseholder))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if packetsDropped == 0 {
+				t.Fatalf("Expected node %d to be partitioned but reported no packets dropped.", expectedLeaseholder)
+			}
+
+			// (attempt to) restore iptables when test end, so that cluster
+			// can be investigated afterwards.
+			restoreNet := fmt.Sprintf(`
 set -e;
-sudo iptables -D INPUT -p tcp --dport 26257 -j DROP;
-sudo iptables -D OUTPUT -p tcp --dport 26257 -j DROP;
+sudo iptables -D INPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -D OUTPUT -p tcp --dport {pgport%s} -j DROP;
 sudo iptables-save
-`
+`,
+				c.Node(expectedLeaseholder), c.Node(expectedLeaseholder))
 			t.L().Printf("restoring iptables; config cmd:\n%s", restoreNet)
 			require.NoError(t, c.RunE(ctx, c.Node(expectedLeaseholder), restoreNet))
 		}()
@@ -306,4 +320,23 @@ func registerNetwork(r registry.Registry) {
 			runNetworkAuthentication(ctx, t, c)
 		},
 	})
+}
+
+// iptablesPacketsDropped returns the number of packets dropped to a given node due to an iptables rule.
+func iptablesPacketsDropped(
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, node option.NodeListOption,
+) (int, error) {
+	res, err := c.RunWithDetailsSingleNode(ctx, l, node, "sudo iptables -L -v -n")
+	if err != nil {
+		return 0, err
+	}
+	rows := strings.Split(res.Stdout, "\n")
+	// iptables -L outputs rows in the order of: chain, fields, and then values.
+	// We care about the values so only look at row 2.
+	values := strings.Fields(rows[2])
+	if len(values) == 0 {
+		return 0, errors.Errorf("no configured iptables rules found:\n%s", res.Stdout)
+	}
+	packetsDropped, err := strconv.Atoi(values[0])
+	return packetsDropped, errors.Wrapf(err, "could not find number of packets dropped, rules found:\n%s", res.Stdout)
 }

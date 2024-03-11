@@ -37,7 +37,8 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	// amount of data.
 	t.Status("importing tpcc fixture")
 	c.Run(ctx, workloadNode,
-		"./cockroach workload fixtures import tpcc --warehouses=100 --fks=false --checks=false")
+		"./cockroach workload fixtures import tpcc --warehouses=100 --fks=false --checks=false {pgurl:1}",
+	)
 
 	// Wait a full scanner cycle (10m) for the raft log queue to truncate the
 	// sstable entries from the import. They're huge and are not representative of
@@ -62,7 +63,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	// raft log truncation, which caused node 3 to need lots of snapshots when it
 	// came back up.
 	c.Run(ctx, workloadNode, "./cockroach workload run tpcc --warehouses=100 "+
-		fmt.Sprintf("--tolerate-errors --wait=false --duration=%s", downDuration))
+		fmt.Sprintf("--tolerate-errors --wait=false --duration=%s {pgurl:1-2}", downDuration))
 
 	// Bring it back up and make sure it can serve a query within a reasonable
 	// time limit. For now, less time than it was down for.

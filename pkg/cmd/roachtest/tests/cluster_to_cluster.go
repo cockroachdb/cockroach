@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -500,19 +501,22 @@ func (rd *replicationDriver) setupC2C(
 	// TODO(msbutler): allow for backups once this test stabilizes a bit more.
 	srcStartOps := option.DefaultStartOptsNoBackups()
 	srcStartOps.RoachprodOpts.InitTarget = 1
-	srcClusterSetting := install.MakeClusterSettings(install.SecureOption(true))
+
+	roachtestutil.SetDefaultAdminUIPort(c, &srcStartOps.RoachprodOpts)
+	srcClusterSetting := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), srcStartOps, srcClusterSetting, srcCluster)
 
 	// TODO(msbutler): allow for backups once this test stabilizes a bit more.
 	dstStartOps := option.DefaultStartOptsNoBackups()
 	dstStartOps.RoachprodOpts.InitTarget = rd.rs.srcNodes + 1
-	dstClusterSetting := install.MakeClusterSettings(install.SecureOption(true))
+	roachtestutil.SetDefaultAdminUIPort(c, &dstStartOps.RoachprodOpts)
+	dstClusterSetting := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), dstStartOps, dstClusterSetting, dstCluster)
 
 	srcNode := srcCluster.SeededRandNode(rd.rng)
 	destNode := dstCluster.SeededRandNode(rd.rng)
 
-	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, "" /* tenant */, 0 /* sqlInstance */)
+	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, roachprod.PGURLOptions{})
 	t.L().Printf("Randomly chosen src node %d for gateway with address %s", srcNode, addr)
 	t.L().Printf("Randomly chosen dst node %d for gateway", destNode)
 
@@ -1604,7 +1608,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 					shutdownNode:    rrd.shutdownNode,
 					watcherNode:     destinationWatcherNode,
 					crdbNodes:       rrd.crdbNodes(),
-					restartSettings: []install.ClusterSettingOption{install.SecureOption(true)},
+					restartSettings: []install.ClusterSettingOption{},
 					rng:             rrd.rng,
 				}
 				if err := executeNodeShutdown(ctx, t, c, shutdownCfg, shutdownStarter()); err != nil {
@@ -1775,7 +1779,7 @@ func copyPGCertsAndMakeURL(
 		return "", err
 	}
 
-	tmpDir, err := os.MkdirTemp("", "certs")
+	tmpDir, err := os.MkdirTemp("", install.CockroachNodeCertsDir)
 	if err != nil {
 		return "", err
 	}
@@ -1789,11 +1793,11 @@ func copyPGCertsAndMakeURL(
 	if err != nil {
 		return "", err
 	}
-	sslClientCert, err := os.ReadFile(filepath.Join(tmpDir, "client.root.crt"))
+	sslClientCert, err := os.ReadFile(filepath.Join(tmpDir, fmt.Sprintf("client.%s.crt", install.DefaultUser)))
 	if err != nil {
 		return "", err
 	}
-	sslClientKey, err := os.ReadFile(filepath.Join(tmpDir, "client.root.key"))
+	sslClientKey, err := os.ReadFile(filepath.Join(tmpDir, fmt.Sprintf("client.%s.key", install.DefaultUser)))
 	if err != nil {
 		return "", err
 	}

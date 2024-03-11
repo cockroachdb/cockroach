@@ -843,8 +843,9 @@ func (sc *systemTableContents) loadShowResults(
 
 	query := fmt.Sprintf("SELECT * FROM [%s]%s", showStmt, aostFor(timestamp))
 	showCmd := roachtestutil.NewCommand("%s sql", test.DefaultCockroachPath).
-		Flag("certs-dir", "certs").
+		Flag("certs-dir", install.CockroachNodeCertsDir).
 		Flag("e", fmt.Sprintf("%q", query)).
+		Flag("port", fmt.Sprintf("{pgport:%d}", sc.roachNode)).
 		String()
 
 	node := sc.cluster.Node(sc.roachNode)

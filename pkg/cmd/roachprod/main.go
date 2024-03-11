@@ -572,15 +572,7 @@ environment variables to the cockroach process.
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
 		}
-
-		// Always pick a random available port when starting virtual
-		// clusters. We do not expose the functionality of choosing a
-		// specific port for separate-process deployments; for
-		// shared-process, the port will always be based on the system
-		// tenant service.
-		//
-		// TODO(renato): remove this once #111052 is addressed.
-		startOpts.SQLPort = 0
+		// TODO(DarrylWong): remove once #117125 is addressed.
 		startOpts.AdminUIPort = 0
 
 		startOpts.Target = install.StartSharedProcessForVirtualCluster
@@ -974,6 +966,7 @@ var pgurlCmd = &cobra.Command{
 			Secure:             secure,
 			VirtualClusterName: virtualClusterName,
 			SQLInstance:        sqlInstance,
+			Auth:               install.AuthRootCert,
 		})
 		if err != nil {
 			return err

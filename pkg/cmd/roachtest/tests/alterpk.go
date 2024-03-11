@@ -104,9 +104,8 @@ func registerAlterPK(r registry.Registry) {
 		const duration = 10 * time.Minute
 
 		roachNodes, loadNode := setupTest(ctx, t, c)
-
 		cmd := fmt.Sprintf(
-			"./cockroach workload fixtures import tpcc --warehouses=%d --db=tpcc",
+			"./cockroach workload fixtures import tpcc --warehouses=%d --db=tpcc {pgurl:1}",
 			warehouses,
 		)
 		if err := c.RunE(ctx, c.Node(roachNodes[0]), cmd); err != nil {

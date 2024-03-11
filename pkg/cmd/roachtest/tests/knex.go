@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -52,7 +53,7 @@ func registerKnex(r registry.Registry) {
 			c,
 			node,
 			"create sql database",
-			`./cockroach sql --insecure -e "CREATE DATABASE test"`,
+			`./cockroach sql --url={pgurl:1} -e "CREATE DATABASE test"`,
 		)
 		require.NoError(t, err)
 
@@ -116,12 +117,19 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 		)
 		require.NoError(t, err)
 
+		// Write the knexfile test config into the test suite to use.
+		// The default test config does not support ssl connections.
+		err = c.PutString(ctx, knexfile, "/mnt/data1/knex/knexfile.js", 0755, c.Node(1))
+		require.NoError(t, err)
+
 		t.Status("running knex tests")
 		result, err := c.RunWithDetailsSingleNode(
 			ctx,
 			t.L(),
 			node,
-			`cd /mnt/data1/knex/ && DB='cockroachdb' npm test`,
+			fmt.Sprintf(`cd /mnt/data1/knex/ && PGUSER=%s PGPASSWORD=%s PGPORT={pgport:1} PGSSLROOTCERT=$HOME/%s/ca.crt \
+				KNEX_TEST='/mnt/data1/knex/knexfile.js' DB='cockroachdb' npm test`,
+				install.DefaultUser, install.DefaultPassword, install.CockroachNodeCertsDir),
 		)
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)
@@ -152,3 +160,41 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 		},
 	})
 }
+
+const knexfile = `
+'use strict';
+/* eslint no-var: 0 */
+
+const _ = require('lodash');
+
+console.log('Using custom cockroachdb test config');
+
+const testIntegrationDialects = (
+  process.env.DB ||
+  'cockroachdb'
+).match(/[\w-]+/g);
+
+const testConfigs = {
+  cockroachdb: {
+      adapter: 'cockroachdb',
+      port: process.env.PGPORT,
+      host: 'localhost',
+      database: 'test',
+      user: process.env.PGUSER,
+      password: process.env.PGPASSWORD,
+      ssl: {
+        rejectUnauthorized: false,
+        ca: process.env.PGSSLROOTCERT
+      }
+  },
+};
+
+module.exports = _.reduce(
+  testIntegrationDialects,
+  function (res, dialectName) {
+    res[dialectName] = testConfigs[dialectName];
+    return res;
+  },
+  {}
+);
+`

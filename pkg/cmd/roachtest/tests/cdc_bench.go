@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -167,7 +168,7 @@ func formatSI(num int64) string {
 }
 
 // makeCDCBenchOptions creates common cluster options for CDC benchmarks.
-func makeCDCBenchOptions() (option.StartOpts, install.ClusterSettings) {
+func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSettings) {
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["kv.rangefeed.enabled"] = "true"
@@ -209,6 +210,9 @@ func makeCDCBenchOptions() (option.StartOpts, install.ClusterSettings) {
 	// Scheduled backups may interfere with performance, disable them.
 	opts.RoachprodOpts.ScheduleBackups = false
 
+	// Prom helpers assume AdminUIPort is at 26258
+	roachtestutil.SetDefaultAdminUIPort(c, &opts.RoachprodOpts)
+
 	// Backpressure writers when rangefeed clients can't keep up. This gives more
 	// reliable results, since we can otherwise randomly hit timeouts and incur
 	// catchup scans.
@@ -248,7 +252,7 @@ func runCDCBenchScan(
 
 	// Start data nodes first to place data on them. We'll start the changefeed
 	// coordinator later, since we don't want any data on it.
-	opts, settings := makeCDCBenchOptions()
+	opts, settings := makeCDCBenchOptions(c)
 
 	switch protocol {
 	case cdcBenchMuxProtocol:
@@ -408,7 +412,7 @@ func runCDCBenchWorkload(
 
 	// Start data nodes first to place data on them. We'll start the changefeed
 	// coordinator later, since we don't want any data on it.
-	opts, settings := makeCDCBenchOptions()
+	opts, settings := makeCDCBenchOptions(c)
 	settings.ClusterSettings["kv.rangefeed.enabled"] = strconv.FormatBool(cdcEnabled)
 
 	switch protocol {

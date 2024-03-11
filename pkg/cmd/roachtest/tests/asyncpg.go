@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -23,11 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
-const asyncpgRunTestCmd = `
-source venv/bin/activate && 
+var asyncpgRunTestCmd = fmt.Sprintf(`
+source venv/bin/activate &&
 cd /mnt/data1/asyncpg && 
-PGPORT=26257 PGHOST=localhost PGUSER=root PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
-`
+PGPORT={pgport:1} PGHOST=localhost PGUSER=%s PGPASSWORD=%s PGSSLROOTCERT=$HOME/%s/ca.crt PGSSLMODE=require PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
+`, install.DefaultUser, install.DefaultPassword, install.CockroachNodeCertsDir)
 
 var asyncpgReleaseTagRegex = regexp.MustCompile(`^(?P<major>v\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 

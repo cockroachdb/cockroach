@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
@@ -35,7 +36,10 @@ func registerLiquibase(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
+		// TODO(darrylwong): if https://github.com/liquibase/liquibase-test-harness/pull/724 is merged, enable secure mode
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -95,6 +99,7 @@ func registerLiquibase(r registry.Registry) {
 		if err = c.RunE(ctx, node, `sudo mkdir /cockroach && sudo ln -sf /home/ubuntu/cockroach /cockroach/cockroach.sh`); err != nil {
 			t.Fatal(err)
 		}
+		// TODO(darrylwong): once secure mode is enabled, add --certs-dir=install.CockroachNodeCertsDir
 		if err = c.RunE(ctx, node, `/mnt/data1/liquibase-test-harness/src/test/resources/docker/setup_db.sh localhost`); err != nil {
 			t.Fatal(err)
 		}
@@ -109,6 +114,7 @@ func registerLiquibase(r registry.Registry) {
 			resultsPath = repoDir + "/target/surefire-reports/TEST-liquibase.harness.LiquibaseHarnessSuiteTest.xml"
 		)
 
+		// TODO(darrylwong): once secure mode is enabled, add -DdbUsername=roach -DdbPassword=system
 		cmd := fmt.Sprintf("cd /mnt/data1/liquibase-test-harness/ && "+
 			"mvn surefire-report:report-only test -Dtest=LiquibaseHarnessSuiteTest "+
 			"-DdbName=cockroachdb -DdbVersion=20.2 -DoutputDirectory=%s", repoDir)

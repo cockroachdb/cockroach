@@ -305,7 +305,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		if err := timeutil.RunWithTimeout(ctx, "mark-nodes-decommissioned", 5*time.Minute,
 			func(ctx context.Context) error {
 				decommissionCmd := fmt.Sprintf(
-					"./cockroach node decommission --wait none --insecure --url={pgurl:%d} 2 3", 1)
+					"./cockroach node decommission --wait none --url={pgurl:%d} 2 3", 1)
 				return c.RunE(ctx, c.Node(controller), decommissionCmd)
 			}); err != nil {
 			// Timeout means we failed to recover ranges especially system ones
@@ -331,8 +331,8 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		if err := timeutil.RunWithTimeout(ctx, "decommission-removed-nodes", 5*time.Minute,
 			func(ctx context.Context) error {
 				decommissionCmd := fmt.Sprintf(
-					"./cockroach node decommission --wait all --insecure --url={pgurl:%d} 2 3", 1)
-				return c.RunE(ctx, c.Node(controller), decommissionCmd)
+					"./cockroach node decommission --wait all --url={pgurl:%d} 2 3", 1)
+				return c.RunE(ctx, c.Nodes(controller), decommissionCmd)
 			}); err != nil {
 			// Timeout means we failed to drain all ranges from failed nodes, possibly
 			// because some ranges were not recovered.
@@ -447,7 +447,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 		require.NoError(t, err, "infra failure, can't get IP addr of cluster node")
 		require.NotEmpty(t, addrs, "infra failure, can't get IP addr of cluster node")
 		addr := addrs[0]
-		planCmd := "./cockroach debug recover make-plan --confirm y --insecure --host " + addr + " -o " + planName
+		planCmd := "./cockroach debug recover make-plan --confirm y --host " + addr + " -o " + planName
 
 		if err = c.RunE(ctx, c.Node(controller), planCmd); err != nil {
 			t.L().Printf("failed to create plan, test can't proceed assuming unrecoverable cluster: %s",
@@ -461,7 +461,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 		}
 
 		t.L().Printf("staging recovery plan")
-		applyCommand := "./cockroach debug recover apply-plan --confirm y --insecure --host " + addr + " " + planName
+		applyCommand := "./cockroach debug recover apply-plan --confirm y --host " + addr + " " + planName
 		c.Run(ctx, c.Nodes(controller), applyCommand)
 
 		// Ignore node failures because they could fail if recovered ranges
@@ -477,7 +477,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 		}
 
 		t.L().Printf("waiting for nodes to process recovery")
-		verifyCommand := "./cockroach debug recover verify --insecure --host " + addr + " " + planName
+		verifyCommand := "./cockroach debug recover verify --host " + addr + " " + planName
 		if err = timeutil.RunWithTimeout(ctx, "wait-for-restart", 2*time.Minute,
 			func(ctx context.Context) error {
 				for {

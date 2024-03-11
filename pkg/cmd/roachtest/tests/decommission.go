@@ -150,7 +150,7 @@ func runDrainAndDecommission(
 	for i := 1; i <= nodes; i++ {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
 	}
-	c.Run(ctx, c.Node(pinnedNode), `./cockroach workload init kv --drop --splits 1000`)
+	c.Run(ctx, c.Node(pinnedNode), `./cockroach workload init kv --drop --splits 1000 {pgurl:1}`)
 
 	run := func(stmt string) {
 		db := c.Conn(ctx, t.L(), pinnedNode)
@@ -200,7 +200,7 @@ func runDrainAndDecommission(
 		m.Go(func() error {
 			drain := func(id int) error {
 				t.Status(fmt.Sprintf("draining node %d", id))
-				return c.RunE(ctx, c.Node(id), "./cockroach node drain --insecure")
+				return c.RunE(ctx, c.Node(id), fmt.Sprintf("./cockroach node drain --certs-dir=%s --port={pgport:%d}", install.CockroachNodeCertsDir, id))
 			}
 			return drain(id)
 		})
@@ -214,7 +214,7 @@ func runDrainAndDecommission(
 		id := nodes - 3
 		decom := func(id int) error {
 			t.Status(fmt.Sprintf("decommissioning node %d", id))
-			return c.RunE(ctx, c.Node(id), "./cockroach node decommission --self --insecure")
+			return c.RunE(ctx, c.Node(id), fmt.Sprintf("./cockroach node decommission --self --certs-dir=%s --port={pgport:%d}", install.CockroachNodeCertsDir, id))
 		}
 		return decom(id)
 	})
@@ -260,7 +260,8 @@ func runDecommission(
 
 		c.Start(ctx, t.L(), withDecommissionVMod(startOpts), install.MakeClusterSettings(), c.Node(i))
 	}
-	c.Run(ctx, c.Node(pinnedNode), fmt.Sprintf(`./workload init kv --drop {pgurl:%d}`, pinnedNode))
+	c.Run(ctx, c.Node(pinnedNode),
+		fmt.Sprintf(`./workload init kv --drop {pgurl:%d}`, pinnedNode))
 
 	h := newDecommTestHelper(t, c)
 
@@ -1123,7 +1124,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 				t.Status(fmt.Sprintf("decommissioning node %d", id))
 				return c.RunE(ctx,
 					c.Node(id),
-					fmt.Sprintf("./cockroach node decommission %d --insecure --checks=skip", id),
+					fmt.Sprintf("./cockroach node decommission %[1]d --checks=skip --certs-dir=%[2]s --port={pgport:%[1]d}", id, install.CockroachNodeCertsDir),
 				)
 			}
 			return decom(id)
@@ -1460,8 +1461,8 @@ func execCLI(
 ) (string, error) {
 	args := []string{"./cockroach"}
 	args = append(args, extraArgs...)
-	args = append(args, "--insecure")
 	args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
+	args = append(args, fmt.Sprintf("--certs-dir=%s", install.CockroachNodeCertsDir))
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
 	t.L().Printf("%s\n", result.Stdout)
 	return result.Stdout, err
