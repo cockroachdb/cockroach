@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/pebble/vfs/atomicfs"
 	"github.com/gogo/protobuf/proto"
+	"github.com/lestrrat-go/jwx/jwa"
+	"github.com/lestrrat-go/jwx/jwk"
 )
 
 const (
@@ -86,11 +88,11 @@ type StoreKeyManager struct {
 // Load must be called before calling other functions.
 func (m *StoreKeyManager) Load(ctx context.Context) error {
 	var err error
-	m.activeKey, err = loadKeyFromFile(m.fs, m.activeKeyFilename)
+	m.activeKey, err = LoadKeyFromFile(m.fs, m.activeKeyFilename)
 	if err != nil {
 		return err
 	}
-	m.oldKey, err = loadKeyFromFile(m.fs, m.oldKeyFilename)
+	m.oldKey, err = LoadKeyFromFile(m.fs, m.oldKeyFilename)
 	if err != nil {
 		return err
 	}
@@ -115,7 +117,8 @@ func (m *StoreKeyManager) GetKey(id string) (*enginepbccl.SecretKey, error) {
 	return nil, fmt.Errorf("store key ID %s was not found", id)
 }
 
-func loadKeyFromFile(fs vfs.FS, filename string) (*enginepbccl.SecretKey, error) {
+// LoadKeyFromFile reads a secret key from the given file.
+func LoadKeyFromFile(fs vfs.FS, filename string) (*enginepbccl.SecretKey, error) {
 	now := kmTimeNow().Unix()
 	key := &enginepbccl.SecretKey{}
 	key.Info = &enginepbccl.KeyInfo{}
@@ -136,21 +139,54 @@ func loadKeyFromFile(fs vfs.FS, filename string) (*enginepbccl.SecretKey, error)
 	if err != nil {
 		return nil, err
 	}
-	// keyIDLength bytes for the ID, followed by the key.
-	keyLength := len(b) - keyIDLength
-	switch keyLength {
-	case 16:
-		key.Info.EncryptionType = enginepbccl.EncryptionType_AES128_CTR
-	case 24:
-		key.Info.EncryptionType = enginepbccl.EncryptionType_AES192_CTR
-	case 32:
-		key.Info.EncryptionType = enginepbccl.EncryptionType_AES256_CTR
-	default:
-		return nil, fmt.Errorf("store key of unsupported length: %d", keyLength)
+
+	// We support two file formats:
+	// - Old-style keys are just raw random data with no delimiters; the only
+	//   format validity requirement is that the file has the right length.
+	// - New-style keys are in JWK format (we support both JWK (single-key)
+	//   and JWKS (set of keys)) formats, although we currently require
+	//   that JWKS sets contain exactly one key).
+	// Since random generation of 48+ bytes will not produce a valid json object,
+	// if the file parses as JWK, assume that was the intended format.
+	if keySet, jwkErr := jwk.Parse(b); jwkErr == nil {
+		jwKey, ok := keySet.Get(0)
+		if !ok {
+			return nil, fmt.Errorf("JWKS file contains no keys")
+		}
+		if keySet.Len() != 1 {
+			return nil, fmt.Errorf("expected exactly 1 key in JWKS file, found %d", keySet.Len())
+		}
+		if jwKey.KeyType() != jwa.OctetSeq {
+			return nil, fmt.Errorf("expected kty=oct, found %s", jwKey.KeyType())
+		}
+		key.Info.EncryptionType, err = enginepbccl.EncryptionTypeFromJWKAlgorithm(jwKey.Algorithm())
+		if err != nil {
+			return nil, err
+		}
+		key.Info.KeyId = jwKey.KeyID()
+		symKey, ok := jwKey.(jwk.SymmetricKey)
+		if !ok {
+			return nil, fmt.Errorf("error converting jwk.Key to SymmetricKey")
+		}
+		key.Key = symKey.Octets()
+	} else {
+		// keyIDLength bytes for the ID, followed by the key.
+		keyLength := len(b) - keyIDLength
+		switch keyLength {
+		case 16:
+			key.Info.EncryptionType = enginepbccl.EncryptionType_AES128_CTR
+		case 24:
+			key.Info.EncryptionType = enginepbccl.EncryptionType_AES192_CTR
+		case 32:
+			key.Info.EncryptionType = enginepbccl.EncryptionType_AES256_CTR
+		default:
+			return nil, errors.Wrapf(jwkErr, "could not parse store key. "+
+				"Key length %d is not valid for old-style key. Parse error for new-style key", keyLength)
+		}
+		key.Key = b[keyIDLength:]
+		// Hex encoding to make it human readable.
+		key.Info.KeyId = hex.EncodeToString(b[:keyIDLength])
 	}
-	key.Key = b[keyIDLength:]
-	// Hex encoding to make it human readable.
-	key.Info.KeyId = hex.EncodeToString(b[:keyIDLength])
 	key.Info.CreationTime = now
 	key.Info.Source = filename
 

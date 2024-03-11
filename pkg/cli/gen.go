@@ -12,10 +12,8 @@ package cli
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"html"
-	"io"
 	"os"
 	"sort"
 	"strings"
@@ -145,63 +143,6 @@ func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Generated %s completion file: %s\n", shell, autoCompletePath)
 	return nil
-}
-
-var aesSize int
-var overwriteKey bool
-
-// GenEncryptionKeyCmd is a command to generate a store key for Encryption At
-// Rest.
-// Exported to allow use by CCL code.
-var GenEncryptionKeyCmd = &cobra.Command{
-	Use:   "encryption-key <key-file>",
-	Short: "generate store key for encryption at rest",
-	Long: `Generate store key for encryption at rest.
-
-Generates a key suitable for use as a store key for Encryption At Rest.
-The resulting key file will be 32 bytes (random key ID) + key_size in bytes.
-`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		encryptionKeyPath := args[0]
-
-		// Check encryptionKeySize is suitable for the encryption algorithm.
-		if aesSize != 128 && aesSize != 192 && aesSize != 256 {
-			return fmt.Errorf("store key size should be 128, 192, or 256 bits, got %d", aesSize)
-		}
-
-		// 32 bytes are reserved for key ID.
-		kSize := aesSize/8 + 32
-		b := make([]byte, kSize)
-		if _, err := rand.Read(b); err != nil {
-			return fmt.Errorf("failed to create key with size %d bytes", kSize)
-		}
-
-		// Write key to the file with owner read/write permission.
-		openMode := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
-		if !overwriteKey {
-			openMode |= os.O_EXCL
-		}
-
-		f, err := os.OpenFile(encryptionKeyPath, openMode, 0600)
-		if err != nil {
-			return err
-		}
-		n, err := f.Write(b)
-		if err == nil && n < len(b) {
-			err = io.ErrShortWrite
-		}
-		if err1 := f.Close(); err == nil {
-			err = err1
-		}
-
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("successfully created AES-%d key: %s\n", aesSize, encryptionKeyPath)
-		return nil
-	},
 }
 
 var includeAllSettings bool
@@ -421,7 +362,8 @@ Output the list of metrics typical for a node.
 	},
 }
 
-var genCmd = &cobra.Command{
+// GenCmd is the root of all gen commands. Exported to allow modification by CCL code.
+var GenCmd = &cobra.Command{
 	Use:   "gen [command]",
 	Short: "generate auxiliary files",
 	Long:  "Generate manpages, example shell settings, example databases, etc.",
@@ -435,7 +377,6 @@ var genCmds = []*cobra.Command{
 	genHAProxyCmd,
 	genSettingsListCmd,
 	genMetricListCmd,
-	GenEncryptionKeyCmd,
 }
 
 func init() {
@@ -446,10 +387,6 @@ func init() {
 	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
 		"path to generated haproxy configuration file")
 	cliflagcfg.VarFlag(genHAProxyCmd.Flags(), &haProxyLocality, cliflags.Locality)
-	GenEncryptionKeyCmd.PersistentFlags().IntVarP(&aesSize, "size", "s", 128,
-		"AES key size for encryption at rest (one of: 128, 192, 256)")
-	GenEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKey, "overwrite", false,
-		"Overwrite key if it exists")
 
 	f := genSettingsListCmd.PersistentFlags()
 	f.BoolVar(&includeAllSettings, "all-settings", false,
@@ -464,5 +401,5 @@ func init() {
 		[]string{"system-only", "system-visible", "application"},
 		"label to use in the output for the various setting classes")
 
-	genCmd.AddCommand(genCmds...)
+	GenCmd.AddCommand(genCmds...)
 }

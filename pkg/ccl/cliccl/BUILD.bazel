@@ -9,6 +9,7 @@ go_library(
         "demo.go",
         "ear.go",
         "flags.go",
+        "gen.go",
         "mt.go",
         "mt_proxy.go",
         "mt_test_directory.go",
@@ -45,6 +46,7 @@ go_library(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_lestrrat_go_jwx//jwk",
         "@com_github_olekukonko_tablewriter//:tablewriter",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_pflag//:pflag",
@@ -56,6 +58,7 @@ go_test(
     size = "medium",
     srcs = [
         "ear_test.go",
+        "gen_test.go",
         "main_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -77,7 +80,9 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_pebble//vfs",
         "@com_github_spf13_cobra//:cobra",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
