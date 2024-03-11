@@ -339,8 +339,16 @@ func registerBackup(r registry.Registry) {
 				// total elapsed time. This is used by roachperf to compute and display
 				// the average MB/sec per node.
 				tick()
-				c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach sql --url={pgurl:1} -e "
-				BACKUP bank.bank TO 'gs://`+backupTestingBucket+`/`+dest+`?AUTH=implicit'"`)
+				conn := c.Conn(ctx, t.L(), 1)
+				defer conn.Close()
+				var jobID jobspb.JobID
+				uri := `gs://`+backupTestingBucket+`/`+dest+`?AUTH=implicit`
+				if err := conn.QueryRowContext(ctx,fmt.Sprintf("BACKUP bank.bank INTO '%s' WITH detached",uri)).Scan(&jobID); err != nil {
+					return err
+				}
+				if err := AssertReasonableFractionCompleted(ctx, t.L(), c, jobID, 2); err != nil {
+					return err
+				}
 				tick()
 
 				// Upload the perf artifacts to any one of the nodes so that the test
@@ -353,18 +361,6 @@ func registerBackup(r registry.Registry) {
 					log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 				}
 				return nil
-			})
-			m.Go(func(ctx context.Context) error {
-				var jobID jobspb.JobID
-				conn := c.Conn(ctx, t.L(), 2)
-				testutils.SucceedsSoon(t, func() error {
-					err := conn.QueryRowContext(ctx, `SELECT job_id [SHOW JOBS] where job_type = 'BACKUP'`).Scan(&jobID)
-					if err != nil {
-						return errors.Wrap(err, "could not get job id")
-					}
-					return nil
-				})
-				return AssertReasonableFractionCompleted(ctx, t.L(), c, jobID, 2)
 			})
 			m.Wait()
 		},

@@ -233,7 +233,8 @@ func getFractionProgressed(
 	var status string
 	var fractionCompleted float64
 	conn := c.Conn(ctx, l, nodeToQuery)
-	err := conn.QueryRowContext(ctx, `SELECT status, fracion_completed FROM [SHOW JOBS $1]`, jobID).Scan(&status, &fractionCompleted)
+	defer conn.Close()
+	err := conn.QueryRowContext(ctx, `SELECT status, fracion_completed FROM [SHOW JOB $1]`, jobID).Scan(&status, &fractionCompleted)
 	if err != nil {
 		return 0, errors.Wrap(err, "getting the job status and fraction completed")
 	}
