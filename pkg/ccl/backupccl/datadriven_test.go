@@ -237,6 +237,13 @@ func (d *datadrivenTestState) getIODir(t *testing.T, name string) string {
 	return dir
 }
 
+func (d *datadrivenTestState) clearConnCache() {
+	for _, db := range d.sqlDBs {
+		db.Close()
+	}
+	d.sqlDBs = make(map[sqlDBKey]*gosql.DB)
+}
+
 func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *gosql.DB {
 	return d.getSQLDBForVC(t, name, "default", user)
 }
@@ -463,14 +470,13 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			ds.noticeBuffer = nil
 			const user = "root"
 			sqlDB := ds.getSQLDB(t, lastCreatedCluster, user)
-			// First, run the schema change.
 
 			_, err := sqlDB.Exec(d.Input)
 
 			var jobID jobspb.JobID
 			{
-				const qFmt = `SELECT job_id FROM [SHOW JOBS] WHERE job_type = '%s' ORDER BY created DESC LIMIT 1`
-				errJob := sqlDB.QueryRow(fmt.Sprintf(qFmt, jobType)).Scan(&jobID)
+				const query = `SELECT id FROM system.jobs WHERE job_type = $1 ORDER BY created DESC LIMIT 1`
+				errJob := sqlDB.QueryRow(query, jobType.String()).Scan(&jobID)
 				if !errors.Is(errJob, gosql.ErrNoRows) {
 					require.NoError(t, errJob)
 				}
@@ -525,7 +531,9 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				ds.cleanupFns = append(ds.cleanupFns, nodelocalCleanup)
 			}
 			return ""
-
+		case "clear-conn-cache":
+			ds.clearConnCache()
+			return ""
 		case "new-cluster":
 			var name, shareDirWith, iodir, localities, beforeVersion, testingKnobCfg string
 			var splits int
@@ -646,7 +654,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				var jobID jobspb.JobID
 				require.NoError(t,
 					ds.getSQLDB(t, cluster, user).QueryRow(
-						`SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1`).Scan(&jobID))
+						`SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID))
 				fmt.Printf("expecting pausepoint, found job ID %d\n\n\n", jobID)
 
 				runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
