@@ -201,7 +201,7 @@ func getJobProgress(t test.Test, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jo
 func AssertReasonableFractionCompleted(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, jobID jobspb.JobID, nodeToQuery int,
 ) error {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	fractionsRecorded := make([]float64, 0)
 
@@ -218,6 +218,7 @@ func AssertReasonableFractionCompleted(
 				if count > 5 && fractionsRecorded[count/2] < 0.2 && fractionsRecorded[count/2] > 0.8 {
 					return errors.Newf("the median fraction completed was %.2f, which is outside (0.2,0.8)", fractionsRecorded[count/2])
 				}
+				l.Printf("not enought fractions recorded to assert progress looks sane")
 				return nil
 			}
 		case <-ctx.Done():
