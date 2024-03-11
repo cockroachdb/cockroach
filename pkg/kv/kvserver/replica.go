@@ -2386,11 +2386,22 @@ func (r *Replica) GetEngineCapacity() (roachpb.StoreCapacity, error) {
 	return r.store.TODOEngine().Capacity()
 }
 
+func (r *Replica) GetRangeApproximateDiskBytes() (uint64, error) {
+	desc := r.Desc()
+	// TODO(baptist): Having to call AsRawKey is a code smell here, consider other options.
+	return r.GetApproximateDiskBytes(desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+}
+
 // GetApproximateDiskBytes returns an approximate measure of bytes in the store
 // in the specified key range.
 func (r *Replica) GetApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 	bytes, _, _, err := r.store.TODOEngine().ApproximateDiskBytes(from, to)
 	return bytes, err
+}
+
+func (r *Replica) CompactStorage(_ context.Context) error {
+	desc := r.Desc()
+	return r.store.TODOEngine().CompactRange(desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 }
 
 func init() {

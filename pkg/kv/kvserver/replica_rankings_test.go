@@ -395,6 +395,10 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 
 	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			DisableSQLServer:  true,
+		},
 	})
 
 	defer tc.Stopper().Stop(ctx)

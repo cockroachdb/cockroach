@@ -108,6 +108,15 @@ var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+// TombstoneQueueEnabled is a setting that controls whether the tombstone queue
+// is enabled.
+var TombstoneQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.tombstone_queue.enabled",
+	"whether the tombstone queue is enabled",
+	true,
+)
+
 // RangeFeedRefreshInterval is injected from kvserver to avoid import cycles
 // when accessed from kvcoord.
 var RangeFeedRefreshInterval *settings.DurationSetting
