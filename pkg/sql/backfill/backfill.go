@@ -711,8 +711,7 @@ func (ib *IndexBackfiller) Close(ctx context.Context) {
 func (ib *IndexBackfiller) GrowBoundAccount(ctx context.Context, growBy int64) error {
 	ib.muBoundAccount.Lock()
 	defer ib.muBoundAccount.Unlock()
-	err := ib.muBoundAccount.boundAccount.Grow(ctx, growBy)
-	return err
+	return ib.muBoundAccount.boundAccount.Grow(ctx, growBy)
 }
 
 // ShrinkBoundAccount shrinks the mutex protected bound account backing the

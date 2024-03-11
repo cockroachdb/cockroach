@@ -372,7 +372,7 @@ func NewProcessor(
 		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
-		return backfill.NewIndexBackfillMerger(ctx, flowCtx, processorID, *core.IndexBackfillMerger)
+		return backfill.NewIndexBackfillMerger(flowCtx, processorID, *core.IndexBackfillMerger), nil
 	}
 	if core.Ttl != nil {
 		if err := checkNumIn(inputs, 0); err != nil {
