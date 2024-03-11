@@ -4,16 +4,23 @@
 # clusters that ensures consistent use of the correct project-assignment vars
 # and done some additional sanity check enforcement on some flags.
 
-if [[ $1 == "start" ]]; then
-  if [[ "$*" != *"--secure"* ]]; then
-    echo "--secure is required when starting DRT clusters"
-    exit 1
-  fi
-  if [[ "$*" != *"--sql-port 26257"* ]]; then
-    # we don't use service discovery in our the drt project so use default port.
-    echo "--sql-port 26257 is required when starting DRT clusters"
-    exit 1
-  fi
-fi
+case $1 in
+  "start")
+    if [[ "$*" != *"--secure"* ]]; then
+      echo "--secure is implied when starting DRT clusters, adding it"
+      set -- "$@" "--secure"
+    fi
+    if [[ "$*" != *"--sql-port 26257"* ]]; then
+     echo "--sql-port 26257 is implied when starting DRT clusters, adding it"
+      set -- "$@" "--sql-port" "26257"
+    fi
+    ;;
+  "sql")
+    if [[ "$*" != *"--secure"* ]]; then
+      set -- "$@" "--secure"
+    fi
+    ;;
+esac
+
 
 GCE_PROJECT=cockroach-drt  ROACHPROD_DNS="drt.crdb.io" roachprod "$@"
