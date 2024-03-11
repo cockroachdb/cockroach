@@ -3502,9 +3502,14 @@ func TestSnapshotRateLimit(t *testing.T) {
 	require.Equal(t, int64(32<<20), limit)
 }
 
+type entry struct {
+	conf   roachpb.SpanConfig
+	bounds roachpb.Span
+}
+
 type mockSpanConfigReader struct {
 	real      spanconfig.StoreReader
-	overrides map[string]roachpb.SpanConfig
+	overrides map[string]entry
 }
 
 func (m *mockSpanConfigReader) NeedsSplit(
@@ -3522,10 +3527,19 @@ func (m *mockSpanConfigReader) ComputeSplitKey(
 func (m *mockSpanConfigReader) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, error) {
-	if conf, ok := m.overrides[string(key)]; ok {
-		return conf, nil
+	if e, ok := m.overrides[string(key)]; ok {
+		return e.conf, nil
 	}
 	return m.GetSpanConfigForKey(ctx, key)
+}
+
+func (m *mockSpanConfigReader) GetSpanConfigForKeyWithBounds(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, roachpb.Span, error) {
+	if e, ok := m.overrides[string(key)]; ok {
+		return e.conf, e.bounds, nil
+	}
+	return m.GetSpanConfigForKeyWithBounds(ctx, key)
 }
 
 var _ spanconfig.StoreReader = &mockSpanConfigReader{}
@@ -3976,8 +3990,14 @@ func TestAllocatorCheckRange(t *testing.T) {
 			if tc.spanConfig != nil {
 				mockSr := &mockSpanConfigReader{
 					real: cfg.SystemConfigProvider.GetSystemConfig(),
-					overrides: map[string]roachpb.SpanConfig{
-						"a": *tc.spanConfig,
+					overrides: map[string]entry{
+						"a": {
+							conf: *tc.spanConfig,
+							bounds: roachpb.Span{
+								Key:    []byte("a"),
+								EndKey: []byte("b"),
+							},
+						},
 					},
 				}
 

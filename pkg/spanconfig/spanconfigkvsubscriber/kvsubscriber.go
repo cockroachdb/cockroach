@@ -364,6 +364,16 @@ func (s *KVSubscriber) GetSpanConfigForKey(
 	return s.mu.internal.GetSpanConfigForKey(ctx, key)
 }
 
+// GetSpanConfigForKeyWithBounds is part of the spanconfig.KVSubscriber interface.
+func (s *KVSubscriber) GetSpanConfigForKeyWithBounds(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, roachpb.Span, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.mu.internal.GetSpanConfigForKeyWithBounds(ctx, key)
+}
+
 // GetProtectionTimestamps is part of the spanconfig.KVSubscriber interface.
 func (s *KVSubscriber) GetProtectionTimestamps(
 	ctx context.Context, sp roachpb.Span,
