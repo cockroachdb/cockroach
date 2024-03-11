@@ -344,10 +344,10 @@ SELECT * FROM crdb_internal.leases WHERE node_id < 0
 ----
 node_id  table_id  name  parent_id  expiration  deleted
 
-query ITTTTTIIITTRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRBBTTTTTRRRRR colnames
+query ITTTTTIIITTRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRBBTTTTTRRRRRR colnames
 SELECT * FROM crdb_internal.node_statement_statistics WHERE node_id < 0
 ----
-node_id  application_name  flags  statement_id  key  anonymized  count  first_attempt_count  max_retries  last_error  last_error_code  rows_avg  rows_var  idle_lat_avg  idle_lat_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  rows_written_avg  rows_written_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  cpu_sql_nanos_avg  cpu_sql_nanos_var  mvcc_step_avg  mvcc_step_var  mvcc_step_internal_avg  mvcc_step_internal_var  mvcc_seek_avg  mvcc_seek_var  mvcc_seek_internal_avg  mvcc_seek_internal_var  mvcc_block_bytes_avg  mvcc_block_bytes_var  mvcc_block_bytes_in_cache_avg  mvcc_block_bytes_in_cache_var  mvcc_key_bytes_avg  mvcc_key_bytes_var  mvcc_value_bytes_avg  mvcc_value_bytes_var  mvcc_point_count_avg  mvcc_point_count_var  mvcc_points_covered_by_range_tombstones_avg  mvcc_points_covered_by_range_tombstones_var  mvcc_range_key_count_avg  mvcc_range_key_count_var  mvcc_range_key_contained_points_avg  mvcc_range_key_contained_points_var  mvcc_range_key_skipped_points_avg  mvcc_range_key_skipped_points_var  implicit_txn  full_scan  sample_plan  database_name  exec_node_ids  txn_fingerprint_id  index_recommendations  latency_seconds_min  latency_seconds_max  latency_seconds_p50  latency_seconds_p90  latency_seconds_p99
+node_id  application_name  flags  statement_id  key  anonymized  count  first_attempt_count  max_retries  last_error  last_error_code  rows_avg  rows_var  idle_lat_avg  idle_lat_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  rows_written_avg  rows_written_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  cpu_sql_nanos_avg  cpu_sql_nanos_var  mvcc_step_avg  mvcc_step_var  mvcc_step_internal_avg  mvcc_step_internal_var  mvcc_seek_avg  mvcc_seek_var  mvcc_seek_internal_avg  mvcc_seek_internal_var  mvcc_block_bytes_avg  mvcc_block_bytes_var  mvcc_block_bytes_in_cache_avg  mvcc_block_bytes_in_cache_var  mvcc_key_bytes_avg  mvcc_key_bytes_var  mvcc_value_bytes_avg  mvcc_value_bytes_var  mvcc_point_count_avg  mvcc_point_count_var  mvcc_points_covered_by_range_tombstones_avg  mvcc_points_covered_by_range_tombstones_var  mvcc_range_key_count_avg  mvcc_range_key_count_var  mvcc_range_key_contained_points_avg  mvcc_range_key_contained_points_var  mvcc_range_key_skipped_points_avg  mvcc_range_key_skipped_points_var  implicit_txn  full_scan  sample_plan  database_name  exec_node_ids  txn_fingerprint_id  index_recommendations  latency_seconds_min  latency_seconds_max  latency_seconds_p50  latency_seconds_p90  latency_seconds_p99 failure_count
 
 query ITTTIIRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR colnames
 SELECT * FROM crdb_internal.node_transaction_statistics WHERE node_id < 0
@@ -835,13 +835,15 @@ DROP SEQUENCE s
 statement OK
 RESET application_name
 
-# Note: in the following test, three rows of output are expected:
-# - one for the SELECT statements that failed with a retry error,
-# - one for the final SELECT retry attempt that succeeded without an error,
+# Note: in the following test, five rows of output are expected:
+# - one for the SELECT statements that failed with a retry error, as well as
+#   the retry attempt that succeeded without an error.
 # - one for the RESET statement.
+# - one for the CREATE SEQUENCE statement.
+# - one for the DROP SEQUENCE statement.
 #
-# We expect the first two entries to have max_retries > 0 because
-# auto-retries are expected by the server.
+# We expect the SELECT entry to have max_retries > 0 because auto-retries
+# are expected by the server.
 # We also expect the RESET statement to have max_retries = 0, because
 # RESET never retries. This tests that the retry counter is properly
 # reset to 0 between statements - a naive implementation could make
@@ -851,18 +853,17 @@ RESET application_name
 # different fingerprint on retries is caused by in-place mutation of the AST
 # (#22847).
 #
-query TIB
-SELECT key, max_retries, flags LIKE '!%' AS f
+query TII
+SELECT key, max_retries, failure_count
   FROM crdb_internal.node_statement_statistics
  WHERE application_name = 'test_max_retry'
-ORDER BY key, f
+ORDER BY key
 ----
-CREATE SEQUENCE s                                                         0  false
-DROP SEQUENCE s                                                           0  false
-RESET application_name                                                    0  false
-SELECT IF(nextval('_') < _, crdb_internal.force_retry('_'::INTERVAL), _)  0  true
-SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)                2  false
-SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)                1  true
+CREATE SEQUENCE s                                                         0  0
+DROP SEQUENCE s                                                           0  0
+RESET application_name                                                    0  0
+SELECT IF(nextval('_') < _, crdb_internal.force_retry('_'::INTERVAL), _)  0  1
+SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)                2  1
 
 query T
 SELECT database_name FROM crdb_internal.node_statement_statistics limit 1
@@ -1063,11 +1064,11 @@ query ITTTI colnames
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics' ORDER BY key
 ----
 node_id  application_name     key                   statement_ids                                                  count
-1        test_txn_statistics  10922505138341351577  {4104808689124681542}                                          1
-1        test_txn_statistics  12762606372390135532  {8833422719858486605,8833422719858486605,8833422719858486605}  1
-1        test_txn_statistics  15417266716795083410  {8833422719858486605}                                          1
-1        test_txn_statistics  15417266716795083422  {8833422719858486593}                                          1
-1        test_txn_statistics  17236010932163349339  {8833422719858486605,8833422719858486605}                      2
+1        test_txn_statistics  17664899828239596817  {6504861979500726990}                                          1
+1        test_txn_statistics  17664899828239596829  {6504861979500726978}                                          1
+1        test_txn_statistics  17976145939037309168  {6204733445766643503}                                          1
+1        test_txn_statistics  18364202634803759405  {6504861979500726990,6504861979500726990}                      2
+1        test_txn_statistics  9852458619443781049   {6504861979500726990,6504861979500726990,6504861979500726990}  1
 
 ## crdb_internal.cluster_database_privileges
 subtest cluster_database_privileges
