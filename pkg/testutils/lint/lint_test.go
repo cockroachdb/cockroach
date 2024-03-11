@@ -1281,7 +1281,7 @@ func TestLint(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`(json|jsonpb|yaml|protoutil|xml|\.Field|ewkb|wkb|wkt)\.Marshal\(`),
+			stream.GrepNot(`(json|jsonpb|yaml|protoutil|xml|\.Field|ewkb|wkb|wkt|asn1)\.Marshal\(`),
 		), func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'protoutil.Marshal' instead", s)
 		}); err != nil {
@@ -1326,7 +1326,7 @@ func TestLint(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`(json|jsonpb|yaml|xml|protoutil|toml|Codec|ewkb|wkb|wkt)\.Unmarshal\(`),
+			stream.GrepNot(`(json|jsonpb|yaml|xml|protoutil|toml|Codec|ewkb|wkb|wkt|asn1)\.Unmarshal\(`),
 		), func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'protoutil.Unmarshal' instead", s)
 		}); err != nil {
