@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"text/tabwriter"
@@ -180,7 +179,7 @@ func (c *Cluster) PrintDetails(logger *logger.Logger) error {
 		logger.Printf("(no expiration)")
 	}
 	// Align columns left and separate with at least two spaces.
-	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
+	tw := tabwriter.NewWriter(logger.Stdout, 0, 8, 2, ' ', 0)
 	logPrettifiedHeader(tw, printDetailsColumnHeaders)
 
 	for _, vm := range c.VMs {
