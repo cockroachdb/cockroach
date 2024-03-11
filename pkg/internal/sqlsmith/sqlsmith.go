@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randident"
@@ -84,6 +85,8 @@ type Smither struct {
 	selectStmtSampler                  *selectStatementSampler
 	scalarExprWeights, boolExprWeights []scalarExprWeight
 	scalarExprSampler, boolExprSampler *scalarExprSampler
+	plpgsqlStmtSampler                 *plpgsqlStmtSampler
+	plpgsqlStmtWeights                 []plpgsqlStatementWeight
 
 	disableWith                bool
 	disableNondeterministicFns bool
@@ -120,10 +123,11 @@ type Smither struct {
 }
 
 type (
-	statement       func(*Smither) (tree.Statement, bool)
-	tableExpr       func(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
-	selectStatement func(s *Smither, desiredTypes []*types.T, refs colRefs, withTables tableRefs) (tree.SelectStatement, colRefs, bool)
-	scalarExpr      func(*Smither, Context, *types.T, colRefs) (expr tree.TypedExpr, ok bool)
+	statement        func(*Smither) (tree.Statement, bool)
+	tableExpr        func(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
+	selectStatement  func(s *Smither, desiredTypes []*types.T, refs colRefs, withTables tableRefs) (tree.SelectStatement, colRefs, bool)
+	scalarExpr       func(*Smither, Context, *types.T, colRefs) (expr tree.TypedExpr, ok bool)
+	plpgsqlStatement func(*Smither, plpgsqlBlockScope) (stmt plpgsqltree.Statement, ok bool)
 )
 
 // NewSmither creates a new Smither. db is used to populate existing tables
@@ -136,12 +140,13 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 		nameGens:   map[string]*nameGenInfo{},
 		nameGenCfg: randident.DefaultNameGeneratorConfig(),
 
-		stmtWeights:       allStatements,
-		alterWeights:      alters,
-		tableExprWeights:  allTableExprs,
-		selectStmtWeights: selectStmts,
-		scalarExprWeights: scalars,
-		boolExprWeights:   bools,
+		stmtWeights:        allStatements,
+		alterWeights:       alters,
+		tableExprWeights:   allTableExprs,
+		selectStmtWeights:  selectStmts,
+		scalarExprWeights:  scalars,
+		boolExprWeights:    bools,
+		plpgsqlStmtWeights: plpgsqlStmts,
 
 		complexity:       0.2,
 		scalarComplexity: 0.2,
@@ -156,6 +161,7 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 	s.selectStmtSampler = newWeightedSelectStatementSampler(s.selectStmtWeights, rnd.Int63())
 	s.scalarExprSampler = newWeightedScalarExprSampler(s.scalarExprWeights, rnd.Int63())
 	s.boolExprSampler = newWeightedScalarExprSampler(s.boolExprWeights, rnd.Int63())
+	s.plpgsqlStmtSampler = newWeightedPLpgSQLStmtSampler(s.plpgsqlStmtWeights, rnd.Int63())
 	s.enableBulkIO()
 	if s.db != nil {
 		row := s.db.QueryRow("SELECT current_database()")
