@@ -88,6 +88,10 @@ func sendAddRemoteSSTs(
 		return errors.Wrap(err, "failed to generate and send remote file spans")
 	}
 
+	if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("restore.after.link_phase"); err != nil {
+		return err
+	}
+
 	downloadSpans := dataToRestore.getSpans()
 
 	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
