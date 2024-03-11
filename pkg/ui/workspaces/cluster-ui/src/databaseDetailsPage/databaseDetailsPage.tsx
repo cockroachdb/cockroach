@@ -170,6 +170,7 @@ export interface DatabaseDetailsPageActions {
   onSortingTablesChange?: (columnTitle: string, ascending: boolean) => void;
   onSortingGrantsChange?: (columnTitle: string, ascending: boolean) => void;
   onViewModeChange?: (viewMode: ViewMode) => void;
+  refreshNodes: () => void;
 }
 
 export type DatabaseDetailsPageProps = DatabaseDetailsPageData &
@@ -264,6 +265,7 @@ export class DatabaseDetailsPage extends React.Component<
   }
 
   componentDidMount(): void {
+    this.props.refreshNodes();
     if (!this.props.loaded && !this.props.loading && !this.props.requestError) {
       this.props.refreshDatabaseDetails(
         this.props.name,

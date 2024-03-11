@@ -87,6 +87,7 @@ export const mapStateToProps = (state: AdminUIState): DatabasesPageData => {
       spanStats,
       nodeRegions,
       isTenant,
+      nodeStatuses: state?.cachedData.nodes.data,
     }),
     sortSetting: sortSettingLocalSetting.selector(state),
     filters: filtersLocalSetting.selector(state),

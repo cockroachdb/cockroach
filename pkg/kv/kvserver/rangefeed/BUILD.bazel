@@ -64,7 +64,6 @@ go_test(
     ],
     embed = [":rangefeed"],
     deps = [
-        "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvpb",
@@ -74,6 +73,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util",
@@ -90,7 +90,6 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
-        "@com_github_cockroachdb_pebble//vfs",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_exp//slices",
