@@ -75,11 +75,6 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(2001)), roachpb.RKeyMax, 32<<20 + 1, 64 << 20, true, 1},
 	}
 
-	cfg, err := tc.store.GetConfReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	{
 		// This test plays fast and loose and if there are raft commands ongoing then
 		// we'll hit internal assertions in the tests below. Sending a write through
@@ -105,18 +100,19 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		conf := zonepb.DefaultZoneConfigRef()
+		conf.RangeMaxBytes = proto.Int64(test.maxBytes)
+		repl.store.cfg.DefaultSpanConfig.RangeMaxBytes = test.maxBytes
+
 		repl.mu.Lock()
 		repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: test.bytes}
 		repl.mu.Unlock()
-		conf := roachpb.TestingDefaultSpanConfig()
-		conf.RangeMaxBytes = test.maxBytes
-		repl.SetSpanConfig(conf)
 
 		// Testing using shouldSplitRange instead of shouldQueue to avoid using the splitFinder
 		// This tests the merge queue behavior too as a result. For splitFinder tests,
 		// see split/split_test.go.
 		shouldQ, priority := shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
-			repl.GetMaxBytes(ctx), repl.ShouldBackpressureWrites(ctx), cfg)
+			*conf.RangeMaxBytes, repl.ShouldBackpressureWrites(ctx), config.NewSystemConfig(conf))
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}

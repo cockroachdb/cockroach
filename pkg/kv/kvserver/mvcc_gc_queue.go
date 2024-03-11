@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -261,15 +260,10 @@ func (r mvccGCQueueScore) String() string {
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
 func (mgcq *mvccGCQueue) shouldQueue(
-	ctx context.Context, _ hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, _ hlc.ClockTimestamp, repl *Replica, conf *roachpb.SpanConfig,
 ) (bool, float64) {
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score.
-	conf, err := repl.LoadSpanConfig(ctx)
-	if err != nil {
-		log.VErrEventf(ctx, 2, "failed to load span config: %v", err)
-		return false, 0
-	}
 	canGC, _, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
 	if err != nil {
 		log.VErrEventf(ctx, 2, "failed to check protected timestamp for gc: %v", err)
@@ -683,14 +677,14 @@ func (r *replicaGCer) GC(
 //  7. push these transactions (again, recreating txn entries).
 //  8. send a GCRequest.
 func (mgcq *mvccGCQueue) process(
-	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, conf *roachpb.SpanConfig,
 ) (processed bool, err error) {
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
 	defer repl.MeasureReqCPUNanos(grunning.Time())
 
 	// Lookup the descriptor and GC policy for the zone containing this key range.
-	desc, conf := repl.DescAndSpanConfig()
+	desc := repl.Desc()
 
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score and updated GC
@@ -861,7 +855,7 @@ func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 }
 
 func (mgcq *mvccGCQueue) postProcessScheduled(
-	ctx context.Context, processedReplica replicaInQueue, priority float64,
+	ctx context.Context, processedReplica replicaInQueue, conf *roachpb.SpanConfig, priority float64,
 ) {
 	if priority < deleteRangePriority {
 		mgcq.lastRangeWasHighPriority = false
@@ -872,7 +866,7 @@ func (mgcq *mvccGCQueue) postProcessScheduled(
 		// We are most likely processing first range that has a GC hint notifying
 		// that multiple range deletions happen.
 		if err := timeutil.RunWithTimeout(ctx, "gc-check-hinted-hi-pri-replicas", gcHintScannerTimeout, func(ctx context.Context) error {
-			mgcq.scanReplicasForHiPriGCHints(ctx, processedReplica.GetRangeID())
+			mgcq.scanReplicasForHiPriGCHints(ctx, processedReplica.GetRangeID(), conf)
 			return ctx.Err()
 		}); err != nil {
 			log.Infof(ctx, "failed to start mvcc gc scan for range delete hints, error: %s", err)
@@ -887,7 +881,7 @@ func (mgcq *mvccGCQueue) postProcessScheduled(
 // single bad replica that could cause scan to time out be less disruptive
 // in case we need to retry.
 func (mgcq *mvccGCQueue) scanReplicasForHiPriGCHints(
-	ctx context.Context, triggerRange roachpb.RangeID,
+	ctx context.Context, triggerRange roachpb.RangeID, conf *roachpb.SpanConfig,
 ) {
 	var foundReplicas int
 	clockNow := mgcq.store.Clock().NowAsClockTimestamp()
@@ -902,8 +896,8 @@ func (mgcq *mvccGCQueue) scanReplicasForHiPriGCHints(
 		}
 		gCHint := replica.GetGCHint()
 		if !gCHint.LatestRangeDeleteTimestamp.IsEmpty() {
-			desc, spanConfig := replica.DescAndSpanConfig()
-			gcThreshold := now.Add(-int64(spanConfig.GCPolicy.TTLSeconds)*1e9,
+			desc := replica.Desc()
+			gcThreshold := now.Add(-int64(conf.GCPolicy.TTLSeconds)*1e9,
 				0)
 			if gCHint.LatestRangeDeleteTimestamp.Less(gcThreshold) {
 				// If replica has a hint we also need to check if this replica is a

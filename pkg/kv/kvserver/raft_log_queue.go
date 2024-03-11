@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -175,7 +174,7 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 			maxSize:              defaultQueueMaxSize,
 			maxConcurrency:       raftLogQueueConcurrency,
 			needsLease:           false,
-			needsSpanConfigs:     false,
+			needsSpanConfigs:     true,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.RaftLogQueueSuccesses,
 			failures:             store.metrics.RaftLogQueueFailures,
@@ -243,7 +242,9 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 // nodes with sufficient disk space. Also, IMPORT/RESTORE's split/scatter
 // phase interacts poorly with overly aggressive truncations and can DDOS the
 // Raft snapshot queue.
-func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, error) {
+func newTruncateDecision(
+	ctx context.Context, r *Replica, conf *roachpb.SpanConfig,
+) (truncateDecision, error) {
 	rangeID := r.RangeID
 	now := timeutil.Now()
 
@@ -262,8 +263,8 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// efficient to catch up via a snapshot than via applying a long tail of log
 	// entries.
 	targetSize := r.store.cfg.RaftLogTruncationThreshold
-	if targetSize > r.mu.conf.RangeMaxBytes {
-		targetSize = r.mu.conf.RangeMaxBytes
+	if targetSize > conf.RangeMaxBytes {
+		targetSize = conf.RangeMaxBytes
 	}
 	raftStatus := r.raftStatusRLocked()
 
@@ -634,15 +635,15 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 // is true only if the replica is the raft leader and if the total number of
 // the range's raft log's stale entries exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, r *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, now hlc.ClockTimestamp, r *Replica, conf *roachpb.SpanConfig,
 ) (shouldQueue bool, priority float64) {
-	decision, err := newTruncateDecision(ctx, r)
+	decision, err := newTruncateDecision(ctx, r, conf)
 	if err != nil {
 		log.Warningf(ctx, "%v", err)
 		return false, 0
 	}
 
-	shouldQ, _, prio := rlq.shouldQueueImpl(ctx, decision)
+	shouldQ, _, prio := rlq.shouldQueueImpl(ctx, decision, conf)
 	return shouldQ, prio
 }
 
@@ -651,7 +652,7 @@ func (rlq *raftLogQueue) shouldQueue(
 // we want to recompute the log size (in which case `recomputeRaftLogSize` and
 // `shouldQ` are both true and a reasonable priority is returned).
 func (rlq *raftLogQueue) shouldQueueImpl(
-	ctx context.Context, decision truncateDecision,
+	ctx context.Context, decision truncateDecision, conf *roachpb.SpanConfig,
 ) (shouldQ bool, recomputeRaftLogSize bool, priority float64) {
 	if decision.ShouldTruncate() {
 		return true, !decision.Input.LogSizeTrusted, float64(decision.Input.LogSize)
@@ -677,14 +678,14 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) process(
-	ctx context.Context, r *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, r *Replica, conf *roachpb.SpanConfig,
 ) (processed bool, err error) {
-	decision, err := newTruncateDecision(ctx, r)
+	decision, err := newTruncateDecision(ctx, r, conf)
 	if err != nil {
 		return false, err
 	}
 
-	if _, recompute, _ := rlq.shouldQueueImpl(ctx, decision); recompute {
+	if _, recompute, _ := rlq.shouldQueueImpl(ctx, decision, conf); recompute {
 		log.VEventf(ctx, 2, "recomputing raft log based on decision %+v", decision)
 
 		// We need to hold raftMu both to access the sideloaded storage and to
@@ -708,7 +709,7 @@ func (rlq *raftLogQueue) process(
 		log.VEventf(ctx, 2, "recomputed raft log size to %s", humanizeutil.IBytes(n))
 
 		// Override the decision, now that an accurate log size is available.
-		decision, err = newTruncateDecision(ctx, r)
+		decision, err = newTruncateDecision(ctx, r, conf)
 		if err != nil {
 			return false, err
 		}
@@ -741,7 +742,7 @@ func (rlq *raftLogQueue) process(
 }
 
 func (*raftLogQueue) postProcessScheduled(
-	ctx context.Context, replica replicaInQueue, priority float64,
+	ctx context.Context, replica replicaInQueue, conf *roachpb.SpanConfig, priority float64,
 ) {
 }
 

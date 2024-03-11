@@ -66,7 +66,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -2238,11 +2237,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.cfg.SpanConfigSubscriber.Subscribe(func(ctx context.Context, update roachpb.Span) {
 			s.onSpanConfigUpdate(ctx, update)
 		})
-
-		// We also want to do it when the fallback config setting is changed.
-		spanconfigstore.FallbackConfigOverride.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
-			s.applyAllFromSpanConfigStore(ctx)
-		})
 	}
 
 	// Start Raft processing goroutines.
@@ -2488,6 +2482,32 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 	s.rangefeedReplicas.Unlock()
 }
 
+// GetSpanConfigForKey loads the span config starting at the given key. This
+// allows inserting test configurations through knobs.
+func (s *Store) GetSpanConfigForKey(
+	ctx context.Context, key roachpb.RKey,
+) (*roachpb.SpanConfig, error) {
+	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
+		return nil, errSpanConfigsUnavailable
+	}
+
+	// TODO(baptist): Tests should correctly set the span configs.
+	if s.cfg.SpanConfigsDisabled {
+		return &s.cfg.DefaultSpanConfig, nil
+	}
+	confReader, err := s.GetConfReader(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.cfg.TestingKnobs.ConfReaderInterceptor != nil {
+		if reader := s.cfg.TestingKnobs.ConfReaderInterceptor(); reader != nil {
+			confReader = reader
+		}
+	}
+	conf, err := confReader.GetSpanConfigForKey(ctx, key)
+	return &conf, err
+}
+
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
 func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
@@ -2527,12 +2547,12 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 				// adjacent table. This results in a single update, corresponding to the
 				// new table's span, which forms the right-hand side post split.
 
-				conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, startKey)
+				conf, err := s.GetSpanConfigForKey(replCtx, startKey)
 				if err != nil {
 					log.Errorf(replCtx, "skipped applying update, unexpected error reading from subscriber: %v", err)
 					return err
 				}
-				changed = repl.SetSpanConfig(conf)
+				changed = repl.SetSpanConfig(*conf)
 			}
 			if changed {
 				repl.MaybeQueue(ctx, now)
@@ -2543,27 +2563,6 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 		// Errors here should not be possible, but if there is one, log loudly.
 		log.Errorf(ctx, "unexpected error visiting replicas: %v", err)
 	}
-}
-
-// applyAllFromSpanConfigStore applies, on each replica, span configs from the
-// embedded span config store.
-func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
-	now := s.cfg.Clock.NowAsClockTimestamp()
-	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		replCtx := repl.AnnotateCtx(ctx)
-		key := repl.Desc().StartKey
-		conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, key)
-		if err != nil {
-			log.Errorf(ctx, "skipped applying config update, unexpected error reading from subscriber: %v", err)
-			return true // more
-		}
-
-		changed := repl.SetSpanConfig(conf)
-		if changed {
-			repl.MaybeQueue(replCtx, now)
-		}
-		return true // more
-	})
 }
 
 // GossipStore broadcasts the store on the gossip network.
@@ -3538,13 +3537,7 @@ func (s *Store) AllocatorCheckRange(
 	}
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator check range", spanOptions...)
 
-	confReader, err := s.GetConfReader(ctx)
-	if err != nil {
-		log.Eventf(ctx, "span configs unavailable: %s", err)
-		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
-	}
-
-	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
+	conf, err := s.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
 		log.Eventf(ctx, "error retrieving span config for range %s: %s", desc, err)
 		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
@@ -3559,7 +3552,7 @@ func (s *Store) AllocatorCheckRange(
 		storePool = s.cfg.StorePool
 	}
 
-	action, _ := s.allocator.ComputeAction(ctx, storePool, &conf, desc)
+	action, _ := s.allocator.ComputeAction(ctx, storePool, conf, desc)
 
 	// In the case that the action does not require a target, return immediately.
 	if !(action.Add() || action.Replace()) {
@@ -3573,7 +3566,7 @@ func (s *Store) AllocatorCheckRange(
 		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
-	target, _, err := s.allocator.AllocateTarget(ctx, storePool, &conf,
+	target, _, err := s.allocator.AllocateTarget(ctx, storePool, conf,
 		filteredVoters, filteredNonVoters, replacing, action.ReplicaStatus(), action.TargetReplicaType(),
 	)
 	if err == nil {
@@ -3584,7 +3577,7 @@ func (s *Store) AllocatorCheckRange(
 		fragileQuorumErr := s.allocator.CheckAvoidsFragileQuorum(
 			ctx,
 			storePool,
-			&conf,
+			conf,
 			desc.Replicas().VoterDescriptors(),
 			filteredVoters,
 			action.ReplicaStatus(),
@@ -3637,7 +3630,16 @@ func (s *Store) Enqueue(
 		return nil, nil, errors.Errorf("unknown queue type %q", queueName)
 	}
 
-	confReader, err := s.GetConfReader(ctx)
+	// TODO(baptist): Remove this check. We read the conf reader just to see if
+	// we can without error. Once we load the SpanConfig from the Reader instead
+	// of the cached version, these two checks are the same.
+	_, err := s.GetConfReader(ctx)
+	if err != nil {
+		return nil, nil, errors.Wrap(err,
+			"unable to retrieve conf reader, cannot run queue; make sure "+
+				"the cluster has been initialized and all nodes connected to it")
+	}
+	conf, err := repl.LoadSpanConfig(ctx)
 	if err != nil {
 		return nil, nil, errors.Wrap(err,
 			"unable to retrieve conf reader, cannot run queue; make sure "+
@@ -3676,7 +3678,7 @@ func (s *Store) Enqueue(
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)
-		shouldQueue, priority := qImpl.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, confReader)
+		shouldQueue, priority := qImpl.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, conf)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
 			return collectAndFinish(), nil, nil
@@ -3684,7 +3686,7 @@ func (s *Store) Enqueue(
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	processed, processErr := qImpl.process(ctx, repl, confReader)
+	processed, processErr := qImpl.process(ctx, repl, conf)
 	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
 	return collectAndFinish(), processErr, nil
 }

@@ -180,7 +180,6 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
-        "//pkg/spanconfig/spanconfigstore",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
