@@ -272,7 +272,7 @@ func createPostgresSchemas(
 		if err != nil {
 			return nil, err
 		}
-		desc.SetOffline("importing")
+		desc.SetOffline(tabledesc.OfflineReasonImporting)
 		return desc, nil
 	}
 	var schemaDescs []*schemadesc.Mutable
