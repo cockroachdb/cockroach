@@ -1,9 +1,0 @@
-name: Test ARM64
-permissions: read-all
-on: [push, pull_request]
-jobs:
-  test-linux-arm64-cpu-race:
-    uses: ./.github/workflows/test_template.yaml
-    with:
-      runs-on: actuated-arm64-8cpu-8gb
-      targets: "['linux-arm64-unit-4-cpu-race']"
