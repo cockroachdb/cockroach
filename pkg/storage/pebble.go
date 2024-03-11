@@ -1671,7 +1671,7 @@ func (p *Pebble) ScanInternal(
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set CategoryAndQoS.
 	return p.db.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile)
+		visitRangeDel, visitRangeKey, visitSharedFile, nil /* visitExternalFile */)
 }
 
 // ConsistentIterators implements the Engine interface.
@@ -2252,7 +2252,7 @@ func (p *Pebble) IngestAndExciseFiles(
 		Start: EngineKey{Key: exciseSpan.Key}.Encode(),
 		End:   EngineKey{Key: exciseSpan.EndKey}.Encode(),
 	}
-	return p.db.IngestAndExcise(paths, shared, rawSpan)
+	return p.db.IngestAndExcise(paths, shared, nil /* external */, rawSpan)
 }
 
 // IngestExternalFiles implements the Engine interface.
@@ -3029,7 +3029,7 @@ func (p *pebbleSnapshot) ScanInternal(
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set CategoryAndQoS.
 	return p.snapshot.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile)
+		visitRangeDel, visitRangeKey, visitSharedFile, nil /* visitExternalFile */)
 }
 
 // pebbleEFOS represents an eventually file-only snapshot created using
@@ -3152,7 +3152,7 @@ func (p *pebbleEFOS) ScanInternal(
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set CategoryAndQoS.
 	return p.efos.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile)
+		visitRangeDel, visitRangeKey, visitSharedFile, nil /* visitExternalFile */)
 }
 
 // ExceedMaxSizeError is the error returned when an export request
