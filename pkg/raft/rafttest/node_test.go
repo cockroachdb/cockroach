@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 func TestBasicProgress(t *testing.T) {
@@ -49,6 +50,9 @@ func TestBasicProgress(t *testing.T) {
 }
 
 func TestRestart(t *testing.T) {
+	// TODO(pav-kv): de-flake it. See https://github.com/etcd-io/raft/issues/181.
+	skip.UnderStress(t, "the test is flaky")
+
 	peers := []raft.Peer{{ID: 1, Context: nil}, {ID: 2, Context: nil}, {ID: 3, Context: nil}, {ID: 4, Context: nil}, {ID: 5, Context: nil}}
 	nt := newRaftNetwork(1, 2, 3, 4, 5)
 

@@ -52,5 +52,6 @@ go_test(
     deps = [
         "//pkg/raft",
         "//pkg/raft/raftpb",
+        "//pkg/testutils/skip",
     ],
 )
