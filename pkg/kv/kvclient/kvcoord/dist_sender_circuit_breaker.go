@@ -69,6 +69,15 @@ var (
 		true,
 		settings.WithPublic,
 	)
+
+	CircuitBreakerIgnoreFollowerReads = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		"kv.dist_sender.circuit_breaker.ignore_follower_reads.enabled",
+		"when true, follower reads are ignored by the circuit breaker "+
+			"(they don't cause it to trip, nor are they rejected when tripped)",
+		true,
+		settings.WithPublic,
+	)
 )
 
 const (
@@ -471,7 +480,7 @@ func (r *ReplicaCircuitBreaker) Err() error {
 // for the send and a token which the caller must call Done() on with the result
 // of the request.
 func (r *ReplicaCircuitBreaker) Track(
-	ctx context.Context, ba *kvpb.BatchRequest, nowNanos int64,
+	ctx context.Context, ba *kvpb.BatchRequest, nowNanos int64, origRoutingPolicy kvpb.RoutingPolicy,
 ) (context.Context, replicaCircuitBreakerToken, error) {
 	if r == nil {
 		return ctx, replicaCircuitBreakerToken{}, nil // circuit breakers disabled
@@ -479,6 +488,27 @@ func (r *ReplicaCircuitBreaker) Track(
 
 	// Record the request timestamp.
 	r.lastRequest.Store(nowNanos)
+
+	// If the request's original routing policy was NEAREST, this is an explicitly
+	// requested follower read -- ignore it in the circuit breaker if requested.
+	// We still record the lastRequest timestamp, to avoid GCing the breaker.
+	//
+	// NB: we check origRoutingPolicy rather than ba.RoutingPolicy, because the
+	// latter may change from LEASEHOLDER to NEAREST once the request has retried
+	// long enough to fall below the closed timestamp. We don't want to ignore
+	// such implicit follower reads, because it may cause them to get stuck on the
+	// stalled replica, which would defeat the purpose of the circuit breakers.
+	//
+	// TODO(erikgrinaker): consider a more sophisticated policy here, to avoid
+	// follower reads getting stuck on stalled replicas too. There are two main
+	// considerations: follower reads may prevent the breaker from tripping if all
+	// leased requests fail/stall but all follower reads succeed, and a faulty
+	// replica with a tripped circuit breaker may still be able to serve follower
+	// reads even if leased requests fail.
+	if origRoutingPolicy == kvpb.RoutingPolicy_NEAREST &&
+		CircuitBreakerIgnoreFollowerReads.Get(&r.d.settings.SV) {
+		return ctx, replicaCircuitBreakerToken{}, nil
+	}
 
 	// Check if the breaker is tripped.
 	if err := r.Err(); err != nil {
