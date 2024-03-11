@@ -77,6 +77,15 @@ type JsonReport struct {
 	ExitCode       int32                       `json:"exit_code"`
 	ExitCodeName   string                      `json:"exit_code_name"`
 	ResultsByLabel map[string][]JsonTestResult `json:"results_by_label"`
+
+	GitHubRunId      int64  `json:"github_run_id,omitempty"`
+	GitHubJob        string `json:"github_job,omitempty"`
+	GitHubRunAttempt int64  `json:"github_run_attempt,omitempty"`
+
+	TeamCityBuildTypeId string `json:"teamcity_buildtype_id,omitempty"`
+	TeamCityBuildId     int64  `json:"teamcity_build_id,omitempty"`
+
+	Branch string `json:"branch,omitempty"`
 }
 
 type JsonTestResult struct {
@@ -353,15 +362,29 @@ func stringToMillis(s string) (int64, error) {
 // be parsed or was not fetched, then the report will be missing those test
 // results, but everything else will be present. If errs is empty, then the
 // report is complete.
+//
+// In addition to the passed-in arguments, we also consult the following
+// environment variables for supplemental data: GITHUB_RUN_ID, GITHUB_JOB,
+// GITHUB_RUN_ATTEMPT, TC_BUILDTYPE_ID, TC_BUILD_ID, GITHUB_ACTIONS_BRANCH and
+// TC_BUILD_BRANCH. These are environment variables that either GitHub sets for us (see
+// https://docs.github.com/en/actions/learn-github-actions/variables#default-environment-variables),
+// we set in TeamCity, or we set as part of the GitHub workflow definition (see
+// github-actions-essential-ci.yml).
 func ConstructJSONReport(invocation *InvocationInfo, serverName string) (JsonReport, []error) {
 	ret := JsonReport{
-		Server:         serverName,
-		InvocationId:   invocation.InvocationId,
-		StartedAt:      timeMillisToString(invocation.StartedTimeMillis),
-		FinishedAt:     timeMillisToString(invocation.FinishTimeMillis),
-		ExitCode:       invocation.ExitCode,
-		ExitCodeName:   invocation.ExitCodeName,
-		ResultsByLabel: make(map[string][]JsonTestResult),
+		Server:              serverName,
+		InvocationId:        invocation.InvocationId,
+		StartedAt:           timeMillisToString(invocation.StartedTimeMillis),
+		FinishedAt:          timeMillisToString(invocation.FinishTimeMillis),
+		ExitCode:            invocation.ExitCode,
+		ExitCodeName:        invocation.ExitCodeName,
+		ResultsByLabel:      make(map[string][]JsonTestResult),
+		GitHubRunId:         tryParseInt(os.Getenv("GITHUB_RUN_ID")),
+		GitHubJob:           os.Getenv("GITHUB_JOB"),
+		GitHubRunAttempt:    tryParseInt(os.Getenv("GITHUB_RUN_ATTEMPT")),
+		TeamCityBuildTypeId: os.Getenv("TC_BUILDTYPE_ID"),
+		TeamCityBuildId:     tryParseInt(os.Getenv("TC_BUILD_ID")),
+		Branch:              getBranch(),
 	}
 	var errs []error
 
@@ -405,4 +428,23 @@ func ConstructJSONReport(invocation *InvocationInfo, serverName string) (JsonRep
 	}
 
 	return ret, errs
+}
+
+func tryParseInt(s string) int64 {
+	if s == "" {
+		return 0
+	}
+	i, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return i
+}
+
+func getBranch() string {
+	b := os.Getenv("GITHUB_ACTIONS_BRANCH")
+	if b != "" {
+		return b
+	}
+	return strings.TrimPrefix(os.Getenv("TC_BUILD_BRANCH"), "refs/heads/")
 }

@@ -27,6 +27,8 @@ bazel test //pkg:all_tests $ENGFLOW_FLAGS --remote_download_minimal \
       --profile=artifacts/profile.json.gz \
       ${EXTRA_TEST_ARGS:+$EXTRA_TEST_ARGS} \
       $BES_KEYWORDS_ARGS \
+      --bes_keywords "branch=${TC_BUILD_BRANCH#refs/heads/}" \
+      --bes_keywords nightly_stress \
     || status=$?
 
 # Upload results to GitHub.
