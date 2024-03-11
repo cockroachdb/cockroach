@@ -795,6 +795,9 @@ select * from crdb_internal.gossip_alerts
 query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.node_inflight_trace_spans
 
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
+select * from crdb_internal.leases;
+
 query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')
 
@@ -1655,6 +1658,11 @@ subtest end
 # test validates that this is no longer the case.
 subtest allow_role_memberships_to_change_during_transaction
 
+user root
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERMETADATA TO testuser
+
 user testuser
 
 statement ok
@@ -1662,5 +1670,10 @@ set allow_role_memberships_to_change_during_transaction=true
 
 statement ok
 SELECT  * FROM crdb_internal.leases;
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWCLUSTERMETADATA FROM testuser
 
 subtest end

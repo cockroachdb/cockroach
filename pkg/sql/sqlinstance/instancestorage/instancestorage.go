@@ -156,15 +156,14 @@ func NewStorage(
 // associates it with its SQL address and session information.
 func (s *Storage) CreateNodeInstance(
 	ctx context.Context,
-	sessionID sqlliveness.SessionID,
-	sessionExpiration hlc.Timestamp,
+	session sqlliveness.Session,
 	rpcAddr string,
 	sqlAddr string,
 	locality roachpb.Locality,
 	binaryVersion roachpb.Version,
 	nodeID roachpb.NodeID,
 ) (instance sqlinstance.InstanceInfo, _ error) {
-	return s.createInstanceRow(ctx, sessionID, sessionExpiration, rpcAddr, sqlAddr, locality, binaryVersion, nodeID)
+	return s.createInstanceRow(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion, nodeID)
 }
 
 const noNodeID = 0
@@ -173,14 +172,13 @@ const noNodeID = 0
 // associates it with its SQL address and session information.
 func (s *Storage) CreateInstance(
 	ctx context.Context,
-	sessionID sqlliveness.SessionID,
-	sessionExpiration hlc.Timestamp,
+	session sqlliveness.Session,
 	rpcAddr string,
 	sqlAddr string,
 	locality roachpb.Locality,
 	binaryVersion roachpb.Version,
 ) (instance sqlinstance.InstanceInfo, _ error) {
-	return s.createInstanceRow(ctx, sessionID, sessionExpiration, rpcAddr, sqlAddr, locality, binaryVersion, noNodeID)
+	return s.createInstanceRow(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion, noNodeID)
 }
 
 // ReleaseInstance deallocates the instance id iff it is currently owned by the
@@ -225,8 +223,7 @@ func (s *Storage) ReleaseInstance(
 
 func (s *Storage) createInstanceRow(
 	ctx context.Context,
-	sessionID sqlliveness.SessionID,
-	sessionExpiration hlc.Timestamp,
+	session sqlliveness.Session,
 	rpcAddr string,
 	sqlAddr string,
 	locality roachpb.Locality,
@@ -236,11 +233,11 @@ func (s *Storage) createInstanceRow(
 	if len(sqlAddr) == 0 || len(rpcAddr) == 0 {
 		return sqlinstance.InstanceInfo{}, errors.AssertionFailedf("missing sql or rpc address information for instance")
 	}
-	if len(sessionID) == 0 {
+	if len(session.ID()) == 0 {
 		return sqlinstance.InstanceInfo{}, errors.AssertionFailedf("no session information for instance")
 	}
 
-	region, _, err := slstorage.UnsafeDecodeSessionID(sessionID)
+	region, _, err := slstorage.UnsafeDecodeSessionID(session.ID())
 	if err != nil {
 		return sqlinstance.InstanceInfo{}, errors.Wrap(err, "unable to determine region for sql_instance")
 	}
@@ -260,7 +257,7 @@ func (s *Storage) createInstanceRow(
 
 			// Set the transaction deadline to the session expiration to ensure
 			// transaction commits before the session expires.
-			err = txn.UpdateDeadline(ctx, sessionExpiration)
+			err = txn.UpdateDeadline(ctx, session.Expiration())
 			if err != nil {
 				return err
 			}
@@ -284,7 +281,7 @@ func (s *Storage) createInstanceRow(
 
 			b := txn.NewBatch()
 
-			value, err := s.rowCodec.encodeValue(rpcAddr, sqlAddr, sessionID, locality, binaryVersion)
+			value, err := s.rowCodec.encodeValue(rpcAddr, sqlAddr, session.ID(), locality, binaryVersion)
 			if err != nil {
 				return err
 			}
@@ -313,7 +310,7 @@ func (s *Storage) createInstanceRow(
 				InstanceID:      instanceID,
 				InstanceRPCAddr: rpcAddr,
 				InstanceSQLAddr: sqlAddr,
-				SessionID:       sessionID,
+				SessionID:       session.ID(),
 				Locality:        locality,
 				BinaryVersion:   binaryVersion,
 			}, err
@@ -333,7 +330,7 @@ func (s *Storage) createInstanceRow(
 		// every region, then writing to the local region. Allocating globally
 		// would require one round trip for reading and one round trip for
 		// writes.
-		if err := s.generateAvailableInstanceRows(ctx, [][]byte{region}, sessionExpiration); err != nil {
+		if err := s.generateAvailableInstanceRows(ctx, [][]byte{region}, session.Expiration()); err != nil {
 			log.Warningf(ctx, "failed to generate available instance rows: %v", err)
 		}
 	}
@@ -603,7 +600,7 @@ func (s *Storage) readRegionsFromSystemDatabase(
 // them in the sql_instances table. When instance IDs are pre-allocated, all
 // other fields in that row will be NULL.
 func (s *Storage) generateAvailableInstanceRowsWithTxn(
-	ctx context.Context, regions [][]byte, sessionExpiration hlc.Timestamp, txn *kv.Txn, commit bool,
+	ctx context.Context, regions [][]byte, txn *kv.Txn, commit bool,
 ) error {
 	target := int(PreallocatedCount.Get(&s.settings.SV))
 	// Figure out which regions are down, so that we can skip them in the allocation
@@ -653,7 +650,7 @@ func (s *Storage) generateAvailableInstanceRows(
 ) error {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return s.generateAvailableInstanceRowsWithTxn(ctx, regions, sessionExpiration, txn, true)
+		return s.generateAvailableInstanceRowsWithTxn(ctx, regions, txn, true)
 	})
 }
 
