@@ -413,6 +413,7 @@ type Node struct {
 		encodedVersion string
 		updateCh       chan struct{}
 	}
+	proxySender kv.Sender
 }
 
 var _ kvpb.InternalServer = &Node{}
@@ -565,6 +566,7 @@ func NewNode(
 	tenantInfoWatcher *tenantcapabilitieswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
 	spanConfigReporter spanconfig.Reporter,
+	proxySender kv.Sender,
 ) *Node {
 	n := &Node{
 		storeCfg:              cfg,
@@ -582,6 +584,7 @@ func NewNode(
 		spanConfigReporter:    spanConfigReporter,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
+		proxySender:           proxySender,
 	}
 	n.versionUpdateMu.updateCh = make(chan struct{})
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)

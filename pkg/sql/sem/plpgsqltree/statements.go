@@ -789,11 +789,7 @@ func (s *Continue) WalkStmt(visitor StatementVisitor) Statement {
 // stmt_return
 type Return struct {
 	StatementImpl
-	Expr   Expr
-	RetVar Variable
-	// Implicit is set if this Return statement was not originally in the body
-	// and was added by us.
-	Implicit bool
+	Expr Expr
 }
 
 func (s *Return) CopyNode() *Return {
@@ -802,10 +798,9 @@ func (s *Return) CopyNode() *Return {
 }
 
 func (s *Return) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString("RETURN ")
-	if s.Expr == nil {
-		ctx.FormatNode(&s.RetVar)
-	} else {
+	ctx.WriteString("RETURN")
+	if s.Expr != nil {
+		ctx.WriteByte(' ')
 		ctx.FormatNode(s.Expr)
 	}
 	ctx.WriteString(";\n")

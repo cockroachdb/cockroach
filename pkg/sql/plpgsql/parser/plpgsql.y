@@ -317,12 +317,11 @@ func (u *plpgsqlSymUnion) sqlStatement() tree.Statement {
 %type <tree.ResolvableTypeReference>	decl_datatype
 %type <str>		decl_collate
 
-%type <str>	expr_until_semi expr_until_paren stmt_until_semi
+%type <str>	expr_until_semi expr_until_paren stmt_until_semi return_expr
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
 %type <plpgsqltree.Expr>	opt_exitcond
 
 %type <forvariable>	for_variable
-%type <plpgsqltree.Expr>	return_variable
 %type <*tree.NumVal>	foreach_slice
 %type <plpgsqltree.Statement>	for_control
 
@@ -1056,11 +1055,17 @@ stmt_continue: CONTINUE opt_label opt_exitcond
   }
 ;
 
-stmt_return: RETURN return_variable ';'
+stmt_return: RETURN return_expr ';'
   {
-    $$.val = &plpgsqltree.Return{
-      Expr: $2.expr(),
+    var expr plpgsqltree.Expr
+    if $2 != "" {
+      var err error
+      expr, err = plpgsqllex.(*lexer).ParseExpr($2)
+      if err != nil {
+        return setErr(plpgsqllex, err)
+      }
     }
+    $$.val = &plpgsqltree.Return{Expr: expr}
   }
 | RETURN_NEXT NEXT
   {
@@ -1072,6 +1077,15 @@ stmt_return: RETURN return_variable ';'
  }
 ;
 
+return_expr:
+  {
+    sqlStr, err := plpgsqllex.(*lexer).ReadReturnExpr()
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$ = sqlStr
+  }
+;
 
 query_options:
   {
@@ -1086,17 +1100,6 @@ query_options:
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-  }
-;
-
-
-return_variable: expr_until_semi
-  {
-    expr, err := plpgsqllex.(*lexer).ParseExpr($1)
-    if err != nil {
-      return setErr(plpgsqllex, err)
-    }
-    $$.val = expr
   }
 ;
 

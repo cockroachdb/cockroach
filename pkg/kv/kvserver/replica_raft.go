@@ -696,6 +696,12 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 		}
 		p.SafeString(")")
 	}
+	if n := s.apply.numAddSST; n > 0 {
+		p.Printf(", apply-sst=%d", n)
+		if c := s.apply.numAddSSTCopies; c > 0 {
+			p.Printf(" (copies=%d)", c)
+		}
+	}
 	p.SafeString("]")
 
 	if n := s.apply.stateAssertions; n > 0 {
