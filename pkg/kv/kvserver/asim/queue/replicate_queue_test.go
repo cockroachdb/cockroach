@@ -58,6 +58,33 @@ func TestQueuePriorityQueue(t *testing.T) {
 	}
 }
 
+func testingGetReplLeaseCounts(s state.State) (replCounts, leaseCounts map[int]int) {
+	storeReplView := make(map[int]int)
+	storeLeaseView := make(map[int]int)
+	stores := s.Stores()
+	storeIDs := make([]state.StoreID, len(stores))
+	for i, store := range stores {
+		storeIDs[i] = store.StoreID()
+	}
+	for _, desc := range s.StoreDescriptors(false /* cached */, storeIDs...) {
+		storeReplView[int(desc.StoreID)] = int(desc.Capacity.RangeCount)
+		storeLeaseView[int(desc.StoreID)] = int(desc.Capacity.LeaseCount)
+	}
+	return storeReplView, storeLeaseView
+}
+
+func makeConstraint(k, v string) roachpb.Constraint {
+	return roachpb.Constraint{
+		Type:  roachpb.Constraint_REQUIRED,
+		Key:   k,
+		Value: v,
+	}
+}
+
+func singleLocality(k, v string) roachpb.Locality {
+	return roachpb.Locality{Tiers: []roachpb.Tier{{Key: k, Value: v}}}
+}
+
 func TestReplicateQueue(t *testing.T) {
 	start := state.TestingStartTime()
 	ctx := context.Background()
@@ -68,45 +95,10 @@ func TestReplicateQueue(t *testing.T) {
 	testSettings.StateExchangeInterval = 5 * time.Second
 	testSettings.ReplicaChangeBaseDelay = 5 * time.Second
 
-	getReplLeaseCounts := func(s state.State) (map[int]int, map[int]int) {
-		storeReplView := make(map[int]int)
-		storeLeaseView := make(map[int]int)
-		stores := s.Stores()
-		storeIDs := make([]state.StoreID, len(stores))
-		for i, store := range stores {
-			storeIDs[i] = store.StoreID()
-		}
-		for _, desc := range s.StoreDescriptors(false /* cached */, storeIDs...) {
-			storeReplView[int(desc.StoreID)] = int(desc.Capacity.RangeCount)
-			storeLeaseView[int(desc.StoreID)] = int(desc.Capacity.LeaseCount)
-		}
-		return storeReplView, storeLeaseView
-	}
-
-	singleLocality := func(k, v string) roachpb.Locality {
-		return roachpb.Locality{Tiers: []roachpb.Tier{{Key: k, Value: v}}}
-	}
-
-	constraint := func(k, v string) roachpb.Constraint {
-		return roachpb.Constraint{
-			Type:  roachpb.Constraint_REQUIRED,
-			Key:   k,
-			Value: v,
-		}
-	}
-
-	leasePreference := func(constraints ...roachpb.Constraint) roachpb.LeasePreference {
-		preference := roachpb.LeasePreference{
-			Constraints: make([]roachpb.Constraint, len(constraints)),
-		}
-		copy(preference.Constraints, constraints)
-		return preference
-	}
-
 	conjunctionConstraint := func(k, v string, numReplicas int32) roachpb.ConstraintsConjunction {
 		return roachpb.ConstraintsConjunction{
 			NumReplicas: numReplicas,
-			Constraints: []roachpb.Constraint{constraint(k, v)},
+			Constraints: []roachpb.Constraint{makeConstraint(k, v)},
 		}
 	}
 
@@ -120,18 +112,18 @@ func TestReplicateQueue(t *testing.T) {
 	}
 
 	testCases := []struct {
-		desc                                    string
-		replicaCounts                           map[state.StoreID]int
-		spanConfig                              roachpb.SpanConfig
-		initialRF                               int
-		nonLiveNodes                            map[state.NodeID]livenesspb.NodeLivenessStatus
-		nodeLocalities                          map[state.NodeID]roachpb.Locality
-		ticks                                   []int64
-		expectedReplCounts, expectedLeaseCounts map[int64]map[int]int
+		desc               string
+		replicaCounts      map[state.StoreID]int
+		spanConfig         roachpb.SpanConfig
+		initialRF          int
+		nonLiveNodes       map[state.NodeID]livenesspb.NodeLivenessStatus
+		nodeLocalities     map[state.NodeID]roachpb.Locality
+		ticks              []int64
+		expectedReplCounts map[int64]map[int]int
 	}{
 		{
 			// NB: Expect no action, range counts are balanced.
-			desc: "s1:(l=10,r=10),s2:(l=0,r=10) balanced replicas, noop",
+			desc: "s1:(r=10),s2:(r=10) balanced replicas, noop",
 			replicaCounts: map[state.StoreID]int{
 				1: 10, 2: 10,
 			},
@@ -143,10 +135,9 @@ func TestReplicateQueue(t *testing.T) {
 			},
 		},
 		{
-			// NB: Expect replica transfer towards s3, one per interval. Since
-			// no lease transfers can occur, we expect only replica
-			// rebalancing. The only option is moving replicas from s2 -> s3.
-			desc: "s1:(l=10,r=10), s2:(l=0.r=10), s3:(l=0,r=0) rebalance replicas s2 -> s3",
+			// NB: Expect replica transfer towards s3, one per interval. The only
+			// option is moving replicas from s2 -> s3.
+			desc: "s1:(r=10), s2:(r=10), s3:(r=0) rebalance replicas s2 -> s3",
 			replicaCounts: map[state.StoreID]int{
 				1: 10, 2: 10, 3: 0,
 			},
@@ -283,70 +274,6 @@ func TestReplicateQueue(t *testing.T) {
 				25: {1: 10, 2: 7, 3: 3},
 			},
 		},
-		{
-			desc: "handle lease preferences",
-			replicaCounts: map[state.StoreID]int{
-				1: 10, 2: 10,
-			},
-			initialRF: 2,
-			spanConfig: roachpb.SpanConfig{
-				NumReplicas: 2,
-				NumVoters:   2,
-				LeasePreferences: []roachpb.LeasePreference{
-					leasePreference(constraint("region", "b")),
-				},
-			},
-			nodeLocalities: map[state.NodeID]roachpb.Locality{
-				1: singleLocality("region", "a"),
-				2: singleLocality("region", "b"),
-			},
-			ticks: []int64{5, 10, 15, 20, 25},
-			expectedReplCounts: map[int64]map[int]int{
-				5:  {1: 10, 2: 10},
-				10: {1: 10, 2: 10},
-				15: {1: 10, 2: 10},
-				20: {1: 10, 2: 10},
-				25: {1: 10, 2: 10},
-			},
-			expectedLeaseCounts: map[int64]map[int]int{
-				5:  {1: 10, 2: 0},
-				10: {1: 10, 2: 0},
-				15: {1: 9, 2: 1},
-				20: {1: 8, 2: 2},
-				25: {1: 7, 2: 3},
-			},
-		},
-		{
-			desc: "don't transfer leases to draining store",
-			replicaCounts: map[state.StoreID]int{
-				1: 10, 2: 10,
-			},
-			initialRF: 2,
-			spanConfig: roachpb.SpanConfig{
-				NumReplicas: 2,
-				NumVoters:   2,
-				LeasePreferences: []roachpb.LeasePreference{
-					leasePreference(constraint("region", "b")),
-				},
-			},
-			nodeLocalities: map[state.NodeID]roachpb.Locality{
-				1: singleLocality("region", "a"),
-				2: singleLocality("region", "b"),
-			},
-			nonLiveNodes: map[state.NodeID]livenesspb.NodeLivenessStatus{
-				2: livenesspb.NodeLivenessStatus_DRAINING},
-			ticks: []int64{5, 10, 15},
-			expectedReplCounts: map[int64]map[int]int{
-				5:  {1: 10, 2: 10},
-				10: {1: 10, 2: 10},
-				15: {1: 10, 2: 10},
-			},
-			expectedLeaseCounts: map[int64]map[int]int{
-				5:  {1: 10, 2: 0},
-				10: {1: 10, 2: 0},
-				15: {1: 10, 2: 0},
-			},
-		},
 	}
 
 	for _, tc := range testCases {
@@ -384,7 +311,6 @@ func TestReplicateQueue(t *testing.T) {
 			}
 
 			replCountResults := make(map[int64]map[int]int)
-			leaseCountResults := make(map[int64]map[int]int)
 			// Initialize the store pool information.
 			gossip := gossip.NewGossip(s, testSettings)
 			gossip.Tick(ctx, start, s)
@@ -416,14 +342,10 @@ func TestReplicateQueue(t *testing.T) {
 				rq.MaybeAdd(ctx, repls[nextRepl], s)
 
 				nextRepl++
-				replCounts, leaseCounts := getReplLeaseCounts(s)
+				replCounts, _ := testingGetReplLeaseCounts(s)
 				replCountResults[tick] = replCounts
-				leaseCountResults[tick] = leaseCounts
 			}
 			require.Equal(t, tc.expectedReplCounts, replCountResults)
-			if len(tc.expectedLeaseCounts) > 0 {
-				require.Equal(t, tc.expectedLeaseCounts, leaseCountResults)
-			}
 		})
 	}
 }

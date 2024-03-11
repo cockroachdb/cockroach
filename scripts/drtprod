@@ -4,16 +4,39 @@
 # clusters that ensures consistent use of the correct project-assignment vars
 # and done some additional sanity check enforcement on some flags.
 
-if [[ $1 == "start" ]]; then
-  if [[ "$*" != *"--secure"* ]]; then
-    echo "--secure is required when starting DRT clusters"
-    exit 1
-  fi
-  if [[ "$*" != *"--sql-port 26257"* ]]; then
-    # we don't use service discovery in our the drt project so use default port.
-    echo "--sql-port 26257 is required when starting DRT clusters"
-    exit 1
-  fi
-fi
+case $1 in
+  "start")
+    if [[ "$*" != *"--secure"* ]]; then
+      echo "--secure is implied when starting DRT clusters, adding it"
+      set -- "$@" "--secure"
+    fi
+    if [[ "$*" != *"--sql-port 26257"* ]]; then
+     echo "--sql-port 26257 is implied when starting DRT clusters, adding it"
+      set -- "$@" "--sql-port" "26257"
+    fi
+    ;;
+  "sql")
+    if [[ "$*" != *"--secure"* ]]; then
+      set -- "$@" "--secure"
+    fi
+    ;;
+  "dns")
+    # roachprod only manages DNS in ephemeral, so we just do this ourselves.
+    # These are very low-churn clusters so this is fine being manual and in a
+    # wrapper.
+    shift
+    cluster=$1
+    set -euo pipefail
+    GCE_PROJECT=cockroach-drt roachprod adminurl $cluster |
+      awk '{printf "%04d\t%s\n", NR, $0}' | # prepend the padded node IDs.
+      sed -e 's,http://\(.*\):26258/,\1,g' | # remove the HTTP part.
+      while read node ip; do
+        host="${cluster}-${node}.drt.crdb.io."
+        gcloud dns --project=cockroach-shared record-sets update "${host}" --rrdatas="${ip}" \
+          --type="A" --zone="drt" --ttl=60
+      done
+    exit 0
+esac
+
 
 GCE_PROJECT=cockroach-drt  ROACHPROD_DNS="drt.crdb.io" roachprod "$@"

@@ -791,7 +791,9 @@ upsert descriptor #104
    table:
   -  checks: []
   +  checks:
-  +  - constraintId: 2
+  +  - columnIds:
+  +    - 3
+  +    constraintId: 2
   +    expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
   +    fromHashShardedColumn: true
   +    name: check_crdb_internal_j_shard_3
@@ -878,6 +880,8 @@ upsert descriptor #104
   +    state: DELETE_ONLY
   +  - constraint:
   +      check:
+  +        columnIds:
+  +        - 3
   +        constraintId: 2
   +        expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
   +        fromHashShardedColumn: true
@@ -998,6 +1002,8 @@ upsert descriptor #104
   -    state: DELETE_ONLY
   -  - constraint:
   -      check:
+  -        columnIds:
+  -        - 3
   -        constraintId: 2
   -        expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
   -        fromHashShardedColumn: true

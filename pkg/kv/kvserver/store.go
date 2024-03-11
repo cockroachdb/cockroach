@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
@@ -846,6 +845,7 @@ type Store struct {
 	replRankingsByTenant *ReplicaRankingMap
 	storeRebalancer      *StoreRebalancer
 	rangeIDAlloc         *idalloc.Allocator // Range ID allocator
+	leaseQueue           *leaseQueue        // Lease queue
 	mvccGCQueue          *mvccGCQueue       // MVCC GC queue
 	mergeQueue           *mergeQueue        // Range merging queue
 	splitQueue           *splitQueue        // Range splitting queue
@@ -1626,6 +1626,7 @@ func NewStore(
 			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
+		s.leaseQueue = newLeaseQueue(s, s.allocator)
 		s.mvccGCQueue = newMVCCGCQueue(s)
 		s.mergeQueue = newMergeQueue(s, s.db)
 		s.splitQueue = newSplitQueue(s, s.db)
@@ -1639,7 +1640,7 @@ func NewStore(
 		// pkg/ui/src/views/reports/containers/enqueueRange/index.tsx
 		s.scanner.AddQueues(
 			s.mvccGCQueue, s.mergeQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue,
-			s.raftLogQueue, s.raftSnapshotQueue, s.consistencyQueue)
+			s.raftLogQueue, s.raftSnapshotQueue, s.consistencyQueue, s.leaseQueue)
 		tsDS := s.cfg.TimeSeriesDataStore
 		if s.cfg.TestingKnobs.TimeSeriesDataStore != nil {
 			tsDS = s.cfg.TestingKnobs.TimeSeriesDataStore
@@ -1654,6 +1655,9 @@ func NewStore(
 
 	if cfg.TestingKnobs.DisableGCQueue {
 		s.setGCQueueActive(false)
+	}
+	if cfg.TestingKnobs.DisableLeaseQueue {
+		s.setLeaseQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableMergeQueue {
 		s.setMergeQueueActive(false)
@@ -3491,9 +3495,6 @@ func (s *Store) ReplicateQueueDryRun(
 		s.cfg.AmbientCtx.Tracer, "replicate queue dry run",
 	)
 	defer collectAndFinish()
-	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool {
-		return true
-	}
 	desc := repl.Desc()
 	conf, err := repl.LoadSpanConfig(ctx)
 	if err != nil {
@@ -3501,7 +3502,7 @@ func (s *Store) ReplicateQueueDryRun(
 		return collectAndFinish(), nil
 	}
 	_, err = s.replicateQueue.processOneChange(
-		ctx, repl, desc, conf, canTransferLease, false /* scatter */, true, /* dryRun */
+		ctx, repl, desc, conf, false /* scatter */, true, /* dryRun */
 	)
 	if err != nil {
 		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
