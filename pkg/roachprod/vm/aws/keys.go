@@ -48,7 +48,8 @@ func (p *Provider) sshKeyExists(l *logger.Logger, keyName, region string) (bool,
 // sshKeyImport takes the user's local, public SSH key and imports it into the ec2 region so that
 // we can create new hosts with it.
 func (p *Provider) sshKeyImport(l *logger.Logger, keyName, region string) error {
-	if _, err := config.SSHPublicKey(); err != nil {
+	sshPublicKeyPath, err := config.SSHPublicKeyPath()
+	if err != nil {
 		return err
 	}
 
@@ -73,7 +74,7 @@ func (p *Provider) sshKeyImport(l *logger.Logger, keyName, region string) error 
 		"ec2", "import-key-pair",
 		"--region", region,
 		"--key-name", keyName,
-		"--public-key-material", fmt.Sprintf("fileb://%s", config.SSHPublicKeyPath),
+		"--public-key-material", fmt.Sprintf("fileb://%s", sshPublicKeyPath),
 		"--tag-specifications", tagSpecs,
 	}
 	err = p.runJSONCommand(l, args, &data)
