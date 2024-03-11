@@ -30,6 +30,9 @@ var _ catalog.TableDescriptor = (*Mutable)(nil)
 var _ catalog.MutableDescriptor = (*Mutable)(nil)
 var _ catalog.TableDescriptor = (*wrapper)(nil)
 
+// OfflineReasonImporting hard codes the Offline Reason for Importing Tables
+const OfflineReasonImporting = "importing"
+
 // wrapper is the base implementation of the catalog.Descriptor
 // interface, which is overloaded by immutable and Mutable.
 type wrapper struct {
@@ -203,7 +206,14 @@ func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.Ind
 	desc.Indexes[indexOrdinal-1] = index
 }
 
-// InitializeImport binds the import start time to the table descriptor
+// OfflineForImport sets the descriptor offline in advance of an
+// import, bumping the ImportEpoch.
+func (desc *Mutable) OfflineForImport() {
+	desc.SetOffline(OfflineReasonImporting)
+	desc.ImportEpoch++
+}
+
+// InitializeImport binds the import start time to the table descriptor.
 func (desc *Mutable) InitializeImport(startWallTime int64) error {
 	if desc.ImportStartWallTime != 0 {
 		return errors.AssertionFailedf("Import in progress with start time %v", desc.ImportStartWallTime)
@@ -212,7 +222,7 @@ func (desc *Mutable) InitializeImport(startWallTime int64) error {
 	return nil
 }
 
-// FinalizeImport removes the ImportStartTime
+// FinalizeImport removes in progress import metadata from the descriptor
 func (desc *Mutable) FinalizeImport() {
 	desc.ImportStartWallTime = 0
 }
