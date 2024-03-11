@@ -154,3 +154,83 @@ func (c *CustomFuncs) MakeIntersectionFunction(args memo.ScalarListExpr) opt.Sca
 		},
 	)
 }
+
+// NormalizeCmpGreatest rewrites the comparison operation with greatest function
+// into individual comparison clauses, like this,
+//
+//	greatest(x, y) < 42
+//
+// into:
+//
+//	(x IS NULL OR x < 42) AND (y IS NULL OR y < 42) AND (x IS NOT NULL OR y IS NOT NULL OR NULL)
+func (c *CustomFuncs) NormalizeCmpGreatest(
+	op opt.Operator, args memo.ScalarListExpr, right opt.ScalarExpr,
+) opt.ScalarExpr {
+	var result opt.ScalarExpr
+	for i := range args {
+		node, ok := c.f.DynamicConstruct(op, args[i], right).(opt.ScalarExpr)
+		if !ok {
+			panic(errors.AssertionFailedf("unexpected operator %s", op))
+		}
+		node = c.f.ConstructOr(node, c.f.ConstructIs(args[i], c.f.ConstructNull(c.AnyType())))
+
+		if result == nil {
+			result = node
+		} else {
+			result = c.f.ConstructAnd(result, node)
+		}
+	}
+
+	var fallback opt.ScalarExpr
+	for i := range args {
+		node := c.f.ConstructIsNot(args[i], c.f.ConstructNull(c.AnyType()))
+		if fallback == nil {
+			fallback = node
+		} else {
+			fallback = c.f.ConstructOr(fallback, node)
+		}
+	}
+	fallback = c.f.ConstructOr(fallback, c.f.ConstructNull(c.AnyType()))
+
+	return c.f.ConstructAnd(result, fallback)
+}
+
+// NormalizeCmpLeast rewrites the comparison operation with least function
+// into individual comparison clauses, like this,
+//
+//	least(x, y) < 42
+//
+// into:
+//
+//	(x IS NOT NULL AND x < 42) OR (y IS NOT NULL AND y < 42) OR (x IS NULL AND y IS NULL AND NULL)
+func (c *CustomFuncs) NormalizeCmpLeast(
+	op opt.Operator, args memo.ScalarListExpr, right opt.ScalarExpr,
+) opt.ScalarExpr {
+	var result opt.ScalarExpr
+	for i := range args {
+		node, ok := c.f.DynamicConstruct(op, args[i], right).(opt.ScalarExpr)
+		if !ok {
+			panic(errors.AssertionFailedf("unexpected operator %s", op))
+		}
+		node = c.f.ConstructAnd(node, c.f.ConstructIsNot(args[i], c.f.ConstructNull(c.AnyType())))
+
+		if result == nil {
+			result = node
+		} else {
+			result = c.f.ConstructOr(result, node)
+		}
+	}
+
+	var fallback opt.ScalarExpr
+	for i := range args {
+		node := c.f.ConstructIs(args[i], c.f.ConstructNull(c.AnyType()))
+		if fallback == nil {
+			fallback = node
+		} else {
+			fallback = c.f.ConstructAnd(fallback, node)
+		}
+	}
+	fallback = c.f.ConstructAnd(fallback, c.f.ConstructNull(c.AnyType()))
+
+	return c.f.ConstructOr(result, fallback)
+}
