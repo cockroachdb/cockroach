@@ -235,6 +235,13 @@ func (m *manualStore) GetSpanConfigForKey(
 	panic("unimplemented")
 }
 
+// GetSpanConfigForKeyWithBounds implements the spanconfig.Store interface.
+func (m *manualStore) GetSpanConfigForKeyWithBounds(
+	context.Context, roachpb.RKey,
+) (roachpb.SpanConfig, roachpb.Span, error) {
+	panic("unimplemented")
+}
+
 // ForEachOverlappingSpanConfig implements the spanconfig.Store interface.
 func (m *manualStore) ForEachOverlappingSpanConfig(
 	_ context.Context, span roachpb.Span, f func(roachpb.Span, roachpb.SpanConfig) error,

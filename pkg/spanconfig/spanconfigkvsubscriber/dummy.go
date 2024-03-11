@@ -61,6 +61,13 @@ func (n *noopKVSubscriber) GetSpanConfigForKey(
 	return roachpb.SpanConfig{}, nil
 }
 
+// GetSpanConfigForKeyWithBounds is part of the spanconfig.KVSubscriber interface.
+func (n *noopKVSubscriber) GetSpanConfigForKeyWithBounds(
+	context.Context, roachpb.RKey,
+) (roachpb.SpanConfig, roachpb.Span, error) {
+	return roachpb.SpanConfig{}, roachpb.Span{}, nil
+}
+
 // GetProtectionTimestamps is part of the spanconfig.KVSubscriber interface.
 func (n *noopKVSubscriber) GetProtectionTimestamps(
 	context.Context, roachpb.Span,
