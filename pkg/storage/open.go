@@ -11,14 +11,20 @@
 package storage
 
 import (
+	"cmp"
 	"context"
+	"slices"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/wal"
 )
 
 // A ConfigOption may be passed to Open to configure the storage engine.
@@ -204,6 +210,100 @@ func LBaseMaxBytes(v int64) ConfigOption {
 	}
 }
 
+// WALFailover configures automatic failover of the engine's write-ahead log to
+// another volume in the event the WAL becomes blocked on a write that does not
+// complete within a reasonable duration.
+func WALFailover(mode base.WALFailoverMode, storeEnvs fs.Envs) ConfigOption {
+	// If the user specified no WAL failover setting, we default to disabling WAL
+	// failover and assume that the previous process did not have WAL failover
+	// enabled (so there's no need to populate Options.WALRecoveryDirs). If an
+	// operator had WAL failover enabled and now wants to disable it, they must
+	// explicitly set --wal-failover=disabled for the next process.
+	if mode == base.WALFailoverDefault || len(storeEnvs) == 1 {
+		return func(cfg *engineConfig) error { return nil }
+	}
+	// mode == WALFailoverDisabled or WALFailoverAmongStores.
+
+	// For each store, we need to determine which store is its secondary for the
+	// purpose of WALs. Even if failover is disabled, it's possible that it wasn't
+	// when the previous process ran, and the secondary's wal dir may have WALs
+	// that need to be replayed.
+	//
+	// To assign secondaries, we sort by path and dictate that the next store in
+	// the slice is the secondary. Note that in-memory stores may not have unique
+	// paths, in which case we fall back to using the ordering of the store flags
+	// (which falls out of the use of a stable sort).
+	//
+	// TODO(jackson): Using the path is a simple way to assign secondaries, but
+	// it's not resilient to changing between absolute and relative paths,
+	// introducing symlinks, etc. Since we have the fs.Envs already available, we
+	// could peek into the data directories, find the most recent OPTIONS file and
+	// parse out the previous secondary if any. If we had device nos and inodes
+	// available, we could deterministically sort by those instead.
+	sortedEnvs := slices.Clone(storeEnvs)
+	slices.SortStableFunc(sortedEnvs, func(a, b *fs.Env) int {
+		return cmp.Compare(a.Dir, b.Dir)
+	})
+
+	indexOfEnv := func(e *fs.Env) (int, bool) {
+		for i := range sortedEnvs {
+			if sortedEnvs[i] == e {
+				return i, true
+			}
+		}
+		return 0, false
+	}
+	return func(cfg *engineConfig) error {
+		// Find the Env being opened in the slice of sorted envs.
+		idx, ok := indexOfEnv(cfg.Env)
+		if !ok {
+			panic(errors.AssertionFailedf("storage: opening a store with an unrecognized filesystem Env (dir=%s)", cfg.Env.Dir))
+		}
+		failoverIdx := (idx + 1) % len(sortedEnvs)
+		secondaryEnv := sortedEnvs[failoverIdx]
+		// Ref once to ensure the secondary Env isn't closed before this Engine has
+		// been closed if the secondary's corresponding Engine is closed first.
+		secondaryEnv.Ref()
+		cfg.onClose = append(cfg.onClose, func(p *Pebble) {
+			// Release the reference.
+			secondaryEnv.Close()
+		})
+
+		secondaryFS := secondaryEnv.DefaultFS
+		secondary := wal.Dir{
+			FS: secondaryFS,
+			// Use auxiliary/wals-among-stores within the other stores directory.
+			Dirname: secondaryFS.PathJoin(secondaryEnv.Dir, base.AuxiliaryDir, "wals-among-stores"),
+		}
+
+		if mode == base.WALFailoverAmongStores {
+			cfg.Opts.WALFailover = &pebble.WALFailoverOptions{
+				Secondary: secondary,
+				FailoverOptions: wal.FailoverOptions{
+					// Leave most the options to their defaults, but
+					// UnhealthyOperationLatencyThreshold should be pulled from the
+					// cluster setting.
+					UnhealthyOperationLatencyThreshold: func() (time.Duration, bool) {
+						// WAL failover requires 24.1 to be finalized first. Otherwise, we might
+						// write WALs to a secondary, downgrade to a previous version's binary and
+						// blindly miss WALs. The second return value indicates whether the
+						// WAL manager is allowed to failover to the secondary.
+						//
+						// NB: We do not use settings.Version.IsActive because we do not have a
+						// guarantee that the cluster version has been initialized.
+						failoverOK := cfg.Settings.Version.ActiveVersionOrEmpty(context.TODO()).IsActive(clusterversion.V24_1Start)
+						return walFailoverUnhealthyOpThreshold.Get(&cfg.Settings.SV), failoverOK
+					},
+				},
+			}
+			return nil
+		}
+		// mode == WALFailoverDisabled
+		cfg.Opts.WALRecoveryDirs = append(cfg.Opts.WALRecoveryDirs, secondary)
+		return nil
+	}
+}
+
 // PebbleOptions contains Pebble-specific options in the same format as a
 // Pebble OPTIONS file. For example:
 // [Options]
@@ -240,7 +340,7 @@ type engineConfig struct {
 // Open opens a new Pebble storage engine, reading and writing data to the
 // provided fs.Env, configured with the provided options.
 //
-// If succesful, the returned Engine takes ownership over the provided fs.Env's
+// If successful, the returned Engine takes ownership over the provided fs.Env's
 // reference. When the Engine is closed, the fs.Env is closed once too. If the
 // Env must be retained beyond the Engine's lifetime, the caller should Ref() it
 // first.
