@@ -44,7 +44,7 @@ func TestDecrypt(t *testing.T) {
 
 	// Generate a new encryption key to use.
 	keyPath := filepath.Join(dir, "aes.key")
-	err := cli.GenEncryptionKeyCmd.RunE(nil, []string{keyPath})
+	err := genEncryptionKeyCmd.RunE(nil, []string{keyPath})
 	require.NoError(t, err)
 
 	// Spin up a new encrypted store.
@@ -124,7 +124,7 @@ func TestList(t *testing.T) {
 
 	// Generate a new encryption key to use.
 	keyPath := filepath.Join(dir, "aes.key")
-	err := cli.GenEncryptionKeyCmd.RunE(nil, []string{keyPath})
+	err := genEncryptionKeyCmd.RunE(nil, []string{keyPath})
 	require.NoError(t, err)
 
 	// Spin up a new encrypted store.
