@@ -292,6 +292,7 @@ func generateAndSendImportSpans(
 	// lastCovSpanSize is the size of files added to the right-most span of
 	// the cover so far.
 	var lastCovSpanSize int64
+	var lastCovSpanCount int
 	var lastCovSpan roachpb.Span
 	var covFilesByLayer [][]*backuppb.BackupManifest_File
 	var firstInSpan bool
@@ -374,8 +375,8 @@ func generateAndSendImportSpans(
 				}
 
 				var filesByLayer [][]*backuppb.BackupManifest_File
-				var covSize int64
-				var newCovFilesSize int64
+				var covSize, newCovFilesSize int64
+				var covCount, newCovFilesCount int
 
 				for layer := range newFilesByLayer {
 					for _, file := range newFilesByLayer[layer] {
@@ -385,6 +386,7 @@ func generateAndSendImportSpans(
 						}
 						newCovFilesSize += sz
 					}
+					newCovFilesCount += len(newFilesByLayer[layer])
 					filesByLayer = append(filesByLayer, newFilesByLayer[layer])
 				}
 
@@ -397,6 +399,7 @@ func generateAndSendImportSpans(
 
 						if inclusiveOverlap(coverSpan, file.Span) {
 							covSize += sz
+							covCount++
 							filesByLayer[layer] = append(filesByLayer[layer], file)
 						}
 					}
@@ -406,8 +409,17 @@ func generateAndSendImportSpans(
 					covFilesByLayer = newFilesByLayer
 					lastCovSpan = coverSpan
 					lastCovSpanSize = newCovFilesSize
+					lastCovSpanCount = newCovFilesCount
 				} else {
-					if (newCovFilesSize == 0 || lastCovSpanSize+newCovFilesSize <= filter.targetSize) && !firstInSpan {
+					// We have room to add to the last span if doing so would remain below
+					// both the target byte size and 200 total files. We limit the number
+					// of files since we default to running multiple concurrent workers so
+					// we want to bound sum total open files across all of them to <= 1k.
+					// We bound the span byte size to improve work distribution and make
+					// the progress more granular.
+					fits := lastCovSpanSize+newCovFilesSize <= filter.targetSize && lastCovSpanCount+newCovFilesCount <= 200
+
+					if (newCovFilesCount == 0 || fits) && !firstInSpan {
 						// If there are no new files that cover this span or if we can add the
 						// files in the new span's cover to the last span's cover and still stay
 						// below targetSize, then we should merge the two spans.
@@ -416,6 +428,7 @@ func generateAndSendImportSpans(
 						}
 						lastCovSpan.EndKey = coverSpan.EndKey
 						lastCovSpanSize = lastCovSpanSize + newCovFilesSize
+						lastCovSpanCount = lastCovSpanCount + newCovFilesCount
 					} else {
 						if err := flush(ctx); err != nil {
 							return err
@@ -423,6 +436,7 @@ func generateAndSendImportSpans(
 						lastCovSpan = coverSpan
 						covFilesByLayer = filesByLayer
 						lastCovSpanSize = covSize
+						lastCovSpanCount = covCount
 					}
 				}
 				firstInSpan = false
