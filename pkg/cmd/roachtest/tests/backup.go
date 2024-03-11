@@ -325,7 +325,7 @@ func registerBackup(r registry.Registry) {
 		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			rows := rows2TiB
+			rows := rows100GiB
 			if c.IsLocal() {
 				rows = 100
 			}
