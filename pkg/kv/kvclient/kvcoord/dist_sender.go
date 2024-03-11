@@ -2280,6 +2280,7 @@ func (ds *DistSender) sendToReplicas(
 	// If we don't know the closed timestamp policy, we ought to optimistically
 	// assume that it's LEAD_FOR_GLOBAL_READS, because if it is, and we assumed
 	// otherwise, we may send a request to a remote region unnecessarily.
+	origRoutingPolicy := ba.RoutingPolicy
 	if ba.RoutingPolicy == kvpb.RoutingPolicy_LEASEHOLDER &&
 		CanSendToFollower(
 			ds.st, ds.clock,
@@ -2463,7 +2464,7 @@ func (ds *DistSender) sendToReplicas(
 
 		tBegin := timeutil.Now() // for slow log message
 		sendCtx, cbToken, cbErr := ds.circuitBreakers.ForReplica(desc, &curReplica).
-			Track(ctx, ba, tBegin.UnixNano())
+			Track(ctx, ba, tBegin.UnixNano(), origRoutingPolicy)
 		if cbErr != nil {
 			// Circuit breaker is tripped. err will be handled below.
 			err = cbErr

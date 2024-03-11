@@ -54,6 +54,7 @@ kv.closed_timestamp.side_transport_interval	duration	200ms	the interval at which
 kv.closed_timestamp.target_duration	duration	3s	if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration	system-visible
 kv.dist_sender.circuit_breaker.cancellation.enabled	boolean	true	when enabled, in-flight requests will be cancelled when the circuit breaker trips	application
 kv.dist_sender.circuit_breaker.enabled	boolean	true	enable circuit breakers for failing or stalled replicas	application
+kv.dist_sender.circuit_breaker.ignore_follower_reads.enabled	boolean	true	when true, follower reads are ignored by the circuit breaker (they don't cause it to trip, nor are they rejected when tripped)	application
 kv.dist_sender.circuit_breaker.probe.interval	duration	3s	interval between replica probes	application
 kv.dist_sender.circuit_breaker.probe.threshold	duration	3s	duration of errors or stalls after which a replica will be probed	application
 kv.dist_sender.circuit_breaker.probe.timeout	duration	3s	timeout for replica probes	application
