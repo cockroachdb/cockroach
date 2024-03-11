@@ -290,7 +290,7 @@ func runCDCBenchScan(
 	// finish time.
 	t.L().Printf("running changefeed %s scan", scanType)
 	with := fmt.Sprintf(`format = '%s', end_time = '%s'`,
-		format, timeutil.Now().Add(5*time.Second).Format(time.RFC3339))
+		format, timeutil.Now().Add(30*time.Second).Format(time.RFC3339))
 	switch scanType {
 	case cdcBenchInitialScan:
 		with += ", initial_scan = 'yes'"
