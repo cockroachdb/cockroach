@@ -1001,6 +1001,23 @@ which use 'cockroach-data-tenant-X' for tenant 'X')
 `,
 	}
 
+	WALFailover = FlagInfo{
+		Name:   "wal-failover",
+		EnvVar: "COCKROACH_WAL_FAILOVER",
+		Description: `
+Configures the use and behavior of WAL failover. Defaults to "disabled".
+The value "among-stores" enables automatic failover to another store's
+data directory if a WAL write does not complete within the configured
+threshold. For example:
+<PRE>
+
+  --wal-failover=among-stores
+
+</PRE>
+See the storage.wal_failover.unhealthy_op_threshold cluster setting.
+`,
+	}
+
 	StorageEngine = FlagInfo{
 		Name: "storage-engine",
 		Description: `
