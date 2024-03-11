@@ -184,6 +184,20 @@ CREATE TABLE t.test(a INT PRIMARY KEY, b INT)`); err != nil {
 	}
 	assertColumnOwnsSequences(t, kvDB, "t", "test", 0 /* colIdx */, nil /* seqNames */)
 	assertColumnOwnsSequences(t, kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
+
+	// Ensure identity column owns a sequence
+	if _, err := sqlConn.Exec("CREATE TABLE t.test2(a INT GENERATED ALWAYS AS IDENTITY, b INT NOT NULL)"); err != nil {
+		t.Fatal(err)
+	}
+	assertColumnOwnsSequences(t, kvDB, "t", "test2", 0 /* colIdx */, []string{"test2_a_seq"})
+	assertColumnOwnsSequences(t, kvDB, "t", "test2", 1 /* colIdx */, nil /* seqNames */)
+
+	// Ensure adding identity column owns a sequence
+	if _, err := sqlConn.Exec("ALTER TABLE t.test2 ALTER COLUMN b ADD GENERATED ALWAYS AS IDENTITY;"); err != nil {
+		t.Fatal(err)
+	}
+	assertColumnOwnsSequences(t, kvDB, "t", "test2", 0 /* colIdx */, []string{"test2_a_seq"})
+	assertColumnOwnsSequences(t, kvDB, "t", "test2", 1 /* colIdx */, []string{"test2_b_seq"})
 }
 
 // assertColumnOwnsSequences ensures that the column at (DbName, tbName, colIdx)
