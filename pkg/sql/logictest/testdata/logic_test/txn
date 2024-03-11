@@ -1323,6 +1323,12 @@ UPSERT INTO kv VALUES('foo')
 statement error cannot execute DELETE in a read-only transaction
 DELETE FROM kv
 
+statement error cannot execute SELECT FOR UPDATE in a read-only transaction
+SELECT * FROM kv FOR UPDATE
+
+statement error cannot execute SELECT FOR SHARE in a read-only transaction
+SELECT * FROM kv FOR SHARE
+
 statement error cannot execute nextval\(\) in a read-only transaction
 SELECT nextval('a')
 
@@ -1406,6 +1412,26 @@ ROLLBACK
 # restore the default
 statement ok
 SET default_transaction_read_only = false
+
+# Test that we cannot change to READ WRITE during AS OF SYSTEM TIME transactions.
+
+statement ok
+BEGIN AS OF SYSTEM TIME '-1us'
+
+statement error AS OF SYSTEM TIME specified with READ WRITE mode
+SET transaction_read_only = false
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN AS OF SYSTEM TIME '-1us'
+
+statement error AS OF SYSTEM TIME specified with READ WRITE mode
+SET TRANSACTION READ WRITE
+
+statement ok
+ROLLBACK
 
 # Transaction AS OF SYSTEM TIME clauses can be assigned a default value.
 
