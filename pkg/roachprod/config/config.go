@@ -12,9 +12,12 @@ package config
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"os/user"
+	"path"
 	"regexp"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,9 +40,9 @@ var (
 	// CockroachDevLicense is used by both roachprod and tools that import it.
 	CockroachDevLicense = envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
 
-	// SSHPublicKeyPath is the path to the public key that is expected
-	// to exist in order to set up new roachprod clusters.
-	SSHPublicKeyPath = os.ExpandEnv("${HOME}/.ssh/id_rsa.pub")
+	// SSHDirectory is the path to search for SSH keys needed to set up
+	// set up new roachprod clusters.
+	SSHDirectory = os.ExpandEnv("${HOME}/.ssh")
 )
 
 func init() {
@@ -104,13 +107,51 @@ func IsLocalClusterName(clusterName string) bool {
 
 var localClusterRegex = regexp.MustCompile(`^local(|-[a-zA-Z0-9\-]+)$`)
 
+// See https://github.com/openssh/openssh-portable/blob/86bdd385/ssh_config.5#L1123-L1130
+var defaultPubKeyNames = []string{
+	"id_rsa",
+	"id_ecdsa",
+	"id_ecdsa_sk",
+	"id_ed25519",
+	"id_ed25519_sk",
+	"id_dsa",
+}
+
+// SSHPublicKeyPath returns the path to the default public key expected by
+// roachprod.
+func SSHPublicKeyPath() (string, error) {
+	dirEnts, err := os.ReadDir(SSHDirectory)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read SSH directory")
+	}
+
+	for _, name := range defaultPubKeyNames {
+		idx := slices.IndexFunc(dirEnts, func(entry fs.DirEntry) bool {
+			return name == entry.Name()
+		})
+		if idx == -1 {
+			continue
+		}
+		pubKeyPath := path.Join(SSHDirectory, name+".pub")
+		if _, err := os.Stat(pubKeyPath); err == nil {
+			return pubKeyPath, nil
+		}
+	}
+
+	return "", errors.Newf("no default public key found in %s", SSHDirectory)
+}
+
 // SSHPublicKey returns the contents of the default public key
 // expected by roachprod.
 func SSHPublicKey() (string, error) {
-	sshKey, err := os.ReadFile(SSHPublicKeyPath)
+	sshPublicKeyPath, err := SSHPublicKeyPath()
+	if err != nil {
+		return "", err
+	}
+	sshKey, err := os.ReadFile(sshPublicKeyPath)
 	if err != nil {
 		if oserror.IsNotExist(err) {
-			return "", errors.Wrapf(err, "please run ssh-keygen externally to create your %s file", SSHPublicKeyPath)
+			return "", errors.Wrapf(err, "please run ssh-keygen externally to create a public key file")
 		}
 		return "", errors.Wrap(err, "failed to read public SSH key")
 	}
