@@ -65,6 +65,7 @@ const mapStateToProps = (state: AppState): DatabasesPageData => {
       spanStats: state.adminUI?.databaseDetailsSpanStats,
       nodeRegions,
       isTenant,
+      nodeStatuses: state.adminUI.nodes.data,
     }),
     sortSetting: selectDatabasesSortSetting(state),
     search: selectDatabasesSearch(state),

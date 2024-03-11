@@ -38,7 +38,7 @@ func runDecrypt(_ *cobra.Command, args []string) (returnErr error) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := cli.OpenEngine(dir, stopper, storage.MustExist, storage.ReadOnly)
+	db, err := cli.OpenEngine(dir, stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return errors.Wrap(err, "could not open store")
 	}

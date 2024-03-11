@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -213,7 +214,7 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 
 	dir := args[0]
 
-	db, err := cli.OpenEngine(dir, stopper, storage.MustExist, storage.ReadOnly)
+	db, err := cli.OpenEngine(dir, stopper, fs.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
