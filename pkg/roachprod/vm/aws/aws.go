@@ -438,7 +438,11 @@ func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 				if err != nil {
 					return err
 				}
-				l.Printf("imported %s as %s in region %s", config.SSHPublicKeyPath, keyName, region)
+				sshPublicKeyPath, err := config.SSHPublicKeyPath()
+				if err != nil {
+					return err
+				}
+				l.Printf("imported %s as %s in region %s", sshPublicKeyPath, keyName, region)
 			}
 			return nil
 		})
