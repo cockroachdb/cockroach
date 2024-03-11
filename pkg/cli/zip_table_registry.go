@@ -1277,6 +1277,35 @@ var zipSystemTables = DebugZipTableRegistry{
 			"locality",
 		},
 	},
+	// system.sql_stats_cardinality shows row counts for all of the system tables related to the SQL Stats
+	// system, grouped by aggregated timestamp. None of this information is sensitive. It aids in escalations
+	// involving the SQL Stats system.
+	"system.sql_stats_cardinality": func() TableRegistryConfig {
+		query := `
+			SELECT table_name, aggregated_ts, row_count
+			FROM (
+					SELECT 'system.statement_statistics' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.statement_statistics
+					GROUP BY aggregated_ts
+				UNION
+					SELECT 'system.transaction_statistics' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.transaction_statistics
+					GROUP BY aggregated_ts
+				UNION
+					SELECT 'system.statement_activity' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.statement_activity
+					GROUP BY aggregated_ts
+				UNION
+					SELECT 'system.transaction_activity' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.transaction_activity
+					GROUP BY aggregated_ts
+			)
+			ORDER BY table_name, aggregated_ts DESC;`
+		return TableRegistryConfig{
+			customQueryUnredacted: query,
+			customQueryRedacted:   query,
+		}
+	}(),
 	"system.sqlliveness": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"session_id",
