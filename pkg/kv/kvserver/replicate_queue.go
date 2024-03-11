@@ -645,6 +645,13 @@ func (rq *replicateQueue) shouldQueue(
 func (rq *replicateQueue) process(
 	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
+	if tokenErr := repl.allocatorToken.TryAcquire(ctx, rq.name); tokenErr != nil {
+		log.KvDistribution.VEventf(ctx,
+			1, "unable to acquire allocator token to process range: %v", tokenErr)
+		return false, tokenErr
+	}
+	defer repl.allocatorToken.Release(ctx)
+
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
