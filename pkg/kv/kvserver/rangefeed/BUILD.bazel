@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "budget.go",
         "catchup_scan.go",
+        "event_size.go",
         "filter.go",
         "metrics.go",
         "processor.go",
@@ -56,6 +57,7 @@ go_test(
         "budget_test.go",
         "catchup_scan_bench_test.go",
         "catchup_scan_test.go",
+        "event_size_test.go",
         "processor_test.go",
         "registry_test.go",
         "resolved_timestamp_test.go",
@@ -76,6 +78,7 @@ go_test(
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/testutils/skip",
+        "//pkg/testutils/storageutils",
         "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/future",
