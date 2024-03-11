@@ -1245,6 +1245,20 @@ func (s *state) GetSpanConfigForKey(
 	return *rng.config, nil
 }
 
+// GetSpanConfigForKeyWithBounds is added for the spanconfig.StoreReader interface.
+func (s *state) GetSpanConfigForKeyWithBounds(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, roachpb.Span, error) {
+	rng := s.rangeFor(ToKey(key.AsRawKey()))
+	if rng == nil {
+		panic(fmt.Sprintf("programming error: range for key %s doesn't exist", key))
+	}
+	return *rng.config, roachpb.Span{
+		Key:    rng.startKey.ToRKey().AsRawKey(),
+		EndKey: rng.endKey.ToRKey().AsRawKey(),
+	}, nil
+}
+
 // Scan is added for the rangedesc.Scanner interface, required for
 // SpanConfigConformanceReport. We ignore the span passed in and return every
 // descriptor available.

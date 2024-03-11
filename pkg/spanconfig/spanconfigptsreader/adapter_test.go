@@ -191,6 +191,12 @@ func (m *manualSubscriber) GetSpanConfigForKey(
 	panic("unimplemented")
 }
 
+func (m *manualSubscriber) GetSpanConfigForKeyWithBounds(
+	context.Context, roachpb.RKey,
+) (roachpb.SpanConfig, roachpb.Span, error) {
+	panic("unimplemented")
+}
+
 func (m *manualSubscriber) LastUpdated() hlc.Timestamp {
 	return m.updatedTS
 }

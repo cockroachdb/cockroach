@@ -9707,7 +9707,7 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 
 	var exportReqsAtomic int64
 
-	tc, sqlDB, iodir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10,
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10,
 		InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				// Disabled to run within tenants because the function that sets up the restoring cluster
@@ -9734,16 +9734,6 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 		})
 	defer cleanupFn()
 
-	_, restoreDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, iodir, InitManualReplication,
-		base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
-				},
-			},
-		})
-	defer cleanup()
-
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 	conn := tc.Conns[0]
@@ -9754,33 +9744,42 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, localFoo)
 
 	sqlDB.Exec(t, `INSERT INTO data.foo select * from generate_series(6,10)`)
-	// Create another table.
-	sqlDB.Exec(t, `CREATE TABLE data.bar (id INT, INDEX bar(id))`)
-	sqlDB.Exec(t, `INSERT INTO data.bar select * from generate_series(1,10)`)
 
 	// Set foo to exclude_data_from_backup and back it up. The ExportRequest
 	// should be a noop and backup no data.
 	sqlDB.Exec(t, `ALTER TABLE data.foo SET (exclude_data_from_backup = true)`)
+	fooTableSpan := getTableSpan(t, conn, "foo", "data")
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "data", func(r *kvserver.Replica) (bool, error) {
-		if !r.ExcludeDataFromBackup(context.Background()) {
+		exclude, err := r.ExcludeDataFromBackup(context.Background(), fooTableSpan)
+		if err != nil {
+			return false, err
+		}
+		if !exclude {
 			return false, errors.New("waiting for the range containing table data.foo to split")
 		}
 		return true, nil
 	})
-	waitForReplicaFieldToBeSet(t, tc, conn, "bar", "data", func(r *kvserver.Replica) (bool, error) {
-		if r.ExcludeDataFromBackup(context.Background()) {
-			return false, errors.New("waiting for the range containing table data.bar to split")
-		}
-		return true, nil
-	})
+
+	// Create another table. Assert we don't see ExcludeDataFromBackup on it
+	sqlDB.Exec(t, `CREATE TABLE data.bar (id INT, INDEX bar(id))`)
+	_, r := getStoreAndReplica(t, tc, conn, "bar", "data")
+	barTableSpan := getTableSpan(t, conn, "bar", "data")
+	exclude, err := r.ExcludeDataFromBackup(context.Background(), barTableSpan)
+	require.NoError(t, err)
+	require.False(t, exclude, "bar should never be excluded")
+	sqlDB.Exec(t, `INSERT INTO data.bar select * from generate_series(1,10)`)
 
 	sqlDB.Exec(t, `BACKUP DATABASE data INTO LATEST IN $1`, localFoo)
 	sqlDB.Exec(t, `CREATE TABLE data.baz (id INT)`)
 	sqlDB.Exec(t, `ALTER TABLE data.baz SET (exclude_data_from_backup = true)`)
 	sqlDB.Exec(t, `INSERT INTO data.baz select * from generate_series(1,10)`)
-
+	bazTableSpan := getTableSpan(t, conn, "baz", "data")
 	waitForReplicaFieldToBeSet(t, tc, conn, "baz", "data", func(r *kvserver.Replica) (bool, error) {
-		if !r.ExcludeDataFromBackup(context.Background()) {
+		exclude, err := r.ExcludeDataFromBackup(context.Background(), bazTableSpan)
+		if err != nil {
+			return false, err
+		}
+		if !exclude {
 			return false, errors.New("waiting for the range containing table data.foo to split")
 		}
 		return true, nil
@@ -9788,10 +9787,10 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP DATABASE data INTO LATEST IN $1`, localFoo)
 
-	restoreDB.Exec(t, `RESTORE DATABASE data FROM LATEST IN $1`, localFoo)
-	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.foo`), 5)
-	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.bar`), 10)
-	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.baz`), 0)
+	sqlDB.Exec(t, `RESTORE DATABASE data FROM LATEST IN $1 WITH new_db_name=data2`, localFoo)
+	require.Len(t, sqlDB.QueryStr(t, `SELECT * FROM data2.foo`), 5)
+	require.Len(t, sqlDB.QueryStr(t, `SELECT * FROM data2.bar`), 10)
+	require.Len(t, sqlDB.QueryStr(t, `SELECT * FROM data2.baz`), 0)
 
 	before := atomic.LoadInt64(&exportReqsAtomic)
 	sqlDB.Exec(t, `BACKUP data.foo TO $1`, localFoo+"/tbl")
@@ -9886,8 +9885,13 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 
 	_, err = conn.Exec(`ALTER TABLE foo SET (exclude_data_from_backup = true)`)
 	require.NoError(t, err)
+	fooTableSpan := getTableSpan(t, conn, "foo", "defaultdb")
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "defaultdb", func(r *kvserver.Replica) (bool, error) {
-		if !r.ExcludeDataFromBackup(ctx) {
+		excluded, err := r.ExcludeDataFromBackup(ctx, fooTableSpan)
+		if err != nil {
+			return false, err
+		}
+		if !excluded {
 			return false, errors.New("waiting for exclude_data_from_backup to be applied")
 		}
 		return true, nil

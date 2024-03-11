@@ -175,7 +175,7 @@ func TestRandomized(t *testing.T) {
 
 			// Ensure that the config accessed through the StoreReader interface is
 			// the same as above.
-			storeReaderConfig, found := store.getSpanConfigForKey(ctx, roachpb.RKey(testSpan.Key))
+			storeReaderConfig, _, found := store.getSpanConfigForKey(ctx, roachpb.RKey(testSpan.Key))
 			require.True(t, found)
 			require.True(t, foundSpanConfigPair.config.Equal(storeReaderConfig))
 		})
@@ -265,7 +265,7 @@ func TestRandomized(t *testing.T) {
 			require.Truef(t, querySpan.ProperlyContainsKey(curSplitKey.AsRawKey()),
 				"invalid split key %s (over span %s)", curSplitKey, querySpan)
 
-			confAtCurSplitKey, found := store.getSpanConfigForKey(ctx, curSplitKey)
+			confAtCurSplitKey, _, found := store.getSpanConfigForKey(ctx, curSplitKey)
 			require.True(t, found)
 
 			if i == 0 {

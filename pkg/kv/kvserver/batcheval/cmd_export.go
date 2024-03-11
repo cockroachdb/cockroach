@@ -108,7 +108,12 @@ func evalExport(
 	// ExportRequest is likely to find its target data has been GC'ed at this
 	// point, and so if the range being exported is part of such a table, we do
 	// not want to send back any row data to be backed up.
-	if cArgs.EvalCtx.ExcludeDataFromBackup(ctx) {
+	excludeFromBackup, err := cArgs.EvalCtx.ExcludeDataFromBackup(ctx,
+		roachpb.Span{Key: args.Key, EndKey: args.EndKey})
+	if err != nil {
+		return result.Result{}, err
+	}
+	if excludeFromBackup {
 		log.Infof(ctx, "[%s, %s) is part of a table excluded from backup, returning empty ExportResponse", args.Key, args.EndKey)
 		return result.Result{}, nil
 	}

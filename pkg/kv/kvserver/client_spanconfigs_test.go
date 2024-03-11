@@ -185,6 +185,12 @@ func (m *mockSpanConfigSubscriber) GetSpanConfigForKey(
 	return m.Store.GetSpanConfigForKey(ctx, key)
 }
 
+func (m *mockSpanConfigSubscriber) GetSpanConfigForKeyWithBounds(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, roachpb.Span, error) {
+	return m.Store.GetSpanConfigForKeyWithBounds(ctx, key)
+}
+
 func (m *mockSpanConfigSubscriber) GetProtectionTimestamps(
 	context.Context, roachpb.Span,
 ) ([]hlc.Timestamp, hlc.Timestamp, error) {

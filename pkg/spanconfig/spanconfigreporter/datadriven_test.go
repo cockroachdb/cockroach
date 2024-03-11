@@ -285,6 +285,13 @@ func (s *mockCluster) GetSpanConfigForKey(
 	return s.store.GetSpanConfigForKey(ctx, key)
 }
 
+// GetSpanConfigForKeyWithBounds implements spanconfig.StoreReader.
+func (s *mockCluster) GetSpanConfigForKeyWithBounds(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, roachpb.Span, error) {
+	return s.store.GetSpanConfigForKeyWithBounds(ctx, key)
+}
+
 func (s *mockCluster) addNode(desc roachpb.NodeDescriptor) {
 	_, found := s.nodes[desc.NodeID]
 	require.Falsef(s.t, found, "attempting to re-add n%d", desc.NodeID)
