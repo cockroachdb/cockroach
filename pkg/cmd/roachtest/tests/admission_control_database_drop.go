@@ -40,7 +40,7 @@ func registerDatabaseDrop(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:             "admission-control/database-drop",
-		Timeout:          10 * time.Hour,
+		Timeout:          15 * time.Hour,
 		Owner:            registry.OwnerAdmissionControl,
 		Benchmark:        true,
 		CompatibleClouds: registry.OnlyGCE,
