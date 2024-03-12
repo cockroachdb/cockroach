@@ -405,6 +405,37 @@ NOTICE: outer handler
 NOTICE: inner block
 NOTICE: inner handler 100
 
+# A block can be nested inside another block that has an exception handler.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    RAISE NOTICE 'outer block: %', x;
+    BEGIN
+      x := x + 1;
+      RAISE NOTICE 'inner block: %', x;
+      SELECT 1 // 0;
+    EXCEPTION WHEN division_by_zero THEN
+      x := x + 1;
+      RAISE NOTICE 'inner handler: %', x;
+      SELECT 1 // 0;
+    END;
+  EXCEPTION WHEN division_by_zero THEN
+    x := x + 1;
+    RAISE NOTICE 'outer handler: %', x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: outer block: 0
+NOTICE: inner block: 1
+NOTICE: inner handler: 2
+NOTICE: outer handler: 3
+
 subtest error
 
 statement ok
@@ -454,25 +485,6 @@ CREATE PROCEDURE p() AS $$
     BEGIN
       RAISE NOTICE '%', x;
     END;
-  END
-$$ LANGUAGE PLpgSQL;
-
-# A block cannot currently be nested in a block with an exception handler
-# (tracked in #118551).
-statement error pgcode 0A000 pq: unimplemented: PL/pgSQL blocks cannot yet be nested within a block that has an exception handler
-CREATE PROCEDURE p() AS $$
-  DECLARE
-    x INT := 0;
-  BEGIN
-    RAISE NOTICE '%', x;
-    DECLARE
-      y INT := 1 // x;
-    BEGIN
-      RAISE NOTICE '% %', x, y;
-    END;
-  EXCEPTION
-    WHEN division_by_zero THEN
-      RAISE NOTICE 'oops!';
   END
 $$ LANGUAGE PLpgSQL;
 
