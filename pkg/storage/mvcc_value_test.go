@@ -309,6 +309,26 @@ func BenchmarkEncodeMVCCValue(b *testing.B) {
 	}
 }
 
+func BenchmarkEncodeMVCCValueForExport(b *testing.B) {
+	DisableMetamorphicSimpleValueEncoding(b)
+	headers, values := mvccValueBenchmarkConfigs()
+	for hDesc, h := range headers {
+		for vDesc, v := range values {
+			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
+			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
+			b.Run(name, func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					res, err := EncodeMVCCValueForExport(mvccValue)
+					if err != nil { // for performance
+						require.NoError(b, err)
+					}
+					_ = res
+				}
+			})
+		}
+	}
+}
+
 func BenchmarkDecodeMVCCValue(b *testing.B) {
 	headers, values := mvccValueBenchmarkConfigs()
 	for hDesc, h := range headers {

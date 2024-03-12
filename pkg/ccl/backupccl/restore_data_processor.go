@@ -584,10 +584,12 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
 
-		// NB: Using valueScratch here assumes that
+		// Using valueScratch here assumes that
 		// DecodeValueFromMVCCValue, ClearChecksum, and
 		// InitChecksum don't copy/reallocate the slice they
-		// were given.
+		// were given. We expect that value.ClearChecksum and
+		// value.InitChecksum calls above have modified
+		// valueScratch.
 		if err := batcher.AddMVCCKey(ctx, key, valueScratch); err != nil {
 			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}

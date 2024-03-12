@@ -408,9 +408,11 @@ func (r *importResumer) prepareTablesForIngestion(
 	var err error
 	var newTableDescs []jobspb.ImportDetails_Table
 	var desc *descpb.TableDescriptor
+
+	useImportEpochs := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V24_1)
 	for i, table := range details.Tables {
 		if !table.IsNew {
-			desc, err = prepareExistingTablesForIngestion(ctx, txn, descsCol, table.Desc)
+			desc, err = prepareExistingTablesForIngestion(ctx, txn, descsCol, table.Desc, useImportEpochs)
 			if err != nil {
 				return importDetails, err
 			}
@@ -488,7 +490,11 @@ func (r *importResumer) prepareTablesForIngestion(
 // prepareExistingTablesForIngestion prepares descriptors for existing tables
 // being imported into.
 func prepareExistingTablesForIngestion(
-	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, desc *descpb.TableDescriptor,
+	ctx context.Context,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+	desc *descpb.TableDescriptor,
+	useImportEpochs bool,
 ) (*descpb.TableDescriptor, error) {
 	if len(desc.Mutations) > 0 {
 		return nil, errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", desc.Mutations[0].String())
@@ -508,7 +514,14 @@ func prepareExistingTablesForIngestion(
 	// Take the table offline for import.
 	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
 	// ensure that filtering by state handles IMPORTING correctly.
-	importing.OfflineForImport()
+
+	// We only use the new OfflineForImport on 24.1, which bumps
+	// the ImportEpoch, if we are completely on 24.1.
+	if useImportEpochs {
+		importing.OfflineForImport()
+	} else {
+		importing.SetOffline(tabledesc.OfflineReasonImporting)
+	}
 
 	// TODO(dt): de-validate all the FKs.
 	if err := descsCol.WriteDesc(

@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -482,7 +481,6 @@ func runBackupProcessor(
 			case spans := <-todo:
 				for _, span := range spans {
 					for len(span.span.Key) != 0 {
-						includeMVCCValueHeader := clusterSettings.Version.IsActive(ctx, clusterversion.V24_1)
 						splitMidKey := splitKeysOnTimestamps.Get(&clusterSettings.SV)
 						// If we started splitting already, we must continue until we reach the end
 						// of split span.
@@ -496,7 +494,7 @@ func runBackupProcessor(
 							MVCCFilter:             spec.MVCCFilter,
 							TargetFileSize:         batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
 							SplitMidKey:            splitMidKey,
-							IncludeMVCCValueHeader: includeMVCCValueHeader,
+							IncludeMVCCValueHeader: spec.IncludeMVCCValueHeader,
 						}
 
 						// If we're doing re-attempts but are not yet in the priority regime,

@@ -134,17 +134,17 @@ func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Print(v.Value.PrettyPrint())
 }
 
-// EncodeMVCCValueForExport strips fields from the MVCCValueHeader that
-// should not get exported out of the cluster.
+// EncodeMVCCValueForExport encodes fields from the MVCCValueHeader
+// that are appropriate for export out of the cluster.
 func EncodeMVCCValueForExport(mvccValue MVCCValue) ([]byte, error) {
-	// Consider a fast path, where only the roachpb.Value gets exported.
-	// Currently, this only occurs if the value was not imported.
 	if mvccValue.ImportEpoch == 0 {
 		return mvccValue.Value.RawBytes, nil
 	}
 
-	// Manually strip off any non-exportable fields, and re-encode the mvcc value.
-	mvccValue.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp{}
+	// We only export ImportEpoch.
+	mvccValue.MVCCValueHeader = enginepb.MVCCValueHeader{
+		ImportEpoch: mvccValue.ImportEpoch,
+	}
 	return EncodeMVCCValue(mvccValue)
 }
 

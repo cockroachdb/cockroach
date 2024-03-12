@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -392,12 +391,14 @@ func ingestKvs(
 		true /* isPKAdder */)
 
 	var bulkAdderImportEpoch uint32
-	if flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.V24_1) && len(spec.Tables) == 1 {
-		for _, v := range spec.Tables {
+	for _, v := range spec.Tables {
+		if bulkAdderImportEpoch == 0 {
 			bulkAdderImportEpoch = v.Desc.ImportEpoch
+		} else if bulkAdderImportEpoch != v.Desc.ImportEpoch {
+			return nil, errors.AssertionFailedf("inconsistent import epoch on multi-table import")
 		}
-
 	}
+
 	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
 		Name:                     pkAdderName,
 		DisallowShadowingBelow:   writeTS,
