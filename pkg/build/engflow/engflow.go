@@ -11,10 +11,12 @@
 package engflow
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"slices"
@@ -23,8 +25,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	bes "github.com/cockroachdb/cockroach/pkg/build/bazel/bes"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	//lint:ignore SA1019 grandfathered
 	gproto "github.com/golang/protobuf/proto"
 	"golang.org/x/net/http2"
@@ -428,6 +433,64 @@ func ConstructJSONReport(invocation *InvocationInfo, serverName string) (JsonRep
 	}
 
 	return ret, errs
+}
+
+func postOptions(res *TestResultWithXml, opts FailurePosterOptions) *issues.Options {
+	return &issues.Options{
+		Token:  opts.GithubApiToken,
+		Org:    "cockroachdb",
+		Repo:   "cockroach",
+		SHA:    opts.Sha,
+		Branch: getBranch(),
+		EngFlowOptions: &issues.EngFlowOptions{
+			Attempt:      int(res.Attempt),
+			InvocationID: opts.InvocationId,
+			Label:        res.Label,
+			Run:          int(res.Run),
+			Shard:        int(res.Shard),
+			ServerURL:    fmt.Sprintf("https://%s.cluster.engflow.com/", opts.ServerName),
+		},
+		GetBinaryVersion: build.BinaryVersion,
+	}
+}
+
+type FailurePosterOptions struct {
+	Sha, InvocationId, ServerName, GithubApiToken string
+	ExtraParams                                   []string
+}
+
+// FailurePoster returns a githubpost.FailurePoster that's appropriate for use
+// with githubpost.PostFromTestXMLWithFailurePoster.
+func FailurePoster(res *TestResultWithXml, opts FailurePosterOptions) githubpost.FailurePoster {
+	postOpts := postOptions(res, opts)
+	formatter := func(ctx context.Context, failure githubpost.Failure) (issues.IssueFormatter, issues.PostRequest) {
+		fmter, req := githubpost.DefaultFormatter(ctx, failure)
+		// We don't want an artifacts link: there are none on EngFlow.
+		req.Artifacts = ""
+		if req.ExtraParams == nil {
+			req.ExtraParams = make(map[string]string)
+		}
+		if res.Run != 0 {
+			req.ExtraParams["run"] = fmt.Sprintf("%d", res.Run)
+		}
+		if res.Shard != 0 {
+			req.ExtraParams["shard"] = fmt.Sprintf("%d", res.Shard)
+		}
+		if res.Attempt != 0 {
+			req.ExtraParams["attempt"] = fmt.Sprintf("%d", res.Attempt)
+		}
+		if len(opts.ExtraParams) > 0 {
+			for _, key := range opts.ExtraParams {
+				req.ExtraParams[key] = "true"
+			}
+		}
+		return fmter, req
+	}
+	return func(ctx context.Context, failure githubpost.Failure) error {
+		fmter, req := formatter(ctx, failure)
+		_, err := issues.Post(ctx, log.Default(), fmter, req, postOpts)
+		return err
+	}
 }
 
 func tryParseInt(s string) int64 {

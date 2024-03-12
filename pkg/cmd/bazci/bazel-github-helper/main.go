@@ -14,20 +14,26 @@
 // bazel-github-helper is a binary to parse test results from a "build event
 // protocol" binary file, as constructed by
 // `bazel ... --build_event_binary_file`. We use this data to construct a JSON
-// test report.
+// test report. We also optionally populate `GITHUB_STEP_SUMMARY` and can post
+// GitHub issues if the `GITHUB_ACTIONS_BRANCH` variable is set to `master`
+// or a release branch.
 
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build/engflow"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost"
 )
 
 var (
@@ -64,12 +70,10 @@ func process() error {
 
 	if *jsonOutFile != "" {
 		jsonData, err := json.Marshal(jsonReport)
-		if err != nil {
-			return err
-		}
-		err = os.WriteFile(*jsonOutFile, jsonData, 0644)
-		if err != nil {
-			return err
+		if err == nil {
+			logError("write json report", os.WriteFile(*jsonOutFile, jsonData, 0644))
+		} else {
+			logError("marshal json", err)
 		}
 	} else {
 		fmt.Fprintln(os.Stderr, "-jsonoutfile not passed, skipping constructing JSON test report")
@@ -77,16 +81,55 @@ func process() error {
 
 	if summaryFile != "" {
 		summaryF, err := os.OpenFile(summaryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = summaryF.Close() }()
-		err = dumpSummary(summaryF, invocation)
-		if err != nil {
-			return err
+		if err == nil {
+			defer func() { _ = summaryF.Close() }()
+			logError("dump summary", dumpSummary(summaryF, invocation))
+		} else {
+			logError("open summary file", err)
 		}
 	} else {
 		fmt.Fprintln(os.Stderr, "GITHUB_STEP_SUMMARY not passed, skipping populating GitHub actions test report")
+	}
+
+	branch := os.Getenv("GITHUB_ACTIONS_BRANCH")
+	job := os.Getenv("GITHUB_JOB")
+	githubToken := os.Getenv("GITHUB_TOKEN")
+	sha, err := getSha()
+	if err != nil {
+		logError("get checked-out SHA", err)
+	}
+	ctx := context.Background()
+	// Only post issues if this is master or a release branch and the job is
+	// not EXPERIMENTAL.
+	if (branch == "master" || strings.HasPrefix(branch, "release-")) &&
+		!strings.HasPrefix(job, "EXPERIMENTAL_") &&
+		githubToken != "" {
+		for _, testResults := range invocation.TestResults {
+			for _, testResult := range testResults {
+				if testResult.Err != nil {
+					// We already logged this error.
+					continue
+				}
+				var testXml bazelutil.TestSuites
+				if err := xml.Unmarshal([]byte(testResult.TestXml), &testXml); err != nil {
+					fmt.Fprintf(os.Stderr, "Could not parse test.xml: got error %+v\n", err)
+					continue
+				}
+
+				if err := githubpost.PostFromTestXMLWithFailurePoster(
+					ctx, engflow.FailurePoster(testResult, engflow.FailurePosterOptions{
+						Sha:            sha,
+						InvocationId:   invocation.InvocationId,
+						ServerName:     "mesolite",
+						GithubApiToken: githubToken,
+					}), testXml); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to process %+v with the following error: %+v", testXml, err)
+					continue
+				}
+			}
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "Not reporting issues for branch %s and job %s", branch, job)
 	}
 
 	return nil
@@ -193,6 +236,22 @@ func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
 	}
 
 	return nil
+}
+
+func getSha() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func logError(ctx string, err error) {
+	if err == nil {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "encountered error when attempting to %s: %+v", ctx, err)
 }
 
 func main() {

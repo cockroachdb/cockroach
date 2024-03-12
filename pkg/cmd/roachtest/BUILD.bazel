@@ -21,7 +21,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/build",
-        "//pkg/cmd/internal/issues",
+        "//pkg/cmd/bazci/githubpost/issues",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
@@ -90,7 +90,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":roachtest_lib"],
     deps = [
-        "//pkg/cmd/internal/issues",
+        "//pkg/cmd/bazci/githubpost/issues",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",

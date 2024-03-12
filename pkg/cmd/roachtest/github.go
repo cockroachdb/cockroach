@@ -16,7 +16,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"

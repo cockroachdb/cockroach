@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
