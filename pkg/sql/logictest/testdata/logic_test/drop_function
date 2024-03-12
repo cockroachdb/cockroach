@@ -289,12 +289,19 @@ CREATE SCHEMA altSchema;
 statement ok
 ALTER FUNCTION f_called_by_b_1 SET SCHEMA altSchema;
 
+skipif config local-legacy-schema-changer
 statement ok
 DROP SCHEMA altSchema CASCADE;
 
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop function \"f_called_by_b_1\" because other object \(\[test.public.f_called_by_b_2, test.public.t1_with_b_2_ref\]\) still depend on it
+DROP SCHEMA altSchema CASCADE;
+
+skipif config local-legacy-schema-changer
 statement error pgcode 42883 unknown function: f_called_by_b_2()
 SELECT * FROM  f_called_by_b_2();
 
+skipif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1_with_b_2_ref];
 ----
@@ -303,6 +310,11 @@ CREATE TABLE public.t1_with_b_2_ref (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t1_with_b_2_ref_pkey PRIMARY KEY (rowid ASC)
 )
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP FUNCTION f_called_by_b_2;
+DROP TABLE t1_with_b_2_ref;
 
 statement ok
 DROP FUNCTION f_b;

@@ -117,7 +117,7 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 
 	}
 
-	if err := d.resolveCollectedObjects(ctx, p); err != nil {
+	if err := d.resolveCollectedObjects(ctx, false /*dropDatabase*/, p); err != nil {
 		return nil, err
 	}
 
