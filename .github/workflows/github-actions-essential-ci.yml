@@ -4,7 +4,7 @@ on:
     types: [ opened, reopened, synchronize, edited ]
     branches: [ master ]
 concurrency:
-  group: ${{ github.event.pull_request.number }}
+  group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 jobs:
   EXPERIMENTAL_acceptance:
@@ -12,7 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run acceptance tests
@@ -33,7 +35,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - name: check generated code
         run: ./build/github/check-generated-code.sh
@@ -45,7 +49,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run docker tests
@@ -62,12 +68,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: cockroach
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - uses: actions/checkout@v4
         with:
           path: examples-orms
           repository: cockroachdb/examples-orms
           ref: 876b2d52ae2b63aa9cc1741c8d189ff0b66ab0d7
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./cockroach/build/github/get-engflow-keys.sh
       - name: run tests
         run: ./cockroach/build/github/examples-orms.sh
@@ -79,8 +87,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
           submodules: true
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run lint tests
@@ -96,8 +106,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
           submodules: true
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - name: run local roachtests
         run: ./build/github/local-roachtest.sh crosslinux
@@ -114,8 +126,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
           submodules: true
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - name: run local roachtests
         run: ./build/github/local-roachtest.sh crosslinuxfips
@@ -132,11 +146,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: build
-        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev //c-deps:libgeos --config crossmacos --jobs 100 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --bes_keywords build-macos-amd64 --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
+        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev //c-deps:libgeos --config crossmacos --jobs 100 --remote_download_minimal --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
@@ -148,11 +164,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: build
-        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev //c-deps:libgeos --config crossmacosarm --jobs 100 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --bes_keywords build-macos-arm64 --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
+        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev //c-deps:libgeos --config crossmacosarm --jobs 100 --remote_download_minimal --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
@@ -166,11 +184,13 @@ jobs:
         with:
           # By default, checkout merges the PR into the current master.
           # Instead, we want to check out the PR as is.
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run tests
-        run: bazel test //pkg:all_tests //pkg/ui:lint //pkg/ui:test --config crosslinux --jobs 300 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --bes_keywords ci-unit-test --config=use_ci_timeouts --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
+        run: bazel test //pkg:all_tests //pkg/ui:lint //pkg/ui:test --config crosslinux --jobs 300 --remote_download_minimal --bes_keywords ci-unit-test --config=use_ci_timeouts --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh)
       - name: upload test results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
@@ -182,11 +202,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: build
-        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss --config crosswindows --jobs 100 --remote_download_minimal --bes_keywords=github_pr_number=${{ github.event.pull_request.number }} --bes_keywords build-windows --build_event_binary_file=bes.bin --enable_runfiles $(./build/github/engflow-args.sh)
+        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss --config crosswindows --jobs 100 --remote_download_minimal --build_event_binary_file=bes.bin --enable_runfiles $(./build/github/engflow-args.sh)
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()

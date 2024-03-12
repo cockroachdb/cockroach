@@ -548,6 +548,7 @@ func TestLint(t *testing.T) {
 					":!testutils/backup.go",                  // For BACKUP_TESTING_BUCKET
 					":!compose/compose_test.go",              // For PATH.
 					":!testutils/skip/skip.go",               // For REMOTE_EXEC.
+					":!build/engflow/engflow.go",             // For GITHUB_ACTIONS_BRANCH, etc.
 				},
 			},
 		} {

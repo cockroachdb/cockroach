@@ -1012,7 +1012,7 @@ func urlGenerator(
 			port = desc.Port
 		}
 		scheme := "http"
-		if c.Secure {
+		if uConfig.secure {
 			scheme = "https"
 		}
 		if !strings.HasPrefix(uConfig.path, "/") {
