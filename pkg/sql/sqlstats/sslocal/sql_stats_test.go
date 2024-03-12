@@ -712,34 +712,39 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	testData := []*struct {
+	type testData struct {
+		syncutil.Mutex
+
 		query        string
 		placeholders []interface{}
 		phaseTimes   *sessionphase.Times
-	}{
-		{
-			query:        "SELECT $1::INT8",
-			placeholders: []interface{}{1},
-			phaseTimes:   nil,
-		},
+	}
+
+	tc := &testData{
+		query:        "SELECT $1::INT8",
+		placeholders: []interface{}{1},
+		phaseTimes:   nil,
 	}
 
 	g := ctxgroup.WithContext(ctx)
 	var finishedExecute syncutil.AtomicBool
 	waitTxnFinish := make(chan struct{})
-	currentTestCaseIdx := 0
 	const latencyThreshold = time.Second * 5
 
 	var params base.TestServerArgs
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		AfterExecute: func(ctx context.Context, stmt string, isInternal bool, err error) {
-			if currentTestCaseIdx < len(testData) && testData[currentTestCaseIdx].query == stmt {
+			tc.Lock()
+			defer tc.Unlock()
+			if tc.query == stmt {
 				finishedExecute.Set(true)
 			}
 		},
 		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string) {
-			if !isInternal && testData[currentTestCaseIdx].query == stmt && finishedExecute.Get() {
-				testData[currentTestCaseIdx].phaseTimes = phaseTimes.Clone()
+			tc.Lock()
+			defer tc.Unlock()
+			if !isInternal && tc.query == stmt && finishedExecute.Get() {
+				tc.phaseTimes = phaseTimes.Clone()
 				g.GoCtx(func(ctx context.Context) error {
 					waitTxnFinish <- struct{}{}
 					return nil
@@ -749,29 +754,41 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 	}
 	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(ctx)
+	ts := s.ApplicationLayer()
 
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "StartServer", url.User(username.RootUser))
+		t, ts.AdvSQLAddr(), "StartServer", url.User(username.RootUser))
 	defer cleanupGoDB()
 	c, err := pgx.Connect(ctx, pgURL.String())
 	require.NoError(t, err, "error connecting with pg url")
 
-	for currentTestCaseIdx < len(testData) {
-		finishedExecute.Set(false)
-		tc := testData[currentTestCaseIdx]
-		// Make extended protocol query
-		_ = c.QueryRow(ctx, tc.query, tc.placeholders...)
-		require.NoError(t, err, "error scanning row")
-		<-waitTxnFinish
+	finishedExecute.Set(false)
 
+	var p string
+	var q []interface{}
+	func() {
+		tc.Lock()
+		defer tc.Unlock()
+		p = tc.query
+		q = tc.placeholders
+	}()
+
+	// Make extended protocol query
+	_ = c.QueryRow(ctx, p, q...)
+	require.NoError(t, err, "error scanning row")
+	<-waitTxnFinish
+
+	func() {
+		tc.Lock()
+		defer tc.Unlock()
 		// Ensure test case phase times are populated by query txn.
 		require.NotNil(t, tc.phaseTimes)
 		// Ensure SessionTransactionStarted variable is populated.
 		require.False(t, tc.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted).IsZero())
 		// Ensure compute transaction service latency is within a reasonable threshold.
 		require.Less(t, tc.phaseTimes.GetTransactionServiceLatency(), latencyThreshold)
-		currentTestCaseIdx++
-	}
+	}()
+
 	require.NoError(t, g.Wait())
 }
 
