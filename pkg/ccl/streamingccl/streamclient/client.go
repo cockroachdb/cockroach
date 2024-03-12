@@ -11,9 +11,9 @@ package streamclient
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -288,7 +288,17 @@ func processOptions(opts []Option) *options {
 }
 
 func RedactSourceURI(addr string) (string, error) {
-	return cloud.SanitizeExternalStorageURI(addr, RedactableURLParameters)
+	uri, err := url.Parse(addr)
+	if err != nil {
+		return "", err
+	}
+	if uri.User != nil {
+		if _, passwordSet := uri.User.Password(); passwordSet {
+			uri.User = url.UserPassword(uri.User.Username(), "redacted")
+		}
+	}
+	uri.RawQuery = "redacted"
+	return uri.String(), nil
 }
 
 /*
