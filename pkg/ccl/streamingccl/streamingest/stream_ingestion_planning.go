@@ -290,6 +290,7 @@ func createReplicationJob(
 		Username:    p.User(),
 		Progress: jobspb.StreamIngestionProgress{
 			ReplicatedTime:        resumeTimestamp,
+			InitialSplitComplete:  revertFirst,
 			InitialRevertRequired: revertFirst,
 		},
 		Details: streamIngestionDetails,
