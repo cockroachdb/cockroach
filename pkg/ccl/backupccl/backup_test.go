@@ -7109,14 +7109,15 @@ func TestBackupRestoreTenant(t *testing.T) {
 	tenant20 := sqlutils.MakeSQLRunner(conn20)
 	tenant20.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.qux(i int primary key); INSERT INTO foo.qux VALUES (120), (220)`)
 
-	var ts1, ts2 string
-	systemDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts1)
+	var ts1, ts2, clusterID string
+	systemDB.QueryRow(t, `SELECT cluster_logical_timestamp(), crdb_internal.cluster_id()`).Scan(&ts1, &clusterID)
 	tenant10.Exec(t, `UPDATE foo.bar SET i = i + 10000`)
 	tenant10.Exec(t, `CREATE TABLE foo.bar2(i int primary key); INSERT INTO foo.bar2 VALUES (1010), (2010)`)
 	systemDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts2)
 
 	// BACKUP tenant 10 at ts1, before they created bar2.
 	systemDB.Exec(t, `BACKUP TENANT 10 TO 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts1)
+
 	// Also create a full cluster backup. It should contain the tenant.
 	systemDB.Exec(t, fmt.Sprintf("BACKUP TO 'nodelocal://1/clusterwide' AS OF SYSTEM TIME %s WITH include_all_virtual_clusters", ts1))
 
@@ -7152,29 +7153,33 @@ func TestBackupRestoreTenant(t *testing.T) {
 		defer restoreTC.Stopper().Stop(ctx)
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
-		restoreDB.CheckQueryResults(t, `select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`, [][]string{
+		restoreDB.CheckQueryResults(t, `select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities' from system.tenants`, [][]string{
 			{
 				`1`, `true`, `system`,
 				strconv.Itoa(int(mtinfopb.DataStateReady)),
 				strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-				`{"capabilities": {}, "deprecatedId": "1", "lastRevertTenantTimestamp": {}}`,
+				`{}`,
 			},
 		})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`SELECT id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) FROM system.tenants`,
+			`SELECT id, active, name, data_state, service_mode, 
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities',
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'previousSourceTenant'->'clusterId',
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'previousSourceTenant'->'cutoverTimestamp'->'wallTime'
+				FROM system.tenants`,
 			[][]string{
 				{
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1", "lastRevertTenantTimestamp": {}}`,
+					`{}`, `NULL`, `NULL`,
 				},
 				{
 					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10", "lastRevertTenantTimestamp": {}}`,
+					`{"canUseNodelocalStorage": true}`, `"` + clusterID + `"`, `"` + strings.Split(ts2, ".")[0] + `"`,
 				},
 			},
 		)
@@ -7203,19 +7208,21 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.Exec(t, `ALTER TENANT [10] STOP SERVICE`)
 		restoreDB.Exec(t, `DROP TENANT [10]`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
+			`select id, active, name, data_state, 
+				service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities', 
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'droppedName' from system.tenants`,
 			[][]string{
 				{
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1", "lastRevertTenantTimestamp": {}}`,
+					`{}`, `NULL`,
 				},
 				{
 					`10`, `false`, `NULL`,
 					strconv.Itoa(int(mtinfopb.DataStateDrop)),
 					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedDataState": "DROP", "deprecatedId": "10", "droppedName": "cluster-10", "lastRevertTenantTimestamp": {}}`,
+					`{"canUseNodelocalStorage": true}`, `"cluster-10"`,
 				},
 			},
 		)
@@ -7238,19 +7245,21 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
+			`select id, active, name, data_state, service_mode, 
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities'
+			from system.tenants`,
 			[][]string{
 				{
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1", "lastRevertTenantTimestamp": {}}`,
+					`{}`,
 				},
 				{
 					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10", "lastRevertTenantTimestamp": {}}`,
+					`{"canUseNodelocalStorage": true}`,
 				},
 			},
 		)
@@ -7279,30 +7288,34 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
+			`select id, active, name, data_state, service_mode, 
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities'
+			from system.tenants`,
 			[][]string{
 				{
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1", "lastRevertTenantTimestamp": {}}`,
+					`{}`,
 				},
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
+			`select id, active, name, data_state, service_mode, 
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities'
+			from system.tenants`,
 			[][]string{
 				{
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1", "lastRevertTenantTimestamp": {}}`,
+					`{}`,
 				},
 				{
 					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10", "lastRevertTenantTimestamp": {}}`,
+					`{"canUseNodelocalStorage": true}`,
 				},
 			},
 		)
@@ -7319,30 +7332,34 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
+			`select id, active, name, data_state, service_mode, 
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities' 
+			from system.tenants`,
 			[][]string{
 				{
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1", "lastRevertTenantTimestamp": {}}`,
+					`{}`,
 				},
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/clusterwide'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
+			`select id, active, name, data_state, service_mode, 
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities' 
+			from system.tenants`,
 			[][]string{
 				{
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1", "lastRevertTenantTimestamp": {}}`,
+					`{}`,
 				},
 				{
 					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10", "lastRevertTenantTimestamp": {}}`,
+					`{"canUseNodelocalStorage": true}`,
 				},
 			},
 		)
@@ -7381,42 +7398,46 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
+			`select id, active, name, data_state, service_mode, 
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities'
+			from system.tenants`,
 			[][]string{
 				{
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1", "lastRevertTenantTimestamp": {}}`,
+					`{}`,
 				},
 			})
 		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide' WITH include_all_virtual_clusters`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
+			`select id, active, name, data_state, service_mode, 
+				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities' 
+			from system.tenants`,
 			[][]string{
 				{
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1", "lastRevertTenantTimestamp": {}}`,
+					`{}`,
 				},
 				{
 					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10", "lastRevertTenantTimestamp": {}}`,
+					`{"canUseNodelocalStorage": true}`,
 				},
 				{
 					`11`, `true`, `cluster-11`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "11", "lastRevertTenantTimestamp": {}}`,
+					`{"canUseNodelocalStorage": true}`,
 				},
 				{
 					`20`, `true`, `cluster-20`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "20", "lastRevertTenantTimestamp": {}}`,
+					`{"canUseNodelocalStorage": true}`,
 				},
 			},
 		)
@@ -7496,6 +7517,16 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts1)
+
+		restoreDB.CheckQueryResults(t,
+			`select id, name,
+			crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'previousSourceTenant'->'clusterId',
+			crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'previousSourceTenant'->'cutoverTimestamp'->'wallTime'
+			from system.tenants`,
+			[][]string{
+				{`1`, `system`, `NULL`, `NULL`},
+				{`10`, `cluster-10`, `"` + clusterID + `"`, `"` + strings.Split(ts1, ".")[0] + `"`},
+			})
 
 		tenantID := roachpb.MustMakeTenantID(10)
 		if err := restoreTC.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {

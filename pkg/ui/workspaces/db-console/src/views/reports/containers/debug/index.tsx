@@ -440,7 +440,7 @@ export default function Debug() {
             params={{ node: nodeID, seconds: "5", labels: "true" }}
           />
           <DebugTableLink
-            name="Cluster-wide CPU Profile (profiles all nodes; MEMORY OVERHEAD)"
+            name="Cluster-wide Combined CPU Profile"
             url="debug/pprof/ui/cpu/"
             params={{ node: "all", seconds: "5", labels: "true" }}
           />

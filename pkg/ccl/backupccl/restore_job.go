@@ -846,6 +846,7 @@ func createImportingDescriptors(
 	backupCodec keys.SQLCodec,
 	sqlDescs []catalog.Descriptor,
 	r *restoreResumer,
+	manifest backuppb.BackupManifest,
 ) (
 	dataToPreRestore *restorationDataBase,
 	preValidation *restorationDataBase,
@@ -1347,6 +1348,20 @@ func createImportingDescriptors(
 					default:
 						return errors.AssertionFailedf("unknown tenant data state %v", tenantInfoCopy)
 					}
+					if p, err := roachpb.MakeTenantID(tenantInfoCopy.ID); err == nil {
+						if details.PreRewriteTenantId != nil {
+							p = *details.PreRewriteTenantId
+						}
+						ts := details.EndTime
+						if ts.IsEmpty() {
+							ts = manifest.EndTime
+						}
+						tenantInfoCopy.PreviousSourceTenant = &mtinfopb.PreviousSourceTenant{
+							ClusterID:        manifest.ClusterID,
+							TenantID:         p,
+							CutoverTimestamp: ts,
+						}
+					}
 					spanConfigs := p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, txn.KV())
 					if _, err := sql.CreateTenantRecord(
 						ctx,
@@ -1700,7 +1715,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err != nil {
 		return err
 	}
-	preData, preValidateData, mainData, err := createImportingDescriptors(ctx, p, backupCodec, sqlDescs, r)
+	preData, preValidateData, mainData, err := createImportingDescriptors(ctx, p, backupCodec, sqlDescs, r, latestBackupManifest)
 	if err != nil {
 		return err
 	}
