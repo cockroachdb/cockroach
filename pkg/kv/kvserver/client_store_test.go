@@ -114,7 +114,8 @@ func TestStoreRaftReplicaID(t *testing.T) {
 
 // TestStoreLoadReplicaQuiescent tests whether replicas are initially quiescent
 // when loaded during store start, with eager Raft group initialization. Epoch
-// lease ranges should be quiesced, but expiration leases shouldn't.
+// lease ranges will initially be quiesced (unless acquired by a store replica
+// queue), but expiration leases shouldn't.
 func TestStoreLoadReplicaQuiescent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -142,6 +143,10 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						DisableScanner: true,
+						// The lease queue will unquiesce the range and acquire the
+						// proscribed leases upon restart. The range should quiesce again
+						// in the regular duration.
+						DisableLeaseQueue: true,
 					},
 				},
 				StoreSpecs: []base.StoreSpec{
