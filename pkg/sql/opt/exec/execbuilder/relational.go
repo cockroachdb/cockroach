@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -3365,6 +3366,12 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 			b.flags.Set(exec.PlanFlagContainsMutation)
 			break
 		}
+	}
+
+	// Volatile routines step the transaction, and routines with an exception
+	// block use internal savepoints.
+	if udf.Def.Volatility == volatility.Volatile || udf.Def.ExceptionBlock != nil {
+		b.flags.Set(exec.PlanFlagMustUseRootTxn)
 	}
 
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.

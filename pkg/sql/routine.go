@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -267,6 +268,11 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 		// snapshot to advance, because we do not support restoring the txn's prior
 		// external read snapshot after returning from the volatile function.
 		if g.expr.EnableStepping {
+			if buildutil.CrdbTestBuild {
+				if txn.Type() != kv.RootTxn {
+					return errors.AssertionFailedf("routine: cannot step LeafTxn")
+				}
+			}
 			if err := txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
 				return err
 			}
@@ -309,6 +315,11 @@ func (g *routineGenerator) handleException(ctx context.Context, err error) error
 	blockState := g.expr.BlockState
 	if err == nil || blockState == nil || blockState.ExceptionHandler == nil {
 		return err
+	}
+	if buildutil.CrdbTestBuild {
+		if g.p.Txn().Type() != kv.RootTxn {
+			return errors.AssertionFailedf("routine: cannot handle exception in LeafTxn")
+		}
 	}
 	caughtCode := pgerror.GetPGCode(err)
 	if caughtCode == pgcode.Uncategorized {

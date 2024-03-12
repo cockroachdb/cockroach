@@ -77,6 +77,11 @@ const (
 	// check plan uses locking. Typically this is set for plans with FK checks
 	// under read committed isolation.
 	PlanFlagCheckContainsLocking
+
+	// PlanFlagMustUseRootTxn is set if at least one node cannot be executed in
+	// the presence of concurrency. Note that PlanFlagMustUseRootTxn is not the
+	// only condition that forces use of the root transaction.
+	PlanFlagMustUseRootTxn
 )
 
 func (pf PlanFlags) IsSet(flag PlanFlags) bool {
