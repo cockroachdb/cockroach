@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 # drtprod is a wrapper for roachprod for use when managing the long-lived DRT
 # clusters that ensures consistent use of the correct project-assignment vars
 # and done some additional sanity check enforcement on some flags.
@@ -29,7 +31,6 @@ case $1 in
     # wrapper.
     shift
     cluster=$1
-    set -euo pipefail
     roachprod adminurl $cluster --ips |
       awk '{printf "%04d\t%s\n", NR, $0}' | # prepend the padded node IDs.
       sed -e 's,http://\(.*\):26258/,\1,g' | # remove the HTTP part.
@@ -38,6 +39,45 @@ case $1 in
         gcloud dns --project=cockroach-shared record-sets update "${host}" --rrdatas="${ip}" \
           --type="A" --zone="drt" --ttl=60
       done
+    exit 0
+    ;;
+  "create")
+    if [ "$#" -lt 2 ]; then
+      echo "usage: $0 create {ua-1,ua-2}"
+      exit 1
+    fi
+    case "${2}" in
+      "ua-1")
+        roachprod create ua-1 \
+          --clouds gce \
+          --gce-zones "us-east1-b" \
+          --nodes 9 \
+          --gce-machine-type n2-standard-8 \
+          --gce-pd-volume-size 5000 --local-ssd=false \
+          --username ua \
+          --lifetime 8760h
+        # setup dns
+        $0 dns ua-1
+        ;;
+      "ua-2")
+        roachprod create ua-2 \
+          --clouds gce \
+          --gce-zones "us-east1-b" \
+          --nodes 9 \
+          --gce-machine-type n2-standard-8 \
+          --gce-pd-volume-size 5000 --local-ssd=false  \
+          --username ua \
+          --lifetime 8760h
+        # setup dns
+        $0 dns ua-2
+        ;;
+      *)
+        echo
+        echo "ATN: If $2 is intended to be long-lived, please define it by name in $0 instead."
+        echo
+        exec roachprod "$@"
+      ;;
+    esac
     exit 0
 esac
 
