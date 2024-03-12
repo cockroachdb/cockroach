@@ -2481,13 +2481,13 @@ CREATE TABLE _ (_ INT8, INDEX (_) VISIBILITY 0.00) -- identifiers removed
 # But the following statement would still work in a cluster.
 # This is a known issue. See more details in
 # https://github.com/cockroachdb/cockroach/pull/65825.
-error
+parse-no-verify
 CREATE TABLE a (b INT, UNIQUE INDEX foo (b) WHERE c > 3 NOT VISIBLE)
 ----
 
 # The following test cases make sure that creating an invisible primary index is
 # not supported by the parser.
-error
+parse-no-verify
 CREATE TABLE a (b INT8 PRIMARY KEY NOT VISIBLE)
 ----
 

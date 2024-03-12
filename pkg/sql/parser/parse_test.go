@@ -36,14 +36,40 @@ import (
 
 // TestParseDataDriven verifies that we can parse the supplied SQL and regenerate the SQL
 // string from the syntax tree.
+//
+// The follow commands are allowed:
+//
+//   - parse
+//
+//     Parses a statement and verifies that it round-trips. Various forms of the
+//     formatted AST are printed as test output.
+//
+//   - parse-no-verify
+//
+//     Parses a statement without verifying that it round-trips. It will fail if
+//     parsing errors. It does not print any test output.
+//
+//   - error
+//
+//     Parses a statement and expects an error. The error is printed as test
+//     output.
 func TestParseDataDriven(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "parse":
 				return sqlutils.VerifyParseFormat(t, d.Input, false /* plpgsql */)
+			case "parse-no-verify":
+				_, err := parser.Parse(d.Input)
+				if err != nil {
+					d.Fatalf(t, "unexpected error: %s", err)
+				}
+				return ""
 			case "error":
 				_, err := parser.Parse(d.Input)
+				if err == nil {
+					d.Fatalf(t, "expected error, found none")
+				}
 				return sqlutils.VerifyParseError(err)
 			}
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)
