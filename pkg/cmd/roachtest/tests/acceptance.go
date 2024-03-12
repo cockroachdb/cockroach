@@ -60,16 +60,6 @@ func registerAcceptance(r registry.Registry) {
 				name: "multitenant",
 				fn:   runAcceptanceMultitenant,
 			},
-			{
-				name:     "multitenant-multiregion",
-				fn:       runAcceptanceMultitenantMultiRegion,
-				numNodes: 9,
-				nodeRegions: []string{"us-west1-b", "us-west1-b", "us-west1-b",
-					"us-west1-b", "us-west1-b", "us-west1-b",
-					"us-east1-b", "us-east1-b", "us-east1-b"},
-				requiresLicense: true,
-				disallowLocal:   true,
-			},
 		},
 		registry.OwnerObsInf: {
 			{name: "status-server", fn: runStatusServer},
@@ -106,6 +96,16 @@ func registerAcceptance(r registry.Registry) {
 				name:     "mismatched-locality",
 				fn:       runMismatchedLocalityTest,
 				numNodes: 3,
+			},
+			{
+				name:     "multitenant-multiregion",
+				fn:       runAcceptanceMultitenantMultiRegion,
+				numNodes: 9,
+				nodeRegions: []string{"us-west1-b", "us-west1-b", "us-west1-b",
+					"us-west1-b", "us-west1-b", "us-west1-b",
+					"us-east1-b", "us-east1-b", "us-east1-b"},
+				requiresLicense: true,
+				disallowLocal:   true,
 			},
 		},
 	}
