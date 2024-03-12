@@ -103,6 +103,10 @@ const indexBackfillMergeProgressReportInterval = 10 * time.Second
 
 // Run runs the processor.
 func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowReceiver) {
+	opName := "IndexBackfillMerger"
+	ctx = logtags.AddTag(ctx, opName, int(ibm.spec.Table.ID))
+	ctx, span := execinfra.ProcessorSpan(ctx, ibm.flowCtx, opName, ibm.processorID)
+	defer span.Finish()
 	// This method blocks until all worker goroutines exit, so it's safe to
 	// close memory monitoring infra in defers.
 	mergerMon := execinfra.NewMonitor(ctx, ibm.flowCtx.Cfg.BackfillerMonitor, "index-backfiller-merger-mon")
@@ -113,10 +117,6 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 		defer ibm.muBoundAccount.Unlock()
 		ibm.muBoundAccount.boundAccount.Close(ctx)
 	}()
-	opName := "IndexBackfillMerger"
-	ctx = logtags.AddTag(ctx, opName, int(ibm.spec.Table.ID))
-	ctx, span := execinfra.ProcessorSpan(ctx, ibm.flowCtx, opName, ibm.processorID)
-	defer span.Finish()
 	defer output.ProducerDone()
 	defer execinfra.SendTraceData(ctx, ibm.flowCtx, output)
 
