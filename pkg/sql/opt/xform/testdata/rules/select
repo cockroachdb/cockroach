@@ -629,7 +629,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k = 5
 ----
-memo (optimized, ~10KB, required=[presentation: k:1])
+memo (optimized, ~9KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -979,7 +979,7 @@ select
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1
 ----
-memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G4 G5)
@@ -8443,7 +8443,7 @@ inner-join (zigzag pqr@q pqr@r)
 memo expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~17KB, required=[presentation: q:2,r:3])
+memo (optimized, ~16KB, required=[presentation: q:2,r:3])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (zigzag-join G3 pqr@q pqr@r)
  │    └── [presentation: q:2,r:3]
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)

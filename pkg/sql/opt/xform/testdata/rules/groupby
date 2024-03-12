@@ -449,7 +449,7 @@ project
 memo
 SELECT min(a) FROM abc
 ----
-memo (optimized, ~7KB, required=[presentation: min:7])
+memo (optimized, ~6KB, required=[presentation: min:7])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: min:7]
  │         ├── best: (scalar-group-by G4 G5 cols=())
@@ -511,7 +511,7 @@ memo (optimized, ~7KB, required=[presentation: min:7])
 memo
 SELECT max(a) FROM abc
 ----
-memo (optimized, ~7KB, required=[presentation: max:7])
+memo (optimized, ~6KB, required=[presentation: max:7])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:7]
  │         ├── best: (scalar-group-by G4 G5 cols=())
@@ -2173,7 +2173,7 @@ memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
 memo
 SELECT DISTINCT ON (w, u) u, v, w FROM kuvw ORDER BY w, u, v DESC
 ----
-memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4] [ordering: +4,+2])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +4,+2])
  ├── G1: (distinct-on G2 G3 cols=(2,4),ordering=-3 opt(2,4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +4,+2]
  │    │    ├── best: (distinct-on G2="[ordering: +4,+2,-3]" G3 cols=(2,4),ordering=-3 opt(2,4))
@@ -2298,7 +2298,7 @@ memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
 memo
 SELECT (SELECT w FROM kuvw WHERE v=1 AND x=u) FROM xyz ORDER BY x+1, x
 ----
-memo (optimized, ~26KB, required=[presentation: w:12] [ordering: +13,+1])
+memo (optimized, ~25KB, required=[presentation: w:12] [ordering: +13,+1])
  ├── G1: (project G2 G3 x)
  │    ├── [presentation: w:12] [ordering: +13,+1]
  │    │    ├── best: (sort G1)
@@ -2365,7 +2365,7 @@ memo (optimized, ~26KB, required=[presentation: w:12] [ordering: +13,+1])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO NOTHING
 ----
-memo (optimized, ~27KB, required=[])
+memo (optimized, ~26KB, required=[])
  ├── G1: (insert G2 G3 G4 G5 xyz)
  │    └── []
  │         ├── best: (insert G2 G3 G4 G5 xyz)
@@ -3432,7 +3432,7 @@ INDEX gg (g)
 memo
 SELECT d, e, count(*) FROM defg GROUP BY d, e LIMIT 10
 ----
-memo (optimized, ~20KB, required=[presentation: d:1,e:2,count:8])
+memo (optimized, ~19KB, required=[presentation: d:1,e:2,count:8])
  ├── G1: (limit G2 G3) (limit G4 G3) (limit G5 G3) (limit G6 G3)
  │    └── [presentation: d:1,e:2,count:8]
  │         ├── best: (limit G4="[limit hint: 10.00]" G3)
