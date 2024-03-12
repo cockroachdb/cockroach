@@ -40,7 +40,7 @@ func registerAlterPK(r registry.Registry) {
 	// runAlterPKBank runs a primary key change while the bank workload runs.
 	runAlterPKBank := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		const numRows = 1000000
-		const duration = 1 * time.Minute
+		const duration = 3 * time.Minute
 
 		roachNodes, loadNode := setupTest(ctx, t, c)
 
@@ -72,12 +72,14 @@ func registerAlterPK(r registry.Registry) {
 			// Wait for the initialization to finish. Once it's done,
 			// sleep for some time, then alter the primary key.
 			<-initDone
-			time.Sleep(duration / 10)
+			time.Sleep(duration / 30)
 
 			t.Status("beginning primary key change")
+			defer func() { pkChangeDone <- struct{}{} }()
 			db := c.Conn(ctx, t.L(), roachNodes[0])
 			defer db.Close()
 			cmds := []string{
+				`SET CLUSTER SETTING kv.transaction.internal.max_auto_retries = 10000`,
 				`USE bank;`,
 				`ALTER TABLE bank ALTER COLUMN balance SET NOT NULL;`,
 				`ALTER TABLE bank ALTER PRIMARY KEY USING COLUMNS (id, balance)`,
@@ -93,7 +95,6 @@ func registerAlterPK(r registry.Registry) {
 				}
 			}
 			t.Status("primary key change finished")
-			pkChangeDone <- struct{}{}
 			return nil
 		})
 		m.Wait()
