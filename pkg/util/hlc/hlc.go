@@ -437,15 +437,7 @@ func (c *Clock) PhysicalNow() int64 {
 }
 
 // PhysicalTime returns a time.Time struct using the local wall time.
-func (c *Clock) PhysicalTime() time.Time {
-	// NOTE: We don't go through c.physicalNanos() if c.timeSource is set in order
-	// to preserve the monotonic clock reading that the timeSource might provide
-	// inside its instants.
-	if c.wallClock != nil {
-		return c.wallClock.Now()
-	}
-	return timeutil.Unix(0, c.wallClock.Now().UnixNano())
-}
+func (c *Clock) PhysicalTime() time.Time { return c.wallClock.Now() }
 
 // Update takes a hybrid timestamp, usually originating from an event
 // received from another member of a distributed system. The clock is
