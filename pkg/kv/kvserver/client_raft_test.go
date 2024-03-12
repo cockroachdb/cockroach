@@ -2648,6 +2648,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	const numReplicas = 3
 
 	ctx := context.Background()
+	manual := hlc.NewHybridManualClock()
 	tc := testcluster.StartTestCluster(t, numReplicas,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -2657,15 +2658,30 @@ func TestWedgedReplicaDetection(t *testing.T) {
 					// this test doesn't expect.
 					RaftElectionTimeoutTicks: 100000,
 				},
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						WallClock: manual,
+					},
+				},
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
+
+	// Pause the manual clock so that we can carefully control the perceived
+	// timing of the follower replica's activity.
+	manual.Pause()
 
 	key := []byte("a")
 	tc.SplitRangeOrFatal(t, key)
 	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 
+	// Do a write; we'll use it to determine when the dust has settled.
+	_, err := tc.Servers[0].DB().Inc(ctx, key, 1)
+	require.Nil(t, err)
+	tc.WaitForValues(t, key, []int64{1, 1, 1})
+
 	leaderRepl := tc.GetRaftLeader(t, key)
+	leaderClock := leaderRepl.Clock()
 	followerRepl := func() *kvserver.Replica {
 		for i := range tc.Servers {
 			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(key)
@@ -2693,18 +2709,20 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	wg.Wait()
 	defer followerRepl.RaftUnlock()
 
-	// TODO(andrei): The test becomes flaky with a lower threshold because the
-	// follower is considered inactive just below. Figure out how to switch the
-	// test to a manual clock. The activity tracking for followers uses the
-	// physical clock.
+	// inactivityThreshold is the test's duration of inactivity after which the
+	// follower replica is considered inactive. In practice, this is set to the
+	// range lease duration.
 	inactivityThreshold := time.Second
+
+	// Increment the clock to be close to inactivityThreshold, but not past it.
+	manual.Increment(inactivityThreshold.Nanoseconds() - 1)
 
 	// Send a request to the leader replica. followerRepl is locked so it will
 	// not respond.
 	value := []byte("value")
 	ba := &kvpb.BatchRequest{}
 	ba.Add(putArgs(key, value))
-	if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
+	if err := ba.SetActiveTimestamp(leaderClock); err != nil {
 		t.Fatal(err)
 	}
 	if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
@@ -2713,7 +2731,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 
 	// The follower should still be active.
 	followerID := followerRepl.ReplicaID()
-	if !leaderRepl.IsFollowerActiveSince(ctx, followerID, inactivityThreshold) {
+	if !leaderRepl.IsFollowerActiveSince(followerID, leaderClock.PhysicalTime(), inactivityThreshold) {
 		t.Fatalf("expected follower to still be considered active")
 	}
 
@@ -2722,6 +2740,9 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	// would bump the last active timestamp on the leader. Because of this,
 	// we check whether the follower is eventually considered inactive.
 	testutils.SucceedsSoon(t, func() error {
+		// Increment the clock to past inactivityThreshold.
+		manual.Increment(inactivityThreshold.Nanoseconds() + 1)
+
 		// Send another request to the leader replica. followerRepl is locked
 		// so it will not respond.
 		if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
@@ -2729,7 +2750,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 		}
 
 		// The follower should no longer be considered active.
-		if leaderRepl.IsFollowerActiveSince(ctx, followerID, inactivityThreshold) {
+		if leaderRepl.IsFollowerActiveSince(followerID, leaderClock.PhysicalTime(), inactivityThreshold) {
 			return errors.New("expected follower to be considered inactive")
 		}
 		return nil
