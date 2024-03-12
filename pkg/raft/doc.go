@@ -21,10 +21,6 @@ The state machine is kept in sync through the use of a replicated log.
 For more details on Raft, see "In Search of an Understandable Consensus Algorithm"
 (https://raft.github.io/raft.pdf) by Diego Ongaro and John Ousterhout.
 
-A simple example application, _raftexample_, is also available to help illustrate
-how to use this package in practice:
-https://github.com/etcd-io/etcd/tree/main/contrib/raftexample
-
 # Usage
 
 The primary object in raft is a Node. You either start a Node from scratch
