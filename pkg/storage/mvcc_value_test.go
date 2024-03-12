@@ -105,7 +105,7 @@ func TestEncodeMVCCValueForExport(t *testing.T) {
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			encodedVal, err := EncodeMVCCValueForExport(tc.val)
+			encodedVal, err := EncodeMVCCValueForExport(tc.val, nil)
 			require.NoError(t, err)
 			strippedMVCCVal, err := DecodeMVCCValue(encodedVal)
 			require.NoError(t, err)
@@ -316,13 +316,37 @@ func BenchmarkEncodeMVCCValueForExport(b *testing.B) {
 		for vDesc, v := range values {
 			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
 			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
+			var buf []byte
 			b.Run(name, func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
-					res, err := EncodeMVCCValueForExport(mvccValue)
+					var err error
+					buf, err = EncodeMVCCValueForExport(mvccValue, buf[:0])
 					if err != nil { // for performance
 						require.NoError(b, err)
 					}
-					_ = res
+					_ = buf
+				}
+			})
+		}
+	}
+}
+
+func BenchmarkEncodeMVCCValueWithAllocator(b *testing.B) {
+	DisableMetamorphicSimpleValueEncoding(b)
+	headers, values := mvccValueBenchmarkConfigs()
+	for hDesc, h := range headers {
+		for vDesc, v := range values {
+			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
+			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
+			var buf []byte
+			b.Run(name, func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					var err error
+					buf, err = EncodeMVCCValueToBuf(mvccValue, buf[:0])
+					if err != nil { // for performance
+						require.NoError(b, err)
+					}
+					_ = buf
 				}
 			})
 		}
