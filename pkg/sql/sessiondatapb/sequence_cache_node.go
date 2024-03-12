@@ -52,7 +52,7 @@ func (sc *SequenceCacheNode) NextValue(
 		sc.mu.Lock()
 		defer sc.mu.Unlock()
 		// There is a hazard that multiple threads could add the entry, so check if it exists again with the writer lock
-		_, found = sc.cache[seqID]
+		cacheEntry, found = sc.cache[seqID]
 		if !found {
 			cacheEntry = &SequenceCacheNodeEntry{}
 			sc.cache[seqID] = cacheEntry
