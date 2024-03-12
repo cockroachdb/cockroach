@@ -14,7 +14,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/streamingccl",
-        "//pkg/cloud",
         "//pkg/cloud/externalconn",
         "//pkg/jobs/jobspb",
         "//pkg/keys",

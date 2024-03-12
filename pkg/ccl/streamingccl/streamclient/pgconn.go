@@ -32,12 +32,6 @@ const (
 	sslRootCertURLParam = "sslrootcert"
 )
 
-var RedactableURLParameters = []string{
-	sslCertURLParam,
-	sslKeyURLParam,
-	sslRootCertURLParam,
-}
-
 func setupPGXConfig(remote *url.URL, options *options) (*pgx.ConnConfig, error) {
 	noInlineCertURI, tlsInfo, err := uriWithInlineTLSCertsRemoved(remote)
 	if err != nil {
