@@ -177,43 +177,8 @@ func encodedMVCCValueSize(v MVCCValue) int {
 
 // EncodeMVCCValue encodes an MVCCValue into its Pebble representation. See the
 // comment on MVCCValue for a description of the encoding scheme.
-//
-// TODO(erikgrinaker): This could mid-stack inline when we compared
-// v.MVCCValueHeader == enginepb.MVCCValueHeader{} instead of IsEmpty(), but
-// struct comparisons have a significant performance regression in Go 1.19 which
-// negates the inlining gain. Reconsider this with Go 1.20. See:
-// https://github.com/cockroachdb/cockroach/issues/88818
-//
-// TODO(ssd): Dedup with EncodeMVCCValueWithAllocator.
 func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
-	if v.MVCCValueHeader.IsEmpty() && !disableSimpleValueEncoding {
-		// Simple encoding. Use the roachpb.Value encoding directly with no
-		// modification. No need to re-allocate or copy.
-		return v.Value.RawBytes, nil
-	}
-
-	// Extended encoding. Wrap the roachpb.Value encoding with a header containing
-	// MVCC-level metadata. Requires a re-allocation and copy.
-	headerLen := v.MVCCValueHeader.Size()
-	headerSize := extendedPreludeSize + headerLen
-	valueSize := headerSize + len(v.Value.RawBytes)
-
-	buf := make([]byte, valueSize)
-	// 4-byte-header-len
-	binary.BigEndian.PutUint32(buf, uint32(headerLen))
-	// 1-byte-sentinel
-	buf[tagPos] = extendedEncodingSentinel
-	// mvcc-header
-	//
-	// NOTE: we don't use protoutil to avoid passing v.MVCCValueHeader through
-	// an interface, which would cause a heap allocation and incur the cost of
-	// dynamic dispatch.
-	if _, err := v.MVCCValueHeader.MarshalToSizedBuffer(buf[extendedPreludeSize:headerSize]); err != nil {
-		return nil, errors.Wrap(err, "marshaling MVCCValueHeader")
-	}
-	// <4-byte-checksum><1-byte-tag><encoded-data> or empty for tombstone
-	copy(buf[headerSize:], v.Value.RawBytes)
-	return buf, nil
+	return EncodeMVCCValueToBuf(v, nil)
 }
 
 // EncodeMVCCValueToBuf encodes an MVCCValue into its Pebble
@@ -224,7 +189,11 @@ func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
 // it is large enough. If the provided buffer is not large enough a
 // new buffer is allocated.
 //
-// TODO(ssd): Dedup with EncodeMVCCValue.
+// TODO(erikgrinaker): This could mid-stack inline when we compared
+// v.MVCCValueHeader == enginepb.MVCCValueHeader{} instead of IsEmpty(), but
+// struct comparisons have a significant performance regression in Go 1.19 which
+// negates the inlining gain. Reconsider this with Go 1.20. See:
+// https://github.com/cockroachdb/cockroach/issues/88818
 func EncodeMVCCValueToBuf(v MVCCValue, buf []byte) ([]byte, error) {
 	if v.MVCCValueHeader.IsEmpty() && !disableSimpleValueEncoding {
 		// Simple encoding. Use the roachpb.Value encoding directly with no
