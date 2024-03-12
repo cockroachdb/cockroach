@@ -47,10 +47,11 @@ RESTORE cfs FROM LATEST IN 'nodelocal://1/foo' WITH into_db='r1';
 ----
 
 query-sql
-SELECT start_key FROM [SHOW RANGES FROM TABLE orig.cfs]
+SELECT start_pretty from crdb_internal.ranges
+ WHERE start_key >= crdb_internal.index_span('orig.cfs'::regclass::oid::int, 1)[1]
+   AND start_key <= crdb_internal.index_span('orig.cfs'::regclass::oid::int, 1)[2];
 ----
-…/<TableMin>
-…/1/0
-…/1/1
-…/1/2
-…/1/3
+/Table/109/1/0
+/Table/109/1/1
+/Table/109/1/2
+/Table/109/1/3
