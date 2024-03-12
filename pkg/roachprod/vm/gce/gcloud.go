@@ -38,10 +38,9 @@ import (
 )
 
 const (
-	defaultProject = "cockroach-ephemeral"
-	ProviderName   = "gce"
-	DefaultImage   = "ubuntu-2204-jammy-v20230727"
-	ARM64Image     = "ubuntu-2204-jammy-arm64-v20230727"
+	ProviderName = "gce"
+	DefaultImage = "ubuntu-2204-jammy-v20230727"
+	ARM64Image   = "ubuntu-2204-jammy-arm64-v20230727"
 	// TODO(DarrylWong): Upgrade FIPS to Ubuntu 22 when it is available.
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
@@ -52,13 +51,36 @@ const (
 // providerInstance is the instance to be registered into vm.Providers by Init.
 var providerInstance = &Provider{}
 
-// DefaultProject returns the default GCE project.
+var (
+	defaultDefaultProject = config.EnvOrDefaultString(
+		"ROACHPROD_GCE_DEFAULT_PROJECT", "cockroach-ephemeral",
+	)
+	defaultMetadataProject = config.EnvOrDefaultString(
+		"ROACHPROD_GCE_METADATA_PROJECT",
+		defaultDefaultProject,
+	)
+	defaultDNSProject = config.EnvOrDefaultString(
+		"ROACHPROD_GCE_DNS_PROJECT", "cockroach-shared",
+	)
+
+	// Service account to use if the default project is in use.
+	defaultDefaultServiceAccount = config.EnvOrDefaultString(
+		"ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT",
+		"21965078311-compute@developer.gserviceaccount.com",
+	)
+)
+
+// DefaultProject returns the default GCE project. This is used to determine whether
+// certain features, such as DNS names are enabled.
 func DefaultProject() string {
-	return defaultProject
+	if p, ok := vm.Providers[ProviderName].(*Provider); ok {
+		return p.defaultProject
+	}
+	return defaultDefaultProject
 }
 
 // projects for which a cron GC job exists.
-var projectsWithGC = []string{defaultProject}
+var projectsWithGC = []string{defaultDefaultProject}
 
 // Denotes if this provider was successfully initialized.
 var initialized = false
@@ -68,7 +90,7 @@ var initialized = false
 // If the gcloud tool is not available on the local path, the provider is a
 // stub.
 func Init() error {
-	providerInstance.Projects = []string{defaultProject}
+	providerInstance.Projects = []string{DefaultProject()}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
 		providerInstance.Projects = []string{projectFromEnv}
@@ -79,7 +101,7 @@ func Init() error {
 			"(https://cloud.google.com/sdk/downloads)")
 		return errors.New("gcloud not found")
 	}
-	providerInstance.DNSProvider = NewDNSProvider()
+	providerInstance.dnsProvider = newDNSProvider()
 	initialized = true
 	vm.Providers[ProviderName] = providerInstance
 	return nil
@@ -145,7 +167,7 @@ type jsonVM struct {
 
 // Convert the JSON VM data into our common VM type
 func (jsonVM *jsonVM) toVM(
-	project string, disks []describeVolumeCommandResponse, opts *ProviderOpts,
+	project string, disks []describeVolumeCommandResponse, opts *ProviderOpts, dnsDomain string,
 ) (ret *vm.VM) {
 	var vmErrors []error
 	var err error
@@ -247,7 +269,7 @@ func (jsonVM *jsonVM) toVM(
 		DNSProvider:            ProviderName,
 		ProviderID:             jsonVM.Name,
 		PublicIP:               publicIP,
-		PublicDNS:              fmt.Sprintf("%s.%s", jsonVM.Name, Subdomain),
+		PublicDNS:              fmt.Sprintf("%s.%s", jsonVM.Name, dnsDomain),
 		RemoteUser:             remoteUser,
 		VPC:                    vpc,
 		MachineType:            machineType,
@@ -320,9 +342,20 @@ type ProviderOpts struct {
 
 // Provider is the GCE implementation of the vm.Provider interface.
 type Provider struct {
-	vm.DNSProvider
+	*dnsProvider
 	Projects       []string
 	ServiceAccount string
+
+	// The project to use for looking up metadata. In particular, this includes
+	// user keys.
+	metadataProject string
+
+	// The project that provides the core roachprod services.
+	defaultProject string
+
+	// The service account to use if the default project is in use and no
+	// ServiceAccount was specified.
+	defaultServiceAccount string
 }
 
 // LogEntry represents a single log entry from the gcloud logging(stack driver)
@@ -411,7 +444,6 @@ func buildFilterPreemptionCliArgs(
 }
 
 type snapshotJson struct {
-	CreationSizeBytes  string    `json:"creationSizeBytes"`
 	CreationTimestamp  time.Time `json:"creationTimestamp"`
 	Description        string    `json:"description"`
 	DiskSizeGb         string    `json:"diskSizeGb"`
@@ -903,6 +935,10 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.StringVar(&providerInstance.ServiceAccount, ProviderName+"-service-account",
 		providerInstance.ServiceAccount, "Service account to use")
+	flags.StringVar(&providerInstance.defaultServiceAccount,
+		ProviderName+"-default-service-account", defaultDefaultServiceAccount,
+		"Service account to use if the default project is in use and no "+
+			"--gce-service-account was specified")
 
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
@@ -958,6 +994,49 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 		ProviderName+"-use-shared-user", true,
 		fmt.Sprintf("use the shared user %q for ssh rather than your user %q",
 			config.SharedUser, config.OSUser.Username))
+
+	dnsProviderInstance := providerInstance.dnsProvider
+	flags.StringVar(
+		&dnsProviderInstance.dnsProject, ProviderName+"-dns-project",
+		defaultDNSProject,
+		"project to use to set up DNS",
+	)
+	flags.StringVar(
+		&dnsProviderInstance.zone,
+		ProviderName+"-dns-zone",
+		dnsDefaultZone,
+		"zone file in gcloud project to use to set up public DNS records",
+	)
+	flags.StringVar(
+		&dnsProviderInstance.domain,
+		ProviderName+"-dns-domain",
+		dnsDefaultDomain,
+		"zone domian in gcloud project to use to set up public DNS records",
+	)
+	flags.StringVar(
+		&dnsProviderInstance.managedZone,
+		ProviderName+"managed-dns-zone",
+		dnsDefaultManagedZone,
+		"zone file in gcloud project to use to set up DNS SRV records",
+	)
+	flags.StringVar(
+		&dnsProviderInstance.managedDomain,
+		ProviderName+"managed-dns-domain",
+		dnsDefaultManagedDomain,
+		"zone file in gcloud project to use to set up DNS SRV records",
+	)
+
+	flags.StringVar(
+		&providerInstance.metadataProject, ProviderName+"-metadata-project",
+		defaultMetadataProject,
+		"google cloud project to use to store and fetch SSH keys",
+	)
+
+	flags.StringVar(
+		&providerInstance.defaultProject, ProviderName+"-default-project",
+		defaultDefaultProject,
+		"google cloud project to use to run core roachprod services",
+	)
 }
 
 // useArmAMI returns true if the machine type is an arm64 machine type.
@@ -1147,9 +1226,8 @@ func (p *Provider) computeInstanceArgs(
 		"--boot-disk-type", "pd-ssd",
 	}
 
-	if project == defaultProject && p.ServiceAccount == "" {
-		p.ServiceAccount = "21965078311-compute@developer.gserviceaccount.com"
-
+	if project == p.defaultProject && p.ServiceAccount == "" {
+		p.ServiceAccount = p.defaultServiceAccount
 	}
 	if p.ServiceAccount != "" {
 		args = append(args, "--service-account", p.ServiceAccount)
@@ -1935,7 +2013,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 				// The former is a subset of the latter. Some information like `Labels` will be missing.
 				disks = toDescribeVolumeCommandResponse(jsonVM.Disks, jsonVM.Zone)
 			}
-			vms = append(vms, *jsonVM.toVM(prj, disks, defaultOpts))
+			vms = append(vms, *jsonVM.toVM(prj, disks, defaultOpts, p.domain))
 		}
 	}
 

@@ -17,27 +17,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strings"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/errors"
 )
-
-const (
-	dnsProject = "cockroach-shared"
-	dnsZone    = "roachprod"
-)
-
-// Subdomain is the DNS subdomain to in which to maintain cluster node names.
-var Subdomain = func() string {
-	if d, ok := os.LookupEnv("ROACHPROD_DNS"); ok {
-		return d
-	}
-	return "roachprod.crdb.io"
-}()
 
 const gceDiskStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a GCE machine for roachprod use.
@@ -288,41 +273,12 @@ func writeStartupScript(
 
 // SyncDNS replaces the configured DNS zone with the supplied hosts.
 func SyncDNS(l *logger.Logger, vms vm.List) error {
-	if Subdomain == "" {
-		return nil
-	}
+	return providerInstance.dnsProvider.syncDNS(l, vms)
+}
 
-	f, err := os.CreateTemp(os.ExpandEnv("$HOME/.roachprod/"), "dns.bind")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	// Keep imported zone file in dry run mode.
-	defer func() {
-		if err := os.Remove(f.Name()); err != nil {
-			l.Errorf("removing %s failed: %v", f.Name(), err)
-		}
-	}()
-
-	var zoneBuilder strings.Builder
-	for _, vm := range vms {
-		entry, err := vm.ZoneEntry()
-		if err != nil {
-			l.Printf("WARN: skipping: %s\n", err)
-			continue
-		}
-		zoneBuilder.WriteString(entry)
-	}
-	fmt.Fprint(f, zoneBuilder.String())
-	f.Close()
-
-	args := []string{"--project", dnsProject, "dns", "record-sets", "import",
-		f.Name(), "-z", dnsZone, "--delete-all-existing", "--zone-file-format"}
-	cmd := exec.Command("gcloud", args...)
-	output, err := cmd.CombinedOutput()
-
-	return errors.Wrapf(err, "Command: %s\nOutput: %s\nZone file contents:\n%s", cmd, output, zoneBuilder.String())
+// DNSDomain returns the configured DNS domain for public DNS A records.
+func DNSDomain() string {
+	return providerInstance.dnsProvider.domain
 }
 
 // GetUserAuthorizedKeys retrieves reads a list of user public keys from the
@@ -332,7 +288,7 @@ func GetUserAuthorizedKeys(l *logger.Logger) (authorizedKeys []byte, err error) 
 	var outBuf bytes.Buffer
 	// The below command will return a stream of user:pubkey as text.
 	cmd := exec.Command("gcloud", "compute", "project-info", "describe",
-		"--project=cockroach-ephemeral",
+		"--project="+providerInstance.metadataProject,
 		"--format=value(commonInstanceMetadata.ssh-keys)")
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = &outBuf
