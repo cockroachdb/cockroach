@@ -32,17 +32,6 @@ var DefaultTenantSelect = settings.RegisterStringSetting(
 	settings.WithName(DefaultClusterSelectSettingName),
 )
 
-// VerifyTenantService determines whether there should be an advisory
-// interlock between changes to the tenant service and changes to the
-// above cluster setting.
-var VerifyTenantService = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"server.controller.default_tenant.check_service.enabled",
-	"verify that the service mode is coherently set with the value of "+DefaultClusterSelectSettingName,
-	true,
-	settings.WithName(DefaultClusterSelectSettingName+".check_service.enabled"),
-)
-
 // WaitForClusterStartTimeout is the amount of time the tenant
 // controller will wait for the default virtual cluster to have an
 // active SQL server.

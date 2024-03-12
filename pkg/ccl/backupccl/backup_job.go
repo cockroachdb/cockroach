@@ -244,6 +244,7 @@ func backup(
 		backupManifest.StartTime,
 		backupManifest.EndTime,
 		backupManifest.ElidedPrefix,
+		backupManifest.ClusterVersion.AtLeast(clusterversion.V24_1.Version()),
 	)
 	if err != nil {
 		return roachpb.RowCount{}, 0, err

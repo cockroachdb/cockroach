@@ -1,5 +1,7 @@
 # LogicTest: !fakedist-disk
 
+skip under race
+
 # Note that we disable the "forced disk spilling" config because the histograms
 # are dropped if the stats collection reaches the memory budget limit.
 

@@ -15,6 +15,7 @@ go_library(
 go_binary(
     name = "cockroach-oss",
     embed = [":cockroach-oss_lib"],
+    exec_properties = {"Pool": "large"},
     visibility = ["//visibility:public"],
 )
 

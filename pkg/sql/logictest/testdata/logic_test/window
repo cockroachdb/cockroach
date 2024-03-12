@@ -1,3 +1,5 @@
+skip under race
+
 statement ok
 CREATE TABLE kv (
   -- don't add column "a"

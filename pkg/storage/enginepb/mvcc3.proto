@@ -198,6 +198,10 @@ message MVCCValueHeader {
   // not be available in changefeeds. This allows higher levels of the system to
   // control which writes are exported.
   bool omit_in_rangefeeds = 3;
+
+  // ImportEpoch identifies the number of times a user has called IMPORT
+  // INTO on the table this key belongs to when the table was not empty.
+  uint32 import_epoch = 4;
 }
 
 // MVCCValueHeaderPure is not to be used directly. It's generated only for use of
@@ -207,6 +211,7 @@ message MVCCValueHeaderPure {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 
   bool omit_in_rangefeeds = 3;
+  uint32 import_epoch = 4;
 }
 // MVCCValueHeaderCrdbTest is not to be used directly. It's generated only for use of
 // its marshaling methods by MVCCValueHeader. See the comment there.
@@ -219,6 +224,7 @@ message MVCCValueHeaderCrdbTest {
   util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
   bool omit_in_rangefeeds = 3;
+  uint32 import_epoch = 4;
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width

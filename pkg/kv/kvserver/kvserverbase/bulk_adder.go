@@ -69,6 +69,15 @@ type BulkAdderOptions struct {
 	// the first buffer to pick split points in the hope it is a representative
 	// sample of the overall input.
 	InitialSplitsIfUnordered int
+
+	// ImportEpoch specifies the ImportEpoch of the table the BulkAdder
+	// is ingesting data into as part of an IMPORT INTO job. If specified, the Bulk
+	// Adder's SSTBatcher will write the import epoch to each versioned value's
+	// metadata.
+	//
+	// Callers should check that the cluster is at or above
+	// version 24.1 before setting this option.
+	ImportEpoch uint32
 }
 
 // BulkAdderFactory describes a factory function for BulkAdders.

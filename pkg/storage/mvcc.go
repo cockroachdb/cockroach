@@ -7884,9 +7884,14 @@ func mvccExportToWriter(
 				return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
 			}
 
-			// Export only the inner roachpb.Value, not the MVCCValue header.
-			unsafeValue = mvccValue.Value.RawBytes
-
+			if opts.IncludeMVCCValueHeader {
+				unsafeValue, err = EncodeMVCCValueForExport(mvccValue)
+				if err != nil {
+					return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err, "repackaging imported mvcc value %s", unsafeKey)
+				}
+			} else {
+				unsafeValue = mvccValue.Value.RawBytes
+			}
 			// Skip tombstone records when start time is zero (non-incremental)
 			// and we are not exporting all versions.
 			skip = skipTombstones && mvccValue.IsTombstone()
@@ -8052,6 +8057,14 @@ type MVCCExportOptions struct {
 	// FingerprintOptions controls how fingerprints are generated
 	// when using MVCCExportFingerprint.
 	FingerprintOptions MVCCExportFingerprintOptions
+
+	// IncludeMVCCValueHeader controls whether we include
+	// MVCCValueHeaders in the exported data. When true, the
+	// portions of the header appropriate for export are included
+	// in the encoded values. Callers should be ready to decode
+	// full MVCCValue's in this case.
+	IncludeMVCCValueHeader bool
+
 	// ScanStats, if set, is updated with iterator stats upon export success of
 	// failure. Non-iterator stats i.e., {NumGets,NumReverseScans} are left
 	// unchanged, and NumScans is incremented by 1.

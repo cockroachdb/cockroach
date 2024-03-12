@@ -22,8 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
@@ -358,17 +356,6 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	// Report tracked cluster settings via telemetry.
 	// TODO(justin): implement a more general mechanism for tracking these.
 	switch n.name {
-	case multitenant.DefaultClusterSelectSettingName:
-		if multitenant.VerifyTenantService.Get(&n.st.SV) && expectedEncodedValue != "" {
-			tr, err := GetTenantRecordByName(params.ctx, n.st, params.p.InternalSQLTxn(), roachpb.TenantName(expectedEncodedValue))
-			if err != nil {
-				return errors.Wrapf(err, "failed to lookup tenant %q", expectedEncodedValue)
-			}
-			if tr.ServiceMode != mtinfopb.ServiceModeShared {
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"shared service not enabled for tenant %q", expectedEncodedValue)
-			}
-		}
 	case catpb.AutoStatsEnabledSettingName:
 		switch expectedEncodedValue {
 		case "true":
