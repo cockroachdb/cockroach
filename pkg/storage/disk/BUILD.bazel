@@ -1,0 +1,56 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "disk",
+    srcs = [
+        "linux_parse.go",
+        "monitor.go",
+        "platform_default.go",
+        "platform_linux.go",
+        "stats.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/disk",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/envutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//vfs",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "//pkg/util/sysutil",
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "//pkg/util/sysutil",
+            "@org_golang_x_sys//unix",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+go_test(
+    name = "disk_test",
+    srcs = [
+        "linux_parse_test.go",
+        "monitor_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":disk"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_stretchr_testify//require",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "@com_github_cockroachdb_datadriven//:datadriven",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "@com_github_cockroachdb_datadriven//:datadriven",
+        ],
+        "//conditions:default": [],
+    }),
+)
