@@ -179,9 +179,19 @@ const (
 	// by "__more__". E.g.
 	//  SELECT * FROM foo where v IN (1, 2+2, $1, $2*3) => SELECT * FROM foo where v IN (_, __more__)
 	FmtCollapseLists
+
+	// FmtConstantsAsUnderscores instructs the pretty-printer to format
+	// constants (literals, placeholders) as underscores.
+	// e.g.
+	//   SELECT 1, 'a', $1 => SELECT _, _, _
+	FmtConstantsAsUnderscores
 )
 
 const genericArityIndicator = "__more__"
+
+// StmtFingerprintPlaceholder is the char that replaces all literals and
+// placeholders in a query when computing its fingerprint.
+const StmtFingerprintPlaceholder = '_'
 
 // PasswordSubstitution is the string that replaces
 // passwords unless FmtShowPasswords is specified.
