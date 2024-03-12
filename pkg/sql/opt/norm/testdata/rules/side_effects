@@ -105,7 +105,64 @@ inner-join (hash)
  └── filters
       └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
-# Decorrelate CASE WHEN branch if there are no side effects.
+# Hoist the first CASE WHEN condition even if there are side effects.
+norm
+SELECT CASE WHEN i<(SELECT y FROM xy WHERE x=i LIMIT (random()*10)::int) THEN 4 ELSE 5 END FROM a
+----
+project
+ ├── columns: case:12
+ ├── volatile
+ ├── left-join-apply
+ │    ├── columns: i:2 x:8 y:9
+ │    ├── volatile
+ │    ├── scan a
+ │    │    └── columns: i:2
+ │    ├── limit
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── outer: (2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── volatile
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8,9)
+ │    │    ├── select
+ │    │    │    ├── columns: x:8!null y:9
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(8,9)
+ │    │    │    ├── scan xy
+ │    │    │    │    ├── columns: x:8!null y:9
+ │    │    │    │    ├── key: (8)
+ │    │    │    │    └── fd: (8)-->(9)
+ │    │    │    └── filters
+ │    │    │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │    │    └── (random() * 10.0)::INT8
+ │    └── filters (true)
+ └── projections
+      └── CASE WHEN i:2 < y:9 THEN 4 ELSE 5 END [as=case:12, outer=(2,9)]
+
+# Hoist following CASE WHEN conditions if there are no side effects.
+norm
+SELECT CASE WHEN i<0 THEN 3 WHEN i<(SELECT y FROM xy WHERE x=i LIMIT 1) THEN 4 ELSE 5 END FROM a
+----
+project
+ ├── columns: case:12
+ ├── left-join (hash)
+ │    ├── columns: i:2 x:8 y:9
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── fd: (8)-->(9)
+ │    ├── scan a
+ │    │    └── columns: i:2
+ │    ├── scan xy
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
+ │    └── filters
+ │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ └── projections
+      └── CASE WHEN i:2 < 0 THEN 3 WHEN i:2 < y:9 THEN 4 ELSE 5 END [as=case:12, outer=(2,9)]
+
+# Hoist CASE WHEN branch if there are no side effects.
 norm
 SELECT CASE WHEN i<0 THEN (SELECT y FROM xy WHERE x=i LIMIT 1) ELSE 5 END FROM a
 ----
@@ -126,7 +183,7 @@ project
  └── projections
       └── CASE WHEN i:2 < 0 THEN y:9 ELSE 5 END [as=case:12, outer=(2,9)]
 
-# Decorrelate CASE ELSE branch if there are no side effects.
+# Hoist CASE ELSE branch if there are no side effects.
 norm
 SELECT * FROM a WHERE (CASE WHEN i<0 THEN 5 ELSE (SELECT y FROM xy WHERE x=i LIMIT 1) END)=k
 ----
@@ -156,7 +213,57 @@ project
       └── filters
            └── k:1 = CASE WHEN i:2 < 0 THEN 5 ELSE y:9 END [outer=(1,2,9), constraints=(/1: (/NULL - ]), fd=(2,9)-->(1)]
 
-# Don't decorrelate CASE WHEN branch if there are side effects.
+# Don't hoist CASE WHEN conditions (other than the first) if there are
+# side effects.
+norm
+SELECT CASE WHEN i<0 THEN 3 WHEN i<(SELECT y FROM xy WHERE x=i LIMIT (random()*10)::int) THEN 4 ELSE 5 END FROM a
+----
+project
+ ├── columns: case:12
+ ├── volatile
+ ├── scan a
+ │    └── columns: i:2
+ └── projections
+      └── case [as=case:12, outer=(2), volatile, correlated-subquery]
+           ├── true
+           ├── when
+           │    ├── i:2 < 0
+           │    └── 3
+           ├── when
+           │    ├── lt
+           │    │    ├── i:2
+           │    │    └── subquery
+           │    │         └── project
+           │    │              ├── columns: y:9
+           │    │              ├── outer: (2)
+           │    │              ├── cardinality: [0 - 1]
+           │    │              ├── volatile
+           │    │              ├── key: ()
+           │    │              ├── fd: ()-->(9)
+           │    │              └── limit
+           │    │                   ├── columns: x:8!null y:9
+           │    │                   ├── outer: (2)
+           │    │                   ├── cardinality: [0 - 1]
+           │    │                   ├── volatile
+           │    │                   ├── key: ()
+           │    │                   ├── fd: ()-->(8,9)
+           │    │                   ├── select
+           │    │                   │    ├── columns: x:8!null y:9
+           │    │                   │    ├── outer: (2)
+           │    │                   │    ├── cardinality: [0 - 1]
+           │    │                   │    ├── key: ()
+           │    │                   │    ├── fd: ()-->(8,9)
+           │    │                   │    ├── scan xy
+           │    │                   │    │    ├── columns: x:8!null y:9
+           │    │                   │    │    ├── key: (8)
+           │    │                   │    │    └── fd: (8)-->(9)
+           │    │                   │    └── filters
+           │    │                   │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+           │    │                   └── (random() * 10.0)::INT8
+           │    └── 4
+           └── 5
+
+# Don't hoist CASE WHEN branch if there are side effects.
 norm
 SELECT CASE WHEN i<0 THEN (SELECT y FROM xy WHERE x=i LIMIT (random()*10)::int) ELSE 5 END FROM a
 ----
@@ -200,7 +307,7 @@ project
            │                   └── (random() * 10.0)::INT8
            └── 5
 
-# Don't decorrelate CASE ELSE branch if there are side effects.
+# Don't hoist CASE ELSE branch if there are side effects.
 norm
 SELECT * FROM a WHERE (CASE WHEN i<0 THEN 5 ELSE (SELECT y FROM xy WHERE x=i AND 5/y>1) END)=k
 ----
@@ -244,8 +351,277 @@ select
                                     ├── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
                                     └── (5 / y:9) > 1 [outer=(9), immutable]
 
+# Case with some expressions that can be hoisted, and some which cannot.
+norm
+SELECT CASE
+  WHEN i<(SELECT y FROM xy WHERE x=i LIMIT (random()*10)::int)
+  THEN (SELECT y FROM xy WHERE x=i LIMIT 1)
+  WHEN i<(SELECT y FROM xy WHERE x=i LIMIT 1)
+  THEN (SELECT y FROM xy WHERE x=i LIMIT (random()*10)::int)
+  WHEN i<(SELECT y FROM xy WHERE x=i LIMIT (random()*10)::int)
+  THEN (SELECT y FROM xy WHERE x=i LIMIT 1)
+  ELSE (SELECT y FROM xy WHERE x=i LIMIT (random()*10)::int) END
+FROM a
+----
+project
+ ├── columns: y:36
+ ├── volatile
+ ├── left-join (hash)
+ │    ├── columns: i:2 x:8 xy.y:9 x:12 xy.y:13 x:24 xy.y:25 x:32 xy.y:33
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── volatile
+ │    ├── fd: (24)-->(25), (12)-->(13), (32)-->(33)
+ │    ├── left-join (hash)
+ │    │    ├── columns: i:2 x:8 xy.y:9 x:12 xy.y:13 x:24 xy.y:25
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    │    ├── volatile
+ │    │    ├── fd: (24)-->(25), (12)-->(13)
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: i:2 x:8 xy.y:9 x:24 xy.y:25
+ │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    │    │    ├── volatile
+ │    │    │    ├── fd: (24)-->(25)
+ │    │    │    ├── left-join-apply
+ │    │    │    │    ├── columns: i:2 x:8 xy.y:9
+ │    │    │    │    ├── volatile
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    └── columns: i:2
+ │    │    │    │    ├── limit
+ │    │    │    │    │    ├── columns: x:8!null xy.y:9
+ │    │    │    │    │    ├── outer: (2)
+ │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    ├── volatile
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    ├── fd: ()-->(8,9)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: x:8!null xy.y:9
+ │    │    │    │    │    │    ├── outer: (2)
+ │    │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    │    ├── fd: ()-->(8,9)
+ │    │    │    │    │    │    ├── scan xy
+ │    │    │    │    │    │    │    ├── columns: x:8!null xy.y:9
+ │    │    │    │    │    │    │    ├── key: (8)
+ │    │    │    │    │    │    │    └── fd: (8)-->(9)
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │    │    │    │    │    └── (random() * 10.0)::INT8
+ │    │    │    │    └── filters (true)
+ │    │    │    ├── scan xy
+ │    │    │    │    ├── columns: x:24!null xy.y:25
+ │    │    │    │    ├── key: (24)
+ │    │    │    │    └── fd: (24)-->(25)
+ │    │    │    └── filters
+ │    │    │         └── x:24 = i:2 [outer=(2,24), constraints=(/2: (/NULL - ]; /24: (/NULL - ]), fd=(2)==(24), (24)==(2)]
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:12!null xy.y:13
+ │    │    │    ├── key: (12)
+ │    │    │    └── fd: (12)-->(13)
+ │    │    └── filters
+ │    │         └── x:12 = i:2 [outer=(2,12), constraints=(/2: (/NULL - ]; /12: (/NULL - ]), fd=(2)==(12), (12)==(2)]
+ │    ├── scan xy
+ │    │    ├── columns: x:32!null xy.y:33
+ │    │    ├── key: (32)
+ │    │    └── fd: (32)-->(33)
+ │    └── filters
+ │         └── x:32 = i:2 [outer=(2,32), constraints=(/2: (/NULL - ]; /32: (/NULL - ]), fd=(2)==(32), (32)==(2)]
+ └── projections
+      └── case [as=y:36, outer=(2,9,13,25,33), volatile, correlated-subquery]
+           ├── true
+           ├── when
+           │    ├── i:2 < xy.y:9
+           │    └── xy.y:25
+           ├── when
+           │    ├── i:2 < xy.y:13
+           │    └── subquery
+           │         └── project
+           │              ├── columns: xy.y:29
+           │              ├── outer: (2)
+           │              ├── cardinality: [0 - 1]
+           │              ├── volatile
+           │              ├── key: ()
+           │              ├── fd: ()-->(29)
+           │              └── limit
+           │                   ├── columns: x:28!null xy.y:29
+           │                   ├── outer: (2)
+           │                   ├── cardinality: [0 - 1]
+           │                   ├── volatile
+           │                   ├── key: ()
+           │                   ├── fd: ()-->(28,29)
+           │                   ├── select
+           │                   │    ├── columns: x:28!null xy.y:29
+           │                   │    ├── outer: (2)
+           │                   │    ├── cardinality: [0 - 1]
+           │                   │    ├── key: ()
+           │                   │    ├── fd: ()-->(28,29)
+           │                   │    ├── scan xy
+           │                   │    │    ├── columns: x:28!null xy.y:29
+           │                   │    │    ├── key: (28)
+           │                   │    │    └── fd: (28)-->(29)
+           │                   │    └── filters
+           │                   │         └── x:28 = i:2 [outer=(2,28), constraints=(/2: (/NULL - ]; /28: (/NULL - ]), fd=(2)==(28), (28)==(2)]
+           │                   └── (random() * 10.0)::INT8
+           ├── when
+           │    ├── lt
+           │    │    ├── i:2
+           │    │    └── subquery
+           │    │         └── project
+           │    │              ├── columns: xy.y:17
+           │    │              ├── outer: (2)
+           │    │              ├── cardinality: [0 - 1]
+           │    │              ├── volatile
+           │    │              ├── key: ()
+           │    │              ├── fd: ()-->(17)
+           │    │              └── limit
+           │    │                   ├── columns: x:16!null xy.y:17
+           │    │                   ├── outer: (2)
+           │    │                   ├── cardinality: [0 - 1]
+           │    │                   ├── volatile
+           │    │                   ├── key: ()
+           │    │                   ├── fd: ()-->(16,17)
+           │    │                   ├── select
+           │    │                   │    ├── columns: x:16!null xy.y:17
+           │    │                   │    ├── outer: (2)
+           │    │                   │    ├── cardinality: [0 - 1]
+           │    │                   │    ├── key: ()
+           │    │                   │    ├── fd: ()-->(16,17)
+           │    │                   │    ├── scan xy
+           │    │                   │    │    ├── columns: x:16!null xy.y:17
+           │    │                   │    │    ├── key: (16)
+           │    │                   │    │    └── fd: (16)-->(17)
+           │    │                   │    └── filters
+           │    │                   │         └── x:16 = i:2 [outer=(2,16), constraints=(/2: (/NULL - ]; /16: (/NULL - ]), fd=(2)==(16), (16)==(2)]
+           │    │                   └── (random() * 10.0)::INT8
+           │    └── xy.y:33
+           └── subquery
+                └── project
+                     ├── columns: xy.y:21
+                     ├── outer: (2)
+                     ├── cardinality: [0 - 1]
+                     ├── volatile
+                     ├── key: ()
+                     ├── fd: ()-->(21)
+                     └── limit
+                          ├── columns: x:20!null xy.y:21
+                          ├── outer: (2)
+                          ├── cardinality: [0 - 1]
+                          ├── volatile
+                          ├── key: ()
+                          ├── fd: ()-->(20,21)
+                          ├── select
+                          │    ├── columns: x:20!null xy.y:21
+                          │    ├── outer: (2)
+                          │    ├── cardinality: [0 - 1]
+                          │    ├── key: ()
+                          │    ├── fd: ()-->(20,21)
+                          │    ├── scan xy
+                          │    │    ├── columns: x:20!null xy.y:21
+                          │    │    ├── key: (20)
+                          │    │    └── fd: (20)-->(21)
+                          │    └── filters
+                          │         └── x:20 = i:2 [outer=(2,20), constraints=(/2: (/NULL - ]; /20: (/NULL - ]), fd=(2)==(20), (20)==(2)]
+                          └── (random() * 10.0)::INT8
 
-# Don't decorrelate IFERROR branch if there are side effects
+# The first argument of a COALESCE can always be hoisted.
+norm
+SELECT COALESCE((SELECT y FROM xy WHERE x=i LIMIT (random()*10)::int), 10) FROM a;
+----
+project
+ ├── columns: coalesce:12
+ ├── volatile
+ ├── left-join-apply
+ │    ├── columns: i:2 x:8 y:9
+ │    ├── volatile
+ │    ├── scan a
+ │    │    └── columns: i:2
+ │    ├── limit
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── outer: (2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── volatile
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8,9)
+ │    │    ├── select
+ │    │    │    ├── columns: x:8!null y:9
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(8,9)
+ │    │    │    ├── scan xy
+ │    │    │    │    ├── columns: x:8!null y:9
+ │    │    │    │    ├── key: (8)
+ │    │    │    │    └── fd: (8)-->(9)
+ │    │    │    └── filters
+ │    │    │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │    │    └── (random() * 10.0)::INT8
+ │    └── filters (true)
+ └── projections
+      └── COALESCE(y:9, 10) [as=coalesce:12, outer=(9)]
+
+# Following COALESCE arguments can be hoisted if leakproof.
+norm
+SELECT COALESCE(i, (SELECT y FROM xy WHERE x=i LIMIT 1), 10) FROM a;
+----
+project
+ ├── columns: coalesce:12
+ ├── left-join (hash)
+ │    ├── columns: i:2 x:8 y:9
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── fd: (8)-->(9)
+ │    ├── scan a
+ │    │    └── columns: i:2
+ │    ├── scan xy
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
+ │    └── filters
+ │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ └── projections
+      └── COALESCE(i:2, y:9, 10) [as=coalesce:12, outer=(2,9)]
+
+# A volatile COALESCE argument (other than the first) cannot be hoisted.
+norm
+SELECT COALESCE(i, (SELECT y FROM xy WHERE x=i LIMIT (random()*10)::int), 10) FROM a;
+----
+project
+ ├── columns: coalesce:12
+ ├── volatile
+ ├── scan a
+ │    └── columns: i:2
+ └── projections
+      └── coalesce [as=coalesce:12, outer=(2), volatile, correlated-subquery]
+           ├── i:2
+           ├── subquery
+           │    └── project
+           │         ├── columns: y:9
+           │         ├── outer: (2)
+           │         ├── cardinality: [0 - 1]
+           │         ├── volatile
+           │         ├── key: ()
+           │         ├── fd: ()-->(9)
+           │         └── limit
+           │              ├── columns: x:8!null y:9
+           │              ├── outer: (2)
+           │              ├── cardinality: [0 - 1]
+           │              ├── volatile
+           │              ├── key: ()
+           │              ├── fd: ()-->(8,9)
+           │              ├── select
+           │              │    ├── columns: x:8!null y:9
+           │              │    ├── outer: (2)
+           │              │    ├── cardinality: [0 - 1]
+           │              │    ├── key: ()
+           │              │    ├── fd: ()-->(8,9)
+           │              │    ├── scan xy
+           │              │    │    ├── columns: x:8!null y:9
+           │              │    │    ├── key: (8)
+           │              │    │    └── fd: (8)-->(9)
+           │              │    └── filters
+           │              │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+           │              └── (random() * 10.0)::INT8
+           └── 10
+
+# Don't hoist IFERROR branch if there are side effects
 norm
 SELECT * FROM a WHERE IFERROR(1/0, (SELECT y::DECIMAL FROM xy WHERE x = i AND 5/y>1))=k
 ----
@@ -289,7 +665,7 @@ select
                                └── projections
                                     └── xy.y:9::DECIMAL [as=y:12, outer=(9), immutable]
 
-# Decorrelate IFERROR branch if there are no side effects
+# Hoist IFERROR branch if there are no side effects
 norm
 SELECT * FROM a WHERE IFERROR((1/0)::int, (SELECT y FROM xy WHERE x = i))=k
 ----
@@ -320,3 +696,54 @@ project
       │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
       └── filters
            └── k:1 = IFERROR((1 / 0)::INT8, y:9) [outer=(1,9), immutable, constraints=(/1: (/NULL - ]), fd=(9)-->(1)]
+
+# Regression test for #97432 - only hoist leakproof subqueries from
+# conditionally-evaluated CASE branches.
+norm
+SELECT CASE WHEN f = 1
+  THEN (SELECT y FROM xy WHERE x = i) --Hoistable
+  ELSE (SELECT 1 // 0 FROM xy WHERE x = i) END --Not Hoistable
+FROM a;
+----
+project
+ ├── columns: case:17
+ ├── immutable
+ ├── left-join (hash)
+ │    ├── columns: i:2 f:3 x:13 y:14
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── fd: (13)-->(14)
+ │    ├── scan a
+ │    │    └── columns: i:2 f:3
+ │    ├── scan xy
+ │    │    ├── columns: x:13!null y:14
+ │    │    ├── key: (13)
+ │    │    └── fd: (13)-->(14)
+ │    └── filters
+ │         └── x:13 = i:2 [outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
+ └── projections
+      └── case [as=case:17, outer=(2,3,14), immutable, correlated-subquery]
+           ├── true
+           ├── when
+           │    ├── f:3 = 1.0
+           │    └── y:14
+           └── subquery
+                └── project
+                     ├── columns: "?column?":12!null
+                     ├── outer: (2)
+                     ├── cardinality: [0 - 1]
+                     ├── immutable
+                     ├── key: ()
+                     ├── fd: ()-->(12)
+                     ├── select
+                     │    ├── columns: x:8!null
+                     │    ├── outer: (2)
+                     │    ├── cardinality: [0 - 1]
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(8)
+                     │    ├── scan xy
+                     │    │    ├── columns: x:8!null
+                     │    │    └── key: (8)
+                     │    └── filters
+                     │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+                     └── projections
+                          └── 1 // 0 [as="?column?":12, immutable]
