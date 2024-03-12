@@ -12,6 +12,7 @@ package rangefeed
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -35,9 +36,8 @@ var (
 	testKey            = roachpb.Key("/db1")
 	testTxnID          = uuid.MakeV4()
 	testIsolationLevel = isolation.Serializable
-	testTxnTS          = hlc.Timestamp{Logical: 1}
-	testNewClosedTs    = hlc.Timestamp{WallTime: 10, Logical: 2}
-	testMinTs          = hlc.Timestamp{}
+	testTxnTS          = hlc.Timestamp{WallTime: 10, Logical: 4}
+	testNewClosedTs    = hlc.Timestamp{WallTime: 15}
 	testRSpan          = roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
 	testSpan           = roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
 	testTs             = hlc.Timestamp{WallTime: 1}
@@ -98,12 +98,12 @@ func writeIntentOpEvent() (
 	expectedMemUsage int64,
 	expectedFutureMemUsage int64,
 ) {
+	fmt.Println(testTxnID)
 	op = makeLogicalOp(&enginepb.MVCCWriteIntentOp{
-		TxnID:           testTxnID,
-		TxnKey:          testKey,
-		TxnIsoLevel:     testIsolationLevel,
-		TxnMinTimestamp: testMinTs,
-		Timestamp:       testTxnTS,
+		TxnID:       testTxnID,
+		TxnKey:      testKey,
+		TxnIsoLevel: testIsolationLevel,
+		Timestamp:   testTxnTS,
 	})
 	expectedMemUsage += mvccLogicalOp + mvccWriteIntentOp + int64(op.Size())
 	// no future event to publish
@@ -115,6 +115,7 @@ func updateIntentOpEvent() (
 	expectedMemUsage int64,
 	expectedFutureMemUsage int64,
 ) {
+	fmt.Println(testTxnID)
 	op = makeLogicalOp(&enginepb.MVCCUpdateIntentOp{
 		TxnID:     testTxnID,
 		Timestamp: hlc.Timestamp{Logical: 3},
@@ -158,6 +159,7 @@ func abortIntentOpEvent() (
 	expectedMemUsage int64,
 	expectedFutureMemUsage int64,
 ) {
+	fmt.Println(testTxnID)
 	op = makeLogicalOp(&enginepb.MVCCAbortIntentOp{
 		TxnID: testTxnID,
 	})
@@ -171,6 +173,7 @@ func abortTxnOpEvent() (
 	expectedMemUsage int64,
 	expectedFutureMemUsage int64,
 ) {
+	fmt.Println(testTxnID)
 	op = makeLogicalOp(&enginepb.MVCCAbortTxnOp{
 		TxnID: testTxnID,
 	})
@@ -223,15 +226,15 @@ func checkpointEvent(span roachpb.RSpan, rts resolvedTimestamp) kvpb.RangeFeedEv
 }
 
 func generateCtEvent(
-	span roachpb.RSpan, rts resolvedTimestamp,
+	span roachpb.RSpan, rts resolvedTimestamp, ctEventTimestamp hlc.Timestamp,
 ) (ev event, expectedMemUsage int64, expectedFutureMemUsage int64) {
 	ev = event{
 		ct: ctEvent{
-			Timestamp: testNewClosedTs,
+			Timestamp: ctEventTimestamp,
 		},
 	}
 	expectedMemUsage += eventOverhead
-	if rts.ForwardClosedTS(context.Background(), testNewClosedTs) {
+	if rts.ForwardClosedTS(context.Background(), ctEventTimestamp) {
 		ce := checkpointEvent(span, rts)
 		expectedFutureMemUsage += futureEventBaseOverhead + rangefeedCheckpointOverhead + int64(ce.Size())
 	}
@@ -282,7 +285,7 @@ func generateSyncEvent() (ev event, expectedMemUsage int64, expectedFutureMemUsa
 	return
 }
 
-func TestEventSizeCalculation(t *testing.T) {
+func TestBasicEventSizeCalculation(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
@@ -353,7 +356,7 @@ func TestEventSizeCalculation(t *testing.T) {
 	t.Run("ct event", func(t *testing.T) {
 		rts := makeResolvedTimestamp(st)
 		rts.Init(ctx)
-		ev, expectedMemUsage, expectedFutureMemUsage := generateCtEvent(testRSpan, rts)
+		ev, expectedMemUsage, expectedFutureMemUsage := generateCtEvent(testRSpan, rts, testNewClosedTs)
 		require.Equal(t, expectedMemUsage, ev.MemUsage())
 		require.Equal(t, expectedFutureMemUsage, ev.FutureMemUsage(ctx, testRSpan, rts))
 	})
@@ -382,5 +385,63 @@ func TestEventSizeCalculation(t *testing.T) {
 		ev, expectedMemUsage, expectedFutureMemUsage := generateSyncEvent()
 		require.Equal(t, expectedMemUsage, ev.MemUsage())
 		require.Equal(t, expectedFutureMemUsage, ev.FutureMemUsage(ctx, testRSpan, rts))
+	})
+}
+
+func TestEventSeriesSizeCalculation(t *testing.T) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	t.Run("series of events", func(t *testing.T) {
+		events := []event{}
+		expectedMemUsage, expectedFutureMemUsage := int64(0), int64(0)
+		rts := makeResolvedTimestamp(st)
+		rts.Init(ctx)
+
+		// Set a new closed timestamp. Resolved timestamp advances.
+		ev, memUsage, futureMemUsage := generateCtEvent(testRSpan, rts, hlc.Timestamp{WallTime: 5})
+		// We pass by value when calling generateCtEvent so that testRSpan and rts
+		// are not modified by the function. Assert that.
+		require.Equal(t, hlc.Timestamp{}, rts.Get())
+		rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 5})
+		expectedMemUsage += memUsage
+		expectedFutureMemUsage += futureMemUsage
+		events = append(events, ev)
+
+		// Add an intent for a new transaction.
+		ev, memUsage, futureMemUsage = generateLogicalOpEvent("write_intent", testRSpan, rts)
+		require.Equal(t, len(ev.ops), 1)
+		rts.ConsumeLogicalOp(ctx, ev.ops[0])
+		require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
+		expectedMemUsage += memUsage
+		expectedFutureMemUsage += futureMemUsage
+		events = append(events, ev)
+
+		// Set a new closed timestamp and do not advance resolved ts.
+		ev, memUsage, futureMemUsage = generateCtEvent(testRSpan, rts, hlc.Timestamp{WallTime: 15})
+		rts.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 5})
+		require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
+		expectedMemUsage += memUsage
+		expectedFutureMemUsage += futureMemUsage
+		events = append(events, ev)
+
+		// Abort the transaction. Force checkpoint event in ConsumeLogicalOp.
+		ev, memUsage, futureMemUsage = generateLogicalOpEvent("abort_txn", testRSpan, rts)
+		require.Equal(t, len(ev.ops), 1)
+		rts.ConsumeLogicalOp(ctx, ev.ops[0])
+		require.Equal(t, hlc.Timestamp{WallTime: 15}, rts.Get())
+		expectedMemUsage += memUsage
+		expectedFutureMemUsage += futureMemUsage
+		events = append(events, ev)
+
+		actualMemUsage := int64(0)
+		actualFutureMemUsage := int64(0)
+		for _, e := range events {
+			actualMemUsage += e.MemUsage()
+			actualFutureMemUsage += e.FutureMemUsage(ctx, testRSpan, rts)
+		}
+
+		require.Equal(t, expectedMemUsage, actualMemUsage)
+		require.Equal(t, expectedFutureMemUsage, actualFutureMemUsage)
 	})
 }
