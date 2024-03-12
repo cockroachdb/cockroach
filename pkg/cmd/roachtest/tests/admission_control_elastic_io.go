@@ -122,16 +122,24 @@ func registerElasticIO(r registry.Registry) {
 				// not working, the threshold of 7 will be easily breached, since
 				// regular tokens allow sub-levels to exceed 10.
 				const subLevelThreshold = 7
+				const sampleCountForL0Sublevel = 12
+				var l0SublevelCount []float64
 				// Sleep initially for stability to be achieved, before measuring.
 				time.Sleep(5 * time.Minute)
 				for {
-					time.Sleep(30 * time.Second)
+					time.Sleep(10 * time.Second)
 					val, err := getMetricVal(subLevelMetric)
 					if err != nil {
 						continue
 					}
-					if val > subLevelThreshold {
-						t.Fatalf("sub-level count %f exceeded threshold", val)
+					l0SublevelCount = append(l0SublevelCount, val)
+					// We want to use the mean of the last 2m of data to avoid short-lived
+					// spikes causing failures.
+					if len(l0SublevelCount) >= sampleCountForL0Sublevel {
+						latestSampleMeanL0Sublevels := getMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
+						if latestSampleMeanL0Sublevels > subLevelThreshold {
+							t.Fatalf("sub-level mean %f over last %d iterations exceeded threshold", latestSampleMeanL0Sublevels, sampleCountForL0Sublevel)
+						}
 					}
 					if timeutil.Now().After(endTime) {
 						return nil
