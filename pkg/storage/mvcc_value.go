@@ -12,6 +12,8 @@ package storage
 
 import (
 	"encoding/binary"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -118,13 +120,32 @@ func (v MVCCValue) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 	if v.MVCCValueHeader != (enginepb.MVCCValueHeader{}) {
+		fields := make([]string, 0)
 		w.Printf("{")
 		if !v.LocalTimestamp.IsEmpty() {
-			w.Printf("localTs=%s", v.LocalTimestamp)
+			fields = append(fields, fmt.Sprintf("localTs=%s", v.LocalTimestamp))
 		}
+		if v.ImportEpoch != 0 {
+			fields = append(fields, fmt.Sprintf("importEpoch=%v", v.ImportEpoch))
+		}
+		w.Print(strings.Join(fields, ", "))
 		w.Printf("}")
 	}
 	w.Print(v.Value.PrettyPrint())
+}
+
+// EncodeMVCCValueForExport encodes fields from the MVCCValueHeader
+// that are appropriate for export out of the cluster.
+func EncodeMVCCValueForExport(mvccValue MVCCValue) ([]byte, error) {
+	if mvccValue.ImportEpoch == 0 {
+		return mvccValue.Value.RawBytes, nil
+	}
+
+	// We only export ImportEpoch.
+	mvccValue.MVCCValueHeader = enginepb.MVCCValueHeader{
+		ImportEpoch: mvccValue.ImportEpoch,
+	}
+	return EncodeMVCCValue(mvccValue)
 }
 
 // When running a metamorphic build, disable the simple MVCC value encoding to
@@ -209,6 +230,32 @@ func DecodeMVCCValue(buf []byte) (MVCCValue, error) {
 		return v, err
 	}
 	return decodeExtendedMVCCValue(buf)
+}
+
+// DecodeValueFromMVCCValue decodes and MVCCValue and returns the
+// roachpb.Value portion without parsing the MVCCValueHeader.
+//
+// NB: Caller assumes that this function does not copy or re-allocate
+// the underlying byte slice.
+func DecodeValueFromMVCCValue(buf []byte) (roachpb.Value, error) {
+	if len(buf) == 0 {
+		// Tombstone with no header.
+		return roachpb.Value{}, nil
+	}
+	if len(buf) <= tagPos {
+		return roachpb.Value{}, errMVCCValueMissingTag
+	}
+	if buf[tagPos] != extendedEncodingSentinel {
+		return roachpb.Value{RawBytes: buf}, nil
+	}
+
+	// Extended encoding
+	headerLen := binary.BigEndian.Uint32(buf)
+	headerSize := extendedPreludeSize + headerLen
+	if len(buf) < int(headerSize) {
+		return roachpb.Value{}, errMVCCValueMissingHeader
+	}
+	return roachpb.Value{RawBytes: buf[headerSize:]}, nil
 }
 
 // DecodeMVCCValueAndErr is a helper that can be called using the ([]byte,
