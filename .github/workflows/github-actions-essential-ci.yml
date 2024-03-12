@@ -3,6 +3,26 @@ on:
   pull_request:
     types: [ opened, reopened, synchronize, edited ]
     branches: [ master ]
+  push:
+    branches:
+      - 'master'
+      - 'release-*'
+      - 'staging'
+      - 'trying'
+      - '!release-1.0*'
+      - '!release-1.1*'
+      - '!release-2.0*'
+      - '!release-2.1*'
+      - '!release-19.1*'
+      - '!release-19.2*'
+      - '!release-20.1*'
+      - '!release-20.2*'
+      - '!release-21.1*'
+      - '!release-21.2*'
+      - '!release-22.1*'
+      - '!release-22.2*'
+      - '!release-23.1*'
+      - '!release-23.2*'
 concurrency:
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
@@ -141,7 +161,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_macos_amd64_build:
+  macos_amd64_build:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -159,7 +179,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_macos_arm64_build:
+  macos_arm64_build:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -197,7 +217,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_windows_build:
+  windows_build:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
