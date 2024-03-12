@@ -49,7 +49,26 @@ var (
 	// SSHDirectory is the path to search for SSH keys needed to set up
 	// set up new roachprod clusters.
 	SSHDirectory = os.ExpandEnv("${HOME}/.ssh")
+
+	// DefaultEmailDomain is used to form the full account name for GCE and Slack.
+	DefaultEmailDomain = EnvOrDefaultString(
+		"ROACHPROD_EMAIL_DOMAIN", "@cockroachlabs.com",
+	)
+
+	// EmailDomain used to form fully qualified usernames for gcloud and slack.
+	EmailDomain string
 )
+
+// EnvOrDefaultString returns the value of the environment variable with the
+// given key, or the default value if the environment variable is not set.
+//
+// Unlike envutil.EnvOrDefaultString, it does not assert properties of the key.
+func EnvOrDefaultString(key, def string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
+	}
+	return def
+}
 
 func init() {
 	var err error
@@ -69,9 +88,6 @@ func init() {
 const (
 	// DefaultDebugDir is used to stash debug information.
 	DefaultDebugDir = "${HOME}/.roachprod/debug"
-
-	// EmailDomain is used to form the full account name for GCE and Slack.
-	EmailDomain = "@cockroachlabs.com"
 
 	// Local is the prefix used to identify local clusters.
 	// It is also used as the zone for local clusters.
