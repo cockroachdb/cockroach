@@ -635,14 +635,9 @@ func runBackupProcessor(
 							if fileCount := len(resp.Files); fileCount > 0 {
 								resumeTS = resp.Files[fileCount-1].EndKeyTS
 							}
-							resumeSpan = spanAndTime{
-								span:       *resp.ResumeSpan,
-								firstKeyTS: resumeTS,
-								start:      span.start,
-								end:        span.end,
-								attempts:   span.attempts,
-								lastTried:  span.lastTried,
-							}
+							resumeSpan = span
+							resumeSpan.span = *resp.ResumeSpan
+							resumeSpan.firstKeyTS = resumeTS
 						}
 
 						if backupKnobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
