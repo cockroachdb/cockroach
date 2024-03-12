@@ -917,7 +917,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_INVERTED_INDEX
 %token <str> FORCE_NOT_NULL FORCE_NULL FORCE_QUOTE FORCE_ZIGZAG
 %token <str> FOREIGN FORMAT FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
 
@@ -12900,34 +12900,33 @@ index_flags_param:
   {
     $$.val = &tree.IndexFlags{NoIndexJoin: true}
   }
-|
-  NO_ZIGZAG_JOIN
+| NO_ZIGZAG_JOIN
   {
     $$.val = &tree.IndexFlags{NoZigzagJoin: true}
   }
-|
-  NO_FULL_SCAN
+| NO_FULL_SCAN
   {
     $$.val = &tree.IndexFlags{NoFullScan: true}
   }
-|
-  IGNORE_FOREIGN_KEYS
+| IGNORE_FOREIGN_KEYS
   {
     /* SKIP DOC */
     $$.val = &tree.IndexFlags{IgnoreForeignKeys: true}
   }
-|
-  FORCE_ZIGZAG
+| FORCE_INVERTED_INDEX
+  {
+    /* SKIP DOC */
+     $$.val = &tree.IndexFlags{ForceInvertedIndex: true}
+  }
+| FORCE_ZIGZAG
   {
      $$.val = &tree.IndexFlags{ForceZigzag: true}
   }
-|
-  FORCE_ZIGZAG '=' index_name
+| FORCE_ZIGZAG '=' index_name
   {
      $$.val = &tree.IndexFlags{ZigzagIndexes: []tree.UnrestrictedName{tree.UnrestrictedName($3)}}
   }
-|
-  FORCE_ZIGZAG '=' '[' iconst64 ']'
+| FORCE_ZIGZAG '=' '[' iconst64 ']'
   {
     /* SKIP DOC */
      $$.val = &tree.IndexFlags{ZigzagIndexIDs: []tree.IndexID{tree.IndexID($4.int64())}}
@@ -16540,6 +16539,7 @@ unreserved_keyword:
 | FORCE_NULL
 | FORCE_QUOTE
 | FORCE_INDEX
+| FORCE_INVERTED_INDEX
 | FORCE_ZIGZAG
 | FORWARD
 | FREEZE
@@ -17044,6 +17044,7 @@ bare_label_keywords:
 | FORCE_NULL
 | FORCE_QUOTE
 | FORCE_INDEX
+| FORCE_INVERTED_INDEX
 | FORCE_ZIGZAG
 | FOREIGN
 | FORMAT
