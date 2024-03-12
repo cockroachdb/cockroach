@@ -773,6 +773,10 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		}
 	}
 
+	if scan.Flags.ForceInvertedIndex && !scan.IsInvertedScan() {
+		return hugeCost
+	}
+
 	stats := scan.Relational().Statistics()
 	rowCount := stats.RowCount
 	if isUnfiltered && c.evalCtx != nil && c.evalCtx.SessionData().DisallowFullTableScans {
