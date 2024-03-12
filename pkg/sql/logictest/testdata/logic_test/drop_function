@@ -275,31 +275,27 @@ CREATE OR REPLACE FUNCTION f_b()  RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other objects \(\[test.public.f_called_by_b2\]\) still depend on it
 DROP FUNCTION f_called_by_b;
 
-statement ok
-ALTER FUNCTION f_called_by_b RENAME to f_called_by_b_1;
-ALTER FUNCTION f_called_by_b2 RENAME to f_called_by_b_2;
-
-statement error pgcode 2BP01 cannot drop function \"f_called_by_b_1\" because other objects \(\[test.public.f_called_by_b_2\]\) still depend on it
-DROP FUNCTION f_called_by_b_1;
+statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other objects \(\[test.public.f_called_by_b2\]\) still depend on it
+DROP FUNCTION f_called_by_b;
 
 statement ok
-CREATE TABLE t1_with_b_2_ref(j int default f_called_by_b_1() CHECK (f_called_by_b_1() > 0));
+CREATE TABLE t1_with_b_2_ref(j int default f_called_by_b() CHECK (f_called_by_b() > 0));
 CREATE SCHEMA altSchema;
 
 statement ok
-ALTER FUNCTION f_called_by_b_1 SET SCHEMA altSchema;
+ALTER FUNCTION f_called_by_b SET SCHEMA altSchema;
 
 skipif config local-legacy-schema-changer
 statement ok
 DROP SCHEMA altSchema CASCADE;
 
 onlyif config local-legacy-schema-changer
-statement error pgcode 2BP01 cannot drop function \"f_called_by_b_1\" because other object \(\[test.public.f_called_by_b_2, test.public.t1_with_b_2_ref\]\) still depend on it
+statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other object \(\[test.public.f_called_by_b2, test.public.t1_with_b_2_ref\]\) still depend on it
 DROP SCHEMA altSchema CASCADE;
 
 skipif config local-legacy-schema-changer
-statement error pgcode 42883 unknown function: f_called_by_b_2()
-SELECT * FROM  f_called_by_b_2();
+statement error pgcode 42883 unknown function: f_called_by_b2()
+SELECT * FROM  f_called_by_b2();
 
 skipif config local-legacy-schema-changer
 query T
@@ -313,7 +309,7 @@ CREATE TABLE public.t1_with_b_2_ref (
 
 onlyif config local-legacy-schema-changer
 statement ok
-DROP FUNCTION f_called_by_b_2;
+DROP FUNCTION f_called_by_b2;
 DROP TABLE t1_with_b_2_ref;
 
 statement ok
