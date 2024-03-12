@@ -375,4 +375,10 @@ func initFlags() {
 			"sql-instance", 0, "specific SQL/HTTP instance to connect to (this is a roachprod abstraction distinct from the internal instance ID)")
 	}
 
+	for _, cmd := range []*cobra.Command{startCmd, listCmd, syncCmd} {
+		cmd.Flags().StringSliceVar(&config.DNSRequiredProviders,
+			"dns-required-providers", config.DefaultDNSRequiredProviders,
+			"the cloud providers that must be active to refresh DNS entries",
+		)
+	}
 }

@@ -18,6 +18,7 @@ import (
 	"path"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -57,6 +58,15 @@ var (
 
 	// EmailDomain used to form fully qualified usernames for gcloud and slack.
 	EmailDomain string
+
+	// DNSRequiredProviders is the list of cloud providers that must be active for
+	// DNS records to be synced when roachprod syncs its state.
+	DefaultDNSRequiredProviders = envOrDefaultStrings(
+		"ROACHPROD_DNS_REQUIRED_PROVIDERS", []string{"gce", "aws"},
+	)
+
+	// DNSRequiredProviders is the list of cloud providers that must be active for
+	DNSRequiredProviders []string
 )
 
 // EnvOrDefaultString returns the value of the environment variable with the
@@ -66,6 +76,13 @@ var (
 func EnvOrDefaultString(key, def string) string {
 	if v, ok := os.LookupEnv(key); ok {
 		return v
+	}
+	return def
+}
+
+func envOrDefaultStrings(key string, def []string) []string {
+	if v, ok := os.LookupEnv(key); ok {
+		return strings.Split(v, ",")
 	}
 	return def
 }
