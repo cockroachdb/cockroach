@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -193,6 +194,8 @@ type SSTBatcher struct {
 
 	asyncAddSSTs ctxgroup.Group
 
+	valueBuf bufalloc.ByteAllocator
+
 	mu struct {
 		syncutil.Mutex
 
@@ -332,12 +335,18 @@ func (b *SSTBatcher) SetOnFlush(onFlush func(summary kvpb.BulkOpSummary)) {
 func (b *SSTBatcher) AddMVCCKeyWithImportEpoch(
 	ctx context.Context, key storage.MVCCKey, value []byte, importEpoch uint32,
 ) error {
+
 	mvccVal, err := storage.DecodeMVCCValue(value)
 	if err != nil {
 		return err
 	}
 	mvccVal.MVCCValueHeader.ImportEpoch = importEpoch
-	encVal, err := storage.EncodeMVCCValue(mvccVal)
+
+	b.valueBuf = b.valueBuf.Truncate()
+	var buf []byte
+	b.valueBuf, buf = b.valueBuf.Alloc(mvccVal.ExtendedEncodingSize(), 0)
+
+	encVal, err := storage.EncodeMVCCValueToBuf(mvccVal, buf)
 	if err != nil {
 		return err
 	}
@@ -427,6 +436,7 @@ func (b *SSTBatcher) Reset(ctx context.Context) {
 	b.batchEndTimestamp = hlc.Timestamp{}
 	b.flushKey = nil
 	b.flushKeyChecked = false
+	b.valueBuf = b.valueBuf.Truncate()
 	b.ms.Reset()
 
 	if b.writeAtBatchTS {

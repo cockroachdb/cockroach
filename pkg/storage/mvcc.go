@@ -7751,6 +7751,7 @@ func mvccExportToWriter(
 		return maxSize
 	}
 
+	var a bufalloc.ByteAllocator
 	iter.SeekGE(opts.StartKey)
 	for {
 		if ok, err := iter.Valid(); err != nil {
@@ -7884,8 +7885,13 @@ func mvccExportToWriter(
 				return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
 			}
 
-			if opts.IncludeMVCCValueHeader {
-				unsafeValue, err = EncodeMVCCValueForExport(mvccValue)
+			if !ok && opts.IncludeMVCCValueHeader {
+
+				a = a.Truncate()
+				var buf []byte
+				a, buf = a.Alloc(mvccValue.ExtendedEncodingSizeForExport(), 0)
+
+				unsafeValue, err = EncodeMVCCValueForExport(mvccValue, buf)
 				if err != nil {
 					return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err, "repackaging imported mvcc value %s", unsafeKey)
 				}

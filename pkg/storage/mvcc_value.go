@@ -102,6 +102,27 @@ func (v MVCCValue) LocalTimestampNeeded(keyTS hlc.Timestamp) bool {
 		v.LocalTimestamp.ToTimestamp().Less(keyTS)
 }
 
+// ExtendedEncodingSize is the size require to encode this MVCCValue
+// using the extended encoding. This does not check whether the
+// extended encoding is actually required.
+func (v MVCCValue) ExtendedEncodingSize() int {
+	headerLen := v.MVCCValueHeader.Size()
+	headerSize := extendedPreludeSize + headerLen
+	return headerSize + len(v.Value.RawBytes)
+}
+
+// ExtendedEncodingSizeForExport is the size require to encode this MVCCValue
+// using the extended encoding if being encoded for export. This does
+// not check whether the extended encoding is actually required.
+//
+// NB: Must be updated with EncodeMVCCValueForExport.
+func (v MVCCValue) ExtendedEncodingSizeForExport() int {
+	h := enginepb.MVCCValueHeader{ImportEpoch: v.MVCCValueHeader.ImportEpoch}
+	headerLen := h.Size()
+	headerSize := extendedPreludeSize + headerLen
+	return headerSize + len(v.Value.RawBytes)
+}
+
 // GetLocalTimestamp returns the MVCCValue's local timestamp. If the local
 // timestamp is not set explicitly, its implicit value is taken from the
 // provided key version timestamp and returned.
@@ -136,16 +157,14 @@ func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // EncodeMVCCValueForExport encodes fields from the MVCCValueHeader
 // that are appropriate for export out of the cluster.
-func EncodeMVCCValueForExport(mvccValue MVCCValue) ([]byte, error) {
-	if mvccValue.ImportEpoch == 0 {
+//
+// NB: Must be updated with ExtendedEncodingSizeForExport.
+func EncodeMVCCValueForExport(mvccValue MVCCValue, b []byte) ([]byte, error) {
+	mvccValue.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp{}
+	if mvccValue.MVCCValueHeader.IsEmpty() {
 		return mvccValue.Value.RawBytes, nil
 	}
-
-	// We only export ImportEpoch.
-	mvccValue.MVCCValueHeader = enginepb.MVCCValueHeader{
-		ImportEpoch: mvccValue.ImportEpoch,
-	}
-	return EncodeMVCCValue(mvccValue)
+	return EncodeMVCCValueToBuf(mvccValue, b)
 }
 
 // When running a metamorphic build, disable the simple MVCC value encoding to
@@ -185,6 +204,8 @@ func encodedMVCCValueSize(v MVCCValue) int {
 // struct comparisons have a significant performance regression in Go 1.19 which
 // negates the inlining gain. Reconsider this with Go 1.20. See:
 // https://github.com/cockroachdb/cockroach/issues/88818
+//
+// TODO(ssd): Dedup with EncodeMVCCValueWithAllocator.
 func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
 	if v.MVCCValueHeader.IsEmpty() && !disableSimpleValueEncoding {
 		// Simple encoding. Use the roachpb.Value encoding directly with no
@@ -199,6 +220,50 @@ func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
 	valueSize := headerSize + len(v.Value.RawBytes)
 
 	buf := make([]byte, valueSize)
+	// 4-byte-header-len
+	binary.BigEndian.PutUint32(buf, uint32(headerLen))
+	// 1-byte-sentinel
+	buf[tagPos] = extendedEncodingSentinel
+	// mvcc-header
+	//
+	// NOTE: we don't use protoutil to avoid passing v.MVCCValueHeader through
+	// an interface, which would cause a heap allocation and incur the cost of
+	// dynamic dispatch.
+	if _, err := v.MVCCValueHeader.MarshalToSizedBuffer(buf[extendedPreludeSize:headerSize]); err != nil {
+		return nil, errors.Wrap(err, "marshaling MVCCValueHeader")
+	}
+	// <4-byte-checksum><1-byte-tag><encoded-data> or empty for tombstone
+	copy(buf[headerSize:], v.Value.RawBytes)
+	return buf, nil
+}
+
+// EncodeMVCCValueToBuf encodes an MVCCValue into its Pebble
+// representation. See the comment on MVCCValue for a description of
+// the encoding scheme.
+//
+// If extended encoding is required, the given buffer will be used. If
+// the provided buffer is not large enough an error is
+// returned. Callers can use (MVCCValue).ExtendedEncodingSize() to
+// determine the required buffer size before calling.
+//
+// TODO(ssd): Dedup with EncodeMVCCValue.
+func EncodeMVCCValueToBuf(v MVCCValue, buf []byte) ([]byte, error) {
+	if v.MVCCValueHeader.IsEmpty() && !disableSimpleValueEncoding {
+		// Simple encoding. Use the roachpb.Value encoding directly with no
+		// modification. No need to re-allocate or copy.
+		return v.Value.RawBytes, nil
+	}
+	if len(buf) < v.ExtendedEncodingSize() {
+		return nil, errors.AssertionFailedf("provided buffer not large enough to encode MVCCValue")
+	}
+
+	// Extended encoding. Wrap the roachpb.Value encoding with a header containing
+	// MVCC-level metadata. Requires a re-allocation and copy.
+	headerLen := v.MVCCValueHeader.Size()
+	headerSize := extendedPreludeSize + headerLen
+
+	// Extended encoding. Wrap the roachpb.Value encoding with a header containing
+	// MVCC-level metadata. Requires a copy.
 	// 4-byte-header-len
 	binary.BigEndian.PutUint32(buf, uint32(headerLen))
 	// 1-byte-sentinel
