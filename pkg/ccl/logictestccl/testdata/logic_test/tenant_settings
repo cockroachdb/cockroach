@@ -183,7 +183,7 @@ user host-cluster-root
 
 # Verify that destroying a tenant cleans up any tenant-specific overrides.
 statement ok
-CREATE TENANT foo1234
+CREATE TENANT foo1234 WITH SERVICE NONE
 
 statement ok
 ALTER TENANT foo1234 SET CLUSTER SETTING sql.notices.enabled = true
