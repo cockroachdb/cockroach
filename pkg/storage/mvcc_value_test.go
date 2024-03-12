@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
@@ -105,7 +106,8 @@ func TestEncodeMVCCValueForExport(t *testing.T) {
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			encodedVal, err := EncodeMVCCValueForExport(tc.val)
+			buf := make([]byte, tc.val.ExtendedEncodingSize())
+			encodedVal, err := EncodeMVCCValueForExport(tc.val, buf)
 			require.NoError(t, err)
 			strippedMVCCVal, err := DecodeMVCCValue(encodedVal)
 			require.NoError(t, err)
@@ -314,15 +316,40 @@ func BenchmarkEncodeMVCCValueForExport(b *testing.B) {
 	headers, values := mvccValueBenchmarkConfigs()
 	for hDesc, h := range headers {
 		for vDesc, v := range values {
+			a := bufalloc.ByteAllocator{}
 			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
 			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
+			buf := make([]byte, mvccValue.ExtendedEncodingSize())
 			b.Run(name, func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
-					res, err := EncodeMVCCValueForExport(mvccValue)
+					res, err := EncodeMVCCValueForExport(mvccValue, buf)
 					if err != nil { // for performance
 						require.NoError(b, err)
 					}
 					_ = res
+					a = a.Truncate()
+				}
+			})
+		}
+	}
+}
+
+func BenchmarkEncodeMVCCValueWithAllocator(b *testing.B) {
+	DisableMetamorphicSimpleValueEncoding(b)
+	headers, values := mvccValueBenchmarkConfigs()
+	for hDesc, h := range headers {
+		for vDesc, v := range values {
+			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
+			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
+			buf := make([]byte, mvccValue.ExtendedEncodingSize())
+			b.Run(name, func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					res, err := EncodeMVCCValueToBuf(mvccValue, buf)
+					if err != nil { // for performance
+						require.NoError(b, err)
+					}
+					_ = res
+					buf = buf[:0]
 				}
 			})
 		}
