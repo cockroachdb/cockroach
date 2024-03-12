@@ -21,6 +21,21 @@ import (
 // FmtHideConstants or FmtShortenConstants is set in the flags and the node is
 // affected by that format.
 func (ctx *FmtCtx) formatNodeOrAdjustConstants(n NodeFormatter) {
+	if ctx.flags.HasFlags(FmtCollapseLists) {
+		// This is a more aggressive form of collapsing lists than the cases
+		// provided by FmtHideConstants and FmtShortenConstants.
+		switch v := n.(type) {
+		case *ValuesClause:
+			v.formatForFingerprint(ctx)
+			return
+		case *Tuple:
+			v.formatForFingerprint(ctx)
+			return
+		case *Array:
+			v.formatForFingerprint(ctx)
+			return
+		}
+	}
 	if ctx.flags.HasFlags(FmtHideConstants) {
 		switch v := n.(type) {
 		case *ValuesClause:
@@ -312,6 +327,14 @@ func (node *DArray) formatShortenConstants(ctx *FmtCtx) {
 
 func arityIndicator(n int) Expr {
 	return NewUnresolvedName(arityString(n))
+}
+
+// arityIndicatorNoBounds is like arityIndicator, but it does not include the
+// bounds in the name. It's used when we don't care about differentiating
+// between different bounds, such as in formatting the statement as a
+// representative query for fingerprint generation.
+func arityIndicatorNoBounds() Expr {
+	return NewUnresolvedName(genericArityIndicator)
 }
 
 func arityString(n int) string {
