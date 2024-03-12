@@ -664,11 +664,18 @@ func (p *Provider) createVM(
 		l.Printf("WARNING: increasing the OS volume size to minimally allowed 32GB")
 		osVolumeSize = 32
 	}
-	imageSKUForArch := func(arch string) string {
+	imageSKU := func(arch string, machineType string) string {
 		if arch == string(vm.ArchARM64) {
 			return "22_04-lts-arm64"
 		}
-		return "22_04-lts-gen2"
+		version := MachineFamilyVersionFromMachineType(machineType)
+		// N.B. We make a simplifying assumption that anything above v5 is gen2.
+		// roachtest's SelectAzureMachineType prefers v5 machine types, some of which do not support gen1.
+		// (Matrix of machine types supporting gen2: https://learn.microsoft.com/en-us/azure/virtual-machines/generation-2)
+		if version >= 5 {
+			return "22_04-lts-gen2"
+		}
+		return "22_04-lts"
 	}
 
 	// Derived from
@@ -686,12 +693,12 @@ func (p *Provider) createVM(
 				// You can find available versions by running the following command:
 				// az machine image list --all --publisher Canonical
 				// To get the latest 22.04 version:
-				// az machine image list --all --publisher Canonical | \
+				// az vm image list --all --publisher Canonical | \
 				// jq '[.[] | select(.sku=="22_04-lts")] | max_by(.version)'
 				ImageReference: &compute.ImageReference{
 					Publisher: to.StringPtr("Canonical"),
 					Offer:     to.StringPtr("0001-com-ubuntu-server-jammy"),
-					Sku:       to.StringPtr(imageSKUForArch(opts.Arch)),
+					Sku:       to.StringPtr(imageSKU(opts.Arch, providerOpts.MachineType)),
 					Version:   to.StringPtr("22.04.202312060"),
 				},
 				OsDisk: &compute.OSDisk{
@@ -1543,7 +1550,7 @@ func getUbuntuImage(version vm.UbuntuVersion) ([]string, error) {
 	return nil, errors.Errorf("Unknown Ubuntu version specified.")
 }
 
-var azureMachineTypes = regexp.MustCompile(`^(Standard_[DE])(\d+)((?:p|l|pl)?ds)_v5$`)
+var azureMachineTypes = regexp.MustCompile(`^(Standard_[DE])(\d+)([a-z]*)_v(?P<version>\d+)$`)
 
 // CpuArchFromAzureMachineType attempts to determine the CPU architecture from the corresponding Azure
 // machine type. In case the machine type is not recognized, it defaults to AMD64.
@@ -1551,7 +1558,7 @@ var azureMachineTypes = regexp.MustCompile(`^(Standard_[DE])(\d+)((?:p|l|pl)?ds)
 func CpuArchFromAzureMachineType(machineType string) vm.CPUArch {
 	matches := azureMachineTypes.FindStringSubmatch(machineType)
 
-	if len(matches) >= 3 {
+	if len(matches) >= 4 {
 		series := matches[1] + matches[3]
 		if series == "Standard_Dps" || series == "Standard_Dpds" ||
 			series == "Standard_Dplds" || series == "Standard_Dpls" ||
@@ -1560,4 +1567,23 @@ func CpuArchFromAzureMachineType(machineType string) vm.CPUArch {
 		}
 	}
 	return vm.ArchAMD64
+}
+
+// MachineFamilyVersionFromMachineType attempts to determine the machine family version from the machine type.
+// If the version cannot be determined, it returns -1.
+func MachineFamilyVersionFromMachineType(machineType string) int {
+	matches := azureMachineTypes.FindStringSubmatch(machineType)
+	for i, name := range azureMachineTypes.SubexpNames() {
+		if i >= len(matches) {
+			break
+		}
+		if i != 0 && name == "version" {
+			res, err := strconv.Atoi(matches[i])
+			if err != nil {
+				return -1
+			}
+			return res
+		}
+	}
+	return -1
 }
