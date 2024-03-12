@@ -81,8 +81,11 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 
 			rd := makeRestoreDriver(t, c, sp)
 			rd.prepareCluster(ctx)
-			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c,
-				gatewayNode, rd))
+			cfg := defaultNodeShutdownConfig(c, nodeToShutdown)
+			cfg.restartSettings = rd.defaultClusterSettings()
+			require.NoError(t,
+				executeNodeShutdown(ctx, t, c, cfg,
+					makeRestoreStarter(ctx, t, c, gatewayNode, rd)))
 			rd.checkFingerprint(ctx)
 		},
 	})
@@ -96,15 +99,16 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          sp.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-
 			gatewayNode := 2
 			nodeToShutdown := 2
 
 			rd := makeRestoreDriver(t, c, sp)
 			rd.prepareCluster(ctx)
-
-			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c,
-				gatewayNode, rd))
+			cfg := defaultNodeShutdownConfig(c, nodeToShutdown)
+			cfg.restartSettings = rd.defaultClusterSettings()
+			require.NoError(t,
+				executeNodeShutdown(ctx, t, c, cfg,
+					makeRestoreStarter(ctx, t, c, gatewayNode, rd)))
 			rd.checkFingerprint(ctx)
 		},
 	})
@@ -858,6 +862,12 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 		t:  t,
 		c:  c,
 		sp: sp,
+	}
+}
+
+func (rd *restoreDriver) defaultClusterSettings() []install.ClusterSettingOption {
+	return []install.ClusterSettingOption{
+		install.SecureOption(false),
 	}
 }
 
