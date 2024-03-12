@@ -418,8 +418,6 @@ type ScanFlags struct {
 	// ForceIndex and NoIndexJoin cannot both be set at the same time.
 	ForceIndex  bool
 	ForceZigzag bool
-	Direction   tree.Direction
-	Index       int
 
 	// When the optimizer is performing unique constraint or foreign key
 	// constraint check, we will temporarily disable the not visible index feature
@@ -431,6 +429,9 @@ type ScanFlags struct {
 	// true, optimizer will also generate equivalent memo group using the
 	// invisible index. Otherwise, optimizer will ignore the invisible indexes.
 	DisableNotVisibleIndex bool
+
+	Direction tree.Direction
+	Index     int
 
 	// ZigzagIndexes makes planner prefer a zigzag with particular indexes.
 	// ForceZigzag must also be true.
