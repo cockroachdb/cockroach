@@ -93,6 +93,8 @@ func initFlags() {
 	rootCmd.PersistentFlags().IntVarP(&config.MaxConcurrency, "max-concurrency", "", 32,
 		"maximum number of operations to execute on nodes concurrently, set to zero for infinite",
 	)
+	rootCmd.PersistentFlags().StringVarP(&config.EmailDomain, "email-domain", "",
+		config.DefaultEmailDomain, "email domain for users")
 
 	createCmd.Flags().DurationVarP(&createVMOpts.Lifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
