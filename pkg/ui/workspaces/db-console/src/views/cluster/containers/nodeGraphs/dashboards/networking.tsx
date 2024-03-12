@@ -185,20 +185,96 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Unhealthy RPC Connections"
-      tooltip={`The number of outgoing connections on each node that are in an
+        title="Unhealthy RPC Connections"
+        tooltip={`The number of outgoing connections on each node that are in an
           unhealthy state.`}
-      showMetricsInTooltip={true}
+        showMetricsInTooltip={true}
     >
       <Axis label="connections">
         {nodeIDs.map(nid => (
+            <Metric
+                key={nid}
+                name="cr.node.rpc.connection.unhealthy"
+                title={nodeDisplayName(nodeDisplayNameByID, nid)}
+                sources={storeIDsForNode(storeIDsByNodeID, nid)}
+                tenantSource={tenantSource}
+            />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Proxy requests"
+      tooltip={`The number of proxy requests each node is sending.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="requests">
+        {nodeIDs.map(nid => (
           <Metric
             key={nid}
-            name="cr.node.rpc.connection.unhealthy"
+            name="cr.node.distsender.rpc.proxy.sent"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={storeIDsForNode(storeIDsByNodeID, nid)}
             tenantSource={tenantSource}
+            nonNegativeRate
           />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+        title="Proxy request errors"
+        tooltip={`The number of proxy request errors on each node.`}
+        showMetricsInTooltip={true}
+    >
+      <Axis label="errors">
+        {nodeIDs.map(nid => (
+            <Metric
+                key={nid}
+                name="cr.node.distsender.rpc.proxy.err"
+                title={nodeDisplayName(nodeDisplayNameByID, nid)}
+                sources={storeIDsForNode(storeIDsByNodeID, nid)}
+                tenantSource={tenantSource}
+                nonNegativeRate
+            />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Proxy forwards"
+      tooltip={`The number of proxy requests each node is fowarding.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="requests">
+        {nodeIDs.map(nid => (
+          <Metric
+            key={nid}
+            name="cr.node.distsender.rpc.proxy.forward.sent"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            tenantSource={tenantSource}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+        title="Proxy forwards"
+        tooltip={`The number of proxy request errors on each node.`}
+        showMetricsInTooltip={true}
+    >
+      <Axis label="errors">
+        {nodeIDs.map(nid => (
+            <Metric
+                key={nid}
+                name="cr.node.distsender.rpc.proxy.forward.err"
+                title={nodeDisplayName(nodeDisplayNameByID, nid)}
+                sources={storeIDsForNode(storeIDsByNodeID, nid)}
+                tenantSource={tenantSource}
+                nonNegativeRate
+            />
         ))}
       </Axis>
     </LineGraph>,
