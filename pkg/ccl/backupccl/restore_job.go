@@ -1992,7 +1992,7 @@ func (r *restoreResumer) validateJobIsResumable(
 	}
 
 	if err := checkBackupManifestVersionCompatability(ctx, execConfig.Settings.Version,
-		mainBackupManifests, allowUnsafeRestore, details.ExperimentalOnline); err != nil {
+		mainBackupManifests, allowUnsafeRestore); err != nil {
 		return err
 	}
 

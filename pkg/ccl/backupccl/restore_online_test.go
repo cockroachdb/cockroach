@@ -202,7 +202,6 @@ func TestOnlineRestoreErrors(t *testing.T) {
 		rSQLDB.ExpectErr(t, "scheme userfile is not accessible during node startup",
 			"RESTORE DATABASE bank FROM LATEST IN 'userfile:///my_backups' WITH EXPERIMENTAL DEFERRED COPY")
 	})
-
 }
 
 func bankOnlineRestore(

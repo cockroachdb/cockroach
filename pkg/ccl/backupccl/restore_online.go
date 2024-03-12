@@ -361,6 +361,37 @@ func checkManifestsForOnlineCompat(ctx context.Context, manifests []backuppb.Bac
 	return nil
 }
 
+// checkBackupElidedPrefixForOnlineCompat ensures the backup is online
+// restorable depending on the kind of elided prefix in the backup. If no
+// prefixes were stripped in the backup, the restore cannot rewrite table
+// descriptors.
+func checkBackupElidedPrefixForOnlineCompat(
+	ctx context.Context, manifests []backuppb.BackupManifest, rewrites jobspb.DescRewriteMap,
+) error {
+	elidePrefix := manifests[0].ElidedPrefix
+
+	for _, manifest := range manifests {
+		if manifest.ElidedPrefix != elidePrefix {
+			return errors.AssertionFailedf("incremental backup elided prefix is not the same as full backup")
+		}
+	}
+	switch elidePrefix {
+	case execinfrapb.ElidePrefix_TenantAndTable:
+		return nil
+	case execinfrapb.ElidePrefix_Tenant:
+		return errors.AssertionFailedf("online restore disallowed for restores of tenants. previous check failed.")
+	case execinfrapb.ElidePrefix_None:
+		for oldID, rw := range rewrites {
+			if rw.ID != oldID {
+				return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: descriptor rewrites not supported but required (%d -> %d) on backup without stripped table prefixes", oldID, rw.ID)
+			}
+		}
+		return nil
+	default:
+		return errors.AssertionFailedf("unexpected elided prefix value")
+	}
+}
+
 func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 	ctx context.Context, execCtx sql.JobExecContext, details jobspb.RestoreDetails,
 ) (uint64, error) {
