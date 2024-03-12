@@ -541,6 +541,10 @@ message LocalOnlySessionData {
   // statistics merged from partial and full statistics for cardinality
   // estimation in the optimizer.
   bool optimizer_use_merged_partial_statistics = 137;
+  // OptimizerUseConditionalHoistFix, when true, prevents the optimizer from
+  // hoisting a volatile expression that is conditionally executed by a CASE,
+  // COALESCE, or IFERR expression.
+  bool optimizer_use_conditional_hoist_fix = 138;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
