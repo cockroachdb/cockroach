@@ -26,5 +26,6 @@ go_library(
 go_binary(
     name = "cockroach-sql",
     embed = [":cockroach-sql_lib"],
+    exec_properties = {"Pool": "large"},
     visibility = ["//visibility:public"],
 )
