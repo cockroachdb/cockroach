@@ -27,6 +27,7 @@ exit_status=0
 # Set up credentials
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 log_into_gcloud
+generate_ssh_key
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 export ROACHPROD_USER=teamcity
 export ROACHPROD_CLUSTER=teamcity-microbench-${TC_BUILD_ID}
