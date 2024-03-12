@@ -15,7 +15,6 @@ bazel test //pkg/acceptance:acceptance_test \
   --remote_download_minimal \
   "--sandbox_writable_path=$ARTIFACTSDIR" \
   "--test_tmpdir=$ARTIFACTSDIR" \
-  --bes_keywords acceptance \
   --test_arg=-l="$ARTIFACTSDIR" \
   --test_arg=-b=$COCKROACH \
   --test_env=TZ=America/New_York \

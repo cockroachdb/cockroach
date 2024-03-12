@@ -22,7 +22,7 @@ export COCKROACH_DEV_LICENSE=$(gcloud secrets versions access 1 --secret=cockroa
 set -x
 
 bazel build --config=$CROSSCONFIG $(./build/github/engflow-args.sh) \
-      --bes_keywords=local-roachtest --jobs 100 \
+      --jobs 100 \
       //pkg/cmd/cockroach-short \
       //pkg/cmd/roachtest \
       //pkg/cmd/roachprod \
