@@ -240,7 +240,7 @@ func (lt *LockTracker) addLock(call *ast.CallExpr, isRead bool) {
 
 // maybeReportUnlock tries to find a matching lock for a given unlock by
 // iterating backwards in the locks slice. If one is found, it checks if the
-// distance between is greater than maxLineDistance and also has no nlint
+// distance between is greater than maxLineDistance and also has no nolint
 // comment and reports on that if both are true.
 func (lt *LockTracker) maybeReportUnlock(call *ast.CallExpr, isRead bool) {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
