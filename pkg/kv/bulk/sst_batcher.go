@@ -193,6 +193,8 @@ type SSTBatcher struct {
 
 	asyncAddSSTs ctxgroup.Group
 
+	valueScratch []byte
+
 	mu struct {
 		syncutil.Mutex
 
@@ -332,16 +334,17 @@ func (b *SSTBatcher) SetOnFlush(onFlush func(summary kvpb.BulkOpSummary)) {
 func (b *SSTBatcher) AddMVCCKeyWithImportEpoch(
 	ctx context.Context, key storage.MVCCKey, value []byte, importEpoch uint32,
 ) error {
+
 	mvccVal, err := storage.DecodeMVCCValue(value)
 	if err != nil {
 		return err
 	}
 	mvccVal.MVCCValueHeader.ImportEpoch = importEpoch
-	encVal, err := storage.EncodeMVCCValue(mvccVal)
+	b.valueScratch, err = storage.EncodeMVCCValueToBuf(mvccVal, b.valueScratch[:0])
 	if err != nil {
 		return err
 	}
-	return b.AddMVCCKey(ctx, key, encVal)
+	return b.AddMVCCKey(ctx, key, b.valueScratch)
 }
 
 // AddMVCCKey adds a key+timestamp/value pair to the batch (flushing if needed).
@@ -427,6 +430,7 @@ func (b *SSTBatcher) Reset(ctx context.Context) {
 	b.batchEndTimestamp = hlc.Timestamp{}
 	b.flushKey = nil
 	b.flushKeyChecked = false
+	b.valueScratch = b.valueScratch[:0]
 	b.ms.Reset()
 
 	if b.writeAtBatchTS {
