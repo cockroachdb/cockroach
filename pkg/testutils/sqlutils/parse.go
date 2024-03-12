@@ -111,9 +111,6 @@ var issueLinkRE = regexp.MustCompile("https://go.crdb.dev/issue-v/([0-9]+)/.*")
 // VerifyParseError is used in the SQL and PL/pgSQL datadriven parser tests to
 // check that an unsuccessfully parsed expression returns an expected error.
 func VerifyParseError(err error) string {
-	if err == nil {
-		return ""
-	}
 	pgerr := pgerror.Flatten(err)
 	msg := pgerr.Message
 	if pgerr.Detail != "" {
