@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -200,6 +201,32 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 				tree.AsString(maybeExistingFuncObj), scDesc.GetName(),
 			)
 		}
+	}
+
+	// Disallow renaming if this rename operation will break other UDF's invoking
+	// this one.
+	var dependentFuncs []string
+	for _, dep := range fnDesc.GetDependedOnBy() {
+		desc, err := params.p.Descriptors().ByID(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
+		if err != nil {
+			return err
+		}
+		_, ok := desc.(catalog.FunctionDescriptor)
+		if !ok {
+			continue
+		}
+		fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
+		if err != nil {
+			return err
+		}
+		dependentFuncs = append(dependentFuncs, fullyResolvedName.FQString())
+	}
+	if len(dependentFuncs) > 0 {
+		return pgerror.Newf(
+			pgcode.DependentObjectsStillExist,
+			"cannot rename function %q because other functions ([%v]) still depend on it",
+			fnDesc.Name, strings.Join(dependentFuncs, ", "),
+		)
 	}
 
 	scDesc.RemoveFunction(fnDesc.GetName(), fnDesc.GetID())
