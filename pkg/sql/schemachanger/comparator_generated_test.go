@@ -188,6 +188,11 @@ func TestSchemaChangeComparator_cascade(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/cascade"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_case(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/case"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_case_sensitive_names(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/case_sensitive_names"

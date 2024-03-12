@@ -125,6 +125,7 @@ opt_split_scan_limit                                       2048
 optimizer_always_use_histograms                            on
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
+optimizer_use_conditional_hoist_fix                        on
 optimizer_use_forecasts                                    on
 optimizer_use_histograms                                   on
 optimizer_use_improved_computed_column_filters_derivation  on
@@ -136,7 +137,7 @@ optimizer_use_lock_op_for_serializable                     off
 optimizer_use_multicol_stats                               on
 optimizer_use_not_visible_indexes                          off
 optimizer_use_provided_ordering_fix                        on
-optimizer_use_virtual_computed_column_stats                on
+optimizer_use_virtual_computed_column_stats                off
 override_multi_region_zone_config                          off
 parallelize_multi_key_lookup_joins_enabled                 off
 password_encryption                                        scram-sha-256

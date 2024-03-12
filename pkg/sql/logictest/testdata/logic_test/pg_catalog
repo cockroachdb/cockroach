@@ -2886,6 +2886,7 @@ opt_split_scan_limit                                       2048                N
 optimizer_always_use_histograms                            on                  NULL      NULL        NULL        string
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL      NULL        NULL        string
 optimizer_merge_joins_enabled                              on                  NULL      NULL        NULL        string
+optimizer_use_conditional_hoist_fix                        on                  NULL      NULL        NULL        string
 optimizer_use_forecasts                                    on                  NULL      NULL        NULL        string
 optimizer_use_histograms                                   on                  NULL      NULL        NULL        string
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL      NULL        NULL        string
@@ -2897,7 +2898,7 @@ optimizer_use_lock_op_for_serializable                     off                 N
 optimizer_use_multicol_stats                               on                  NULL      NULL        NULL        string
 optimizer_use_not_visible_indexes                          off                 NULL      NULL        NULL        string
 optimizer_use_provided_ordering_fix                        on                  NULL      NULL        NULL        string
-optimizer_use_virtual_computed_column_stats                on                  NULL      NULL        NULL        string
+optimizer_use_virtual_computed_column_stats                off                 NULL      NULL        NULL        string
 override_multi_region_zone_config                          off                 NULL      NULL        NULL        string
 parallelize_multi_key_lookup_joins_enabled                 off                 NULL      NULL        NULL        string
 password_encryption                                        scram-sha-256       NULL      NULL        NULL        string
@@ -3064,6 +3065,7 @@ opt_split_scan_limit                                       2048                N
 optimizer_always_use_histograms                            on                  NULL  user     NULL      on                  on
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL  user     NULL      on                  on
 optimizer_merge_joins_enabled                              on                  NULL  user     NULL      on                  on
+optimizer_use_conditional_hoist_fix                        on                  NULL  user     NULL      on                  on
 optimizer_use_forecasts                                    on                  NULL  user     NULL      on                  on
 optimizer_use_histograms                                   on                  NULL  user     NULL      on                  on
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL  user     NULL      on                  on
@@ -3075,7 +3077,7 @@ optimizer_use_lock_op_for_serializable                     off                 N
 optimizer_use_multicol_stats                               on                  NULL  user     NULL      on                  on
 optimizer_use_not_visible_indexes                          off                 NULL  user     NULL      off                 off
 optimizer_use_provided_ordering_fix                        on                  NULL  user     NULL      on                  on
-optimizer_use_virtual_computed_column_stats                on                  NULL  user     NULL      on                  on
+optimizer_use_virtual_computed_column_stats                off                 NULL  user     NULL      NULL                NULL
 override_multi_region_zone_config                          off                 NULL  user     NULL      off                 off
 parallelize_multi_key_lookup_joins_enabled                 off                 NULL  user     NULL      false               false
 password_encryption                                        scram-sha-256       NULL  user     NULL      scram-sha-256       scram-sha-256
@@ -3241,6 +3243,7 @@ optimizer                                                  NULL    NULL     NULL
 optimizer_always_use_histograms                            NULL    NULL     NULL     NULL        NULL
 optimizer_hoist_uncorrelated_equality_subqueries           NULL    NULL     NULL     NULL        NULL
 optimizer_merge_joins_enabled                              NULL    NULL     NULL     NULL        NULL
+optimizer_use_conditional_hoist_fix                        NULL    NULL     NULL     NULL        NULL
 optimizer_use_forecasts                                    NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                                   NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_computed_column_filters_derivation  NULL    NULL     NULL     NULL        NULL

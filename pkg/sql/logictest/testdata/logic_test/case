@@ -1,0 +1,50 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON);
+
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+
+statement ok
+INSERT INTO a VALUES (1, 1, 1, 'foo', '{"x": "one"}');
+INSERT INTO xy VALUES (1, 2);
+
+statement error pgcode 22012 pq: division by zero
+SELECT CASE WHEN f = (SELECT 1 // 0 FROM xy WHERE x = i) THEN 100 ELSE 200 END FROM a;
+
+query I
+SELECT CASE WHEN f = 0 THEN (SELECT 1 // 0 FROM xy WHERE x = i) ELSE 200 END FROM a;
+----
+200
+
+statement error pgcode 22012 pq: division by zero
+SELECT CASE WHEN f = 1 THEN (SELECT 1 // 0 FROM xy WHERE x = i) ELSE 200 END FROM a;
+
+query I
+SELECT CASE WHEN f = 1 THEN 100 ELSE (SELECT 1 // 0 FROM xy WHERE x = i) END FROM a;
+----
+100
+
+statement error pgcode 22012 pq: division by zero
+SELECT CASE WHEN f = 0 THEN 100 ELSE (SELECT 1 // 0 FROM xy WHERE x = i) END FROM a;
+
+# Regression test for #97432 - respect CASE branch evaluation order for
+# non-leakproof expressions.
+subtest volatile-subquery
+
+query I
+SELECT CASE WHEN f = 1
+  THEN (SELECT y FROM xy WHERE x = i)
+  ELSE (SELECT 1 // 0 FROM xy WHERE x = i) END
+FROM a;
+----
+2
+
+statement error pgcode 22012 pq: division by zero
+SELECT CASE WHEN f = 0
+  THEN (SELECT y FROM xy WHERE x = i)
+  ELSE (SELECT 1 // 0 FROM xy WHERE x = i) END
+FROM a;
+
+subtest end

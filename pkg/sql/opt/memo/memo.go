@@ -189,6 +189,7 @@ type Memo struct {
 	mergeJoinsEnabled                          bool
 	plpgsqlUseStrictInto                       bool
 	useVirtualComputedColumnStats              bool
+	useConditionalHoistFix                     bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -264,6 +265,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		mergeJoinsEnabled:                          evalCtx.SessionData().OptimizerMergeJoinsEnabled,
 		plpgsqlUseStrictInto:                       evalCtx.SessionData().PLpgSQLUseStrictInto,
 		useVirtualComputedColumnStats:              evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats,
+		useConditionalHoistFix:                     evalCtx.SessionData().OptimizerUseConditionalHoistFix,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -417,6 +419,7 @@ func (m *Memo) IsStale(
 		m.mergeJoinsEnabled != evalCtx.SessionData().OptimizerMergeJoinsEnabled ||
 		m.plpgsqlUseStrictInto != evalCtx.SessionData().PLpgSQLUseStrictInto ||
 		m.useVirtualComputedColumnStats != evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats ||
+		m.useConditionalHoistFix != evalCtx.SessionData().OptimizerUseConditionalHoistFix ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
