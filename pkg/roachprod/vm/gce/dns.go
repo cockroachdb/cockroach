@@ -14,12 +14,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -27,14 +30,38 @@ import (
 )
 
 const (
-	dnsManagedZone = "roachprod-managed"
-	dnsDomain      = "roachprod-managed.crdb.io"
-	dnsMaxResults  = 10000
+	dnsMaxResults = 10000
 
 	// dnsProblemLabel is the label used when we see transient DNS
 	// errors while making API calls to Cloud DNS.
 	dnsProblemLabel = "dns_problem"
 )
+
+var (
+	dnsDefaultZone = config.EnvOrDefaultString(
+		"ROACHPROD_GCE_DNS_ZONE",
+		"roachprod",
+	)
+	dnsDefaultDomain = config.EnvOrDefaultString(
+		"ROACHPROD_GCE_DNS_DOMAIN",
+		// Preserve the legacy environment variable name for backwards
+		// compatibility.
+		config.EnvOrDefaultString(
+			"ROACHPROD_DNS",
+			"roachprod.crdb.io",
+		),
+	)
+	dnsDefaultManagedZone = config.EnvOrDefaultString(
+		"ROACHPROD_GCE_DNS_MANAGED_ZONE",
+		"roachprod-managed",
+	)
+	dnsDefaultManagedDomain = config.EnvOrDefaultString(
+		"ROACHPROD_GCE_DNS_MANAGED_DOMAIN",
+		"roachprod-managed.crdb.io",
+	)
+)
+
+var ErrDNSOperation = fmt.Errorf("error during Google Cloud DNS operation")
 
 var _ vm.DNSProvider = &dnsProvider{}
 
@@ -42,6 +69,19 @@ type ExecFn func(cmd *exec.Cmd) ([]byte, error)
 
 // dnsProvider implements the vm.DNSProvider interface.
 type dnsProvider struct {
+	// dnsProject is the project used for all DNS operations.
+	dnsProject string
+
+	// publicZone is the gce zone used to manage A records for all clusters (e.g. roachprod).
+	publicZone string
+	// publicDomain is the DNS domain used to manage A records for all clusters (e.g. roachprod.crdb.io).
+	publicDomain string
+
+	// managedZone is the managed zone for SRV records (e.g. roachprod-managed).
+	managedZone string
+	// managedDomain is the domain for SRV records (e.g. roachprod-managed.crdb.io).
+	managedDomain string
+
 	recordsCache struct {
 		mu      syncutil.Mutex
 		records map[string][]vm.DNSRecord
@@ -49,7 +89,7 @@ type dnsProvider struct {
 	execFn ExecFn
 }
 
-func NewDNSProvider() vm.DNSProvider {
+func NewDNSProvider() *dnsProvider {
 	var gcloudMu syncutil.Mutex
 	return NewDNSProviderWithExec(func(cmd *exec.Cmd) ([]byte, error) {
 		// Limit to one gcloud command at a time. At this time we are unsure if it's
@@ -62,8 +102,13 @@ func NewDNSProvider() vm.DNSProvider {
 	})
 }
 
-func NewDNSProviderWithExec(execFn ExecFn) vm.DNSProvider {
+func NewDNSProviderWithExec(execFn ExecFn) *dnsProvider {
 	return &dnsProvider{
+		dnsProject:    defaultDNSProject,
+		publicZone:    dnsDefaultZone,
+		publicDomain:  dnsDefaultDomain,
+		managedZone:   dnsDefaultManagedZone,
+		managedDomain: dnsDefaultManagedDomain,
 		recordsCache: struct {
 			mu      syncutil.Mutex
 			records map[string][]vm.DNSRecord
@@ -106,10 +151,10 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 		firstRecord := recordGroup[0]
 		data := maps.Keys(combinedRecords)
 		sort.Strings(data)
-		args := []string{"--project", dnsProject, "dns", "record-sets", command, name,
+		args := []string{"--project", n.dnsProject, "dns", "record-sets", command, name,
 			"--type", string(firstRecord.Type),
 			"--ttl", strconv.Itoa(firstRecord.TTL),
-			"--zone", dnsManagedZone,
+			"--zone", n.managedZone,
 			"--rrdatas", strings.Join(data, ","),
 		}
 		cmd := exec.CommandContext(ctx, "gcloud", args...)
@@ -138,9 +183,9 @@ func (n *dnsProvider) ListRecords(ctx context.Context) ([]vm.DNSRecord, error) {
 // DeleteRecordsByName implements the vm.DNSProvider interface.
 func (n *dnsProvider) DeleteRecordsByName(ctx context.Context, names ...string) error {
 	for _, name := range names {
-		args := []string{"--project", dnsProject, "dns", "record-sets", "delete", name,
+		args := []string{"--project", n.dnsProject, "dns", "record-sets", "delete", name,
 			"--type", string(vm.SRV),
-			"--zone", dnsManagedZone,
+			"--zone", n.managedZone,
 		}
 		cmd := exec.CommandContext(ctx, "gcloud", args...)
 		out, err := n.execFn(cmd)
@@ -179,8 +224,11 @@ func (n *dnsProvider) DeleteRecordsBySubdomain(ctx context.Context, subdomain st
 }
 
 // Domain implements the vm.DNSProvider interface.
+//
+// Note that this is the domain used for the managed zone with SRV records, not
+// the public zone.
 func (n *dnsProvider) Domain() string {
-	return dnsDomain
+	return n.managedDomain
 }
 
 // lookupSRVRecords uses standard net tools to perform a DNS lookup. This
@@ -217,10 +265,10 @@ func (n *dnsProvider) lookupSRVRecords(ctx context.Context, name string) ([]vm.D
 func (n *dnsProvider) listSRVRecords(
 	ctx context.Context, filter string, limit int,
 ) ([]vm.DNSRecord, error) {
-	args := []string{"--project", dnsProject, "dns", "record-sets", "list",
+	args := []string{"--project", n.dnsProject, "dns", "record-sets", "list",
 		"--limit", strconv.Itoa(limit),
 		"--page-size", strconv.Itoa(limit),
-		"--zone", dnsManagedZone,
+		"--zone", n.managedZone,
 		"--format", "json",
 	}
 	if filter != "" {
@@ -283,4 +331,54 @@ func (n *dnsProvider) clearCacheEntry(name string) {
 // may or may not have a trailing dot.
 func (n *dnsProvider) normaliseName(name string) string {
 	return strings.TrimSuffix(name, ".")
+}
+
+// syncPublicDNS syncs the public DNS zone with the given list of VMs.
+//
+// Note that this operates on the public DNS zone, not the managed zone.
+func (p *dnsProvider) syncPublicDNS(l *logger.Logger, vms vm.List) (err error) {
+	if p.publicDomain == "" {
+		return nil
+	}
+
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "syncing DNS for %s", p.publicDomain)
+		}
+	}()
+
+	f, err := os.CreateTemp(os.ExpandEnv("$HOME/.roachprod/"), "dns.bind")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Keep imported zone file in dry run mode.
+	defer func() {
+		if err := os.Remove(f.Name()); err != nil {
+			l.Errorf("removing %s failed: %v", f.Name(), err)
+		}
+	}()
+
+	var zoneBuilder strings.Builder
+	for _, vm := range vms {
+		entry, err := vm.ZoneEntry()
+		if err != nil {
+			l.Printf("WARN: skipping: %s\n", err)
+			continue
+		}
+		zoneBuilder.WriteString(entry)
+	}
+	fmt.Fprint(f, zoneBuilder.String())
+	f.Close()
+
+	args := []string{"--project", p.dnsProject, "dns", "record-sets", "import",
+		f.Name(), "-z", p.publicZone, "--delete-all-existing", "--zone-file-format"}
+	cmd := exec.Command("gcloud", args...)
+	output, err := cmd.CombinedOutput()
+
+	return errors.Wrapf(err,
+		"Command: %s\nOutput: %s\nZone file contents:\n%s",
+		cmd, output, zoneBuilder.String(),
+	)
 }
