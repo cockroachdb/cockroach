@@ -133,7 +133,7 @@ func initFlags() {
 			providerOptsContainer[providerName].ConfigureCreateFlags(createCmd.Flags())
 
 			for _, cmd := range []*cobra.Command{
-				destroyCmd, extendCmd, listCmd, syncCmd, gcCmd,
+				destroyCmd, extendCmd, listCmd, syncCmd, gcCmd, setupSSHCmd, startCmd, pgurlCmd, adminurlCmd,
 			} {
 				providerOptsContainer[providerName].ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
 			}
