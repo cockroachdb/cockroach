@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -68,21 +69,21 @@ func NewStatsProfiler(
 
 // MaybeTakeProfile takes a profile if the non-go size is big enough.
 func (o *StatsProfiler) MaybeTakeProfile(
-	ctx context.Context, curRSS int64, ms *status.GoMemStats, cs *status.CGoMemStats,
+	ctx context.Context, curRSS int64, cs *status.CGoMemStats,
 ) {
-	o.maybeTakeProfile(ctx, curRSS, func(ctx context.Context, path string, _ ...interface{}) bool { return saveStats(ctx, path, ms, cs) })
+	o.maybeTakeProfile(ctx, curRSS, func(ctx context.Context, path string, _ ...interface{}) bool { return saveStats(ctx, path, cs) })
 }
 
-func saveStats(
-	ctx context.Context, path string, ms *status.GoMemStats, cs *status.CGoMemStats,
-) bool {
+func saveStats(ctx context.Context, path string, cs *status.CGoMemStats) bool {
 	f, err := os.Create(path)
 	if err != nil {
 		log.Warningf(ctx, "error creating stats profile %s: %v", path, err)
 		return false
 	}
 	defer f.Close()
-	msJ, err := json.MarshalIndent(&ms.MemStats, "", "  ")
+	ms := &runtime.MemStats{}
+	runtime.ReadMemStats(ms)
+	msJ, err := json.MarshalIndent(ms, "", "  ")
 	if err != nil {
 		log.Warningf(ctx, "error marshaling stats profile %s: %v", path, err)
 		return false
