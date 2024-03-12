@@ -601,7 +601,7 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 			wakeLeader := hasLeader && !fromLeader
 			r.maybeUnquiesceLocked(wakeLeader, false /* mayCampaign */)
 		}
-		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
+		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, r.Clock().PhysicalTime())
 		switch req.Message.Type {
 		case raftpb.MsgPreVote, raftpb.MsgVote:
 			// If we receive a (pre)vote request, and we find our leader to be dead or
@@ -1313,7 +1313,7 @@ func (r *Replica) tick(
 	// This is likely unintentional, and the leader should likely consider itself
 	// live even when quiesced.
 	if r.isRaftLeaderRLocked() {
-		r.mu.lastUpdateTimes.update(r.replicaID, timeutil.Now())
+		r.mu.lastUpdateTimes.update(r.replicaID, r.Clock().PhysicalTime())
 	}
 
 	r.mu.ticks++
