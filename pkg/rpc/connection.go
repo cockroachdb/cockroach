@@ -121,6 +121,10 @@ func (s *neverTripSignal) C() <-chan struct{} {
 	return nil
 }
 
+func (s *neverTripSignal) IsTripped() bool {
+	return false
+}
+
 // ConnectNoBreaker is like Connect but bypasses the circuit breaker, meaning
 // that it will latch onto (or start) an existing connection attempt even if
 // previous attempts have not succeeded. This may be preferable to Connect
@@ -172,6 +176,10 @@ func (s *connFuture) C() <-chan struct{} {
 // Err must only be called after C() has been closed.
 func (s *connFuture) Err() error {
 	return s.err
+}
+
+func (s *connFuture) IsTripped() bool {
+	return s.Resolved()
 }
 
 // Conn must only be called after C() has been closed.

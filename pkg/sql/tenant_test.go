@@ -112,8 +112,8 @@ func TestGetTenantIds(t *testing.T) {
 	}))
 	expectedIds := []roachpb.TenantID{
 		roachpb.MustMakeTenantID(1),
-		roachpb.MustMakeTenantID(2),
 		roachpb.MustMakeTenantID(3),
+		roachpb.MustMakeTenantID(4),
 	}
 	require.Equal(t, expectedIds, ids)
 
@@ -126,7 +126,7 @@ func TestGetTenantIds(t *testing.T) {
 	}))
 	expectedIds = []roachpb.TenantID{
 		roachpb.MustMakeTenantID(1),
-		roachpb.MustMakeTenantID(3),
+		roachpb.MustMakeTenantID(4),
 	}
 	require.Equal(t, expectedIds, ids)
 }

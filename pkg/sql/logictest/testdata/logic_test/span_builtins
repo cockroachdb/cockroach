@@ -26,7 +26,7 @@ skipif config 3node-tenant-default-configs
 query T
 SELECT crdb_internal.tenant_span('foo-bar')
 ----
-{"\\xfe8a","\\xfe8b"}
+{"\\xfe8b","\\xfe8c"}
 
 subtest end
 
