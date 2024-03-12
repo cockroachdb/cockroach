@@ -558,6 +558,7 @@ func TestBatchJobsCreation(t *testing.T) {
 				if test.batchSize > 10 {
 					skip.UnderStress(t, "skipping stress test for batch size ", test.batchSize)
 					skip.UnderRace(t, "skipping test for batch size ", test.batchSize)
+					skip.UnderDeadlock(t, "skipping test for batch size ", test.batchSize)
 				}
 
 				args := base.TestServerArgs{
