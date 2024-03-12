@@ -1,3 +1,5 @@
+skip under race
+
 subtest strict
 
 statement ok
