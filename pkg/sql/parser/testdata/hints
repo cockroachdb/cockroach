@@ -70,6 +70,14 @@ SELECT ('a') FROM t@{FORCE_INDEX=idx,DESC,NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOR
 SELECT '_' FROM t@{FORCE_INDEX=idx,DESC,NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS} -- literals removed
 SELECT 'a' FROM _@{FORCE_INDEX=_,DESC,NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS} -- identifiers removed
 
+parse
+SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS,NO_ZIGZAG_JOIN,NO_FULL_SCAN,FORCE_INVERTED_INDEX}
+----
+SELECT 'a' FROM t@{NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS,FORCE_INVERTED_INDEX} -- normalized!
+SELECT ('a') FROM t@{NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS,FORCE_INVERTED_INDEX} -- fully parenthesized
+SELECT '_' FROM t@{NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS,FORCE_INVERTED_INDEX} -- literals removed
+SELECT 'a' FROM _@{NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS,FORCE_INVERTED_INDEX} -- identifiers removed
+
 error
 SELECT a FROM foo@{FORCE_INDEX}
 ----
@@ -276,3 +284,42 @@ SELECT ('a') FROM t@{FORCE_INDEX=idx,ASC} -- fully parenthesized
 SELECT '_' FROM t@{FORCE_INDEX=idx,ASC} -- literals removed
 SELECT 'a' FROM _@{FORCE_INDEX=_,ASC} -- identifiers removed
 
+parse
+SELECT 'a' FROM t@{FORCE_INVERTED_INDEX}
+----
+SELECT 'a' FROM t@{FORCE_INVERTED_INDEX}
+SELECT ('a') FROM t@{FORCE_INVERTED_INDEX} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_INVERTED_INDEX} -- literals removed
+SELECT 'a' FROM _@{FORCE_INVERTED_INDEX} -- identifiers removed
+
+error
+SELECT a FROM foo@{FORCE_INVERTED_INDEX,FORCE_INVERTED_INDEX}
+----
+at or near "force_inverted_index": syntax error: FORCE_INVERTED_INDEX specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INVERTED_INDEX,FORCE_INVERTED_INDEX}
+                                        ^
+
+error
+SELECT a FROM foo@{FORCE_INVERTED_INDEX,FORCE_INDEX=a}
+----
+at or near "}": syntax error: FORCE_INVERTED_INDEX cannot be specified in conjunction with FORCE_INDEX
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INVERTED_INDEX,FORCE_INDEX=a}
+                                                     ^
+
+error
+SELECT 'a' FROM t@{FORCE_INVERTED_INDEX,ASC}
+----
+at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
+DETAIL: source SQL:
+SELECT 'a' FROM t@{FORCE_INVERTED_INDEX,ASC}
+                                           ^
+
+error
+SELECT 'a' FROM t@{FORCE_INVERTED_INDEX,DESC}
+----
+at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
+DETAIL: source SQL:
+SELECT 'a' FROM t@{FORCE_INVERTED_INDEX,DESC}
+                                            ^
