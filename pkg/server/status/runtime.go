@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/elastic/gosigar"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/net"
@@ -306,7 +305,58 @@ var getCgoMemStats func(context.Context) (uint, uint, error)
 // Compare only with other /cpu/classes metrics.
 const runtimeMetricGCAssist = "/cpu/classes/gc/mark/assist:cpu-seconds"
 
-var runtimeMetrics = []string{runtimeMetricGCAssist}
+// Memory occupied by live objects and dead objects that have not
+// yet been marked free by the garbage collector.
+const runtimeMetricHeapAlloc = "/memory/classes/heap/objects:bytes"
+
+// Memory that is reserved for heap objects but is not currently
+// used to hold heap objects.
+const runtimeMetricHeapFragmentBytes = "/memory/classes/heap/unused:bytes"
+
+// Memory that is completely free and eligible to be returned to
+// the underlying system, but has not been. This metric is the
+// runtime's estimate of free address space that is backed by
+// physical memory.
+const runtimeMetricHeapReservedBytes = "/memory/classes/heap/free:bytes"
+
+// Memory that is completely free and has been returned to the
+// underlying system. This metric is the runtime's estimate of free
+// address space that is still mapped into the process, but is not
+// backed by physical memory.
+const runtimeMetricHeapReleasedBytes = "/memory/classes/heap/released:bytes"
+
+// Memory allocated from the heap that is reserved for stack space,
+// whether or not it is currently in-use. Currently, this
+// represents all stack memory for goroutines. It also includes all
+// OS thread stacks in non-cgo programs. Note that stacks may be
+// allocated differently in the future, and this may change.
+const runtimeMetricMemStackHeapBytes = "/memory/classes/heap/stacks:bytes"
+
+// Stack memory allocated by the underlying operating system.
+// In non-cgo programs this metric is currently zero. This may
+// change in the future.In cgo programs this metric includes
+// OS thread stacks allocated directly from the OS. Currently,
+// this only accounts for one stack in c-shared and c-archive build
+// modes, and other sources of stacks from the OS are not measured.
+// This too may change in the future.
+const runtimeMetricMemStackOSBytes = "/memory/classes/os-stacks:bytes"
+
+// All memory mapped by the Go runtime into the current process
+// as read-write. Note that this does not include memory mapped
+// by code called via cgo or via the syscall package. Sum of all
+// metrics in /memory/classes.
+const runtimeMetricGoTotal = "/memory/classes/total:bytes"
+
+var runtimeMetrics = []string{
+	runtimeMetricGCAssist,
+	runtimeMetricHeapAlloc,
+	runtimeMetricHeapFragmentBytes,
+	runtimeMetricHeapReservedBytes,
+	runtimeMetricHeapReleasedBytes,
+	runtimeMetricMemStackHeapBytes,
+	runtimeMetricMemStackOSBytes,
+	runtimeMetricGoTotal,
+}
 
 // GoRuntimeSampler are a collection of metrics to sample from golang's runtime environment and
 // runtime metrics metadata. It fetches go runtime metrics and provides read access.
@@ -325,6 +375,13 @@ func (grm *GoRuntimeSampler) getIndex(name string) int {
 		panic(fmt.Sprintf("unsampled metric: %s", name))
 	}
 	return i
+}
+
+// uint64 gets the sampled value by metrics name as uint64.
+// N.B. This method will panic if the metrics value is not metrics.KindUint64.
+func (grm *GoRuntimeSampler) uint64(name string) uint64 {
+	i := grm.getIndex(name)
+	return grm.metricSamples[i].Value.Uint64()
 }
 
 // float64 gets the sampled value by metrics name as float64.
@@ -555,14 +612,6 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	return rsr
 }
 
-// GoMemStats groups a runtime.MemStats structure with the timestamp when it
-// was collected.
-type GoMemStats struct {
-	runtime.MemStats
-	// Collected is the timestamp at which these values were collected.
-	Collected time.Time
-}
-
 // CGoMemStats reports what has been allocated outside of Go.
 type CGoMemStats struct {
 	// CGoAllocated represents allocated bytes.
@@ -594,13 +643,8 @@ func GetCGoMemStats(ctx context.Context) *CGoMemStats {
 //
 // This method should be called periodically by a higher level system in order
 // to keep runtime statistics current.
-//
-// SampleEnvironment takes GoMemStats as input because that is collected
-// separately, on a different schedule.
 // The CGoMemStats should be provided via GetCGoMemStats().
-func (rsr *RuntimeStatSampler) SampleEnvironment(
-	ctx context.Context, ms *GoMemStats, cs *CGoMemStats,
-) {
+func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMemStats) {
 	// Note that debug.ReadGCStats() does not suffer the same problem as
 	// runtime.ReadMemStats(). The only way you can know that is by reading the
 	// source.
@@ -725,19 +769,20 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
-	goStatsStaleness := float32(timeutil.Since(ms.Collected)) / float32(time.Second)
-	goTotal := ms.Sys - ms.HeapReleased
-
+	goAlloc := rsr.goRuntimeSampler.uint64(runtimeMetricHeapAlloc)
+	goTotal := rsr.goRuntimeSampler.uint64(runtimeMetricGoTotal) -
+		rsr.goRuntimeSampler.uint64(runtimeMetricHeapReleasedBytes)
+	stackTotal := rsr.goRuntimeSampler.uint64(runtimeMetricMemStackHeapBytes) +
+		rsr.goRuntimeSampler.uint64(runtimeMetricMemStackOSBytes)
 	stats := &eventpb.RuntimeStats{
 		MemRSSBytes:       mem.Resident,
 		GoroutineCount:    uint64(numGoroutine),
-		MemStackSysBytes:  ms.StackSys,
-		GoAllocBytes:      ms.HeapAlloc,
+		MemStackSysBytes:  stackTotal,
+		GoAllocBytes:      goAlloc,
 		GoTotalBytes:      goTotal,
-		GoStatsStaleness:  goStatsStaleness,
-		HeapFragmentBytes: ms.HeapInuse - ms.HeapAlloc,
-		HeapReservedBytes: ms.HeapIdle - ms.HeapReleased,
-		HeapReleasedBytes: ms.HeapReleased,
+		HeapFragmentBytes: rsr.goRuntimeSampler.uint64(runtimeMetricHeapFragmentBytes),
+		HeapReservedBytes: rsr.goRuntimeSampler.uint64(runtimeMetricHeapReservedBytes),
+		HeapReleasedBytes: rsr.goRuntimeSampler.uint64(runtimeMetricHeapReleasedBytes),
 		CGoAllocBytes:     cs.CGoAllocatedBytes,
 		CGoTotalBytes:     cs.CGoTotalBytes,
 		CGoCallRate:       float32(cgoRate),
@@ -754,7 +799,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	rsr.last.cgoCall = numCgoCall
 	rsr.last.gcCount = gc.NumGC
 
-	rsr.GoAllocBytes.Update(int64(ms.HeapAlloc))
+	rsr.GoAllocBytes.Update(int64(goAlloc))
 	rsr.GoTotalBytes.Update(int64(goTotal))
 	rsr.CgoCalls.Update(numCgoCall)
 	rsr.Goroutines.Update(int64(numGoroutine))

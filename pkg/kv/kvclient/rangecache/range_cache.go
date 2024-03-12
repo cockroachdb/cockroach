@@ -540,6 +540,14 @@ func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newDescs ...
 	et.clear()
 }
 
+// RangeInfo extracts the RangeInfo from this token.
+func (et *EvictionToken) RangeInfo() roachpb.RangeInfo {
+	if !et.Valid() {
+		return roachpb.RangeInfo{}
+	}
+	return et.entry.toRangeInfo()
+}
+
 // LookupWithEvictionToken attempts to locate a descriptor, and possibly also a
 // lease) for the range containing the given key. This is done by first trying
 // the cache, and then querying the two-level lookup table of range descriptors

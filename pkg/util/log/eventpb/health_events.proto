@@ -39,7 +39,7 @@ message RuntimeStats {
   // The total memory allocated by Go but not released. Expressed as bytes.
   uint64 go_total_bytes = 6 [(gogoproto.jsontag) = ",omitempty"];
   // The staleness of the Go memory statistics. Expressed in seconds.
-  float go_stats_staleness = 7 [(gogoproto.jsontag) = ",omitempty"];
+  float go_stats_staleness = 7 [(gogoproto.jsontag) = ",omitempty", deprecated=true];
   // The amount of heap fragmentation. Expressed as bytes.
   uint64 heap_fragment_bytes = 8 [(gogoproto.jsontag) = ",omitempty"];
   // The amount of heap reserved. Expressed as bytes.
