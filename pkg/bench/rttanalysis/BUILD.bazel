@@ -55,7 +55,6 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":rttanalysis"],
     exec_properties = {"test.Pool": "large"},
-    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/jobs/jobspb",
