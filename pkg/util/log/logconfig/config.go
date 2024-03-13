@@ -25,6 +25,11 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
+// envEnableBufferedFileSinks allows the bufferedSink to be used with the fileSink.
+// TODO(#72452): Remove env var once bufferedSink support for fileSink is no longer
+// experimental.
+const envEnableBufferedFileSinks = "COCKROACH_ENABLE_ASYNC_LOG_FILE_BUFFER"
+
 // DefaultFileFormat is the entry format for file sinks when not
 // specified in a configuration.
 const DefaultFileFormat = `crdb-v2`

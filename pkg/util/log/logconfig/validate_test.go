@@ -13,41 +13,58 @@ package logconfig
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
 
 func TestValidate(t *testing.T) {
+	// TODO(#72452): Remove env check once bufferedSink support for fileSink is no longer experimental.
+	defer require.NoError(t, os.Setenv(envEnableBufferedFileSinks, "false"))
+
 	datadriven.RunTest(t, "testdata/validate", func(t *testing.T, d *datadriven.TestData) string {
-		c := DefaultConfig()
-		if err := yaml.UnmarshalStrict([]byte(d.Input), &c); err != nil {
-			t.Fatal(err)
-		}
-		var buf bytes.Buffer
-		fmt.Fprintln(&buf, "## before validate:\n#")
-		b, err := yaml.Marshal(&c)
-		if err != nil {
-			t.Fatal(err)
-		}
-		buf.Write(b)
-		t.Logf("%s", buf.String())
-		buf.Reset()
-
-		defaultDir := "/default-dir"
-		if err := c.Validate(&defaultDir); err != nil {
-			fmt.Fprintf(&buf, "ERROR: %v\n", err)
-		} else {
-			clearExpectedValues(&c)
-
+		switch d.Cmd {
+		case "setenv":
+			key, value := "", ""
+			d.ScanArgs(t, "key", &key)
+			d.ScanArgs(t, "value", &value)
+			require.NoError(t, os.Setenv(key, value))
+			return fmt.Sprintf("SET %s=%s", key, value)
+		case "yaml":
+			c := DefaultConfig()
+			if err := yaml.UnmarshalStrict([]byte(d.Input), &c); err != nil {
+				t.Fatal(err)
+			}
+			var buf bytes.Buffer
+			fmt.Fprintln(&buf, "## before validate:\n#")
 			b, err := yaml.Marshal(&c)
 			if err != nil {
 				t.Fatal(err)
 			}
 			buf.Write(b)
+			t.Logf("%s", buf.String())
+			buf.Reset()
+
+			defaultDir := "/default-dir"
+			if err := c.Validate(&defaultDir); err != nil {
+				fmt.Fprintf(&buf, "ERROR: %v\n", err)
+			} else {
+				clearExpectedValues(&c)
+
+				b, err := yaml.Marshal(&c)
+				if err != nil {
+					t.Fatal(err)
+				}
+				buf.Write(b)
+			}
+			return buf.String()
+		default:
+			t.Fatal("unknown command")
+			return ""
 		}
-		return buf.String()
 	})
 }
 

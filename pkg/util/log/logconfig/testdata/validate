@@ -793,3 +793,52 @@ capture-stray-errors:
   enable: true
   dir: /default-dir
   max-group-size: 100MiB
+
+# Test env-var gated configurations involving bufferedSink and fileSink.
+# TODO(#72452): Remove env check once bufferedSink support for fileSink is no longer experimental.
+setenv key=COCKROACH_ENABLE_ASYNC_LOG_FILE_BUFFER value=true
+----
+SET COCKROACH_ENABLE_ASYNC_LOG_FILE_BUFFER=true
+
+# Check that buffering works with file sinks when the correct env var is set.
+yaml
+file-defaults:
+  buffered-writes: false
+  buffering:
+    max-staleness: 5s
+    flush-trigger-size: 1.0MiB
+    max-buffer-size: 50MiB
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      buffered-writes: false
+      filter: INFO
+      buffering:
+        max-staleness: 5s
+        flush-trigger-size: 1.0MiB
+        max-buffer-size: 50MiB
+        format: newline
+  stderr:
+    filter: NONE
+    buffering:
+      max-staleness: 5s
+      flush-trigger-size: 1.0MiB
+      max-buffer-size: 50MiB
+      format: newline
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that buffering and buffered-writes are incompatible together
+yaml
+file-defaults:
+  buffered-writes: true
+  buffering:
+    max-staleness: 5s
+    flush-trigger-size: 1.0MiB
+    max-buffer-size: 50MiB
+----
+ERROR: Unable to use "buffered-writes" in conjunction with a "buffering" configuration. These configuration options are mutually exclusive.

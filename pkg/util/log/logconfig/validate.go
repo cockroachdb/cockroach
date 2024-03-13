@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -379,14 +380,21 @@ func (c *Config) newFileSinkConfig(groupName string) *FileSinkConfig {
 func (c *Config) validateFileSinkConfig(fc *FileSinkConfig) error {
 	propagateFileDefaults(&fc.FileDefaults, c.FileDefaults)
 	if !fc.Buffering.IsNone() {
-		// We cannot use unimplemented.WithIssue() here because of a
-		// circular dependency.
-		err := errors.UnimplementedError(
-			errors.IssueLink{IssueURL: build.MakeIssueURL(72452)},
-			`unimplemented: "buffering" not yet supported for file-groups`)
-		err = errors.WithHint(err, `Use "buffered-writes".`)
-		err = errors.WithTelemetry(err, "#72452")
-		return err
+		if !envutil.EnvOrDefaultBool(envEnableBufferedFileSinks, false) {
+			// TODO(#72452): Remove env check once bufferedSink support for fileSink is no longer experimental.
+			// We cannot use unimplemented.WithIssue() here because of a
+			// circular dependency.
+			err := errors.UnimplementedError(
+				errors.IssueLink{IssueURL: build.MakeIssueURL(72452)},
+				`unimplemented: "buffering" not yet supported for file-groups`)
+			err = errors.WithHint(err, `Use "buffered-writes".`)
+			err = errors.WithTelemetry(err, "#72452")
+			return err
+		}
+		if fc.BufferedWrites != nil && *fc.BufferedWrites {
+			return errors.Newf(`Unable to use "buffered-writes" in conjunction with a "buffering" configuration. ` +
+				`These configuration options are mutually exclusive.`)
+		}
 	}
 	if fc.Dir != c.FileDefaults.Dir {
 		// A directory was specified explicitly. Normalize it.

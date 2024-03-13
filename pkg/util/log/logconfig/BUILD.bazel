@@ -25,6 +25,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
+        "//pkg/util/envutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log/logpb",
         "@com_github_cockroachdb_errors//:errors",
@@ -46,6 +47,7 @@ go_test(
     deps = [
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
