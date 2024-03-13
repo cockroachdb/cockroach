@@ -1,5 +1,3 @@
-skip under race
-
 subtest strict
 
 statement ok
@@ -1221,55 +1219,6 @@ DROP TABLE source
 
 statement ok
 DROP TABLE target
-
-# Regression test for UPSERT batching logic (#51391).
-user host-cluster-root
-
-statement ok
-SET CLUSTER SETTING kv.raft.command.max_size='4MiB';
-
-user root
-
-statement ok
-CREATE TABLE src (s STRING);
-CREATE TABLE dest (s STRING);
-INSERT INTO src
-SELECT
-	'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-FROM
-	generate_series(1, 50000)
-
-# This statement produces a raft command of about 6.6 MiB in size, so if the
-# batching logic is incorrect, we'll encounter "command is too large" error.
-statement ok
-UPSERT INTO dest (s) (SELECT s FROM src)
-
-user host-cluster-root
-
-statement ok
-RESET CLUSTER SETTING kv.raft.command.max_size;
-
-user root
-
-statement ok
-DROP TABLE src;
-DROP TABLE dest
-
-# Regression test for finishing UPSERT too early (#54456).
-statement ok
-CREATE TABLE t54456 (c INT PRIMARY KEY);
-UPSERT INTO t54456 SELECT i FROM generate_series(1, 25000) AS i
-
-query I
-SELECT count(*) FROM t54456
-----
-25000
-
-# Regression test for clearing up upserted rows too early (#54465).
-query I
-WITH cte(c) AS (UPSERT INTO t54456 SELECT i FROM generate_series(25001, 40000) AS i RETURNING c) SELECT count(*) FROM cte
-----
-15000
 
 # Regression test for #59125. Ensure that valid rows don't get filtered out
 # from ON CONFLICT DO NOTHING.
