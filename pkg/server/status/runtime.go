@@ -256,7 +256,7 @@ var (
 		Name:        "sys.host.disk.weightedio.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
-		Help:        "Weighted time spent reading from or writing to to all disks since this process started (as reported by the OS)",
+		Help:        "Weighted time spent reading from or writing to all disks since this process started (as reported by the OS)",
 	}
 	metaHostIopsInProgress = metric.Metadata{
 		Name:        "sys.host.disk.iopsinprogress",
@@ -734,13 +734,10 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 		}
 	}
 
-	var deltaDisk DiskStats
 	diskCounters, err := getSummedDiskCounters(ctx)
 	if err != nil {
 		log.Ops.Warningf(ctx, "problem fetching disk stats: %s; disk stats will be empty.", err)
 	} else {
-		deltaDisk = diskCounters
-		subtractDiskCounters(&deltaDisk, rsr.last.disk)
 		rsr.last.disk = diskCounters
 		subtractDiskCounters(&diskCounters, rsr.initialDiskCounters)
 
