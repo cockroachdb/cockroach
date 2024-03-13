@@ -474,6 +474,12 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						showSystemIdentity = true
 					}
 
+					certName := ""
+					if td.HasArg("cert_name") {
+						td.ScanArgs(t, "cert_name", &certName)
+						rmArg("cert_name")
+					}
+
 					systemIdentity := user
 					explicitSystemIdentity := td.HasArg("system_identity")
 					if explicitSystemIdentity {
@@ -485,9 +491,8 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
 						t, s.ServingSQLAddr(), t.Name(), url.User(systemIdentity),
-						forceCerts ||
-							systemIdentity == username.RootUser ||
-							systemIdentity == username.TestUser /* withClientCerts */)
+						forceCerts || systemIdentity == username.RootUser ||
+							systemIdentity == username.TestUser, certName)
 					defer cleanupFn()
 
 					var host, port string
@@ -794,12 +799,12 @@ func TestSSLSessionVar(t *testing.T) {
 	}
 
 	pgURLWithCerts, cleanupFuncCerts := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "TestSSLSessionVarCerts" /* prefix */, url.User(username.TestUser), true,
+		t, s.ServingSQLAddr(), "TestSSLSessionVarCerts" /* prefix */, url.User(username.TestUser), true, "",
 	)
 	defer cleanupFuncCerts()
 
 	pgURLWithoutCerts, cleanupFuncWithoutCerts := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "TestSSLSessionVarNoCerts" /* prefix */, url.UserPassword(username.TestUser, "abc"), false,
+		t, s.ServingSQLAddr(), "TestSSLSessionVarNoCerts" /* prefix */, url.UserPassword(username.TestUser, "abc"), false, "",
 	)
 	defer cleanupFuncWithoutCerts()
 	q := pgURLWithoutCerts.Query()

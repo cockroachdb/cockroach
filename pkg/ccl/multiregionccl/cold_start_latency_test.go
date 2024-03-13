@@ -335,7 +335,7 @@ SELECT checkpoint > extract(epoch from after)
 		require.NoError(t, err)
 		pgURL, cleanup, err := sqlutils.PGUrlWithOptionalClientCertsE(
 			tenant.SQLAddr(), "tenantdata", url.UserPassword("foo", password),
-			false, // withClientCerts
+			false, "", // withClientCerts
 		)
 		if !assert.NoError(t, err) {
 			return

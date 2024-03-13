@@ -280,7 +280,7 @@ func TestNodelocalNotAdmin(t *testing.T) {
 	require.NoError(t, err)
 
 	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "notAdmin", url.User(smithUser), false, /* withCerts */
+		t, s.ServingSQLAddr(), "notAdmin", url.User(smithUser), false, "",
 	)
 	defer cleanupGoDB()
 	pgURL.RawQuery = "sslmode=disable"
@@ -322,7 +322,7 @@ func TestUserfileNotAdmin(t *testing.T) {
 	require.NoError(t, err)
 
 	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "notAdmin", url.User(smithUser), false, /* withCerts */
+		t, s.ServingSQLAddr(), "notAdmin", url.User(smithUser), false, "",
 	)
 	defer cleanupGoDB()
 	pgURL.RawQuery = "sslmode=disable"
