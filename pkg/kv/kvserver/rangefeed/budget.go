@@ -266,6 +266,31 @@ func (a *SharedBudgetAllocation) Release(ctx context.Context) {
 	}
 }
 
+// ReleaseAmount releases amount to the budget feed if amount <= what the
+// allocation token holds. Otherwise, it releases what it has and logs about
+// memory accounting inaccuracy.
+func (a *SharedBudgetAllocation) ReleaseAmount(ctx context.Context, amount int64) {
+	if a != nil {
+		newSize := atomic.AddInt64(&a.size, -amount) // newSize := oldSize - amount
+		if newSize >= 0 {
+			// if newSize >= 0, release amount
+			a.feed.returnAllocation(ctx, amount)
+			return
+		}
+
+		if oldSize := newSize + amount; oldSize > 0 {
+			// if newSize < 0, release oldSize(newSize+amount) if oldSize > 0
+			a.feed.returnAllocation(ctx, oldSize)
+			log.VErrorf(ctx, 4, "excess memory usage: %d bytes more than accounted", -newSize)
+		} else {
+			// releasing more memory than allocation token budget: warn about memory
+			// accounting inaccuracy
+			log.VErrorf(ctx, 4, "excess memory usage: %d bytes more than accounted", amount)
+		}
+
+	}
+}
+
 // BudgetFactory creates memory budget for rangefeed according to system
 // settings.
 type BudgetFactory struct {

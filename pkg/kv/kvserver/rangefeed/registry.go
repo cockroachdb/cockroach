@@ -178,6 +178,7 @@ func (r *registration) publish(
 			case <-ctx.Done():
 				r.mu.Lock()
 				alloc.Release(ctx)
+				alloc.ReleaseAmount(ctx, sharedEventBaseOverhead)
 			}
 			return
 		}
@@ -185,6 +186,7 @@ func (r *registration) publish(
 		// a catch-up scan.
 		r.mu.overflowed = true
 		alloc.Release(ctx)
+		alloc.ReleaseAmount(ctx, sharedEventBaseOverhead)
 	}
 }
 
@@ -341,6 +343,7 @@ func (r *registration) outputLoop(ctx context.Context) error {
 		case nextEvent := <-r.buf:
 			err := r.stream.Send(nextEvent.event)
 			nextEvent.alloc.Release(ctx)
+			nextEvent.alloc.ReleaseAmount(ctx, sharedEventBaseOverhead)
 			putPooledSharedEvent(nextEvent)
 			if err != nil {
 				return err
@@ -376,6 +379,7 @@ func (r *registration) drainAllocations(ctx context.Context) {
 				return
 			}
 			e.alloc.Release(ctx)
+			e.alloc.ReleaseAmount(ctx, sharedEventBaseOverhead)
 			putPooledSharedEvent(e)
 		default:
 			return

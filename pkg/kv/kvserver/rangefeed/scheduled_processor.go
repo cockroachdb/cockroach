@@ -181,6 +181,9 @@ func (p *ScheduledProcessor) processEvents(ctx context.Context) {
 				p.consumeEvent(ctx, e)
 			}
 			e.alloc.Release(ctx)
+			// Release base struct memory for event since e is no longer used.
+			// Underlying data is moved to rangefeed events.
+			e.alloc.ReleaseAmount(ctx, e.EventBaseOverhead())
 			putPooledEvent(e)
 		default:
 			return
@@ -448,7 +451,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 	// inserting value into channel.
 	var alloc *SharedBudgetAllocation
 	if p.MemBudget != nil {
-		size := EventMemUsage(&e)
+		size := e.MemoryToAllocate(p.reg.Len())
 		if size > 0 {
 			var err error
 			// First we will try non-blocking fast path to allocate memory budget.
@@ -480,6 +483,8 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 			// ensures that unused allocation is released.
 			defer func() {
 				alloc.Release(ctx)
+				// No alloc.ReleaseAmount is called here because Release should return
+				// all alloc memory already if event is not sent.
 			}()
 		}
 	}
@@ -678,9 +683,11 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 
 		case *enginepb.MVCCWriteIntentOp:
 			// No updates to publish.
+			alloc.ReleaseAmount(ctx, UnderlyingDataSize(op))
 
 		case *enginepb.MVCCUpdateIntentOp:
 			// No updates to publish.
+			alloc.ReleaseAmount(ctx, UnderlyingDataSize(op))
 
 		case *enginepb.MVCCCommitIntentOp:
 			// Publish the newly committed value.
@@ -688,9 +695,11 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 
 		case *enginepb.MVCCAbortIntentOp:
 			// No updates to publish.
+			alloc.ReleaseAmount(ctx, UnderlyingDataSize(op))
 
 		case *enginepb.MVCCAbortTxnOp:
 			// No updates to publish.
+			alloc.ReleaseAmount(ctx, UnderlyingDataSize(op))
 
 		default:
 			log.Fatalf(ctx, "unknown logical op %T", t)
@@ -700,6 +709,8 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 		// move forward. If so, publish a RangeFeedCheckpoint notification.
 		if p.rts.ConsumeLogicalOp(ctx, op) {
 			p.publishCheckpoint(ctx, alloc)
+		} else {
+			alloc.ReleaseAmount(ctx, TotalCheckpointEventOverhead(p.reg.Len()))
 		}
 	}
 }
@@ -720,12 +731,16 @@ func (p *ScheduledProcessor) forwardClosedTS(
 	if p.rts.ForwardClosedTS(ctx, newClosedTS) {
 		p.publishCheckpoint(ctx, alloc)
 	}
+	// No memory release if no checkpoints published since it will be soonly
+	// released if no registrations references alloc.
 }
 
 func (p *ScheduledProcessor) initResolvedTS(ctx context.Context, alloc *SharedBudgetAllocation) {
 	if p.rts.Init(ctx) {
 		p.publishCheckpoint(ctx, alloc)
 	}
+	// No memory release if no checkpoints published since it will be soonly
+	// released if no registrations references alloc.
 }
 
 func (p *ScheduledProcessor) publishValue(
