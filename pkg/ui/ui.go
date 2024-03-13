@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -92,6 +93,9 @@ type indexHTMLArgs struct {
 	FeatureFlags     serverpb.FeatureFlags
 
 	OIDCGenerateJWTAuthTokenEnabled bool
+
+	LicenseType               string
+	SecondsUntilLicenseExpiry int64
 }
 
 // OIDCUIConf is a variable that stores data required by the
@@ -129,6 +133,7 @@ type Config struct {
 	GetUser  func(ctx context.Context) *string
 	OIDC     OIDCUI
 	Flags    serverpb.FeatureFlags
+	Settings *cluster.Settings
 }
 
 var uiConfigPath = regexp.MustCompile("^/uiconfig$")
@@ -158,6 +163,11 @@ func Handler(cfg Config) http.Handler {
 	buildInfo := build.GetInfo()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		licenseType, err := base.LicenseType(cfg.Settings)
+		if err != nil {
+			log.Errorf(context.Background(), "unable to get license type: %+v", err)
+		}
+		licenseTTL := base.LicenseTTL.Value()
 		oidcConf := cfg.OIDC.GetOIDCConf()
 		args := indexHTMLArgs{
 			Insecure:         cfg.Insecure,
@@ -170,6 +180,9 @@ func Handler(cfg Config) http.Handler {
 			FeatureFlags:     cfg.Flags,
 
 			OIDCGenerateJWTAuthTokenEnabled: oidcConf.GenerateJWTAuthTokenEnabled,
+
+			LicenseType:               licenseType,
+			SecondsUntilLicenseExpiry: licenseTTL,
 		}
 		if cfg.NodeID != nil {
 			args.NodeID = cfg.NodeID.String()

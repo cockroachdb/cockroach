@@ -178,7 +178,8 @@ func (s *httpServer) setupRoutes(
 			}
 			return nil
 		},
-		Flags: flags,
+		Flags:    flags,
+		Settings: s.cfg.Settings,
 	})
 
 	// The authentication mux used here is created in "allow anonymous" mode so that the UI
