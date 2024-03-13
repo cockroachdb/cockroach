@@ -1064,6 +1064,16 @@ func FunctionDescs(
 			}
 		}
 
+		for i, funcID := range fnDesc.DependsOnFunctions {
+			if funcRewrite, ok := descriptorRewrites[funcID]; ok {
+				fnDesc.DependsOnFunctions[i] = funcRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore function %q because referenced function %d was not found",
+					fnDesc.Name, funcID)
+			}
+		}
+
 		// Rewrite back reference IDs.
 		for i, dep := range fnDesc.DependedOnBy {
 			if depRewrite, ok := descriptorRewrites[dep.ID]; ok {
