@@ -1544,7 +1544,7 @@ delete f
 query T
 EXPLAIN (OPT, MEMO, REDACT) DELETE FROM f WHERE f = 8.5
 ----
-memo (optimized, ~16KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~15KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -1972,7 +1972,7 @@ select
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT a FROM a WHERE a % 8 > 2
 ----
-memo (optimized, ~7KB, required=[presentation: info:5] [distribution: test])
+memo (optimized, ~6KB, required=[presentation: info:5] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1] [distribution: test])
  │    └── [presentation: info:5] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1] [distribution: test]" [presentation: a:1] [distribution: test])
