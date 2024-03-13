@@ -272,14 +272,16 @@ type Overload struct {
 	// the signature of the function), RoutineParams contains all parameters as
 	// well as their class.
 	RoutineParams RoutineParams
-	// ToInputParamOrdinal is only set when Type is ProcedureRoutine (and when
-	// the corresponding FunctionSignature proto was created on at least 24.1
-	// version). It contains a mapping from all parameters to their ordinal in
-	// Types - OUT parameters get a special value of -1.
+	// OutParamOrdinals is only set when Type is ProcedureRoutine and contains
+	// all ordinals of OUT parameters among all parameters specified in the CALL
+	// invocation. For example, if the procedure has an invocation like
+	//   (IN p1, INOUT p2, OUT p3, INOUT p4, OUT p5),
+	// then OutParamOrdinals will contain [2, 4] (while Types will contain
+	// types of [p1, p2, p4].
 	//
 	// On the main code path it is only set when UDFContainsOnlySignature is
 	// true (meaning that we only had access to the FunctionSignature proto).
-	ToInputParamOrdinal []int32
+	OutParamOrdinals []int32
 }
 
 // params implements the overloadImpl interface.
@@ -291,8 +293,8 @@ func (b Overload) returnType() ReturnTyper { return b.ReturnType }
 // preferred implements the overloadImpl interface.
 func (b Overload) preferred() bool { return b.PreferredOverload }
 
-func (b Overload) toInputParamOrdinal() []int32 {
-	return b.ToInputParamOrdinal
+func (b Overload) outParamOrdinals() []int32 {
+	return b.OutParamOrdinals
 }
 
 // FixedReturnType returns a fixed type that the function returns, returning Any
@@ -363,9 +365,9 @@ type overloadImpl interface {
 	returnType() ReturnTyper
 	// allows manually resolving preference between multiple compatible overloads.
 	preferred() bool
-	// toInputParamOrdinal is only used for stored procedures. See comment on
-	// Overload.ToInputParamOrdinal for more details.
-	toInputParamOrdinal() []int32
+	// outParamOrdinals is only used for stored procedures. See comment on
+	// Overload.OutParamOrdinals for more details.
+	outParamOrdinals() []int32
 }
 
 var _ overloadImpl = &Overload{}
@@ -769,6 +771,25 @@ type overloadSet interface {
 	get(i int) overloadImpl
 }
 
+func toInputParamOrdinal(i int, outParamOrdinals []int32) (ordinal int, isOutParam bool) {
+	ordinal = i
+	if len(outParamOrdinals) > 0 {
+		var outParamsSeen int
+		for _, outParamOrdinal := range outParamOrdinals {
+			if outParamOrdinal == int32(i) {
+				// This expression corresponds to an OUT parameter.
+				return -1, true
+			}
+			if outParamOrdinal > int32(i) {
+				break
+			}
+			outParamsSeen++
+		}
+		ordinal = i - outParamsSeen
+	}
+	return ordinal, false
+}
+
 // typeCheckOverloadedExprs determines the correct overload to use for the given set of
 // expression parameters, along with an optional desired return type. It returns the expression
 // parameters after being type checked, along with a slice of candidate overloadImpls. The
@@ -837,42 +858,41 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		s.overloadIdxs = make([]uint8, 0, numOverloads)
 	}
 	s.overloadIdxs = s.overloadIdxs[:numOverloads]
-	// foundToInputParamOrdinal indicates whether at least one overload has
-	// non-nil toInputParamOrdinal mapping. If none are found, we can avoid
-	// redundant calls to the toInputParamOrdinal() method.
-	var foundToInputParamOrdinal bool
+	// foundOutParamsOrdinals indicates whether at least one overload has
+	// non-nil outParamOrdinals mapping. If none are found, we can avoid
+	// redundant calls to the outParamOrdinals() method.
+	var foundOutParamsOrdinals bool
 	for i := range s.overloadIdxs {
 		s.overloadIdxs[i] = uint8(i)
-		if s.overloads[i].toInputParamOrdinal() != nil {
-			foundToInputParamOrdinal = true
+		if len(s.overloads[i].outParamOrdinals()) != 0 {
+			foundOutParamsOrdinals = true
 		}
 	}
 
 	// Filter out incorrect parameter length overloads.
 	exprsLen := len(s.exprs)
 	matchLen := func(ov overloadImpl, params TypeList) bool {
-		if !foundToInputParamOrdinal || ov.toInputParamOrdinal() == nil {
+		if !foundOutParamsOrdinals || len(ov.outParamOrdinals()) == 0 {
 			return params.MatchLen(exprsLen)
 		}
-		return len(ov.toInputParamOrdinal()) == exprsLen
+		// Ignore all OUT parameters since they are included in exprs but not in
+		// params.
+		return params.MatchLen(exprsLen - len(ov.outParamOrdinals()))
 	}
 	s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, matchLen)
 
 	makeFilter := func(i int, fn func(params TypeList, ordinal int) bool) func(overloadImpl, TypeList) bool {
-		if !foundToInputParamOrdinal {
+		if !foundOutParamsOrdinals {
 			return func(_ overloadImpl, params TypeList) bool {
 				return fn(params, i)
 			}
 		}
 		return func(ov overloadImpl, params TypeList) bool {
-			ordinal := i
-			if isOutParam := ov.toInputParamOrdinal(); i < len(isOutParam) {
-				if isOutParam[i] < 0 {
-					// If this expression is for the OUT parameter - we should
-					// ignore it.
-					return true
-				}
-				ordinal = int(isOutParam[i])
+			ordinal, isOutParam := toInputParamOrdinal(i, ov.outParamOrdinals())
+			if isOutParam {
+				// This expression corresponds to an OUT parameter and should be
+				// ignored.
+				return true
 			}
 			return fn(params, ordinal)
 		}
@@ -913,14 +933,13 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		for _, ovIdx := range s.overloadIdxs {
 			ov := s.overloads[ovIdx]
 			ordinal := i
-			if foundToInputParamOrdinal {
-				if toInputParamOrdinal := ov.toInputParamOrdinal(); i < len(toInputParamOrdinal) {
-					if toInputParamOrdinal[i] < 0 {
-						// If this expression is for the OUT parameter - we
-						// should ignore it.
-						continue
-					}
-					ordinal = int(toInputParamOrdinal[i])
+			if foundOutParamsOrdinals {
+				var isOutParam bool
+				ordinal, isOutParam = toInputParamOrdinal(i, ov.outParamOrdinals())
+				if isOutParam {
+					// This expression corresponds to an OUT parameter and
+					// should be ignored.
+					continue
 				}
 			}
 			typ := ov.params().GetAt(ordinal)
@@ -1446,15 +1465,14 @@ func checkReturn(
 
 	case 1:
 		idx := s.overloadIdxs[0]
-		toInputParamOrdinal := s.overloads[idx].toInputParamOrdinal()
+		outParamOrdinals := s.overloads[idx].outParamOrdinals()
 		p := s.params[idx]
 		for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
-			ordinal := i
-			if i < len(toInputParamOrdinal) {
-				if toInputParamOrdinal[i] < 0 {
-					continue
-				}
-				ordinal = int(toInputParamOrdinal[i])
+			ordinal, isOutParam := toInputParamOrdinal(i, outParamOrdinals)
+			if isOutParam {
+				// This expression corresponds to an OUT parameter and
+				// should be ignored.
+				continue
 			}
 			des := p.GetAt(ordinal)
 			typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, des)
@@ -1487,14 +1505,13 @@ func checkReturnPlaceholdersAtIdx(
 	ctx context.Context, semaCtx *SemaContext, s *overloadTypeChecker, idx uint8,
 ) (ok bool, _ error) {
 	p := s.params[idx]
-	toInputParamOrdinal := s.overloads[idx].toInputParamOrdinal()
+	outParamOrdinals := s.overloads[idx].outParamOrdinals()
 	for i, ok := s.placeholderIdxs.Next(0); ok; i, ok = s.placeholderIdxs.Next(i + 1) {
-		ordinal := i
-		if i < len(toInputParamOrdinal) {
-			if toInputParamOrdinal[i] < 0 {
-				continue
-			}
-			ordinal = int(toInputParamOrdinal[i])
+		ordinal, isOutParam := toInputParamOrdinal(i, outParamOrdinals)
+		if isOutParam {
+			// This expression corresponds to an OUT parameter and should be
+			// ignored.
+			continue
 		}
 		des := p.GetAt(ordinal)
 		typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, des)

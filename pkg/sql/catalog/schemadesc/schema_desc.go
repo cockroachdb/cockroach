@@ -499,12 +499,12 @@ func (desc *Mutable) ReplaceOverload(
 	for i := range fn.Signatures {
 		sig := fn.Signatures[i]
 		match := existing.Types.Length() == len(sig.ArgTypes) &&
-			len(existing.ToInputParamOrdinal) == len(sig.ToInputParamOrdinal)
+			len(existing.OutParamOrdinals) == len(sig.OutParamOrdinals)
 		for j := 0; match && j < len(sig.ArgTypes); j++ {
 			match = existing.Types.GetAt(j).Equivalent(sig.ArgTypes[j])
 		}
-		for j := 0; match && j < len(sig.ToInputParamOrdinal); j++ {
-			match = existing.ToInputParamOrdinal[j] == sig.ToInputParamOrdinal[j]
+		for j := 0; match && j < len(sig.OutParamOrdinals); j++ {
+			match = existing.OutParamOrdinals[j] == sig.OutParamOrdinals[j]
 		}
 		if match {
 			fn.Signatures[i] = newSignature
@@ -552,7 +552,7 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			},
 			Type:                     routineType,
 			UDFContainsOnlySignature: true,
-			ToInputParamOrdinal:      sig.ToInputParamOrdinal,
+			OutParamOrdinals:         sig.OutParamOrdinals,
 		}
 		if funcDescPb.Signatures[i].ReturnSet {
 			overload.Class = tree.GeneratorClass

@@ -86,7 +86,7 @@ func (*UnaryOp) preferred() bool {
 	return false
 }
 
-func (*UnaryOp) toInputParamOrdinal() []int32 {
+func (*UnaryOp) outParamOrdinals() []int32 {
 	return nil
 }
 
@@ -264,7 +264,7 @@ func (op *BinOp) preferred() bool {
 	return op.PreferredOverload
 }
 
-func (op *BinOp) toInputParamOrdinal() []int32 {
+func (op *BinOp) outParamOrdinals() []int32 {
 	return nil
 }
 
@@ -1410,7 +1410,7 @@ func (op *CmpOp) preferred() bool {
 	return op.PreferredOverload
 }
 
-func (op *CmpOp) toInputParamOrdinal() []int32 {
+func (op *CmpOp) outParamOrdinals() []int32 {
 	return nil
 }
 

@@ -1567,11 +1567,13 @@ message SchemaDescriptor {
 
     optional bool is_procedure = 5 [(gogoproto.nullable) = false];
 
-    // ToInputParamOrdinal is only set when IsProcedure is true (and when the
-    // proto was created on at least 24.1 version). It contains a mapping from
-    // all parameters to their ordinal in ArgTypes - OUT parameters get a
-    // special value of -1.
-    repeated int32 to_input_param_ordinal = 6;
+    // OutParamOrdinals is only set when IsProcedure is true and contains all
+    // ordinals of OUT parameters among all parameters specified in the CALL
+    // invocation. For example, if the procedure has an invocation like
+    //   (IN p1, INOUT p2, OUT p3, INOUT p4, OUT p5),
+    // then OutParamOrdinals will contain [2, 4] (while ArgTypes will contain
+    // types of [p1, p2, p4].
+    repeated int32 out_param_ordinals = 6;
   }
 
   // Function contains a group of UDFs with the same name.
