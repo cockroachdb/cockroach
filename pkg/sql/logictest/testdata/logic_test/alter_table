@@ -3772,3 +3772,57 @@ SELECT * FROM t_set_generated ORDER BY a
 5  5  NULL
 
 subtest end
+
+
+statement ok
+CREATE TABLE t_alter_identity (id SERIAL PRIMARY KEY, a int GENERATED ALWAYS AS IDENTITY, b int GENERATED ALWAYS AS IDENTITY, z int);
+
+statement error pq: INCREMENT must not be zero
+ALTER TABLE t_alter_identity ALTER COLUMN b SET INCREMENT 0;
+
+query error pq: START value \(11\) cannot be greater than MAXVALUE \(10\)
+ALTER TABLE t_alter_identity ALTER COLUMN b SET MAXVALUE 10 SET START WITH 11;
+
+query error pq: START value \(5\) cannot be less than MINVALUE \(10\)
+ALTER TABLE t_alter_identity ALTER COLUMN b SET MINVALUE 10 SET START WITH 5;
+
+query error pq: column "z" of relation "t_alter_identity" is not an identity column
+ALTER TABLE t_alter_identity ALTER COLUMN z SET START WITH 5;
+
+# Verify sequence options are implemented on the identity
+
+statement ok
+INSERT INTO t_alter_identity DEFAULT VALUES;
+
+statement ok
+ALTER TABLE t_alter_identity ALTER COLUMN b SET START WITH 5;
+
+statement ok
+ALTER TABLE t_alter_identity ALTER COLUMN b SET INCREMENT 4;
+
+statement ok
+ALTER TABLE t_alter_identity ALTER COLUMN b RESTART;
+
+statement ok
+INSERT INTO t_alter_identity DEFAULT VALUES;
+
+statement ok
+INSERT INTO t_alter_identity DEFAULT VALUES;
+
+statement ok
+ALTER TABLE t_alter_identity ALTER COLUMN b SET MAXVALUE 40 RESTART WITH 20 SET CACHE 5 SET INCREMENT BY 2
+
+statement ok
+INSERT INTO t_alter_identity DEFAULT VALUES;
+
+statement ok
+INSERT INTO t_alter_identity DEFAULT VALUES;
+
+query I rowsort
+SELECT b from t_alter_identity ORDER BY b;
+----
+1
+5
+9
+18
+20

@@ -3435,6 +3435,60 @@ test_identity     public           set_generated_as_identity_a_seq  INT8       6
 test_identity     public           set_generated_as_identity_b_seq  INT8       64                 2                        0              10           1              9223372036854775807  1          NO
 
 statement ok
+CREATE TABLE alter_opts_generated_as_identity (a INT GENERATED ALWAYS AS IDENTITY (START WITH 2))
+
+query TTTTTTTTTT colnames
+SELECT column_name, is_identity, identity_generation, is_nullable, column_default, identity_start, identity_increment, identity_maximum, identity_minimum, identity_cycle
+FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'alter_opts_generated_as_identity' AND column_name = 'a'
+----
+column_name  is_identity  identity_generation  is_nullable  column_default                                                      identity_start  identity_increment  identity_maximum     identity_minimum  identity_cycle
+a            YES          ALWAYS               NO           nextval('public.alter_opts_generated_as_identity_a_seq'::REGCLASS)  2               1                   9223372036854775807  1                 NULL
+
+query TTTTIIITTTTT colnames
+SELECT * FROM information_schema.sequences WHERE sequence_name = 'alter_opts_generated_as_identity_a_seq'
+----
+sequence_catalog  sequence_schema  sequence_name                           data_type  numeric_precision  numeric_precision_radix  numeric_scale  start_value  minimum_value  maximum_value        increment  cycle_option
+test_identity     public           alter_opts_generated_as_identity_a_seq  INT8       64                 2                        0              2            1              9223372036854775807  1          NO
+
+statement ok
+ALTER TABLE alter_opts_generated_as_identity ALTER COLUMN a SET INCREMENT BY 2;
+
+query TTTTIIITTTTT colnames
+SELECT * FROM information_schema.sequences WHERE sequence_name = 'alter_opts_generated_as_identity_a_seq'
+----
+sequence_catalog  sequence_schema  sequence_name                           data_type  numeric_precision  numeric_precision_radix  numeric_scale  start_value  minimum_value  maximum_value        increment  cycle_option
+test_identity     public           alter_opts_generated_as_identity_a_seq  INT8       64                 2                        0              2            1              9223372036854775807  2          NO
+
+query TTTTTTTTTT colnames
+SELECT column_name, is_identity, identity_generation, is_nullable, column_default, identity_start, identity_increment, identity_maximum, identity_minimum, identity_cycle
+FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'alter_opts_generated_as_identity' AND column_name = 'a'
+----
+column_name  is_identity  identity_generation  is_nullable  column_default                                                      identity_start  identity_increment  identity_maximum     identity_minimum  identity_cycle
+a            YES          ALWAYS               NO           nextval('public.alter_opts_generated_as_identity_a_seq'::REGCLASS)  2               2                   9223372036854775807  1                 NULL
+
+query TTTTIIITTTTT colnames
+SELECT * FROM information_schema.sequences WHERE sequence_name = 'alter_opts_generated_as_identity_a_seq'
+----
+sequence_catalog  sequence_schema  sequence_name                           data_type  numeric_precision  numeric_precision_radix  numeric_scale  start_value  minimum_value  maximum_value        increment  cycle_option
+test_identity     public           alter_opts_generated_as_identity_a_seq  INT8       64                 2                        0              2            1              9223372036854775807  2          NO
+
+statement ok
+ALTER TABLE alter_opts_generated_as_identity ALTER COLUMN a SET MAXVALUE 40 SET START WITH 2 SET CACHE 5 SET INCREMENT BY 2;
+
+query TTTTTTTTTT colnames
+SELECT column_name, is_identity, identity_generation, is_nullable, column_default, identity_start, identity_increment, identity_maximum, identity_minimum, identity_cycle
+FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'alter_opts_generated_as_identity' AND column_name = 'a'
+----
+column_name  is_identity  identity_generation  is_nullable  column_default                                                      identity_start  identity_increment  identity_maximum  identity_minimum  identity_cycle
+a            YES          ALWAYS               NO           nextval('public.alter_opts_generated_as_identity_a_seq'::REGCLASS)  2               2                   40                1                 NULL
+
+query TTTTIIITTTTT colnames
+SELECT * FROM information_schema.sequences WHERE sequence_name = 'alter_opts_generated_as_identity_a_seq'
+----
+sequence_catalog  sequence_schema  sequence_name                           data_type  numeric_precision  numeric_precision_radix  numeric_scale  start_value  minimum_value  maximum_value  increment  cycle_option
+test_identity     public           alter_opts_generated_as_identity_a_seq  INT8       64                 2                        0              2            1              40             2          NO
+
+statement ok
 SET DATABASE = test
 
 statement ok
