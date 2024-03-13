@@ -230,3 +230,19 @@ func maybeUseMemoryBudget(t test.Test, budget int) option.StartOpts {
 	}
 	return startOpts
 }
+
+// Returns the mean over the last n samples. If n > len(items), returns the mean
+// over the entire items slice.
+func getMeanOverLastN(n int, items []float64) float64 {
+	count := n
+	if len(items) < n {
+		count = len(items)
+	}
+	sum := float64(0)
+	i := 0
+	for i < count {
+		sum += items[len(items)-1-i]
+		i++
+	}
+	return sum / float64(count)
+}
