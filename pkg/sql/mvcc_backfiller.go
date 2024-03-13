@@ -138,8 +138,9 @@ func (im *IndexBackfillerMergePlanner) plan(
 	) error {
 		sd := NewInternalSessionData(ctx, im.execCfg.Settings, "plan-index-backfill-merge")
 		evalCtx = createSchemaChangeEvalCtx(ctx, im.execCfg, sd, txn.KV().ReadTimestamp(), descriptors)
-		planCtx = im.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn.KV(),
-			DistributionTypeSystemTenantOnly)
+		planCtx = im.execCfg.DistSQLPlanner.NewPlanningCtx(
+			ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
+		)
 
 		spec, err := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), addedIndexes, temporaryIndexes, mergeTimestamp)
 		if err != nil {
