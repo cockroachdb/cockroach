@@ -591,6 +591,15 @@ func (h *hasher) HashUniqueOrdinals(val cat.UniqueOrdinals) {
 	h.hash = hash
 }
 
+func (h *hasher) HashSchemaFunctionDeps(val opt.SchemaFunctionDeps) {
+	hash := h.hash
+	val.ForEach(func(i int) {
+		hash ^= internHash(i)
+		hash *= prime64
+	})
+	h.hash = hash
+}
+
 func (h *hasher) HashSchemaDeps(val opt.SchemaDeps) {
 	// Hash the length and address of the first element.
 	h.HashInt(len(val))
@@ -775,6 +784,10 @@ func (h *hasher) HashLiteralRows(val *opt.LiteralRows) {
 
 func (h *hasher) HashUDFDefinition(val *UDFDefinition) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+}
+
+func (h *hasher) HashStoredProcTxnOp(val tree.StoredProcTxnOp) {
+	h.HashUint64(uint64(val))
 }
 
 // ----------------------------------------------------------------------
@@ -1040,6 +1053,10 @@ func (h *hasher) IsUniqueOrdinalsEqual(l, r cat.UniqueOrdinals) bool {
 		}
 	}
 	return true
+}
+
+func (h *hasher) IsSchemaFunctionDepsEqual(l, r opt.SchemaFunctionDeps) bool {
+	return l.Equals(r)
 }
 
 func (h *hasher) IsSchemaDepsEqual(l, r opt.SchemaDeps) bool {
@@ -1309,6 +1326,10 @@ func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
 		return false
 	}
 	return h.IsColListEqual(l.Params, r.Params) && l.IsRecursive == r.IsRecursive
+}
+
+func (h *hasher) IsStoredProcTxnOpEqual(l, r tree.StoredProcTxnOp) bool {
+	return l == r
 }
 
 // encodeDatum turns the given datum into an encoded string of bytes. If two

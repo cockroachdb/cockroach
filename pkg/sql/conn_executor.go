@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1507,6 +1508,26 @@ type connExecutor struct {
 			implicit bool
 		}
 
+		// storedProcTxnState contains fields that are used for explicit transaction
+		// management in stored procedures. Both fields are set during execution of
+		// a stored procedure through the planner. Both fields are reset by the
+		// connExecutor in execCmd, depending on the execution status (e.g. success,
+		// error, retry).
+		storedProcTxnState struct {
+			// txnOp, if not set to StoredProcTxnNoOp, indicates that the current txn
+			// should be committed or aborted. The connExecutor uses it in
+			// execStmtInOpenState to decide whether to commit or rollback the current
+			// transaction.
+			txnOp tree.StoredProcTxnOp
+
+			// resumeProc, if non-nil, contains the plan for a CALL statement that
+			// will continue execution of a stored procedure that previously suspended
+			// execution in order to commit or abort its transaction. The planner
+			// checks for resumeProc in buildExecMemo, and executes it as the next
+			// statement if it is non-nil.
+			resumeProc *memo.Memo
+		}
+
 		// shouldExecuteOnTxnRestart indicates that ex.onTxnRestart will be
 		// called when txn is being retried. It is true when txn is started but
 		// can remain false when txn is executed within another higher-level
@@ -2590,6 +2611,26 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// Nothing to do. The same statement will be executed again.
 	default:
 		panic(errors.AssertionFailedf("unexpected advance code: %s", advInfo.code))
+	}
+
+	// Special handling for COMMIT/ROLLBACK in PL/pgSQL stored procedures. We
+	// unconditionally reset the StoredProcTxnOp because it has either
+	// successfully set in motion the commit/rollback of the current transaction,
+	// or execution failed and the PL/pgSQL command should be ignored.
+	ex.extraTxnState.storedProcTxnState.txnOp = tree.StoredProcTxnNoOp
+	switch advInfo.code {
+	case stayInPlace, rewind:
+		// Do not reset the "resume" plan. This will allow a sub-transaction
+		// within a stored procedure to be retried individually from any previous or
+		// following transactions within the stored procedure.
+		//
+		// NOTE: we will eventually reach the default case below when the retries
+		// terminate.
+	default:
+		// Finish cleaning up the stored proc state by resetting the "resume" plan.
+		// The stored procedure has finished execution, either successfully or with
+		// an error.
+		ex.extraTxnState.storedProcTxnState.resumeProc = nil
 	}
 
 	if err := ex.updateTxnRewindPosMaybe(ctx, cmd, pos, advInfo); err != nil {
@@ -3734,6 +3775,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.sqlCursors = ex.getCursorAccessor()
+	p.storedProcTxnState = ex.getStoredProcTxnStateAccessor()
 	p.createdSequences = ex.getCreatedSequencesAccessor()
 
 	p.queryCacheSession.Init()
@@ -4224,6 +4266,12 @@ func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
 
 func (ex *connExecutor) getCursorAccessor() sqlCursors {
 	return connExCursorAccessor{
+		ex: ex,
+	}
+}
+
+func (ex *connExecutor) getStoredProcTxnStateAccessor() storedProcTxnStateAccessor {
+	return storedProcTxnStateAccessor{
 		ex: ex,
 	}
 }

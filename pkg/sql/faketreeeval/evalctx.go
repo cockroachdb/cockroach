@@ -439,6 +439,13 @@ func (ep *DummyEvalPlanner) RoutineExprGenerator(
 	return nil
 }
 
+// EvalTxnControlExpr is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) EvalTxnControlExpr(
+	ctx context.Context, expr *tree.TxnControlExpr, args tree.Datums,
+) (tree.Datum, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
 func (ep *DummyEvalPlanner) ResolveTypeByOID(_ context.Context, _ oid.Oid) (*types.T, error) {
 	return nil, errors.WithStack(errEvalPlanner)

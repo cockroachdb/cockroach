@@ -175,6 +175,9 @@ func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	for _, id := range desc.DependsOnTypes {
 		ret.Add(id)
 	}
+	for _, id := range desc.DependsOnFunctions {
+		ret.Add(id)
+	}
 	for _, dep := range desc.DependedOnBy {
 		ret.Add(dep.ID)
 	}
@@ -260,6 +263,10 @@ func (desc *immutable) ValidateForwardReferences(
 	for _, typeID := range desc.DependsOnTypes {
 		vea.Report(catalog.ValidateOutboundTypeRef(typeID, vdg))
 	}
+
+	for _, functionID := range desc.DependsOnFunctions {
+		vea.Report(catalog.ValidateOutboundFunctionRef(functionID, vdg))
+	}
 }
 
 // ValidateBackReferences implements the catalog.Descriptor interface.
@@ -281,10 +288,19 @@ func (desc *immutable) ValidateBackReferences(
 		vea.Report(catalog.ValidateOutboundTypeRefBackReference(desc.GetID(), typ))
 	}
 
-	// Currently, we don't support cross function references yet.
-	// So here we assume that all inbound references are from tables.
+	// We support both table and function references, which we will determine based
+	// on the descriptor type.
 	for _, by := range desc.DependedOnBy {
-		vea.Report(desc.validateInboundTableRef(by, vdg))
+		descriptor, err := vdg.GetDescriptor(by.ID)
+		if err != nil {
+			vea.Report(err)
+		}
+		switch backRef := descriptor.(type) {
+		case catalog.TableDescriptor:
+			vea.Report(desc.validateInboundTableRef(by, backRef))
+		case catalog.FunctionDescriptor:
+			vea.Report(desc.validateInboundFunctionRef(by, backRef))
+		}
 	}
 }
 
@@ -307,13 +323,33 @@ func (desc *immutable) validateFuncExistsInSchema(scDesc catalog.SchemaDescripto
 		desc.GetName(), desc.GetID(), scDesc.GetName(), scDesc.GetID())
 }
 
-func (desc *immutable) validateInboundTableRef(
-	by descpb.FunctionDescriptor_Reference, vdg catalog.ValidationDescGetter,
+func (desc *immutable) validateInboundFunctionRef(
+	ref descpb.FunctionDescriptor_Reference, backrefFunctionDesc catalog.FunctionDescriptor,
 ) error {
-	backRefTbl, err := vdg.GetTableDescriptor(by.ID)
-	if err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depended-on-by relation back reference")
+	if backrefFunctionDesc.Dropped() {
+		return errors.AssertionFailedf("depended-on-by function %q (%d) is dropped",
+			backrefFunctionDesc.GetName(), backrefFunctionDesc.GetID())
 	}
+	// Validate all other references are unset.
+	if ref.ColumnIDs != nil || ref.IndexIDs != nil || ref.ConstraintIDs != nil {
+		return errors.AssertionFailedf("function reference has invalid references (%v, %v %v)",
+			ref.ColumnIDs, ref.IndexIDs, ref.ConstraintIDs)
+	}
+	// Validate a reference exists to this function.
+	for _, refID := range backrefFunctionDesc.GetDependsOnFunctions() {
+		if refID == desc.ID {
+			return nil
+		}
+	}
+	return errors.AssertionFailedf("missing back reference to: %q (%d) inside %q (%d)",
+		desc.GetName(), desc.GetID(),
+		backrefFunctionDesc.GetName(), backrefFunctionDesc.GetID(),
+	)
+}
+
+func (desc *immutable) validateInboundTableRef(
+	by descpb.FunctionDescriptor_Reference, backRefTbl catalog.TableDescriptor,
+) error {
 	if backRefTbl.Dropped() {
 		return errors.AssertionFailedf("depended-on-by relation %q (%d) is dropped",
 			backRefTbl.GetName(), backRefTbl.GetID())
@@ -593,6 +629,37 @@ func (desc *Mutable) RemoveConstraintReference(id descpb.ID, constraintID descpb
 			return
 		}
 	}
+}
+
+// AddFunctionReference adds back reference for a function invoking this function.
+func (desc *Mutable) AddFunctionReference(id descpb.ID) error {
+	for _, f := range desc.DependsOnFunctions {
+		if f == id {
+			return pgerror.Newf(pgcode.InvalidFunctionDefinition,
+				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
+			)
+		}
+	}
+
+	// Check if the dependency already exists.
+	for _, d := range desc.DependedOnBy {
+		if d.ID == id {
+			return nil
+		}
+	}
+	desc.DependedOnBy = append(desc.DependedOnBy, descpb.FunctionDescriptor_Reference{ID: id})
+	return nil
+}
+
+// RemoveFunctionReference removes back reference for a function invoking this function.
+func (desc *Mutable) RemoveFunctionReference(id descpb.ID) error {
+	for i := range desc.DependedOnBy {
+		if desc.DependedOnBy[i].ID == id {
+			desc.DependedOnBy = append(desc.DependedOnBy[:i], desc.DependedOnBy[i+1:]...)
+			return nil
+		}
+	}
+	return nil
 }
 
 // AddColumnReference adds back reference to a column to the function.

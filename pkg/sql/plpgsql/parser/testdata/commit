@@ -1,0 +1,109 @@
+parse
+BEGIN
+  INSERT INTO xy VALUES (1, 2);
+  COMMIT;
+  INSERT INTO xy VALUES (3, 4);
+END
+----
+BEGIN
+INSERT INTO xy VALUES (1, 2);
+COMMIT;
+INSERT INTO xy VALUES (3, 4);
+END;
+ -- normalized!
+BEGIN
+INSERT INTO xy VALUES ((1), (2));
+COMMIT;
+INSERT INTO xy VALUES ((3), (4));
+END;
+ -- fully parenthesized
+BEGIN
+INSERT INTO xy VALUES (_, _);
+COMMIT;
+INSERT INTO xy VALUES (_, _);
+END;
+ -- literals removed
+BEGIN
+INSERT INTO _ VALUES (1, 2);
+COMMIT;
+INSERT INTO _ VALUES (3, 4);
+END;
+ -- identifiers removed
+
+parse
+BEGIN
+  INSERT INTO xy VALUES (1, 2);
+  COMMIT AND NO CHAIN;
+  INSERT INTO xy VALUES (3, 4);
+END
+----
+BEGIN
+INSERT INTO xy VALUES (1, 2);
+COMMIT;
+INSERT INTO xy VALUES (3, 4);
+END;
+ -- normalized!
+BEGIN
+INSERT INTO xy VALUES ((1), (2));
+COMMIT;
+INSERT INTO xy VALUES ((3), (4));
+END;
+ -- fully parenthesized
+BEGIN
+INSERT INTO xy VALUES (_, _);
+COMMIT;
+INSERT INTO xy VALUES (_, _);
+END;
+ -- literals removed
+BEGIN
+INSERT INTO _ VALUES (1, 2);
+COMMIT;
+INSERT INTO _ VALUES (3, 4);
+END;
+ -- identifiers removed
+
+parse
+BEGIN
+  INSERT INTO xy VALUES (1, 2);
+  COMMIT AND CHAIN;
+  INSERT INTO xy VALUES (3, 4);
+END
+----
+BEGIN
+INSERT INTO xy VALUES (1, 2);
+COMMIT AND CHAIN;
+INSERT INTO xy VALUES (3, 4);
+END;
+ -- normalized!
+BEGIN
+INSERT INTO xy VALUES ((1), (2));
+COMMIT AND CHAIN;
+INSERT INTO xy VALUES ((3), (4));
+END;
+ -- fully parenthesized
+BEGIN
+INSERT INTO xy VALUES (_, _);
+COMMIT AND CHAIN;
+INSERT INTO xy VALUES (_, _);
+END;
+ -- literals removed
+BEGIN
+INSERT INTO _ VALUES (1, 2);
+COMMIT AND CHAIN;
+INSERT INTO _ VALUES (3, 4);
+END;
+ -- identifiers removed
+
+error
+BEGIN
+  INSERT INTO xy VALUES (1, 2);
+  COMMIT foo;
+  INSERT INTO xy VALUES (3, 4);
+END
+----
+at or near "foo": syntax error
+DETAIL: source SQL:
+BEGIN
+  INSERT INTO xy VALUES (1, 2);
+  COMMIT foo;
+         ^

@@ -1274,6 +1274,31 @@ define UDFCallPrivate {
     TailCall bool
 }
 
+# TxnControl allows PL/pgSQL stored procedures to pause their execution, commit
+# or rollback the current transaction, and then continue execution in the new
+# transaction.
+[Scalar]
+define TxnControl {
+    # Args contains the scalar expressions given as arguments to the
+    # "continuation" stored procedure invocation.
+    Args ScalarListExpr
+    _ TxnControlPrivate
+}
+
+[Private]
+define TxnControlPrivate {
+    # TxnOp indicates whether the current transaction should be committed or
+    # aborted.
+    TxnOp StoredProcTxnOp
+
+    # Props is used when building the plan for the continuation SP.
+    Props PhysProps
+
+    # Def stores the procedure that will resume execution of the parent SP in
+    # the new transaction.
+    Def UDFDefinition
+}
+
 # KVOptions is a set of KVOptionItems that specify arbitrary keys and values
 # that are used as modifiers for various statements (see tree.KVOptions). The
 # key is a constant string but the value can be a scalar expression.

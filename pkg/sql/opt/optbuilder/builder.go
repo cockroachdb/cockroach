@@ -144,10 +144,6 @@ type Builder struct {
 
 	// insideUDF is true when the current expressions are being built within a
 	// UDF.
-	// TODO(mgartner): Once other UDFs can be referenced from within a UDF, a
-	// boolean will not be sufficient to track whether or not we are in a UDF.
-	// We'll need to track the depth of the UDFs we are building expressions
-	// within.
 	insideUDF bool
 
 	// insideDataSource is true when we are processing a data source.
@@ -162,8 +158,9 @@ type Builder struct {
 	// inner view/function).
 	trackSchemaDeps bool
 
-	schemaDeps     opt.SchemaDeps
-	schemaTypeDeps opt.SchemaTypeDeps
+	schemaDeps         opt.SchemaDeps
+	schemaFunctionDeps opt.SchemaFunctionDeps
+	schemaTypeDeps     opt.SchemaTypeDeps
 
 	// If set, the data source names in the AST are rewritten to the fully
 	// qualified version (after resolution). Used to construct the strings for

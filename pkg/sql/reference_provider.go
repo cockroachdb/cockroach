@@ -29,6 +29,7 @@ type tableDescReferences []descpb.TableDescriptor_Reference
 type referenceProvider struct {
 	tableReferences     map[descpb.ID]tableDescReferences
 	viewReferences      map[descpb.ID]tableDescReferences
+	referencedFunctions catalog.DescriptorIDSet
 	referencedSequences catalog.DescriptorIDSet
 	referencedTypes     catalog.DescriptorIDSet
 	allRelationIDs      catalog.DescriptorIDSet
@@ -59,6 +60,16 @@ func (r *referenceProvider) ForEachTableReference(
 			if err := f(id, ref.IndexID, ref.ColumnIDs); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// ForEachFunctionReference implements scbuildstmt.ReferenceProvider.
+func (r *referenceProvider) ForEachFunctionReference(f func(functionID descpb.ID) error) error {
+	for _, functionID := range r.referencedFunctions.Ordered() {
+		if err := f(functionID); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -110,7 +121,7 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 	// For the time being this is only used for CREATE FUNCTION. We need to handle
 	// CREATE VIEW when it's needed.
 	createFnExpr := optFactory.Memo().RootExpr().(*memo.CreateFunctionExpr)
-	tableReferences, typeReferences, err := toPlanDependencies(createFnExpr.Deps, createFnExpr.TypeDeps)
+	tableReferences, typeReferences, functionReferences, err := toPlanDependencies(createFnExpr.Deps, createFnExpr.TypeDeps, createFnExpr.FuncDeps)
 	if err != nil {
 		return nil, err
 	}
@@ -141,6 +152,9 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 		}
 	}
 
+	for functionID := range functionReferences {
+		ret.referencedFunctions.Add(functionID)
+	}
 	return ret, nil
 }
 
