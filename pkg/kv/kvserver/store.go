@@ -3367,6 +3367,15 @@ func (s *Store) computeMetrics(ctx context.Context) (m storage.Metrics, err erro
 		s.metrics.RdbCheckpoints.Update(int64(len(dirs)))
 	}
 
+	// Get disk stats for the disk associated with this store.
+	if s.diskMonitor != nil {
+		diskStats, err := s.diskMonitor.CumulativeStats()
+		if err != nil {
+			return m, err
+		}
+		s.metrics.updateDiskStats(diskStats)
+	}
+
 	return m, nil
 }
 
