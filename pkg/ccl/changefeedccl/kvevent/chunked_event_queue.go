@@ -13,6 +13,7 @@ import "sync"
 const bufferEventChunkArrSize = 128
 
 // bufferEventChunkQueue is a queue implemented as a linked-list of bufferEntry.
+// TODO(#120216): This data structure should use `util/queue.Queue`.
 type bufferEventChunkQueue struct {
 	head, tail *bufferEventChunk
 }
