@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -50,7 +51,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 )
 
@@ -743,16 +743,29 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	}
 
 	var storeKnobs kvserver.StoreTestingKnobs
+	var stickyRegistry fs.StickyRegistry
 	if s := cfg.TestingKnobs.Store; s != nil {
 		storeKnobs = *s.(*kvserver.StoreTestingKnobs)
 	}
+	if cfg.TestingKnobs.Server != nil {
+		serverKnobs := cfg.TestingKnobs.Server.(*TestingKnobs)
+		stickyRegistry = serverKnobs.StickyVFSRegistry
+	}
 
+	storeEnvs, err := fs.InitEnvsFromStoreSpecs(ctx, cfg.Stores.Specs, fs.ReadWrite, stickyRegistry)
+	if err != nil {
+		return Engines{}, err
+	}
+	defer func() {
+		if err := storeEnvs.CloseAll(); err != nil {
+			panic(err)
+		}
+	}()
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 
 		storageConfigOpts := []storage.ConfigOption{
 			storage.Attributes(spec.Attributes),
-			storage.EncryptionAtRest(spec.EncryptionOptions),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
 		}
 		if len(storeKnobs.EngineKnobs) > 0 {
@@ -762,25 +775,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			storageConfigOpts = append(storageConfigOpts, opt)
 		}
 
-		var location storage.Location
 		if spec.InMemory {
-			if spec.StickyVFSID == "" {
-				location = storage.InMemory()
-			} else {
-				if cfg.TestingKnobs.Server == nil {
-					return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
-						"engine no server knobs available to get a registry. " +
-						"Please use Knobs.Server.StickyVFSRegistry to provide one.")
-				}
-				knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
-				if knobs.StickyVFSRegistry == nil {
-					return Engines{}, errors.Errorf("Could not create a sticky " +
-						"engine no registry available. Please use " +
-						"Knobs.Server.StickyVFSRegistry to provide one.")
-				}
-				location = storage.MakeLocation("", knobs.StickyVFSRegistry.Get(spec.StickyVFSID))
-			}
-
 			var sizeInBytes = spec.Size.InBytes
 			if spec.Size.Percent > 0 {
 				sysMem, err := status.GetTotalMemory(ctx)
@@ -799,11 +794,10 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 			detail(redact.Sprintf("store %d: in-memory, size %s", i, humanizeutil.IBytes(sizeInBytes)))
 		} else {
-			location = storage.Filesystem(spec.Path)
-			if err := vfs.Default.MkdirAll(spec.Path, 0755); err != nil {
-				return Engines{}, errors.Wrap(err, "creating store directory")
-			}
-			du, err := vfs.Default.GetDiskUsage(spec.Path)
+			// NB: We've already initialized an *fs.Env backed by the real
+			// physical filesystem. This initialization will create the
+			// data directory if it didn't already exist.
+			du, err := storeEnvs[i].UnencryptedFS.GetDiskUsage(spec.Path)
 			if err != nil {
 				return Engines{}, errors.Wrap(err, "retrieving disk usage")
 			}
@@ -847,10 +841,15 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return nil, errors.Errorf("store %d: using Pebble storage engine but StoreSpec provides RocksDB options", i)
 			}
 		}
-		eng, err := storage.Open(ctx, location, cfg.Settings, storageConfigOpts...)
+		eng, err := storage.Open(ctx, storeEnvs[i], cfg.Settings, storageConfigOpts...)
 		if err != nil {
 			return Engines{}, err
 		}
+		// Nil out the store env; the engine has taken responsibility for Closing
+		// it.
+		// TODO(jackson): Refactor to either reference count references to the env,
+		// or leave ownership with the caller of Open.
+		storeEnvs[i] = nil
 		detail(redact.Sprintf("store %d: %+v", i, eng.Properties()))
 		engines = append(engines, eng)
 	}

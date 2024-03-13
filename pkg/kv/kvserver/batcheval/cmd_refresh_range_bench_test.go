@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -182,16 +183,13 @@ type benchOptions struct {
 type engineMaker func(testing.TB, string, int64, fs.RWMode) storage.Engine
 
 func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, rw fs.RWMode) storage.Engine {
-	opts := []storage.ConfigOption{storage.LBaseMaxBytes(lBaseMaxBytes)}
-	if rw == fs.ReadOnly {
-		opts = append(opts, storage.ReadOnly)
-	}
-	eng, err := storage.Open(
-		context.Background(),
-		storage.Filesystem(dir),
-		cluster.MakeTestingClusterSettings(),
-		opts...)
+	env, err := fs.InitEnv(context.Background(), vfs.Default, dir, fs.EnvConfig{RW: rw})
 	if err != nil {
+		b.Fatalf("could not initialize fs env at %s: %+v", dir, err)
+	}
+	eng, err := storage.Open(context.Background(), env, cluster.MakeTestingClusterSettings(), storage.LBaseMaxBytes(lBaseMaxBytes))
+	if err != nil {
+		require.NoError(b, env.Close())
 		b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
 	}
 	return eng

@@ -128,7 +128,7 @@ func runSyncer(
 			// Failed on first open, before we tried to corrupt anything. Hard stop.
 			return 0, err
 		}
-		fmt.Fprintln(stderr, "RocksDB directory", dir, "corrupted:", err)
+		fmt.Fprintln(stderr, "store directory", dir, "corrupted:", err)
 		return 0, nil // trigger reset
 	}
 

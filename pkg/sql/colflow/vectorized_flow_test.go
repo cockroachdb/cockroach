@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -277,7 +278,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 	// We use an on-disk engine for this test since we're testing FS interactions
 	// and want to get the same behavior as a non-testing environment.
 	tempPath, dirCleanup := testutils.TempDir(t)
-	ngn, err := storage.Open(ctx, storage.Filesystem(tempPath), cluster.MakeClusterSettings(), storage.CacheSize(0))
+	ngn, err := storage.Open(ctx, fs.MustInitPhysicalTestingEnv(tempPath), cluster.MakeClusterSettings(), storage.CacheSize(0))
 	require.NoError(t, err)
 	defer ngn.Close()
 	defer dirCleanup()

@@ -14,6 +14,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/cli/exit",
+        "//pkg/settings",
         "//pkg/storage/enginepb",
         "//pkg/util/envutil",
         "//pkg/util/log",
@@ -22,6 +24,7 @@ go_library(
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//record",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_pebble//vfs/atomicfs",

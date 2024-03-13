@@ -806,16 +806,6 @@ type StorageConfig struct {
 	EncryptionOptions []byte
 }
 
-// HasEncryptionConfig returns whether the StorageConfig includes configuration
-// settings for encryption-at-rest. The existence of this config does not mean
-// that the store is configured to use encryption. If the store has ever had
-// encryption-at-rest enabled, the operator is required to provide the
-// --enterprise-encryption flag, which results in the StorageConfig carrying an
-// encryption config.
-func (sc StorageConfig) HasEncryptionConfig() bool {
-	return len(sc.EncryptionOptions) > 0
-}
-
 const (
 	// DefaultTempStorageMaxSizeBytes is the default maximum budget
 	// for temp storage.

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -587,7 +588,7 @@ func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine)
 	dir, cleanup := testutils.TempDir(t)
 	eng, err := storage.Open(
 		ctx,
-		storage.Filesystem(dir),
+		fs.MustInitPhysicalTestingEnv(dir),
 		cluster.MakeClusterSettings(),
 		storage.CacheSize(1<<20 /* 1 MiB */))
 	if err != nil {
@@ -606,9 +607,11 @@ func TestSideloadStorageSync(t *testing.T) {
 		// Create a sideloaded storage with an in-memory FS. Use strict MemFS to be
 		// able to emulate crash restart by rolling it back to last synced state.
 		ctx := context.Background()
-		fs := vfs.NewStrictMem()
-		eng := storage.InMemFromFS(ctx, fs, "",
-			cluster.MakeTestingClusterSettings(), storage.ForTesting)
+		memFS := vfs.NewStrictMem()
+		env, err := fs.InitEnv(ctx, memFS, "", fs.EnvConfig{})
+		require.NoError(t, err)
+		eng, err := storage.Open(ctx, env, cluster.MakeTestingClusterSettings(), storage.ForTesting)
+		require.NoError(t, err)
 		ss := newTestingSideloadStorage(eng)
 
 		// Put an entry which should trigger the lazy creation of the sideloaded
@@ -619,21 +622,23 @@ func TestSideloadStorageSync(t *testing.T) {
 			require.NoError(t, ss.Sync())
 		}
 		// Cut off all syncs from this point, to emulate a crash.
-		fs.SetIgnoreSyncs(true)
+		memFS.SetIgnoreSyncs(true)
 		ss = nil
 		eng.Close()
 		// Reset filesystem to the last synced state.
-		fs.ResetToSyncedState()
-		fs.SetIgnoreSyncs(false)
+		memFS.ResetToSyncedState()
+		memFS.SetIgnoreSyncs(false)
 
 		// Emulate process restart. Load from the last synced state.
-		eng = storage.InMemFromFS(ctx, fs, "",
-			cluster.MakeTestingClusterSettings(), storage.ForTesting)
+		env, err = fs.InitEnv(ctx, memFS, "", fs.EnvConfig{})
+		require.NoError(t, err)
+		eng, err = storage.Open(ctx, env, cluster.MakeTestingClusterSettings(), storage.ForTesting)
+		require.NoError(t, err)
 		defer eng.Close()
 		ss = newTestingSideloadStorage(eng)
 
 		// The sideloaded directory must exist because all its parents are synced.
-		_, err := eng.Stat(ss.Dir())
+		_, err = eng.Stat(ss.Dir())
 		require.NoError(t, err)
 
 		// The stored entry is still durable if we synced the sideloaded storage

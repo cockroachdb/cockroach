@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -93,7 +94,7 @@ func TestDebugCheckStore(t *testing.T) {
 	// Introduce a stats divergence on s1.
 	func() {
 		eng, err := storage.Open(ctx,
-			storage.Filesystem(storePaths[0]),
+			fs.MustInitPhysicalTestingEnv(storePaths[0]),
 			cluster.MakeClusterSettings(),
 			storage.CacheSize(10<<20 /* 10 MiB */),
 			storage.MustExist)

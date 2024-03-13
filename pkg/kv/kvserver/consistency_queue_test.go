@@ -388,9 +388,15 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 		// Create a new store on top of checkpoint location inside existing in-mem
 		// VFS to verify its contents.
-		fs := stickyVFSRegistry.Get(strconv.FormatInt(int64(i), 10))
-		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], cluster.MakeClusterSettings(),
-			storage.ForTesting, storage.MustExist, storage.ReadOnly, storage.CacheSize(1<<20))
+		ctx := context.Background()
+		memFS := stickyVFSRegistry.Get(strconv.FormatInt(int64(i), 10))
+		env, err := fs.InitEnv(ctx, memFS, cps[0], fs.EnvConfig{RW: fs.ReadOnly})
+		require.NoError(t, err)
+		cpEng, err := storage.Open(ctx, env, cluster.MakeClusterSettings(),
+			storage.ForTesting, storage.MustExist, storage.CacheSize(1<<20))
+		if err != nil {
+			require.NoError(t, err)
+		}
 		defer cpEng.Close()
 
 		// Find the problematic range in the storage.
@@ -528,7 +534,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 
 	func() {
 		eng, err := storage.Open(ctx,
-			storage.Filesystem(path),
+			fs.MustInitPhysicalTestingEnv(path),
 			cluster.MakeClusterSettings(),
 			storage.CacheSize(1<<20 /* 1 MiB */),
 			storage.MustExist)
