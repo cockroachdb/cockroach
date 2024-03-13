@@ -291,19 +291,3 @@ type syncEvent struct {
 // should be called from underneath a stopper task to ensure that the
 // engine has not been closed.
 type IntentScannerConstructor func() IntentScanner
-
-// calculateDateEventSize returns estimated size of the event that contain actual
-// data. We only account for logical ops and sst's. Those events come from raft
-// and are budgeted. Other events come from processor jobs and update timestamps
-// we don't take them into account as they are supposed to be small and to avoid
-// complexity of having multiple producers getting from budget.
-func calculateDateEventSize(e event) int64 {
-	var size int64
-	for _, op := range e.ops {
-		size += int64(op.Size())
-	}
-	if e.sst != nil {
-		size += int64(len(e.sst.data))
-	}
-	return size
-}
