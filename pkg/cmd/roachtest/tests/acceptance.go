@@ -107,6 +107,14 @@ func registerAcceptance(r registry.Registry) {
 				requiresLicense: true,
 				disallowLocal:   true,
 			},
+			{
+				name:          "benchmark-leasing",
+				numNodes:      3,
+				disallowLocal: true,
+				nodeRegions:   []string{"us-west1-c", "us-east1-c", "australia-southeast1-a"},
+				fn:            runAcceptanceMultiRegionBenchmarkLeasing,
+				timeout:       time.Hour,
+			},
 		},
 	}
 	for owner, tests := range testCases {

@@ -219,7 +219,7 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 			if err != nil &&
 				!strings.Contains(err.Error(), "count-lease timed out reading from a region") {
 				// Unrelated error, so lets kill off the test.
-				return errors.CombineErrors(errors.AssertionFailedf("no time out detect because of dead region."),
+				return errors.CombineErrors(errors.AssertionFailedf("no time out detected because of dead region."),
 					err)
 			} else if err != nil {
 				t.Status("Waiting for schema change completion, hit expected error: ", err)
