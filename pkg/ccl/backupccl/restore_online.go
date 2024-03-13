@@ -19,10 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -649,4 +652,24 @@ func (r *restoreResumer) cleanupAfterDownload(
 		}
 	}
 	return nil
+}
+
+func createImportRollbackJob(
+	ctx context.Context,
+	jr *jobs.Registry,
+	txn isql.Txn,
+	username username.SQLUsername,
+	tableDesc *tabledesc.Mutable,
+) error {
+	jobRecord := jobs.Record{
+		Description:   fmt.Sprintf("ROLLBACK IMPORT INTO %s", tableDesc.GetName()),
+		Username:      username,
+		DescriptorIDs: descpb.IDs{tableDesc.GetID()},
+		Details: jobspb.ImportRollbackDetails{
+			TableID: tableDesc.GetID(),
+		},
+		Progress: jobspb.ImportRollbackProgress{},
+	}
+	_, err := jr.CreateJobWithTxn(ctx, jobRecord, jr.MakeJobID(), txn)
+	return err
 }

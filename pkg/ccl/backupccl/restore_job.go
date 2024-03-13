@@ -812,18 +812,31 @@ func shouldPreRestore(table *tabledesc.Mutable) bool {
 
 // backedUpDescriptorWithInProgressImportInto returns true if the backed up descriptor represents a table with an in
 // progress import that started in a cluster finalized to version 22.2.
-func backedUpDescriptorWithInProgressImportInto(
-	ctx context.Context, p sql.JobExecContext, desc catalog.Descriptor,
-) (bool, error) {
+func backedUpDescriptorWithInProgressImportInto(desc catalog.Descriptor) bool {
 	table, ok := desc.(catalog.TableDescriptor)
 	if !ok {
-		return false, nil
+		return false
 	}
 
-	if table.GetInProgressImportStartTime() == 0 {
-		return false, nil
+	return table.GetInProgressImportStartTime() > 0
+}
+
+func backedUpDescriptorWithImportEpoch(desc catalog.Descriptor) bool {
+	table, ok := desc.(catalog.TableDescriptor)
+	if !ok {
+		return false
 	}
-	return true, nil
+
+	return table.TableDesc().ImportEpoch > 0
+}
+
+func epochBasedinProgressImport(desc catalog.Descriptor) bool {
+	table, ok := desc.(catalog.TableDescriptor)
+	if !ok {
+		return false
+	}
+
+	return table.GetInProgressImportStartTime() > 0 && table.TableDesc().ImportEpoch > 0
 }
 
 // createImportingDescriptors creates the tables that we will restore into and returns up to three
@@ -886,22 +899,32 @@ func createImportingDescriptors(
 	for _, desc := range sqlDescs {
 		// Decide which offline tables to include in the restore:
 		//
-		// -  An offline table created by RESTORE or IMPORT PGDUMP is fully discarded.
-		//    The table will not exist in the restoring cluster.
+		// - An offline table created by RESTORE or IMPORT PGDUMP is
+		//   fully discarded.  The table will not exist in the restoring
+		//   cluster.
 		//
-		// -  An offline table undergoing an IMPORT INTO has all importing data
-		//    elided in the restore processor and is restored online to its pre import
-		//    state.
+		// - An offline table undergoing an IMPORT INTO in traditional
+		//   restore has all importing data elided in the restore
+		//   processor and is restored online to its pre import state.
+		//
+		// - An offline table undergoing an IMPORT INTO in online
+		//   restore with no ImportEpoch cannot be restored and an error
+		//   is returned.
+		//
+		// - An offline table undergoing an IMPORT INTO in online
+		//   restore with an ImportEpoch is restored with an Offline
+		//   table and a revert job is queued that will bring the table
+		//   back online.
 		if desc.Offline() {
 			if schema, ok := desc.(catalog.SchemaDescriptor); ok {
 				offlineSchemas[schema.GetID()] = struct{}{}
 			}
 
-			if hasInProgressImportInto, err := backedUpDescriptorWithInProgressImportInto(ctx, p, desc); err != nil {
-				return nil, nil, nil, err
-			} else if hasInProgressImportInto && details.ExperimentalOnline {
-				return nil, nil, nil, errors.Newf("table %s (id %d) in restoring backup has an in-progress import, but online restore cannot be run on a table with an in progress import", desc.GetName(), desc.GetID())
-			} else if !hasInProgressImportInto {
+			if backedUpDescriptorWithInProgressImportInto(desc) {
+				if details.ExperimentalOnline && !backedUpDescriptorWithImportEpoch(desc) {
+					return nil, nil, nil, errors.Newf("table %s (id %d) in restoring backup has an in-progress import, but online restore cannot be run on a table with an in progress import", desc.GetName(), desc.GetID())
+				}
+			} else {
 				continue
 			}
 		}
@@ -2256,7 +2279,8 @@ func (r *restoreResumer) publishDescriptors(
 	// Write the new TableDescriptors and flip state over to public so they can be
 	// accessed.
 	for i := range details.TableDescs {
-		mutTable := all.LookupDescriptor(details.TableDescs[i].GetID()).(*tabledesc.Mutable)
+		desc := all.LookupDescriptor(details.TableDescs[i].GetID())
+		mutTable := desc.(*tabledesc.Mutable)
 
 		if details.ExperimentalOnline && mutTable.IsTable() {
 			// We disable automatic stats refresh on all restored tables until the
@@ -2310,6 +2334,13 @@ func (r *restoreResumer) publishDescriptors(
 			return err
 		}
 
+		if details.ExperimentalOnline && epochBasedinProgressImport(desc) {
+			if err := createImportRollbackJob(ctx,
+				r.execCfg.JobRegistry, txn, r.job.Payload().UsernameProto.Decode(), mutTable,
+			); err != nil {
+				return err
+			}
+		}
 	}
 	// For all of the newly created types, make type schema change jobs for any
 	// type descriptors that were backed up in the middle of a type schema change.
@@ -2340,7 +2371,11 @@ func (r *restoreResumer) publishDescriptors(
 	b := txn.KV().NewBatch()
 	if err := all.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		d := desc.(catalog.MutableDescriptor)
-		d.SetPublic()
+		if details.ExperimentalOnline && epochBasedinProgressImport(desc) {
+			log.Infof(ctx, "table %q (%d) with in-progress IMPORT remaining offline", desc.GetName(), desc.GetID())
+		} else {
+			d.SetPublic()
+		}
 		return txn.Descriptors().WriteDescToBatch(ctx, kvTrace, d, b)
 	}); err != nil {
 		return err
