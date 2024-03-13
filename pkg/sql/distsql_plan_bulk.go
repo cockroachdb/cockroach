@@ -61,8 +61,9 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	oracle replicaoracle.Oracle,
 	localityFilter roachpb.Locality,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, nil, /* txn */
-		DistributionTypeAlways, oracle, localityFilter)
+	planCtx := dsp.NewPlanningCtxWithOracle(
+		ctx, evalCtx, nil /* planner */, nil /* txn */, FullDistribution, oracle, localityFilter,
+	)
 
 	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer()
 	if err != nil {
@@ -99,8 +100,9 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 	oracle replicaoracle.Oracle,
 	localityFilter roachpb.Locality,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, nil, /* txn */
-		DistributionTypeAlways, oracle, localityFilter)
+	planCtx := dsp.NewPlanningCtxWithOracle(
+		ctx, evalCtx, nil /* planner */, nil /* txn */, FullDistribution, oracle, localityFilter,
+	)
 	pods, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
 		return nil, nil, err

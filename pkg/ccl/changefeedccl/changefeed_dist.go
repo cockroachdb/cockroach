@@ -368,10 +368,10 @@ func makePlan(
 		maybeCfKnobs, haveKnobs := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 		var blankTxn *kv.Txn
 
-		distMode := sql.DistributionTypeAlways
+		distMode := sql.FullDistribution
 		if details.SinkURI == `` {
 			// Sinkless feeds get one ChangeAggregator on this node.
-			distMode = sql.DistributionTypeNone
+			distMode = sql.LocalDistribution
 		}
 
 		var locFilter roachpb.Locality
@@ -393,7 +393,7 @@ func makePlan(
 			log.Infof(ctx, "spans returned by DistSQL: %s", spanPartitions)
 		}
 		switch {
-		case distMode == sql.DistributionTypeNone || rangeDistribution == int64(defaultDistribution):
+		case distMode == sql.LocalDistribution || rangeDistribution == int64(defaultDistribution):
 		case rangeDistribution == int64(balancedSimpleDistribution):
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.Infof(ctx, "rebalancing ranges using balanced simple distribution")

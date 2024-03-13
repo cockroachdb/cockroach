@@ -31,9 +31,9 @@ func PlanAndRunCTAS(
 	out execinfrapb.ProcessorCoreUnion,
 	recv *DistSQLReceiver,
 ) {
-	distribute := DistributionType(DistributionTypeNone)
+	distribute := DistributionType(LocalDistribution)
 	if !isLocal {
-		distribute = DistributionTypeAlways
+		distribute = FullDistribution
 	}
 	planCtx := dsp.NewPlanningCtx(ctx, planner.ExtendedEvalContext(), planner,
 		txn, distribute)
