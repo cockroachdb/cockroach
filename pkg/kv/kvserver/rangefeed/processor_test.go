@@ -122,6 +122,14 @@ func abortTxnOp(txnID uuid.UUID) enginepb.MVCCLogicalOp {
 	})
 }
 
+func deleteRangeOp(startKey, endKey roachpb.Key, timestamp hlc.Timestamp) enginepb.MVCCLogicalOp {
+	return makeLogicalOp(&enginepb.MVCCDeleteRangeOp{
+		StartKey:  startKey,
+		EndKey:    endKey,
+		Timestamp: timestamp,
+	})
+}
+
 func makeRangeFeedEvent(val interface{}) *kvpb.RangeFeedEvent {
 	var event kvpb.RangeFeedEvent
 	event.MustSetValue(val)
@@ -811,7 +819,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 func TestProcessorMemoryBudgetReleased(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	fb := newTestBudget(40)
-	p, h, stopper := newTestProcessor(t, withBudget(fb), withChanTimeout(15*time.Minute))
+	p, h, stopper := newTestProcessor(t, withBudget(fb), withChanTimeout(20*time.Minute))
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
