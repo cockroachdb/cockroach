@@ -92,6 +92,20 @@ func TestCCLLogic_fips_ready(
 	runCCLLogicTest(t, "fips_ready")
 }
 
+func TestCCLLogic_fk_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "fk_read_committed")
+}
+
+func TestCCLLogic_hash_sharded_index_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "hash_sharded_index_read_committed")
+}
+
 func TestCCLLogic_new_schema_changer(
 	t *testing.T,
 ) {

@@ -244,13 +244,6 @@ func TestExecBuild_fk(
 	runExecBuildLogicTest(t, "fk")
 }
 
-func TestExecBuild_fk_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "fk_read_committed")
-}
-
 func TestExecBuild_forecast(
 	t *testing.T,
 ) {
@@ -524,13 +517,6 @@ func TestExecBuild_select_for_update(
 	runExecBuildLogicTest(t, "select_for_update")
 }
 
-func TestExecBuild_select_for_update_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "select_for_update_read_committed")
-}
-
 func TestExecBuild_select_index(
 	t *testing.T,
 ) {
@@ -678,13 +664,6 @@ func TestExecBuild_unique(
 	runExecBuildLogicTest(t, "unique")
 }
 
-func TestExecBuild_unique_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "unique_read_committed")
-}
-
 func TestExecBuild_update(
 	t *testing.T,
 ) {
@@ -699,25 +678,11 @@ func TestExecBuild_update_from(
 	runExecBuildLogicTest(t, "update_from")
 }
 
-func TestExecBuild_update_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "update_read_committed")
-}
-
 func TestExecBuild_upsert(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "upsert")
-}
-
-func TestExecBuild_upsert_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "upsert_read_committed")
 }
 
 func TestExecBuild_values(

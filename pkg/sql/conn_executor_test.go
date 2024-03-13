@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -1454,6 +1455,9 @@ ALTER TABLE t1 ADD COLUMN b INT DEFAULT 1`,
 func TestInjectRetryErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// Enable enterprise features to test READ COMMITTED retries.
+	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}
