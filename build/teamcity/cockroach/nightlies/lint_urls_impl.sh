@@ -16,6 +16,7 @@ bazel build //pkg/cmd/bazci --config=ci
 $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- \
     test //pkg/testutils/lint:lint_test \
     --config=ci --define gotags=bazel,gss,nightly,lint \
+    --test_filter=TestNightlyLint \
     --test_env=CC=$(which gcc) \
     --test_env=CXX=$(which gcc) \
     --test_env=HOME \
