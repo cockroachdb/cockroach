@@ -70,7 +70,7 @@ func pgURL(
 	}
 
 	// No LoopbackListener
-	pgURL, cleanupFn, err = sqlutils.PGUrlWithOptionalClientCertsE(sqlAddr, prefix, user, clientCerts)
+	pgURL, cleanupFn, err = sqlutils.PGUrlWithOptionalClientCertsE(sqlAddr, prefix, user, clientCerts, "")
 	if err != nil {
 		return pgURL, cleanupFn, err
 	}

@@ -448,6 +448,11 @@ func authCert(
 		}
 		return hook(ctx, systemIdentity, clientConnection)
 	})
+	if len(tlsState.PeerCertificates) > 0 {
+		b.SetReplacementIdentity(username.MakeSQLUsernameFromPreNormalizedString(tree.Name(
+			tlsState.PeerCertificates[0].Subject.CommonName,
+		).Normalize()))
+	}
 	return b, nil
 }
 
