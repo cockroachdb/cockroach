@@ -83,7 +83,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   EXPERIMENTAL_examples_orms:
-    runs-on: [self-hosted, basic_runner_group_fips]
+    runs-on: [self-hosted, basic_big_runner_group_fips]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -122,7 +122,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   EXPERIMENTAL_local_roachtest:
-    runs-on: [self-hosted, basic_runner_group]
+    runs-on: [self-hosted, basic_big_runner_group]
     steps:
       - uses: actions/checkout@v4
         with:
