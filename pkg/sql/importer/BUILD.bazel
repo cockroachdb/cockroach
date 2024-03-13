@@ -26,6 +26,7 @@ go_library(
         "read_import_pgcopy.go",
         "read_import_pgdump.go",
         "read_import_workload.go",
+        "rollback_job.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/importer",
     visibility = ["//visibility:public"],
