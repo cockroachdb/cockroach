@@ -1018,6 +1018,7 @@ func (s *Server) newConnExecutor(
 		memMetrics.TxnMaxBytesHist,
 		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings,
 	)
+	txnFingerprintIDCacheAcc := sessionMon.MakeBoundAccount()
 
 	nodeIDOrZero, _ := s.cfg.NodeInfo.NodeID.OptionalNodeID()
 	ex := &connExecutor{
@@ -1059,7 +1060,8 @@ func (s *Server) newConnExecutor(
 		indexUsageStats:           s.indexUsageStats,
 		txnIDCacheWriter:          s.txnIDCache,
 		totalActiveTimeStopWatch:  timeutil.NewStopWatch(),
-		txnFingerprintIDCache:     NewTxnFingerprintIDCache(s.cfg.Settings, sessionRootMon),
+		txnFingerprintIDCache:     NewTxnFingerprintIDCache(ctx, s.cfg.Settings, &txnFingerprintIDCacheAcc),
+		txnFingerprintIDAcc:       &txnFingerprintIDCacheAcc,
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -1272,6 +1274,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.mu.IdleInSessionTimeout.Stop()
 	ex.mu.IdleInTransactionSessionTimeout.Stop()
 
+	ex.txnFingerprintIDAcc.Close(ctx)
 	if closeType != panicClose {
 		ex.state.mon.Stop(ctx)
 		ex.sessionPreparedMon.Stop(ctx)
@@ -1650,6 +1653,7 @@ type connExecutor struct {
 	// txnFingerprintIDCache is used to track the most recent
 	// txnFingerprintIDs executed in this session.
 	txnFingerprintIDCache *TxnFingerprintIDCache
+	txnFingerprintIDAcc   *mon.BoundAccount
 
 	// totalActiveTimeStopWatch tracks the total active time of the session.
 	// This is defined as the time spent executing transactions and statements.
