@@ -2007,6 +2007,7 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 			t.Name(),
 			url.UserPassword(user, user),
 			user == rootUser,
+			"",
 		)
 		defer cleanup()
 		conn, err := pgx.Connect(ctx, pgURL.String())
