@@ -84,17 +84,25 @@ type bufferFmtConfig struct {
 }
 
 func newBufferFmtConfig(bufferFmt *logconfig.BufferFormat) *bufferFmtConfig {
-	fmtType := logconfig.BufferFormat("newline")
-	if bufferFmt != nil {
-		fmtType = *bufferFmt
+	// Use newline by default.
+	cfg := bufferFmtConfig{delimiter: "\n", fmtType: logconfig.BufferFmtNewline}
+	if bufferFmt == nil {
+		return &cfg
 	}
 
-	cfg := bufferFmtConfig{delimiter: "\n", fmtType: fmtType}
-
-	if fmtType == logconfig.BufferFmtJsonArray {
-		cfg.suffix = "]"
-		cfg.prefix = "["
+	switch *bufferFmt {
+	case logconfig.BufferFmtNewline:
+		// Do nothing, we'll return the default cfg after.
+	case logconfig.BufferFmtJsonArray:
+		cfg.fmtType = logconfig.BufferFmtJsonArray
 		cfg.delimiter = ","
+		cfg.prefix = "["
+		cfg.suffix = "]"
+	case logconfig.BufferFmtNone:
+		cfg.fmtType = logconfig.BufferFmtNone
+		cfg.delimiter = ""
+	default:
+		panic(errors.AssertionFailedf("unknown BufferFormat: %v", *bufferFmt))
 	}
 
 	return &cfg
