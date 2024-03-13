@@ -176,10 +176,16 @@ func (lq *leaseQueue) updateChan() <-chan time.Time {
 func (lq *leaseQueue) canTransferLeaseFrom(
 	ctx context.Context, repl *Replica, conf *roachpb.SpanConfig,
 ) bool {
-	// Do a best effort check to see if this replica conforms to the configured
-	// lease preferences (if any), if it does not we want to encourage more
-	// aggressive lease movement and not delay it.
-	if repl.LeaseViolatesPreferences(ctx, conf) {
+	// If there are preferred leaseholders and the current leaseholder is not in
+	// this group, then always allow the lease to transfer without delay.
+	if lq.allocator.LeaseholderShouldMoveDueToPreferences(
+		ctx,
+		lq.storePool,
+		conf,
+		repl,
+		repl.Desc().Replicas().VoterDescriptors(),
+		false, /* excludeReplsInNeedOfSnap */
+	) {
 		return true
 	}
 	// If the local store is IO overloaded, then always allow transferring the
