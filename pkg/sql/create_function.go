@@ -156,32 +156,25 @@ func (n *createFunctionNode) createNewFunction(
 		return err
 	}
 	signatureTypes := make([]*types.T, 0, len(udfDesc.Params))
-	var toInputParamOrdinal []int32
-	if udfDesc.IsProcedure() {
-		toInputParamOrdinal = make([]int32, 0, len(udfDesc.Params))
-	}
-	for _, param := range udfDesc.Params {
+	var outParamOrdinals []int32
+	for paramIdx, param := range udfDesc.Params {
 		class := funcdesc.ToTreeRoutineParamClass(param.Class)
-		if udfDesc.IsProcedure() {
-			if tree.IsInParamClass(class) {
-				toInputParamOrdinal = append(toInputParamOrdinal, int32(len(signatureTypes)))
-			} else {
-				toInputParamOrdinal = append(toInputParamOrdinal, -1)
-			}
-		}
 		if tree.IsInParamClass(class) {
 			signatureTypes = append(signatureTypes, param.Type)
+		}
+		if udfDesc.IsProcedure() && class == tree.RoutineParamOut {
+			outParamOrdinals = append(outParamOrdinals, int32(paramIdx))
 		}
 	}
 	scDesc.AddFunction(
 		udfDesc.GetName(),
 		descpb.SchemaDescriptor_FunctionSignature{
-			ID:                  udfDesc.GetID(),
-			ArgTypes:            signatureTypes,
-			ReturnType:          returnType,
-			ReturnSet:           udfDesc.ReturnType.ReturnSet,
-			IsProcedure:         udfDesc.IsProcedure(),
-			ToInputParamOrdinal: toInputParamOrdinal,
+			ID:               udfDesc.GetID(),
+			ArgTypes:         signatureTypes,
+			ReturnType:       returnType,
+			ReturnSet:        udfDesc.ReturnType.ReturnSet,
+			IsProcedure:      udfDesc.IsProcedure(),
+			OutParamOrdinals: outParamOrdinals,
 		},
 	)
 	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {
@@ -242,23 +235,14 @@ func (n *createFunctionNode) replaceFunction(
 	} else {
 		udfDesc.Params = make([]descpb.FunctionDescriptor_Parameter, len(n.cf.Params))
 	}
-	var toInputParamOrdinal []int32
-	var inputParamOrdinal int32
-	if n.cf.IsProcedure {
-		toInputParamOrdinal = make([]int32, len(n.cf.Params))
-	}
+	var outParamOrdinals []int32
 	for i, p := range n.cf.Params {
 		udfDesc.Params[i], err = makeFunctionParam(params.ctx, p, params.p)
 		if err != nil {
 			return err
 		}
-		if n.cf.IsProcedure {
-			if p.IsInParam() {
-				toInputParamOrdinal[i] = inputParamOrdinal
-				inputParamOrdinal++
-			} else {
-				toInputParamOrdinal[i] = -1
-			}
+		if n.cf.IsProcedure && p.Class == tree.RoutineParamOut {
+			outParamOrdinals = append(outParamOrdinals, int32(i))
 		}
 	}
 
@@ -307,21 +291,21 @@ func (n *createFunctionNode) replaceFunction(
 	}
 
 	if n.cf.IsProcedure {
-		signatureChanged := len(existing.ToInputParamOrdinal) != len(toInputParamOrdinal)
-		for i := 0; !signatureChanged && i < len(toInputParamOrdinal); i++ {
-			signatureChanged = existing.ToInputParamOrdinal[i] != toInputParamOrdinal[i]
+		signatureChanged := len(existing.OutParamOrdinals) != len(outParamOrdinals)
+		for i := 0; !signatureChanged && i < len(outParamOrdinals); i++ {
+			signatureChanged = existing.OutParamOrdinals[i] != outParamOrdinals[i]
 		}
 		if signatureChanged {
 			if err = scDesc.ReplaceOverload(
 				udfDesc.GetName(),
 				existing,
 				descpb.SchemaDescriptor_FunctionSignature{
-					ID:                  udfDesc.GetID(),
-					ArgTypes:            existing.Types.Types(),
-					ReturnType:          retType,
-					ReturnSet:           udfDesc.ReturnType.ReturnSet,
-					IsProcedure:         true,
-					ToInputParamOrdinal: toInputParamOrdinal,
+					ID:               udfDesc.GetID(),
+					ArgTypes:         existing.Types.Types(),
+					ReturnType:       retType,
+					ReturnSet:        udfDesc.ReturnType.ReturnSet,
+					IsProcedure:      true,
+					OutParamOrdinals: outParamOrdinals,
 				},
 			); err != nil {
 				return err

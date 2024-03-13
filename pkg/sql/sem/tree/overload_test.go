@@ -113,7 +113,7 @@ func (to testOverload) preferred() bool {
 	return to.pref
 }
 
-func (to *testOverload) toInputParamOrdinal() []int32 {
+func (to *testOverload) outParamOrdinals() []int32 {
 	return nil
 }
 
