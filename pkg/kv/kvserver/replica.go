@@ -1028,6 +1028,9 @@ func (r *Replica) MaybeQueue(ctx context.Context, now hlc.ClockTimestamp) {
 			h.MaybeAdd(ctx, r, now)
 		})
 	}
+	r.store.leaseQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.MaybeAdd(ctx, r, now)
+	})
 	// The replicate queue has a relatively more expensive queue check
 	// (shouldQueue), because it scales with the number of stores, and
 	// performs more checks.
