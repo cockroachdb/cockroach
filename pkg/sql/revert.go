@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -62,13 +62,13 @@ func DeleteTableWithPredicate(
 	codec keys.SQLCodec,
 	sv *settings.Values,
 	distSender *kvcoord.DistSender,
-	table catalog.TableDescriptor,
+	tableID catid.DescID,
 	predicates kvpb.DeleteRangePredicates,
 	batchSize int64,
 ) error {
 
-	log.Infof(ctx, "deleting data for table %d with predicate %s", table.GetID(), predicates.String())
-	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.GetID())))
+	log.Infof(ctx, "deleting data for table %d with predicate %s", tableID, predicates.String())
+	tableKey := roachpb.RKey(codec.TablePrefix(uint32(tableID)))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 
 	// To process the table in parallel, spin up a few workers and partition the

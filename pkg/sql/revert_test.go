@@ -66,7 +66,7 @@ func TestTableRollback(t *testing.T) {
 
 	predicates := kvpb.DeleteRangePredicates{StartTime: targetTime}
 	require.NoError(t, sql.DeleteTableWithPredicate(
-		ctx, kv, codec, sv, execCfg.DistSender, desc, predicates, 10))
+		ctx, kv, codec, sv, execCfg.DistSender, desc.GetID(), predicates, 10))
 
 	db.CheckQueryResults(t, `SELECT count(*) FROM test`, beforeNumRows)
 
