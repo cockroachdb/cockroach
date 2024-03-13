@@ -134,6 +134,7 @@ func RegisterTests(r registry.Registry) {
 	registerSchemaChangeMixedVersions(r)
 	registerDeclSchemaChangeCompatMixedVersions(r)
 	registerSchemaChangeRandomLoad(r)
+	registerSchemaChangeMultiRegionBenchmarkLeasing(r)
 	registerScrubAllChecksTPCC(r)
 	registerScrubIndexOnlyTPCC(r)
 	registerSecondaryIndexesMultiVersionCluster(r)
