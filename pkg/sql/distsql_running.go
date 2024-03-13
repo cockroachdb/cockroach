@@ -1784,9 +1784,9 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
 		planner.SessionData().DistSQLMode, subqueryPlan.plan,
 	).WillDistribute()
-	distribute := DistributionType(DistributionTypeNone)
+	distribute := DistributionType(LocalDistribution)
 	if distributeSubquery {
-		distribute = DistributionTypeAlways
+		distribute = FullDistribution
 	}
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 	subqueryPlanCtx.stmtType = tree.Rows
@@ -2030,7 +2030,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		// is no point in providing the locality filter since it will be ignored
 		// anyway, so we don't use NewPlanningCtxWithOracle constructor.
 		localPlanCtx := dsp.NewPlanningCtx(
-			ctx, evalCtx, planCtx.planner, evalCtx.Txn, DistributionTypeNone,
+			ctx, evalCtx, planCtx.planner, evalCtx.Txn, LocalDistribution,
 		)
 		localPlanCtx.setUpForMainQuery(ctx, planCtx.planner, recv)
 		localPhysPlan, localPhysPlanCleanup, err := dsp.createPhysPlan(ctx, localPlanCtx, plan)
@@ -2280,9 +2280,9 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
 		planner.SessionData().DistSQLMode, postqueryPlan,
 	).WillDistribute()
-	distribute := DistributionType(DistributionTypeNone)
+	distribute := DistributionType(LocalDistribution)
 	if distributePostquery {
-		distribute = DistributionTypeAlways
+		distribute = FullDistribution
 	}
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 	postqueryPlanCtx.stmtType = tree.Rows
