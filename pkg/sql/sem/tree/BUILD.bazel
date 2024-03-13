@@ -145,6 +145,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/bitarray",
+        "//pkg/util/buildutil",
         "//pkg/util/cache",
         "//pkg/util/collatedstring",
         "//pkg/util/duration",

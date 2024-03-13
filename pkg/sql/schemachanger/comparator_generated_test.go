@@ -1898,6 +1898,11 @@ func TestSchemaChangeComparator_udf(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_udf_calling_udf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_calling_udf"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_udf_delete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_delete"

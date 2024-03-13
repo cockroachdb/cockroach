@@ -533,6 +533,14 @@ func (opc *optPlanningCtx) reuseMemo(
 // The returned memo is only safe to use in one thread, during execution of the
 // current statement.
 func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ error) {
+	if resumeProc := opc.p.storedProcTxnState.getResumeProc(); resumeProc != nil {
+		// We are executing a stored procedure which has paused to commit or
+		// rollback its transaction. Use resumeProc to resume execution in a new
+		// transaction where the control statement left off.
+		opc.log(ctx, "resuming stored procedure execution in a new transaction")
+		return opc.reuseMemo(ctx, resumeProc)
+	}
+
 	prepared := opc.p.stmt.Prepared
 	p := opc.p
 	if opc.allowMemoReuse && prepared != nil && prepared.Memo != nil {
@@ -551,8 +559,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 			}
 		}
 		opc.log(ctx, "reusing cached memo")
-		memo, err := opc.reuseMemo(ctx, prepared.Memo)
-		return memo, err
+		return opc.reuseMemo(ctx, prepared.Memo)
 	}
 
 	if opc.useCache {
@@ -576,8 +583,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 				opc.log(ctx, "query cache hit")
 				opc.flags.Set(planFlagOptCacheHit)
 			}
-			memo, err := opc.reuseMemo(ctx, cachedData.Memo)
-			return memo, err
+			return opc.reuseMemo(ctx, cachedData.Memo)
 		}
 		opc.flags.Set(planFlagOptCacheMiss)
 		opc.log(ctx, "query cache miss")

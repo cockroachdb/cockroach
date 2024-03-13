@@ -417,6 +417,9 @@ type ReferenceProvider interface {
 	// ForEachViewReference iterate through all referenced views and the reference
 	// details with the given function.
 	ForEachViewReference(f func(viewID descpb.ID, colIDs descpb.ColumnIDs) error) error
+	// ForEachFunctionReference iterates through all referenced functions for each
+	// function.
+	ForEachFunctionReference(f func(id descpb.ID) error) error
 	// ReferencedSequences returns all referenced sequence IDs
 	ReferencedSequences() catalog.DescriptorIDSet
 	// ReferencedTypes returns all referenced type IDs (not including implicit

@@ -184,6 +184,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	refProvider := b.BuildReferenceProvider(n)
 	validateTypeReferences(b, refProvider, db.DatabaseID)
 	validateFunctionRelationReferences(b, refProvider, db.DatabaseID)
+	validateFunctionToFunctionReferences(b, refProvider, db.DatabaseID)
 	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, refProvider))
 	b.LogEventForExistingTarget(&fn)
 }
@@ -200,12 +201,34 @@ func validateFunctionRelationReferences(
 	for _, id := range refProvider.ReferencedRelationIDs().Ordered() {
 		_, _, namespace := scpb.FindNamespace(b.QueryByID(id))
 		if namespace.DatabaseID != parentDBID {
-			name := tree.MakeTypeNameWithPrefix(b.NamePrefix(namespace), namespace.Name)
 			panic(pgerror.Newf(
 				pgcode.FeatureNotSupported,
-				"the function cannot refer to other databases",
-				name.String()))
+				"dependent relation %s cannot be from another database",
+				namespace.Name))
 		}
+	}
+}
+
+// validateFunctionToFunctionReferences validates no function references are
+// cross database.
+func validateFunctionToFunctionReferences(
+	b BuildCtx, refProvider ReferenceProvider, parentDBID descpb.ID,
+) {
+	err := refProvider.ForEachFunctionReference(func(id descpb.ID) error {
+		funcElts := b.QueryByID(id)
+		funcName := funcElts.FilterFunctionName().MustGetOneElement()
+		schemaParent := funcElts.FilterSchemaChild().MustGetOneElement()
+		schemaNamespace := b.QueryByID(schemaParent.SchemaID).FilterNamespace().MustGetOneElement()
+		if schemaNamespace.DatabaseID != parentDBID {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"dependent function %s cannot be from another database",
+				funcName.Name)
+		}
+		return nil
+	})
+	if err != nil {
+		panic(err)
 	}
 }
 
