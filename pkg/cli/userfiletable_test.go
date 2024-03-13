@@ -888,7 +888,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 
 			userURL, cleanup2 := sqlutils.PGUrlWithOptionalClientCerts(t,
 				c.Server.AdvSQLAddr(), t.Name(),
-				url.UserPassword(tc.username, "a"), false)
+				url.UserPassword(tc.username, "a"), false, "")
 			defer cleanup2()
 
 			_, err := c.RunWithCapture(fmt.Sprintf("userfile upload %s %s --url=%s",
