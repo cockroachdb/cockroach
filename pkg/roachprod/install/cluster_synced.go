@@ -554,10 +554,10 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 		var cmd string
 		if c.IsLocal() {
 			// Not all shells like brace expansion, so we'll do it here
-			dirs := []string{"data", "logs"}
+			dirs := []string{"data*", "logs*"}
 			if !preserveCerts {
 				dirs = append(dirs, fmt.Sprintf("%s*", CockroachNodeCertsDir))
-				dirs = append(dirs, "tenant-certs*")
+				dirs = append(dirs, fmt.Sprintf("%s*", CockroachNodeTenantCertsDir))
 			}
 			for _, dir := range dirs {
 				cmd += fmt.Sprintf(`rm -fr %s/%s ;`, c.localVMDir(node), dir)
@@ -566,10 +566,13 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 			rmCmds := []string{
 				`sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \;`,
 				`sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data}`,
-				`sudo rm -fr logs`,
+				`sudo rm -fr logs* data*`,
 			}
 			if !preserveCerts {
-				rmCmds = append(rmCmds, fmt.Sprintf("sudo rm -fr %s*", CockroachNodeCertsDir), "sudo rm -fr tenant-certs*")
+				rmCmds = append(rmCmds,
+					fmt.Sprintf("sudo rm -fr %s*", CockroachNodeCertsDir),
+					fmt.Sprintf("sudo rm -fr %s*", CockroachNodeTenantCertsDir),
+				)
 			}
 
 			cmd = strings.Join(rmCmds, " && ")
@@ -1602,11 +1605,15 @@ install --mode 0600 "${tmp2}" ~/.ssh/authorized_keys
 const (
 	// CockroachNodeCertsDir is the certs directory that lives
 	// on the cockroach node itself.
-	CockroachNodeCertsDir = "certs"
-	certsTarName          = "certs.tar"
-	tenantCertsTarName    = "tenant-certs.tar"
-	tenantCertFile        = "client-tenant.%d.crt"
+	CockroachNodeCertsDir       = "certs"
+	CockroachNodeTenantCertsDir = "tenant-certs"
+	certsTarName                = "certs.tar"
+	tenantCertFile              = "client-tenant.%d.crt"
 )
+
+func tenantCertsTarName(virtualClusterID int) string {
+	return fmt.Sprintf("%s-%d.tar", CockroachNodeTenantCertsDir, virtualClusterID)
+}
 
 // DistributeCerts will generate and distribute certificates to all the nodes.
 func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) error {
@@ -1679,11 +1686,14 @@ func (c *SyncedCluster) DistributeTenantCerts(
 		return err
 	}
 
-	if err := hostCluster.createTenantCertBundle(ctx, l, tenantCertsTarName, virtualClusterID, nodeNames); err != nil {
+	certsTar := tenantCertsTarName(virtualClusterID)
+	if err := hostCluster.createTenantCertBundle(
+		ctx, l, tenantCertsTarName(virtualClusterID), virtualClusterID, nodeNames,
+	); err != nil {
 		return err
 	}
 
-	tarfile, cleanup, err := hostCluster.getFileFromFirstNode(ctx, l, tenantCertsTarName)
+	tarfile, cleanup, err := hostCluster.getFileFromFirstNode(ctx, l, certsTar)
 	if err != nil {
 		return err
 	}
@@ -1712,24 +1722,25 @@ func (c *SyncedCluster) createTenantCertBundle(
 				cmd += fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 			}
 			cmd += fmt.Sprintf(`
-CERT_DIR=tenant-certs/certs
-CA_KEY=%[1]s/ca.key
+CERT_DIR=%[1]s-%[5]d/certs
+CA_KEY=%[2]s/ca.key
 
 rm -fr $CERT_DIR
 mkdir -p $CERT_DIR
-cp %[1]s/ca.crt $CERT_DIR
+cp %[2]s/ca.crt $CERT_DIR
 SHARED_ARGS="--certs-dir=$CERT_DIR --ca-key=$CA_KEY"
-VERSION=$(%[2]s version --build-tag)
+VERSION=$(%[3]s version --build-tag)
 VERSION=${VERSION::3}
 TENANT_SCOPE_OPT=""
 if [[ $VERSION = v22 ]]; then
-        TENANT_SCOPE_OPT="--tenant-scope %[4]d"
+        TENANT_SCOPE_OPT="--tenant-scope %[5]d"
 fi
-%[2]s cert create-node %[3]s $SHARED_ARGS
-%[2]s cert create-tenant-client %[4]d %[3]s $SHARED_ARGS
-%[2]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
-tar cvf %[5]s $CERT_DIR
+%[3]s cert create-node %[4]s $SHARED_ARGS
+%[3]s cert create-tenant-client %[5]d %[4]s $SHARED_ARGS
+%[3]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
+tar cvf %[6]s $CERT_DIR
 `,
+				CockroachNodeTenantCertsDir,
 				CockroachNodeCertsDir,
 				cockroachNodeBinary(c, node),
 				strings.Join(nodeNames, " "),
@@ -1791,7 +1802,7 @@ func (c *SyncedCluster) checkForTenantCertificates(
 	if c.IsLocal() {
 		dir = c.localVMDir(1)
 	}
-	if !c.fileExistsOnFirstNode(ctx, l, filepath.Join(dir, tenantCertsTarName)) {
+	if !c.fileExistsOnFirstNode(ctx, l, filepath.Join(dir, tenantCertsTarName(virtualClusterID))) {
 		return false
 	}
 	return c.fileExistsOnFirstNode(ctx, l, filepath.Join(c.CertsDir(1), fmt.Sprintf(tenantCertFile, virtualClusterID)))
