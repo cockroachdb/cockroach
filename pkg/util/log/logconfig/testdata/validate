@@ -794,7 +794,10 @@ capture-stray-errors:
   dir: /default-dir
   max-group-size: 100MiB
 
-# Test env-var gated configurations involving bufferedSink and fileSink.
+############################################################################
+## Test env-var gated configurations involving bufferedSink and fileSink. ##
+############################################################################
+
 # TODO(#72452): Remove env check once bufferedSink support for fileSink is no longer experimental.
 setenv key=COCKROACH_ENABLE_ASYNC_LOG_FILE_BUFFER value=true
 ----
@@ -819,7 +822,7 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
-        format: newline
+        format: none
   stderr:
     filter: NONE
     buffering:
