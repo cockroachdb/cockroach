@@ -448,6 +448,12 @@ func authCert(
 		}
 		return hook(ctx, systemIdentity, clientConnection)
 	})
+	// The common name in the certificate is used as the system indentity
+	commonName, err := username.MakeSQLUsernameFromUserInput(tlsState.PeerCertificates[0].Subject.CommonName, username.PurposeValidation)
+	if err != nil {
+		return nil, err
+	}
+	b.SetReplacementIdentity(commonName)
 	return b, nil
 }
 

@@ -25,7 +25,7 @@ import (
 
 // PGUrl is like PGUrlE, but uses t.Fatal to handle errors.
 func PGUrl(t testing.TB, servingAddr, prefix string, user *url.Userinfo) (url.URL, func()) {
-	return PGUrlWithOptionalClientCerts(t, servingAddr, prefix, user, true /* withCerts */)
+	return PGUrlWithOptionalClientCerts(t, servingAddr, prefix, user, true, "" /* withCerts */)
 }
 
 // PGUrlE returns a postgres connection url which connects to this server with the given user, and a
@@ -42,15 +42,19 @@ func PGUrl(t testing.TB, servingAddr, prefix string, user *url.Userinfo) (url.UR
 //
 //	prefix: A prefix to be prepended to the temp file names generated, for debugging.
 func PGUrlE(servingAddr, prefix string, user *url.Userinfo) (url.URL, func(), error) {
-	return PGUrlWithOptionalClientCertsE(servingAddr, prefix, user, true /* withCerts */)
+	return PGUrlWithOptionalClientCertsE(servingAddr, prefix, user, true, "" /* withCerts */)
 }
 
 // PGUrlWithOptionalClientCerts is like PGUrlWithOptionalClientCertsE, but uses t.Fatal to handle
 // errors.
 func PGUrlWithOptionalClientCerts(
-	t testing.TB, servingAddr, prefix string, user *url.Userinfo, withClientCerts bool,
+	t testing.TB,
+	servingAddr, prefix string,
+	user *url.Userinfo,
+	withClientCerts bool,
+	certName string,
 ) (url.URL, func()) {
-	u, f, err := PGUrlWithOptionalClientCertsE(servingAddr, prefix, user, withClientCerts)
+	u, f, err := PGUrlWithOptionalClientCertsE(servingAddr, prefix, user, withClientCerts, certName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,8 +63,9 @@ func PGUrlWithOptionalClientCerts(
 
 // PGUrlWithOptionalClientCertsE is like PGUrlE but the caller can
 // customize whether the client certificates are loaded on-disk and in the URL.
+// certName is name of the certificate to use. If empty, the username is used.
 func PGUrlWithOptionalClientCertsE(
-	servingAddr, prefix string, user *url.Userinfo, withClientCerts bool,
+	servingAddr, prefix string, user *url.Userinfo, withClientCerts bool, certName string,
 ) (url.URL, func(), error) {
 	host, port, err := net.SplitHostPort(servingAddr)
 	if err != nil {
@@ -89,8 +94,11 @@ func PGUrlWithOptionalClientCertsE(
 	options.Add("sslrootcert", tempCAPath)
 
 	if withClientCerts {
-		certPath := filepath.Join(certnames.EmbeddedCertsDir, fmt.Sprintf("client.%s.crt", user.Username()))
-		keyPath := filepath.Join(certnames.EmbeddedCertsDir, fmt.Sprintf("client.%s.key", user.Username()))
+		if certName == "" {
+			certName = user.Username()
+		}
+		certPath := filepath.Join(certnames.EmbeddedCertsDir, fmt.Sprintf("client.%s.crt", certName))
+		keyPath := filepath.Join(certnames.EmbeddedCertsDir, fmt.Sprintf("client.%s.key", certName))
 
 		// Copy these assets to disk from embedded strings, so this test can
 		// run from a standalone binary.
