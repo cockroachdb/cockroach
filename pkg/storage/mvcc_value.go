@@ -136,16 +136,14 @@ func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // EncodeMVCCValueForExport encodes fields from the MVCCValueHeader
 // that are appropriate for export out of the cluster.
-func EncodeMVCCValueForExport(mvccValue MVCCValue) ([]byte, error) {
-	if mvccValue.ImportEpoch == 0 {
+//
+// NB: Must be updated with ExtendedEncodingSizeForExport.
+func EncodeMVCCValueForExport(mvccValue MVCCValue, b []byte) ([]byte, error) {
+	mvccValue.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp{}
+	if mvccValue.MVCCValueHeader.IsEmpty() {
 		return mvccValue.Value.RawBytes, nil
 	}
-
-	// We only export ImportEpoch.
-	mvccValue.MVCCValueHeader = enginepb.MVCCValueHeader{
-		ImportEpoch: mvccValue.ImportEpoch,
-	}
-	return EncodeMVCCValue(mvccValue)
+	return EncodeMVCCValueToBuf(mvccValue, b)
 }
 
 // When running a metamorphic build, disable the simple MVCC value encoding to
@@ -179,13 +177,24 @@ func encodedMVCCValueSize(v MVCCValue) int {
 
 // EncodeMVCCValue encodes an MVCCValue into its Pebble representation. See the
 // comment on MVCCValue for a description of the encoding scheme.
+func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
+	return EncodeMVCCValueToBuf(v, nil)
+}
+
+// EncodeMVCCValueToBuf encodes an MVCCValue into its Pebble
+// representation. See the comment on MVCCValue for a description of
+// the encoding scheme.
+//
+// If extended encoding is required, the given buffer will be used if
+// it is large enough. If the provided buffer is not large enough a
+// new buffer is allocated.
 //
 // TODO(erikgrinaker): This could mid-stack inline when we compared
 // v.MVCCValueHeader == enginepb.MVCCValueHeader{} instead of IsEmpty(), but
 // struct comparisons have a significant performance regression in Go 1.19 which
 // negates the inlining gain. Reconsider this with Go 1.20. See:
 // https://github.com/cockroachdb/cockroach/issues/88818
-func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
+func EncodeMVCCValueToBuf(v MVCCValue, buf []byte) ([]byte, error) {
 	if v.MVCCValueHeader.IsEmpty() && !disableSimpleValueEncoding {
 		// Simple encoding. Use the roachpb.Value encoding directly with no
 		// modification. No need to re-allocate or copy.
@@ -198,7 +207,13 @@ func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
 	headerSize := extendedPreludeSize + headerLen
 	valueSize := headerSize + len(v.Value.RawBytes)
 
-	buf := make([]byte, valueSize)
+	if valueSize > cap(buf) {
+		buf = make([]byte, valueSize)
+	} else {
+		buf = buf[:valueSize]
+	}
+	// Extended encoding. Wrap the roachpb.Value encoding with a header containing
+	// MVCC-level metadata. Requires a copy.
 	// 4-byte-header-len
 	binary.BigEndian.PutUint32(buf, uint32(headerLen))
 	// 1-byte-sentinel
