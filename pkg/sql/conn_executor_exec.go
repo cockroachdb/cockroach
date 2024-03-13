@@ -3122,7 +3122,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 		transactionFingerprintID :=
 			appstatspb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
 
-		err := ex.txnFingerprintIDCache.Add(transactionFingerprintID)
+		err := ex.txnFingerprintIDCache.Add(ctx, transactionFingerprintID)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "failed to enqueue transactionFingerprintID = %d: %s", transactionFingerprintID, err)
