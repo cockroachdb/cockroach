@@ -1758,6 +1758,12 @@ type BackupRestoreTestingKnobs struct {
 	RunBeforeRestoreFlow func() error
 
 	RunAfterRestoreFlow func() error
+
+	BackupDistSQLRetryPolicy *retry.Options
+
+	RunBeforeBackupFlow func() error
+
+	RunAfterBackupFlow func() error
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}

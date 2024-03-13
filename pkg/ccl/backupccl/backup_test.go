@@ -1637,6 +1637,75 @@ func TestRestoreRetryProcErr(t *testing.T) {
 	})
 }
 
+// TestBackupJobRetryReset tests that the job level retry counter
+// resets after the backup progresses. To do so, the test does the following:
+// 1. Intercept the backup job before the flow begins and send a retryable error.
+// 2. After we send MaxRetries-1, allow the job to complete the flow and send a progress update.
+// 3. After progress has been recorded, intercept the backup job again and send retryable errors until the job failed.
+// 4. Assert that more than max retries have been sent, implying that the retry counter reset after progress was made.
+func TestBackupJobRetryReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	mu := struct {
+		syncutil.Mutex
+		retryCount int
+	}{}
+	waitForProgress := make(chan struct{})
+	maxRetries := 4
+
+	params := base.TestClusterArgs{}
+	knobs := base.TestingKnobs{
+		BackupRestore: &sql.BackupRestoreTestingKnobs{
+			BackupDistSQLRetryPolicy: &retry.Options{
+				InitialBackoff: time.Microsecond,
+				Multiplier:     2,
+				MaxBackoff:     2 * time.Microsecond,
+				MaxRetries:     maxRetries,
+			},
+			RunBeforeBackupFlow: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				if mu.retryCount >= maxRetries-1 {
+					return nil
+				}
+				mu.retryCount++
+				// Send a retryable error
+				return syscall.ECONNRESET
+			},
+			RunAfterBackupFlow: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				// Wait for at least 1% backup job progress, then continue sending retryable errors
+				<-waitForProgress
+				mu.retryCount++
+				// Send a retryable error
+				return syscall.ECONNRESET
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+	params.ServerArgs = base.TestServerArgs{Knobs: knobs}
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10, InitManualReplication, params)
+	// This creates 4 additional backup chunks.
+	for i := 0; i < 4; i++ {
+		sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s AS (SELECT * FROM bank)`, "bank"+strconv.Itoa(i)))
+	}
+	defer cleanupFn()
+	var backupJobId jobspb.JobID
+	sqlDB.QueryRow(t, `BACKUP DATABASE data INTO $1 WITH DETACHED`, localFoo).Scan(&backupJobId)
+	testutils.SucceedsSoon(t, func() error {
+		jobProgress := jobutils.GetJobProgress(t, sqlDB, backupJobId)
+		if jobProgress.GetFractionCompleted() < 0.01 {
+			return errors.Newf("backup has not made progress yet")
+		}
+		return nil
+	})
+	close(waitForProgress)
+	// Job will fail with exhausted retries: connection reset by peer
+	jobutils.WaitForJobToFail(t, sqlDB, backupJobId)
+	require.Greater(t, mu.retryCount, maxRetries+2)
+}
+
 func createAndWaitForJob(
 	t *testing.T,
 	db *sqlutils.SQLRunner,
