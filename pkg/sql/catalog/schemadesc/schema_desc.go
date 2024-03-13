@@ -89,6 +89,14 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 					return iterutil.Map(err)
 				}
 			}
+			for _, typ := range sig.OutParamTypes {
+				if !catid.IsOIDUserDefined(typ.Oid()) {
+					continue
+				}
+				if err := fn(typ); err != nil {
+					return iterutil.Map(err)
+				}
+			}
 			if !catid.IsOIDUserDefined(sig.ReturnType.Oid()) {
 				continue
 			}
@@ -499,12 +507,13 @@ func (desc *Mutable) ReplaceOverload(
 	for i := range fn.Signatures {
 		sig := fn.Signatures[i]
 		match := existing.Types.Length() == len(sig.ArgTypes) &&
-			len(existing.ToInputParamOrdinal) == len(sig.ToInputParamOrdinal)
+			len(existing.OutParamOrdinals) == len(sig.OutParamOrdinals)
 		for j := 0; match && j < len(sig.ArgTypes); j++ {
 			match = existing.Types.GetAt(j).Equivalent(sig.ArgTypes[j])
 		}
-		for j := 0; match && j < len(sig.ToInputParamOrdinal); j++ {
-			match = existing.ToInputParamOrdinal[j] == sig.ToInputParamOrdinal[j]
+		for j := 0; match && j < len(sig.OutParamOrdinals); j++ {
+			match = existing.OutParamOrdinals[j] == sig.OutParamOrdinals[j] &&
+				existing.OutParamTypes.GetAt(j).Equivalent(sig.OutParamTypes[j])
 		}
 		if match {
 			fn.Signatures[i] = newSignature
@@ -552,7 +561,7 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			},
 			Type:                     routineType,
 			UDFContainsOnlySignature: true,
-			ToInputParamOrdinal:      sig.ToInputParamOrdinal,
+			OutParamOrdinals:         sig.OutParamOrdinals,
 		}
 		if funcDescPb.Signatures[i].ReturnSet {
 			overload.Class = tree.GeneratorClass
@@ -568,6 +577,13 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			)
 		}
 		overload.Types = paramTypes
+		if len(sig.OutParamTypes) > 0 {
+			outParamTypes := make(tree.ParamTypes, len(sig.OutParamTypes))
+			for j := range outParamTypes {
+				outParamTypes[j] = tree.ParamType{Typ: sig.OutParamTypes[j]}
+			}
+			overload.OutParamTypes = outParamTypes
+		}
 		prefixedOverload := tree.MakeQualifiedOverload(desc.GetName(), overload)
 		funcDef.Overloads = append(funcDef.Overloads, prefixedOverload)
 	}

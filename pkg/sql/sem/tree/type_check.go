@@ -1181,11 +1181,52 @@ func (expr *FuncExpr) TypeCheck(
 	s := getOverloadTypeChecker(
 		(*qualifiedOverloads)(&def.Overloads), expr.Exprs...,
 	)
-	defer s.release()
+	// Note that we cannot just do
+	//   defer s.release()
+	// since s might be updated below.
+	defer func() {
+		s.release()
+	}()
 
 	if err = expr.typeCheckWithFuncAncestor(semaCtx, func() error {
 		if err := s.typeCheckOverloadedExprs(ctx, semaCtx, desired, false); err != nil {
 			return pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
+		}
+		if expr.InCall && len(s.overloadIdxs) == 0 {
+			// Since we didn't find the overload, let's see whether the user
+			// made a mistake and attempted to call a UDF. We attempt this by
+			// temporarily adjusting the RoutineType of each UDF to be
+			// Procedure, then running type-checking on all overloads, and
+			// resetting the UDF overloads to their original state.
+			var functionIdxs []int
+			for idx, o := range def.Overloads {
+				if o.Type == UDFRoutine {
+					o.Type = ProcedureRoutine
+					functionIdxs = append(functionIdxs, idx)
+				}
+			}
+			if len(functionIdxs) > 0 {
+				defer func() {
+					for _, idx := range functionIdxs {
+						def.Overloads[idx].Type = UDFRoutine
+					}
+				}()
+				// Note that we will run type-checking on non-UDF overloads too,
+				// which is redundant since at this point we know all those
+				// overloads will be filtered out, but it makes it easier to
+				// set the overloadTypeChecker to the correct state if this run
+				// succeeds.
+				s2 := getOverloadTypeChecker((*qualifiedOverloads)(&def.Overloads), expr.Exprs...)
+				err2 := s2.typeCheckOverloadedExprs(ctx, semaCtx, desired, false)
+				if err2 == nil && len(s2.overloadIdxs) > 0 {
+					// This time we found a match, so update s according to this
+					// type checker.
+					s.release()
+					s = s2
+				} else {
+					s2.release()
+				}
+			}
 		}
 		return nil
 	}); err != nil {

@@ -11,6 +11,9 @@ CALL p();
 statement error pgcode 42883 procedure p\(int\) does not exist
 CALL p(1);
 
+statement error pgcode 42883 procedure p\(int, string\) does not exist
+CALL p(1, NULL::TEXT);
+
 statement error pgcode 42883 procedure p\(int, int, int\) does not exist
 CALL p(1, 2, 3);
 

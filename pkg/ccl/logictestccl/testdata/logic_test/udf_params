@@ -29,6 +29,15 @@ SELECT * FROM f();
 param
 1
 
+statement error pgcode 42809 f\(unknown\) is not a procedure
+CALL f(NULL);
+
+statement error pgcode 42809 f\(int\) is not a procedure
+CALL f(NULL::INT);
+
+statement error pgcode 42809 f\(int\) is not a procedure
+CALL f(1);
+
 statement ok
 DROP FUNCTION f;
 
