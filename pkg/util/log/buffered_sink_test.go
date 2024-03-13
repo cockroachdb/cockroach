@@ -470,7 +470,41 @@ func TestBufferFormatJsonArray(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("second flush didn't happen")
 	}
+}
 
+func TestBufferFormatNone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer Scope(t).Close(t)
+	fmtType := logconfig.BufferFmtNone
+	sink, mock, cleanup := getMockBufferedSync(t, noMaxStaleness, 8 /* sizeTrigger */, noMaxBufferSize, &fmtType)
+	defer cleanup()
+
+	// Test that the bufferedSink doesn't modify/format the output messages.
+	flush1C := make(chan struct{})
+	flush2C := make(chan struct{})
+
+	gomock.InOrder(
+		mock.EXPECT().
+			output(gomock.Eq([]byte("test1test2")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)}).
+			Do(addArgs(func() { close(flush1C) })),
+		mock.EXPECT().
+			output(gomock.Eq([]byte("test3")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)}).
+			Do(addArgs(func() { close(flush2C) })),
+	)
+
+	require.NoError(t, sink.output([]byte("test1"), sinkOutputOptions{}))
+	require.NoError(t, sink.output([]byte("test2"), sinkOutputOptions{}))
+	select {
+	case <-flush1C:
+	case <-time.After(10 * time.Second):
+		t.Fatal("first flush didn't happen")
+	}
+	require.NoError(t, sink.output([]byte("test3"), sinkOutputOptions{extraFlush: true}))
+	select {
+	case <-flush2C:
+	case <-time.After(10 * time.Second):
+		t.Fatal("second flush didn't happen")
+	}
 }
 
 func TestMsgBufFlushFormat(t *testing.T) {

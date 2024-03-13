@@ -1172,6 +1172,7 @@ type constrainedString interface {
 const (
 	BufferFmtJsonArray BufferFormat = "json-array"
 	BufferFmtNewline   BufferFormat = "newline"
+	BufferFmtNone      BufferFormat = "none"
 )
 
 // BufferFormat is a string restricted to "json-array" and "newline".

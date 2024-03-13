@@ -794,7 +794,7 @@ capture-stray-errors:
   dir: /default-dir
   max-group-size: 100MiB
 
-# Check that buffering works with file sinks when the correct env var is set.
+# Check that buffering works with file sinks.
 yaml
 file-defaults:
   buffered-writes: false
@@ -813,7 +813,7 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
-        format: newline
+        format: none
   stderr:
     filter: NONE
     buffering:
@@ -826,7 +826,7 @@ capture-stray-errors:
   dir: /default-dir
   max-group-size: 100MiB
 
-# Check that buffering and buffered-writes are incompatible together
+# Check that buffering and buffered-writes are incompatible together.
 yaml
 file-defaults:
   buffered-writes: true
