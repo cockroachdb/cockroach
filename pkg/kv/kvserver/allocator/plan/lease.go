@@ -161,11 +161,14 @@ func (lp LeasePlanner) PlanOneChange(
 		// enqueue the replica before we've received Raft leadership, which
 		// prevents us from finding appropriate lease targets since we can't
 		// determine if any are behind.
-		liveVoters, _ := lp.storePool.LiveAndDeadReplicas(
-			existingVoters, false /* includeSuspectAndDrainingStores */)
-		preferred := lp.allocator.PreferredLeaseholders(lp.storePool, conf, liveVoters)
-		if len(preferred) > 0 &&
-			repl.LeaseViolatesPreferences(ctx, conf) {
+		if lp.allocator.LeaseholderShouldMoveDueToPreferences(
+			ctx,
+			lp.storePool,
+			conf,
+			repl,
+			existingVoters,
+			false, /* excludeReplsInNeedOfSnap */
+		) {
 			return change, CantTransferLeaseViolatingPreferencesError{RangeID: desc.RangeID}
 		}
 		// There is no target and no more preferred leaseholders, a no-op.
