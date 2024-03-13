@@ -62,8 +62,10 @@ func (s *PersistedSQLStats) Flush(ctx context.Context, stopper *stop.Stopper) {
 		return
 	}
 
-	log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
-		s.SQLStats.GetTotalFingerprintCount(), s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(s.lastFlushStarted))
+	if log.V(1) {
+		log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
+			s.SQLStats.GetTotalFingerprintCount(), s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(s.lastFlushStarted))
+	}
 	s.lastFlushStarted = now
 
 	aggregatedTs := s.ComputeAggregatedTs()
@@ -113,7 +115,9 @@ func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, er
 	// To reduce the overhead only do the check once an hour by default.
 	intervalToCheck := SQLStatsLimitTableCheckInterval.Get(&s.cfg.Settings.SV)
 	if !s.lastSizeCheck.IsZero() && s.lastSizeCheck.Add(intervalToCheck).After(timeutil.Now()) {
-		log.Infof(ctx, "PersistedSQLStats.StmtsLimitSizeReached skipped with last check at: %s and check interval: %s", s.lastSizeCheck, intervalToCheck)
+		if log.V(1) {
+			log.Infof(ctx, "PersistedSQLStats.StmtsLimitSizeReached skipped with last check at: %s and check interval: %s", s.lastSizeCheck, intervalToCheck)
+		}
 		return false, nil
 	}
 
