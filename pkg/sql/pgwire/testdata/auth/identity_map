@@ -131,9 +131,9 @@ subtest end
 # Connect as the magic "testuser" since that comes pre-equipped with a cert.
 subtest certificate_good
 
-connect user=carl database=mydb system_identity=testuser
+connect user=carl database=mydb system_identity=testuser force_certs show_system_identity
 ----
-ok mydb
+ok mydb testuser
 
 authlog 6
 .*client_connection_end
@@ -166,6 +166,26 @@ authlog 6
 38 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser2","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
 39 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 40 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+
+subtest end
+
+# Connect with carl is dbuser and pass testuser as cert to be used, dont pass explicit system-identity, so that the
+# system-identity is picked from the cert by auth method.
+subtest certificate_with_user_mapping_no_explicit_system_identity
+
+connect user=carl database=mydb cert_name=testuser force_certs show_system_identity
+----
+ok mydb testuser
+
+authlog 6
+.*client_connection_end
+----
+41 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+42 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+43 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+45 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+46 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+47 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 

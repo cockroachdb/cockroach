@@ -177,4 +177,18 @@ send "$argv sql --certs-dir=$certs_dir --user=gallant -e 'select 1'\r"
 eexpect "(1 row)"
 end_test
 
+# Check that cert auth fails when role subject and HBAconf(name-remapping) setting are both set for same db user."
+start_test "validating cert auth fails when both role subject and HBAconf(name-remapping) setting are set"
+send "rm -f $certs_dir/client.gallant.*\r"
+eexpect $prompt
+
+set id_map_stmt "SET CLUSTER SETTING server.identity_map.configuration='crdb goofus gallant'"
+set hba_conf_stmt "SET CLUSTER SETTING server.host_based_authentication.configuration='hostssl all gallant all cert map=crdb'"
+send "$argv sql --certs-dir=$certs_dir --user=root -e \"$id_map_stmt\" \r"
+send "$argv sql --certs-dir=$certs_dir --user=root -e \"$hba_conf_stmt\" \r"
+set auth_url "postgresql://gallant@localhost:26257?sslcert=$certs_dir/client.goofus.crt&sslkey=$certs_dir/client.goofus.key"
+send "$argv sql --certs-dir=$certs_dir --url=\"$auth_url\" -e 'select 1'\r";
+eexpect "ERROR: certificate authentication failed for user \"goofus\" (DN: o=Cockroach,cn=gallant)"
+end_test
+
 stop_server $argv

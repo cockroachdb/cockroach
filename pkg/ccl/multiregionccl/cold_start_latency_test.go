@@ -319,7 +319,7 @@ COMMIT;`}
 		defer tenant.AppStopper().Stop(ctx)
 		pgURL, cleanup, err := sqlutils.PGUrlWithOptionalClientCertsE(
 			tenant.AdvSQLAddr(), "tenantdata", url.UserPassword("foo", password),
-			false, // withClientCerts
+			false, "", // withClientCerts
 		)
 		if !assert.NoError(t, err) {
 			return
