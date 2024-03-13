@@ -1499,6 +1499,9 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %type <[]tree.SequenceOption> sequence_option_list opt_sequence_option_list
 %type <tree.SequenceOption> sequence_option_elem
 
+%type <[]tree.SequenceOption> identity_option_list
+%type <tree.SequenceOption> identity_option_elem
+
 %type <bool> all_or_distinct
 %type <bool> with_comment
 %type <empty> join_outer
@@ -1862,6 +1865,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP STORED
 //   ALTER TABLE ... ALTER [COLUMN] <colname> ADD GENERATED { ALWAYS | BY DEFAULT } AS IDENTITY [ ( opt_sequence_option_list ) ]
 //   ALTER TABLE ... ALTER [COLUMN] <colname> SET GENERATED { ALWAYS | BY DEFAULT }
+//   ALTER TABLE ... ALTER [COLUMN] <colname> <identity_option_list>
 //   ALTER TABLE ... ALTER [COLUMN] <colname> [SET DATA] TYPE <type> [COLLATE <collation>]
 //   ALTER TABLE ... ALTER PRIMARY KEY USING COLUMNS ( <colnames...> )
 //   ALTER TABLE ... RENAME TO <newname>
@@ -2791,6 +2795,11 @@ alter_table_cmd:
 | ALTER opt_column column_name set_generated_default {
     $$.val = &tree.AlterTableSetIdentity{Column: tree.Name($3), GeneratedAsIdentityType: tree.GeneratedByDefault}
   }
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> <identity_option_list>
+| ALTER opt_column column_name identity_option_list
+  {
+    $$.val = &tree.AlterTableIdentity{Column: tree.Name($3), SeqOptions: $4.seqOpts()}
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP STORED
 | ALTER opt_column column_name DROP STORED
   {
@@ -3022,6 +3031,37 @@ opt_validate_behavior:
   {
     $$.val = tree.ValidationDefault
   }
+
+identity_option_elem:
+  SET CYCLE                        { /* SKIP DOC */
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCycle} }
+  | SET NO CYCLE                     { $$.val = tree.SequenceOption{Name: tree.SeqOptNoCycle} }
+  | SET CACHE signed_iconst64        { x := $3.int64()
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &x} }
+  | SET INCREMENT signed_iconst64    { x := $3.int64()
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
+  | SET INCREMENT BY signed_iconst64 { x := $4.int64()
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x, OptionalWord: true} }
+  | SET MINVALUE signed_iconst64     { x := $3.int64()
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptMinValue, IntVal: &x} }
+  | SET NO MINVALUE                  { $$.val = tree.SequenceOption{Name: tree.SeqOptMinValue} }
+  | SET MAXVALUE signed_iconst64     { x := $3.int64()
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptMaxValue, IntVal: &x} }
+  | SET NO MAXVALUE                  { $$.val = tree.SequenceOption{Name: tree.SeqOptMaxValue} }
+  | SET START signed_iconst64        { x := $3.int64()
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
+  | SET START WITH signed_iconst64   { x := $4.int64()
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x, OptionalWord: true} }
+  | RESTART                      { $$.val = tree.SequenceOption{Name: tree.SeqOptRestart} }
+  | RESTART signed_iconst64      { x := $2.int64()
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x} }
+  | RESTART WITH signed_iconst64 { x := $3.int64()
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x, OptionalWord: true} }
+  | SET sequence_option_elem error                      { return setErr(sqllex, errors.Newf("sequence option \"%s\" not supported here", $2.seqOpt().Name)) } 
+
+identity_option_list:
+  identity_option_elem                       { $$.val = []tree.SequenceOption{$1.seqOpt()} }
+| identity_option_list identity_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
 
 // %Help: ALTER TYPE - change the definition of a type.
 // %Category: DDL

@@ -3426,6 +3426,7 @@ alter_table_cmd ::=
 	| 'ALTER' opt_column column_name 'ADD' generated_by_default_as 'IDENTITY' '(' opt_sequence_option_list ')'
 	| 'ALTER' opt_column column_name set_generated_always
 	| 'ALTER' opt_column column_name set_generated_default
+	| 'ALTER' opt_column column_name identity_option_list
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
 	| 'ALTER' opt_column column_name 'SET' 'NOT' 'NULL'
 	| 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior
@@ -4355,6 +4356,9 @@ set_generated_always ::=
 set_generated_default ::=
 	'SET' 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT'
 
+identity_option_list ::=
+	( identity_option_elem ) ( ( identity_option_elem ) )*
+
 opt_set_data ::=
 	'SET' 'DATA'
 	| 
@@ -4580,6 +4584,21 @@ interval_second ::=
 
 col_qual_list ::=
 	(  ) ( ( col_qualification ) )*
+
+identity_option_elem ::=
+	'SET' 'NO' 'CYCLE'
+	| 'SET' 'CACHE' signed_iconst64
+	| 'SET' 'INCREMENT' signed_iconst64
+	| 'SET' 'INCREMENT' 'BY' signed_iconst64
+	| 'SET' 'MINVALUE' signed_iconst64
+	| 'SET' 'NO' 'MINVALUE'
+	| 'SET' 'MAXVALUE' signed_iconst64
+	| 'SET' 'NO' 'MAXVALUE'
+	| 'SET' 'START' signed_iconst64
+	| 'SET' 'START' 'WITH' signed_iconst64
+	| 'RESTART'
+	| 'RESTART' signed_iconst64
+	| 'RESTART' 'WITH' signed_iconst64
 
 key_match ::=
 	'MATCH' 'SIMPLE'
