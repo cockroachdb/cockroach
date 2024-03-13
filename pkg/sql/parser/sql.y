@@ -1928,7 +1928,7 @@ alter_table_stmt:
 //   USING <var> = COPY FROM PARENT [, ...]
 //   { TO | = } <expr>
 //
-// %SeeAlso: WEBDOCS/configure-zone.html
+// %SeeAlso: WEBDOCS/alter-partition.html
 alter_partition_stmt:
   alter_zone_partition_stmt
 | ALTER PARTITION error // SHOW HELP: ALTER PARTITION
