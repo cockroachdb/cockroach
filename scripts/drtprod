@@ -43,10 +43,23 @@ case $1 in
     ;;
   "create")
     if [ "$#" -lt 2 ]; then
-      echo "usage: $0 create {drt-ua1,drt-ua2}"
+      echo "usage: $0 create {drt-main,drt-ua1,drt-ua2}"
       exit 1
     fi
     case "${2}" in
+      "drt-main")
+        roachprod create drt-main \
+          --clouds gce \
+          --gce-managed \
+          --gce-zones "us-east1-b,us-west1-b,europe-west2-b" \
+          --nodes 15 \
+          --gce-machine-type n2-standard-16 \
+          --gce-pd-volume-size 10000 --local-ssd=false \
+          --username drt \
+          --lifetime 8760h
+        # setup dns
+        $0 dns drt-main
+        ;;
       "drt-ua1")
         roachprod create drt-ua1 \
           --clouds gce \
