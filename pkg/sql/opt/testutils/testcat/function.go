@@ -83,10 +83,8 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 
 	// Resolve the parameter names and types.
 	signatureTypes := make(tree.ParamTypes, 0, len(c.Params))
-	var toInputParamOrdinal []int32
-	if c.IsProcedure {
-		toInputParamOrdinal = make([]int32, len(c.Params))
-	}
+	var outParamOrdinals []int32
+	var outParams tree.ParamTypes
 	var outParamTypes []*types.T
 	var outParamNames []string
 	for i := range c.Params {
@@ -95,18 +93,15 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		if err != nil {
 			panic(err)
 		}
-		if c.IsProcedure {
-			if tree.IsInParamClass(param.Class) {
-				toInputParamOrdinal[i] = int32(len(signatureTypes))
-			} else {
-				toInputParamOrdinal[i] = -1
-			}
-		}
 		if tree.IsInParamClass(param.Class) {
 			signatureTypes = append(signatureTypes, tree.ParamType{
 				Name: string(param.Name),
 				Typ:  typ,
 			})
+		}
+		if param.Class == tree.RoutineParamOut {
+			outParamOrdinals = append(outParamOrdinals, int32(i))
+			outParams = append(outParams, tree.ParamType{Typ: typ})
 		}
 		if param.IsOutParam() {
 			outParamTypes = append(outParamTypes, typ)
@@ -169,16 +164,17 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	}
 	tc.currUDFOid++
 	overload := &tree.Overload{
-		Oid:                 tc.currUDFOid,
-		Types:               signatureTypes,
-		ReturnType:          tree.FixedReturnType(retType),
-		Body:                body,
-		Volatility:          v,
-		CalledOnNullInput:   calledOnNullInput,
-		Language:            language,
-		Type:                routineType,
-		RoutineParams:       c.Params,
-		ToInputParamOrdinal: toInputParamOrdinal,
+		Oid:               tc.currUDFOid,
+		Types:             signatureTypes,
+		ReturnType:        tree.FixedReturnType(retType),
+		Body:              body,
+		Volatility:        v,
+		CalledOnNullInput: calledOnNullInput,
+		Language:          language,
+		Type:              routineType,
+		RoutineParams:     c.Params,
+		OutParamOrdinals:  outParamOrdinals,
+		OutParamTypes:     outParams,
 	}
 	overload.ReturnsRecordType = types.IsRecordType(retType)
 	if c.ReturnType != nil && c.ReturnType.SetOf {
