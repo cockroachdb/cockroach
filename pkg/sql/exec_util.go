@@ -2982,8 +2982,9 @@ type sessionDataMutatorCallbacks struct {
 	setCurTxnReadOnly func(readOnly bool) error
 	// upgradedIsolationLevel is called whenever the transaction isolation
 	// session variable is configured and the isolation level is automatically
-	// upgraded to a stronger one.
-	upgradedIsolationLevel func()
+	// upgraded to a stronger one. It's also used when the isolation level is
+	// upgraded in BEGIN or SET TRANSACTION statements.
+	upgradedIsolationLevel func(ctx context.Context, upgradedFrom tree.IsolationLevel, requiresNotice bool)
 	// onTempSchemaCreation is called when the temporary schema is set
 	// on the search path (the first and only time).
 	// It can be nil, in which case nothing triggers on execution.
