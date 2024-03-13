@@ -1044,8 +1044,9 @@ func (sc *SchemaChanger) distIndexBackfill(
 		}
 		sd := NewInternalSessionData(ctx, sc.execCfg.Settings, "dist-index-backfill")
 		evalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.KV().ReadTimestamp(), txn.Descriptors())
-		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil, /* planner */
-			txn.KV(), DistributionTypeSystemTenantOnly)
+		planCtx = sc.distSQLPlanner.NewPlanningCtx(
+			ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
+		)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
 		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, readAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes)
@@ -1351,8 +1352,9 @@ func (sc *SchemaChanger) distColumnBackfill(
 			)
 			defer recv.Release()
 
-			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn.KV(),
-				DistributionTypeSystemTenantOnly)
+			planCtx := sc.distSQLPlanner.NewPlanningCtx(
+				ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
+			)
 			spec, err := initColumnBackfillerSpec(tableDesc, duration, chunkSize, backfillUpdateChunkSizeThresholdBytes, readAsOf)
 			if err != nil {
 				return err

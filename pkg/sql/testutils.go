@@ -151,9 +151,9 @@ func (dsp *DistSQLPlanner) Exec(
 	)
 	defer recv.Release()
 
-	distributionType := DistributionType(DistributionTypeNone)
+	distributionType := DistributionType(LocalDistribution)
 	if distribute {
-		distributionType = DistributionTypeSystemTenantOnly
+		distributionType = FullDistribution
 	}
 	evalCtx := p.ExtendedEvalContext()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
@@ -181,7 +181,7 @@ func (dsp *DistSQLPlanner) ExecLocalAll(
 	)
 	defer recv.Release()
 
-	distributionType := DistributionType(DistributionTypeNone)
+	distributionType := DistributionType(LocalDistribution)
 	evalCtx := p.ExtendedEvalContext()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
 		distributionType)

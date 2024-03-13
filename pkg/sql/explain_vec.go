@@ -128,9 +128,9 @@ func newPlanningCtxForExplainPurposes(
 	subqueryPlans []subquery,
 	distribution physicalplan.PlanDistribution,
 ) *PlanningCtx {
-	distribute := DistributionType(DistributionTypeNone)
+	distribute := DistributionType(LocalDistribution)
 	if distribution.WillDistribute() {
-		distribute = DistributionTypeAlways
+		distribute = FullDistribution
 	}
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx,
 		params.p, params.p.txn, distribute)
