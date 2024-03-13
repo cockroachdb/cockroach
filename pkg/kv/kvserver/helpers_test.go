@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3"
@@ -416,11 +415,11 @@ func (r *Replica) NumPendingProposals() int {
 }
 
 func (r *Replica) IsFollowerActiveSince(
-	ctx context.Context, followerID roachpb.ReplicaID, threshold time.Duration,
+	followerID roachpb.ReplicaID, now time.Time, threshold time.Duration,
 ) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastUpdateTimes.isFollowerActiveSince(followerID, timeutil.Now(), threshold)
+	return r.mu.lastUpdateTimes.isFollowerActiveSince(followerID, now, threshold)
 }
 
 // GetTSCacheHighWater returns the high water mark of the replica's timestamp
