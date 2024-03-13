@@ -18,7 +18,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl"
@@ -151,7 +150,7 @@ mode in the current environment.
 	cliflagcfg.VarFlag(cli.DebugPebbleCmd.PersistentFlags(),
 		&storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 
-	cli.PopulateStorageConfigHook = fillEncryptionOptionsForStore
+	cli.PopulateEnvConfigHook = fillEncryptionOptionsForStore
 	cli.EncryptedStorePathsHook = func() []string {
 		var res []string
 		for _, spec := range storeEncryptionSpecs.Specs {
@@ -161,16 +160,14 @@ mode in the current environment.
 	}
 }
 
-// fillEncryptionOptionsForStore fills the StorageConfig fields
+// fillEncryptionOptionsForStore fills the EnvConfig fields
 // based on the --enterprise-encryption flag value.
-func fillEncryptionOptionsForStore(cfg *base.StorageConfig) error {
-	opts, err := baseccl.EncryptionOptionsForStore(cfg.Dir, storeEncryptionSpecs)
+func fillEncryptionOptionsForStore(dir string, cfg *fs.EnvConfig) error {
+	opts, err := baseccl.EncryptionOptionsForStore(dir, storeEncryptionSpecs)
 	if err != nil {
 		return err
 	}
-	if opts != nil {
-		cfg.EncryptionOptions = opts
-	}
+	cfg.EncryptionOptions = opts
 	return nil
 }
 
