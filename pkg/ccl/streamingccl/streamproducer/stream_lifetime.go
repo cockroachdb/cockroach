@@ -294,8 +294,9 @@ func buildReplicationStreamSpec(
 
 	// Partition the spans with SQLPlanner
 	dsp := jobExecCtx.DistSQLPlanner()
-	planCtx := dsp.NewPlanningCtx(ctx, jobExecCtx.ExtendedEvalContext(),
-		nil /* planner */, nil /* txn */, sql.DistributionTypeAlways)
+	planCtx := dsp.NewPlanningCtx(
+		ctx, jobExecCtx.ExtendedEvalContext(), nil /* planner */, nil /* txn */, sql.FullDistribution,
+	)
 
 	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, targetSpans)
 	if err != nil {

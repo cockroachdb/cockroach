@@ -344,9 +344,9 @@ func runPlanInsidePlan(
 		ctx, plannerCopy.Descriptors().HasUncommittedTypes(),
 		plannerCopy.SessionData().DistSQLMode, plan.main,
 	)
-	distributeType := DistributionType(DistributionTypeNone)
+	distributeType := DistributionType(LocalDistribution)
 	if distributePlan.WillDistribute() {
-		distributeType = DistributionTypeAlways
+		distributeType = FullDistribution
 	}
 	evalCtx := evalCtxFactory()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)

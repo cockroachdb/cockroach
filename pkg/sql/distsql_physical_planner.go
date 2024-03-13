@@ -144,11 +144,12 @@ type DistSQLPlanner struct {
 type DistributionType int
 
 const (
-	// DistributionTypeNone does not distribute a plan across multiple instances.
-	DistributionTypeNone = iota
-	// DistributionTypeAlways distributes a plan across multiple instances whether
+	// LocalDistribution does not distribute a plan across multiple SQL
+	// instances.
+	LocalDistribution = iota
+	// FullDistribution distributes a plan across multiple SQL instances whether
 	// it is a system tenant or non-system tenant.
-	DistributionTypeAlways
+	FullDistribution
 )
 
 // ReplicaOraclePolicy controls which policy the physical planner uses to choose
@@ -4837,7 +4838,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 	oracle replicaoracle.Oracle,
 	localityFiler roachpb.Locality,
 ) *PlanningCtx {
-	distribute := distributionType == DistributionTypeAlways
+	distribute := distributionType == FullDistribution
 	infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewaySQLInstanceID)
 	planCtx := &PlanningCtx{
 		ExtendedEvalCtx: evalCtx,

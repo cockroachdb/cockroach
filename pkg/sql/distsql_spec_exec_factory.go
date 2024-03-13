@@ -73,9 +73,9 @@ func newDistSQLSpecExecFactory(
 		planningMode:         planningMode,
 		gatewaySQLInstanceID: p.extendedEvalCtx.DistSQLPlanner.gatewaySQLInstanceID,
 	}
-	distribute := DistributionType(DistributionTypeNone)
+	distribute := DistributionType(LocalDistribution)
 	if e.planningMode != distSQLLocalOnlyPlanning {
-		distribute = DistributionTypeAlways
+		distribute = FullDistribution
 	}
 	evalCtx := p.ExtendedEvalContext()
 	e.planCtx = e.dsp.NewPlanningCtx(ctx, evalCtx, e.planner, e.planner.txn, distribute)
