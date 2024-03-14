@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -370,6 +371,7 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 
 	testCancelIngestion := func(t *testing.T, cancelAfterPaused bool) {
+		telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 		c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 		defer cleanup()
 		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
@@ -417,6 +419,9 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 		c.DestSysSQL.CheckQueryResults(t,
 			fmt.Sprintf("SELECT count(*) FROM system.tenants WHERE id = %s", args.DestTenantID),
 			[][]string{{"0"}})
+
+		counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+		require.GreaterOrEqual(t, counts["physical_replication.canceled"], int32(1))
 	}
 
 	t.Run("cancel-ingestion-after-paused", func(t *testing.T) {
@@ -650,6 +655,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 			args.SrcTenantID = roachpb.SystemTenantID
 			args.SrcTenantName = "system"
 		}
+		telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 		c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 		defer cleanup()
 
@@ -682,6 +688,8 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 
 		cutoverTime := c.DestSysServer.Clock().Now()
 		c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
+		counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+		require.GreaterOrEqual(t, counts["physical_replication.cutover"], int32(1))
 		c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
 
 		// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
