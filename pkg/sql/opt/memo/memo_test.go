@@ -424,6 +424,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseProvidedOrderingFix = false
 	notStale()
 
+	// Stale plpgsql_use_strict_into.
+	evalCtx.SessionData().PLpgSQLUseStrictInto = true
+	stale()
+	evalCtx.SessionData().PLpgSQLUseStrictInto = false
+	notStale()
+
 	// Stale optimizer_merge_joins_enabled.
 	evalCtx.SessionData().OptimizerMergeJoinsEnabled = true
 	stale()
