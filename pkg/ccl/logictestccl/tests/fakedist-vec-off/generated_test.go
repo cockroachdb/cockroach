@@ -134,6 +134,13 @@ func TestCCLLogic_plpgsql_cursor(
 	runCCLLogicTest(t, "plpgsql_cursor")
 }
 
+func TestCCLLogic_plpgsql_into(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_into")
+}
+
 func TestCCLLogic_plpgsql_record(
 	t *testing.T,
 ) {
