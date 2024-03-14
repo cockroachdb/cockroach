@@ -105,7 +105,7 @@ func TestEncodeMVCCValueForExport(t *testing.T) {
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			encodedVal, err := EncodeMVCCValueForExport(tc.val, nil)
+			encodedVal, _, err := EncodeMVCCValueForExport(tc.val, nil)
 			require.NoError(t, err)
 			strippedMVCCVal, err := DecodeMVCCValue(encodedVal)
 			require.NoError(t, err)
@@ -320,7 +320,7 @@ func BenchmarkEncodeMVCCValueForExport(b *testing.B) {
 			b.Run(name, func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					var err error
-					buf, err = EncodeMVCCValueForExport(mvccValue, buf[:0])
+					buf, _, err = EncodeMVCCValueForExport(mvccValue, buf[:0])
 					if err != nil { // for performance
 						require.NoError(b, err)
 					}
@@ -342,7 +342,7 @@ func BenchmarkEncodeMVCCValueWithAllocator(b *testing.B) {
 			b.Run(name, func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					var err error
-					buf, err = EncodeMVCCValueToBuf(mvccValue, buf[:0])
+					buf, _, err = EncodeMVCCValueToBuf(mvccValue, buf[:0])
 					if err != nil { // for performance
 						require.NoError(b, err)
 					}
