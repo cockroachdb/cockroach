@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -474,15 +473,6 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 	}
 	s := r.MakeClusterSpec(hw.nodes, clusterOpts...)
 
-	if backupCloud == spec.AWS && s.VolumeSize != 0 {
-		// Work around an issue that RAID0s local NVMe and GP3 storage together:
-		// https://github.com/cockroachdb/cockroach/issues/98783.
-		//
-		// TODO(srosenberg): Remove this workaround when 98783 is addressed.
-		s.AWS.MachineType, _, _ = spec.SelectAWSMachineType(s.CPUs, s.Mem, false /* shouldSupportLocalSSD */, vm.ArchAMD64)
-		s.AWS.MachineType = strings.Replace(s.AWS.MachineType, "d.", ".", 1)
-		s.Arch = vm.ArchAMD64
-	}
 	return s
 }
 
