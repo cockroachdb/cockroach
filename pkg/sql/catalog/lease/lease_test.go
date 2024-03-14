@@ -3130,7 +3130,7 @@ func TestLeaseBulkInsertWithImplicitTxn(t *testing.T) {
 				beforeExecute.Unlock()
 			}
 		},
-		AfterExecute: func(ctx context.Context, stmt string, err error) {
+		AfterExecute: func(ctx context.Context, stmt string, isInternal bool, err error) {
 			beforeExecute.Lock()
 			if stmt == beforeExecuteResumeStmt {
 				beforeExecute.Unlock()

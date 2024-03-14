@@ -741,7 +741,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		AfterExecute: func(ctx context.Context, stmt string, err error) {
+		AfterExecute: func(ctx context.Context, stmt string, isInternal bool, err error) {
 			if currentTestCaseIdx < len(testData) && testData[currentTestCaseIdx].query == stmt {
 				finishedExecute.Set(true)
 			}
