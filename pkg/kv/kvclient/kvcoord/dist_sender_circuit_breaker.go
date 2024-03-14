@@ -696,6 +696,14 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 
 			// Probe the replica.
 			err := r.sendProbe(ctx, transport)
+
+			// If the context failed, we're shutting down. Just exit the probe without
+			// reporting the result (which could trip the breaker).
+			if ctx.Err() != nil {
+				return
+			}
+
+			// Report the probe result.
 			report(err)
 			if err == nil {
 				// On a successful probe, record the success and stop probing.
@@ -767,9 +775,9 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 //     these replicas.
 func (r *ReplicaCircuitBreaker) sendProbe(ctx context.Context, transport Transport) error {
 	// We don't use timeutil.RunWithTimeout() because we need to be able to
-	// differentiate which context failed.
+	// differentiate whether the context timed out.
 	timeout := CircuitBreakerProbeTimeout.Get(&r.d.settings.SV)
-	sendCtx, cancel := context.WithTimeout(ctx, timeout) // nolint:context
+	ctx, cancel := context.WithTimeout(ctx, timeout) // nolint:context
 	defer cancel()
 
 	transport.Reset()
@@ -784,19 +792,15 @@ func (r *ReplicaCircuitBreaker) sendProbe(ctx context.Context, transport Transpo
 	})
 
 	log.VEventf(ctx, 2, "sending probe: %s", ba)
-	br, err := transport.SendNext(sendCtx, ba)
+	br, err := transport.SendNext(ctx, ba)
 	log.VEventf(ctx, 2, "probe result: br=%v err=%v", br, err)
 
 	// Handle local send errors.
 	if err != nil {
-		// If the given context was cancelled, we're shutting down. Stop probing.
-		if ctx.Err() != nil {
-			return nil
-		}
-
-		// If the send context timed out, fail.
-		if ctxErr := sendCtx.Err(); ctxErr != nil {
-			return ctxErr
+		// If the context timed out, fail. The caller will handle the case where
+		// we're shutting down.
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
 		// Any other local error is likely a networking/gRPC issue. This includes if
