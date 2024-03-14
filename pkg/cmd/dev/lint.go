@@ -110,8 +110,9 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 	if len(pkgs) > 1 {
 		return fmt.Errorf("can only lint a single package (found %s)", strings.Join(pkgs, ", "))
 	}
+	var pkg string
 	if len(pkgs) == 1 {
-		pkg := strings.TrimRight(pkgs[0], "/")
+		pkg = strings.TrimRight(pkgs[0], "/")
 		if !strings.HasPrefix(pkg, "./") {
 			pkg = "./" + pkg
 		}
@@ -121,7 +122,15 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 	if err != nil {
 		return err
 	}
-	if !short && filter == "" {
+	if pkg != "" {
+		toLint := strings.TrimPrefix(pkg, "./")
+		args := []string{"build", toLint, "--//build/toolchains:nogo_flag"}
+		if numCPUs != 0 {
+			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+		}
+		logCommand("bazel", args...)
+		return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	} else if !short && filter == "" {
 		args := []string{
 			"build",
 			"//pkg/cmd/cockroach-short",
