@@ -7886,11 +7886,14 @@ func mvccExportToWriter(
 			}
 
 			if !ok && opts.IncludeMVCCValueHeader {
-				valueScratch, err = EncodeMVCCValueForExport(mvccValue, valueScratch[:0])
+				buf, canRetainBuf, err := EncodeMVCCValueForExport(mvccValue, valueScratch[:0])
 				if err != nil {
 					return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err, "repackaging imported mvcc value %s", unsafeKey)
 				}
-				unsafeValue = valueScratch
+				if canRetainBuf {
+					valueScratch = buf
+				}
+				unsafeValue = buf
 			} else {
 				unsafeValue = mvccValue.Value.RawBytes
 			}
