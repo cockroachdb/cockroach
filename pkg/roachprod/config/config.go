@@ -12,12 +12,10 @@ package config
 
 import (
 	"context"
-	"io/fs"
 	"os"
 	"os/user"
 	"path"
 	"regexp"
-	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -126,9 +124,15 @@ func SSHPublicKeyPath() (string, error) {
 	}
 
 	for _, name := range defaultPubKeyNames {
-		idx := slices.IndexFunc(dirEnts, func(entry fs.DirEntry) bool {
-			return name == entry.Name()
-		})
+		idx := func() int {
+			for j, entry := range dirEnts {
+				if name == entry.Name() {
+					return j
+				}
+			}
+
+			return -1
+		}()
 		if idx == -1 {
 			continue
 		}
