@@ -15,7 +15,6 @@
 package colflow_test
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -45,7 +44,6 @@ func TestColBatchScanMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
@@ -81,7 +79,7 @@ func TestColBatchScanMeta(t *testing.T) {
 	}
 	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&fetchSpec, s.Codec(), td, td.GetPrimaryIndex(),
+		ctx, &fetchSpec, s.Codec(), td, td.GetPrimaryIndex(),
 		[]descpb.ColumnID{td.PublicColumns()[0].GetID()},
 	); err != nil {
 		t.Fatal(err)
@@ -126,7 +124,6 @@ func BenchmarkColBatchScan(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	logScope := log.Scope(b)
 	defer logScope.Close(b)
-	ctx := context.Background()
 
 	srv, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
@@ -146,7 +143,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 			span := tableDesc.PrimaryIndexSpan(s.Codec())
 			var fetchSpec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(
-				&fetchSpec, s.Codec(), tableDesc, tableDesc.GetPrimaryIndex(),
+				ctx, &fetchSpec, s.Codec(), tableDesc, tableDesc.GetPrimaryIndex(),
 				[]descpb.ColumnID{tableDesc.PublicColumns()[0].GetID(), tableDesc.PublicColumns()[1].GetID()},
 			); err != nil {
 				b.Fatal(err)

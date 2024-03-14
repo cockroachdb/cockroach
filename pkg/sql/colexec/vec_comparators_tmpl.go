@@ -22,6 +22,8 @@
 package colexec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -124,8 +126,8 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 // {{end}}
 // {{end}}
 
-func GetVecComparator(t *types.T, numVecs int) vecComparator {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+func GetVecComparator(ctx context.Context, t *types.T, numVecs int) vecComparator {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {

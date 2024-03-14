@@ -516,6 +516,7 @@ type admissionOptions struct {
 // several components in a remote flow. Mostly for testing purposes.
 type remoteComponentCreator interface {
 	newOutbox(
+		ctx context.Context,
 		flowCtx *execinfra.FlowCtx,
 		processorID int32,
 		allocator *colmem.Allocator,
@@ -536,6 +537,7 @@ type remoteComponentCreator interface {
 type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	allocator *colmem.Allocator,
@@ -544,7 +546,7 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 	typs []*types.T,
 	getStats func(context.Context) []*execinfrapb.ComponentStats,
 ) (*colrpc.Outbox, error) {
-	return colrpc.NewOutbox(flowCtx, processorID, allocator, converterMemAcc, input, typs, getStats)
+	return colrpc.NewOutbox(ctx, flowCtx, processorID, allocator, converterMemAcc, input, typs, getStats)
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
@@ -759,7 +761,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	getStats func(context.Context) []*execinfrapb.ComponentStats,
 ) (execopnode.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
-		flowCtx, processorID, colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
+		ctx, flowCtx, processorID, colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 		s.monitorRegistry.NewStreamingMemAccount(flowCtx),
 		op, outputTyps, getStats,
 	)

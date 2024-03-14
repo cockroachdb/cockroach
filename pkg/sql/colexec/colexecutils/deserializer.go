@@ -38,18 +38,18 @@ type Deserializer struct {
 // - alwaysReallocate, if true, indicates that a new coldata.Batch must be
 // allocated on each Deserialize call.
 func (d *Deserializer) Init(
-	allocator *colmem.Allocator, typs []*types.T, alwaysReallocate bool,
+	ctx context.Context, allocator *colmem.Allocator, typs []*types.T, alwaysReallocate bool,
 ) error {
 	d.allocator = allocator
 	d.typs = typs
 	d.alwaysReallocate = alwaysReallocate
 	d.data = make([]array.Data, len(typs))
 	var err error
-	d.deser, err = colserde.NewRecordBatchSerializer(typs)
+	d.deser, err = colserde.NewRecordBatchSerializer(ctx, typs)
 	if err != nil {
 		return err
 	}
-	d.converter, err = colserde.NewArrowBatchConverter(typs, colserde.ArrowToBatchOnly, nil /* acc */)
+	d.converter, err = colserde.NewArrowBatchConverter(ctx, typs, colserde.ArrowToBatchOnly, nil /* acc */)
 	return err
 }
 
@@ -60,7 +60,7 @@ func (d *Deserializer) Init(
 // batches are still tracked by the allocator.
 // NOTE: this method propagates errors through the panic-catch mechanism, so it
 // must be wrapped with colexecerror.CatchVectorizedRuntimeError.
-func (d *Deserializer) Deserialize(serializedBatch []byte) coldata.Batch {
+func (d *Deserializer) Deserialize(ctx context.Context, serializedBatch []byte) coldata.Batch {
 	d.data = d.data[:0]
 	batchLength, err := d.deser.Deserialize(&d.data, serializedBatch)
 	if err != nil {
@@ -71,7 +71,7 @@ func (d *Deserializer) Deserialize(serializedBatch []byte) coldata.Batch {
 	}
 	d.batch, _ = d.allocator.ResetMaybeReallocateNoMemLimit(d.typs, d.batch, batchLength)
 	d.allocator.PerformOperation(d.batch.ColVecs(), func() {
-		if err = d.converter.ArrowToBatch(d.data, batchLength, d.batch); err != nil {
+		if err = d.converter.ArrowToBatch(ctx, d.data, batchLength, d.batch); err != nil {
 			colexecerror.InternalError(err)
 		}
 	})

@@ -50,7 +50,7 @@ func newSorter(
 ) colexecop.ResettableOperator {
 	partitioners := make([]partitioner, len(orderingCols)-1)
 	for i, ord := range orderingCols[:len(orderingCols)-1] {
-		partitioners[i] = newPartitioner(inputTypes[ord.ColIdx], false /* nullsAreDistinct */)
+		partitioners[i] = newPartitioner(allocator.Ctx, inputTypes[ord.ColIdx], false /* nullsAreDistinct */)
 	}
 	s := &sortOp{
 		allocator:    allocator,
@@ -353,7 +353,7 @@ func (p *sortOp) sort() {
 				p.sortersWithNulls = make([]colSorter, len(p.sorters))
 			}
 			if p.sortersWithNulls[i] == nil {
-				p.sortersWithNulls[i] = newSingleSorterWithNulls(p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction)
+				p.sortersWithNulls[i] = newSingleSorterWithNulls(p.Ctx, p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction)
 			}
 			p.sorters[i] = p.sortersWithNulls[i]
 		} else {
@@ -361,7 +361,7 @@ func (p *sortOp) sort() {
 				p.sortersWithoutNulls = make([]colSorter, len(p.sorters))
 			}
 			if p.sortersWithoutNulls[i] == nil {
-				p.sortersWithoutNulls[i] = newSingleSorterWithoutNulls(p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction)
+				p.sortersWithoutNulls[i] = newSingleSorterWithoutNulls(p.Ctx, p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction)
 			}
 			p.sorters[i] = p.sortersWithoutNulls[i]
 		}

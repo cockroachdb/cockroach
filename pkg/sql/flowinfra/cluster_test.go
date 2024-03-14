@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -107,7 +108,7 @@ func runTestClusterFlow(
 	require.NoError(t, err)
 
 	var spec fetchpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(&spec, codec, desc, desc.ActiveIndexes()[1], []descpb.ColumnID{1, 2}); err != nil {
+	if err := rowenc.InitIndexFetchSpec(ctx, &spec, codec, desc, desc.ActiveIndexes()[1], []descpb.ColumnID{1, 2}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -129,7 +130,7 @@ func runTestClusterFlow(
 	fid := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 	req1 := &execinfrapb.SetupFlowRequest{
-		Version:           execinfra.Version,
+		Version:           execversion.Version,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
@@ -148,7 +149,7 @@ func runTestClusterFlow(
 	}
 
 	req2 := &execinfrapb.SetupFlowRequest{
-		Version:           execinfra.Version,
+		Version:           execversion.Version,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
@@ -168,13 +169,13 @@ func runTestClusterFlow(
 
 	var pkSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&pkSpec, codec, desc, desc.GetPrimaryIndex(), []descpb.ColumnID{1, 2, 3},
+		ctx, &pkSpec, codec, desc, desc.GetPrimaryIndex(), []descpb.ColumnID{1, 2, 3},
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	req3 := &execinfrapb.SetupFlowRequest{
-		Version:           execinfra.Version,
+		Version:           execversion.Version,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
@@ -423,7 +424,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	require.NoError(t, err)
 
 	req := execinfrapb.SetupFlowRequest{
-		Version:           execinfra.Version,
+		Version:           execversion.Version,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: execinfrapb.FlowID{UUID: uuid.MakeV4()},
@@ -730,7 +731,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					require.NoError(b, err)
 					for i := range reqs {
 						reqs[i] = execinfrapb.SetupFlowRequest{
-							Version:           execinfra.Version,
+							Version:           execversion.Version,
 							LeafTxnInputState: leafInputState,
 							Flow: execinfrapb.FlowSpec{
 								Processors: []execinfrapb.ProcessorSpec{{

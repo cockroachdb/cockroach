@@ -37,7 +37,7 @@ import (
 func getRandomTypeFavorNative(rng *rand.Rand) *types.T {
 	typ := randgen.RandType(rng)
 	for retry := 0; retry < 3; retry++ {
-		if typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) != typeconv.DatumVecCanonicalTypeFamily {
+		if typeconv.TypeFamilyToCanonicalTypeFamily(context.Background(), typ.Family()) != typeconv.DatumVecCanonicalTypeFamily {
 			break
 		}
 		typ = randgen.RandType(rng)

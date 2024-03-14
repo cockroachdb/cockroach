@@ -270,8 +270,9 @@ func distRestore(
 
 		rowResultWriter := sql.NewRowResultWriter(nil)
 
-		recv := sql.MakeDistSQLReceiver(
+		recv, _ := sql.MakeDistSQLReceiver(
 			ctx,
+			evalCtx.Settings.Version,
 			sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
 			tree.Rows,
 			nil,   /* rangeCache */
@@ -286,7 +287,7 @@ func distRestore(
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
-		dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+		dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 		return errors.Wrap(rowResultWriter.Err(), "running distSQL flow")
 	})
 

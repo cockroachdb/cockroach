@@ -2421,8 +2421,12 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	progressAtomic *uint64,
 ) (topLevelQueryStats, error) {
 	defer planner.curPlan.savePlanInfo()
-	recv := MakeDistSQLReceiver(
-		ctx, res, stmtType,
+	var recv *DistSQLReceiver
+	recv, ctx = MakeDistSQLReceiver(
+		ctx,
+		planner.execCfg.Settings.Version,
+		res,
+		stmtType,
 		ex.server.cfg.RangeDescriptorCache,
 		planner.txn,
 		ex.server.cfg.Clock,
@@ -2464,7 +2468,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 				return factoryEvalCtx
 			}
 		}
-		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
+		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(evalCtx, planCtx, planner, recv, evalCtxFactory)
 	}
 	return recv.stats, err
 }

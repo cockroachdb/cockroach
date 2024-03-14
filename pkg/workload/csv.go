@@ -38,7 +38,7 @@ const (
 func WriteCSVRows(
 	ctx context.Context, w io.Writer, table Table, rowStart, rowEnd int, sizeBytesLimit int64,
 ) (rowBatchIdx int, err error) {
-	cb := coldata.NewMemBatchWithCapacity(nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
+	cb := coldata.NewMemBatchWithCapacity(ctx, nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
 	var a bufalloc.ByteAllocator
 
 	bytesWrittenW := &bytesWrittenWriter{w: w}

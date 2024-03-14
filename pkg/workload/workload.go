@@ -283,8 +283,8 @@ func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) Batched
 // given its index. BatchRows doesn't attempt any reuse and so is allocation
 // heavy. In performance-critical code, FillBatch should be used directly,
 // instead.
-func (b BatchedTuples) BatchRows(batchIdx int) [][]interface{} {
-	cb := coldata.NewMemBatchWithCapacity(nil, 0, coldata.StandardColumnFactory)
+func (b BatchedTuples) BatchRows(ctx context.Context, batchIdx int) [][]interface{} {
+	cb := coldata.NewMemBatchWithCapacity(ctx, nil, 0, coldata.StandardColumnFactory)
 	var a bufalloc.ByteAllocator
 	b.FillBatch(batchIdx, cb, &a)
 	return ColBatchToRows(cb)

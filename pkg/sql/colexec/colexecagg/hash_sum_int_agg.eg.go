@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -32,6 +33,7 @@ var (
 	_ apd.Context
 	_ duration.Duration
 	_ = typeconv.TypeFamilyToCanonicalTypeFamily
+	_ execversion.DistSQLVersion
 )
 
 func newSumIntHashAggAlloc(

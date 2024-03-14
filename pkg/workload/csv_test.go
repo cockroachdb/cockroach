@@ -80,7 +80,7 @@ func BenchmarkWriteCSVRows(b *testing.B) {
 
 	var batches []coldata.Batch
 	for _, table := range tpcc.FromWarehouses(1).Tables() {
-		cb := coldata.NewMemBatch(nil /* types */, coldata.StandardColumnFactory)
+		cb := coldata.NewMemBatch(context.Background(), nil /* types */, coldata.StandardColumnFactory)
 		var a bufalloc.ByteAllocator
 		table.InitialRows.FillBatch(0, cb, &a)
 		batches = append(batches, cb)

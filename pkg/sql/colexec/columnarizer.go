@@ -249,7 +249,7 @@ func (c *Columnarizer) Next() coldata.Batch {
 		if row == nil {
 			break
 		}
-		EncDatumRowToColVecs(row, nRows, c.vecs, c.typs, &c.da)
+		EncDatumRowToColVecs(row, nRows, c.vecs, &c.da)
 		batchDone = c.helper.AccountForSet(nRows)
 		nRows++
 	}

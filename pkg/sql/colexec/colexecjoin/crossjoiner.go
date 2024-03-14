@@ -332,14 +332,12 @@ func newCrossJoinerBase(
 	base := &crossJoinerBase{
 		joinType: joinType,
 		left: cjState{
-			unlimitedAllocator:    unlimitedAllocator,
-			types:                 leftTypes,
-			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(leftTypes),
+			unlimitedAllocator: unlimitedAllocator,
+			types:              leftTypes,
 		},
 		right: cjState{
-			unlimitedAllocator:    unlimitedAllocator,
-			types:                 rightTypes,
-			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(rightTypes),
+			unlimitedAllocator: unlimitedAllocator,
+			types:              rightTypes,
 		},
 		rightTuples: colexecutils.NewRewindableSpillingQueue(
 			&colexecutils.NewSpillingQueueArgs{
@@ -389,6 +387,8 @@ type crossJoinerBase struct {
 
 func (b *crossJoinerBase) init(ctx context.Context) {
 	b.cancelChecker.Init(ctx)
+	b.left.canonicalTypeFamilies = typeconv.ToCanonicalTypeFamilies(ctx, b.left.types)
+	b.right.canonicalTypeFamilies = typeconv.ToCanonicalTypeFamilies(ctx, b.right.types)
 }
 
 func (b *crossJoinerBase) setupLeftBuilder() {

@@ -282,11 +282,14 @@ func newCFetcherWrapper(
 		// ArrowBatchConverter as for everything else since the converter only
 		// grows / shrinks the account according to its own usage and never
 		// relies on the total used value.
-		wrapper.converter, err = colserde.NewArrowBatchConverter(tableArgs.typs, colserde.BatchToArrowOnly, acc)
+		// TODO(82323): ctx object probably doesn't have the execversion set.
+		// We probably will need to use IndexFetchSpec.Version to communicate
+		// what exec version is expected.
+		wrapper.converter, err = colserde.NewArrowBatchConverter(ctx, tableArgs.typs, colserde.BatchToArrowOnly, acc)
 		if err != nil {
 			return nil, err
 		}
-		wrapper.serializer, err = colserde.NewRecordBatchSerializer(tableArgs.typs)
+		wrapper.serializer, err = colserde.NewRecordBatchSerializer(ctx, tableArgs.typs)
 		if err != nil {
 			return nil, err
 		}
@@ -321,13 +324,13 @@ func deserializeColumnarBatchesFromArrow(
 
 	result := make([]coldata.Batch, 0, len(serializedColBatches))
 	var d colexecutils.Deserializer
-	if err = d.Init(allocator, tableArgs.typs, true /* alwaysReallocate */); err != nil {
+	if err = d.Init(ctx, allocator, tableArgs.typs, true /* alwaysReallocate */); err != nil {
 		return nil, err
 	}
 	defer d.Close(ctx)
 	if err = colexecerror.CatchVectorizedRuntimeError(func() {
 		for _, serializedBatch := range serializedColBatches {
-			result = append(result, d.Deserialize(serializedBatch))
+			result = append(result, d.Deserialize(ctx, serializedBatch))
 		}
 	}); err != nil {
 		return nil, err

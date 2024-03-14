@@ -211,8 +211,9 @@ func startDistIngestion(
 		rw := sql.NewRowResultWriter(nil /* rowContainer */)
 
 		var noTxn *kv.Txn
-		recv := sql.MakeDistSQLReceiver(
+		recv, _ := sql.MakeDistSQLReceiver(
 			ctx,
+			execCtx.ExecCfg().Settings.Version,
 			sql.NewMetadataCallbackWriter(rw, metaFn),
 			tree.Rows,
 			nil, /* rangeCache */
@@ -224,7 +225,7 @@ func startDistIngestion(
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *execCtx.ExtendedEvalContext()
-		dsp.Run(ctx, planner.initialPlanCtx, noTxn, planner.initialPlan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+		dsp.Run(planner.initialPlanCtx, noTxn, planner.initialPlan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 		return rw.Err()
 	}
 

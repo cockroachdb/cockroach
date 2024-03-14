@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -160,8 +161,10 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
 		})
-		recv := MakeDistSQLReceiver(
+		var recv *DistSQLReceiver
+		recv, ctx = MakeDistSQLReceiver(
 			ctx,
+			execCfg.Settings.Version,
 			rw,
 			stmt.AST.StatementReturnType(),
 			execCfg.RangeDescriptorCache,
@@ -186,7 +189,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		planCtx.stmtType = recv.stmtType
 
 		execCfg.DistSQLPlanner.PlanAndRun(
-			ctx, evalCtx, planCtx, txn, p.curPlan.main, recv, nil, /* finishedSetupFn */
+			evalCtx, planCtx, txn, p.curPlan.main, recv, nil, /* finishedSetupFn */
 		)
 		return rw.Err()
 	})
@@ -279,8 +282,10 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
 		})
-		recv := MakeDistSQLReceiver(
+		var recv *DistSQLReceiver
+		recv, ctx = MakeDistSQLReceiver(
 			ctx,
+			execCfg.Settings.Version,
 			rw,
 			stmt.AST.StatementReturnType(),
 			execCfg.RangeDescriptorCache,
@@ -304,7 +309,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			factoryEvalCtx.Context = evalCtx.Context
 			return &factoryEvalCtx
 		}
-		err = execCfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, p, recv, evalCtxFactory)
+		err = execCfg.DistSQLPlanner.PlanAndRunAll(evalCtx, planCtx, p, recv, evalCtxFactory)
 		if err != nil {
 			return err
 		}
@@ -419,11 +424,13 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	st := cluster.MakeTestingClusterSettings()
 	txn := kv.NewTxn(ctx, db, s.NodeID())
 
 	rw := &errOnlyResultWriter{}
-	recv := MakeDistSQLReceiver(
+	recv, _ := MakeDistSQLReceiver(
 		ctx,
+		st.Version,
 		rw,
 		tree.Rows, /* StatementReturnType */
 		nil,       /* rangeCache */
@@ -572,8 +579,10 @@ func TestDistSQLReceiverDrainsOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	recv := MakeDistSQLReceiver(
+	st := cluster.MakeTestingClusterSettings()
+	recv, _ := MakeDistSQLReceiver(
 		context.Background(),
+		st.Version,
 		&errOnlyResultWriter{},
 		tree.Rows,
 		nil, /* rangeCache */

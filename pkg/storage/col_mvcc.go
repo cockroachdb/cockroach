@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -425,6 +426,12 @@ func mvccScanToCols(
 	opts MVCCScanOptions,
 	st *cluster.Settings,
 ) (MVCCScanResult, error) {
+	// TODO: think through this.
+	if indexFetchSpec.Version >= fetchpb.IndexFetchSpecNativeINetVersion {
+		ctx = execversion.WithVersion(ctx, execversion.NativeINetVersion)
+	} else {
+		ctx = execversion.WithVersion(ctx, execversion.MinAcceptedVersion)
+	}
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
 	adapter := mvccScanFetchAdapter{machine: onNextKVSeek}
 	adapter.results.maxKeysPerRow = indexFetchSpec.MaxKeysPerRow

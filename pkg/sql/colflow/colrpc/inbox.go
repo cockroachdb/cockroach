@@ -126,7 +126,7 @@ var _ colexecop.Operator = &Inbox{}
 func NewInbox(
 	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*Inbox, error) {
-	i := &Inbox{
+	return &Inbox{
 		typs:                     typs,
 		allocator:                allocator,
 		streamID:                 streamID,
@@ -135,9 +135,7 @@ func NewInbox(
 		timeoutCh:                make(chan error, 1),
 		errCh:                    make(chan error, 1),
 		deserializationStopWatch: timeutil.NewStopWatch(),
-	}
-	err := i.deserializer.Init(allocator, typs, false /* alwaysReallocate */)
-	return i, err
+	}, nil
 }
 
 // NewInboxWithFlowCtxDone creates a new Inbox when the done channel of the flow
@@ -172,7 +170,7 @@ func NewInboxWithAdmissionControl(
 	}
 	i.admissionQ = admissionQ
 	i.admissionInfo = admissionInfo
-	return i, err
+	return i, nil
 }
 
 // close closes the inbox, ensuring that any call to RunWithStream will return
@@ -265,6 +263,11 @@ func (i *Inbox) Init(ctx context.Context) {
 	// Initializes the Inbox for operation by blocking until RunWithStream sets
 	// the stream to read from.
 	if err := func() error {
+		if err := i.deserializer.Init(
+			i.Ctx, i.allocator, i.typs, false, /* alwaysReallocate */
+		); err != nil {
+			return err
+		}
 		// Wait for the stream to be initialized. We're essentially waiting for
 		// the remote connection.
 		select {
@@ -406,7 +409,7 @@ func (i *Inbox) Next() coldata.Batch {
 				colexecerror.ExpectedError(err)
 			}
 		}
-		batch := i.deserializer.Deserialize(m.Data.RawBytes)
+		batch := i.deserializer.Deserialize(i.Ctx, m.Data.RawBytes)
 		// Eagerly throw away the RawBytes memory.
 		m.Data.RawBytes = nil
 		// At this point, we have lost all references to the serialized bytes

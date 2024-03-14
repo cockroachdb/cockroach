@@ -11,7 +11,6 @@
 package colflow_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -36,7 +35,7 @@ import (
 // and makes sure that a panic doesn't occur yet the error is propagated.
 func TestVectorizedInternalPanic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
@@ -73,7 +72,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 // and makes sure that a panic is emitted all the way through the chain.
 func TestNonVectorizedPanicPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)

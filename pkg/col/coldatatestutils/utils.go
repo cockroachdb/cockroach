@@ -11,6 +11,8 @@
 package coldatatestutils
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -22,7 +24,7 @@ import (
 func CopyBatch(
 	original coldata.Batch, typs []*types.T, factory coldata.ColumnFactory,
 ) coldata.Batch {
-	b := coldata.NewMemBatchWithCapacity(typs, original.Length(), factory)
+	b := coldata.NewMemBatchWithCapacity(context.Background(), typs, original.Length(), factory)
 	b.SetLength(original.Length())
 	for colIdx, col := range original.ColVecs() {
 		b.ColVec(colIdx).Copy(coldata.SliceArgs{

@@ -129,7 +129,6 @@ func handleStream(
 func TestOutboxInbox(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
 	// Set up the RPC layer.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -277,8 +276,7 @@ func TestOutboxInbox(t *testing.T) {
 			outboxConverterMemAcc := testMemMonitor.MakeBoundAccount()
 			defer outboxConverterMemAcc.Close(ctx)
 			outbox, err := NewOutbox(
-				&execinfra.FlowCtx{Gateway: false},
-				0, /* processorID */
+				ctx, &execinfra.FlowCtx{Gateway: false}, 0, /* processorID */
 				colmem.NewAllocator(outboxCtx, &outboxMemAcc, coldata.StandardColumnFactory),
 				&outboxConverterMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
 			)
@@ -484,7 +482,6 @@ func TestOutboxInbox(t *testing.T) {
 func TestInboxHostCtxCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
 	// Set up the RPC layer.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -522,8 +519,7 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(outboxHostCtx)
 	outbox, err := NewOutbox(
-		&execinfra.FlowCtx{Gateway: false},
-		0, /* processorID */
+		ctx, &execinfra.FlowCtx{Gateway: false}, 0, /* processorID */
 		colmem.NewAllocator(outboxHostCtx, &outboxMemAcc, coldata.StandardColumnFactory),
 		testMemAcc, colexecargs.OpWithMetaInfo{Root: outboxInput}, typs, nil, /* getStats */
 	)
@@ -574,7 +570,6 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 func TestOutboxInboxMetadataPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
@@ -705,6 +700,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				expectedMetadata = tc.overrideExpectedMetadata
 			}
 			outbox, err := NewOutbox(
+				ctx,
 				&execinfra.FlowCtx{Gateway: false},
 				0, /* processorID */
 				colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
@@ -769,7 +765,6 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 func BenchmarkOutboxInbox(b *testing.B) {
 	defer log.Scope(b).Close(b)
-	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
@@ -803,8 +798,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
-		&execinfra.FlowCtx{Gateway: false},
-		0, /* processorID */
+		ctx, &execinfra.FlowCtx{Gateway: false}, 0, /* processorID */
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
 		testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
 	)
@@ -844,7 +838,6 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	outboxStreamID := execinfrapb.StreamID(1234)
-	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
@@ -870,8 +863,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
-		&execinfra.FlowCtx{Gateway: false},
-		0, /* processorID */
+		ctx, &execinfra.FlowCtx{Gateway: false}, 0, /* processorID */
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
 		testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
 	)
@@ -903,9 +895,8 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	streamID := execinfrapb.StreamID(1234)
-	ctx := context.Background()
-	inboxInternalCtx := context.Background()
-	taggedCtx := logtags.AddTag(context.Background(), "streamID", streamID)
+	inboxInternalCtx := ctx
+	taggedCtx := logtags.AddTag(ctx, "streamID", streamID)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)

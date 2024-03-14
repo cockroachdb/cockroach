@@ -220,8 +220,10 @@ func distImport(
 		}
 	}
 
-	recv := sql.MakeDistSQLReceiver(
+	var recv *sql.DistSQLReceiver
+	recv, ctx = sql.MakeDistSQLReceiver(
 		ctx,
+		evalCtx.Settings.Version,
 		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
 		tree.Rows,
 		nil, /* rangeCache */
@@ -274,7 +276,7 @@ func distImport(
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
-		dsp.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, testingKnobs.onSetupFinish)
+		dsp.Run(planCtx, nil, p, recv, &evalCtxCopy, testingKnobs.onSetupFinish)
 		return rowResultWriter.Err()
 	})
 

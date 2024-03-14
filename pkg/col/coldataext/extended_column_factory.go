@@ -11,6 +11,8 @@
 package coldataext
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -40,9 +42,9 @@ func NewExtendedColumnFactoryNoEvalCtx() coldata.ColumnFactory {
 	return &extendedColumnFactory{}
 }
 
-func (cf *extendedColumnFactory) MakeColumn(t *types.T, n int) coldata.Column {
-	if typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+func (cf *extendedColumnFactory) MakeColumn(ctx context.Context, t *types.T, n int) coldata.Column {
+	if typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) == typeconv.DatumVecCanonicalTypeFamily {
 		return newDatumVec(t, n, cf.evalCtx)
 	}
-	return coldata.StandardColumnFactory.MakeColumn(t, n)
+	return coldata.StandardColumnFactory.MakeColumn(ctx, t, n)
 }

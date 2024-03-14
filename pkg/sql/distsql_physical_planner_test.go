@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -199,8 +200,10 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	rangeCache := rangecache.NewRangeCache(st, nil /* db */, size, stopper)
-	r := MakeDistSQLReceiver(
+	var recv *DistSQLReceiver
+	recv, ctx = MakeDistSQLReceiver(
 		ctx,
+		st.Version,
 		&errOnlyResultWriter{}, /* resultWriter */
 		tree.Rows,
 		rangeCache,
@@ -218,7 +221,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	}
 
 	// Push some metadata and check that the caches are updated with it.
-	status := r.Push(nil /* row */, &execinfrapb.ProducerMetadata{
+	status := recv.Push(nil /* row */, &execinfrapb.ProducerMetadata{
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[0],
@@ -240,7 +243,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	if status != execinfra.NeedMoreRows {
 		t.Fatalf("expected status NeedMoreRows, got: %d", status)
 	}
-	status = r.Push(nil /* row */, &execinfrapb.ProducerMetadata{
+	status = recv.Push(nil /* row */, &execinfrapb.ProducerMetadata{
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[2],
@@ -1125,8 +1128,8 @@ func TestPartitionSpans(t *testing.T) {
 		if err := mockGossip.AddInfoProto(
 			gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
 			&execinfrapb.DistSQLVersionGossipInfo{
-				MinAcceptedVersion: execinfra.MinAcceptedVersion,
-				Version:            execinfra.Version,
+				MinAcceptedVersion: execversion.MinAcceptedVersion,
+				Version:            execversion.Version,
 			},
 			0, // ttl - no expiration
 		); err != nil {
@@ -1478,8 +1481,8 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		if err := mockGossip.AddInfoProto(
 			gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
 			&execinfrapb.DistSQLVersionGossipInfo{
-				MinAcceptedVersion: execinfra.MinAcceptedVersion,
-				Version:            execinfra.Version,
+				MinAcceptedVersion: execversion.MinAcceptedVersion,
+				Version:            execversion.Version,
 			},
 			0, // ttl - no expiration
 		); err != nil {
@@ -1565,8 +1568,8 @@ func TestCheckNodeHealth(t *testing.T) {
 	if err := mockGossip.AddInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
 		&execinfrapb.DistSQLVersionGossipInfo{
-			MinAcceptedVersion: execinfra.MinAcceptedVersion,
-			Version:            execinfra.Version,
+			MinAcceptedVersion: execversion.MinAcceptedVersion,
+			Version:            execversion.Version,
 		},
 		0, // ttl - no expiration
 	); err != nil {

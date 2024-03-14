@@ -1096,8 +1096,9 @@ func (sc *SchemaChanger) distIndexBackfill(
 		return nil
 	}
 	cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
-	recv := MakeDistSQLReceiver(
+	recv, _ := MakeDistSQLReceiver(
 		ctx,
+		evalCtx.Settings.Version,
 		&cbw,
 		tree.Rows, /* stmtType - doesn't matter here since no result are produced */
 		sc.rangeDescriptorCache,
@@ -1226,7 +1227,6 @@ func (sc *SchemaChanger) distIndexBackfill(
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := evalCtx
 		sc.distSQLPlanner.Run(
-			ctx,
 			planCtx,
 			nil, /* txn - the processors manage their own transactions */
 			p, recv, &evalCtxCopy,
@@ -1341,8 +1341,9 @@ func (sc *SchemaChanger) distColumnBackfill(
 			cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
 			sd := NewInternalSessionData(ctx, sc.execCfg.Settings, "dist-column-backfill")
 			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.KV().ReadTimestamp(), txn.Descriptors())
-			recv := MakeDistSQLReceiver(
+			recv, _ := MakeDistSQLReceiver(
 				ctx,
+				evalCtx.Settings.Version,
 				&cbw,
 				tree.Rows, /* stmtType - doesn't matter here since no result are produced */
 				sc.rangeDescriptorCache,
@@ -1364,7 +1365,6 @@ func (sc *SchemaChanger) distColumnBackfill(
 				return err
 			}
 			sc.distSQLPlanner.Run(
-				ctx,
 				planCtx,
 				nil, /* txn - the processors manage their own transactions */
 				plan, recv, &evalCtx,

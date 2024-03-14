@@ -11,10 +11,16 @@
 package colexecprojconst
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -26,6 +32,17 @@ import (
 func TestGetProjectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	defer testMemMonitor.Stop(ctx)
+	memAcc := testMemMonitor.MakeBoundAccount()
+	defer memAcc.Close(ctx)
+	evalCtx := eval.MakeTestingEvalContext(st)
+	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
+	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+
 	binOp := treebin.MakeBinaryOperator(treebin.Mult)
 	var input colexecop.Operator
 	colIdx := 3
@@ -36,8 +53,8 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	outputIdx := 5
 	calledOnNullInput := false
 	op, err := GetProjectionRConstOperator(
-		nil /* allocator */, inputTypes, types.Float, types.Float, binOp, input, colIdx,
-		constArg, outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil /* cmpExpr */, calledOnNullInput,
+		testAllocator, inputTypes, types.Float, types.Float, binOp, input, colIdx,
+		constArg, outputIdx, &evalCtx, nil /* BinFn */, nil /* cmpExpr */, calledOnNullInput,
 	)
 	if err != nil {
 		t.Error(err)
@@ -45,6 +62,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	expected := &projMultFloat64Float64ConstOp{
 		projConstOpBase: projConstOpBase{
 			OneInputHelper:    colexecop.MakeOneInputHelper(op.(*projMultFloat64Float64ConstOp).Input),
+			allocator:         testAllocator,
 			colIdx:            colIdx,
 			outputIdx:         outputIdx,
 			calledOnNullInput: calledOnNullInput,
@@ -59,6 +77,17 @@ func TestGetProjectionConstOperator(t *testing.T) {
 func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	defer testMemMonitor.Stop(ctx)
+	memAcc := testMemMonitor.MakeBoundAccount()
+	defer memAcc.Close(ctx)
+	evalCtx := eval.MakeTestingEvalContext(st)
+	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
+	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+
 	cmpOp := treecmp.MakeComparisonOperator(treecmp.GE)
 	var input colexecop.Operator
 	colIdx := 3
@@ -69,8 +98,8 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	outputIdx := 5
 	calledOnNullInput := false
 	op, err := GetProjectionRConstOperator(
-		nil /* allocator */, inputTypes, types.Int2, types.Int, cmpOp, input, colIdx,
-		constArg, outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil /* cmpExpr */, calledOnNullInput,
+		testAllocator, inputTypes, types.Int2, types.Int, cmpOp, input, colIdx,
+		constArg, outputIdx, &evalCtx, nil /* BinFn */, nil /* cmpExpr */, calledOnNullInput,
 	)
 	if err != nil {
 		t.Error(err)
@@ -78,6 +107,7 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	expected := &projGEInt64Int16ConstOp{
 		projConstOpBase: projConstOpBase{
 			OneInputHelper:    colexecop.MakeOneInputHelper(op.(*projGEInt64Int16ConstOp).Input),
+			allocator:         testAllocator,
 			colIdx:            colIdx,
 			outputIdx:         outputIdx,
 			calledOnNullInput: calledOnNullInput,
