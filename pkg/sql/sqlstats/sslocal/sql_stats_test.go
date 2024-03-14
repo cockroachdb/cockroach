@@ -799,6 +799,7 @@ func TestFingerprintCreation(t *testing.T) {
 
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
 	testConn.Exec(t, "CREATE TABLE t (v INT)")
+	testConn.Exec(t, `SET CLUSTER SETTING sql.stats.statement_fingerprint.format_mask = 0`)
 
 	var count int64
 
@@ -1296,7 +1297,7 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 		},
 		{
 			name:     "no latency - prepared statement (implicit txn)",
-			stmtLats: map[string]float64{"SELECT $1::INT8": 0},
+			stmtLats: map[string]float64{"SELECT _::INT8": 0},
 			txnLat:   0,
 			ops: func(t *testing.T, db *gosql.DB) {
 				stmt, err := db.Prepare("SELECT $1::INT")
@@ -1353,7 +1354,7 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 		},
 		{
 			name:     "prepared statement",
-			stmtLats: map[string]float64{"SELECT $1::INT8": 0.1},
+			stmtLats: map[string]float64{"SELECT _::INT8": 0.1},
 			txnLat:   0.2,
 			ops: func(t *testing.T, db *gosql.DB) {
 				stmt, err := db.Prepare("SELECT $1::INT")
@@ -1370,7 +1371,7 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 		},
 		{
 			name:     "prepared statement inside transaction",
-			stmtLats: map[string]float64{"SELECT $1::INT8": 0.1},
+			stmtLats: map[string]float64{"SELECT _::INT8": 0.1},
 			txnLat:   0.2,
 			ops: func(t *testing.T, db *gosql.DB) {
 				tx, err := db.Begin()
