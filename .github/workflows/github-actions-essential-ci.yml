@@ -50,7 +50,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_check_generated_code:
+  check_generated_code:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +64,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_docker_image_amd64:
+  docker_image_amd64:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -82,7 +82,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_examples_orms:
+  examples_orms:
     runs-on: [self-hosted, basic_big_runner_group_fips]
     steps:
       - uses: actions/checkout@v4
