@@ -58,8 +58,8 @@ func TestKvBuf(t *testing.T) {
 	ctx := context.Background()
 	noneMonitor := mon.NewMonitor(mon.NewMonitorArgs{Name: "none"})
 	noneMonitor.StartNoReserved(ctx, nil /* pool */)
-	none := noneMonitor.MakeBoundAccount()
-	lots := mon.NewUnlimitedMonitor(ctx, mon.NewMonitorArgs{Name: "lots"}).MakeBoundAccount()
+	none := noneMonitor.MakeEarmarkedBoundAccount()
+	lots := mon.NewUnlimitedMonitor(ctx, mon.NewMonitorArgs{Name: "lots"}).MakeEarmarkedBoundAccount()
 
 	// Write everything to our buf.
 	b := kvBuf{}
