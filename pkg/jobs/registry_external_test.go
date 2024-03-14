@@ -747,7 +747,7 @@ func TestWaitWithRetryableError(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				DisableAutoCommitDuringExec: true,
-				AfterExecute: func(ctx context.Context, stmt string, err error) {
+				AfterExecute: func(ctx context.Context, stmt string, isInternal bool, err error) {
 					if targetJobID.Load() > 0 &&
 						strings.Contains(stmt, "SELECT count(*) FROM system.jobs") &&
 						strings.Contains(stmt, fmt.Sprintf("%d", targetJobID.Load())) {
