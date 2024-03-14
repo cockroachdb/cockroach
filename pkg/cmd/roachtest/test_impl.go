@@ -449,6 +449,7 @@ func (t *testImpl) resetFailures() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.mu.failures = nil
+	t.mu.failuresSuppressed = false
 }
 
 // We take the "squashed" error that contains information of all the errors for each failure.
