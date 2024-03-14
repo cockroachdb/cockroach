@@ -432,4 +432,141 @@ SELECT * FROM xy;
 104  204
 105  105
 
+subtest setting
+
+# The plpgsql_use_strict_into setting causes INTO to behave as if strict was
+# specified.
+statement ok
+SET plpgsql_use_strict_into = true;
+
+statement ok
+DROP FUNCTION f();
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO i FROM xy ORDER BY x DESC LIMIT 1;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+105
+
+statement ok
+DROP FUNCTION f();
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO i FROM xy WHERE False;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode P0002 pq: query returned no rows
+SELECT f();
+
+statement ok
+DROP FUNCTION f();
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO i FROM xy ORDER BY x DESC;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode P0003 pq: query returned more than one row
+SELECT f();
+
+statement ok
+DROP FUNCTION f();
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    INSERT INTO xy VALUES (106, 106) RETURNING x INTO i;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+106
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+101  201
+102  202
+103  203
+104  204
+105  105
+106  106
+
+statement ok
+DROP FUNCTION f();
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    INSERT INTO xy (SELECT * FROM xy WHERE False) RETURNING x INTO i;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode P0002 pq: query returned no rows
+SELECT f();
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+101  201
+102  202
+103  203
+104  204
+105  105
+106  106
+
+statement ok
+DROP FUNCTION f();
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    INSERT INTO xy VALUES (107, 107), (108, 108) RETURNING x INTO i;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode P0003 pq: query returned more than one row
+SELECT f();
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+101  201
+102  202
+103  203
+104  204
+105  105
+106  106
+
+statement ok
+RESET plpgsql_use_strict_into;
+
 subtest end

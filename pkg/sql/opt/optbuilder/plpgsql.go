@@ -624,6 +624,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					seenTargets[name] = struct{}{}
 				}
 			}
+			strict := t.Strict || b.ob.evalCtx.SessionData().PLpgSQLUseStrictInto
 
 			// Create a new continuation routine to handle executing a SQL statement.
 			execCon := b.makeContinuation("_stmt_exec")
@@ -650,7 +651,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 
 			// Ensure that the SQL statement returns at most one row.
 			limitVal := tree.DInt(1)
-			if t.Strict {
+			if strict {
 				// Increase the limit so that it's possible to check that there is
 				// exactly one row.
 				limitVal = tree.DInt(2)
@@ -661,7 +662,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				stmtScope.makeOrderingChoice(),
 			)
 
-			if t.Strict {
+			if strict {
 				// Check that the expression produces exactly one row.
 				b.addOneRowCheck(stmtScope)
 			} else {
