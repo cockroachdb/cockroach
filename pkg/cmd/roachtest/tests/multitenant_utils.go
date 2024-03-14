@@ -107,7 +107,8 @@ func createTenantNodeInternal(
 	return tn
 }
 
-func createTenantNode(
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedCreateTenantNode(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
@@ -118,7 +119,8 @@ func createTenantNode(
 	return createTenantNodeInternal(ctx, t, c, kvnodes, tenantID, node, httpPort, sqlPort, true /* certs */, opts...)
 }
 
-func createTenantNodeNoCerts(
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedCreateTenantNodeNoCerts(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
@@ -189,7 +191,7 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	randomSeed := rand.Int63()
 	c.SetRandomSeed(randomSeed)
 	require.NoError(t, err)
-	tn.errCh = startTenantServer(
+	tn.errCh = deprecatedStartTenantServer(
 		ctx, c, c.Node(tn.node), internalIPs[0], binary, tn.kvAddrs, tn.tenantID,
 		tn.httpPort, tn.sqlPort, tn.envVars, randomSeed,
 		extraArgs...,
@@ -251,7 +253,8 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	t.L().Printf("sql server for tenant %d (instance %d) now running", tn.tenantID, tn.instanceID)
 }
 
-func startTenantServer(
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedStartTenantServer(
 	tenantCtx context.Context,
 	c cluster.Cluster,
 	node option.NodeListOption,
@@ -289,8 +292,11 @@ func startTenantServer(
 	return errCh
 }
 
-// createTenantAdminRole creates a role that can be used to log into a secure cluster's db console.
-func createTenantAdminRole(t test.Test, tenantName string, tenantSQL *sqlutils.SQLRunner) {
+// deprecatedCreateTenantAdminRole creates a role that can be used to log into a secure cluster's db console.
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedCreateTenantAdminRole(
+	t test.Test, tenantName string, tenantSQL *sqlutils.SQLRunner,
+) {
 	tenantSQL.Exec(t, fmt.Sprintf(`CREATE ROLE IF NOT EXISTS %s WITH LOGIN PASSWORD '%s'`, install.DefaultUser, install.DefaultPassword))
 	tenantSQL.Exec(t, fmt.Sprintf(`GRANT ADMIN TO %s`, install.DefaultUser))
 	t.L().Printf(`Log into %s db console with username "%s" and password "%s"`,
@@ -299,9 +305,10 @@ func createTenantAdminRole(t test.Test, tenantName string, tenantSQL *sqlutils.S
 
 const appTenantName = "app"
 
-// createInMemoryTenant runs through the necessary steps to create an in-memory
+// deprecatedCreateInMemoryTenant runs through the necessary steps to create an in-memory
 // tenant without resource limits and full dbconsole viewing privileges.
-func createInMemoryTenant(
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedCreateInMemoryTenant(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
@@ -309,15 +316,16 @@ func createInMemoryTenant(
 	nodes option.NodeListOption,
 	secure bool,
 ) {
-	db := createInMemoryTenantWithConn(ctx, t, c, tenantName, nodes, secure)
+	db := deprecatedCreateInMemoryTenantWithConn(ctx, t, c, tenantName, nodes, secure)
 	db.Close()
 }
 
-// createInMemoryTenantWithConn runs through the necessary steps to create an
+// deprecatedCreateInMemoryTenantWithConn runs through the necessary steps to create an
 // in-memory tenant without resource limits and full dbconsole viewing
 // privileges. As a convenience, it also returns a connection to the tenant (on
 // a random node in the cluster).
-func createInMemoryTenantWithConn(
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedCreateInMemoryTenantWithConn(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
@@ -330,19 +338,20 @@ func createInMemoryTenantWithConn(
 	sysSQL := sqlutils.MakeSQLRunner(sysDB)
 	sysSQL.Exec(t, "CREATE TENANT $1", tenantName)
 
-	tenantConn := startInMemoryTenant(ctx, t, c, tenantName, nodes)
+	tenantConn := deprecatedStartInMemoryTenant(ctx, t, c, tenantName, nodes)
 	tenantSQL := sqlutils.MakeSQLRunner(tenantConn)
 	if secure {
-		createTenantAdminRole(t, tenantName, tenantSQL)
+		deprecatedCreateTenantAdminRole(t, tenantName, tenantSQL)
 	}
 	return tenantConn
 }
 
-// startInMemoryTenant starts an in memory tenant that has already been created.
+// deprecatedStartInMemoryTenant starts an in memory tenant that has already been created.
 // This function also removes tenant rate limiters and sets a few cluster
 // settings on the tenant.  As a convenience, it also returns a connection to
 // the tenant (on a random node in the cluster).
-func startInMemoryTenant(
+// Deprecated: use Cluster.StartServiceForVirtualCluster instead.
+func deprecatedStartInMemoryTenant(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
