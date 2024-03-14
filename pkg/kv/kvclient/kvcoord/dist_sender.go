@@ -237,6 +237,62 @@ This counts the number of ranges with an active rangefeed that are performing ca
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaDistSenderCircuitBreakerReplicasCount = metric.Metadata{
+		Name:        "distsender.circuit_breaker.replicas.count",
+		Help:        `Number of replicas currently tracked by DistSender circuit breakers`,
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaDistSenderCircuitBreakerReplicasTripped = metric.Metadata{
+		Name:        "distsender.circuit_breaker.replicas.tripped",
+		Help:        `Number of DistSender replica circuit breakers currently tripped`,
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaDistSenderCircuitBreakerReplicasTrippedEvents = metric.Metadata{
+		Name:        "distsender.circuit_breaker.replicas.tripped_events",
+		Help:        `Cumulative number of DistSender replica circuit breakers tripped over time`,
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaDistSenderCircuitBreakerReplicasProbesRunning = metric.Metadata{
+		Name:        "distsender.circuit_breaker.replicas.probes.running",
+		Help:        `The number of currently running DistSender replica circuit breaker probes`,
+		Measurement: "Probes",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaDistSenderCircuitBreakerReplicasProbesSuccess = metric.Metadata{
+		Name:        "distsender.circuit_breaker.replicas.probes.success",
+		Help:        `Cumulative number of successful DistSender replica circuit breaker probes`,
+		Measurement: "Probes",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaDistSenderCircuitBreakerReplicasProbesFailure = metric.Metadata{
+		Name:        "distsender.circuit_breaker.replicas.probes.failure",
+		Help:        `Cumulative number of failed DistSender replica circuit breaker probes`,
+		Measurement: "Probes",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaDistSenderCircuitBreakerReplicasRequestsCancelled = metric.Metadata{
+		Name:        "distsender.circuit_breaker.replicas.requests.cancelled",
+		Help:        `Number of requests cancelled when DistSender replica circuit breakers trip`,
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaDistSenderCircuitBreakerReplicasRequestsRejected = metric.Metadata{
+		Name:        "distsender.circuit_breaker.replicas.requests.rejected",
+		Help:        `Number of requests rejected by tripped DistSender replica circuit breakers`,
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // CanSendToFollower is used by the DistSender to determine if it needs to look
@@ -325,8 +381,23 @@ type DistSenderMetrics struct {
 	SlowReplicaRPCs                    *metric.Counter
 	MethodCounts                       [kvpb.NumMethods]*metric.Counter
 	ErrCounts                          [kvpb.NumErrors]*metric.Counter
+	CircuitBreaker                     DistSenderCircuitBreakerMetrics
 	DistSenderRangeFeedMetrics
 }
+
+// DistSenderCircuitBreakerMetrics is the set of circuit breaker metrics.
+type DistSenderCircuitBreakerMetrics struct {
+	Replicas                  *metric.Gauge
+	ReplicasTripped           *metric.Gauge
+	ReplicasTrippedEvents     *metric.Counter
+	ReplicasProbesRunning     *metric.Gauge
+	ReplicasProbesSuccess     *metric.Counter
+	ReplicasProbesFailure     *metric.Counter
+	ReplicasRequestsCancelled *metric.Counter
+	ReplicasRequestsRejected  *metric.Counter
+}
+
+func (DistSenderCircuitBreakerMetrics) MetricStruct() {}
 
 // DistSenderRangeFeedMetrics is a set of rangefeed specific metrics.
 type DistSenderRangeFeedMetrics struct {
@@ -356,6 +427,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		RangeLookups:                       metric.NewCounter(metaDistSenderRangeLookups),
 		SlowRPCs:                           metric.NewGauge(metaDistSenderSlowRPCs),
 		SlowReplicaRPCs:                    metric.NewCounter(metaDistSenderSlowReplicaRPCs),
+		CircuitBreaker:                     makeDistSenderCircuitBreakerMetrics(),
 		DistSenderRangeFeedMetrics:         makeDistSenderRangeFeedMetrics(),
 	}
 	for i := range m.MethodCounts {
@@ -373,6 +445,19 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		m.ErrCounts[i] = metric.NewCounter(meta)
 	}
 	return m
+}
+
+func makeDistSenderCircuitBreakerMetrics() DistSenderCircuitBreakerMetrics {
+	return DistSenderCircuitBreakerMetrics{
+		Replicas:                  metric.NewGauge(metaDistSenderCircuitBreakerReplicasCount),
+		ReplicasTripped:           metric.NewGauge(metaDistSenderCircuitBreakerReplicasTripped),
+		ReplicasTrippedEvents:     metric.NewCounter(metaDistSenderCircuitBreakerReplicasTrippedEvents),
+		ReplicasProbesRunning:     metric.NewGauge(metaDistSenderCircuitBreakerReplicasProbesRunning),
+		ReplicasProbesSuccess:     metric.NewCounter(metaDistSenderCircuitBreakerReplicasProbesSuccess),
+		ReplicasProbesFailure:     metric.NewCounter(metaDistSenderCircuitBreakerReplicasProbesFailure),
+		ReplicasRequestsCancelled: metric.NewCounter(metaDistSenderCircuitBreakerReplicasRequestsCancelled),
+		ReplicasRequestsRejected:  metric.NewCounter(metaDistSenderCircuitBreakerReplicasRequestsRejected),
+	}
 }
 
 // rangeFeedErrorCounters are various error related counters for rangefeed.

@@ -299,7 +299,18 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 					d.mu.Unlock()
 					d.mu.Lock()
 				}
-				delete(d.mu.replicas, key) // nolint:deferunlockcheck
+				// Check if we raced with a concurrent delete. We don't expect to,
+				// since only this loop removes circuit breakers.
+				//
+				// TODO(erikgrinaker): this needs to remove tripped circuit breakers
+				// from the metrics, otherwise they'll appear as tripped forever.
+				// However, there are race conditions with concurrent probes that can
+				// lead to metrics gauge leaks (both positive and negative), so we'll
+				// have to make sure we reap the probes here first.
+				if _, ok := d.mu.replicas[key]; ok {
+					delete(d.mu.replicas, key)               // nolint:deferunlockcheck
+					d.metrics.CircuitBreaker.Replicas.Dec(1) // nolint:deferunlockcheck
+				}
 			}
 		}()
 	}
@@ -365,6 +376,7 @@ func (d *DistSenderCircuitBreakers) ForReplica(
 		cb = c // we raced with a concurrent insert
 	} else {
 		d.mu.replicas[key] = cb
+		d.metrics.CircuitBreaker.Replicas.Inc(1)
 	}
 
 	return cb
@@ -422,8 +434,9 @@ func newReplicaCircuitBreaker(
 		desc:     *replDesc,
 	}
 	r.breaker = circuit.NewBreaker(circuit.Options{
-		Name:       r.id(),
-		AsyncProbe: r.launchProbe,
+		Name:         r.id(),
+		AsyncProbe:   r.launchProbe,
+		EventHandler: r,
 	})
 	r.mu.cancelFns = map[*kvpb.BatchRequest]func(){}
 	return r
@@ -491,6 +504,7 @@ func (r *ReplicaCircuitBreaker) Track(
 	// Check if the breaker is tripped. If it is, this will also launch a probe if
 	// one isn't already running.
 	if err := r.Err(); err != nil {
+		r.d.metrics.CircuitBreaker.ReplicasRequestsRejected.Inc(1)
 		return nil, replicaCircuitBreakerToken{}, err
 	}
 
@@ -714,6 +728,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 				for ba, cancel := range r.mu.cancelFns {
 					delete(r.mu.cancelFns, ba)
 					cancel()
+					r.d.metrics.CircuitBreaker.ReplicasRequestsCancelled.Inc(1)
 				}
 			}()
 
@@ -831,4 +846,40 @@ func (r *ReplicaCircuitBreaker) sendProbe(ctx context.Context, transport Transpo
 
 	// Successful probe.
 	return nil
+}
+
+// OnTrip implements circuit.EventHandler.
+func (r *ReplicaCircuitBreaker) OnTrip(b *circuit.Breaker, prev, cur error) {
+	if cur == nil {
+		return
+	}
+	// OnTrip() is called every time the probe reports an error, regardless of
+	// whether the breaker was already tripped. Record each probe failure, but
+	// only record tripped breakers when it wasn't already tripped.
+	r.d.metrics.CircuitBreaker.ReplicasProbesFailure.Inc(1)
+	if prev == nil {
+		r.d.metrics.CircuitBreaker.ReplicasTripped.Inc(1)
+		r.d.metrics.CircuitBreaker.ReplicasTrippedEvents.Inc(1)
+	}
+}
+
+// OnReset implements circuit.EventHandler.
+func (r *ReplicaCircuitBreaker) OnReset(b *circuit.Breaker, prev error) {
+	// OnReset() is called every time the probe reports a success, regardless
+	// of whether the breaker was already tripped. Record each probe success,
+	// but only record untripped breakers when it was already tripped.
+	r.d.metrics.CircuitBreaker.ReplicasProbesSuccess.Inc(1)
+	if prev != nil {
+		r.d.metrics.CircuitBreaker.ReplicasTripped.Dec(1)
+	}
+}
+
+// OnProbeLaunched implements circuit.EventHandler.
+func (r *ReplicaCircuitBreaker) OnProbeLaunched(b *circuit.Breaker) {
+	r.d.metrics.CircuitBreaker.ReplicasProbesRunning.Inc(1)
+}
+
+// OnProbeDone implements circuit.EventHandler.
+func (r *ReplicaCircuitBreaker) OnProbeDone(b *circuit.Breaker) {
+	r.d.metrics.CircuitBreaker.ReplicasProbesRunning.Dec(1)
 }
