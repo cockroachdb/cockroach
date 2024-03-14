@@ -486,6 +486,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		InitialHighWater:    initialHighWater,
 		EndTime:             config.EndTime,
 		WithDiff:            filters.WithDiff,
+		WithFiltering:       filters.WithFiltering,
 		NeedsInitialScan:    needsInitialScan,
 		SchemaChangeEvents:  schemaChange.EventClass,
 		SchemaChangePolicy:  schemaChange.Policy,

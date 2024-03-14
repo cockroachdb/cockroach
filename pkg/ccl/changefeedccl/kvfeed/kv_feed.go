@@ -86,6 +86,11 @@ type Config struct {
 	// time, the changefeed job will end with a successful status.
 	EndTime hlc.Timestamp
 
+	// WithFiltering is propagated via the RangefeedRequest to the rangefeed
+	// server, where if true, the server respects the OmitInRangefeeds flag and
+	// enables filtering out any transactional writes with that flag set to true.
+	WithFiltering bool
+
 	// Knobs are kvfeed testing knobs.
 	Knobs TestingKnobs
 }
@@ -113,18 +118,11 @@ func Run(ctx context.Context, cfg Config) error {
 		return kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), &cfg.Settings.SV, cfg.Metrics)
 	}
 
-	// withFiltering is propagated via the RangefeedRequest to the rangefeed
-	// server, where if true, the server respects the OmitInRangefeeds flag and
-	// enables filtering out any transactional writes with that flag set to true.
-	// OmitInRangefeeds is set to true for all transactional writes when the
-	// disable_changefeed_replication session variable is on.
-	const withFiltering = true
-
 	g := ctxgroup.WithContext(ctx)
 	f := newKVFeed(
 		cfg.Writer, cfg.Spans, cfg.CheckpointSpans, cfg.CheckpointTimestamp,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
-		cfg.NeedsInitialScan, cfg.WithDiff, withFiltering,
+		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering,
 		cfg.InitialHighWater, cfg.EndTime,
 		cfg.Codec,
 		cfg.SchemaFeed,
