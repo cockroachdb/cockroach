@@ -271,7 +271,7 @@ var opWeights = []int{
 	alterTableAlterPrimaryKey:         1,
 	alterTableDropColumn:              0,
 	alterTableDropColumnDefault:       1,
-	alterTableDropConstraint:          0, // TODO(spaskob): unimplemented
+	alterTableDropConstraint:          1,
 	alterTableDropNotNull:             1,
 	alterTableDropStored:              1,
 	alterTableLocality:                1,

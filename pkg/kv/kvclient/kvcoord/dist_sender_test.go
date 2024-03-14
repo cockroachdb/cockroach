@@ -1050,6 +1050,8 @@ func TestNoBackoffOnNotLeaseHolderErrorWithoutLease(t *testing.T) {
 
 	// Lease starts on n1.
 	rangeDesc := testUserRangeDescriptor3Replicas
+	rangeDescUpdate := rangeDesc
+	rangeDescUpdate.Generation += 1
 	replicas := rangeDesc.InternalReplicas
 	lease := roachpb.Lease{
 		Replica:  replicas[0],
@@ -1063,9 +1065,7 @@ func TestNoBackoffOnNotLeaseHolderErrorWithoutLease(t *testing.T) {
 		sentTo = append(sentTo, ba.Replica.NodeID)
 		br := ba.CreateReply()
 		if ba.Replica != replicas[2] {
-			br.Error = kvpb.NewError(&kvpb.NotLeaseHolderError{
-				Replica: ba.Replica,
-			})
+			br.Error = kvpb.NewError(kvpb.NewNotLeaseHolderError(roachpb.Lease{}, ba.Replica.StoreID, &rangeDescUpdate, "test NLHE"))
 		}
 		return br, nil
 	}
@@ -1096,12 +1096,18 @@ func TestNoBackoffOnNotLeaseHolderErrorWithoutLease(t *testing.T) {
 		Lease: lease,
 	})
 
+	key := roachpb.Key("a")
 	// Send a request. It should try all three replicas once: the first two fail
 	// with NLHE, the third one succeeds. None of them should trigger backoffs.
-	_, pErr := kv.SendWrapped(ctx, ds, kvpb.NewGet(roachpb.Key("a")))
+	_, pErr := kv.SendWrapped(ctx, ds, kvpb.NewGet(key))
 	require.NoError(t, pErr.GoError())
 	require.Equal(t, []roachpb.NodeID{1, 2, 3}, sentTo)
 	require.Equal(t, int64(0), ds.Metrics().InLeaseTransferBackoffs.Count())
+	// Verify the range cache still has the previous lease and the new descriptor.
+	ri, err := ds.rangeCache.Lookup(ctx, roachpb.RKey(key))
+	require.NoError(t, err)
+	require.Equal(t, lease, ri.Lease)
+	require.Equal(t, rangeDescUpdate, ri.Desc)
 }
 
 // Test a scenario where a lease indicates a replica that, when contacted,
