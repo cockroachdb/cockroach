@@ -96,7 +96,7 @@ func (b *budget) consumeLocked(ctx context.Context, bytes int64, allowDebt bool)
 	if !allowDebt && b.limitBytes > 20 {
 		if b.mu.acc.Used()+bytes > b.limitBytes {
 			return errors.Wrap(
-				mon.MemoryResource.NewBudgetExceededError(bytes, b.mu.acc.Used(), b.limitBytes),
+				mon.NewMemoryBudgetExceededError(bytes, b.mu.acc.Used(), b.limitBytes),
 				"streamer budget",
 			)
 		}
