@@ -444,6 +444,7 @@ func (md *Metadata) CheckDependencies(
 					name.Schema(),
 					&evalCtx.SessionData().SearchPath,
 					tree.UDFRoutine|tree.BuiltinRoutine|tree.ProcedureRoutine,
+					false,
 				)
 				if err != nil || toCheck.Oid != overload.Oid || toCheck.Version != overload.Version {
 					return false, err

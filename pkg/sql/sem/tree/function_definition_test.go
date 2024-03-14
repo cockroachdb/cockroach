@@ -249,6 +249,7 @@ func TestMatchOverload(t *testing.T) {
 				tc.explicitSchema,
 				&path,
 				tc.routineType,
+				false,
 			)
 			if tc.expectedErr != "" {
 				require.Regexp(t, tc.expectedErr, err.Error())

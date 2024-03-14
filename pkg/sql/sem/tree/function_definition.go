@@ -262,7 +262,11 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 // signatures can have multiple signature types in case they depend on the
 // routine type.
 func (fd *ResolvedFunctionDefinition) MatchOverload(
-	signatures [][]*types.T, explicitSchema string, searchPath SearchPath, routineType RoutineType,
+	signatures [][]*types.T,
+	explicitSchema string,
+	searchPath SearchPath,
+	routineType RoutineType,
+	inCreateContext bool,
 ) (QualifiedOverload, error) {
 	matched := func(paramTypes []*types.T, ol QualifiedOverload, schema string) bool {
 		if ol.Type == UDFRoutine || ol.Type == ProcedureRoutine {
@@ -270,7 +274,34 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 		}
 		return schema == ol.Schema && (paramTypes == nil || ol.params().Match(paramTypes))
 	}
-	typeNames := func(paramTypes []*types.T) string {
+	if inCreateContext {
+		matched = func(paramTypes []*types.T, ol QualifiedOverload, schema string) bool {
+			if ol.Type == UDFRoutine {
+				return schema == ol.Schema && (paramTypes == nil || ol.params().MatchIdentical(paramTypes))
+			}
+			if ol.Type == ProcedureRoutine {
+				if paramTypes == nil || schema != ol.Schema {
+					return schema == ol.Schema
+				}
+				if len(ol.ProcedureInputTypes) != len(paramTypes) {
+					return false
+				}
+				for i, p := range paramTypes {
+					if !ol.ProcedureInputTypes[i].Identical(p) {
+						return false
+					}
+				}
+				return true
+			}
+			return schema == ol.Schema && (paramTypes == nil || ol.params().Match(paramTypes))
+		}
+	}
+	matchedIdx := -1
+	typeNames := func() string {
+		if matchedIdx < 0 {
+			return ""
+		}
+		paramTypes := signatures[matchedIdx]
 		ns := make([]string, len(paramTypes))
 		for i, t := range paramTypes {
 			ns[i] = t.Name()
@@ -279,7 +310,9 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	}
 
 	ret := make([]QualifiedOverload, 0, len(fd.Overloads))
-	var matchedIdx int
+	if signatures == nil {
+		signatures = [][]*types.T{nil}
+	}
 	for idx, paramTypes := range signatures {
 		found := false
 		findMatches := func(schema string) {
@@ -305,10 +338,10 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	if len(ret) == 1 && ret[0].Type&routineType == 0 {
 		if routineType == ProcedureRoutine {
 			return QualifiedOverload{}, pgerror.Newf(
-				pgcode.WrongObjectType, "%s(%s) is not a procedure", fd.Name, typeNames(signatures[matchedIdx]))
+				pgcode.WrongObjectType, "%s(%s) is not a procedure", fd.Name, typeNames())
 		} else {
 			return QualifiedOverload{}, pgerror.Newf(
-				pgcode.WrongObjectType, "%s(%s) is not a function", fd.Name, typeNames(signatures[matchedIdx]))
+				pgcode.WrongObjectType, "%s(%s) is not a function", fd.Name, typeNames())
 		}
 	}
 
@@ -330,12 +363,12 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	if len(ret) == 0 {
 		if routineType == ProcedureRoutine {
 			return QualifiedOverload{}, errors.Mark(
-				pgerror.Newf(pgcode.UndefinedFunction, "procedure %s(%s) does not exist", fd.Name, typeNames(signatures[0])),
+				pgerror.Newf(pgcode.UndefinedFunction, "procedure %s(%s) does not exist", fd.Name, typeNames()),
 				ErrRoutineUndefined,
 			)
 		} else {
 			return QualifiedOverload{}, errors.Mark(
-				pgerror.Newf(pgcode.UndefinedFunction, "function %s(%s) does not exist", fd.Name, typeNames(signatures[0])),
+				pgerror.Newf(pgcode.UndefinedFunction, "function %s(%s) does not exist", fd.Name, typeNames()),
 				ErrRoutineUndefined,
 			)
 		}

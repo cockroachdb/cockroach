@@ -135,6 +135,7 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 			fn.FuncName.Schema(),
 			&evalCtx.SessionData().SearchPath,
 			routineType,
+			false,
 		)
 		if err != nil {
 			return nil, err

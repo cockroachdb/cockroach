@@ -487,7 +487,7 @@ func TestGetMostSignificantOverload(t *testing.T) {
 			}
 			overload, err := getMostSignificantOverload(
 				tc.overloads, impls, filters, tc.searchPath, &expr, nil, /* typedInputExprs */
-				func() string { return "some signature" },
+				func() string { return "some signature" }, nil,
 			)
 			if tc.expectedErr != "" {
 				require.Error(t, err)

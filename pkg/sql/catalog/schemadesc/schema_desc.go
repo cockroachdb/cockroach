@@ -89,6 +89,14 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 					return iterutil.Map(err)
 				}
 			}
+			for _, typ := range sig.InputTypes {
+				if !catid.IsOIDUserDefined(typ.Oid()) {
+					continue
+				}
+				if err := fn(typ); err != nil {
+					return iterutil.Map(err)
+				}
+			}
 			if !catid.IsOIDUserDefined(sig.ReturnType.Oid()) {
 				continue
 			}
@@ -494,6 +502,7 @@ func (desc *Mutable) ReplaceOverload(
 	if !ok {
 		return errors.AssertionFailedf("unexpectedly didn't find a function %s", name)
 	}
+	// TODO
 	for i := range fn.Signatures {
 		sig := fn.Signatures[i]
 		match := len(oldArgTypes) == len(sig.ArgTypes)
@@ -561,6 +570,7 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			)
 		}
 		overload.Types = paramTypes
+		overload.ProcedureInputTypes = sig.InputTypes
 		prefixedOverload := tree.MakeQualifiedOverload(desc.GetName(), overload)
 		funcDef.Overloads = append(funcDef.Overloads, prefixedOverload)
 	}

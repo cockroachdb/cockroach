@@ -352,6 +352,8 @@ type ResolveParams struct {
 	// ResolveTypes if set, instructs the catalog reader to resolve types
 	// and not just tables, sequences, and views.
 	ResolveTypes bool
+
+	IsCreate bool
 }
 
 // NameResolver looks up elements in the catalog by name, and vice-versa.

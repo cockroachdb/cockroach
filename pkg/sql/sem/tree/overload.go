@@ -274,7 +274,8 @@ type Overload struct {
 	// Note that unlike Types (which only contains input parameters and defines
 	// the signature of the function), RoutineParams contains all parameters as
 	// well as their class.
-	RoutineParams RoutineParams
+	RoutineParams       RoutineParams
+	ProcedureInputTypes []*types.T
 }
 
 // params implements the overloadImpl interface.

@@ -156,10 +156,14 @@ func (n *createFunctionNode) createNewFunction(
 		return err
 	}
 	signatureTypes := make([]*types.T, 0, len(udfDesc.Params))
+	var inputTypes []*types.T
 	for _, param := range udfDesc.Params {
 		class := funcdesc.ToTreeRoutineParamClass(param.Class)
 		if tree.IsParamIncludedIntoSignature(class, udfDesc.IsProcedure()) {
 			signatureTypes = append(signatureTypes, param.Type)
+		}
+		if tree.IsInParamClass(class) {
+			inputTypes = append(inputTypes, param.Type)
 		}
 	}
 	scDesc.AddFunction(
@@ -170,6 +174,7 @@ func (n *createFunctionNode) createNewFunction(
 			ReturnType:  returnType,
 			ReturnSet:   udfDesc.ReturnType.ReturnSet,
 			IsProcedure: udfDesc.IsProcedure(),
+			InputTypes:  inputTypes,
 		},
 	)
 	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {
@@ -297,16 +302,21 @@ func (n *createFunctionNode) replaceFunction(
 		// the opposite), and in this case we need to update the schema
 		// descriptor.
 		signatureTypes := make([]*types.T, 0, len(udfDesc.Params))
+		var inputTypes []*types.T
 		for _, param := range udfDesc.Params {
 			class := funcdesc.ToTreeRoutineParamClass(param.Class)
 			if tree.IsParamIncludedIntoSignature(class, udfDesc.IsProcedure()) {
 				signatureTypes = append(signatureTypes, param.Type)
+			}
+			if tree.IsInParamClass(class) {
+				inputTypes = append(inputTypes, param.Type)
 			}
 		}
 		signatureChanged := len(origSignatureTypes) != len(signatureTypes)
 		for i := 0; !signatureChanged && i < len(origSignatureTypes); i++ {
 			signatureChanged = !origSignatureTypes[i].Equivalent(signatureTypes[i])
 		}
+		// TODO: input types change.
 		if signatureChanged {
 			if err = scDesc.ReplaceOverload(
 				udfDesc.GetName(),
@@ -317,6 +327,7 @@ func (n *createFunctionNode) replaceFunction(
 					ReturnType:  retType,
 					ReturnSet:   udfDesc.ReturnType.ReturnSet,
 					IsProcedure: true,
+					InputTypes:  inputTypes,
 				},
 			); err != nil {
 				return err
@@ -350,6 +361,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 	existing, err := params.p.matchRoutine(
 		params.ctx, &routineObj, false, /* required */
 		tree.UDFRoutine|tree.ProcedureRoutine,
+		true,
 	)
 	if err != nil {
 		return nil, false, err

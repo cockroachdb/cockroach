@@ -1298,7 +1298,7 @@ func (b *builderState) ResolveRoutine(
 		panic(err)
 	}
 	ol, err := fd.MatchOverload(
-		signatureTypes, routineObj.FuncName.Schema(), b.semaCtx.SearchPath, routineType,
+		signatureTypes, routineObj.FuncName.Schema(), b.semaCtx.SearchPath, routineType, p.IsCreate,
 	)
 	if err != nil {
 		if p.IsExistenceOptional && errors.Is(err, tree.ErrRoutineUndefined) {

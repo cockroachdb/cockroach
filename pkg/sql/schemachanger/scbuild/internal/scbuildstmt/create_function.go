@@ -51,6 +51,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 		ResolveParams{
 			IsExistenceOptional: true,
 			RequireOwnership:    true,
+			IsCreate:            true,
 		},
 		tree.UDFRoutine|tree.ProcedureRoutine,
 	)

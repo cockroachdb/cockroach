@@ -332,7 +332,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		descs := make([]DescriptorWithObjectType, 0, len(targetRoutines))
 		fnResolved := catalog.DescriptorIDSet{}
 		for _, f := range targetRoutines {
-			overload, err := p.matchRoutine(ctx, &f, true /* required */, routineType)
+			overload, err := p.matchRoutine(ctx, &f, true /* required */, routineType, false)
 			if err != nil {
 				return nil, err
 			}

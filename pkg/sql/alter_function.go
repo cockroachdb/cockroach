@@ -185,6 +185,7 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	existing, err := params.p.matchRoutine(
 		params.ctx, maybeExistingFuncObj, false, /* required */
 		tree.UDFRoutine|tree.ProcedureRoutine,
+		false,
 	)
 	if err != nil {
 		return err
@@ -382,6 +383,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	existing, err := params.p.matchRoutine(
 		params.ctx, maybeExistingFuncObj, false, /* required */
 		tree.UDFRoutine|tree.ProcedureRoutine,
+		false,
 	)
 	if err != nil {
 		return err
@@ -448,6 +450,7 @@ func (p *planner) mustGetMutableFunctionForAlter(
 	ol, err := p.matchRoutine(
 		ctx, routineObj, true, /* required */
 		tree.UDFRoutine|tree.ProcedureRoutine,
+		false,
 	)
 	if err != nil {
 		return nil, err
@@ -472,6 +475,9 @@ func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor
 		class := funcdesc.ToTreeRoutineParamClass(param.Class)
 		if tree.IsParamIncludedIntoSignature(class, ret.IsProcedure) {
 			ret.ArgTypes = append(ret.ArgTypes, param.Type)
+		}
+		if tree.IsInParamClass(class) {
+			ret.InputTypes = append(ret.InputTypes, param.Type)
 		}
 	}
 	return ret
