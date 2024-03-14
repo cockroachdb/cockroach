@@ -306,4 +306,130 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+subtest strict
+
+statement ok
+DROP FUNCTION f();
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO STRICT i FROM xy ORDER BY x DESC LIMIT 1;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+104
+
+statement ok
+DROP FUNCTION f();
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO STRICT i FROM xy WHERE False;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode P0002 pq: query returned no rows
+SELECT f();
+
+statement ok
+DROP FUNCTION f();
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO STRICT i FROM xy ORDER BY x DESC;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode P0003 pq: query returned more than one row
+SELECT f();
+
+statement ok
+DROP FUNCTION f();
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    INSERT INTO xy VALUES (105, 105) RETURNING x INTO STRICT i;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+105
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+101  201
+102  202
+103  203
+104  204
+105  105
+
+statement ok
+DROP FUNCTION f();
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    INSERT INTO xy (SELECT * FROM xy WHERE False) RETURNING x INTO STRICT i;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode P0002 pq: query returned no rows
+SELECT f();
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+101  201
+102  202
+103  203
+104  204
+105  105
+
+statement ok
+DROP FUNCTION f();
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    INSERT INTO xy VALUES (106, 106), (107, 107) RETURNING x INTO STRICT i;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode P0003 pq: query returned more than one row
+SELECT f();
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+101  201
+102  202
+103  203
+104  204
+105  105
+
 subtest end
