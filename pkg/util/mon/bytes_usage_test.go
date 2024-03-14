@@ -50,7 +50,7 @@ func TestMemoryAllocations(t *testing.T) {
 	var paramHeader func()
 
 	m := NewMonitor(Options{
-		Name:     "test",
+		Name: "test",
 	})
 	m.StartNoReserved(ctx, nil /* pool */)
 	accs := make([]BoundAccount, 4)
@@ -666,25 +666,27 @@ func BenchmarkTraverseTree(b *testing.B) {
 func TestLimit(t *testing.T) {
 	ctx := context.Background()
 
-	m := NewMonitor(Options{
-		Name:     "test",
-	})
+	getMonitor := func() *BytesMonitor {
+		return NewMonitor(Options{
+			Name: "test",
+		})
+	}
 
+	m := getMonitor()
 	m.StartNoReserved(ctx, nil /* pool */)
 	require.Equal(t, int64(0), m.Limit())
 	m.Stop(ctx)
 
+	m = getMonitor()
 	m.Start(ctx, nil, NewStandaloneBudget(1000))
 	require.Equal(t, int64(1000), m.Limit())
 
-	m2 := NewMonitor(Options{
-		Name:     "test",
-	})
-
+	m2 := getMonitor()
 	m2.StartNoReserved(ctx, m)
 	require.Equal(t, int64(1000), m2.Limit())
 	m2.Stop(ctx)
 
+	m2 = getMonitor()
 	m2.Start(ctx, m, NewStandaloneBudget(123))
 	require.Equal(t, int64(1123), m2.Limit())
 	m2.Stop(ctx)

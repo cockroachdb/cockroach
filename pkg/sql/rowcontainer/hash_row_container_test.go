@@ -45,10 +45,6 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	// These monitors are started and stopped by subtests.
-	memoryMonitor := getMemoryMonitor()
-	diskMonitor := getDiskMonitor()
-
 	const numRows = 10
 	const numCols = 1
 	rows := randgen.MakeIntRows(numRows, numCols)
@@ -56,7 +52,16 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	typs := types.OneIntCol
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
-	getRowContainer := func() *HashDiskBackedRowContainer {
+	getRowContainer := func(memoryLimit, diskLimit int64) (
+		_ *HashDiskBackedRowContainer,
+		memoryMonitor *mon.BytesMonitor,
+		diskMonitor *mon.BytesMonitor,
+		cleanup func(),
+	) {
+		memoryMonitor = getMemoryMonitor()
+		diskMonitor = getDiskMonitor()
+		memoryMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(memoryLimit))
+		diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(diskLimit))
 		rc := NewHashDiskBackedRowContainer(&evalCtx, memoryMonitor, diskMonitor, tempEngine)
 		err = rc.Init(
 			ctx,
@@ -68,19 +73,19 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error while initializing hashDiskBackedRowContainer: %s", err.Error())
 		}
-		return rc
+		return rc, memoryMonitor, diskMonitor, func() {
+			rc.Close(ctx)
+			diskMonitor.Stop(ctx)
+			memoryMonitor.Stop(ctx)
+		}
 	}
 
 	// NormalRun adds rows to a hashDiskBackedRowContainer, makes it spill to
 	// disk halfway through, keeps on adding rows, and then verifies that all
 	// rows were properly added to the hashDiskBackedRowContainer.
 	t.Run("NormalRun", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-		defer memoryMonitor.Stop(ctx)
-		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-		defer diskMonitor.Stop(ctx)
-		rc := getRowContainer()
-		defer rc.Close(ctx)
+		rc, _, _, cleanup := getRowContainer(math.MaxInt64, math.MaxInt64)
+		defer cleanup()
 		mid := len(rows) / 2
 		for i := 0; i < mid; i++ {
 			if err := rc.AddRow(ctx, rows[i]); err != nil {
@@ -120,12 +125,8 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	})
 
 	t.Run("AddRowOutOfMem", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
-		defer memoryMonitor.Stop(ctx)
-		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-		defer diskMonitor.Stop(ctx)
-		rc := getRowContainer()
-		defer rc.Close(ctx)
+		rc, memoryMonitor, diskMonitor, cleanup := getRowContainer(1, math.MaxInt64)
+		defer cleanup()
 
 		if err := rc.AddRow(ctx, rows[0]); err != nil {
 			t.Fatal(err)
@@ -142,11 +143,8 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	})
 
 	t.Run("AddRowOutOfDisk", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
-		defer memoryMonitor.Stop(ctx)
-		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
-		rc := getRowContainer()
-		defer rc.Close(ctx)
+		rc, memoryMonitor, diskMonitor, cleanup := getRowContainer(1, 1)
+		defer cleanup()
 
 		err := rc.AddRow(ctx, rows[0])
 		if code := pgerror.GetPGCode(err); code != pgcode.DiskFull {
@@ -170,12 +168,8 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	// container to disk, and verifies that the iterator was recreated and points
 	// to the appropriate row.
 	t.Run("VerifyIteratorRecreation", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-		defer memoryMonitor.Stop(ctx)
-		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-		defer diskMonitor.Stop(ctx)
-		rc := getRowContainer()
-		defer rc.Close(ctx)
+		rc, _, _, cleanup := getRowContainer(math.MaxInt64, math.MaxInt64)
+		defer cleanup()
 
 		for i := 0; i < len(rows); i++ {
 			if err := rc.AddRow(ctx, rows[i]); err != nil {
@@ -245,12 +239,8 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	// spills the container to disk, and verifies that the iterator was recreated
 	// and is not valid.
 	t.Run("VerifyIteratorRecreationAfterExhaustion", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-		defer memoryMonitor.Stop(ctx)
-		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-		defer diskMonitor.Stop(ctx)
-		rc := getRowContainer()
-		defer rc.Close(ctx)
+		rc, _, _, cleanup := getRowContainer(math.MaxInt64, math.MaxInt64)
+		defer cleanup()
 
 		for i := 0; i < len(rows); i++ {
 			if err := rc.AddRow(ctx, rows[i]); err != nil {
