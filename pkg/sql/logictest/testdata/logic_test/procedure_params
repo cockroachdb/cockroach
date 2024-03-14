@@ -6,7 +6,119 @@ statement error pgcode 42601 pq: at or near "float": syntax error
 CREATE PROCEDURE p(OUT param INT) RETURNS FLOAT AS $$ SELECT 1; $$ LANGUAGE SQL;
 
 statement ok
+CREATE PROCEDURE p(IN param1 INT, OUT param2 INT) AS $$ SELECT param1; $$ LANGUAGE SQL;
+
+statement error pgcode 42883 procedure p\(\) does not exist
+CALL p();
+
+statement error pgcode 42883 procedure p\(int\) does not exist
+CALL p(1);
+
+statement error pgcode 42883 procedure p\(int, int, int\) does not exist
+CALL p(1, 2, 3);
+
+statement ok
+CREATE PROCEDURE p(IN param1 FLOAT, OUT param2 FLOAT) AS $$ SELECT param1; $$ LANGUAGE SQL;
+
+query I colnames
+CALL p(1, 2);
+----
+param2
+1
+
+query R colnames
+CALL p(1.1, 2.2);
+----
+param2
+1.1
+
+statement error pgcode 42723 function "p" already exists with same argument types
+CREATE PROCEDURE p(OUT param1 INT, IN param2 INT) AS $$ SELECT param2; $$ LANGUAGE SQL;
+
+statement ok
+CREATE OR REPLACE PROCEDURE p(OUT param2 INT, IN param1 INT) AS $$ SELECT param1; $$ LANGUAGE SQL;
+
+query I colnames
+CALL p(1, 2);
+----
+param2
+2
+
+statement error pgcode 42723 function "p" already exists with same argument types
+CREATE PROCEDURE p(OUT param1 INT, IN param2 INT, OUT param3 INT) AS $$ SELECT (1, param2); $$ LANGUAGE SQL;
+
+statement ok
+CREATE PROCEDURE p(OUT param1 INT, IN param2 INT, IN param3 INT) AS $$ SELECT param2 + param3; $$ LANGUAGE SQL;
+
+query I colnames
+CALL p(1, 2, 3);
+----
+param1
+5
+
+statement error pgcode 42723 function "p" already exists with same argument types
+CREATE PROCEDURE p(INOUT param1 INT, IN param2 INT) AS $$ SELECT param1 + param2; $$ LANGUAGE SQL;
+
+statement ok
+CREATE PROCEDURE p(OUT param1 INT, OUT param2 INT, OUT param3 INT) AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
+
+statement error pgcode 42725 procedure p\(int, int, int\) is not unique
+CALL p(1, 2, 3);
+
+statement error pgcode 42725 procedure name "p" is not unique
+DROP PROCEDURE p;
+
+# Postgres seems to special-case the DROP behavior when none of the parameter
+# classes are specified for the argument types - it permissively treats them as
+# IN or OUT in order to match the maximum number overloads. As a result, PG
+# often returns 'procedure name "p" is not unique' error. Replicating that
+# behavior is tricky and seems not worth it, so we, instead, treat all argument
+# types with unspecified parameter class as having the IN class.
+
+# Postgres returns 'procedure name "p" is not unique' error here.
+statement error pgcode 42883 procedure p\(int,int,int\) does not exist
+DROP PROCEDURE p(INT, INT, INT);
+
+# Postgres returns 'procedure name "p" is not unique' error here.
+statement ok
+DROP PROCEDURE p(INT, INT);
+
+statement ok
+CREATE PROCEDURE p(OUT param1 INT, IN param2 INT, IN param3 INT) AS $$ SELECT param2 + param3; $$ LANGUAGE SQL;
+
+statement ok
+DROP PROCEDURE p(OUT INT, INT, INT);
+
+query III colnames
+CALL p(-1, -2, -3);
+----
+param1  param2  param3
+1       2       3
+
+statement error pgcode 42725 procedure name "p" is not unique
+DROP PROCEDURE p;
+
+# Postgres here drops the overload with 3 OUT parameters.
+statement error pgcode 42883 procedure p\(int,int,int\) does not exist
+DROP PROCEDURE p(INT, INT, INT);
+
+statement ok
+DROP PROCEDURE p(OUT INT, OUT INT, OUT INT);
+
+statement ok
+DROP PROCEDURE p(OUT INT, INT);
+
+statement ok
+DROP PROCEDURE p;
+
+statement ok
 CREATE PROCEDURE p(OUT param INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+statement error pgcode 42883 procedure p\(\) does not exist
+CALL p();
+
+statement error pgcode 42723 function "p" already exists with same argument types
+CREATE PROCEDURE p(OUT param1 INT, OUT param2 INT) AS $$ SELECT (1, 2); $$ LANGUAGE SQL;
 
 # Argument expressions for OUT parameters shouldn't be evaluated.
 query I colnames
@@ -22,11 +134,11 @@ statement ok
 CREATE PROCEDURE p(IN INT, INOUT INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
 
 # Argument expressions for IN and INOUT parameters are evaluated.
-statement error division by zero
-CALL p(1 // 0, 1)
+statement error pgcode 22012 division by zero
+CALL p(1 // 0, 1);
 
-statement error division by zero
-CALL p(1, 1 // 0)
+statement error pgcode 22012 division by zero
+CALL p(1, 1 // 0);
 
 statement ok
 DROP PROCEDURE p;
@@ -86,7 +198,7 @@ DROP PROCEDURE p(OUT INT);
 statement ok
 CREATE PROCEDURE p(OUT param1 INT, OUT param2 INT) AS $$ SELECT 1, 2; $$ LANGUAGE SQL;
 
-statement error pq: procedure p\(int\) does not exist
+statement error pgcode 42883 pq: procedure p\(int\) does not exist
 DROP PROCEDURE p(INT);
 
 statement ok
@@ -310,7 +422,7 @@ column1  param2  column3
 
 # Introducing the OUT parameter name is disallowed because it'd change the
 # return type.
-statement error cannot change return type of existing function
+statement error pgcode 42P13 cannot change return type of existing function
 CREATE OR REPLACE PROCEDURE p_default_names(OUT INT, OUT param2 INT, IN INT, OUT param3 INT) AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
 
 # Introducing the name that matches the default OUT parameter name is allowed.
@@ -371,7 +483,7 @@ column1  param2  column3
 3        2       3
 
 # But then the IN parameter name cannot be changed anymore.
-statement error cannot change name of input parameter "in_param"
+statement error pgcode 42P13 cannot change name of input parameter "in_param"
 CREATE OR REPLACE PROCEDURE p_default_names(OUT INT, OUT param2 INT, IN in_param_new INT, OUT INT) AS $$ SELECT (1, 2, 3); $$ LANGUAGE SQL;
 
 subtest end
