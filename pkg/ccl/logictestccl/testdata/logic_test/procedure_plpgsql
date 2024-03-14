@@ -178,4 +178,24 @@ CALL get_rows(3);
 ----
 NOTICE: (1,)
 
+# Regression test for #120439 - maintain the execution ordering of PL/pgSQL
+# subroutines.
+subtest regression_120439
+
+statement ok
+CREATE PROCEDURE p(x INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    IF pg_sleep(0.1) IS NOT NULL THEN
+      RAISE NOTICE 'foo %', x;
+    ELSE
+      SELECT x;
+    END IF;
+  END
+$$;
+
+query T noticetrace
+CALL p(1);
+----
+NOTICE: foo 1
+
 subtest end
