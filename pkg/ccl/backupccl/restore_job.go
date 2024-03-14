@@ -527,6 +527,9 @@ func restore(
 // can't be restored because the necessary tables are missing are omitted; if
 // skip_missing_foreign_keys was set, we should have aborted the RESTORE and
 // returned an error prior to this.
+//
+// The caller is responsible for shrinking `mem` by the returned size once they
+// are done with the returned manifests.
 // TODO(anzoteh96): this method returns two things: backup manifests
 // and the descriptors of the relevant manifests. Ideally, this should
 // be broken down into two methods.
@@ -537,12 +540,23 @@ func loadBackupSQLDescs(
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) ([]backuppb.BackupManifest, backuppb.BackupManifest, []catalog.Descriptor, int64, error) {
+) (
+	_ []backuppb.BackupManifest,
+	_ backuppb.BackupManifest,
+	_ []catalog.Descriptor,
+	memSize int64,
+	retErr error,
+) {
 	backupManifests, sz, err := backupinfo.LoadBackupManifestsAtTime(ctx, mem, details.URIs,
 		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption, kmsEnv, details.EndTime)
 	if err != nil {
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
+	defer func() {
+		if retErr != nil {
+			mem.Shrink(ctx, sz)
+		}
+	}()
 
 	layerToBackupManifestFileIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, p.ExecCfg().DistSQLSrv.ExternalStorage,
 		backupManifests, encryption, kmsEnv)
@@ -576,7 +590,6 @@ func loadBackupSQLDescs(
 	}
 	activeVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
 	if err := maybeUpgradeDescriptors(activeVersion, sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
-		mem.Shrink(ctx, sz)
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
 
@@ -1687,7 +1700,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		p.ExecCfg().InternalDB,
 		p.User(),
 	)
-	backupManifests, latestBackupManifest, sqlDescs, memSize, err := loadBackupSQLDescs(
+	// Note that we ignore memSize because the memory account is closed in a
+	// defer anyway.
+	backupManifests, latestBackupManifest, sqlDescs, _, err := loadBackupSQLDescs(
 		ctx, &mem, p, details, details.Encryption, &kmsEnv,
 	)
 	if err != nil {
@@ -1696,9 +1711,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err := r.validateJobIsResumable(ctx, p.ExecCfg(), backupManifests); err != nil {
 		return err
 	}
-	defer func() {
-		mem.Shrink(ctx, memSize)
-	}()
 	backupCodec, err := backupinfo.MakeBackupCodec(backupManifests)
 	if err != nil {
 		return err

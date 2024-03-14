@@ -806,13 +806,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
-
 	var memSize int64
-	defer func() {
-		if memSize != 0 {
-			mem.Shrink(ctx, memSize)
-		}
-	}()
 
 	if backupManifest == nil || forceReadBackupManifest {
 		backupManifest, memSize, err = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore,
