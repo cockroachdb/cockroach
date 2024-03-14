@@ -171,7 +171,7 @@ func run(
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
 			for i := range stmts {
-				output, logSchemaChangesFn, err = scbuild.Build(ctx, deps, output, stmts[i].AST, nil /* memAcc */)
+				output, logSchemaChangesFn, err = scbuild.Build(ctx, deps, output, stmts[i].AST, mon.NewStandaloneUnlimitedAccount())
 				require.NoErrorf(t, err, "%s: %s", d.Pos, stmts[i].SQL)
 				require.NoError(t, logSchemaChangesFn(ctx))
 			}
@@ -185,7 +185,7 @@ func run(
 			require.NotEmpty(t, stmts)
 
 			for _, stmt := range stmts {
-				_, _, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, stmt.AST, nil /* memAcc */)
+				_, _, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, stmt.AST, mon.NewStandaloneUnlimitedAccount())
 				expected := scerrors.NotImplementedError(nil)
 				require.Errorf(t, err, "%s: expected %T instead of success for", stmt.SQL, expected)
 				require.Truef(t, scerrors.HasNotImplemented(err), "%s: expected %T instead of %v", stmt.SQL, expected, err)

@@ -83,7 +83,7 @@ func TestPlanDataDriven(t *testing.T) {
 					var state scpb.CurrentState
 					var logSchemaChangesFn scbuild.LogSchemaChangerEventsFn
 					for i := range stmts {
-						state, logSchemaChangesFn, err = scbuild.Build(ctx, deps, state, stmts[i].AST, nil /* memAcc */)
+						state, logSchemaChangesFn, err = scbuild.Build(ctx, deps, state, stmts[i].AST, mon.NewStandaloneUnlimitedAccount())
 						require.NoError(t, err)
 						require.NoError(t, logSchemaChangesFn(ctx))
 					}
@@ -106,7 +106,7 @@ func TestPlanDataDriven(t *testing.T) {
 					stmt := stmts[0]
 					alter, ok := stmt.AST.(*tree.AlterTable)
 					require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-					_, _, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, alter, nil /* memAcc */)
+					_, _, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, alter, mon.NewStandaloneUnlimitedAccount())
 					require.Truef(t, scerrors.HasNotImplemented(err), "expected unimplemented, got %v", err)
 				})
 				return ""
@@ -270,7 +270,7 @@ func TestExplainPlanIsMemoryMonitored(t *testing.T) {
 	sctestutils.WithBuilderDependenciesFromTestServer(tt, nodeID, func(dependencies scbuild.Dependencies) {
 		stmt, err := parser.ParseOne(`DROP DATABASE defaultdb CASCADE`)
 		require.NoError(t, err)
-		incumbent, logSchemaChangesFn, err = scbuild.Build(ctx, dependencies, scpb.CurrentState{}, stmt.AST, nil /* memAcc */)
+		incumbent, logSchemaChangesFn, err = scbuild.Build(ctx, dependencies, scpb.CurrentState{}, stmt.AST, mon.NewStandaloneUnlimitedAccount())
 		require.NoError(t, err)
 		require.NoError(t, logSchemaChangesFn(ctx))
 	})

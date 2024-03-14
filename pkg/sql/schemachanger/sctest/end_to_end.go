@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -277,6 +278,7 @@ func checkExplainDiagrams(
 		ActiveVersion:              clusterversion.TestingClusterVersion,
 		ExecutionPhase:             scop.StatementPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
+		MemAcc:                     mon.NewStandaloneUnlimitedAccount(),
 	}
 	if inRollback {
 		params.InRollback = true
@@ -320,7 +322,7 @@ func execStatementWithTestDeps(
 		deps.IncrementPhase()
 		deps.LogSideEffectf("# begin %s", deps.Phase())
 		for _, stmt := range stmts {
-			state, logSchemaChangesFn, err = scbuild.Build(ctx, deps, state, stmt.AST, nil /* memAcc */)
+			state, logSchemaChangesFn, err = scbuild.Build(ctx, deps, state, stmt.AST, mon.NewStandaloneUnlimitedAccount())
 			require.NoError(t, err, "error in builder")
 			require.NoError(t, logSchemaChangesFn(ctx), "error generating event log entries")
 			stateAfterBuildingEachStatement = append(stateAfterBuildingEachStatement, state)

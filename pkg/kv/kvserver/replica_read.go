@@ -467,8 +467,9 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 
 	for retries := 0; ; retries++ {
 		if retries > 0 {
-			// It is safe to call Clear on an uninitialized BoundAccount.
-			boundAccount.Clear(ctx)
+			if boundAccount != nil {
+				boundAccount.Clear(ctx)
+			}
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
 		now := timeutil.Now()

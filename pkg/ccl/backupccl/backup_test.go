@@ -1802,7 +1802,9 @@ func TestBackupRestoreResume(t *testing.T) {
 					t.Fatal(err)
 				}
 				if backupinfo.IsGZipped(backupManifestBytes) {
-					backupManifestBytes, err = backupinfo.DecompressData(ctx, nil, backupManifestBytes)
+					backupManifestBytes, err = backupinfo.DecompressData(
+						ctx, mon.NewStandaloneUnlimitedAccount(), backupManifestBytes,
+					)
 					require.NoError(t, err)
 				}
 				var backupManifest backuppb.BackupManifest
@@ -4082,7 +4084,9 @@ func TestBackupRestoreChecksum(t *testing.T) {
 			t.Fatalf("%+v", err)
 		}
 		if backupinfo.IsGZipped(backupManifestBytes) {
-			backupManifestBytes, err = backupinfo.DecompressData(context.Background(), nil, backupManifestBytes)
+			backupManifestBytes, err = backupinfo.DecompressData(
+				context.Background(), mon.NewStandaloneUnlimitedAccount(), backupManifestBytes,
+			)
 			require.NoError(t, err)
 		}
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
@@ -8485,7 +8489,7 @@ func TestIncorrectAccessOfFilesInBackupMetadata(t *testing.T) {
 	manifestPath := matches[0]
 	manifestData, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
-	manifestData, err = backupinfo.DecompressData(context.Background(), nil, manifestData)
+	manifestData, err = backupinfo.DecompressData(context.Background(), mon.NewStandaloneUnlimitedAccount(), manifestData)
 	require.NoError(t, err)
 	var backupManifest backuppb.BackupManifest
 	require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
@@ -8531,7 +8535,7 @@ func TestRestoringAcrossVersions(t *testing.T) {
 	manifestPath := filepath.Join(rawDir, "cross_version", backupbase.BackupMetadataName)
 	manifestData, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
-	manifestData, err = backupinfo.DecompressData(context.Background(), nil, manifestData)
+	manifestData, err = backupinfo.DecompressData(context.Background(), mon.NewStandaloneUnlimitedAccount(), manifestData)
 	require.NoError(t, err)
 	var backupManifest backuppb.BackupManifest
 	require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
@@ -10733,7 +10737,9 @@ func TestBackupDoNotIncludeViewSpans(t *testing.T) {
 			t.Fatalf("%+v", err)
 		}
 		if backupinfo.IsGZipped(backupManifestBytes) {
-			backupManifestBytes, err = backupinfo.DecompressData(context.Background(), nil, backupManifestBytes)
+			backupManifestBytes, err = backupinfo.DecompressData(
+				context.Background(), mon.NewStandaloneUnlimitedAccount(), backupManifestBytes,
+			)
 			require.NoError(t, err)
 		}
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {

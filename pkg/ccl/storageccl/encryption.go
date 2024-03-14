@@ -186,7 +186,7 @@ func (e *encWriter) flush() error {
 
 // DecryptFile decrypts a file encrypted by EncryptFile, using the supplied key
 // and reading the IV from a prefix of the file. See comments on EncryptFile
-// for intended usage, and see DecryptFile
+// for intended usage, and see DecryptFile.
 func DecryptFile(
 	ctx context.Context, ciphertext, key []byte, mm *mon.BoundAccount,
 ) ([]byte, error) {

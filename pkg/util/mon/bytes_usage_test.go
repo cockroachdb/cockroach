@@ -285,23 +285,6 @@ func TestBoundAccount(t *testing.T) {
 	m.Stop(ctx)
 }
 
-func TestNilBoundAccount(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	var ba *BoundAccount
-	_ = ba.Used()
-	_ = ba.Monitor()
-	_ = ba.Allocated()
-	ba.Empty(ctx)
-	ba.Clear(ctx)
-	ba.Close(ctx)
-	require.Nil(t, ba.Resize(ctx, 0, 10))
-	require.Nil(t, ba.ResizeTo(ctx, 10))
-	require.Nil(t, ba.Grow(ctx, 10))
-	ba.Shrink(ctx, 10)
-}
-
 func TestBytesMonitor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

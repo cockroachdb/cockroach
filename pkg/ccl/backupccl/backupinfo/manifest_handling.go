@@ -439,12 +439,14 @@ func readBackupPartitionDescriptor(
 		return backuppb.BackupPartitionDescriptor{}, err
 	}
 
+	memAcc := mon.NewStandaloneUnlimitedAccount()
+
 	if encryption != nil {
 		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
 			return backuppb.BackupPartitionDescriptor{}, err
 		}
-		plaintextData, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, nil /* mm */)
+		plaintextData, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, memAcc)
 		if err != nil {
 			return backuppb.BackupPartitionDescriptor{}, err
 		}
@@ -452,7 +454,7 @@ func readBackupPartitionDescriptor(
 	}
 
 	if IsGZipped(descBytes) {
-		decompressedData, err := DecompressData(ctx, nil /* mem */, descBytes)
+		decompressedData, err := DecompressData(ctx, memAcc, descBytes)
 		if err != nil {
 			return backuppb.BackupPartitionDescriptor{}, errors.Wrap(
 				err, "decompressing backup partition descriptor")
@@ -493,7 +495,7 @@ func readTableStatistics(
 		if err != nil {
 			return nil, err
 		}
-		statsBytes, err = storageccl.DecryptFile(ctx, statsBytes, encryptionKey, nil /* mm */)
+		statsBytes, err = storageccl.DecryptFile(ctx, statsBytes, encryptionKey, mon.NewStandaloneUnlimitedAccount())
 		if err != nil {
 			return nil, err
 		}
