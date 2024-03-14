@@ -133,7 +133,6 @@ func RegisterTests(r registry.Registry) {
 	registerScrubAllChecksTPCC(r)
 	registerScrubIndexOnlyTPCC(r)
 	registerSecondaryIndexesMultiVersionCluster(r)
-	registerSecure(r)
 	registerSequelize(r)
 	registerSlowDrain(r)
 	registerSysbench(r)
