@@ -2135,11 +2135,15 @@ message AddSSTableRequest {
     string path = 2;
     uint64 backing_file_size = 3;
     uint64 approximate_physical_size = 4;
+    bytes synthetic_prefix = 5;
+
   }
   RemoteFile remote_file = 10 [(gogoproto.nullable) = false];
 
   // AddSStableRequest_PrefixReplacement is used to represent a prefix to be
   // replaced and the prefix with which to replace it.
+  //
+  // TODO(msbutler): delete prefix replacement plumbing.
   message PrefixReplacement {
     bytes from = 1;
     bytes to = 2;

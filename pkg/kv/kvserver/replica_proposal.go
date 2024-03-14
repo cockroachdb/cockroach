@@ -649,13 +649,14 @@ func addSSTablePreApply(
 ) bool {
 	if sst.RemoteFilePath != "" {
 		log.Infof(ctx,
-			"EXPERIMENTAL AddSSTABLE EXTERNAL %s (size %d, span %s) from %s (size %d) at rewrite ts %s",
+			"EXPERIMENTAL AddSSTABLE EXTERNAL %s (size %d, span %s) from %s (size %d) at rewrite ts %s, synth prefix %s",
 			sst.RemoteFilePath,
 			sst.ApproximatePhysicalSize,
 			sst.Span,
 			sst.RemoteFileLoc,
 			sst.BackingFileSize,
 			sst.RemoteRewriteTimestamp,
+			sst.RemoteSyntheticPrefix,
 		)
 
 		start := storage.EngineKey{Key: sst.Span.Key}
@@ -664,6 +665,11 @@ func addSSTablePreApply(
 		if sst.RemoteRewriteTimestamp.IsSet() {
 			syntheticSuffix = storage.EncodeMVCCTimestampSuffix(sst.RemoteRewriteTimestamp)
 		}
+		var syntheticPrefix []byte
+		if len(sst.RemoteSyntheticPrefix) > 0 {
+			syntheticPrefix = sst.RemoteSyntheticPrefix
+		}
+
 		externalFile := pebble.ExternalFile{
 			Locator: remote.Locator(sst.RemoteFileLoc),
 			ObjName: sst.RemoteFilePath,
@@ -673,6 +679,7 @@ func addSSTablePreApply(
 				End:   end.Encode(),
 			},
 			SyntheticSuffix: syntheticSuffix,
+			SyntheticPrefix: syntheticPrefix,
 			// TODO(dt): pass pebble the backing file size to avoid a stat call.
 
 			// TODO(msbutler): I guess we need to figure out if the backing external
