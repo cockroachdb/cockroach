@@ -92,6 +92,7 @@ type Smither struct {
 	disableAggregateFuncs      bool
 	disableMutations           bool
 	simpleDatums               bool
+	simpleScalarTypes          bool
 	simpleNames                bool
 	avoidConsts                bool
 	outputSort                 bool
@@ -196,10 +197,17 @@ func (s *Smither) Generate() string {
 			continue
 		}
 		i = 0
-		p, err := prettyCfg.Pretty(stmt)
+
+		printCfg := prettyCfg
+		fl := tree.FmtParsable
+		if s.postgres {
+			printCfg.FmtFlags = tree.FmtPGCatalog
+			fl = tree.FmtPGCatalog
+		}
+		p, err := printCfg.Pretty(stmt)
 		if err != nil {
 			// Use simple printing if pretty-printing fails.
-			p = tree.AsStringWithFlags(stmt, tree.FmtParsable)
+			p = tree.AsStringWithFlags(stmt, fl)
 		}
 		return p
 	}
@@ -383,6 +391,11 @@ var DisableWith = simpleOption("disable WITH", func(s *Smither) {
 	s.disableWith = true
 })
 
+// EnableWith causes the Smither to probabilistically emit WITH clauses.
+var EnableWith = simpleOption("enable WITH", func(s *Smither) {
+	s.disableWith = false
+})
+
 // DisableNondeterministicFns causes the Smither to disable nondeterministic functions.
 var DisableNondeterministicFns = simpleOption("disable nondeterministic funcs", func(s *Smither) {
 	s.disableNondeterministicFns = true
@@ -396,6 +409,11 @@ func DisableCRDBFns() SmitherOption {
 // SimpleDatums causes the Smither to emit simpler constant datums.
 var SimpleDatums = simpleOption("simple datums", func(s *Smither) {
 	s.simpleDatums = true
+})
+
+// SimpleScalarTypes causes the Smither to use simpler scalar types (e.g. avoid Geometry)
+var SimpleScalarTypes = simpleOption("simple scalar types", func(s *Smither) {
+	s.simpleScalarTypes = true
 })
 
 // SimpleNames specifies that complex name generation should be disabled.
@@ -437,6 +455,11 @@ var DisableLimits = simpleOption("disable LIMIT", func(s *Smither) {
 	s.disableLimits = true
 })
 
+// EnableLimits causes the Smither to probabilistically emit LIMIT clauses.
+var EnableLimits = simpleOption("enable LIMIT", func(s *Smither) {
+	s.disableLimits = true
+})
+
 // AvoidConsts causes the Smither to prefer column references over generating
 // constants.
 var AvoidConsts = simpleOption("avoid consts", func(s *Smither) {
@@ -456,6 +479,11 @@ var DisableAggregateFuncs = simpleOption("disable aggregate funcs", func(s *Smit
 // OutputSort adds a top-level ORDER BY on all columns.
 var OutputSort = simpleOption("output sort", func(s *Smither) {
 	s.outputSort = true
+})
+
+// MaybeSortOutput probabilistically adds ORDER by clause
+var MaybeSortOutput = simpleOption("maybe output sort", func(s *Smither) {
+	s.outputSort = false
 })
 
 // UnlikelyConstantPredicate causes the Smither to make generation of constant

@@ -7,7 +7,15 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/internal/sqlsmith",
+        "//pkg/keys",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/importer",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
         "//pkg/util/randutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
