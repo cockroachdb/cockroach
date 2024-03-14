@@ -59,6 +59,26 @@ func PointKVWithLocalTS(key string, ts int, localTS int, value string) storage.M
 	}
 }
 
+// PointKVWithImportEpoch creates an MVCCKeyValue for the given string key/value,
+// timestamp, and ImportEpoch.
+func PointKVWithImportEpoch(
+	key string, ts int, importEpoch uint32, value string,
+) storage.MVCCKeyValue {
+	var mvccValue storage.MVCCValue
+	if value != "" {
+		mvccValue = StringValue(value)
+	}
+	mvccValue.ImportEpoch = importEpoch
+	v, err := storage.EncodeMVCCValue(mvccValue)
+	if err != nil {
+		panic(err)
+	}
+	return storage.MVCCKeyValue{
+		Key:   PointKey(key, ts),
+		Value: v,
+	}
+}
+
 // RangeKey creates an MVCCRangeKey for the given string key and timestamp
 // (in walltime seconds).
 func RangeKey(start, end string, ts int) storage.MVCCRangeKey {
