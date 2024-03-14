@@ -95,7 +95,7 @@ eexpect root@
 send "PREPARE p AS SELECT * FROM t WHERE k = \$1;\r"
 eexpect root@
 
-send "SELECT crdb_internal.request_statement_bundle('SELECT * FROM t WHERE k = \$1', 0::FLOAT, 0::INTERVAL, 0::INTERVAL);\r"
+send "SELECT crdb_internal.request_statement_bundle('SELECT * FROM t WHERE k = _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL);\r"
 eexpect root@
 
 send "EXECUTE p(1);\r"

@@ -89,7 +89,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"error in argument for $1: could not parse \"(1,cat)\" as type tuple: cannot parse anonymous record type","Detail":"statement name \"s4\"\n--\nportal name \"p4\"\n--\nstatement summary \"SELECT $1 AS a\""}
+{"Type":"ErrorResponse","Code":"0A000","Message":"error in argument for $1: could not parse \"(1,cat)\" as type tuple: cannot parse anonymous record type","Detail":"statement name \"s4\"\n--\nportal name \"p4\"\n--\nstatement summary \"SELECT _ AS a\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -164,7 +164,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: tuple requires a 4 byte header for binary format","Detail":"bufferLength=0\n--\nstatement name \"s_empty_param\"\n--\nportal name \"p_empty_param\"\n--\nstatement summary \"SELECT $1::r\""}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: tuple requires a 4 byte header for binary format","Detail":"bufferLength=0\n--\nstatement name \"s_empty_param\"\n--\nportal name \"p_empty_param\"\n--\nstatement summary \"SELECT _::r\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # negative length tuple
@@ -189,7 +189,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: tuple must have non-negative number of elements","Detail":"numberOfElements=-1\n--\nstatement name \"s_negative_tuple\"\n--\nportal name \"p_negative_tuple\"\n--\nstatement summary \"SELECT $1::r\""}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: tuple must have non-negative number of elements","Detail":"numberOfElements=-1\n--\nstatement name \"s_negative_tuple\"\n--\nportal name \"p_negative_tuple\"\n--\nstatement summary \"SELECT _::r\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # not enough bytes for element OID
@@ -214,7 +214,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element OID for binary format","Detail":"elementIdx=0 bufferLength=4 bufferStartIdx=4 bufferEndIdx=8\n--\nstatement name \"s_element_oid_no_bytes\"\n--\nportal name \"p_element_oid_no_bytes\"\n--\nstatement summary \"SELECT $1::r\""}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element OID for binary format","Detail":"elementIdx=0 bufferLength=4 bufferStartIdx=4 bufferEndIdx=8\n--\nstatement name \"s_element_oid_no_bytes\"\n--\nportal name \"p_element_oid_no_bytes\"\n--\nstatement summary \"SELECT _::r\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # element OID not found
@@ -240,7 +240,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: element type not found for OID 0","Detail":"elementIdx=0 bufferLength=8 bufferStartIdx=4 bufferEndIdx=8\n--\nstatement name \"s_element_oid_not_found\"\n--\nportal name \"p_element_oid_not_found\"\n--\nstatement summary \"SELECT $1::r\""}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: element type not found for OID 0","Detail":"elementIdx=0 bufferLength=8 bufferStartIdx=4 bufferEndIdx=8\n--\nstatement name \"s_element_oid_not_found\"\n--\nportal name \"p_element_oid_not_found\"\n--\nstatement summary \"SELECT _::r\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # not enough bytes for element size
@@ -266,7 +266,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element size for binary format","Detail":"elementIdx=0 bufferLength=8 bufferStartIdx=8 bufferEndIdx=12\n--\nstatement name \"s_element_size_no_bytes\"\n--\nportal name \"p_element_size_no_bytes\"\n--\nstatement summary \"SELECT $1::r\""}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element size for binary format","Detail":"elementIdx=0 bufferLength=8 bufferStartIdx=8 bufferEndIdx=12\n--\nstatement name \"s_element_size_no_bytes\"\n--\nportal name \"p_element_size_no_bytes\"\n--\nstatement summary \"SELECT _::r\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # null element
@@ -313,7 +313,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: unsupported binary bool: ","Detail":"statement name \"s_element_needs_bytes\"\n--\nportal name \"p_element_needs_bytes\"\n--\nstatement summary \"SELECT $1::r\""}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: unsupported binary bool: ","Detail":"statement name \"s_element_needs_bytes\"\n--\nportal name \"p_element_needs_bytes\"\n--\nstatement summary \"SELECT _::r\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # not enough bytes for element
@@ -340,7 +340,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element for binary format","Detail":"elementIdx=0 bufferLength=12 bufferStartIdx=12 bufferEndIdx=13\n--\nstatement name \"s_element_no_bytes\"\n--\nportal name \"p_element_no_bytes\"\n--\nstatement summary \"SELECT $1::r\""}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element for binary format","Detail":"elementIdx=0 bufferLength=12 bufferStartIdx=12 bufferEndIdx=13\n--\nstatement name \"s_element_no_bytes\"\n--\nportal name \"p_element_no_bytes\"\n--\nstatement summary \"SELECT _::r\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Test binary encoding of a generic tuple result.

@@ -546,7 +546,7 @@ func TestPrepareStatisticsMetadata(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify that query and querySummary are equal in crdb_internal.statement_statistics.metadata.
-	rows, err := sqlDB.Query(`SELECT metadata->>'query', metadata->>'querySummary' FROM crdb_internal.statement_statistics WHERE metadata->>'query' LIKE 'SELECT $1::INT8'`)
+	rows, err := sqlDB.Query(`SELECT metadata->>'query', metadata->>'querySummary' FROM crdb_internal.statement_statistics WHERE metadata->>'query' LIKE 'SELECT _::INT8'`)
 	if err != nil {
 		t.Fatal(err)
 	}

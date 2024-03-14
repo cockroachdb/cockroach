@@ -85,7 +85,7 @@ func TestIndexRecommendationsStats(t *testing.T) {
 		for i := 0; i < (minExecutions + 2); i++ {
 			testConn.Exec(t, `INSERT INTO t3 VALUES($1)`, i)
 			rows := testConn.QueryRow(t, "SELECT index_recommendations FROM CRDB_INTERNAL.STATEMENT_STATISTICS "+
-				" WHERE metadata ->> 'db' = 'idxrectest' AND metadata ->> 'query' = 'INSERT INTO t3 VALUES ($1)'")
+				" WHERE metadata ->> 'db' = 'idxrectest' AND metadata ->> 'query' = 'INSERT INTO t3 VALUES (_)'")
 			rows.Scan(&recommendations)
 
 			require.Equal(t, "{}", recommendations)
