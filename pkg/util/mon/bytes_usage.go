@@ -205,12 +205,14 @@ type BytesMonitor struct {
 		// current monitor's lock.
 		head *BytesMonitor
 
-		// numChildren is the number of children of this BytesMonitor (i.e. the
-		// number of nodes in the linked list).
-		numChildren int
-
 		// stopped indicates whether this monitor has been stopped.
 		stopped bool
+
+		// relinquishAllOnReleaseBytes, if true, indicates that the monitor should
+		// relinquish all bytes on releaseBytes() call.
+		// NB: this field doesn't need mutex protection but is inside of mu
+		// struct in order to reduce the struct size.
+		relinquishAllOnReleaseBytes bool
 	}
 
 	// parentMu encompasses the fields that must be accessed while holding the
@@ -256,17 +258,13 @@ type BytesMonitor struct {
 	// pool.
 	poolAllocationSize int64
 
-	// relinquishAllOnReleaseBytes, if true, indicates that the monitor should
-	// relinquish all bytes on releaseBytes() call.
-	relinquishAllOnReleaseBytes bool
-
 	settings *cluster.Settings
 }
 
 const (
 	// Consult with SQL Queries before increasing these values.
-	expectedMonitorSize     = 192
-	expectedMonitorSizeRace = 200
+	expectedMonitorSize     = 176
+	expectedMonitorSizeRace = 184
 	expectedAccountSize     = 24
 )
 
@@ -354,7 +352,7 @@ func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState
 	// Note that we cannot call traverseTree on the children while holding mm's
 	// lock since it could lead to deadlocks. Instead, we store all children as
 	// of right now, and then export them after unlocking ourselves.
-	children := make([]*BytesMonitor, 0, mm.mu.numChildren)
+	var children []*BytesMonitor
 	for c := mm.mu.head; c != nil; c = c.parentMu.nextSibling {
 		children = append(children, c)
 	}
@@ -502,7 +500,6 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 				mm.parentMu.nextSibling = s
 			}
 			pool.mu.head = mm
-			pool.mu.numChildren++
 		}()
 		effectiveLimit = pool.limit
 	}
@@ -606,7 +603,6 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 			if next != nil {
 				next.parentMu.prevSibling = prev
 			}
-			parent.mu.numChildren--
 		}()
 	}
 	// If this monitor still has children, let's lose the reference to them as
@@ -1104,7 +1100,7 @@ func (mm *BytesMonitor) releaseBudget(ctx context.Context) {
 // RelinquishAllOnReleaseBytes makes it so that the monitor doesn't keep any
 // margin bytes when the bytes are released from it.
 func (mm *BytesMonitor) RelinquishAllOnReleaseBytes() {
-	mm.relinquishAllOnReleaseBytes = true
+	mm.mu.relinquishAllOnReleaseBytes = true
 }
 
 // adjustBudget ensures that the monitor does not keep many more bytes reserved
@@ -1114,7 +1110,7 @@ func (mm *BytesMonitor) RelinquishAllOnReleaseBytes() {
 func (mm *BytesMonitor) adjustBudget(ctx context.Context) {
 	// NB: mm.mu Already locked by releaseBytes().
 	var margin int64
-	if !mm.relinquishAllOnReleaseBytes {
+	if !mm.mu.relinquishAllOnReleaseBytes {
 		margin = mm.poolAllocationSize * int64(maxAllocatedButUnusedBlocks)
 	}
 
