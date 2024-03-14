@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -103,11 +104,15 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 		case <-flushDoneSignal:
 			// A flush was done. Set the timer and wait for it to complete.
 			if sqlStatsActivityFlushEnabled.Get(&settings.SV) {
+				startTime := timeutil.Now().UnixNano()
 				updater := newSqlActivityUpdater(settings, execCtx.ExecCfg().InternalDB, nil)
 				if err := updater.TransferStatsToActivity(ctx); err != nil {
 					log.Warningf(ctx, "error running sql activity updater job: %v", err)
 					metrics.NumErrors.Inc(1)
+				} else {
+					metrics.NumSuccessfulUpdates.Inc(1)
 				}
+				metrics.UpdateLatency.RecordValue(timeutil.Now().UnixNano() - startTime)
 			}
 		case <-ctx.Done():
 			return nil
@@ -120,7 +125,9 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 // ActivityUpdaterMetrics must be public for metrics to get
 // registered
 type ActivityUpdaterMetrics struct {
-	NumErrors *metric.Counter
+	NumErrors            *metric.Counter
+	NumSuccessfulUpdates *metric.Counter
+	UpdateLatency        metric.IHistogram
 }
 
 func (m ActivityUpdaterMetrics) MetricStruct() {}
@@ -133,6 +140,25 @@ func newActivityUpdaterMetrics() metric.Struct {
 			Measurement: "errors",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_COUNTER,
+		}),
+		NumSuccessfulUpdates: metric.NewCounter(metric.Metadata{
+			Name:        "sql.stats.activity.updates.successful",
+			Help:        "Number of successful updates made by the SQL activity updater job",
+			Measurement: "successful updates",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  io_prometheus_client.MetricType_COUNTER,
+		}),
+		UpdateLatency: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metric.Metadata{
+				Name:        "sql.stats.activity.update.latency",
+				Help:        "The latency of updates made by the SQL activity updater job. Includes failed update attempts",
+				Measurement: "Nanoseconds",
+				Unit:        metric.Unit_NANOSECONDS,
+				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
+			},
+			Duration:     base.DefaultHistogramWindowInterval(),
+			BucketConfig: metric.LongRunning60mLatencyBuckets,
+			Mode:         metric.HistogramModePrometheus,
 		}),
 	}
 }
