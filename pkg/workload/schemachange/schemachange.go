@@ -19,6 +19,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -455,6 +456,14 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		if pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 			w.recordInHist(timeutil.Since(start), txnCommitError)
 			w.logger.flushLog(tx, fmt.Sprintf("TXN RETRY ERROR; %v", pgErr))
+			return nil
+		}
+
+		// v23.1 is affected by a rare bug caused by the system.job_info upgrade.
+		// It is fixed in v23.2 and later, but there are no plans to fix it in v23.1
+		// version, so we ignore the error here.
+		// See: https://github.com/cockroachdb/cockroach/issues/115747#issuecomment-1855830157
+		if strings.Contains(pgErr.Error(), "job-rows-batch-insert: null value in column") {
 			return nil
 		}
 
