@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -33,9 +34,15 @@ func RevertTenantToTimestamp(
 	tenantName roachpb.TenantName,
 	revertTo hlc.Timestamp,
 	sessionID clusterunique.ID,
-) error {
+) (err error) {
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
-
+	defer func() {
+		if err == nil {
+			telemetry.Count("virtual_cluster.data_reset")
+		} else {
+			telemetry.Count("virtual_cluster.data_reset_failed")
+		}
+	}()
 	// These vars are set in Txn below. This transaction checks
 	// the service state of the tenant record, moves the tenant's
 	// data state to ADD, and installs a PTS for the revert
