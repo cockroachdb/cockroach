@@ -89,7 +89,7 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 
 	foundStat := false
 	for _, stat := range stats {
-		if stat.Key.Query == "INSERT INTO _ VALUES ($1)" {
+		if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
 			foundStat = true
 			if stat.Stats.Count != 2 {
 				t.Fatal("expected to find 2 invocations, found", stat.Stats.Count)
