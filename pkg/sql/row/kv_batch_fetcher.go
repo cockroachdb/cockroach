@@ -92,7 +92,7 @@ var internalLowPriReadElasticControlEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"sqladmission.low_pri_read_response_elastic_control.enabled",
 	"determines whether the sql portion of internally submitted reads integrate with elastic CPU controller",
-	false,
+	true,
 )
 
 // sendFunc is the function used to execute a KV batch; normally
