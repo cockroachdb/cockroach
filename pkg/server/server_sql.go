@@ -443,14 +443,12 @@ var vmoduleSetting = settings.RegisterStringSetting(
 func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
 	rootSQLMetrics := sql.MakeBaseMemMetrics("root", opts.histogramWindowInterval)
 	rootSQLMemoryMonitor := mon.NewMonitor(mon.NewMonitorArgs{
-		Name: "root",
-		Res: mon.NewMemoryResourceWithErrorHint(
-			"Consider increasing --max-sql-memory startup parameter.", /* hint */
-		),
+		Name:     "root",
 		CurCount: rootSQLMetrics.CurBytesCount,
 		MaxHist:  rootSQLMetrics.MaxBytesHist,
 		Settings: opts.settings,
 	})
+	rootSQLMemoryMonitor.MarkAsRootSQLMonitor()
 	// Set the limit to the memoryPoolSize. Note that this memory monitor also
 	// serves as a parent for a memory monitor that accounts for memory used in
 	// the KV layer at the same node.
