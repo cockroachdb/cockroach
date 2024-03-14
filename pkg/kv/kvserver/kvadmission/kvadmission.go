@@ -301,6 +301,14 @@ func (n *controllerImpl) AdmitKVWork(
 			bypassAdmission = true
 		}
 	}
+	// LeaseInfo requests are used as makeshift replica health probes by
+	// DistSender circuit breakers, make sure they bypass AC.
+	//
+	// TODO(erikgrinaker): the various bypass conditions here should be moved to
+	// one or more request flags.
+	if ba.IsSingleLeaseInfoRequest() {
+		bypassAdmission = true
+	}
 	createTime := ba.AdmissionHeader.CreateTime
 	if !bypassAdmission && createTime == 0 {
 		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
