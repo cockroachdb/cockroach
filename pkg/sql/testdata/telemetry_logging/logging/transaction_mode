@@ -363,7 +363,7 @@ COMMIT;
 	"PlanGist": "AgICAgYC",
 	"SkippedQueries": 7,
 	"Statement": "SELECT ‹'hello'›",
-	"StatementFingerprintID": 3806682926156079000,
+	"StatementFingerprintID": 2101516650360650000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
 	"User": "root"
@@ -378,7 +378,7 @@ COMMIT;
 	"PlanGist": "AgICAgYC",
 	"SQLSTATE": "40001",
 	"Statement": "SELECT CASE nextval(‹'seq'›) WHEN ‹3› THEN crdb_internal.force_retry(‹'00:00:01'›) ELSE ‹2› END",
-	"StatementFingerprintID": 17983543787721968000,
+	"StatementFingerprintID": 8086151951699049000,
 	"StmtPosInTxn": 2,
 	"Tag": "SELECT",
 	"User": "root"
@@ -393,7 +393,7 @@ COMMIT;
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICAgYC",
 	"Statement": "SELECT ‹'hello'›",
-	"StatementFingerprintID": 3806682926156079000,
+	"StatementFingerprintID": 2101516650360650000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
 	"User": "root"
@@ -436,10 +436,10 @@ COMMIT;
 	"RowsWritten": 0,
 	"SkippedTransactions": 1,
 	"StatementFingerprintIDs": [
-		3806682926156079000,
+		2101516650360650000,
 		8086151951699049000
 	],
-	"TransactionFingerprintID": 15834298315376988000,
+	"TransactionFingerprintID": 3750030760852548600,
 	"User": "root"
 }
 
