@@ -100,6 +100,7 @@ go_test(
         "//pkg/util/iterutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/mon",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_golang_mock//gomock",

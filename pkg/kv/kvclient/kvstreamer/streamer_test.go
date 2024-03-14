@@ -83,7 +83,7 @@ func TestStreamerLimitations(t *testing.T) {
 	s := srv.ApplicationLayer()
 
 	getStreamer := func() *kvstreamer.Streamer {
-		return getStreamer(ctx, s, math.MaxInt64, nil /* acc */)
+		return getStreamer(ctx, s, math.MaxInt64, mon.NewStandaloneUnlimitedAccount())
 	}
 
 	t.Run("non-unique requests unsupported", func(t *testing.T) {
@@ -437,7 +437,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 	require.NoError(t, err)
 
 	getStreamer := func() *kvstreamer.Streamer {
-		s := getStreamer(ctx, ts, math.MaxInt64, nil /* acc */)
+		s := getStreamer(ctx, ts, math.MaxInt64, mon.NewStandaloneUnlimitedAccount())
 		// There are two column families in the table.
 		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 2 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s

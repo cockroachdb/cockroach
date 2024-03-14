@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
@@ -314,7 +315,7 @@ func testingReadBackupManifest(
 		return nil, err
 	}
 	if backupinfo.IsGZipped(bytes) {
-		descBytes, err := backupinfo.DecompressData(ctx, nil, bytes)
+		descBytes, err := backupinfo.DecompressData(ctx, mon.NewStandaloneUnlimitedAccount(), bytes)
 		if err != nil {
 			return nil, err
 		}

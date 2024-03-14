@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,7 +52,9 @@ func TestValidateCorpuses(t *testing.T) {
 				SchemaChangerJobIDSupplier: func() jobspb.JobID {
 					jobID++
 					return jobID
-				}})
+				},
+				MemAcc: mon.NewStandaloneUnlimitedAccount(),
+			})
 			require.NoError(t, err)
 		})
 	}

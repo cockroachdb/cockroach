@@ -71,13 +71,13 @@ func Build(
 
 	// localMemAcc tracks memory allocations for local objects.
 	var localMemAcc *mon.BoundAccount
-	defer func() {
-		localMemAcc.Clear(ctx)
-	}()
 	if monitor := memAcc.Monitor(); monitor != nil {
 		acc := monitor.MakeBoundAccount()
 		localMemAcc = &acc
+	} else {
+		localMemAcc = mon.NewStandaloneUnlimitedAccount()
 	}
+	defer localMemAcc.Clear(ctx)
 	bs := newBuilderState(ctx, dependencies, incumbent, localMemAcc)
 	els := newEventLogState(dependencies, incumbent, n)
 
