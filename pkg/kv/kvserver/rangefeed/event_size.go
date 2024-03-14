@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+var numberOfRegistrations = int64(1)
+
 const (
 	mvccLogicalOp      = int64(unsafe.Sizeof(enginepb.MVCCLogicalOp{}))
 	mvccWriteValueOp   = int64(unsafe.Sizeof(enginepb.MVCCWriteValueOp{}))
@@ -42,11 +44,14 @@ const (
 	// SharedBudgetAllocation. Underlying data for SharedBudgetAllocation includes
 	// a pointer to the FeedBudget, but that points to the same data structure
 	// across all rangefeeds, so we opted out in the calculation.
-	sharedEventPtrOverhead  = int64(unsafe.Sizeof(&sharedEvent{}))
-	sharedEventOverhead     = int64(unsafe.Sizeof(sharedEvent{}))
-	rangeFeedEventOverhead  = int64(unsafe.Sizeof(kvpb.RangeFeedEvent{}))
-	allocEventOverhead      = int64(unsafe.Sizeof(SharedBudgetAllocation{}))
-	futureEventBaseOverhead = sharedEventPtrOverhead + sharedEventOverhead + rangeFeedEventOverhead + allocEventOverhead
+	sharedEventPtrOverhead = int64(unsafe.Sizeof(&sharedEvent{}))
+	sharedEventOverhead    = int64(unsafe.Sizeof(sharedEvent{}))
+	rangeFeedEventOverhead = int64(unsafe.Sizeof(kvpb.RangeFeedEvent{}))
+	allocEventOverhead     = int64(unsafe.Sizeof(SharedBudgetAllocation{}))
+)
+
+var (
+	futureEventBaseOverhead = numberOfRegistrations*(sharedEventPtrOverhead+sharedEventOverhead) + rangeFeedEventOverhead + allocEventOverhead
 )
 
 const (
@@ -379,9 +384,14 @@ func (e event) currAndFutureMemUsage() (int64, int64) {
 	return currMemUsage, futureMemUsage
 }
 
+func EventMemUsageWithOneRegistration(e *event) int64 {
+	return EventMemUsage(e, int64(1))
+}
+
 // EventMemUsage returns the current memory usage of the event including the
 // underlying data memory this event holds.
-func EventMemUsage(e *event) int64 {
+func EventMemUsage(e *event, numOfRegistrations int64) int64 {
+	numberOfRegistrations = numOfRegistrations
 	currMemUsage, futureMemUsage := e.currAndFutureMemUsage()
 	return max(currMemUsage, futureMemUsage)
 }

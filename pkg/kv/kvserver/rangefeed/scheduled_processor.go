@@ -448,7 +448,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 	// inserting value into channel.
 	var alloc *SharedBudgetAllocation
 	if p.MemBudget != nil {
-		size := EventMemUsage(&e)
+		size := EventMemUsage(&e, int64(p.reg.Len()))
 		if size > 0 {
 			var err error
 			// First we will try non-blocking fast path to allocate memory budget.
