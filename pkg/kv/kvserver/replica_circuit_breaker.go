@@ -167,9 +167,9 @@ func (r replicaCircuitBreakerLogger) OnTrip(b *circuit.Breaker, prev, cur error)
 	log.Errorf(r.ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
 }
 
-func (r replicaCircuitBreakerLogger) OnReset(br *circuit.Breaker) {
+func (r replicaCircuitBreakerLogger) OnReset(br *circuit.Breaker, prev error) {
 	r.onReset()
-	r.EventHandler.OnReset(br)
+	r.EventHandler.OnReset(br, prev)
 }
 
 func (br *replicaCircuitBreaker) asyncProbe(report func(error), done func()) {
