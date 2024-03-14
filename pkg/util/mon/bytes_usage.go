@@ -254,12 +254,9 @@ type BytesMonitor struct {
 	// keep track of allocations made through this monitor. Note that child
 	// monitors are affected by this limit.
 	//
-	// limit is computed from configLimit, the parent monitor and the
-	// reserved budget during Start().
+	// limit is computed during Start() from the limit provided on monitor
+	// creation, the parent monitor's limit and the reserved budget.
 	limit int64
-
-	// configLimit is the limit configured when the monitor is created.
-	configLimit int64
 
 	// poolAllocationSize specifies the allocation unit for requests to the
 	// pool.
@@ -268,8 +265,8 @@ type BytesMonitor struct {
 
 const (
 	// Consult with SQL Queries before increasing these values.
-	expectedMonitorSize     = 152
-	expectedMonitorSizeRace = 160
+	expectedMonitorSize     = 144
+	expectedMonitorSizeRace = 152
 	expectedAccountSize     = 24
 )
 
@@ -415,7 +412,6 @@ func NewMonitor(args NewMonitorArgs) *BytesMonitor {
 	}
 	m := &BytesMonitor{
 		name:               args.Name,
-		configLimit:        args.Limit,
 		limit:              args.Limit,
 		poolAllocationSize: args.Increment,
 	}
@@ -535,8 +531,8 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 		}
 	}
 
-	if effectiveLimit > mm.configLimit {
-		effectiveLimit = mm.configLimit
+	if effectiveLimit > mm.limit {
+		effectiveLimit = mm.limit
 	}
 	mm.limit = effectiveLimit
 }
@@ -574,6 +570,8 @@ func (mm *BytesMonitor) Name() string {
 }
 
 // Limit returns the memory limit of the monitor.
+// WARNING: if the monitor can be started and stopped multiple times, then this
+// might return an expected value.
 func (mm *BytesMonitor) Limit() int64 {
 	return mm.limit
 }
