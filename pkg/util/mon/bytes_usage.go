@@ -265,9 +265,9 @@ type BytesMonitor struct {
 
 const (
 	// Consult with SQL Queries before increasing these values.
-	expectedMonitorSize     = 200
-	expectedMonitorSizeRace = 208
-	expectedAccountSize     = 32
+	expectedMonitorSize     = 192
+	expectedMonitorSizeRace = 200
+	expectedAccountSize     = 24
 )
 
 func init() {
@@ -683,7 +683,12 @@ type BoundAccount struct {
 	// decreases as used increases (and vice-versa).
 	reserved int64
 	mon      *BytesMonitor
+}
 
+// EarmarkedBoundAccount extends BoundAccount to pre-reserve large allocations
+// up front.
+type EarmarkedBoundAccount struct {
+	BoundAccount
 	earmark int64
 }
 
@@ -701,16 +706,6 @@ func (c *ConcurrentBoundAccount) Used() int64 {
 	c.Lock()
 	defer c.Unlock()
 	return c.wrapped.Used()
-}
-
-// Reserve wraps BoundAccount.Reserve().
-func (c *ConcurrentBoundAccount) Reserve(ctx context.Context, x int64) error {
-	if c == nil {
-		return nil
-	}
-	c.Lock()
-	defer c.Unlock()
-	return c.wrapped.Reserve(ctx, x)
 }
 
 // Close wraps BoundAccount.Close().
@@ -797,6 +792,12 @@ func (mm *BytesMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
 }
 
+// MakeEarmarkedBoundAccount creates an EarmarkedBoundAccount connected to the
+// given monitor.
+func (mm *BytesMonitor) MakeEarmarkedBoundAccount() EarmarkedBoundAccount {
+	return EarmarkedBoundAccount{BoundAccount: BoundAccount{mon: mm}}
+}
+
 // MakeConcurrentBoundAccount creates ConcurrentBoundAccount, which is a thread
 // safe wrapper around BoundAccount.
 func (mm *BytesMonitor) MakeConcurrentBoundAccount() *ConcurrentBoundAccount {
@@ -829,24 +830,6 @@ func (b *BoundAccount) Init(ctx context.Context, mon *BytesMonitor) {
 		log.Fatalf(ctx, "trying to re-initialize non-empty account")
 	}
 	b.mon = mon
-}
-
-// Reserve requests an allocation of some amount from the monitor just like Grow
-// but does not mark it as used immediately, instead keeping it in the local
-// reservation by use by future Grow() calls, and configuring the account to
-// consider that amount "earmarked" for this account, meaning that that Shrink()
-// calls will not release it back to the parent monitor.
-func (b *BoundAccount) Reserve(ctx context.Context, x int64) error {
-	if b == nil {
-		return nil
-	}
-	minExtra := b.mon.roundSize(x)
-	if err := b.mon.reserveBytes(ctx, minExtra); err != nil {
-		return err
-	}
-	b.reserved += minExtra
-	b.earmark += x
-	return nil
 }
 
 // Empty shrinks the account to use 0 bytes. Previously used memory is returned
@@ -951,6 +934,43 @@ func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 
 // Shrink releases part of the cumulated allocations by the specified size.
 func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
+	if b == nil || delta == 0 {
+		return
+	}
+	if b.used < delta {
+		logcrash.ReportOrPanic(ctx, &b.mon.settings.SV,
+			"%s: no bytes in account to release, current %d, free %d",
+			b.mon.name, b.used, delta)
+		delta = b.used
+	}
+	b.used -= delta
+	b.reserved += delta
+	if b.reserved > b.mon.poolAllocationSize {
+		b.mon.releaseBytes(ctx, b.reserved-b.mon.poolAllocationSize)
+		b.reserved = b.mon.poolAllocationSize
+	}
+}
+
+// Reserve requests an allocation of some amount from the monitor just like Grow
+// but does not mark it as used immediately, instead keeping it in the local
+// reservation by use by future Grow() calls, and configuring the account to
+// consider that amount "earmarked" for this account, meaning that that Shrink()
+// calls will not release it back to the parent monitor.
+func (b *EarmarkedBoundAccount) Reserve(ctx context.Context, x int64) error {
+	if b == nil {
+		return nil
+	}
+	minExtra := b.mon.roundSize(x)
+	if err := b.mon.reserveBytes(ctx, minExtra); err != nil {
+		return err
+	}
+	b.reserved += minExtra
+	b.earmark += x
+	return nil
+}
+
+// Shrink releases part of the cumulated allocations by the specified size.
+func (b *EarmarkedBoundAccount) Shrink(ctx context.Context, delta int64) {
 	if b == nil || delta == 0 {
 		return
 	}
