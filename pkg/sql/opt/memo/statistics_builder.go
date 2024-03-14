@@ -456,6 +456,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.LimitOp:
 		return sb.colStatLimit(colSet, e.(*LimitExpr))
 
+	case opt.TopKOp:
+		return sb.colStatTopK(colSet, e.(*TopKExpr))
+
 	case opt.OffsetOp:
 		return sb.colStatOffset(colSet, e.(*OffsetExpr))
 
@@ -2243,6 +2246,23 @@ func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relati
 	sb.finalizeFromCardinality(relProps)
 }
 
+func (sb *statisticsBuilder) colStatLimit(
+	colSet opt.ColSet, limit *LimitExpr,
+) *props.ColumnStatistic {
+	relProps := limit.Relational()
+	s := relProps.Statistics()
+	inputStats := limit.Input.Relational().Statistics()
+	colStat := sb.copyColStatFromChild(colSet, limit, s)
+
+	// Scale distinct count based on the selectivity of the limit operation.
+	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
+	if colSet.Intersects(relProps.NotNullCols) {
+		colStat.NullCount = 0
+	}
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
 func (sb *statisticsBuilder) buildTopK(topK *TopKExpr, relProps *props.Relational) {
 	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
@@ -2265,15 +2285,13 @@ func (sb *statisticsBuilder) buildTopK(topK *TopKExpr, relProps *props.Relationa
 	sb.finalizeFromCardinality(relProps)
 }
 
-func (sb *statisticsBuilder) colStatLimit(
-	colSet opt.ColSet, limit *LimitExpr,
-) *props.ColumnStatistic {
-	relProps := limit.Relational()
+func (sb *statisticsBuilder) colStatTopK(colSet opt.ColSet, topK *TopKExpr) *props.ColumnStatistic {
+	relProps := topK.Relational()
 	s := relProps.Statistics()
-	inputStats := limit.Input.Relational().Statistics()
-	colStat := sb.copyColStatFromChild(colSet, limit, s)
+	inputStats := topK.Input.Relational().Statistics()
+	colStat := sb.copyColStatFromChild(colSet, topK, s)
 
-	// Scale distinct count based on the selectivity of the limit operation.
+	// Scale distinct count based on the selectivity of the topK operation.
 	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
