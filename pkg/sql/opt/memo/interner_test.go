@@ -329,6 +329,12 @@ func TestInterner(t *testing.T) {
 			{val1: tupTyp3, val2: tupTyp4, equal: false},
 		}},
 
+		{hashFn: in.hasher.HashExpr, eqFn: in.hasher.IsExprEqual, variations: []testVariation{
+			{val1: tup1, val2: tup1, equal: true},
+			{val1: tup1, val2: tup2, equal: false},
+			{val1: tup2, val2: tup3, equal: false},
+		}},
+
 		{hashFn: in.hasher.HashTypedExpr, eqFn: in.hasher.IsTypedExprEqual, variations: []testVariation{
 			{val1: tup1, val2: tup1, equal: true},
 			{val1: tup1, val2: tup2, equal: false},
@@ -437,6 +443,56 @@ func TestInterner(t *testing.T) {
 				val1:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Ascending, Index: 1},
 				val2:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Ascending, Index: 1},
 				equal: true,
+			},
+		}},
+
+		{hashFn: in.hasher.HashTransactionModes, eqFn: in.hasher.IsTransactionModesEqual, variations: []testVariation{
+			// Use unnamed fields so that compilation fails if a new field is
+			// added to ScanFlags.
+			{
+				val1:  tree.TransactionModes{},
+				val2:  tree.TransactionModes{},
+				equal: true,
+			},
+			{
+				val1:  tree.TransactionModes{Isolation: tree.ReadCommittedIsolation},
+				val2:  tree.TransactionModes{Isolation: tree.ReadCommittedIsolation},
+				equal: true,
+			},
+			{
+				val1:  tree.TransactionModes{Isolation: tree.ReadCommittedIsolation},
+				val2:  tree.TransactionModes{Isolation: tree.SerializableIsolation},
+				equal: false,
+			},
+			{
+				val1:  tree.TransactionModes{UserPriority: tree.Low},
+				val2:  tree.TransactionModes{UserPriority: tree.Low},
+				equal: true,
+			},
+			{
+				val1:  tree.TransactionModes{UserPriority: tree.Low},
+				val2:  tree.TransactionModes{UserPriority: tree.High},
+				equal: false,
+			},
+			{
+				val1:  tree.TransactionModes{ReadWriteMode: tree.ReadOnly},
+				val2:  tree.TransactionModes{ReadWriteMode: tree.ReadOnly},
+				equal: true,
+			},
+			{
+				val1:  tree.TransactionModes{ReadWriteMode: tree.ReadOnly},
+				val2:  tree.TransactionModes{ReadWriteMode: tree.ReadWrite},
+				equal: false,
+			},
+			{
+				val1:  tree.TransactionModes{AsOf: tree.AsOfClause{Expr: tz1}},
+				val2:  tree.TransactionModes{AsOf: tree.AsOfClause{Expr: tz1}},
+				equal: true,
+			},
+			{
+				val1:  tree.TransactionModes{AsOf: tree.AsOfClause{Expr: tz1}},
+				val2:  tree.TransactionModes{AsOf: tree.AsOfClause{Expr: tz2}},
+				equal: false,
 			},
 		}},
 

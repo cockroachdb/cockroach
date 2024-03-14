@@ -623,6 +623,13 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			return b.callContinuation(&con, s)
 
 		case *ast.Execute:
+			if _, ok := t.SqlStmt.(*tree.SetTransaction); ok {
+				// SET TRANSACTION must happen immediately after a COMMIT or ROLLBACK
+				// statement. When we handle COMMIT/ROLLBACK, we check for following
+				// SET TRANSACTION statements, so encountering one here means it's in an
+				// incorrect location.
+				panic(setTxnNotAfterControlStmtErr)
+			}
 			if len(t.Target) > 1 {
 				seenTargets := make(map[ast.Variable]struct{})
 				for _, name := range t.Target {
@@ -865,10 +872,29 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				name = "_stmt_rollback"
 				txnOpType = tree.StoredProcTxnRollback
 			}
+			// Check the following statements for SET TRANSACTION statements, which
+			// apply to the new transaction that begins after the COMMIT/ROLLBACK.
+			//
+			// Note: SET TRANSACTION statements are only allowed immediately following
+			// COMMIT or ROLLBACK (or another SET TRANSACTION), in the same block.
+			var txnModes tree.TransactionModes
+			for stmts = stmts[1:]; len(stmts) > 0; stmts = stmts[1:] {
+				execStmt, ok := stmts[0].(*ast.Execute)
+				if !ok {
+					break
+				}
+				setTxnStmt, ok := execStmt.SqlStmt.(*tree.SetTransaction)
+				if !ok {
+					break
+				}
+				if err := txnModes.Merge(setTxnStmt.Modes); err != nil {
+					panic(err)
+				}
+			}
 			con := b.makeContinuation(name)
 			con.def.Volatility = volatility.Volatile
-			b.appendPlpgSQLStmts(&con, stmts[i+1:])
-			return b.callContinuationWithTxnOp(&con, s, txnOpType)
+			b.appendPlpgSQLStmts(&con, stmts)
+			return b.callContinuationWithTxnOp(&con, s, txnOpType, txnModes)
 
 		default:
 			panic(unsupportedPLStmtErr)
@@ -1621,7 +1647,7 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 // continuation in a TxnControlExpr that will commit or abort the current
 // transaction before resuming execution with the continuation.
 func (b *plpgsqlBuilder) callContinuationWithTxnOp(
-	con *continuation, s *scope, txnOp tree.StoredProcTxnOp,
+	con *continuation, s *scope, txnOp tree.StoredProcTxnOp, txnModes tree.TransactionModes,
 ) *scope {
 	if con == nil {
 		panic(errors.AssertionFailedf("nil continuation with transaction control"))
@@ -1633,9 +1659,10 @@ func (b *plpgsqlBuilder) callContinuationWithTxnOp(
 	returnScope := s.push()
 	args := b.makeContinuationArgs(con, s)
 	txnControlExpr := b.ob.factory.ConstructTxnControl(args, &memo.TxnControlPrivate{
-		TxnOp: txnOp,
-		Props: returnScope.makePhysicalProps(),
-		Def:   con.def,
+		TxnOp:    txnOp,
+		TxnModes: txnModes,
+		Props:    returnScope.makePhysicalProps(),
+		Def:      con.def,
 	})
 	returnColName := scopeColName("").WithMetadataName(con.def.Name)
 	b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, txnControlExpr)
@@ -2074,5 +2101,9 @@ var (
 		"PL/pgSQL COMMIT/ROLLBACK is not allowed inside a user-defined function")
 	txnControlWithChainErr = unimplemented.NewWithIssue(119646,
 		"COMMIT or ROLLBACK with AND CHAIN syntax is not yet implemented",
+	)
+	setTxnNotAfterControlStmtErr = errors.WithHint(
+		pgerror.New(pgcode.ActiveSQLTransaction, "SET TRANSACTION must be called before any query"),
+		"PL/pgSQL SET TRANSACTION statements must immediately follow COMMIT or ROLLBACK",
 	)
 )

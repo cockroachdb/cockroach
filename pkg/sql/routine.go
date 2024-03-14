@@ -616,12 +616,13 @@ type storedProcTxnStateAccessor struct {
 }
 
 func (a *storedProcTxnStateAccessor) setStoredProcTxnState(
-	txnOp tree.StoredProcTxnOp, resumeProc *memo.Memo,
+	txnOp tree.StoredProcTxnOp, txnModes *tree.TransactionModes, resumeProc *memo.Memo,
 ) {
 	if a.ex == nil {
 		panic(errors.AssertionFailedf("setStoredProcTxnState is not supported without connExecutor"))
 	}
 	a.ex.extraTxnState.storedProcTxnState.txnOp = txnOp
+	a.ex.extraTxnState.storedProcTxnState.txnModes = txnModes
 	a.ex.extraTxnState.storedProcTxnState.resumeProc = resumeProc
 }
 
@@ -630,6 +631,13 @@ func (a *storedProcTxnStateAccessor) getResumeProc() *memo.Memo {
 		return nil
 	}
 	return a.ex.extraTxnState.storedProcTxnState.resumeProc
+}
+
+func (a *storedProcTxnStateAccessor) getTxnModes() *tree.TransactionModes {
+	if a.ex == nil {
+		return nil
+	}
+	return a.ex.extraTxnState.storedProcTxnState.txnModes
 }
 
 // EvalTxnControlExpr produces the side effects of a COMMIT or ROLLBACK
@@ -654,6 +662,6 @@ func (p *planner) EvalTxnControlExpr(
 	if err != nil {
 		return nil, err
 	}
-	p.storedProcTxnState.setStoredProcTxnState(expr.Op, resumeProc.(*memo.Memo))
+	p.storedProcTxnState.setStoredProcTxnState(expr.Op, &expr.Modes, resumeProc.(*memo.Memo))
 	return tree.DNull, nil
 }
