@@ -70,7 +70,7 @@ type BufferingAdder struct {
 	importEpoch uint32
 
 	bulkMon *mon.BytesMonitor
-	memAcc  mon.BoundAccount
+	memAcc  mon.EarmarkedBoundAccount
 
 	onFlush func(summary kvpb.BulkOpSummary)
 	// underfill tracks how much capacity was remaining in curBuf when it was
@@ -139,7 +139,7 @@ func MakeBulkAdder(
 	//
 	// TODO(adityamaru): IMPORT should also reserve memory for a single SST which
 	// it will store in-memory before sending it to RocksDB.
-	b.memAcc = bulkMon.MakeBoundAccount()
+	b.memAcc = bulkMon.MakeEarmarkedBoundAccount()
 	if opts.MinBufferSize > 0 {
 		if err := b.memAcc.Reserve(ctx, opts.MinBufferSize); err != nil {
 			return nil, errors.WithHint(
