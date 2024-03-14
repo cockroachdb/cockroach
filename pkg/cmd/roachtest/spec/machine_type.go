@@ -24,8 +24,11 @@ import (
 // When MemPerCPU is Standard, the memory per CPU ratio is 4 GB. For High, it is 8 GB.
 // For Auto, it's 4 GB up to and including 16 CPUs, then 2 GB. Low is not supported.
 //
-// N.B. in some cases, the selected architecture and machine type may be different from the requested one. E.g.,
+// N.B. in some cases, the selected architecture and machine type may be _different_ from the requested one. E.g.,
 // graviton3 with >= 24xlarge (96 vCPUs) isn't available, so we fall back to (c|m|r)6i.24xlarge.
+// To keep parity with GCE, we fall back to AMD Milan (c6a.24xlarge) if cpus > 80. However, this family doesn't support
+// local SSDs.
+//
 // N.B. cpus is expected to be an even number; validation is deferred to a specific cloud provider.
 //
 // N.B. if mem is Auto, and cpus > 80, we fall back to AMD Milan (c6a.24xlarge).
@@ -107,8 +110,8 @@ func SelectAWSMachineType(
 		// N.B. to keep parity with GCE, we use AMD Milan instead of Intel Ice Lake, keeping same 2GB RAM per CPU ratio.
 		family = "c6a"
 	}
-	if shouldSupportLocalSSD {
-		// All of the above instance families can be modified to support local SSDs by appending "d".
+	if shouldSupportLocalSSD && family != "c6a" {
+		// All of the above instance families _except_ "c6a" can be modified to support local SSDs by appending "d".
 		family += "d"
 	}
 	return fmt.Sprintf("%s.%s", family, size), selectedArch, nil
