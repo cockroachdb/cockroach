@@ -438,7 +438,11 @@ func mvccScanToCols(
 
 	// Try to use the same root monitor (from the store) if the account is
 	// provided.
-	monitor := opts.MemoryAccount.Monitor()
+	memAccount := opts.MemoryAccount
+	if memAccount == nil {
+		memAccount = mon.NewStandaloneUnlimitedAccount()
+	}
+	monitor := memAccount.Monitor()
 	if monitor == nil {
 		// If we don't have the monitor, then we create a "fake" one that is not
 		// connected to the memory accounting system.

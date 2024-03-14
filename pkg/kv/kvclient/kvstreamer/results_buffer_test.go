@@ -56,7 +56,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
-	budget := newBudget(nil /* acc */, math.MaxInt /* limitBytes */)
+	budget := newBudget(mon.NewStandaloneUnlimitedAccount(), math.MaxInt /* limitBytes */)
 	diskBuffer := TestResultDiskBufferConstructor(tempEngine, diskMonitor)
 	b := newInOrderResultsBuffer(budget, diskBuffer)
 	defer b.close(ctx)

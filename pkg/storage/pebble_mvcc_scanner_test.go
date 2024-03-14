@@ -92,6 +92,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	ts := hlc.Timestamp{WallTime: 2}
 	mvccScanner := pebbleMVCCScanner{
 		parent:           iter,
+		memAccount:       mon.NewStandaloneUnlimitedAccount(),
 		reverse:          false,
 		start:            keys[0],
 		end:              roachpb.Key("d"),
@@ -156,11 +157,12 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 
 	ts := hlc.Timestamp{WallTime: 2}
 	mvccScanner := pebbleMVCCScanner{
-		parent:  iter,
-		reverse: false,
-		start:   keys[0],
-		end:     roachpb.Key("e"),
-		ts:      ts,
+		parent:     iter,
+		memAccount: mon.NewStandaloneUnlimitedAccount(),
+		reverse:    false,
+		start:      keys[0],
+		end:        roachpb.Key("e"),
+		ts:         ts,
 	}
 	var results pebbleResults
 	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, &results)
