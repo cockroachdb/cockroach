@@ -351,6 +351,33 @@ func TestBytesMonitor(t *testing.T) {
 	m.Stop(ctx)
 }
 
+func TestBytesMonitorWithSoftLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mon := NewMonitorWithSoftLimit("soft-limit", MemoryResource, 10, nil, nil,
+		1, 1000, cluster.MakeTestingClusterSettings())
+
+	ctx := context.Background()
+	mon.Start(ctx, nil, NewStandaloneBudget(math.MaxInt64))
+
+	require.NoError(t, mon.reserveBytes(ctx, 10))
+	require.Error(t, mon.reserveBytes(ctx, 1)) // already at the limit
+	require.Equal(t, int64(10), mon.mu.curAllocated)
+	mon.releaseBytes(ctx, 10)
+
+	require.NoError(t, mon.reserveBytes(ctx, 9))
+	require.NoError(t, mon.reserveBytes(ctx, 11)) // exceed the limit once
+	require.Error(t, mon.reserveBytes(ctx, 1))    // but not twice
+	require.Equal(t, int64(20), mon.mu.curAllocated)
+	mon.releaseBytes(ctx, 9)
+	require.Equal(t, int64(11), mon.mu.curAllocated)
+	require.Error(t, mon.reserveBytes(ctx, 1)) // still exceeding the limit
+	mon.releaseBytes(ctx, 11)
+	require.Zero(t, mon.mu.curAllocated)
+
+	mon.Stop(ctx)
+}
+
 func TestMemoryAllocationEdgeCases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

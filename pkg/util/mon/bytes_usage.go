@@ -249,6 +249,9 @@ type BytesMonitor struct {
 	// limit is computed from configLimit, the parent monitor and the
 	// reserved budget during Start().
 	limit int64
+	// soft specifies whether the limit is soft. A soft limit can be exceeded
+	// at most once.
+	soft bool
 
 	// configLimit is the limit configured when the monitor is created.
 	configLimit int64
@@ -427,6 +430,22 @@ func NewMonitorWithLimit(
 	m.mu.curBytesCount = curCount
 	m.mu.maxBytesHist = maxHist
 	return m
+}
+
+// NewMonitorWithSoftLimit creates a new monitor with a soft limit.
+func NewMonitorWithSoftLimit(
+	name redact.RedactableString,
+	res Resource,
+	limit int64,
+	curCount *metric.Gauge,
+	maxHist metric.IHistogram,
+	increment int64,
+	noteworthy int64,
+	settings *cluster.Settings,
+) *BytesMonitor {
+	mon := NewMonitorWithLimit(name, res, limit, curCount, maxHist, increment, noteworthy, settings)
+	mon.soft = true
+	return mon
 }
 
 // NewMonitorInheritWithLimit creates a new monitor with a limit local to this
@@ -998,7 +1017,13 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 	//
 	// TODO(knz): make the monitor name reportable in telemetry, after checking
 	// that the name is never constructed from user data.
-	if mm.mu.curAllocated > mm.limit-x {
+	if mm.soft {
+		if mm.mu.curAllocated >= mm.limit && x > 0 {
+			return errors.Wrapf(
+				mm.resource.NewBudgetExceededError(x, mm.mu.curAllocated, mm.limit), "%s", mm.name,
+			)
+		}
+	} else if mm.mu.curAllocated > mm.limit-x {
 		return errors.Wrapf(
 			mm.resource.NewBudgetExceededError(x, mm.mu.curAllocated, mm.limit), "%s", mm.name,
 		)
