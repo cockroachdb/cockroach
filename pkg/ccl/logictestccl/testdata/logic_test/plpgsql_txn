@@ -3,6 +3,9 @@
 statement ok
 CREATE TABLE t (x INT);
 
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
 # Variables are preserved across both COMMIT and ROLLBACK.
 statement ok
 CREATE PROCEDURE p(a INT, b INT) LANGUAGE PLpgSQL AS $$
@@ -603,6 +606,382 @@ statement error pgcode 0A000 pq: unimplemented: COMMIT or ROLLBACK with AND CHAI
 CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
   BEGIN
     ROLLBACK AND CHAIN;
+  END
+$$;
+
+subtest set_priority
+
+statement ok
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', current_setting('transaction_priority');
+    NULL;
+    COMMIT;
+    SET TRANSACTION PRIORITY HIGH;
+    RAISE NOTICE 'COMMIT; SET PRIORITY HIGH';
+    RAISE NOTICE '%', current_setting('transaction_priority');
+    COMMIT;
+    SET TRANSACTION PRIORITY LOW;
+    RAISE NOTICE 'COMMIT; SET PRIORITY LOW';
+    RAISE NOTICE '%', current_setting('transaction_priority');
+    COMMIT;
+    RAISE NOTICE 'COMMIT;';
+    RAISE NOTICE '%', current_setting('transaction_priority');
+    ROLLBACK;
+    SET TRANSACTION PRIORITY HIGH;
+    RAISE NOTICE 'ROLLBACK; SET PRIORITY HIGH';
+    RAISE NOTICE '%', current_setting('transaction_priority');
+    NULL;
+    ROLLBACK;
+    SET TRANSACTION PRIORITY LOW;
+    RAISE NOTICE 'ROLLBACK; SET PRIORITY LOW';
+    RAISE NOTICE '%', current_setting('transaction_priority');
+    ROLLBACK;
+    RAISE NOTICE 'ROLLBACK;';
+    RAISE NOTICE '%', current_setting('transaction_priority');
+  END
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: normal
+NOTICE: COMMIT; SET PRIORITY HIGH
+NOTICE: high
+NOTICE: COMMIT; SET PRIORITY LOW
+NOTICE: low
+NOTICE: COMMIT;
+NOTICE: normal
+NOTICE: ROLLBACK; SET PRIORITY HIGH
+NOTICE: high
+NOTICE: ROLLBACK; SET PRIORITY LOW
+NOTICE: low
+NOTICE: ROLLBACK;
+NOTICE: normal
+
+query T
+SHOW TRANSACTION PRIORITY;
+----
+normal
+
+subtest set_read
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    COMMIT;
+    SET TRANSACTION READ ONLY;
+    RAISE NOTICE 'COMMIT; SET READ ONLY';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    NULL;
+    COMMIT;
+    SET TRANSACTION READ WRITE;
+    RAISE NOTICE 'COMMIT; SET READ WRITE';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    COMMIT;
+    SET TRANSACTION READ ONLY;
+    RAISE NOTICE 'COMMIT; SET READ ONLY';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    COMMIT;
+    RAISE NOTICE 'COMMIT;';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    ROLLBACK;
+    SET TRANSACTION READ ONLY;
+    RAISE NOTICE 'ROLLBACK; SET READ ONLY';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    NULL;
+    ROLLBACK;
+    SET TRANSACTION READ WRITE;
+    RAISE NOTICE 'ROLLBACK; SET READ WRITE';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    ROLLBACK;
+    SET TRANSACTION READ ONLY;
+    RAISE NOTICE 'ROLLBACK; SET READ ONLY';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+    ROLLBACK;
+    RAISE NOTICE 'ROLLBACK;';
+    RAISE NOTICE '%', current_setting('transaction_read_only');
+  END
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: off
+NOTICE: COMMIT; SET READ ONLY
+NOTICE: on
+NOTICE: COMMIT; SET READ WRITE
+NOTICE: off
+NOTICE: COMMIT; SET READ ONLY
+NOTICE: on
+NOTICE: COMMIT;
+NOTICE: off
+NOTICE: ROLLBACK; SET READ ONLY
+NOTICE: on
+NOTICE: ROLLBACK; SET READ WRITE
+NOTICE: off
+NOTICE: ROLLBACK; SET READ ONLY
+NOTICE: on
+NOTICE: ROLLBACK;
+NOTICE: off
+
+query T
+SHOW transaction_read_only;
+----
+off
+
+subtest set_timestamp
+
+let $start_ts
+SELECT now()::TIMESTAMP;
+
+let $ts_1
+SELECT ('$start_ts'::TIMESTAMP - '1s'::INTERVAL)::TIMESTAMP;
+
+let $ts_2
+SELECT ('$start_ts'::TIMESTAMP - '2s'::INTERVAL)::TIMESTAMP;
+
+let $ts_3
+SELECT ('$start_ts'::TIMESTAMP - '3s'::INTERVAL)::TIMESTAMP;
+
+let $ts_4
+SELECT ('$start_ts'::TIMESTAMP - '4s'::INTERVAL)::TIMESTAMP;
+
+# We can't directly check the txn timestamps, since they would change on each
+# test iteration. So instead, we check how they compare to one another, e.g.
+# $ts_1 > $ts_2.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  DECLARE
+    ts TIMESTAMP := now();
+  BEGIN
+    IF now() <> ts THEN RAISE EXCEPTION '1'; END IF;
+    COMMIT;
+    IF now() < ts THEN RAISE EXCEPTION '2 %s, %s', now(), ts; END IF;
+    COMMIT;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_1';
+    IF now() <> '$ts_1' THEN RAISE EXCEPTION '3'; END IF;
+    COMMIT;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_2';
+    IF now() <> '$ts_2' THEN RAISE EXCEPTION '4'; END IF;
+    ROLLBACK;
+    -- The behavior should revert to the default, and the timestamp should
+    -- once again be larger than that of the original transaction.
+    IF now() <= ts THEN RAISE EXCEPTION '5'; END IF;
+    ROLLBACK;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_3';
+    IF now() <> '$ts_3' THEN RAISE EXCEPTION '6'; END IF;
+    NULL;
+    ROLLBACK;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_4';
+    IF now() <> '$ts_4' THEN RAISE EXCEPTION '7'; END IF;
+  END
+$$;
+
+statement ok
+CALL p();
+
+let $ts_1
+SELECT now();
+
+statement ok
+INSERT INTO xy VALUES (1, 1);
+
+let $ts_2
+SELECT now();
+
+statement ok
+INSERT INTO xy VALUES (2, 2);
+
+let $ts_3
+SELECT now();
+
+statement ok
+INSERT INTO xy VALUES (3, 3);
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', (SELECT count(*) FROM xy);
+    NULL;
+    COMMIT;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_1';
+    RAISE NOTICE '%', (SELECT count(*) FROM xy);
+    NULL;
+    ROLLBACK;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_2';
+    RAISE NOTICE '%', (SELECT count(*) FROM xy);
+    COMMIT;
+    SET TRANSACTION AS OF SYSTEM TIME '$ts_3';
+    RAISE NOTICE '%', (SELECT count(*) FROM xy);
+    ROLLBACK;
+    RAISE NOTICE '%', (SELECT count(*) FROM xy);
+  END
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: 3
+NOTICE: 0
+NOTICE: 1
+NOTICE: 2
+NOTICE: 3
+
+subtest set_isolation
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    COMMIT;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    RAISE NOTICE 'COMMIT; SET ISOLATION LEVEL READ COMMITTED';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    COMMIT;
+    SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+    RAISE NOTICE 'COMMIT; SET ISOLATION LEVEL SERIALIZABLE';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    NULL;
+    COMMIT;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    RAISE NOTICE 'COMMIT; SET ISOLATION LEVEL READ COMMITTED';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    COMMIT;
+    RAISE NOTICE 'COMMIT;';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    NULL;
+    ROLLBACK;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    RAISE NOTICE 'ROLLBACK; SET ISOLATION LEVEL READ COMMITTED';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    ROLLBACK;
+    SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+    RAISE NOTICE 'ROLLBACK; SET ISOLATION LEVEL SERIALIZABLE';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    NULL;
+    ROLLBACK;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    RAISE NOTICE 'ROLLBACK; SET ISOLATION LEVEL READ COMMITTED';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    ROLLBACK;
+    RAISE NOTICE 'ROLLBACK;';
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+  END
+$$;
+
+skipif config local-read-committed
+query T noticetrace
+CALL p();
+----
+NOTICE: serializable
+NOTICE: COMMIT; SET ISOLATION LEVEL READ COMMITTED
+NOTICE: read committed
+NOTICE: COMMIT; SET ISOLATION LEVEL SERIALIZABLE
+NOTICE: serializable
+NOTICE: COMMIT; SET ISOLATION LEVEL READ COMMITTED
+NOTICE: read committed
+NOTICE: COMMIT;
+NOTICE: serializable
+NOTICE: ROLLBACK; SET ISOLATION LEVEL READ COMMITTED
+NOTICE: read committed
+NOTICE: ROLLBACK; SET ISOLATION LEVEL SERIALIZABLE
+NOTICE: serializable
+NOTICE: ROLLBACK; SET ISOLATION LEVEL READ COMMITTED
+NOTICE: read committed
+NOTICE: ROLLBACK;
+NOTICE: serializable
+
+skipif config local-read-committed
+query T
+SHOW TRANSACTION ISOLATION LEVEL;
+----
+serializable
+
+# It is possible to execute multiple SET TRANSACTION statements.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    COMMIT;
+    SET TRANSACTION PRIORITY HIGH;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    RAISE NOTICE '%', current_setting('transaction_isolation');
+    RAISE NOTICE '%', current_setting('transaction_priority');
+  END
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: read committed
+NOTICE: high
+
+statement ok
+DROP PROCEDURE p;
+
+# SET TRANSACTION cannot be run after any statement other than COMMIT, ROLLBACK,
+# or another SET TRANSACTION statement.
+statement error pgcode 25001 pq: SET TRANSACTION must be called before any query
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    COMMIT;
+    RAISE NOTICE 'setting isolation level';
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+  END
+$$;
+
+statement error pgcode 25001 pq: SET TRANSACTION must be called before any query
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    COMMIT;
+    x := x + 1;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+  END
+$$;
+
+# The same SET TRANSACTION statement cannot be run twice in the same
+# transaction.
+statement error pgcode 42601 pq: isolation level specified multiple times
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    COMMIT;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+  END
+$$;
+
+statement error pgcode 42601 pq: user priority specified multiple times
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    ROLLBACK;
+    SET TRANSACTION PRIORITY HIGH;
+    SET TRANSACTION PRIORITY LOW;
+  END
+$$;
+
+statement error pgcode 42601 pq: read mode specified multiple times
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    COMMIT;
+    SET TRANSACTION READ ONLY;
+    SET TRANSACTION READ ONLY;
+  END
+$$;
+
+statement error pgcode 42601 pq: AS OF SYSTEM TIME specified multiple times
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  BEGIN
+    ROLLBACK;
+    SET TRANSACTION AS OF SYSTEM TIME '-1s';
+    SET TRANSACTION AS OF SYSTEM TIME '-1s';
   END
 $$;
 

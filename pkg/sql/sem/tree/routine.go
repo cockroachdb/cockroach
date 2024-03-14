@@ -309,9 +309,10 @@ type TxnControlPlanGenerator func(
 // the session to end the current transaction, and provides a plan to resume
 // execution in a new transaction in the form of StoredProcContinuation.
 type TxnControlExpr struct {
-	Op   StoredProcTxnOp
-	Args TypedExprs
-	Gen  TxnControlPlanGenerator
+	Op    StoredProcTxnOp
+	Modes TransactionModes
+	Args  TypedExprs
+	Gen   TxnControlPlanGenerator
 
 	Name string
 	Typ  *types.T
@@ -321,14 +322,20 @@ var _ Expr = &TxnControlExpr{}
 
 // NewTxnControlExpr returns a new TxnControlExpr that is well-typed.
 func NewTxnControlExpr(
-	opType StoredProcTxnOp, args TypedExprs, gen TxnControlPlanGenerator, name string, typ *types.T,
+	opType StoredProcTxnOp,
+	txnModes TransactionModes,
+	args TypedExprs,
+	gen TxnControlPlanGenerator,
+	name string,
+	typ *types.T,
 ) *TxnControlExpr {
 	return &TxnControlExpr{
-		Op:   opType,
-		Args: args,
-		Gen:  gen,
-		Name: name,
-		Typ:  typ,
+		Op:    opType,
+		Modes: txnModes,
+		Args:  args,
+		Gen:   gen,
+		Name:  name,
+		Typ:   typ,
 	}
 }
 

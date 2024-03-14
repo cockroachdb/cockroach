@@ -1291,6 +1291,10 @@ define TxnControlPrivate {
     # aborted.
     TxnOp StoredProcTxnOp
 
+    # TxnModes allows SET TRANSACTION statements to apply to the new transaction
+    # that follows the COMMIT/ROLLBACK.
+    TxnModes TransactionModes
+
     # Props is used when building the plan for the continuation SP.
     Props PhysProps
 

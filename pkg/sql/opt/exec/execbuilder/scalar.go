@@ -1262,5 +1262,7 @@ func (b *Builder) buildTxnControl(
 		f.Memo().SetRoot(f.ConstructCall(continuationProc), f.Memo().RootProps())
 		return f.DetachMemo(), nil
 	}
-	return tree.NewTxnControlExpr(txnExpr.TxnOp, args, gen, txnExpr.Def.Name, txnExpr.Def.Typ), nil
+	return tree.NewTxnControlExpr(
+		txnExpr.TxnOp, txnExpr.TxnModes, args, gen, txnExpr.Def.Name, txnExpr.Def.Typ,
+	), nil
 }
