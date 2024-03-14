@@ -336,8 +336,12 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if len(ops) == 0 {
 		return nil, false
 	}
-	n := s.rnd.Intn(len(ops))
-	op := ops[n]
+	op := ops[s.rnd.Intn(len(ops))]
+	for s.simpleScalarTypes && !(isSimpleSeedType(op.LeftType) && isSimpleSeedType(op.RightType)) {
+		// We must work harder to pick some other op.
+		op = ops[s.rnd.Intn(len(ops))]
+	}
+
 	if s.postgres {
 		if ignorePostgresBinOps[binOpTriple{
 			op.LeftType.Family(),
@@ -440,6 +444,12 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
+		// Skip this function if we want simple scalar types, but this
+		// function argument is not.
+		if s.simpleScalarTypes && !isSimpleSeedType(argTyp) {
+			return nil, false
+		}
+
 		// Postgres is picky about having Int4 arguments instead of Int8.
 		if s.postgres && argTyp.Family() == types.IntFamily {
 			argTyp = types.Int4

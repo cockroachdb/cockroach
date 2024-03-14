@@ -62,6 +62,8 @@ type PrettyCfg struct {
 	JSONFmt bool
 	// ValueRedaction, when set, surrounds literal values with redaction markers.
 	ValueRedaction bool
+	// FmtFlags specifies FmtFlags to use when formatting expressions.
+	FmtFlags FmtFlags
 }
 
 // DefaultPrettyCfg returns a PrettyCfg with the default
@@ -184,6 +186,10 @@ func (p *PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
 }
 
 func (p *PrettyCfg) fmtFlags() FmtFlags {
+	if p.FmtFlags != FmtFlags(0) {
+		return p.FmtFlags
+	}
+
 	prettyFlags := FmtShowPasswords | FmtParsable | FmtTagDollarQuotes
 	if p.ValueRedaction {
 		prettyFlags |= FmtMarkRedactionNode | FmtOmitNameRedaction
