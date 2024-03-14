@@ -684,6 +684,80 @@ export const dataFromServerAlertSelector = createSelector(
   },
 );
 
+// licenseTypeSelector returns user-friendly names of license types.
+export const licenseTypeSelector = createSelector(
+  getDataFromServer,
+  data => {
+    switch (data.LicenseType) {
+      case "Evaluation":
+        return "Trial";
+      case "Enterprise":
+        return "Enterprise";
+      case "NonCommercial":
+        return "Non-Commercial";
+      default:
+        return "None";
+    }
+  }
+)
+
+// daysUntilLicenseExpiresSelector returns number of days remaining before license expires.
+export const daysUntilLicenseExpiresSelector = createSelector(
+  getDataFromServer,
+  data => {
+    return Math.ceil(data.SecondsUntilLicenseExpiry / 86400) // seconds in 1 day
+  }
+)
+
+export const showLicenseTTLLocalSetting = new LocalSetting(
+  "show_license_ttl",
+  localSettingsSelector,
+  { show: true },
+);
+
+export const showLicenseTTLAlertSelector = createSelector(
+  showLicenseTTLLocalSetting.selector,
+  daysUntilLicenseExpiresSelector,
+  licenseTypeSelector,
+  (showLicenseTTL, daysUntilLicenseExpired, licenseType): Alert => {
+    if (!showLicenseTTL.show) {
+      return
+    }
+    if (licenseType === "None") {
+      return
+    }
+    const daysToShowAlert = 14;
+    let title: string
+    let level: AlertLevel
+
+    if (daysUntilLicenseExpired > daysToShowAlert) {
+      return
+    } else if (daysUntilLicenseExpired < 0) {
+      title = `License expired ${Math.abs(daysUntilLicenseExpired)} days ago`;
+      level = AlertLevel.CRITICAL;
+    } else if (daysUntilLicenseExpired === 0) {
+      title = `License expired`;
+      level = AlertLevel.CRITICAL;
+    } else if (daysUntilLicenseExpired <= daysToShowAlert) {
+      title = `License expires in ${daysUntilLicenseExpired} days`;
+      level = AlertLevel.WARNING;
+    }
+    return {
+      level: level,
+      title: title,
+      showAsAlert: true,
+      autoClose: false,
+      closable: true,
+      dismiss: (dispatch: Dispatch<Action>) => {
+        dispatch(
+          showLicenseTTLLocalSetting.set({ show: false }),
+        );
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
 /**
  * Selector which returns an array of all active alerts which should be
  * displayed as a banner, which appears at the top of the page and overlaps
@@ -698,6 +772,7 @@ export const bannerAlertsSelector = createSelector(
   terminateSessionAlertSelector,
   terminateQueryAlertSelector,
   dataFromServerAlertSelector,
+  showLicenseTTLAlertSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
   },
