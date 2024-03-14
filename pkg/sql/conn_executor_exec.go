@@ -533,6 +533,16 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}(ctx, res)
 
+	// Special handling for SET TRANSACTION statements within a stored procedure
+	// that uses COMMIT or ROLLBACK. This has to happen before the call to\
+	// resetPlanner to ensure that the settings are propagated correctly.
+	if txnModes := ex.planner.storedProcTxnState.getTxnModes(); txnModes != nil {
+		_, err = ex.planner.SetTransaction(ctx, &tree.SetTransaction{Modes: *txnModes})
+		if err != nil {
+			return makeErrEvent(err)
+		}
+	}
+
 	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 	// client connection, and is Server.InternalMetrics for internal executors.
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)

@@ -427,6 +427,10 @@ func (h *hasher) HashType(val *types.T) {
 	}
 }
 
+func (h *hasher) HashExpr(val tree.Expr) {
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+}
+
 func (h *hasher) HashTypedExpr(val tree.TypedExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
@@ -788,6 +792,16 @@ func (h *hasher) HashUDFDefinition(val *UDFDefinition) {
 
 func (h *hasher) HashStoredProcTxnOp(val tree.StoredProcTxnOp) {
 	h.HashUint64(uint64(val))
+}
+
+func (h *hasher) HashTransactionModes(val tree.TransactionModes) {
+	h.HashUint64(uint64(val.Isolation))
+	h.HashUint64(uint64(val.UserPriority))
+	h.HashUint64(uint64(val.ReadWriteMode))
+	if val.AsOf.Expr != nil {
+		h.HashExpr(val.AsOf.Expr)
+	}
+	h.HashUint64(uint64(val.Deferrable))
 }
 
 // ----------------------------------------------------------------------
@@ -1330,6 +1344,12 @@ func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
 
 func (h *hasher) IsStoredProcTxnOpEqual(l, r tree.StoredProcTxnOp) bool {
 	return l == r
+}
+
+func (h *hasher) IsTransactionModesEqual(l, r tree.TransactionModes) bool {
+	return l.Isolation == r.Isolation && l.UserPriority == r.UserPriority &&
+		l.ReadWriteMode == r.ReadWriteMode && l.AsOf.Expr == r.AsOf.Expr &&
+		l.Deferrable == r.Deferrable
 }
 
 // encodeDatum turns the given datum into an encoded string of bytes. If two

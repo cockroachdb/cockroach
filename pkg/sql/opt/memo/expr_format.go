@@ -965,7 +965,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 				}
 				f.formatExpr(def.Body[i], n)
 			}
-			delete(f.seenUDFs, def)
+			//delete(f.seenUDFs, def)
 		} else {
 			tp.Child("recursive-call")
 		}

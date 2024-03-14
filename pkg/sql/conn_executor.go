@@ -1539,6 +1539,10 @@ type connExecutor struct {
 			// transaction.
 			txnOp tree.StoredProcTxnOp
 
+			// txnModes allows for SET TRANSACTION statements to apply to the new txn
+			// that starts after the COMMIT/ROLLBACK.
+			txnModes *tree.TransactionModes
+
 			// resumeProc, if non-nil, contains the plan for a CALL statement that
 			// will continue execution of a stored procedure that previously suspended
 			// execution in order to commit or abort its transaction. The planner
@@ -2646,10 +2650,11 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// NOTE: we will eventually reach the default case below when the retries
 		// terminate.
 	default:
-		// Finish cleaning up the stored proc state by resetting the "resume" plan.
-		// The stored procedure has finished execution, either successfully or with
-		// an error.
+		// Finish cleaning up the stored proc state by resetting the "resume" plan
+		// and transaction modes. The stored procedure has finished execution,
+		// either successfully or with an error.
 		ex.extraTxnState.storedProcTxnState.resumeProc = nil
+		ex.extraTxnState.storedProcTxnState.txnModes = nil
 	}
 
 	if err := ex.updateTxnRewindPosMaybe(ctx, cmd, pos, advInfo); err != nil {
