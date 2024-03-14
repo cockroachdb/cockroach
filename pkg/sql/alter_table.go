@@ -1180,6 +1180,47 @@ func applyColumnMutation(
 			}
 			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
 		}
+
+	case *tree.AlterTableIdentity:
+		if !col.IsGeneratedAsIdentity() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q is not an identity column",
+				col.GetName(), tableDesc.GetName())
+		}
+
+		// It is assummed that an identiy column owns only one sequence.
+		if col.NumUsesSequences() != 1 {
+			return errors.AssertionFailedf(
+				"identity column %q of relation %q has %d sequences instead of 1",
+				col.GetName(), tableDesc.GetName(), col.NumUsesSequences())
+		}
+
+		seqDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Table(ctx, col.GetUsesSequenceID(0))
+		if err != nil {
+			return err
+		}
+
+		// Alter referenced sequence for identity with sepcified option.
+		// Does not override existing values if not specified.
+		if err := alterSequenceImpl(params, seqDesc, t.SeqOptions, t); err != nil {
+			return err
+		}
+
+		opts := seqDesc.GetSequenceOpts()
+		optsNode := tree.SequenceOptions{}
+		if opts.CacheSize > 1 {
+			optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &opts.CacheSize})
+		}
+		optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptMinValue, IntVal: &opts.MinValue})
+		optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptMaxValue, IntVal: &opts.MaxValue})
+		optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &opts.Increment})
+		optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &opts.Start})
+		if opts.Virtual {
+			optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptVirtual})
+		}
+		s := tree.Serialize(&optsNode)
+		col.ColumnDesc().GeneratedAsIdentitySequenceOption = &s
+
 	}
 	return nil
 }
