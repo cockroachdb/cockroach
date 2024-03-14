@@ -46,9 +46,10 @@ type Config struct {
 	JobRegistry             *jobs.Registry
 
 	// Metrics.
-	FlushCounter   *metric.Counter
-	FlushDuration  metric.IHistogram
-	FailureCounter *metric.Counter
+	FlushCounter            *metric.Counter
+	FlushDuration           metric.IHistogram
+	FlushDoneSignalsIgnored *metric.Counter
+	FailureCounter          *metric.Counter
 
 	// Testing knobs.
 	Knobs *sqlstats.TestingKnobs
@@ -211,6 +212,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 					// Don't block the flush loop if the sql activity update job is not
 					// ready to receive. We should at least continue to collect and flush
 					// stats for this node.
+					s.cfg.FlushDoneSignalsIgnored.Inc(1)
 					log.Warning(ctx, "sql-stats-worker: unable to signal flush completion")
 				}
 			}
