@@ -26,6 +26,10 @@ case $1 in
     fi
     ;;
   "dns")
+    if [ "$#" -lt 2 ]; then
+      echo "usage: $0 $1 <cluster> [create]"
+      exit 1
+    fi 
     # roachprod only manages DNS in ephemeral, so we just do this ourselves.
     # These are very low-churn clusters so this is fine being manual and in a
     # wrapper.
@@ -36,7 +40,7 @@ case $1 in
       sed -e 's,http://\(.*\):26258/,\1,g' | # remove the HTTP part.
       while read node ip; do
         host="${cluster}-${node}.drt.crdb.io."
-        gcloud dns --project=cockroach-shared record-sets update "${host}" --rrdatas="${ip}" \
+        gcloud dns --project=cockroach-shared record-sets ${2:-update} "${host}" --rrdatas="${ip}" \
           --type="A" --zone="drt" --ttl=60
       done
     exit 0
@@ -57,7 +61,7 @@ case $1 in
           --username drt \
           --lifetime 8760h
         # setup dns
-        $0 dns drt-ua1
+        $0 dns drt-ua1 create
         ;;
       "drt-ua2")
         roachprod create drt-ua2 \
@@ -69,7 +73,7 @@ case $1 in
           --username drt \
           --lifetime 8760h
         # setup dns
-        $0 dns drt-ua2
+        $0 dns drt-ua2 create
         ;;
       *)
         echo
