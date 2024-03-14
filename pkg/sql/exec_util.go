@@ -1521,7 +1521,7 @@ type ExecutorTestingKnobs struct {
 
 	// AfterExecute is like StatementFilter, but it runs in the same goroutine of the
 	// statement.
-	AfterExecute func(ctx context.Context, stmt string, err error)
+	AfterExecute func(ctx context.Context, stmt string, isInternal bool, err error)
 
 	// AfterExecCmd is called after successful execution of any command.
 	AfterExecCmd func(ctx context.Context, cmd Command, buf *StmtBuf)
