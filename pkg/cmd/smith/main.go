@@ -11,14 +11,25 @@
 package main
 
 import (
+	"context"
 	gosql "database/sql"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/importer"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,45 +54,54 @@ Options:
 `
 
 var (
-	flags         = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
-	expr          = flags.Bool("expr", false, "generate expressions instead of statements")
-	num           = flags.Int("num", 1, "number of statements / expressions to generate")
-	url           = flags.String("url", "", "database to fetch schema from")
-	execStmts     = flags.Bool("exec-stmts", false, "execute each generated statement against the db specified by url")
+	flags      = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	expr       = flags.Bool("expr", false, "generate expressions instead of statements")
+	num        = flags.Int("num", 1, "number of statements / expressions to generate")
+	url        = flags.String("url", "", "database to fetch schema from")
+	execStmts  = flags.Bool("exec-stmts", false, "execute each generated statement against the db specified by url")
+	schemaPath = flags.String("schema", "", "path containing schema definitions")
+	prefix     = flags.String("prefix", "", "prefix each statement or expression")
+
 	smitherOptMap = map[string]sqlsmith.SmitherOption{
-		"AvoidConsts":                             sqlsmith.AvoidConsts(),
-		"CompareMode":                             sqlsmith.CompareMode(),
-		"DisableAggregateFuncs":                   sqlsmith.DisableAggregateFuncs(),
-		"DisableCRDBFns":                          sqlsmith.DisableCRDBFns(),
-		"DisableCrossJoins":                       sqlsmith.DisableCrossJoins(),
-		"DisableDDLs":                             sqlsmith.DisableDDLs(),
-		"DisableDecimals":                         sqlsmith.DisableDecimals(),
-		"DisableDivision":                         sqlsmith.DisableDivision(),
-		"DisableEverything":                       sqlsmith.DisableEverything(),
-		"DisableIndexHints":                       sqlsmith.DisableIndexHints(),
-		"DisableInsertSelect":                     sqlsmith.DisableInsertSelect(),
-		"DisableJoins":                            sqlsmith.DisableJoins(),
-		"DisableLimits":                           sqlsmith.DisableLimits(),
-		"DisableMutations":                        sqlsmith.DisableMutations(),
-		"DisableNondeterministicFns":              sqlsmith.DisableNondeterministicFns(),
-		"DisableNondeterministicLimits":           sqlsmith.DisableNondeterministicLimits(),
-		"DisableWindowFuncs":                      sqlsmith.DisableWindowFuncs(),
-		"DisableWith":                             sqlsmith.DisableWith(),
-		"EnableAlters":                            sqlsmith.EnableAlters(),
-		"FavorCommonData":                         sqlsmith.FavorCommonData(),
-		"InsUpdOnly":                              sqlsmith.InsUpdOnly(),
+		"AvoidConsts":                sqlsmith.AvoidConsts(),
+		"CompareMode":                sqlsmith.CompareMode(),
+		"DisableAggregateFuncs":      sqlsmith.DisableAggregateFuncs(),
+		"DisableCRDBFns":             sqlsmith.DisableCRDBFns(),
+		"DisableCrossJoins":          sqlsmith.DisableCrossJoins(),
+		"DisableDDLs":                sqlsmith.DisableDDLs(),
+		"DisableDecimals":            sqlsmith.DisableDecimals(),
+		"DisableDivision":            sqlsmith.DisableDivision(),
+		"DisableEverything":          sqlsmith.DisableEverything(),
+		"DisableIndexHints":          sqlsmith.DisableIndexHints(),
+		"DisableInsertSelect":        sqlsmith.DisableInsertSelect(),
+		"DisableJoins":               sqlsmith.DisableJoins(),
+		"DisableLimits":              sqlsmith.DisableLimits(),
+		"DisableMutations":           sqlsmith.DisableMutations(),
+		"DisableNondeterministicFns": sqlsmith.DisableNondeterministicFns(),
+		"DisableWindowFuncs":         sqlsmith.DisableWindowFuncs(),
+		"DisableWith":                sqlsmith.DisableWith(),
+		"DisableUDFs":                sqlsmith.DisableUDFs(),
+		"EnableAlters":               sqlsmith.EnableAlters(),
+		"EnableLimits":               sqlsmith.EnableLimits(),
+		"EnableWith":                 sqlsmith.EnableWith(),
+		"FavorCommonData":            sqlsmith.FavorCommonData(),
+		"IgnoreFNs":                  strArgOpt(sqlsmith.IgnoreFNs),
+		"InsUpdOnly":                 sqlsmith.InsUpdOnly(),
+		"MaybeSortOutput":            sqlsmith.MaybeSortOutput(),
+		"MultiRegionDDLs":            sqlsmith.MultiRegionDDLs(),
+		"MutatingMode":               sqlsmith.MutatingMode(),
+		"MutationsOnly":              sqlsmith.MutationsOnly(),
+		"OnlyNoDropDDLs":             sqlsmith.OnlyNoDropDDLs(),
+		"OnlySingleDMLs":             sqlsmith.OnlySingleDMLs(),
+		"OutputSort":                 sqlsmith.OutputSort(),
+		"PostgresMode":               sqlsmith.PostgresMode(),
+		"SimpleDatums":               sqlsmith.SimpleDatums(),
+		"SimpleScalarTypes":          sqlsmith.SimpleScalarTypes(),
+		"SimpleNames":                sqlsmith.SimpleNames(),
+		"UnlikelyConstantPredicate":  sqlsmith.UnlikelyConstantPredicate(),
+		"UnlikelyRandomNulls":        sqlsmith.UnlikelyRandomNulls(),
+
 		"LowProbabilityWhereClauseWithJoinTables": sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
-		"MultiRegionDDLs":                         sqlsmith.MultiRegionDDLs(),
-		"MutatingMode":                            sqlsmith.MutatingMode(),
-		"MutationsOnly":                           sqlsmith.MutationsOnly(),
-		"OnlyNoDropDDLs":                          sqlsmith.OnlyNoDropDDLs(),
-		"OnlySingleDMLs":                          sqlsmith.OnlySingleDMLs(),
-		"OutputSort":                              sqlsmith.OutputSort(),
-		"PostgresMode":                            sqlsmith.PostgresMode(),
-		"SimpleDatums":                            sqlsmith.SimpleDatums(),
-		"SimpleNames":                             sqlsmith.SimpleNames(),
-		"UnlikelyConstantPredicate":               sqlsmith.UnlikelyConstantPredicate(),
-		"UnlikelyRandomNulls":                     sqlsmith.UnlikelyRandomNulls(),
 	}
 	smitherOpts []string
 )
@@ -119,9 +139,14 @@ func main() {
 	// Gather our sqlsmith options from command-line arguments.
 	var smitherOpts []sqlsmith.SmitherOption
 	for _, arg := range flags.Args() {
-		if opt, ok := smitherOptMap[arg]; ok {
+		argKV := strings.SplitN(arg, "=", 2)
+		if opt, ok := smitherOptMap[argKV[0]]; ok {
 			fmt.Print("-- ", arg, ": ", opt, "\n")
-			smitherOpts = append(smitherOpts, opt)
+			if len(argKV) == 2 {
+				smitherOpts = append(smitherOpts, opt.(strArgOpt)(argKV[1]))
+			} else {
+				smitherOpts = append(smitherOpts, opt)
+			}
 		} else {
 			fmt.Fprintf(flags.Output(), "unrecognized sqlsmith-go option: %v\n", arg)
 			usage()
@@ -146,6 +171,15 @@ func main() {
 		fmt.Println("-- connected to", *url)
 	}
 
+	if *schemaPath != "" {
+		opts, err := parseSchemaDefinition(*schemaPath)
+		if err != nil {
+			fmt.Fprintf(flags.Output(), "could not parse schema file %s: %s", *schemaPath, err)
+			os.Exit(2)
+		}
+		smitherOpts = append(smitherOpts, opts...)
+	}
+
 	// Create our smither.
 	smither, err := sqlsmith.NewSmither(db, rng, smitherOpts...)
 	if err != nil {
@@ -156,10 +190,15 @@ func main() {
 
 	// Finally, generate num statements (or expressions).
 	fmt.Println("-- num", *num)
+	sep := "\n"
+	if *prefix != "" {
+		sep = fmt.Sprintf("\n%s\n", *prefix)
+	}
+
 	if *expr {
 		fmt.Println("-- expr")
 		for i := 0; i < *num; i++ {
-			fmt.Print("\n", smither.GenerateExpr(), "\n")
+			fmt.Print(sep, smither.GenerateExpr(), "\n")
 		}
 	} else {
 		for i := 0; i < *num; i++ {
@@ -168,6 +207,46 @@ func main() {
 			if db != nil && *execStmts {
 				_, _ = db.Exec(stmt)
 			}
+			fmt.Print(sep, smither.Generate(), ";\n")
 		}
 	}
 }
+
+func parseSchemaDefinition(schemaPath string) (opts []sqlsmith.SmitherOption, _ error) {
+	f, err := os.Open(schemaPath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not open schema file %s for reading", schemaPath)
+	}
+	schema, err := io.ReadAll(f)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read schema definition data")
+	}
+	stmts, err := parser.Parse(string(schema))
+	if err != nil {
+		return nil, errors.Wrap(err, "Could not parse schema definition")
+	}
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
+	st := cluster.MakeTestingClusterSettings()
+	wall := timeutil.Now().UnixNano()
+	parentID := descpb.ID(bootstrap.TestingUserDescID(0))
+	for i, s := range stmts {
+		switch t := s.AST.(type) {
+		default:
+			return nil, errors.AssertionFailedf("only CreateTable statements supported, found %T", t)
+		case *tree.CreateTable:
+			tableID := descpb.ID(int(parentID) + i + 1)
+			desc, err := importer.MakeTestingSimpleTableDescriptor(
+				context.Background(), &semaCtx, st, t, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, wall)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to create table descriptor for statement %s", t)
+			}
+			opts = append(opts, sqlsmith.WithTableDescriptor(t.Table, desc.TableDescriptor))
+		}
+	}
+	return opts, nil
+}
+
+type strArgOpt func(v string) sqlsmith.SmitherOption
+
+func (o strArgOpt) Apply(s *sqlsmith.Smither) {}
+func (o strArgOpt) String() string            { return "" }

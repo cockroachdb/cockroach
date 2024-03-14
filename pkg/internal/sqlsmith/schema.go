@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/lib/pq/oid"
+	"golang.org/x/exp/slices"
 )
 
 // tableRef represents a table and its columns.
@@ -51,6 +52,48 @@ type aliasedTableRef struct {
 }
 
 type tableRefs []*tableRef
+
+func WithTableDescriptor(tn tree.TableName, desc descpb.TableDescriptor) SmitherOption {
+	return option{
+		name: fmt.Sprintf("inject table %s", tn.FQString()),
+		apply: func(s *Smither) {
+			if tn.SchemaName != "" {
+				if !slices.ContainsFunc(s.schemas, func(ref *schemaRef) bool {
+					return ref.SchemaName == tn.SchemaName
+				}) {
+					s.schemas = append(s.schemas, &schemaRef{SchemaName: tn.SchemaName})
+				}
+			}
+
+			var cols []*tree.ColumnTableDef
+			for _, col := range desc.Columns {
+				column := tree.ColumnTableDef{
+					Name: tree.Name(col.Name),
+					Type: col.Type,
+				}
+				if col.Nullable {
+					column.Nullable.Nullability = tree.Null
+				}
+				if col.IsComputed() {
+					column.Computed.Computed = true
+				}
+				cols = append(cols, &column)
+			}
+
+			s.tables = append(s.tables, &tableRef{
+				TableName: &tn,
+				Columns:   cols,
+			})
+			if s.columns == nil {
+				s.columns = make(map[tree.TableName]map[tree.Name]*tree.ColumnTableDef)
+			}
+			s.columns[tn] = make(map[tree.Name]*tree.ColumnTableDef)
+			for _, col := range cols {
+				s.columns[tn][col.Name] = col
+			}
+		},
+	}
+}
 
 // ReloadSchemas loads tables from the database.
 func (s *Smither) ReloadSchemas() error {
@@ -135,9 +178,13 @@ func (s *Smither) getRandTable() (*aliasedTableRef, bool) {
 		return nil, false
 	}
 	table := s.tables[s.rnd.Intn(len(s.tables))]
-	var indexFlags tree.IndexFlags
+	aliased := &aliasedTableRef{
+		tableRef: table,
+	}
+
 	if !s.disableIndexHints && s.coin() {
 		indexes := s.getAllIndexesForTableRLocked(*table.TableName)
+		var indexFlags tree.IndexFlags
 		indexNames := make([]tree.Name, 0, len(indexes))
 		for _, index := range indexes {
 			if !index.Inverted {
@@ -147,10 +194,7 @@ func (s *Smither) getRandTable() (*aliasedTableRef, bool) {
 		if len(indexNames) > 0 {
 			indexFlags.Index = tree.UnrestrictedName(indexNames[s.rnd.Intn(len(indexNames))])
 		}
-	}
-	aliased := &aliasedTableRef{
-		tableRef:   table,
-		indexFlags: &indexFlags,
+		aliased.indexFlags = &indexFlags
 	}
 	return aliased, true
 }
