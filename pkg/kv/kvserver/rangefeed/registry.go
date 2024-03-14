@@ -340,6 +340,12 @@ func (r *registration) outputLoop(ctx context.Context) error {
 		select {
 		case nextEvent := <-r.buf:
 			err := r.stream.Send(nextEvent.event)
+			// NextEvent will no longer be used. Memory accounted for it can be
+			// released.
+			nextEvent.alloc.DecreaseUsage(ctx, nil, nextEvent.event)
+			// Adjust the memory usage to avoid holding onto over-allocated memory for
+			// too long after sending the event to stream.
+			nextEvent.alloc.AdjustMemUsage(ctx)
 			nextEvent.alloc.Release(ctx)
 			putPooledSharedEvent(nextEvent)
 			if err != nil {
@@ -470,7 +476,7 @@ func (reg *registry) PublishToOverlapping(
 ) {
 	// Update memory usage just once for the entire event but not for each
 	// registration.
-	alloc.TrackUsage(ctx, nil, event)
+	alloc.IncreaseUsage(ctx, nil, event)
 	// Determine the earliest starting timestamp that a registration
 	// can have while still needing to hear about this event.
 	var minTS hlc.Timestamp

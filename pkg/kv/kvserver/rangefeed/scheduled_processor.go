@@ -180,8 +180,14 @@ func (p *ScheduledProcessor) processEvents(ctx context.Context) {
 				// data since registrations already have errors set.
 				p.consumeEvent(ctx, e)
 			}
-			e.alloc.ReleaseUsage(ctx, e)
+			// e will no longer be used. Memory accounted for it can be released.
+			e.alloc.DecreaseUsage(ctx, e, nil)
+			// Adjust the memory usage to avoid holding onto over-allocated memory for
+			// too long after publishing the events to registration channel.
 			e.alloc.AdjustMemUsage(ctx)
+			// Reduce one reference of alloc, but more references can be held by
+			// registrations' shared events. Thus, memory may not be returned back to
+			// pool yet.
 			e.alloc.Release(ctx)
 			putPooledEvent(e)
 		default:
@@ -485,7 +491,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 			}()
 		}
 	}
-	alloc.TrackUsage(ctx, &e, nil)
+	alloc.IncreaseUsage(ctx, &e, nil)
 	ev := getPooledEvent(e)
 	ev.alloc = alloc
 	if timeout == 0 {

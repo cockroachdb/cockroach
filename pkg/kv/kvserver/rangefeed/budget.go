@@ -355,9 +355,9 @@ func (a *SharedBudgetAllocation) Use(ctx context.Context) {
 	}
 }
 
-// TrackUsage updates the memory usage of the allocation based on the event
-// received.
-func (a *SharedBudgetAllocation) TrackUsage(
+// IncreaseUsage updates the memory usage of the allocation based on the event
+// received. Note that we only track usage but not try to allocate for more.
+func (a *SharedBudgetAllocation) IncreaseUsage(
 	ctx context.Context, ev *event, re *kvpb.RangeFeedEvent,
 ) {
 	if a == nil {
@@ -371,16 +371,24 @@ func (a *SharedBudgetAllocation) TrackUsage(
 	}
 }
 
-func (a *SharedBudgetAllocation) ReleaseUsage(ctx context.Context, ev *event) {
+// DecreaseUsage decreases the memory usage of the allocation based on the event
+// received. Note that we do not release any memory to the pool.
+func (a *SharedBudgetAllocation) DecreaseUsage(
+	ctx context.Context, ev *event, re *kvpb.RangeFeedEvent,
+) {
 	if a == nil {
 		return
 	}
 	if ev != nil {
 		a.memoryAdjuster.decreaseUsage(ctx, EventMemUsage(ev))
 	}
+	if re != nil {
+		a.memoryAdjuster.decreaseUsage(ctx, RangefeedEventMemUsage(re))
+	}
 }
 
 // AdjustMemUsage checks for unused memory and returns it to the budget if any.
+// Note that we only return unused memory but not try to allocate for more.
 func (a *SharedBudgetAllocation) AdjustMemUsage(ctx context.Context) {
 	if a == nil {
 		return

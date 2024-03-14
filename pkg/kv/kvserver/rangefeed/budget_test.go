@@ -231,7 +231,7 @@ func TestFeedBudgetMemoryAdjustment(t *testing.T) {
 		require.Greater(t, int64(1000), evMemUsage)
 		a, err := f.TryGet(ctx, int64(1000))
 		require.NoError(t, err)
-		a.TrackUsage(ctx, &ev, nil)
+		a.IncreaseUsage(ctx, &ev, nil)
 		require.Equal(t, int64(1000), b.Used())
 		a.AdjustMemUsage(ctx) // free 1000-evMemUsage
 		require.Equal(t, evMemUsage, b.Used())
@@ -253,8 +253,8 @@ func TestFeedBudgetMemoryAdjustment(t *testing.T) {
 		a, err := f.TryGet(ctx, 100)
 		require.NoError(t, err)
 
-		a.TrackUsage(ctx, &ev, nil) // overused by evMemUsage
-		a.AdjustMemUsage(ctx)       // should free 0
+		a.IncreaseUsage(ctx, &ev, nil) // overused by evMemUsage
+		a.AdjustMemUsage(ctx)          // should free 0
 		require.Equal(t, int64(100), b.Used())
 	})
 
@@ -284,14 +284,14 @@ func TestFeedBudgetMemoryAdjustment(t *testing.T) {
 		require.Equal(t, int64(700), b.Used())
 		require.NoError(t, err)
 
-		a.TrackUsage(ctx, &ev, nil)
+		a.IncreaseUsage(ctx, &ev, nil)
 		require.Equal(t, int64(700), b.Used())
-		a.TrackUsage(ctx, nil, &futureEvent)
+		a.IncreaseUsage(ctx, nil, &futureEvent)
 		require.Equal(t, int64(700), b.Used())
 		a.AdjustMemUsage(ctx) // should free 600-evMemUsage-futureEventMemUsage
 		require.Equal(t, evMemUsage+futureEventMemUsage, b.Used())
 	})
-	t.Run("concurrent access handling for TrackUsage", func(t *testing.T) {
+	t.Run("concurrent access handling for IncreaseUsage", func(t *testing.T) {
 		f, _, b := makeBudgetWithSize(math.MaxInt64, 0)
 		a, err := f.TryGet(ctx, 1000000)
 		require.NoError(t, err)
@@ -307,13 +307,13 @@ func TestFeedBudgetMemoryAdjustment(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				a.TrackUsage(ctx, &ev, nil)
+				a.IncreaseUsage(ctx, &ev, nil)
 			}()
 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				a.TrackUsage(ctx, nil, &futureEvent)
+				a.IncreaseUsage(ctx, nil, &futureEvent)
 			}()
 		}
 
@@ -338,7 +338,7 @@ func TestFeedBudgetMemoryAdjustment(t *testing.T) {
 		a, err := f.TryGet(ctx, 600)
 		require.NoError(t, err)
 
-		a.TrackUsage(ctx, &ev, nil)
+		a.IncreaseUsage(ctx, &ev, nil)
 		wg := sync.WaitGroup{}
 		for i := 0; i < 100; i++ {
 			wg.Add(1)
@@ -365,7 +365,7 @@ func TestFeedBudgetMemoryAdjustment(t *testing.T) {
 		a, err := f.TryGet(ctx, 600)
 		require.NoError(t, err)
 
-		a.TrackUsage(ctx, &ev, nil) // overused by evMemUsage
+		a.IncreaseUsage(ctx, &ev, nil) // overused by evMemUsage
 		require.Equal(t, int64(600), b.Used())
 		wg := sync.WaitGroup{}
 		for i := 0; i < 100; i++ {
