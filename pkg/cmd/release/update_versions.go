@@ -154,7 +154,7 @@ func (r prRepo) commit() error {
 	cmd.Dir = r.checkoutDir()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed commiting to %s with message '%s': %w", r.name(), string(out), err)
+		return fmt.Errorf("failed committing to %s with message '%s': %w", r.name(), string(out), err)
 	}
 	log.Printf("changes committed to %s: %s\n", r.name(), string(out))
 	return nil
@@ -277,7 +277,7 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 		if err := repo.apply(); err != nil {
 			return fmt.Errorf("cannot mutate repo %s: %w", repo.name(), err)
 		}
-		log.Printf("commiting changes to repo %s", repo.name())
+		log.Printf("committing changes to repo %s", repo.name())
 		if err := repo.commit(); err != nil {
 			return fmt.Errorf("cannot commit changes in repo %s: %w", repo.name(), err)
 		}
