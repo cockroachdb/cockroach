@@ -352,10 +352,6 @@ type ResolveParams struct {
 	// ResolveTypes if set, instructs the catalog reader to resolve types
 	// and not just tables, sequences, and views.
 	ResolveTypes bool
-
-	// IsDropRoutine, if set, indicates that the resolution is being performed
-	// for a DROP FUNCTION or DROP PROCEDURE statement.
-	IsDropRoutine bool
 }
 
 // NameResolver looks up elements in the catalog by name, and vice-versa.

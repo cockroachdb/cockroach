@@ -676,7 +676,6 @@ func TestToOverload(t *testing.T) {
 				RoutineParams: tree.RoutineParams{
 					{Name: "arg1", Type: types.Int},
 				},
-				ProcedureInputTypes: tree.ParamTypes(nil),
 			},
 		},
 		{
@@ -704,7 +703,6 @@ func TestToOverload(t *testing.T) {
 				RoutineParams: tree.RoutineParams{
 					{Name: "arg1", Type: types.Int},
 				},
-				ProcedureInputTypes: tree.ParamTypes(nil),
 			},
 		},
 		{
@@ -733,7 +731,6 @@ func TestToOverload(t *testing.T) {
 				RoutineParams: tree.RoutineParams{
 					{Name: "arg1", Type: types.Int},
 				},
-				ProcedureInputTypes: tree.ParamTypes(nil),
 			},
 		},
 		{
@@ -763,7 +760,6 @@ func TestToOverload(t *testing.T) {
 				RoutineParams: tree.RoutineParams{
 					{Name: "arg1", Type: types.Int},
 				},
-				ProcedureInputTypes: tree.ParamTypes(nil),
 			},
 		},
 		{
@@ -791,7 +787,6 @@ func TestToOverload(t *testing.T) {
 				RoutineParams: tree.RoutineParams{
 					{Name: "arg1", Type: types.Int},
 				},
-				ProcedureInputTypes: tree.ParamTypes(nil),
 			},
 			err: "function 1 is leakproof but not immutable",
 		},

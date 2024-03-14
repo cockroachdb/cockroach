@@ -272,10 +272,6 @@ type Overload struct {
 	// the signature of the function), RoutineParams contains all parameters as
 	// well as their class.
 	RoutineParams RoutineParams
-	// ProcedureInputTypes are all IN / INOUT parameters of a procedure. It
-	// remains unset if Type is not ProcedureRoutine and is only populated when
-	// UDFContainsOnlySignature is true.
-	ProcedureInputTypes TypeList
 }
 
 // params implements the overloadImpl interface.

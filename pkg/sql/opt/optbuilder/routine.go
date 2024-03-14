@@ -243,18 +243,14 @@ func (b *Builder) buildRoutine(
 	bodyScope := b.allocScope()
 	var params opt.ColList
 	if o.Types.Length() > 0 {
-		// Add all input parameters to the scope.
-		inputTypes := o.Types
-		if isProcedure {
-			inputTypes = o.ProcedureInputTypes
-		}
-		paramTypes, ok := inputTypes.(tree.ParamTypes)
+		paramTypes, ok := o.Types.(tree.ParamTypes)
 		if !ok {
 			panic(unimplemented.NewWithIssue(88947,
 				"variadiac user-defined functions are not yet supported"))
 		}
 		params = make(opt.ColList, len(paramTypes))
 		for i := range paramTypes {
+
 			paramType := &paramTypes[i]
 			argColName := funcParamColName(tree.Name(paramType.Name), i)
 			col := b.synthesizeColumn(bodyScope, argColName, paramType.Typ, nil /* expr */, nil /* scalar */)

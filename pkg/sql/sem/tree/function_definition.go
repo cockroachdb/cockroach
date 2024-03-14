@@ -261,29 +261,7 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 func (fd *ResolvedFunctionDefinition) MatchOverload(
 	paramTypes []*types.T, explicitSchema string, searchPath SearchPath, routineType RoutineType,
 ) (QualifiedOverload, error) {
-	return fd.MatchOverloadEx(paramTypes, explicitSchema, searchPath, routineType, false /* inDropOrReplaceContext */)
-}
-
-// MatchOverloadEx is the same as MatchOverload but allows the caller to specify
-// whether the matching is performing for a routine that is being dropped or
-// replaced.
-func (fd *ResolvedFunctionDefinition) MatchOverloadEx(
-	paramTypes []*types.T,
-	explicitSchema string,
-	searchPath SearchPath,
-	routineType RoutineType,
-	inDropOrReplaceContext bool,
-) (QualifiedOverload, error) {
 	matched := func(ol QualifiedOverload, schema string) bool {
-		if inDropOrReplaceContext && ol.Type == ProcedureRoutine {
-			// When dropping or replacing a procedure, all OUT parameters can be
-			// ignored. We achieve this by not including them into paramTypes
-			// which are produced by SignatureTypes call and verifying
-			// paramTypes against the input types.
-			if schema == ol.Schema && ol.ProcedureInputTypes.MatchIdentical(paramTypes) {
-				return true
-			}
-		}
 		if ol.Type == UDFRoutine || ol.Type == ProcedureRoutine {
 			return schema == ol.Schema && (paramTypes == nil || ol.params().MatchIdentical(paramTypes))
 		}

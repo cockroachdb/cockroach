@@ -561,16 +561,6 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			)
 		}
 		overload.Types = paramTypes
-		if sig.IsProcedure {
-			// TODO(100405): if a procedure is created on 23.2 version, then it
-			// won't have InputTypes set, so we won't populate
-			// ProcedureInputTypes correctly. Is this ok?
-			procedureInputTypes := make(tree.ParamTypes, 0, len(sig.InputTypes))
-			for _, inputType := range sig.InputTypes {
-				procedureInputTypes = append(procedureInputTypes, tree.ParamType{Typ: inputType})
-			}
-			overload.ProcedureInputTypes = procedureInputTypes
-		}
 		prefixedOverload := tree.MakeQualifiedOverload(desc.GetName(), overload)
 		funcDef.Overloads = append(funcDef.Overloads, prefixedOverload)
 	}

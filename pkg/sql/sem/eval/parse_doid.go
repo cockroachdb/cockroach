@@ -128,7 +128,7 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 		// Signature types depend on the routine type, but we don't know whether
 		// we have a function or a procedure, so we'll try the function first
 		// and then the procedure if necessary.
-		funcSignatureTypes, err := fn.SignatureTypes(ctx, evalCtx.Planner, tree.UDFRoutine, false /* inDropOrReplaceContext */)
+		funcSignatureTypes, err := fn.SignatureTypes(ctx, evalCtx.Planner, tree.UDFRoutine)
 		if err != nil {
 			return nil, err
 		}
@@ -139,7 +139,7 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 			tree.BuiltinRoutine|tree.UDFRoutine,
 		)
 		if err1 != nil {
-			procSignatureTypes, err := fn.SignatureTypes(ctx, evalCtx.Planner, tree.ProcedureRoutine, false /* inDropOrReplaceContext */)
+			procSignatureTypes, err := fn.SignatureTypes(ctx, evalCtx.Planner, tree.ProcedureRoutine)
 			if err != nil {
 				return nil, err
 			}

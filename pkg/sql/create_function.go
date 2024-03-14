@@ -156,14 +156,10 @@ func (n *createFunctionNode) createNewFunction(
 		return err
 	}
 	signatureTypes := make([]*types.T, 0, len(udfDesc.Params))
-	var inputTypes []*types.T
 	for _, param := range udfDesc.Params {
 		class := funcdesc.ToTreeRoutineParamClass(param.Class)
 		if tree.IsParamIncludedIntoSignature(class, udfDesc.IsProcedure()) {
 			signatureTypes = append(signatureTypes, param.Type)
-		}
-		if udfDesc.IsProcedure() && tree.IsInParamClass(class) {
-			inputTypes = append(inputTypes, param.Type)
 		}
 	}
 	scDesc.AddFunction(
@@ -174,7 +170,6 @@ func (n *createFunctionNode) createNewFunction(
 			ReturnType:  returnType,
 			ReturnSet:   udfDesc.ReturnType.ReturnSet,
 			IsProcedure: udfDesc.IsProcedure(),
-			InputTypes:  inputTypes,
 		},
 	)
 	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {
@@ -227,6 +222,7 @@ func (n *createFunctionNode) replaceFunction(
 	}
 	// origSignatureTypes stores the original signature types of this overload
 	// if we're dealing with a procedure.
+	// TODO: this probably can be simplified.
 	var origSignatureTypes []*types.T
 	if udfDesc.IsProcedure() {
 		origSignatureTypes = make([]*types.T, 0, len(udfDesc.Params))
@@ -301,14 +297,10 @@ func (n *createFunctionNode) replaceFunction(
 		// the opposite), and in this case we need to update the schema
 		// descriptor.
 		signatureTypes := make([]*types.T, 0, len(udfDesc.Params))
-		var inputTypes []*types.T
 		for _, param := range udfDesc.Params {
 			class := funcdesc.ToTreeRoutineParamClass(param.Class)
 			if tree.IsParamIncludedIntoSignature(class, udfDesc.IsProcedure()) {
 				signatureTypes = append(signatureTypes, param.Type)
-			}
-			if udfDesc.IsProcedure() && tree.IsInParamClass(class) {
-				inputTypes = append(inputTypes, param.Type)
 			}
 		}
 		signatureChanged := len(origSignatureTypes) != len(signatureTypes)
@@ -325,7 +317,6 @@ func (n *createFunctionNode) replaceFunction(
 					ReturnType:  retType,
 					ReturnSet:   udfDesc.ReturnType.ReturnSet,
 					IsProcedure: true,
-					InputTypes:  inputTypes,
 				},
 			); err != nil {
 				return err
@@ -358,7 +349,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 	}
 	existing, err := params.p.matchRoutine(
 		params.ctx, &routineObj, false, /* required */
-		tree.UDFRoutine|tree.ProcedureRoutine, true, /* inDropOrReplaceContext */
+		tree.UDFRoutine|tree.ProcedureRoutine,
 	)
 	if err != nil {
 		return nil, false, err
