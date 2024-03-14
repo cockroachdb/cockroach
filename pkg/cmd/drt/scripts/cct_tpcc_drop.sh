@@ -17,6 +17,14 @@ while true; do
     ((j++))
     INIT_LOG=./cct_tpcc_drop_init_$j.txt
     RUN_LOG=./cct_tpcc_drop_run_$j.txt
+
+    # Temporarily, we cleanup and paused IMPORT jobs that may exist due to
+    # node failures. Long-term, we will address these failures by making
+    # IMPORT more resilient and/or creating a variant of IMPORT which cancels
+    # itself instead of pausing.
+    ./cockroach sql --url "${PG_URL_N1}" -e "CANCEL JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE status = 'paused' AND job_type = 'IMPORT');"
+    sleep 15
+
     ./cockroach workload init tpcc \
         --warehouses=3000 \
         --secure \
