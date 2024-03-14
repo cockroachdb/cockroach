@@ -693,8 +693,9 @@ func TestDropTableDeleteData(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 	codec := s.Codec()
 	systemDB := srv.SystemLayer().SQLConn(t)
@@ -710,57 +711,59 @@ func TestDropTableDeleteData(t *testing.T) {
 	const numKeys = 3 * numRows
 	const numTables = 5
 	var descs []catalog.TableDescriptor
-	for i := 0; i < numTables; i++ {
-		tableName := fmt.Sprintf("test%d", i)
-		if err := tests.CreateKVTable(sqlDB, tableName, numRows); err != nil {
-			t.Fatal(err)
+
+	func() {
+		defer close(allowGC)
+		for i := 0; i < numTables; i++ {
+			tableName := fmt.Sprintf("test%d", i)
+			if err := tests.CreateKVTable(sqlDB, tableName, numRows); err != nil {
+				t.Fatal(err)
+			}
+
+			descs = append(descs, desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", tableName))
+
+			parentDatabaseID := descpb.ID(sqlutils.QueryDatabaseID(t, sqlDB, "t"))
+			parentSchemaID := descpb.ID(sqlutils.QuerySchemaID(t, sqlDB, "t", "public"))
+
+			nameKey := catalogkeys.EncodeNameKey(codec, &descpb.NameInfo{
+				ParentID:       parentDatabaseID,
+				ParentSchemaID: parentSchemaID,
+				Name:           tableName,
+			})
+			gr, err := kvDB.Get(ctx, nameKey)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !gr.Exists() {
+				t.Fatalf("Name entry %q does not exist", nameKey)
+			}
+
+			tableSpan := descs[i].TableSpan(codec)
+			tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
+
+			if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descs[i].GetID()); err != nil {
+				t.Fatal(err)
+			}
 		}
 
-		descs = append(descs, desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", tableName))
-
-		parentDatabaseID := descpb.ID(sqlutils.QueryDatabaseID(t, sqlDB, "t"))
-		parentSchemaID := descpb.ID(sqlutils.QuerySchemaID(t, sqlDB, "t", "public"))
-
-		nameKey := catalogkeys.EncodeNameKey(codec, &descpb.NameInfo{
-			ParentID:       parentDatabaseID,
-			ParentSchemaID: parentSchemaID,
-			Name:           tableName,
-		})
-		gr, err := kvDB.Get(ctx, nameKey)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !gr.Exists() {
-			t.Fatalf("Name entry %q does not exist", nameKey)
+		for i := 0; i < numTables; i++ {
+			if _, err := sqlDB.Exec(fmt.Sprintf(`DROP TABLE t.%s`, descs[i].GetName())); err != nil {
+				t.Fatal(err)
+			}
 		}
 
-		tableSpan := descs[i].TableSpan(codec)
-		tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
-
-		if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descs[i].GetID()); err != nil {
-			t.Fatal(err)
+		// Data hasn't been GC-ed.
+		for i := 0; i < numTables; i++ {
+			if err := descExists(sqlDB, true, descs[i].GetID()); err != nil {
+				t.Fatalf("table (id=%d name=%s) was deleted. error: %v", descs[i].GetID(), descs[i].GetName(), err)
+			}
+			tableSpan := descs[i].TableSpan(codec)
+			tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), tableSpan, numKeys)
 		}
-	}
-
-	for i := 0; i < numTables; i++ {
-		if _, err := sqlDB.Exec(fmt.Sprintf(`DROP TABLE t.%s`, descs[i].GetName())); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Data hasn't been GC-ed.
-	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	for i := 0; i < numTables; i++ {
-		if err := descExists(sqlDB, true, descs[i].GetID()); err != nil {
-			t.Fatalf("table (id=%d name=%s) was deleted. error: %v", descs[i].GetID(), descs[i].GetName(), err)
-		}
-		tableSpan := descs[i].TableSpan(codec)
-		tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), tableSpan, numKeys)
-	}
-
-	close(allowGC)
+	}()
 
 	// Now verify that the GC job has run.
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	for i := 0; i < numTables; i++ {
 		if err := jobutils.VerifySystemJob(t, sqlRun, numTables+i,
 			jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
