@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -82,6 +83,7 @@ func runTransactionPhase(
 		ExecutionPhase:             phase,
 		SchemaChangerJobIDSupplier: deps.TransactionalJobRegistry().SchemaChangerJobID,
 		SkipPlannerSanityChecks:    !enforcePlannerSanityCheck.Get(&deps.ClusterSettings().SV),
+		MemAcc:                     mon.NewStandaloneUnlimitedAccount(),
 	})
 	if err != nil {
 		return scpb.CurrentState{}, jobspb.InvalidJobID, err
@@ -269,6 +271,7 @@ func makePostCommitPlan(
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
 		SkipPlannerSanityChecks:    true,
 		InRollback:                 state.InRollback,
+		MemAcc:                     mon.NewStandaloneUnlimitedAccount(),
 	})
 }
 

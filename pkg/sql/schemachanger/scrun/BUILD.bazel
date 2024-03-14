@@ -27,6 +27,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
+        "//pkg/util/mon",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",

@@ -1532,12 +1532,17 @@ func mvccGetWithValueHeader(
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
 	defer mvccScanner.release()
 
+	memAccount := opts.MemoryAccount
+	if memAccount == nil {
+		memAccount = mon.NewStandaloneUnlimitedAccount()
+	}
+
 	// MVCCGet is implemented as an MVCCScan where we retrieve a single key. We
 	// specify an empty key for the end key which will ensure we don't retrieve a
 	// key different than the start key. This is a bit of a hack.
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
-		memAccount:       opts.MemoryAccount,
+		memAccount:       memAccount,
 		lockTable:        opts.LockTable,
 		start:            key,
 		ts:               timestamp,
@@ -4445,9 +4450,13 @@ func mvccScanInit(
 		}, nil
 	}
 
+	memAccount := opts.MemoryAccount
+	if memAccount == nil {
+		memAccount = mon.NewStandaloneUnlimitedAccount()
+	}
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
-		memAccount:       opts.MemoryAccount,
+		memAccount:       memAccount,
 		lockTable:        opts.LockTable,
 		reverse:          opts.Reverse,
 		start:            key,

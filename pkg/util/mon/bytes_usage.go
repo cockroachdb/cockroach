@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -660,7 +661,7 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	mm.mu.curBudget.mon = nil
 
 	// Release the reserved budget to its original pool, if any.
-	if mm.reserved != &noReserved {
+	if mm.reserved != &noReserved && mm.reserved != nil {
 		mm.reserved.Clear(ctx)
 		// Make sure to lose reference to the reserved account because it has a
 		// pointer to the parent monitor.
@@ -718,7 +719,11 @@ type BoundAccount struct {
 	// reserved is a small buffer to amortize the cost of growing an account. It
 	// decreases as used increases (and vice-versa).
 	reserved int32
-	mon      *BytesMonitor
+	// standaloneUnlimited, if set, indicates that this account is not bound to
+	// any BytesMonitor. As such, it doesn't have any limit, and even though it
+	// tracks all reservations, they are not counted against the root budget.
+	standaloneUnlimited bool
+	mon                 *BytesMonitor
 }
 
 // EarmarkedBoundAccount extends BoundAccount to pre-reserve large allocations
@@ -729,6 +734,7 @@ type EarmarkedBoundAccount struct {
 }
 
 // ConcurrentBoundAccount is a thread safe wrapper around BoundAccount.
+// TODO(yuzefovich): add assertions that ConcurrentBoundAccount is non-nil.
 type ConcurrentBoundAccount struct {
 	syncutil.Mutex
 	wrapped BoundAccount
@@ -799,9 +805,21 @@ func NewStandaloneBudget(capacity int64) *BoundAccount {
 	return &BoundAccount{used: capacity}
 }
 
+// NewStandaloneUnlimitedAccount returns a BoundAccount that is actually not
+// bound to any BytesMonitor. Use this only when memory allocations shouldn't
+// be tracked by the memory accounting system.
+func NewStandaloneUnlimitedAccount() *BoundAccount {
+	return &BoundAccount{standaloneUnlimited: true}
+}
+
 // Used returns the number of bytes currently allocated through this account.
 func (b *BoundAccount) Used() int64 {
+	// TODO(yuzefovich): remove nil checks altogether once we've had some baking
+	// time with test-only assertions.
 	if b == nil {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("uninitialized account"))
+		}
 		return 0
 	}
 	return b.used
@@ -811,6 +829,9 @@ func (b *BoundAccount) Used() int64 {
 // value can be nil.
 func (b *BoundAccount) Monitor() *BytesMonitor {
 	if b == nil {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("uninitialized account"))
+		}
 		return nil
 	}
 	return b.mon
@@ -818,6 +839,9 @@ func (b *BoundAccount) Monitor() *BytesMonitor {
 
 func (b *BoundAccount) Allocated() int64 {
 	if b == nil {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("uninitialized account"))
+		}
 		return 0
 	}
 	return b.used + int64(b.reserved)
@@ -873,6 +897,13 @@ func (b *BoundAccount) Init(ctx context.Context, mon *BytesMonitor) {
 // poolAllocationSize is reserved.
 func (b *BoundAccount) Empty(ctx context.Context) {
 	if b == nil {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("uninitialized account"))
+		}
+		return
+	}
+	if b.standaloneUnlimited {
+		b.used = 0
 		return
 	}
 	if toRelease := int64(b.reserved) + b.used - int64(b.mon.poolAllocationSize); toRelease > 0 {
@@ -888,6 +919,9 @@ func (b *BoundAccount) Empty(ctx context.Context) {
 // primes it for reuse.
 func (b *BoundAccount) Clear(ctx context.Context) {
 	if b == nil {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("uninitialized account"))
+		}
 		return
 	}
 	if b.mon == nil {
@@ -904,6 +938,9 @@ func (b *BoundAccount) Clear(ctx context.Context) {
 // TODO(yuzefovich): consider removing this method in favor of Clear.
 func (b *BoundAccount) Close(ctx context.Context) {
 	if b == nil {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("uninitialized account"))
+		}
 		return
 	}
 	if b.mon == nil {
@@ -927,9 +964,6 @@ func (b *BoundAccount) Close(ctx context.Context) {
 // opposed to resizing one object among many in the account), ResizeTo() should
 // be used.
 func (b *BoundAccount) Resize(ctx context.Context, oldSz, newSz int64) error {
-	if b == nil {
-		return nil
-	}
 	delta := newSz - oldSz
 	switch {
 	case delta > 0:
@@ -943,6 +977,9 @@ func (b *BoundAccount) Resize(ctx context.Context, oldSz, newSz int64) error {
 // ResizeTo resizes (grows or shrinks) the account to a specified size.
 func (b *BoundAccount) ResizeTo(ctx context.Context, newSz int64) error {
 	if b == nil {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("uninitialized account"))
+		}
 		return nil
 	}
 	if newSz == b.used {
@@ -955,6 +992,13 @@ func (b *BoundAccount) ResizeTo(ctx context.Context, newSz int64) error {
 // Grow is an accessor for b.mon.GrowAccount.
 func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 	if b == nil {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("uninitialized account"))
+		}
+		return nil
+	}
+	if b.standaloneUnlimited {
+		b.used += x
 		return nil
 	}
 	if int64(b.reserved) >= x {
@@ -973,7 +1017,23 @@ func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 
 // Shrink releases part of the cumulated allocations by the specified size.
 func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
-	if b == nil || delta == 0 {
+	if delta == 0 {
+		return
+	}
+	if b == nil {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("uninitialized account"))
+		}
+		return
+	}
+	if b.standaloneUnlimited {
+		if b.used < delta {
+			logcrash.ReportOrPanic(ctx, nil, /* sv */
+				"standalone unlimited: no bytes in account to release, current %d, free %d",
+				b.used, delta)
+			delta = b.used
+		}
+		b.used -= delta
 		return
 	}
 	if b.used < delta {
@@ -998,6 +1058,9 @@ func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 // calls will not release it back to the parent monitor.
 func (b *EarmarkedBoundAccount) Reserve(ctx context.Context, x int32) error {
 	if b == nil {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("uninitialized account"))
+		}
 		return nil
 	}
 	minExtra := b.mon.roundSize(int64(x))
@@ -1014,7 +1077,13 @@ func (b *EarmarkedBoundAccount) Reserve(ctx context.Context, x int32) error {
 
 // Shrink releases part of the cumulated allocations by the specified size.
 func (b *EarmarkedBoundAccount) Shrink(ctx context.Context, delta int64) {
-	if b == nil || delta == 0 {
+	if delta == 0 {
+		return
+	}
+	if b == nil {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("uninitialized account"))
+		}
 		return
 	}
 	if b.used < delta {
@@ -1178,15 +1247,11 @@ func (mm *BytesMonitor) adjustBudget(ctx context.Context) {
 	}
 }
 
-// ReadAll is like ioctx.ReadAll except it additionally asks the BoundAccount acct
-// permission, if it is non-nil, it grows its buffer while reading. When the
-// caller releases the returned slice it shrink the bound account by its cap.
+// ReadAll is like ioctx.ReadAll except it additionally asks the BoundAccount
+// acct permission if it grows its buffer while reading. When the caller
+// releases the returned slice, it shrinks the bound account by its cap (unless
+// it provided a standalone unlimited account).
 func ReadAll(ctx context.Context, r ioctx.ReaderCtx, acct *BoundAccount) ([]byte, error) {
-	if acct == nil {
-		b, err := ioctx.ReadAll(ctx, r)
-		return b, err
-	}
-
 	const starting, maxIncrease = 1024, 8 << 20
 	if err := acct.Grow(ctx, starting); err != nil {
 		return nil, err

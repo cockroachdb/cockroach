@@ -77,6 +77,8 @@ func Build(
 	if monitor := memAcc.Monitor(); monitor != nil {
 		acc := monitor.MakeBoundAccount()
 		localMemAcc = &acc
+	} else {
+		localMemAcc = mon.NewStandaloneUnlimitedAccount()
 	}
 	bs := newBuilderState(ctx, dependencies, incumbent, localMemAcc)
 	els := newEventLogState(dependencies, incumbent, n)

@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -233,7 +234,7 @@ func getSpansFromManifest(ctx context.Context, t *testing.T, backupPath string) 
 	backupManifestBytes, err := os.ReadFile(backupPath + "/" + backupbase.BackupManifestName)
 	require.NoError(t, err)
 	var backupManifest backuppb.BackupManifest
-	decompressedBytes, err := backupinfo.DecompressData(ctx, nil, backupManifestBytes)
+	decompressedBytes, err := backupinfo.DecompressData(ctx, mon.NewStandaloneUnlimitedAccount(), backupManifestBytes)
 	require.NoError(t, err)
 	require.NoError(t, protoutil.Unmarshal(decompressedBytes, &backupManifest))
 	spans := make([]roachpb.Span, 0, len(backupManifest.Files))
