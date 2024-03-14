@@ -113,13 +113,13 @@ func runMultiTenantUpgrade(
 	// Create two instances of tenant 11 so that we can test with two pods
 	// running during migration.
 	const tenantNode = 2
-	tenant11a := createTenantNode(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11aHTTPPort, tenant11aSQLPort)
+	tenant11a := deprecatedCreateTenantNode(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11aHTTPPort, tenant11aSQLPort)
 	tenant11a.start(ctx, t, c, predecessorBinary)
 	defer tenant11a.stop(ctx, t, c)
 
-	// Since the certs are created with the createTenantNode call above, we
+	// Since the certs are created with the deprecatedCreateTenantNode call above, we
 	// call the "no certs" version of create tenant here.
-	tenant11b := createTenantNodeNoCerts(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11bHTTPPort, tenant11bSQLPort)
+	tenant11b := deprecatedCreateTenantNodeNoCerts(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11bHTTPPort, tenant11bSQLPort)
 	tenant11b.start(ctx, t, c, predecessorBinary)
 	defer tenant11b.stop(ctx, t, c)
 
@@ -174,7 +174,7 @@ func runMultiTenantUpgrade(
 			withResults([][]string{{"1", "bar"}}))
 
 	t.Status("starting tenant 12 server with older binary")
-	tenant12 := createTenantNode(ctx, t, c, kvNodes, tenant12ID, tenantNode, tenant12HTTPPort, tenant12SQLPort)
+	tenant12 := deprecatedCreateTenantNode(ctx, t, c, kvNodes, tenant12ID, tenantNode, tenant12HTTPPort, tenant12SQLPort)
 	tenant12.start(ctx, t, c, predecessorBinary)
 	defer tenant12.stop(ctx, t, c)
 
@@ -196,7 +196,7 @@ func runMultiTenantUpgrade(
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1::INT)`, tenant13ID)
 
 	t.Status("starting tenant 13 server with new binary")
-	tenant13 := createTenantNode(ctx, t, c, kvNodes, tenant13ID, tenantNode, tenant13HTTPPort, tenant13SQLPort)
+	tenant13 := deprecatedCreateTenantNode(ctx, t, c, kvNodes, tenant13ID, tenantNode, tenant13HTTPPort, tenant13SQLPort)
 	tenant13.start(ctx, t, c, currentBinary)
 	defer tenant13.stop(ctx, t, c)
 
@@ -356,7 +356,7 @@ func runMultiTenantUpgrade(
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1::INT)`, tenant14ID)
 
 	t.Status("verifying that the tenant 14 server works and has the proper version")
-	tenant14 := createTenantNode(ctx, t, c, kvNodes, tenant14ID, tenantNode, tenant14HTTPPort, tenant14SQLPort)
+	tenant14 := deprecatedCreateTenantNode(ctx, t, c, kvNodes, tenant14ID, tenantNode, tenant14HTTPPort, tenant14SQLPort)
 	tenant14.start(ctx, t, c, currentBinary)
 	defer tenant14.stop(ctx, t, c)
 	verifySQL(t, tenant14.pgURL,

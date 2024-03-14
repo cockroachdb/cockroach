@@ -120,7 +120,7 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 	for i, node := range c.All() {
 		region := regions[i]
 		regionInfo := fmt.Sprintf("cloud=%s,region=%s,zone=%s", c.Cloud(), regionOnly(region), region)
-		tenant := createTenantNode(ctx, t, c, c.All(), tenantID, node, tenantHTTPPort, tenantSQLPort, createTenantRegion(regionInfo))
+		tenant := deprecatedCreateTenantNode(ctx, t, c, c.All(), tenantID, node, tenantHTTPPort, tenantSQLPort, createTenantRegion(regionInfo))
 		tenant.start(ctx, t, c, "./cockroach")
 		tenants = append(tenants, tenant)
 
