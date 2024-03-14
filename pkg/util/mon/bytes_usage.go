@@ -213,6 +213,19 @@ type BytesMonitor struct {
 		// NB: this field doesn't need mutex protection but is inside of mu
 		// struct in order to reduce the struct size.
 		relinquishAllOnReleaseBytes bool
+
+		// tracksDisk indicates whether this monitor is for tracking disk
+		// resources.
+		// NB: this field doesn't need mutex protection but is inside of mu
+		// struct in order to reduce the struct size.
+		tracksDisk bool
+
+		// rootSQLMonitor indicates whether this monitor is the root SQL memory
+		// monitor (in which case, memory budget exceeded errors should have a
+		// hint to increase --max-sql-memory parameter).
+		// NB: this field doesn't need mutex protection but is inside of mu
+		// struct in order to reduce the struct size.
+		rootSQLMonitor bool
 	}
 
 	// parentMu encompasses the fields that must be accessed while holding the
@@ -226,11 +239,6 @@ type BytesMonitor struct {
 
 	// name identifies this monitor in logging messages.
 	name redact.RedactableString
-
-	// resource specifies what kind of resource the monitor is tracking
-	// allocations for. Specific behavior is delegated to this resource (e.g.
-	// budget exceeded errors).
-	resource Resource
 
 	// reserved indicates how many bytes were already reserved for this
 	// monitor before it was instantiated. Allocations registered to
@@ -263,8 +271,8 @@ type BytesMonitor struct {
 
 const (
 	// Consult with SQL Queries before increasing these values.
-	expectedMonitorSize     = 176
-	expectedMonitorSizeRace = 184
+	expectedMonitorSize     = 160
+	expectedMonitorSizeRace = 168
 	expectedAccountSize     = 24
 )
 
@@ -406,9 +414,6 @@ type Options struct {
 
 // NewMonitor creates a new monitor.
 func NewMonitor(args Options) *BytesMonitor {
-	if args.Res == nil {
-		args.Res = MemoryResource
-	}
 	if args.Limit <= 0 {
 		args.Limit = math.MaxInt64
 	}
@@ -417,7 +422,6 @@ func NewMonitor(args Options) *BytesMonitor {
 	}
 	m := &BytesMonitor{
 		name:               args.Name,
-		resource:           args.Res,
 		configLimit:        args.Limit,
 		limit:              args.Limit,
 		poolAllocationSize: args.Increment,
@@ -425,6 +429,7 @@ func NewMonitor(args Options) *BytesMonitor {
 	}
 	m.mu.curBytesCount = args.CurCount
 	m.mu.maxBytesHist = args.MaxHist
+	m.mu.tracksDisk = args.Res == DiskResource
 	return m
 }
 
@@ -441,15 +446,26 @@ func NewMonitor(args Options) *BytesMonitor {
 func NewMonitorInheritWithLimit(
 	name redact.RedactableString, limit int64, m *BytesMonitor,
 ) *BytesMonitor {
+	res := MemoryResource
+	if m.mu.tracksDisk {
+		res = DiskResource
+	}
 	return NewMonitor(Options{
 		Name:      name,
-		Res:       m.resource,
+		Res:       res,
 		Limit:     limit,
 		CurCount:  nil, // CurCount is not inherited as we don't want to double count allocations
 		MaxHist:   nil, // MaxHist is not inherited as we don't want to double count allocations
 		Increment: m.poolAllocationSize,
 		Settings:  m.settings,
 	})
+}
+
+func (mm *BytesMonitor) MarkAsRootSQLMonitor() {
+	if mm.mu.tracksDisk {
+		panic(errors.AssertionFailedf("root SQL memory monitor cannot track disk resources"))
+	}
+	mm.mu.rootSQLMonitor = true
 }
 
 // noReserved is safe to be used by multiple monitors as the "reserved" account
@@ -659,7 +675,10 @@ func (mm *BytesMonitor) SetMetrics(curCount *metric.Gauge, maxHist metric.IHisto
 
 // Resource returns the type of the resource the monitor is tracking.
 func (mm *BytesMonitor) Resource() Resource {
-	return mm.resource
+	if mm.mu.tracksDisk {
+		return DiskResource
+	}
+	return MemoryResource
 }
 
 // BoundAccount tracks the cumulated allocations for one client of a pool or
@@ -987,6 +1006,19 @@ func (b *EarmarkedBoundAccount) Shrink(ctx context.Context, delta int64) {
 	}
 }
 
+func (mm *BytesMonitor) makeBudgetExceededError(minExtra int64) error {
+	errConstructor := NewMemoryBudgetExceededError
+	if mm.mu.tracksDisk {
+		errConstructor = newDiskBudgetExceededError
+	}
+	if mm.mu.rootSQLMonitor {
+		errConstructor = newRootSQLMemoryMonitorBudgetExceededError
+	}
+	return errors.Wrapf(errConstructor(
+		minExtra, mm.mu.curAllocated, mm.reserved.used), "%s", mm.name,
+	)
+}
+
 // reserveBytes declares an allocation to this monitor. An error is returned if
 // the allocation is denied.
 // x must be a multiple of `poolAllocationSize`.
@@ -996,13 +1028,8 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 	// Check the local limit first. NB: The condition is written in this manner
 	// so that it handles overflow correctly. Consider what happens if
 	// x==math.MaxInt64. mm.limit-x will be a large negative number.
-	//
-	// TODO(knz): make the monitor name reportable in telemetry, after checking
-	// that the name is never constructed from user data.
 	if mm.mu.curAllocated > mm.limit-x {
-		return errors.Wrapf(
-			mm.resource.NewBudgetExceededError(x, mm.mu.curAllocated, mm.limit), "%s", mm.name,
-		)
+		return mm.makeBudgetExceededError(x)
 	}
 	// Check whether we need to request an increase of our budget.
 	if mm.mu.curAllocated > mm.mu.curBudget.used+mm.reserved.used-x {
@@ -1064,11 +1091,7 @@ func (mm *BytesMonitor) releaseBytesLocked(ctx context.Context, sz int64) {
 func (mm *BytesMonitor) increaseBudget(ctx context.Context, minExtra int64) error {
 	// NB: mm.mu Already locked by reserveBytes().
 	if mm.mu.curBudget.mon == nil {
-		// TODO(knz): make the monitor name reportable in telemetry, after checking
-		// that the name is never constructed from user data.
-		return errors.Wrapf(mm.resource.NewBudgetExceededError(
-			minExtra, mm.mu.curAllocated, mm.reserved.used), "%s", mm.name,
-		)
+		return mm.makeBudgetExceededError(minExtra)
 	}
 	if log.V(2) {
 		log.Infof(ctx, "%s: requesting %d bytes from the pool", mm.name, minExtra)

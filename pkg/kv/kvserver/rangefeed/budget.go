@@ -167,7 +167,7 @@ func (f *FeedBudget) TryGet(ctx context.Context, amount int64) (*SharedBudgetAll
 	}
 	var err error
 	if f.mu.memBudget.Used()+amount > f.limit {
-		return nil, errors.Wrap(f.mu.memBudget.Monitor().Resource().NewBudgetExceededError(amount,
+		return nil, errors.Wrap(mon.NewMemoryBudgetExceededError(amount,
 			f.mu.memBudget.Used(),
 			f.limit), "rangefeed budget")
 	}
