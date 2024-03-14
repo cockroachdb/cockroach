@@ -64,27 +64,23 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 
 	typ := tree.ResolvableTypeReference(types.Void)
 	setof := false
-	if n.ReturnType != nil {
+	if n.IsProcedure {
+		if n.ReturnType != nil {
+			panic(errors.AssertionFailedf(
+				"CreateRoutine.ReturnType is expected to be empty for procedures",
+			))
+		}
+		// For procedures, if specified, output parameters form the return type.
+		outParamTypes, outParamNames := getOutputParameters(b, n.Params)
+		if len(outParamTypes) > 0 {
+			typ = types.MakeLabeledTuple(outParamTypes, outParamNames)
+		}
+	} else if n.ReturnType != nil {
 		typ = n.ReturnType.Type
 		if returnType := b.ResolveTypeRef(typ); types.IsRecordType(returnType.Type) {
 			// If the function returns a RECORD type, then we need to check
 			// whether its OUT parameters specify labels for the return type.
-			//
-			// Note that this logic effectively copies what the optimizer does
-			// in optbuilder.Builder.buildCreateFunction.
-			var outParamTypes []*types.T
-			var outParamNames []string
-			for _, param := range n.Params {
-				if param.IsOutParam() {
-					paramType := b.ResolveTypeRef(param.Type)
-					outParamTypes = append(outParamTypes, paramType.Type)
-					paramName := string(param.Name)
-					if paramName == "" {
-						paramName = fmt.Sprintf("column%d", len(outParamTypes))
-					}
-					outParamNames = append(outParamNames, paramName)
-				}
-			}
+			outParamTypes, outParamNames := getOutputParameters(b, n.Params)
 			if len(outParamTypes) == 1 {
 				panic(errors.AssertionFailedf(
 					"we shouldn't get the RECORD return type with a single OUT parameter, expected %s",
@@ -187,6 +183,25 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	validateFunctionToFunctionReferences(b, refProvider, db.DatabaseID)
 	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, refProvider))
 	b.LogEventForExistingTarget(&fn)
+}
+
+func getOutputParameters(
+	b BuildCtx, params tree.RoutineParams,
+) (outParamTypes []*types.T, outParamNames []string) {
+	// Note that this logic effectively copies what the optimizer does in
+	// optbuilder.Builder.buildCreateFunction.
+	for _, param := range params {
+		if param.IsOutParam() {
+			paramType := b.ResolveTypeRef(param.Type)
+			outParamTypes = append(outParamTypes, paramType.Type)
+			paramName := string(param.Name)
+			if paramName == "" {
+				paramName = fmt.Sprintf("column%d", len(outParamTypes))
+			}
+			outParamNames = append(outParamNames, paramName)
+		}
+	}
+	return outParamTypes, outParamNames
 }
 
 func validateTypeReferences(b BuildCtx, refProvider ReferenceProvider, parentDBID descpb.ID) {

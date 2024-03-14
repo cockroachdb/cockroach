@@ -1429,6 +1429,13 @@ func TestLogic_procedure(
 	runLogicTest(t, "procedure")
 }
 
+func TestLogic_procedure_params(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_params")
+}
+
 func TestLogic_procedure_privileges(
 	t *testing.T,
 ) {

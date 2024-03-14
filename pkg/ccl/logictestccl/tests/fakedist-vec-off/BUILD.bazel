@@ -12,7 +12,7 @@ go_test(
         "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
         "//conditions:default": {"test.Pool": "large"},
     }),
-    shard_count = 24,
+    shard_count = 25,
     tags = [
         "ccl_test",
         "cpu:2",

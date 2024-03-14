@@ -2,7 +2,6 @@
 
 subtest types
 
-# SQL UDFs
 statement error pgcode 42P13 pq: function result type must be specified
 CREATE FUNCTION f() AS $$ SELECT 1; $$ LANGUAGE SQL;
 
@@ -35,28 +34,6 @@ CREATE FUNCTION f(INOUT param1 INT, OUT param2 INT) AS $$ SELECT 1, 2, 3; $$ LAN
 
 statement error pgcode 42P13 pq: return type mismatch in function declared to return int
 CREATE FUNCTION f(INOUT param INT) AS $$ SELECT 'hello'; $$ LANGUAGE SQL;
-
-# Stored Procedures
-statement error pgcode 42601 pq: at or near "float": syntax error
-CREATE PROCEDURE p(OUT param INT) RETURNS FLOAT AS $$ SELECT 1; $$ LANGUAGE SQL;
-
-statement ok
-CREATE PROCEDURE p(OUT param INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
-
-statement ok
-DROP PROCEDURE p;
-
-statement ok
-CREATE PROCEDURE p(IN param1 INT, INOUT param2 INT, OUT param3 INT) AS $$ SELECT 1, 2; $$ LANGUAGE SQL;
-
-statement ok
-DROP PROCEDURE p;
-
-statement error pgcode 42P13 pq: return type mismatch in function declared to return record
-CREATE PROCEDURE p(INOUT param1 INT, OUT param2 INT) AS $$ SELECT 1, 2, 3; $$ LANGUAGE SQL;
-
-statement error pgcode 42P13 pq: return type mismatch in function declared to return int
-CREATE PROCEDURE p(INOUT param INT) AS $$ SELECT 'hello'; $$ LANGUAGE SQL;
 
 # Verify that function resolution works correctly when dropping functions (OUT
 # arguments are ignored).
@@ -138,20 +115,6 @@ $$
 
 statement ok
 DROP FUNCTION f_param_types;
-
-statement ok
-CREATE PROCEDURE p(IN p1 INT, INOUT p2 INT, IN OUT p3 INT, OUT p4 INT) AS $$
-SELECT p2, p3, p1;
-$$ LANGUAGE SQL;
-
-query T
-SELECT create_statement FROM [SHOW CREATE PROCEDURE p];
-----
-CREATE PROCEDURE public.p(IN p1 INT8, INOUT p2 INT8, INOUT p3 INT8, OUT p4 INT8)
-  LANGUAGE SQL
-  AS $$
-  SELECT p2, p3, p1;
-$$
 
 subtest end
 

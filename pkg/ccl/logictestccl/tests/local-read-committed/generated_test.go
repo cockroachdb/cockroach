@@ -182,6 +182,13 @@ func TestReadCommittedLogicCCL_plpgsql_unsupported(
 	runCCLLogicTest(t, "plpgsql_unsupported")
 }
 
+func TestReadCommittedLogicCCL_procedure_params(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "procedure_params")
+}
+
 func TestReadCommittedLogicCCL_procedure_plpgsql(
 	t *testing.T,
 ) {
