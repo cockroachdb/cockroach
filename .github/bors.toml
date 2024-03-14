@@ -4,6 +4,9 @@
 # pushed to master.
 status = [
        "Bazel Essential CI (Cockroach)",
+       "check_generated_code",
+       "docker_image_amd64",
+       "examples_orms",
        "macos_amd64_build",
        "macos_arm64_build",
        "windows_build",
