@@ -340,7 +340,10 @@ func (b *SSTBatcher) AddMVCCKeyWithImportEpoch(
 		return err
 	}
 	mvccVal.MVCCValueHeader.ImportEpoch = importEpoch
-	b.valueScratch, err = storage.EncodeMVCCValueToBuf(mvccVal, b.valueScratch[:0])
+	buf, canRetainBuffer, err := storage.EncodeMVCCValueToBuf(mvccVal, b.valueScratch[:0])
+	if canRetainBuffer {
+		b.valueScratch = buf
+	}
 	if err != nil {
 		return err
 	}

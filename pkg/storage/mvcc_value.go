@@ -137,11 +137,13 @@ func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 // EncodeMVCCValueForExport encodes fields from the MVCCValueHeader
 // that are appropriate for export out of the cluster.
 //
-// NB: Must be updated with ExtendedEncodingSizeForExport.
-func EncodeMVCCValueForExport(mvccValue MVCCValue, b []byte) ([]byte, error) {
+// The returned bool is true if the provided buffer was used or
+// reallocated and false if the MVCCValue.Value.RawBytes were returned
+// directly.
+func EncodeMVCCValueForExport(mvccValue MVCCValue, b []byte) ([]byte, bool, error) {
 	mvccValue.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp{}
 	if mvccValue.MVCCValueHeader.IsEmpty() {
-		return mvccValue.Value.RawBytes, nil
+		return mvccValue.Value.RawBytes, false, nil
 	}
 	return EncodeMVCCValueToBuf(mvccValue, b)
 }
@@ -178,7 +180,8 @@ func encodedMVCCValueSize(v MVCCValue) int {
 // EncodeMVCCValue encodes an MVCCValue into its Pebble representation. See the
 // comment on MVCCValue for a description of the encoding scheme.
 func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
-	return EncodeMVCCValueToBuf(v, nil)
+	b, _, err := EncodeMVCCValueToBuf(v, nil)
+	return b, err
 }
 
 // EncodeMVCCValueToBuf encodes an MVCCValue into its Pebble
@@ -189,16 +192,20 @@ func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
 // it is large enough. If the provided buffer is not large enough a
 // new buffer is allocated.
 //
+// The returned bool is true if the provided buffer was used or
+// reallocated and false if the MVCCValue.Value.RawBytes were returned
+// directly.
+//
 // TODO(erikgrinaker): This could mid-stack inline when we compared
 // v.MVCCValueHeader == enginepb.MVCCValueHeader{} instead of IsEmpty(), but
 // struct comparisons have a significant performance regression in Go 1.19 which
 // negates the inlining gain. Reconsider this with Go 1.20. See:
 // https://github.com/cockroachdb/cockroach/issues/88818
-func EncodeMVCCValueToBuf(v MVCCValue, buf []byte) ([]byte, error) {
+func EncodeMVCCValueToBuf(v MVCCValue, buf []byte) ([]byte, bool, error) {
 	if v.MVCCValueHeader.IsEmpty() && !disableSimpleValueEncoding {
 		// Simple encoding. Use the roachpb.Value encoding directly with no
 		// modification. No need to re-allocate or copy.
-		return v.Value.RawBytes, nil
+		return v.Value.RawBytes, false, nil
 	}
 
 	// Extended encoding. Wrap the roachpb.Value encoding with a header containing
@@ -224,11 +231,11 @@ func EncodeMVCCValueToBuf(v MVCCValue, buf []byte) ([]byte, error) {
 	// an interface, which would cause a heap allocation and incur the cost of
 	// dynamic dispatch.
 	if _, err := v.MVCCValueHeader.MarshalToSizedBuffer(buf[extendedPreludeSize:headerSize]); err != nil {
-		return nil, errors.Wrap(err, "marshaling MVCCValueHeader")
+		return nil, false, errors.Wrap(err, "marshaling MVCCValueHeader")
 	}
 	// <4-byte-checksum><1-byte-tag><encoded-data> or empty for tombstone
 	copy(buf[headerSize:], v.Value.RawBytes)
-	return buf, nil
+	return buf, true, nil
 }
 
 // DecodeMVCCValue decodes an MVCCKey from its Pebble representation.
