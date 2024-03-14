@@ -16,7 +16,6 @@ import (
 	"math"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -875,6 +874,7 @@ func (b *BoundAccount) Empty(ctx context.Context) {
 		panic(errors.AssertionFailedf("uninitialized account"))
 	}
 	if b.standaloneUnlimited {
+		log.Infof(ctx, "emptying standalone account %p, had %d bytes used", b, b.used)
 		b.used = 0
 		return
 	}
@@ -957,6 +957,7 @@ func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 		panic(errors.AssertionFailedf("uninitialized account"))
 	}
 	if b.standaloneUnlimited {
+		log.Infof(ctx, "growing standalone account %p by %d bytes, had %d bytes used", b, x, b.used)
 		b.used += x
 		return nil
 	}
@@ -981,12 +982,11 @@ func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 		panic(errors.AssertionFailedf("uninitialized account"))
 	}
 	if b.standaloneUnlimited {
+		log.Infof(ctx, "shrinking standalone account %p by %d bytes, had %d bytes used", b, delta, b.used)
 		if b.used < delta {
-			var sv *settings.Values
-			var name redact.RedactableString
-			logcrash.ReportOrPanic(ctx, sv,
-				"%s: no bytes in account to release, current %d, free %d",
-				name, b.used, delta)
+			logcrash.ReportOrPanic(ctx, nil, /* sv */
+				"standalone account %p: no bytes in account to release, current %d, free %d",
+				b, b.used, delta)
 			delta = b.used
 		}
 		b.used -= delta
