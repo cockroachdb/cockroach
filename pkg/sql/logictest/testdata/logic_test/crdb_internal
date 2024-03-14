@@ -859,11 +859,11 @@ SELECT key, max_retries, failure_count
  WHERE application_name = 'test_max_retry'
 ORDER BY key
 ----
-CREATE SEQUENCE s                                                         0  0
-DROP SEQUENCE s                                                           0  0
-RESET application_name                                                    0  0
-SELECT IF(nextval('_') < _, crdb_internal.force_retry('_'::INTERVAL), _)  0  1
-SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)                2  1
+CREATE SEQUENCE s                                                     0  0
+DROP SEQUENCE s                                                       0  0
+RESET application_name                                                0  0
+SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)            2  1
+SELECT IF(nextval(_) < _, crdb_internal.force_retry(_::INTERVAL), _)  0  1
 
 query T
 SELECT database_name FROM crdb_internal.node_statement_statistics limit 1

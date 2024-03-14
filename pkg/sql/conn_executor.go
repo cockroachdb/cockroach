@@ -3533,7 +3533,7 @@ var queryFormattingForFingerprintsMask = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.stats.statement_fingerprint.format_mask",
 	"enables setting additional fmt flags for statement fingerprint formatting",
-	0,
+	int64(tree.FmtCollapseLists|tree.FmtConstantsAsUnderscores),
 )
 
 func (ex *connExecutor) txnIsolationLevelToKV(

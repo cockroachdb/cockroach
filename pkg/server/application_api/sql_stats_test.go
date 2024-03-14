@@ -86,7 +86,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 		{query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, count: 1, numRows: 0},
 		{
 			query:         `INSERT INTO posts VALUES (1, 'foo')`,
-			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, __more__)`,
 			count:         1,
 			numRows:       1,
 		},
@@ -222,7 +222,7 @@ func TestStatusAPITransactions(t *testing.T) {
 		{query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, count: 1, numRows: 0},
 		{
 			query:         `INSERT INTO posts VALUES (1, 'foo')`,
-			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
+			fingerprinted: `INSERT INTO posts VALUES (_, __more__)`,
 			count:         1,
 			numRows:       1,
 		},
@@ -425,7 +425,7 @@ func TestStatusAPIStatements(t *testing.T) {
 		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
 		{
 			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
-			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, __more__)`,
 		},
 		{stmt: `SELECT * FROM posts`},
 	}
@@ -730,7 +730,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 		{stmt: `CREATE DATABASE football`, respQuery: `CREATE DATABASE football`, fullScan: false, distSQL: false, failed: false, count: 1},
 		{stmt: `SET database = football`, respQuery: `SET database = football`, fullScan: false, distSQL: false, failed: false, count: 1},
 		{stmt: `CREATE TABLE players (id INT PRIMARY KEY, name TEXT, position TEXT, age INT,goals INT)`, respQuery: `CREATE TABLE players (id INT8 PRIMARY KEY, name STRING, "position" STRING, age INT8, goals INT8)`, fullScan: false, distSQL: false, failed: false, count: 1},
-		{stmt: `INSERT INTO players (id, name, position, age, goals) VALUES (1, 'Lionel Messi', 'Forward', 34, 672), (2, 'Cristiano Ronaldo', 'Forward', 36, 674)`, respQuery: `INSERT INTO players(id, name, "position", age, goals) VALUES (_, '_', __more1_10__), (__more1_10__)`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `INSERT INTO players (id, name, position, age, goals) VALUES (1, 'Lionel Messi', 'Forward', 34, 672), (2, 'Cristiano Ronaldo', 'Forward', 36, 674)`, respQuery: `INSERT INTO players(id, name, "position", age, goals) VALUES (_, __more__), (__more__)`, fullScan: false, distSQL: false, failed: false, count: 1},
 		{stmt: `SELECT avg(goals) FROM players`, respQuery: `SELECT avg(goals) FROM players`, fullScan: true, distSQL: true, failed: false, count: 1},
 		{stmt: `SELECT name FROM players WHERE age >= 32`, respQuery: `SELECT name FROM players WHERE age >= _`, fullScan: true, distSQL: true, failed: false, count: 1},
 	}
@@ -882,7 +882,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
 		{
 			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
-			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, __more__)`,
 		},
 		{stmt: `SELECT * FROM posts`},
 	}
@@ -1061,7 +1061,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 		thirdServerSQL.Exec(t, stmt)
 	}
 
-	query := `INSERT INTO posts VALUES (_, '_')`
+	query := `INSERT INTO posts VALUES (_, __more__)`
 	fingerprintID := appstatspb.ConstructStatementFingerprintID(query, true, `roachblog`)
 	path := fmt.Sprintf(`stmtdetails/%v`, fingerprintID)
 
