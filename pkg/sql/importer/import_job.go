@@ -410,6 +410,7 @@ func (r *importResumer) prepareTablesForIngestion(
 	var desc *descpb.TableDescriptor
 
 	useImportEpochs := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V24_1)
+	useImportEpochs = useImportEpochs && importEpochs.Get(&p.ExecCfg().Settings.SV)
 	for i, table := range details.Tables {
 		if !table.IsNew {
 			desc, err = prepareExistingTablesForIngestion(ctx, txn, descsCol, table.Desc, useImportEpochs)
@@ -1254,6 +1255,13 @@ var retryDuration = settings.RegisterDurationSetting(
 	"duration during which the IMPORT can be retried in face of non-permanent errors",
 	time.Minute*2,
 	settings.PositiveDuration,
+)
+
+var importEpochs = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.import.write_import_epoch.enabled",
+	"controls whether IMPORT will write ImportEpoch's to descriptors",
+	false,
 )
 
 func getFractionCompleted(job *jobs.Job) float64 {

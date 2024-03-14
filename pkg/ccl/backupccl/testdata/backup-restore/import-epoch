@@ -6,6 +6,11 @@ new-cluster name=s1
 ----
 
 exec-sql
+SET CLUSTER SETTING bulkio.import.write_import_epoch.enabled=true;
+----
+
+
+exec-sql
 CREATE DATABASE d;
 USE d;
 CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
