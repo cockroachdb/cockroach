@@ -252,22 +252,25 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 	}, nil
 }
 
-// MatchOverload searches an overload which has exactly the same parameter
+// MatchOverload searches an overload which has exactly the same signature
 // types. The overload from the most significant schema is returned. If
-// paramTypes==nil, an error is returned if the function name is not unique in
-// the most significant schema. If paramTypes is not nil, an error with
+// signaturesTypes==nil, an error is returned if the function name is not unique in
+// the most significant schema. If signaturesTypes is not nil, an error with
 // ErrRoutineUndefined cause is returned if not matches found. Overloads that
 // don't match the types in routineType are ignored.
+//
+// signatures can have multiple signature types in case they depend on the
+// routine type.
 func (fd *ResolvedFunctionDefinition) MatchOverload(
-	paramTypes []*types.T, explicitSchema string, searchPath SearchPath, routineType RoutineType,
+	signatures [][]*types.T, explicitSchema string, searchPath SearchPath, routineType RoutineType,
 ) (QualifiedOverload, error) {
-	matched := func(ol QualifiedOverload, schema string) bool {
+	matched := func(paramTypes []*types.T, ol QualifiedOverload, schema string) bool {
 		if ol.Type == UDFRoutine || ol.Type == ProcedureRoutine {
 			return schema == ol.Schema && (paramTypes == nil || ol.params().MatchIdentical(paramTypes))
 		}
 		return schema == ol.Schema && (paramTypes == nil || ol.params().Match(paramTypes))
 	}
-	typeNames := func() string {
+	typeNames := func(paramTypes []*types.T) string {
 		ns := make([]string, len(paramTypes))
 		for i, t := range paramTypes {
 			ns[i] = t.Name()
@@ -275,24 +278,26 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 		return strings.Join(ns, ",")
 	}
 
-	found := false
 	ret := make([]QualifiedOverload, 0, len(fd.Overloads))
-
-	findMatches := func(schema string) {
-		for i := range fd.Overloads {
-			if matched(fd.Overloads[i], schema) {
-				found = true
-				ret = append(ret, fd.Overloads[i])
+	var matchedIdx int
+	for idx, paramTypes := range signatures {
+		found := false
+		findMatches := func(schema string) {
+			for i := range fd.Overloads {
+				if matched(paramTypes, fd.Overloads[i], schema) {
+					found = true
+					ret = append(ret, fd.Overloads[i])
+					matchedIdx = idx
+				}
 			}
 		}
-	}
-
-	if explicitSchema != "" {
-		findMatches(explicitSchema)
-	} else {
-		for i, n := 0, searchPath.NumElements(); i < n; i++ {
-			if findMatches(searchPath.GetSchema(i)); found {
-				break
+		if explicitSchema != "" {
+			findMatches(explicitSchema)
+		} else {
+			for i, n := 0, searchPath.NumElements(); i < n; i++ {
+				if findMatches(searchPath.GetSchema(i)); found {
+					break
+				}
 			}
 		}
 	}
@@ -300,10 +305,10 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	if len(ret) == 1 && ret[0].Type&routineType == 0 {
 		if routineType == ProcedureRoutine {
 			return QualifiedOverload{}, pgerror.Newf(
-				pgcode.WrongObjectType, "%s(%s) is not a procedure", fd.Name, typeNames())
+				pgcode.WrongObjectType, "%s(%s) is not a procedure", fd.Name, typeNames(signatures[matchedIdx]))
 		} else {
 			return QualifiedOverload{}, pgerror.Newf(
-				pgcode.WrongObjectType, "%s(%s) is not a function", fd.Name, typeNames())
+				pgcode.WrongObjectType, "%s(%s) is not a function", fd.Name, typeNames(signatures[matchedIdx]))
 		}
 	}
 
@@ -325,12 +330,12 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	if len(ret) == 0 {
 		if routineType == ProcedureRoutine {
 			return QualifiedOverload{}, errors.Mark(
-				pgerror.Newf(pgcode.UndefinedFunction, "procedure %s(%s) does not exist", fd.Name, typeNames()),
+				pgerror.Newf(pgcode.UndefinedFunction, "procedure %s(%s) does not exist", fd.Name, typeNames(signatures[0])),
 				ErrRoutineUndefined,
 			)
 		} else {
 			return QualifiedOverload{}, errors.Mark(
-				pgerror.Newf(pgcode.UndefinedFunction, "function %s(%s) does not exist", fd.Name, typeNames()),
+				pgerror.Newf(pgcode.UndefinedFunction, "function %s(%s) does not exist", fd.Name, typeNames(signatures[0])),
 				ErrRoutineUndefined,
 			)
 		}

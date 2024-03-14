@@ -504,14 +504,26 @@ func (node *RoutineObj) Format(ctx *FmtCtx) {
 // function overload:
 //   - for functions only input parameters are included;
 //   - for procedures, all parameters are included.
+//
+// If routineType specifies both functions and procedures AND there are some
+// OUT parameters, then two "signatures" are returned.
 func (node RoutineObj) SignatureTypes(
 	ctx context.Context, res TypeReferenceResolver, routineType RoutineType,
-) ([]*types.T, error) {
-	var typs []*types.T
-	if node.Params != nil {
-		typs = make([]*types.T, 0, len(node.Params))
+) ([][]*types.T, error) {
+	if node.Params == nil {
+		return nil, nil
+	}
+	var needTwoSignatures bool
+	for _, arg := range node.Params {
+		if arg.Class == RoutineParamOut {
+			needTwoSignatures = true
+			break
+		}
+	}
+	if !needTwoSignatures {
+		typs := make([]*types.T, 0, len(node.Params))
 		for _, arg := range node.Params {
-			if IsParamIncludedIntoSignature(arg.Class, routineType == ProcedureRoutine /* isProcedure */) {
+			if IsInParamClass(arg.Class) {
 				typ, err := ResolveType(ctx, arg.Type, res)
 				if err != nil {
 					return nil, err
@@ -519,8 +531,20 @@ func (node RoutineObj) SignatureTypes(
 				typs = append(typs, typ)
 			}
 		}
+		return [][]*types.T{typs}, nil
 	}
-	return typs, nil
+	funcTyps, procTyps := make([]*types.T, 0, len(node.Params)), make([]*types.T, 0, len(node.Params))
+	for _, arg := range node.Params {
+		typ, err := ResolveType(ctx, arg.Type, res)
+		if err != nil {
+			return nil, err
+		}
+		if IsInParamClass(arg.Class) {
+			funcTyps = append(funcTyps, typ)
+		}
+		procTyps = append(procTyps, typ)
+	}
+	return [][]*types.T{funcTyps, procTyps}, nil
 }
 
 // AlterFunctionOptions represents a ALTER FUNCTION...action statement.

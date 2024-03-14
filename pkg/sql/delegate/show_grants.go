@@ -270,7 +270,8 @@ SELECT database_name,
 				return nil, err
 			}
 			ol, err := fd.MatchOverload(
-				signatureTypes, fn.FuncName.Schema(), &d.evalCtx.SessionData().SearchPath, routineType,
+				signatureTypes, fn.FuncName.Schema(),
+				&d.evalCtx.SessionData().SearchPath, routineType,
 			)
 			if err != nil {
 				return nil, err

@@ -1295,7 +1295,7 @@ func (b *builderState) ResolveRoutine(
 
 	signatureTypes, err := routineObj.SignatureTypes(b.ctx, b.cr, routineType)
 	if err != nil {
-		return nil
+		panic(err)
 	}
 	ol, err := fd.MatchOverload(
 		signatureTypes, routineObj.FuncName.Schema(), b.semaCtx.SearchPath, routineType,

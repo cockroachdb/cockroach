@@ -248,14 +248,16 @@ func (b *Builder) buildRoutine(
 			panic(unimplemented.NewWithIssue(88947,
 				"variadiac user-defined functions are not yet supported"))
 		}
-		params = make(opt.ColList, len(paramTypes))
+		params = make(opt.ColList, 0, len(paramTypes))
 		for i := range paramTypes {
-
+			if isProcedure && o.RoutineParams[i].Class == tree.RoutineParamOut {
+				continue
+			}
 			paramType := &paramTypes[i]
 			argColName := funcParamColName(tree.Name(paramType.Name), i)
 			col := b.synthesizeColumn(bodyScope, argColName, paramType.Typ, nil /* expr */, nil /* scalar */)
-			col.setParamOrd(i)
-			params[i] = col.id
+			col.setParamOrd(len(params))
+			params = append(params, col.id)
 		}
 	}
 

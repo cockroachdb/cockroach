@@ -245,7 +245,7 @@ func TestMatchOverload(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			path := sessiondata.MakeSearchPath(tc.path)
 			ol, err := fd.MatchOverload(
-				tc.argTypes,
+				[][]*types.T{tc.argTypes},
 				tc.explicitSchema,
 				&path,
 				tc.routineType,

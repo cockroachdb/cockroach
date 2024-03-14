@@ -131,6 +131,9 @@ func (c FunctionClass) String() string {
 }
 
 // RoutineType specifies the type of routine represented by an overload.
+//
+// WARNING: in some places we use bitwise-OR to represent multiple routine
+// types, so exact comparison might be incorrect.
 type RoutineType uint8
 
 const (

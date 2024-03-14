@@ -440,7 +440,7 @@ func (md *Metadata) CheckDependencies(
 				// "<func> is not a function" error here. Instead, we'll return
 				// false and attempt to rebuild the statement.
 				toCheck, err := definition.MatchOverload(
-					overload.Types.Types(),
+					[][]*types.T{overload.Types.Types()},
 					name.Schema(),
 					&evalCtx.SessionData().SearchPath,
 					tree.UDFRoutine|tree.BuiltinRoutine|tree.ProcedureRoutine,
