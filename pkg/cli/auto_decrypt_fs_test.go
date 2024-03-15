@@ -12,6 +12,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -44,11 +45,12 @@ func TestAutoDecryptFS(t *testing.T) {
 		if dir != path1 && dir != path2 {
 			t.Fatalf("unexpected dir %s", dir)
 		}
-		env := fs.InMemory()
-		require.NoError(t, env.DefaultFS.MkdirAll(dir, 0755))
-		env.DefaultFS = vfs.WithLogging(env.DefaultFS, func(format string, args ...interface{}) {
+		memFS := vfs.WithLogging(vfs.NewMem(), func(format string, args ...interface{}) {
 			fmt.Fprintf(&buf, dir+": "+format+"\n", args...)
 		})
+		env, err := fs.InitEnv(context.Background(), memFS, "" /* dir */, fs.EnvConfig{})
+		require.NoError(t, err)
+		require.NoError(t, env.MkdirAll(dir, 0755))
 		return env, nil
 	}
 
@@ -71,15 +73,21 @@ func TestAutoDecryptFS(t *testing.T) {
 	create(path2, "a", "b", "xx")
 
 	// Check that operations inside the two paths happen using the resolved FSes.
-	output := strings.ReplaceAll(buf.String(), dir, "$TMPDIR")
-	expected :=
-		`$TMPDIR/path1: create: $TMPDIR/path1/bar
+	output := strings.TrimSpace(strings.ReplaceAll(buf.String(), dir, "$TMPDIR"))
+	expected := `
+$TMPDIR/path1: mkdir-all:  0777
+$TMPDIR/path1: lock: LOCK
+$TMPDIR/path1: mkdir-all: $TMPDIR/path1 0755
+$TMPDIR/path1: create: $TMPDIR/path1/bar
 $TMPDIR/path1: close: $TMPDIR/path1/bar
+$TMPDIR/foo/path2: mkdir-all:  0777
+$TMPDIR/foo/path2: lock: LOCK
+$TMPDIR/foo/path2: mkdir-all: $TMPDIR/foo/path2 0755
 $TMPDIR/foo/path2: create: $TMPDIR/foo/path2/baz
 $TMPDIR/foo/path2: close: $TMPDIR/foo/path2/baz
 $TMPDIR/foo/path2: mkdir-all: $TMPDIR/foo/path2/a/b 0755
 $TMPDIR/foo/path2: create: $TMPDIR/foo/path2/a/b/xx
 $TMPDIR/foo/path2: close: $TMPDIR/foo/path2/a/b/xx
 `
-	require.Equal(t, expected, output)
+	require.Equal(t, strings.TrimSpace(expected), output)
 }

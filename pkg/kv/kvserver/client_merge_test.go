@@ -3920,7 +3920,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// Iterate over all the tested SSTs and check that they're byte-by-byte equal.
 		var dumpDir string
 		for i := range sstNamesSubset {
-			actualSST, err := fs.ReadFile(receivingEng, sstNamesSubset[i])
+			actualSST, err := fs.ReadFile(receivingEng.Env(), sstNamesSubset[i])
 			if err != nil {
 				return err
 			}

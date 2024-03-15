@@ -250,7 +250,7 @@ func Open(
 	cfg.Env = env
 	cfg.Settings = settings
 	cfg.Opts = DefaultPebbleOptions()
-	cfg.Opts.FS = env.DefaultFS
+	cfg.Opts.FS = env
 	cfg.Opts.ReadOnly = env.IsReadOnly()
 	for _, opt := range opts {
 		if err := opt(&cfg); err != nil {

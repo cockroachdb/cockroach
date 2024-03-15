@@ -3317,7 +3317,7 @@ func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
 // the provided key spans. If spans is empty, it includes the entire store.
 func (s *Store) checkpoint(tag string, spans []roachpb.Span) (string, error) {
 	checkpointBase := s.checkpointsDir()
-	_ = s.TODOEngine().MkdirAll(checkpointBase, os.ModePerm)
+	_ = s.TODOEngine().Env().MkdirAll(checkpointBase, os.ModePerm)
 	// Create the checkpoint in a "pending" directory first. If we fail midway, it
 	// should be clear that the directory contains an incomplete checkpoint.
 	pendingDir := filepath.Join(checkpointBase, tag+"_pending")
@@ -3326,7 +3326,7 @@ func (s *Store) checkpoint(tag string, spans []roachpb.Span) (string, error) {
 	}
 	// Atomically rename the directory when it represents a complete checkpoint.
 	checkpointDir := filepath.Join(checkpointBase, tag)
-	if err := s.TODOEngine().Rename(pendingDir, checkpointDir); err != nil {
+	if err := s.TODOEngine().Env().Rename(pendingDir, checkpointDir); err != nil {
 		return "", err
 	}
 	return checkpointDir, nil
@@ -3356,7 +3356,7 @@ func (s *Store) computeMetrics(ctx context.Context) (m storage.Metrics, err erro
 	s.metrics.updateEnvStats(*envStats)
 
 	{
-		dirs, err := s.TODOEngine().List(s.checkpointsDir())
+		dirs, err := s.TODOEngine().Env().List(s.checkpointsDir())
 		if err != nil { // skip NotFound or any other error
 			dirs = nil
 		}

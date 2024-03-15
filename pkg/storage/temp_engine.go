@@ -111,5 +111,5 @@ func newPebbleTempEngine(
 	return &pebbleTempEngine{
 		db:     p.db,
 		closer: env,
-	}, p, nil
+	}, env, nil
 }
