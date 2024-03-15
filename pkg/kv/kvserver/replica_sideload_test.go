@@ -251,7 +251,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 		fmtSideloaded := func() []string {
 			tc.repl.raftMu.Lock()
 			defer tc.repl.raftMu.Unlock()
-			fs, _ := tc.repl.store.TODOEngine().List(tc.repl.raftMu.sideloaded.Dir())
+			fs, _ := tc.repl.store.TODOEngine().Env().List(tc.repl.raftMu.sideloaded.Dir())
 			sort.Strings(fs)
 			return fs
 		}
