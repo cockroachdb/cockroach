@@ -53,6 +53,15 @@ var MergeQueueInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// MergeQueueInterval is a setting that controls how often the merge queue waits
+// between processing replicas.
+var skipMergeQueueForExternalBytes = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.range_merge.skip_external_bytes",
+	"skip the merge queue for external bytes",
+	false,
+)
+
 // mergeQueue manages a queue of ranges slated to be merged with their right-
 // hand neighbor.
 //
@@ -162,6 +171,18 @@ func (mq *mergeQueue) shouldQueue(
 		// This range is above the minimum size threshold. It does not need to be
 		// merged.
 		return false, 0
+	}
+
+	if skipMergeQueueForExternalBytes.Get(&repl.ClusterSettings().SV) {
+		if hasExternal, err := repl.HasExternalBytes(); err != nil {
+			log.Warningf(ctx, "could not determine if %s has external bytes: %s",
+				repl, err)
+			return false, 0
+		} else if hasExternal {
+			log.Warningf(ctx, "skipping merge for range %s because it has external bytes",
+				desc.RangeID)
+			return false, 0
+		}
 	}
 
 	// Invert sizeRatio to compute the priority so that smaller ranges are merged

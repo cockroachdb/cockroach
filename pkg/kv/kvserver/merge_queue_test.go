@@ -12,20 +12,29 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMergeQueueShouldQueue(t *testing.T) {
@@ -164,6 +173,98 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 			if tc.expPriority != priority {
 				t.Errorf("incorrect priority: expected %v but got %v", tc.expPriority, priority)
 			}
+		})
+	}
+}
+
+// TestMergeWithExternalFiles tests that while a range has external
+// file bytes, we calculate an estimate of the stats during splits.
+func TestMergeShouldQueueWithExternalFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	for _, skipExternal := range []bool{true, false} {
+		t.Run(fmt.Sprintf("kv.range_merge.skip_external_bytes=%v", skipExternal), func(t *testing.T) {
+			ctx := context.Background()
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &StoreTestingKnobs{
+						DisableMergeQueue:              true,
+						DisableSplitQueue:              true,
+						DisableCanAckBeforeApplication: true,
+					},
+				},
+			})
+
+			_, err := db.Exec("SET CLUSTER SETTING kv.range_merge.skip_external_bytes=$1", skipExternal)
+			require.NoError(t, err)
+			const externURI = "nodelocal://1/external-files"
+
+			extStore, err := cloud.EarlyBootExternalStorageFromURI(ctx,
+				externURI,
+				base.ExternalIODirConfig{},
+				s.ClusterSettings(),
+				nil, /* limiters */
+				cloud.NilMetrics)
+			require.NoError(t, err)
+
+			defer s.Stopper().Stop(ctx)
+
+			scratchKey, err := s.ScratchRangeWithExpirationLease()
+			require.NoError(t, err)
+
+			lhsDesc, _, err := s.SplitRange(scratchKey.Next().Next())
+			require.NoError(t, err)
+
+			// Write an external SST the the LHS.
+			fileName := "external-1.sst"
+			writeKey := lhsDesc.StartKey.AsRawKey().Next()
+			mvccKV := storage.MVCCKeyValue{
+				Key: storage.MVCCKey{
+					Key:       writeKey,
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+				Value: []byte("hello"),
+			}
+			sst, _, _ := storageutils.MakeSST(t, s.ClusterSettings(), []interface{}{mvccKV})
+			w, err := extStore.Writer(ctx, fileName)
+			require.NoError(t, err)
+			_, err = w.Write(sst)
+			require.NoError(t, err)
+			require.NoError(t, w.Close())
+
+			size, err := extStore.Size(ctx, fileName)
+			require.NoError(t, err)
+
+			_, _, err = s.DB().AddRemoteSSTable(ctx, roachpb.Span{
+				Key:    writeKey,
+				EndKey: writeKey.Next(),
+			}, kvpb.AddSSTableRequest_RemoteFile{
+				Locator:                 externURI,
+				Path:                    fileName,
+				ApproximatePhysicalSize: uint64(size),
+				BackingFileSize:         uint64(size),
+			}, &enginepb.MVCCStats{
+				ContainsEstimates: 1,
+				KeyBytes:          2,
+				ValBytes:          10,
+				KeyCount:          2,
+				LiveCount:         2,
+			}, s.DB().Clock().Now())
+			require.NoError(t, err)
+
+			store, err := s.GetStores().(*Stores).GetStore(s.GetFirstStoreID())
+			require.NoError(t, err)
+
+			lhsRepl := store.LookupReplica(lhsDesc.StartKey.Next())
+			mq := newMergeQueue(store, store.DB())
+
+			zoneConfig := zonepb.DefaultZoneConfigRef()
+			lhsRepl.SetSpanConfig(zoneConfig.AsSpanConfig())
+			shouldq, _ := mq.shouldQueue(ctx, s.Clock().NowAsClockTimestamp(), lhsRepl, config.NewSystemConfig(zoneConfig))
+			require.Equal(t, !skipExternal, shouldq)
+
 		})
 	}
 }
