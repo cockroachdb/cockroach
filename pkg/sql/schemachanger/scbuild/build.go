@@ -33,6 +33,16 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// LogSchemaChangerEventsFn callback function returned by builder that
+// will log event log entries. This isn't a part of the plan and is executed
+// right before the statement phases.
+type LogSchemaChangerEventsFn func(ctx context.Context) error
+
+// stubLogSchemaChangerEventsFn internally used when no logging is needed.
+var stubLogSchemaChangerEventsFn = func(ctx context.Context) error {
+	return nil
+}
+
 // Build constructs a new state from an incumbent state and a statement.
 //
 // The function takes an AST for a DDL statement and constructs targets
@@ -52,7 +62,7 @@ func Build(
 	incumbent scpb.CurrentState,
 	n tree.Statement,
 	memAcc *mon.BoundAccount,
-) (_ scpb.CurrentState, err error) {
+) (_ scpb.CurrentState, eventLogCallBack LogSchemaChangerEventsFn, err error) {
 	defer scerrors.StartEventf(
 		ctx,
 		"building declarative schema change targets for %s",
@@ -76,7 +86,7 @@ func Build(
 	// VIEW statements.
 	an, err := newAstAnnotator(n)
 	if err != nil {
-		return scpb.CurrentState{}, err
+		return scpb.CurrentState{}, stubLogSchemaChangerEventsFn, err
 	}
 	b := buildCtx{
 		Context:              ctx,
@@ -107,8 +117,8 @@ func Build(
 	}
 
 	// Write to event log and return.
-	logEvents(b, ret.TargetState, loggedTargets)
-	return ret, nil
+	eventLogCallBack = makeEventLogCallback(b, ret.TargetState, loggedTargets)
+	return ret, eventLogCallBack, nil
 }
 
 // makeState populates the declarative schema changer state returned by Build
