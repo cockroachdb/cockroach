@@ -700,7 +700,7 @@ upsert bc
 query T
 EXPLAIN (OPT, MEMO, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
 ----
-memo (optimized, ~33KB, required=[presentation: info:19] [distribution: test])
+memo (optimized, ~34KB, required=[presentation: info:19] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:19] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -1690,7 +1690,7 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM bc WHERE b >= 1.0 AND b < 2.0
 ----
-memo (optimized, ~11KB, required=[presentation: info:5] [distribution: test])
+memo (optimized, ~12KB, required=[presentation: info:5] [distribution: test])
  ├── G1: (explain G2 [presentation: b:1,c:2] [distribution: test])
  │    └── [presentation: info:5] [distribution: test]
  │         ├── best: (explain G2="[presentation: b:1,c:2] [distribution: test]" [presentation: b:1,c:2] [distribution: test])
@@ -1841,7 +1841,7 @@ select
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM g WHERE (g || 'abc') LIKE '%ggg%'
 ----
-memo (optimized, ~12KB, required=[presentation: info:7] [distribution: test])
+memo (optimized, ~13KB, required=[presentation: info:7] [distribution: test])
  ├── G1: (explain G2 [presentation: g:1] [distribution: test])
  │    └── [presentation: info:7] [distribution: test]
  │         ├── best: (explain G2="[presentation: g:1] [distribution: test]" [presentation: g:1] [distribution: test])
@@ -2439,7 +2439,7 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
 ----
-memo (optimized, ~26KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~27KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [presentation: b:1,c:2,f:5] [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[presentation: b:1,c:2,f:5] [distribution: test]" [presentation: b:1,c:2,f:5] [distribution: test])
@@ -2824,7 +2824,7 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
 ----
-memo (optimized, ~32KB, required=[presentation: info:12] [distribution: test])
+memo (optimized, ~33KB, required=[presentation: info:12] [distribution: test])
  ├── G1: (explain G2 [presentation: f:1,g:11] [distribution: test])
  │    └── [presentation: info:12] [distribution: test]
  │         ├── best: (explain G2="[presentation: f:1,g:11] [distribution: test]" [presentation: f:1,g:11] [distribution: test])
@@ -3103,7 +3103,7 @@ anti-join-apply
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
 ----
-memo (optimized, ~21KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~22KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1] [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1] [distribution: test]" [presentation: a:1] [distribution: test])
