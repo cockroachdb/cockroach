@@ -1127,7 +1127,7 @@ func TestCreateCheckpoint_SpanConstrained(t *testing.T) {
 	}
 
 	checkpointRootDir := mem.PathJoin(dir, "checkpoint")
-	require.NoError(t, db.FS.MkdirAll(checkpointRootDir, os.ModePerm))
+	require.NoError(t, db.Env().MkdirAll(checkpointRootDir, os.ModePerm))
 
 	var checkpointNum int
 	checkpointSpan := func(s roachpb.Span) string {
@@ -1222,8 +1222,9 @@ func TestEngineFS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	e := NewDefaultInMemForTesting()
-	defer e.Close()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
+	e := engine.Env()
 
 	testCases := []string{
 		"1a: f = create /bar",
@@ -1389,19 +1390,20 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 	db, err := Open(context.Background(), fs.MustInitPhysicalTestingEnv(dir), cluster.MakeClusterSettings(), CacheSize(testCacheSize))
 	require.NoError(t, err)
 	defer db.Close()
+	env := db.Env()
 
 	// Verify Remove returns os.ErrNotExist if file does not exist.
-	if err := db.Remove("/non/existent/file"); !oserror.IsNotExist(err) {
+	if err := env.Remove("/non/existent/file"); !oserror.IsNotExist(err) {
 		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 	}
 	// Verify RemoveAll returns nil if path does not exist.
-	if err := db.RemoveAll("/non/existent/file"); err != nil {
+	if err := env.RemoveAll("/non/existent/file"); err != nil {
 		t.Fatalf("expected nil, but got %v (%T)", err, err)
 	}
 
 	fname := filepath.Join(dir, "random.file")
 	data := "random data"
-	if f, err := db.Create(fname); err != nil {
+	if f, err := env.Create(fname); err != nil {
 		t.Fatalf("unable to open file with filename %s, got err %v", fname, err)
 	} else {
 		// Write data to file so we can read it later.
@@ -1416,23 +1418,23 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 		}
 	}
 
-	if b, err := fs.ReadFile(db, fname); err != nil {
+	if b, err := fs.ReadFile(env, fname); err != nil {
 		t.Errorf("unable to read file with filename %s, got err %v", fname, err)
 	} else if string(b) != data {
 		t.Errorf("expected content in %s is '%s', got '%s'", fname, data, string(b))
 	}
 
-	if err := db.Remove(fname); err != nil {
+	if err := env.Remove(fname); err != nil {
 		t.Errorf("unable to delete file with filename %s, got err %v", fname, err)
 	}
 
 	// Verify ReadFile returns os.ErrNotExist if reading an already deleted file.
-	if _, err := fs.ReadFile(db, fname); !oserror.IsNotExist(err) {
+	if _, err := fs.ReadFile(env, fname); !oserror.IsNotExist(err) {
 		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 	}
 
 	// Verify Remove returns os.ErrNotExist if deleting an already deleted file.
-	if err := db.Remove(fname); !oserror.IsNotExist(err) {
+	if err := env.Remove(fname); !oserror.IsNotExist(err) {
 		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 	}
 }
@@ -1450,9 +1452,10 @@ func TestFS(t *testing.T) {
 	}
 	for name, loc := range engineDest {
 		t.Run(name, func(t *testing.T) {
-			e, err := Open(context.Background(), loc, cluster.MakeClusterSettings(), CacheSize(testCacheSize), ForTesting)
+			engine, err := Open(context.Background(), loc, cluster.MakeClusterSettings(), CacheSize(testCacheSize), ForTesting)
 			require.NoError(t, err)
-			defer e.Close()
+			defer engine.Close()
+			e := engine.Env()
 
 			path := func(rel string) string {
 				return filepath.Join(dir, rel)

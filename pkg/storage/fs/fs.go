@@ -175,9 +175,9 @@ func InitEnv(ctx context.Context, fs vfs.FS, dir string, cfg EnvConfig) (*Env, e
 		return nil, err
 	}
 	if e.Encryption != nil {
-		e.DefaultFS = e.Encryption.FS
+		e.defaultFS = e.Encryption.FS
 	} else {
-		e.DefaultFS = e.UnencryptedFS
+		e.defaultFS = e.UnencryptedFS
 	}
 	e.refs.Add(1)
 	return e, nil
@@ -188,10 +188,6 @@ func InitEnv(ctx context.Context, fs vfs.FS, dir string, cfg EnvConfig) (*Env, e
 type Env struct {
 	// Dir is the path to the root directory of the environment.
 	Dir string
-	// DefaultFS is the primary VFS that most users should use. If
-	// encryption-at-rest is enabled, this VFS will handle transparently
-	// encrypting and decrypting as necessary.
-	DefaultFS vfs.FS
 	// UnencryptedFS is a VFS without any encryption-at-rest enabled. Some files
 	// are stored unencrypted (eg, the 'min version' file used to persist the
 	// cluster version).
@@ -207,6 +203,11 @@ type Env struct {
 	// the store. It provides access to encryption-at-rest stats, etc.
 	Encryption *EncryptionEnv
 
+	// defaultFS is the primary VFS that most users should use. If
+	// encryption-at-rest is enabled, this VFS will handle transparently
+	// encrypting and decrypting as necessary. When the Env is used as an
+	// implementation of a VFS, this is the underlying VFS used.
+	defaultFS              vfs.FS
 	rw                     RWMode
 	diskHealthChecksCloser io.Closer
 	onDiskSlowFunc         atomic.Pointer[func(vfs.DiskSlowInfo)]
@@ -219,10 +220,11 @@ func (e *Env) Ref() {
 	e.refs.Add(1)
 }
 
+// Assert that Env implements vfs.FS.
+var _ vfs.FS = (*Env)(nil)
+
 // IsReadOnly returns true if the environment is opened in read-only mode.
 func (e *Env) IsReadOnly() bool {
-	// TODO(jackson): If `Env` itself implement vfs.FS (passing through to
-	// DefaultFS), we could enforce the read-only restriction.
 	return e.rw == ReadOnly
 }
 
@@ -285,6 +287,155 @@ func MustInitPhysicalTestingEnv(dir string) *Env {
 		panic(err)
 	}
 	return e
+}
+
+func errReadOnly() error {
+	return errors.New("filesystem is read-only")
+}
+
+// Create creates the named file for reading and writing. If a file
+// already exists at the provided name, it's removed first ensuring the
+// resulting file descriptor points to a new inode.
+func (e *Env) Create(name string) (vfs.File, error) {
+	if e.rw == ReadOnly {
+		return nil, errReadOnly()
+	}
+	return e.defaultFS.Create(name)
+}
+
+// Link creates newname as a hard link to the oldname file.
+func (e *Env) Link(oldname, newname string) error {
+	if e.rw == ReadOnly {
+		return errReadOnly()
+	}
+	return e.defaultFS.Link(oldname, newname)
+}
+
+// Open opens the named file for reading. openOptions provides
+func (e *Env) Open(name string, opts ...vfs.OpenOption) (vfs.File, error) {
+	return e.defaultFS.Open(name, opts...)
+}
+
+// OpenReadWrite opens the named file for reading and writing. If the file
+// does not exist, it is created.
+func (e *Env) OpenReadWrite(name string, opts ...vfs.OpenOption) (vfs.File, error) {
+	if e.rw == ReadOnly {
+		return nil, errReadOnly()
+	}
+	return e.defaultFS.OpenReadWrite(name, opts...)
+}
+
+// OpenDir opens the named directory for syncing.
+func (e *Env) OpenDir(name string) (vfs.File, error) {
+	return e.defaultFS.OpenDir(name)
+}
+
+// Remove removes the named file or directory.
+func (e *Env) Remove(name string) error {
+	if e.rw == ReadOnly {
+		return errReadOnly()
+	}
+	return e.defaultFS.Remove(name)
+}
+
+// RemoveAll removes the named file or directory and any children it
+// contains. It removes everything it can but returns the first error it
+// encounters.
+func (e *Env) RemoveAll(name string) error {
+	if e.rw == ReadOnly {
+		return errReadOnly()
+	}
+	return e.defaultFS.RemoveAll(name)
+}
+
+// Rename renames a file. It overwrites the file at newname if one exists,
+// the same as os.Rename.
+func (e *Env) Rename(oldname, newname string) error {
+	if e.rw == ReadOnly {
+		return errReadOnly()
+	}
+	return e.defaultFS.Rename(oldname, newname)
+
+}
+
+// ReuseForWrite attempts to reuse the file with oldname by renaming it to newname and opening
+// it for writing without truncation. It is acceptable for the implementation to choose not
+// to reuse oldname, and simply create the file with newname -- in this case the implementation
+// should delete oldname. If the caller calls this function with an oldname that does not exist,
+// the implementation may return an error.
+func (e *Env) ReuseForWrite(oldname, newname string) (vfs.File, error) {
+	if e.rw == ReadOnly {
+		return nil, errReadOnly()
+	}
+	return e.defaultFS.ReuseForWrite(oldname, newname)
+}
+
+// MkdirAll creates a directory and all necessary parents. The permission
+// bits perm have the same semantics as in os.MkdirAll. If the directory
+// already exists, MkdirAll does nothing and returns nil.
+func (e *Env) MkdirAll(dir string, perm os.FileMode) error {
+	if e.rw == ReadOnly {
+		return errReadOnly()
+	}
+	return e.defaultFS.MkdirAll(dir, perm)
+}
+
+// Lock locks the given file, creating the file if necessary, and
+// truncating the file if it already exists. The lock is an exclusive lock
+// (a write lock), but locked files should neither be read from nor written
+// to. Such files should have zero size and only exist to co-ordinate
+// ownership across processes.
+//
+// A nil Closer is returned if an error occurred. Otherwise, close that
+// Closer to release the lock.
+//
+// On Linux and OSX, a lock has the same semantics as fcntl(2)'s advisory
+// locks. In particular, closing any other file descriptor for the same
+// file will release the lock prematurely.
+//
+// Attempting to lock a file that is already locked by the current process
+// returns an error and leaves the existing lock untouched.
+//
+// Lock is not yet implemented on other operating systems, and calling it
+// will return an error.
+func (e *Env) Lock(name string) (io.Closer, error) {
+	return e.defaultFS.Lock(name)
+}
+
+// List returns a listing of the given directory. The names returned are
+// relative to dir.
+func (e *Env) List(dir string) ([]string, error) {
+	return e.defaultFS.List(dir)
+}
+
+// Stat returns an os.FileInfo describing the named file.
+func (e *Env) Stat(name string) (os.FileInfo, error) {
+	return e.defaultFS.Stat(name)
+}
+
+// PathBase returns the last element of path. Trailing path separators are
+// removed before extracting the last element. If the path is empty, PathBase
+// returns ".".  If the path consists entirely of separators, PathBase returns a
+// single separator.
+func (e *Env) PathBase(path string) string {
+	return e.defaultFS.PathBase(path)
+}
+
+// PathJoin joins any number of path elements into a single path, adding a
+// separator if necessary.
+func (e *Env) PathJoin(elem ...string) string {
+	return e.defaultFS.PathJoin(elem...)
+}
+
+// PathDir returns all but the last element of path, typically the path's directory.
+func (e *Env) PathDir(path string) string {
+	return e.defaultFS.PathDir(path)
+}
+
+// GetDiskUsage returns disk space statistics for the filesystem where
+// path is any file or directory within that filesystem.
+func (e *Env) GetDiskUsage(path string) (vfs.DiskUsage, error) {
+	return e.defaultFS.GetDiskUsage(path)
 }
 
 // CreateWithSync creates a file wrapped with logic to periodically sync
