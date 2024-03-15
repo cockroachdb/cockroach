@@ -53,6 +53,16 @@ var MergeQueueInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// SkipMergeQueueForExternalBytes is a setting that controls whether
+// replicas with external bytes should be processed by the merge
+// queue.
+var SkipMergeQueueForExternalBytes = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.range_merge.skip_external_bytes.enabled",
+	"skip the merge queue for external bytes",
+	true,
+)
+
 // mergeQueue manages a queue of ranges slated to be merged with their right-
 // hand neighbor.
 //
@@ -162,6 +172,18 @@ func (mq *mergeQueue) shouldQueue(
 		// This range is above the minimum size threshold. It does not need to be
 		// merged.
 		return false, 0
+	}
+
+	if SkipMergeQueueForExternalBytes.Get(&repl.ClusterSettings().SV) {
+		if hasExternal, err := repl.HasExternalBytes(); err != nil {
+			log.Warningf(ctx, "could not determine if %s has external bytes: %s",
+				repl, err)
+			return false, 0
+		} else if hasExternal {
+			log.Infof(ctx, "skipping merge for range %s because it has external bytes",
+				desc.RangeID)
+			return false, 0
+		}
 	}
 
 	// Invert sizeRatio to compute the priority so that smaller ranges are merged
