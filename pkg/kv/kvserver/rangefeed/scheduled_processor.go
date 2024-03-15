@@ -180,6 +180,14 @@ func (p *ScheduledProcessor) processEvents(ctx context.Context) {
 				// data since registrations already have errors set.
 				p.consumeEvent(ctx, e)
 			}
+			// e will no longer be used. Memory accounted for it can be released.
+			e.alloc.DecreaseUsage(ctx, e, nil)
+			// Adjust the memory usage to avoid holding onto over-allocated memory for
+			// too long after publishing the events to registration channel.
+			e.alloc.AdjustMemUsage(ctx)
+			// Reduce one reference of alloc, but more references can be held by
+			// registrations' shared events. Thus, memory may not be returned back to
+			// pool yet.
 			e.alloc.Release(ctx)
 			putPooledEvent(e)
 		default:
@@ -448,7 +456,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 	// inserting value into channel.
 	var alloc *SharedBudgetAllocation
 	if p.MemBudget != nil {
-		size := calculateDateEventSize(e)
+		size := EventMemUsage(&e, int64(p.reg.Len()))
 		if size > 0 {
 			var err error
 			// First we will try non-blocking fast path to allocate memory budget.
@@ -483,6 +491,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 			}()
 		}
 	}
+	alloc.IncreaseUsage(ctx, &e, nil)
 	ev := getPooledEvent(e)
 	ev.alloc = alloc
 	if timeout == 0 {
@@ -663,7 +672,7 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 	ctx context.Context, ops []enginepb.MVCCLogicalOp, alloc *SharedBudgetAllocation,
 ) {
 	for _, op := range ops {
-		// Publish RangeFeedValue updates, if necessary.
+		// Publish RangeFeedValue updates, if necessary.x
 		switch t := op.GetValue().(type) {
 		// OmitInRangefeeds is relevant only for transactional writes, so it's
 		// propagated only in the case of a MVCCCommitIntentOp and
