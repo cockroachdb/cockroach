@@ -7272,6 +7272,13 @@ table's zone configuration this will return NULL.`,
 				if !isAdmin {
 					return nil, errors.New("crdb_internal.reset_sql_stats() requires admin privilege")
 				}
+				hasPriv, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(ctx, privilege.REPAIRCLUSTERMETADATA)
+				if err != nil {
+					return nil, errors.New("crdb_internal.reset_sql_stats() requires REPAIRCLUSTERMETADATA privilege")
+				}
+				if !isAdmin && !hasPriv {
+					return nil, errors.New("crdb_internal.reset_sql_stats() requires either admin or REPAIRCLUSTERMETADATA privilege")
+				}
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
 				}
@@ -7297,8 +7304,12 @@ table's zone configuration this will return NULL.`,
 				if err != nil {
 					return nil, err
 				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.reset_activity_tables() requires admin privilege")
+				hasPriv, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(ctx, privilege.REPAIRCLUSTERMETADATA)
+				if err != nil {
+					return nil, errors.New("crdb_internal.reset_activity_tables() requires REPAIRCLUSTERMETADATA privilege")
+				}
+				if !isAdmin && !hasPriv {
+					return nil, errors.New("crdb_internal.reset_activity_tables() requires either admin or REPAIRCLUSTERMETADATA privilege")
 				}
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
@@ -7325,8 +7336,12 @@ table's zone configuration this will return NULL.`,
 				if err != nil {
 					return nil, err
 				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.reset_insights_tables() requires admin privilege")
+				hasPriv, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(ctx, privilege.REPAIRCLUSTERMETADATA)
+				if err != nil {
+					return nil, errors.New("crdb_internal.reset_insights_tables() requires REPAIRCLUSTERMETADATA privilege")
+				}
+				if !isAdmin && !hasPriv {
+					return nil, errors.New("crdb_internal.reset_insights_tables() requires either admin or REPAIRCLUSTERMETADATA privilege")
 				}
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
