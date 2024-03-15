@@ -58,13 +58,13 @@ type FileSerializer struct {
 // NewFileSerializer creates a FileSerializer for the given types. The caller is
 // responsible for closing the given writer as well as the given memory account.
 func NewFileSerializer(
-	w io.Writer, typs []*types.T, acc *mon.BoundAccount,
+	ctx context.Context, w io.Writer, typs []*types.T, acc *mon.BoundAccount,
 ) (*FileSerializer, error) {
-	a, err := NewArrowBatchConverter(typs, BatchToArrowOnly, acc)
+	a, err := NewArrowBatchConverter(ctx, typs, BatchToArrowOnly, acc)
 	if err != nil {
 		return nil, err
 	}
-	rb, err := NewRecordBatchSerializer(typs)
+	rb, err := NewRecordBatchSerializer(ctx, typs)
 	if err != nil {
 		return nil, err
 	}
@@ -74,13 +74,13 @@ func NewFileSerializer(
 		a:    a,
 		rb:   rb,
 	}
-	return s, s.Reset(w)
+	return s, s.Reset(ctx, w)
 }
 
 // Reset can be called to reuse this FileSerializer with a new io.Writer after
 // calling Finish. The types will remain the ones passed to the constructor. The
 // caller is responsible for closing the given writer.
-func (s *FileSerializer) Reset(w io.Writer) error {
+func (s *FileSerializer) Reset(ctx context.Context, w io.Writer) error {
 	if s.w != nil {
 		return errors.New(`Finish must be called before Reset`)
 	}
@@ -97,7 +97,7 @@ func (s *FileSerializer) Reset(w io.Writer) error {
 	// The file format is a wrapper around the streaming format and the streaming
 	// format starts with a Schema message.
 	s.fb.Reset()
-	messageOffset := schemaMessage(s.fb, s.typs)
+	messageOffset := schemaMessage(ctx, s.fb, s.typs)
 	s.fb.Finish(messageOffset)
 	schemaBytes := s.fb.FinishedBytes()
 	if _, err := s.w.Write(schemaBytes); err != nil {
@@ -130,7 +130,7 @@ func (s *FileSerializer) AppendBatch(ctx context.Context, batch coldata.Batch) e
 
 // Finish writes the footer metadata described by the arrow spec. Nothing can be
 // called after Finish except Reset.
-func (s *FileSerializer) Finish() error {
+func (s *FileSerializer) Finish(ctx context.Context) error {
 	defer func() {
 		s.w = nil
 	}()
@@ -138,7 +138,7 @@ func (s *FileSerializer) Finish() error {
 	// Write the footer flatbuffer, which has byte offsets of all the record
 	// batch messages in the file.
 	s.fb.Reset()
-	footerOffset := fileFooter(s.fb, s.typs, s.recordBatches)
+	footerOffset := fileFooter(ctx, s.fb, s.typs, s.recordBatches)
 	s.fb.Finish(footerOffset)
 	footerBytes := s.fb.FinishedBytes()
 	if _, err := s.w.Write(footerBytes); err != nil {
@@ -180,13 +180,17 @@ type FileDeserializer struct {
 
 // NewFileDeserializerFromBytes constructs a FileDeserializer for an in-memory
 // buffer.
-func NewFileDeserializerFromBytes(typs []*types.T, buf []byte) (*FileDeserializer, error) {
-	return newFileDeserializer(typs, buf, func() error { return nil })
+func NewFileDeserializerFromBytes(
+	ctx context.Context, typs []*types.T, buf []byte,
+) (*FileDeserializer, error) {
+	return newFileDeserializer(ctx, typs, buf, func() error { return nil })
 }
 
 // NewTestFileDeserializerFromPath constructs a FileDeserializer by reading it
 // from a file. It is only used in tests.
-func NewTestFileDeserializerFromPath(typs []*types.T, path string) (*FileDeserializer, error) {
+func NewTestFileDeserializerFromPath(
+	ctx context.Context, typs []*types.T, path string,
+) (*FileDeserializer, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.Io, `opening %s`, path)
@@ -200,11 +204,11 @@ func NewTestFileDeserializerFromPath(typs []*types.T, path string) (*FileDeseria
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.Io, `mmaping %s`, path)
 	}
-	return newFileDeserializer(typs, buf, buf.Unmap)
+	return newFileDeserializer(ctx, typs, buf, buf.Unmap)
 }
 
 func newFileDeserializer(
-	typs []*types.T, buf []byte, bufCloseFn func() error,
+	ctx context.Context, typs []*types.T, buf []byte, bufCloseFn func() error,
 ) (*FileDeserializer, error) {
 	d := &FileDeserializer{
 		buf:        buf,
@@ -217,10 +221,10 @@ func newFileDeserializer(
 	}
 	d.typs = typs
 
-	if d.a, err = NewArrowBatchConverter(typs, ArrowToBatchOnly, nil /* acc */); err != nil {
+	if d.a, err = NewArrowBatchConverter(ctx, typs, ArrowToBatchOnly, nil /* acc */); err != nil {
 		return nil, err
 	}
-	if d.rb, err = NewRecordBatchSerializer(typs); err != nil {
+	if d.rb, err = NewRecordBatchSerializer(ctx, typs); err != nil {
 		return nil, err
 	}
 	d.arrowScratch = make([]array.Data, 0, len(typs))
@@ -245,7 +249,7 @@ func (d *FileDeserializer) NumBatches() int {
 }
 
 // GetBatch fills in the given in-mem batch with the requested on-disk data.
-func (d *FileDeserializer) GetBatch(batchIdx int, b coldata.Batch) error {
+func (d *FileDeserializer) GetBatch(ctx context.Context, batchIdx int, b coldata.Batch) error {
 	rb := d.recordBatches[batchIdx]
 	d.idx = int(rb.offset)
 	buf, err := d.read(metadataLengthNumBytes + int(rb.metadataLen) + int(rb.bodyLen))
@@ -257,7 +261,7 @@ func (d *FileDeserializer) GetBatch(batchIdx int, b coldata.Batch) error {
 	if err != nil {
 		return err
 	}
-	return d.a.ArrowToBatch(d.arrowScratch, batchLength, b)
+	return d.a.ArrowToBatch(ctx, d.arrowScratch, batchLength, b)
 }
 
 // read gets the next `n` bytes from the start of the buffer, consuming them.
@@ -334,12 +338,12 @@ func (w *countingWriter) Write(buf []byte) (int, error) {
 	return n, err
 }
 
-func schema(fb *flatbuffers.Builder, typs []*types.T) flatbuffers.UOffsetT {
+func schema(ctx context.Context, fb *flatbuffers.Builder, typs []*types.T) flatbuffers.UOffsetT {
 	fieldOffsets := make([]flatbuffers.UOffsetT, len(typs))
 	for idx, typ := range typs {
 		var fbTyp byte
 		var fbTypOffset flatbuffers.UOffsetT
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, typ.Family()) {
 		case types.BoolFamily:
 			arrowserde.BoolStart(fb)
 			fbTypOffset = arrowserde.BoolEnd(fb)
@@ -418,8 +422,10 @@ func schema(fb *flatbuffers.Builder, typs []*types.T) flatbuffers.UOffsetT {
 	return arrowserde.SchemaEnd(fb)
 }
 
-func schemaMessage(fb *flatbuffers.Builder, typs []*types.T) flatbuffers.UOffsetT {
-	schemaOffset := schema(fb, typs)
+func schemaMessage(
+	ctx context.Context, fb *flatbuffers.Builder, typs []*types.T,
+) flatbuffers.UOffsetT {
+	schemaOffset := schema(ctx, fb, typs)
 	arrowserde.MessageStart(fb)
 	arrowserde.MessageAddVersion(fb, arrowserde.MetadataVersionV1)
 	arrowserde.MessageAddHeaderType(fb, arrowserde.MessageHeaderSchema)
@@ -428,9 +434,9 @@ func schemaMessage(fb *flatbuffers.Builder, typs []*types.T) flatbuffers.UOffset
 }
 
 func fileFooter(
-	fb *flatbuffers.Builder, typs []*types.T, recordBatches []fileBlock,
+	ctx context.Context, fb *flatbuffers.Builder, typs []*types.T, recordBatches []fileBlock,
 ) flatbuffers.UOffsetT {
-	schemaOffset := schema(fb, typs)
+	schemaOffset := schema(ctx, fb, typs)
 	arrowserde.FooterStartRecordBatchesVector(fb, len(recordBatches))
 	// flatbuffers adds everything back to front. Reverse iterate so they're in
 	// the right order when they come out.

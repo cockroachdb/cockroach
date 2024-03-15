@@ -50,7 +50,7 @@ func NewLeadOperator(
 		defaultIdx:   defaultIdx,
 	}
 	argType := args.InputTypes[argIdx]
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(argType.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(args.BufferAllocator.Ctx, argType.Family()) {
 	case types.BoolFamily:
 		switch argType.Width() {
 		case -1:

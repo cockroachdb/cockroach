@@ -49,7 +49,7 @@ func (b *BatchEncoder) encodeInvertedSecondaryIndex(
 	ctx context.Context, index catalog.Index, kys []roachpb.Key, extraKeys [][]byte,
 ) error {
 	var err error
-	if kys, err = b.encodeInvertedIndexPrefixKeys(kys, index); err != nil {
+	if kys, err = b.encodeInvertedIndexPrefixKeys(ctx, kys, index); err != nil {
 		return err
 	}
 	var vec coldata.Vec
@@ -76,7 +76,7 @@ func (b *BatchEncoder) encodeInvertedSecondaryIndex(
 			if !index.IsUnique() {
 				key = append(key, extraKeys[row]...)
 			}
-			if err = b.encodeInvertedSecondaryIndexNoFamiliesOneRow(index, key, row); err != nil {
+			if err = b.encodeInvertedSecondaryIndexNoFamiliesOneRow(ctx, index, key, row); err != nil {
 				return err
 			}
 		}
@@ -86,14 +86,14 @@ func (b *BatchEncoder) encodeInvertedSecondaryIndex(
 }
 
 func (b *BatchEncoder) encodeInvertedSecondaryIndexNoFamiliesOneRow(
-	ind catalog.Index, key roachpb.Key, row int,
+	ctx context.Context, ind catalog.Index, key roachpb.Key, row int,
 ) error {
 	var value []byte
 	// If we aren't encoding index keys with families, all index keys use the sentinel family 0.
 	key = keys.MakeFamilyKey(key, 0)
 	cols := rowenc.GetValueColumns(ind)
 	var err error
-	value, err = writeColumnValueOneRow(value, b.colMap, b.b.ColVecs(), cols, row+b.start)
+	value, err = writeColumnValueOneRow(ctx, value, b.colMap, b.b.ColVecs(), cols, row+b.start)
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func (b *BatchEncoder) encodeInvertedSecondaryIndexNoFamiliesOneRow(
 }
 
 func (b *BatchEncoder) encodeInvertedIndexPrefixKeys(
-	kys []roachpb.Key, index catalog.Index,
+	ctx context.Context, kys []roachpb.Key, index catalog.Index,
 ) ([]roachpb.Key, error) {
 	numColumns := index.NumKeyColumns()
 	var err error
@@ -116,7 +116,7 @@ func (b *BatchEncoder) encodeInvertedIndexPrefixKeys(
 		colIDs := index.IndexDesc().KeyColumnIDs[:numColumns-1]
 		dirs := index.IndexDesc().KeyColumnDirections
 
-		err = encodeColumns(colIDs, dirs, b.colMap, b.start, b.end, b.b.ColVecs(), kys)
+		err = encodeColumns(ctx, colIDs, dirs, b.colMap, b.start, b.end, b.b.ColVecs(), kys)
 		if err != nil {
 			return nil, err
 		}
@@ -125,6 +125,7 @@ func (b *BatchEncoder) encodeInvertedIndexPrefixKeys(
 }
 
 func writeColumnValueOneRow(
+	ctx context.Context,
 	value []byte,
 	colMap catalog.TableColMap,
 	vecs []coldata.Vec,
@@ -152,7 +153,7 @@ func writeColumnValueOneRow(
 		}
 		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.ColID)
 		lastColID = col.ColID
-		value, err = valuesideEncodeCol(value, colIDDelta, vec, row)
+		value, err = valuesideEncodeCol(ctx, value, colIDDelta, vec, row)
 		if err != nil {
 			return nil, err
 		}

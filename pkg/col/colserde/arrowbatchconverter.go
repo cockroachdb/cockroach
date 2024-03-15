@@ -82,7 +82,7 @@ type ArrowBatchConverter struct {
 // responsibility to close the account.
 // NOTE: Release can only be called before the account is closed.
 func NewArrowBatchConverter(
-	typs []*types.T, mode ConversionMode, acc *mon.BoundAccount,
+	ctx context.Context, typs []*types.T, mode ConversionMode, acc *mon.BoundAccount,
 ) (*ArrowBatchConverter, error) {
 	c := &ArrowBatchConverter{typs: typs, acc: acc}
 	if mode == ArrowToBatchOnly {
@@ -100,7 +100,7 @@ func NewArrowBatchConverter(
 	var numBuffersTotal int
 	var needOffsets bool
 	for _, t := range typs {
-		n := numBuffersForType(t)
+		n := numBuffersForType(ctx, t)
 		numBuffersTotal += n
 		needOffsets = needOffsets || n == 3
 	}
@@ -108,7 +108,7 @@ func NewArrowBatchConverter(
 	buffers := make([]memory.Buffer, numBuffersTotal)
 	var buffersIdx int
 	for i, t := range typs {
-		n := numBuffersForType(t)
+		n := numBuffersForType(ctx, t)
 		c.scratch.buffers[i] = slicesOfBuffers[:n:n]
 		slicesOfBuffers = slicesOfBuffers[n:]
 		for j := range c.scratch.buffers[i] {
@@ -150,7 +150,7 @@ func (c *ArrowBatchConverter) BatchToArrow(
 			offsetsBytes []byte
 		)
 
-		if f := typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()); f == types.IntFamily ||
+		if f := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, typ.Family()); f == types.IntFamily ||
 			f == types.FloatFamily || f == types.BoolFamily {
 			// For ints and floats we have a fast path where we cast the
 			// underlying slice directly to the arrow format. Bools are handled
@@ -389,7 +389,7 @@ func (c *ArrowBatchConverter) accountForScratch(ctx context.Context) error {
 // The passed in data is also mutated (we store nulls differently than arrow and
 // the adjustment is done in place).
 func (c *ArrowBatchConverter) ArrowToBatch(
-	data []array.Data, batchLength int, b coldata.Batch,
+	ctx context.Context, data []array.Data, batchLength int, b coldata.Batch,
 ) error {
 	if len(data) != len(c.typs) {
 		return errors.Errorf("mismatched data and schema length: %d != %d", len(data), len(c.typs))
@@ -399,7 +399,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 		vec := b.ColVec(i)
 		d := &data[i]
 
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, typ.Family()) {
 		case types.BytesFamily:
 			valueBytes, offsets := getValueBytesAndOffsets(d, vec.Nulls(), batchLength)
 			vec.Bytes().Deserialize(valueBytes, offsets)
@@ -498,7 +498,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			// from corruption in case the slice will be appended to in the
 			// future.
 			var col coldata.Column
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, typ.Family()) {
 			case types.BoolFamily:
 				buffers := d.Buffers()
 				// Nulls are always stored in the first buffer whereas the

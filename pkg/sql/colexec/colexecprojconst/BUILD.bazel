@@ -45,7 +45,12 @@ go_test(
     srcs = ["projection_ops_test.go"],
     embed = [":colexecprojconst"],
     deps = [
+        "//pkg/col/coldataext",
+        "//pkg/settings/cluster",
         "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",

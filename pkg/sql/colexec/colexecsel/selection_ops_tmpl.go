@@ -22,6 +22,8 @@
 package colexecsel
 
 import (
+	"context"
+
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -293,6 +295,7 @@ func (p *_OP_NAME) Next() coldata.Batch {
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given left and right column types and comparison.
 func GetSelectionConstOperator(
+	ctx context.Context,
 	cmpOp treecmp.ComparisonOperator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
@@ -314,13 +317,13 @@ func GetSelectionConstOperator(
 		switch cmpOp.Symbol {
 		// {{range .CmpOps}}
 		case treecmp._NAME:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			// {{range .LeftFamilies}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:
 				switch leftType.Width() {
 				// {{range .LeftWidths}}
 				case _LEFT_TYPE_WIDTH:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, constType.Family()) {
 					// {{range .RightFamilies}}
 					case _RIGHT_CANONICAL_TYPE_FAMILY:
 						switch constType.Width() {
@@ -349,6 +352,7 @@ func GetSelectionConstOperator(
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given left and right column types and comparison.
 func GetSelectionOperator(
+	ctx context.Context,
 	cmpOp treecmp.ComparisonOperator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
@@ -370,13 +374,13 @@ func GetSelectionOperator(
 		switch cmpOp.Symbol {
 		// {{range .CmpOps}}
 		case treecmp._NAME:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, leftType.Family()) {
 			// {{range .LeftFamilies}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:
 				switch leftType.Width() {
 				// {{range .LeftWidths}}
 				case _LEFT_TYPE_WIDTH:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, rightType.Family()) {
 					// {{range .RightFamilies}}
 					case _RIGHT_CANONICAL_TYPE_FAMILY:
 						switch rightType.Width() {

@@ -106,6 +106,7 @@ type windowFramer interface {
 }
 
 func newWindowFramer(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
@@ -134,7 +135,7 @@ func newWindowFramer(
 							exclusion:   frame.Exclusion,
 						},
 					}
-					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					op.handleOffsets(ctx, evalCtx, frame, ordering, inputTypes)
 					return op
 					// {{end}}
 				}
@@ -365,6 +366,7 @@ func (b *windowFramerBase) isFirstPeer(ctx context.Context, idx int) bool {
 // handleOffsets populates the offset fields of the window framer operator, if
 // one or both bounds are OFFSET PRECEDING or OFFSET FOLLOWING.
 func (b *windowFramerBase) handleOffsets(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
@@ -405,12 +407,12 @@ func (b *windowFramerBase) handleOffsets(
 	ordColAsc := ordering.Columns[0].Direction == execinfrapb.Ordering_Column_ASC
 	if startHasOffset {
 		b.startHandler = newRangeOffsetHandler(
-			evalCtx, b.datumAlloc, startBound, ordColType, ordColAsc, true, /* isStart */
+			ctx, evalCtx, b.datumAlloc, startBound, ordColType, ordColAsc, true, /* isStart */
 		)
 	}
 	if endHasOffset {
 		b.endHandler = newRangeOffsetHandler(
-			evalCtx, b.datumAlloc, endBound, ordColType, ordColAsc, false, /* isStart */
+			ctx, evalCtx, b.datumAlloc, endBound, ordColType, ordColAsc, false, /* isStart */
 		)
 	}
 }

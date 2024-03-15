@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -73,7 +73,7 @@ func TestServer(t *testing.T) {
 	}
 
 	req := &execinfrapb.SetupFlowRequest{
-		Version:           execinfra.Version,
+		Version:           execversion.Version,
 		LeafTxnInputState: leafInputState,
 	}
 	req.Flow = execinfrapb.FlowSpec{
@@ -100,15 +100,15 @@ func TestServer(t *testing.T) {
 	// Verify version handling.
 	t.Run("version", func(t *testing.T) {
 		testCases := []struct {
-			version     execinfrapb.DistSQLVersion
+			version     execversion.DistSQLVersion
 			expectedErr string
 		}{
 			{
-				version:     execinfra.Version + 1,
+				version:     execversion.Version + 1,
 				expectedErr: "version mismatch",
 			},
 			{
-				version:     execinfra.MinAcceptedVersion - 1,
+				version:     execversion.MinAcceptedVersion - 1,
 				expectedErr: "version mismatch",
 			},
 			// TODO(yuzefovich): figure out what setup to perform to simulate
@@ -117,7 +117,7 @@ func TestServer(t *testing.T) {
 			// panic in a separate goroutine because there is no RowReceiver set
 			// up for the table reader.
 			//{
-			//	version:     execinfra.MinAcceptedVersion,
+			//	version:     execversion.MinAcceptedVersion,
 			//	expectedErr: "",
 			//},
 		}
@@ -153,9 +153,9 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if v.Version != execinfra.Version || v.MinAcceptedVersion != execinfra.MinAcceptedVersion {
+	if v.Version != execversion.Version || v.MinAcceptedVersion != execversion.MinAcceptedVersion {
 		t.Fatalf("node is gossipping the wrong version. Expected: [%d-%d], got [%d-%d",
-			execinfra.Version, execinfra.MinAcceptedVersion, v.Version, v.MinAcceptedVersion)
+			execversion.Version, execversion.MinAcceptedVersion, v.Version, v.MinAcceptedVersion)
 	}
 }
 

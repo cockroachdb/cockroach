@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -3071,6 +3072,7 @@ func (ex *connExecutor) execCopyIn(
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
+	ctx = execversion.WithVersion(ctx, execversion.Version)
 	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)

@@ -481,7 +481,7 @@ func TestMemoryQuota(t *testing.T) {
 	for i, col := range cols {
 		typs[i] = col.GetType()
 	}
-	cb := coldata.NewMemBatchWithCapacity(typs, numRows, factory)
+	cb := coldata.NewMemBatchWithCapacity(ctx, typs, numRows, factory)
 	txn := kvdb.NewTxn(ctx, t.Name())
 	kvb := txn.NewBatch()
 	enc := colenc.MakeEncoder(codec, desc, sv, cb, cols,
@@ -634,7 +634,7 @@ func buildVecKVs(
 		typs[i] = c.GetType()
 	}
 	factory := coldataext.NewExtendedColumnFactory(nil /*evalCtx */)
-	b := coldata.NewMemBatchWithCapacity(typs, len(datums), factory)
+	b := coldata.NewMemBatchWithCapacity(context.Background(), typs, len(datums), factory)
 
 	for row, d := range datums {
 		for col, t := range typs {

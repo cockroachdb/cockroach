@@ -11,7 +11,6 @@
 package colflow_test
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"testing"
@@ -34,7 +33,6 @@ import (
 
 func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
@@ -111,7 +109,6 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 
 func TestVectorizeAllocatorSpaceError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)

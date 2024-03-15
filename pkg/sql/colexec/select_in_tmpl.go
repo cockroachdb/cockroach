@@ -22,6 +22,8 @@
 package colexec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -91,7 +93,7 @@ func GetInProjectionOperator(
 	negate bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
@@ -114,6 +116,7 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	t *types.T,
 	input colexecop.Operator,
@@ -121,7 +124,7 @@ func GetInOperator(
 	datumTuple *tree.DTuple,
 	negate bool,
 ) (colexecop.Operator, error) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {

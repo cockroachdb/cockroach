@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -47,6 +48,7 @@ type callbackRemoteComponentCreator struct {
 var _ remoteComponentCreator = &callbackRemoteComponentCreator{}
 
 func (c callbackRemoteComponentCreator) newOutbox(
+	_ context.Context,
 	_ *execinfra.FlowCtx,
 	_ int32,
 	allocator *colmem.Allocator,
@@ -203,6 +205,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 		},
 	}
 
+	ctx := execversion.WithLatestVersion()
 	inboxToNumInputTypes := make(map[*colrpc.Inbox][]*types.T)
 	outboxCreated := false
 	componentCreator := callbackRemoteComponentCreator{
@@ -221,7 +224,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			require.Len(t, input.MetadataSources, 1)
 			inbox := colexec.MaybeUnwrapInvariantsChecker(input.MetadataSources[0].(colexecop.Operator)).(*colrpc.Inbox)
 			require.Len(t, inboxToNumInputTypes[inbox], numInputTypesToOutbox)
-			return colrpc.NewOutbox(&execinfra.FlowCtx{Gateway: false}, 0 /* processorID */, allocator, converterMemAcc, input, typs, nil /* getStats */)
+			return colrpc.NewOutbox(ctx, &execinfra.FlowCtx{Gateway: false}, 0 /* processorID */, allocator, converterMemAcc, input, typs, nil /* getStats */)
 		},
 		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
 			inbox, err := colrpc.NewInbox(allocator, typs, streamID)
@@ -232,7 +235,6 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
 	flowBase := flowinfra.NewFlowBase(
 		execinfra.FlowCtx{
@@ -272,7 +274,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	ctx := context.Background()
+	ctx := execversion.WithLatestVersion()
 	defer evalCtx.Stop(ctx)
 
 	// We use an on-disk engine for this test since we're testing FS interactions

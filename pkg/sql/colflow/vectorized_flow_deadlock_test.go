@@ -47,7 +47,6 @@ func TestVectorizedFlowDeadlocksWhenSpilling(t *testing.T) {
 			VecFDsToAcquire: vecFDsLimit,
 		}},
 	}
-	ctx := context.Background()
 	s, conn, _ := serverutils.StartServer(t, serverArgs)
 	defer s.Stopper().Stop(ctx)
 

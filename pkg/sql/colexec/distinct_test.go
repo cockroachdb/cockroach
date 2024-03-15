@@ -413,7 +413,7 @@ func TestDistinct(t *testing.T) {
 			}
 			log.Info(context.Background(), "ordered")
 			tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-				return colexecbase.NewOrderedDistinct(input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup), nil
+				return colexecbase.NewOrderedDistinct(context.Background(), input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup), nil
 			})
 		}
 	}
@@ -637,7 +637,7 @@ func BenchmarkDistinct(b *testing.B) {
 			return newPartiallyOrderedDistinct(allocator, allocator, input, distinctCols, distinctCols[:numOrderedCols], typs, false /* nullsAreDistinct */, "" /* errorOnDup */)
 		},
 		func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
-			return colexecbase.NewOrderedDistinct(input, distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */), nil
+			return colexecbase.NewOrderedDistinct(context.Background(), input, distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */), nil
 		},
 	}
 	unorderedShuffled := "UnorderedShuffled"

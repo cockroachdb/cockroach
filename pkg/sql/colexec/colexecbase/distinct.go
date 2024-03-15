@@ -27,7 +27,11 @@ import (
 // a slice of columns, creates a chain of distinct operators and returns the
 // last distinct operator in that chain as well as its output column.
 func OrderedDistinctColsToOperators(
-	input colexecop.Operator, distinctCols []uint32, typs []*types.T, nullsAreDistinct bool,
+	ctx context.Context,
+	input colexecop.Operator,
+	distinctCols []uint32,
+	typs []*types.T,
+	nullsAreDistinct bool,
 ) (colexecop.ResettableOperator, []bool) {
 	var inputToClose colexecop.Closer
 	if c, ok := input.(colexecop.Closer); ok {
@@ -41,7 +45,7 @@ func OrderedDistinctColsToOperators(
 	}
 	if len(distinctCols) > 0 {
 		for i := range distinctCols {
-			input = newSingleDistinct(input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]], nullsAreDistinct)
+			input = newSingleDistinct(ctx, input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]], nullsAreDistinct)
 		}
 	} else {
 		// If there are no distinct columns, we have to mark the very first
@@ -83,6 +87,7 @@ func (d *distinctChainOps) Close(ctx context.Context) error {
 // NewOrderedDistinct creates a new ordered distinct operator on the given
 // input columns with the given types.
 func NewOrderedDistinct(
+	ctx context.Context,
 	input colexecop.Operator,
 	distinctCols []uint32,
 	typs []*types.T,
@@ -93,7 +98,7 @@ func NewOrderedDistinct(
 		OneInputNode:         colexecop.NewOneInputNode(input),
 		UpsertDistinctHelper: UpsertDistinctHelper{ErrorOnDup: errorOnDup},
 	}
-	op, outputCol := OrderedDistinctColsToOperators(&od.distinctChainInput, distinctCols, typs, nullsAreDistinct)
+	op, outputCol := OrderedDistinctColsToOperators(ctx, &od.distinctChainInput, distinctCols, typs, nullsAreDistinct)
 	op = &colexecutils.BoolVecToSelOp{
 		OneInputHelper: colexecop.MakeOneInputHelper(op),
 		OutputCol:      outputCol,

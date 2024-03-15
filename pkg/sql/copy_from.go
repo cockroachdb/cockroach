@@ -852,7 +852,7 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []csv.Record) err
 				vh[i].Null()
 				continue
 			}
-			if err := tree.ParseAndRequireStringHandler(c.resultColumns[i].Typ, s.Val, c.parsingEvalCtx, vh[i], &c.ph); err != nil {
+			if err := tree.ParseAndRequireStringHandler(ctx, c.resultColumns[i].Typ, s.Val, c.parsingEvalCtx, vh[i], &c.ph); err != nil {
 				return err
 			}
 		}
@@ -1317,7 +1317,7 @@ func (c *copyMachine) readTextTupleVec(ctx context.Context, parts [][]byte) erro
 			// This just bypasses DecodeRawBytesToByteArrayAuto, not sure why...
 			c.valueHandlers[i].Bytes(encoding.UnsafeConvertStringToBytes(s))
 		default:
-			if err := tree.ParseAndRequireStringHandler(c.resultColumns[i].Typ, s, c.parsingEvalCtx, c.valueHandlers[i], &c.ph); err != nil {
+			if err := tree.ParseAndRequireStringHandler(ctx, c.resultColumns[i].Typ, s, c.parsingEvalCtx, c.valueHandlers[i], &c.ph); err != nil {
 				return err
 			}
 		}

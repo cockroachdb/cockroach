@@ -11,9 +11,11 @@
 package colencoding
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -27,6 +29,7 @@ import (
 // coldata.TypedVecs.
 // See the analog in rowenc/column_type_encoding.go.
 func DecodeTableValueToCol(
+	ctx context.Context,
 	da *tree.DatumAlloc,
 	vecs *coldata.TypedVecs,
 	vecIdx int,
@@ -110,6 +113,9 @@ func DecodeTableValueToCol(
 		vecs.IntervalCols[colIdx][rowIdx] = d
 	// Types backed by tree.Datums.
 	default:
+		if err = typeconv.AssertDatumBacked(ctx, valTyp); err != nil {
+			return buf, err
+		}
 		var d tree.Datum
 		d, buf, err = valueside.DecodeUntaggedDatum(da, valTyp, buf)
 		if err != nil {

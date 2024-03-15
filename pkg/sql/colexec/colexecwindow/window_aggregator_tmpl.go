@@ -63,7 +63,7 @@ func NewWindowAggregatorOperator(
 	// columns than the queue.
 	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.5)
 	mainMemLimit := args.MemoryLimit - bufferMemLimit
-	framer := newWindowFramer(args.EvalCtx, frame, ordering, args.InputTypes, args.PeersColIdx)
+	framer := newWindowFramer(args.BufferAllocator.Ctx, args.EvalCtx, frame, ordering, args.InputTypes, args.PeersColIdx)
 	colsToStore := framer.getColsToStore(append([]int{}, argIdxs...))
 	buffer := colexecutils.NewSpillingBuffer(
 		args.BufferAllocator, bufferMemLimit, args.QueueCfg, args.FdSemaphore,

@@ -11,6 +11,7 @@
 package coldata
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -116,18 +117,20 @@ func SetBatchSizeForTests(newBatchSize int) error {
 
 // NewMemBatch allocates a new in-memory Batch.
 // TODO(jordan): pool these allocations.
-func NewMemBatch(typs []*types.T, factory ColumnFactory) Batch {
-	return NewMemBatchWithCapacity(typs, BatchSize(), factory)
+func NewMemBatch(ctx context.Context, typs []*types.T, factory ColumnFactory) Batch {
+	return NewMemBatchWithCapacity(ctx, typs, BatchSize(), factory)
 }
 
 // NewMemBatchWithCapacity allocates a new in-memory Batch with the given
 // column size. Use for operators that have a precisely-sized output batch.
-func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactory) Batch {
+func NewMemBatchWithCapacity(
+	ctx context.Context, typs []*types.T, capacity int, factory ColumnFactory,
+) Batch {
 	b := NewMemBatchNoCols(typs, capacity).(*MemBatch)
 	cols := make([]memColumn, len(typs))
 	for i, t := range typs {
 		col := &cols[i]
-		col.init(t, capacity, factory)
+		col.init(ctx, t, capacity, factory)
 		b.b[i] = col
 	}
 	return b
@@ -150,7 +153,7 @@ func NewMemBatchNoCols(typs []*types.T, capacity int) Batch {
 // ZeroBatch is a schema-less Batch of length 0.
 var ZeroBatch = &zeroBatch{
 	MemBatch: NewMemBatchWithCapacity(
-		nil /* typs */, 0 /* capacity */, StandardColumnFactory,
+		context.Background(), nil /* typs */, 0 /* capacity */, StandardColumnFactory,
 	).(*MemBatch),
 }
 
@@ -278,7 +281,7 @@ func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 		}
 	}
 	if cannotReuse {
-		*m = *NewMemBatchWithCapacity(typs, length, factory).(*MemBatch)
+		*m = *NewMemBatchWithCapacity(context.Background(), typs, length, factory).(*MemBatch)
 		m.SetLength(length)
 		return
 	}

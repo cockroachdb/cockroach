@@ -369,10 +369,10 @@ message RemoteProducerMetadata {
 // compatibility with 23.2 is unnecessary.
 message DistSQLVersionGossipInfo {
   optional uint32 version = 1 [(gogoproto.nullable) = false,
-    (gogoproto.casttype) = "DistSQLVersion"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/execversion.DistSQLVersion"];
 
   optional uint32 min_accepted_version = 2 [(gogoproto.nullable) = false,
-    (gogoproto.casttype) = "DistSQLVersion"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/execversion.DistSQLVersion"];
 }
 
 // DistSQLDrainingInfo represents the DistSQL draining state that gets gossiped

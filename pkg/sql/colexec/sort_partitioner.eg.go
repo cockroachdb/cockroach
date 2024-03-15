@@ -14,6 +14,7 @@ package colexec
 
 import (
 	"bytes"
+	"context"
 	"math"
 	"time"
 
@@ -47,8 +48,8 @@ type partitioner interface {
 }
 
 // newPartitioner returns a new partitioner on type t.
-func newPartitioner(t *types.T, nullsAreDistinct bool) partitioner {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+func newPartitioner(ctx context.Context, t *types.T, nullsAreDistinct bool) partitioner {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:

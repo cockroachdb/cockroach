@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -424,7 +425,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// TODO(yuzefovich): avoid populating some fields of the SetupFlowRequest
 		// for local plans.
 		LeafTxnInputState: leafInputState,
-		Version:           execinfra.Version,
+		Version:           execversion.Version,
 		EvalContext:       execinfrapb.MakeEvalContext(&evalCtx.Context),
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
@@ -1221,6 +1222,8 @@ func MakeDistSQLReceiver(
 	clockUpdater clockUpdater,
 	tracing *SessionTracing,
 ) *DistSQLReceiver {
+	// TODO: think through this.
+	ctx = execversion.WithVersion(ctx, execversion.Version)
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
 	r := receiverSyncPool.Get().(*DistSQLReceiver)
 	// Check whether the result writer supports pushing batches into it directly
