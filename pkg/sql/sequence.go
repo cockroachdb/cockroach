@@ -155,41 +155,54 @@ func (p *planner) incrementSequenceUsingCache(
 		cacheSize = seqOpts.EffectiveCacheSize()
 	}
 
-	fetchNextValues := func() (currentValue, incrementAmount, sizeOfCache int64, err error) {
+	fetchNextValues := func() (nextValue, incrementAmount, sizeOfCache int64, err error) {
 		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(sequenceID))
-
-		// The planner txn is only used if the sequence is accessed in the same
-		// transaction that it was created. Otherwise, we *do not* use the planner
-		// txn here, since nextval does not respect transaction boundaries.
-		// This matches the specification at
-		// https://www.postgresql.org/docs/14/functions-sequence.html.
+		sizeOfCache = cacheSize
+		incrementAmount = seqOpts.Increment
+		var res kv.KeyValue
+		var currentValue int64
 		var endValue int64
+		var expValue []byte
+
+		var getSequenceValueFunc func() (kv.KeyValue, error)
+		var cputSequenceValueFunc func() error
 		if createdInCurrentTxn {
-			var res kv.KeyValue
-			res, err = p.txn.Inc(ctx, seqValueKey, seqOpts.Increment*cacheSize)
-			endValue = res.ValueInt()
+			// The planner txn is only used if the sequence is accessed in the same
+			// transaction that it was created. Otherwise, we *do not* use the planner
+			// txn here, since nextval does not respect transaction boundaries.
+			// This matches the specification at
+			// https://www.postgresql.org/docs/14/functions-sequence.html.
+			getSequenceValueFunc = func() (kv.KeyValue, error) {
+				return p.txn.GetForUpdate(ctx, seqValueKey, kvpb.BestEffort)
+			}
+			cputSequenceValueFunc = func() error {
+				return p.txn.CPut(ctx, seqValueKey, endValue, expValue)
+			}
 		} else {
-			endValue, err = kv.IncrementValRetryable(
-				ctx, p.ExecCfg().DB, seqValueKey, seqOpts.Increment*cacheSize)
+			getSequenceValueFunc = func() (kv.KeyValue, error) {
+				return p.ExecCfg().DB.GetForUpdate(ctx, seqValueKey, kvpb.BestEffort)
+			}
+			cputSequenceValueFunc = func() error {
+				return p.ExecCfg().DB.CPut(ctx, seqValueKey, endValue, expValue)
+			}
 		}
 
+		// Get the current value of the sequence.
+		res, err = getSequenceValueFunc()
 		if err != nil {
-			if errors.HasType(err, (*kvpb.IntegerOverflowError)(nil)) {
-				return 0, 0, 0, boundsExceededError(descriptor)
-			}
 			return 0, 0, 0, err
 		}
+		currentValue = res.ValueInt()
+		if res.Exists() {
+			expValue = res.Value.TagAndDataBytes()
+		}
+		endValue = currentValue + incrementAmount*sizeOfCache
 
-		// This sequence has exceeded its bounds after performing this increment.
+		// If the endValue is outside the limits of the sequence,
+		// the cache will only increment upto the limit.
 		if endValue > seqOpts.MaxValue || endValue < seqOpts.MinValue {
-			// If the sequence exceeded its bounds prior to the increment, then return an error.
-			if (seqOpts.Increment > 0 && endValue-seqOpts.Increment*(cacheSize-1) > seqOpts.MaxValue) ||
-				(seqOpts.Increment < 0 && endValue-seqOpts.Increment*(cacheSize-1) < seqOpts.MinValue) {
-				return 0, 0, 0, boundsExceededError(descriptor)
-			}
-			// Otherwise, values between the limit and the value prior to incrementing can be cached.
 			limit := seqOpts.MaxValue
-			if seqOpts.Increment < 0 {
+			if incrementAmount < 0 {
 				limit = seqOpts.MinValue
 			}
 			abs := func(i int64) int64 {
@@ -198,13 +211,26 @@ func (p *planner) incrementSequenceUsingCache(
 				}
 				return i
 			}
-			currentValue = endValue - seqOpts.Increment*(cacheSize-1)
-			incrementAmount = seqOpts.Increment
-			sizeOfCache = abs(limit-(endValue-seqOpts.Increment*cacheSize)) / abs(seqOpts.Increment)
-			return currentValue, incrementAmount, sizeOfCache, nil
+			// Calculate the size of the cache the last value before the limit.
+			sizeOfCache = abs((limit - currentValue) / incrementAmount)
+			endValue = currentValue + incrementAmount*(sizeOfCache)
+			// If sizeOfCache is zero, the sequence is already out of bounds.
+			if sizeOfCache == 0 {
+				return 0, 0, 0, boundsExceededError(descriptor)
+			}
 		}
 
-		return endValue - seqOpts.Increment*(cacheSize-1), seqOpts.Increment, cacheSize, nil
+		// Write increased sequence value with CPut ensuring value consistency between calculations.
+		err = cputSequenceValueFunc()
+		if err != nil {
+			if errors.HasType(err, (*kvpb.IntegerOverflowError)(nil)) {
+				return 0, 0, 0, boundsExceededError(descriptor)
+			}
+			return 0, 0, 0, err
+		}
+
+		nextValue = currentValue + incrementAmount
+		return nextValue, incrementAmount, sizeOfCache, nil
 	}
 
 	var val int64
