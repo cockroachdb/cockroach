@@ -75,6 +75,18 @@ func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 	return nil
 }
 
+func (s *testStream) BufferedSend(e *REventWithAlloc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	event, alloc, cb := e.Detatch()
+	alloc.Release(s.ctx)
+	if s.mu.sendErr != nil {
+		cb(s.mu.sendErr)
+		return
+	}
+	s.mu.events = append(s.mu.events, event)
+}
+
 func (s *testStream) SetSendErr(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -108,7 +108,7 @@ var defaultEventChanTimeout = envutil.EnvOrDefaultDuration(
 // support for concurrent calls to Send. Note that the default implementation of
 // grpc.Stream is not safe for concurrent calls to Send.
 type lockedRangefeedStream struct {
-	wrapped kvpb.RangeFeedEventSink
+	wrapped rangefeed.Stream
 	sendMu  syncutil.Mutex
 }
 
@@ -121,6 +121,14 @@ func (s *lockedRangefeedStream) Send(e *kvpb.RangeFeedEvent) error {
 	defer s.sendMu.Unlock()
 	return s.wrapped.Send(e)
 }
+
+func (s *lockedRangefeedStream) BufferedSend(e *rangefeed.REventWithAlloc) {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	s.BufferedSend(e)
+}
+
+var _ rangefeed.Stream = (*lockedRangefeedStream)(nil)
 
 // rangefeedTxnPusher is a shim around intentResolver that implements the
 // rangefeed.TxnPusher interface.
@@ -241,7 +249,7 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink, pacer *admission.Pacer,
+	args *kvpb.RangeFeedRequest, stream rangefeed.Stream, pacer *admission.Pacer,
 ) *future.ErrorFuture {
 	ctx := r.AnnotateCtx(stream.Context())
 

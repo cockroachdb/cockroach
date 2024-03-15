@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -82,6 +83,15 @@ func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 	defer s.mu.Unlock()
 	s.mu.events = append(s.mu.events, e)
 	return nil
+}
+func (s *testStream) BufferedSend(e *rangefeed.REventWithAlloc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ev, alloc, cb := e.Detatch()
+	s.mu.events = append(s.mu.events, ev)
+	alloc.Release(s.ctx)
+	cb(nil)
+
 }
 
 func (s *testStream) Events() []*kvpb.RangeFeedEvent {

@@ -202,3 +202,9 @@ func (s *noopStream) Send(*kvpb.RangeFeedEvent) error {
 	s.events++
 	return nil
 }
+
+func (s *noopStream) BufferedSend(e *REventWithAlloc) {
+	_, alloc, _ := e.Detatch()
+	s.events++
+	alloc.Release(s.ctx)
+}
