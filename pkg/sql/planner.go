@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -309,11 +308,6 @@ func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
 	return recv.commErr
 }
 
-// noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
-// internal SQL pool before the pool starts explicitly logging overall usage
-// growth in the log.
-var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 1<<20 /* 1 MB */)
-
 // internalPlannerParams encapsulates configurable planner fields. The defaults
 // are set in newInternalPlanner.
 type internalPlannerParams struct {
@@ -420,11 +414,10 @@ func newInternalPlanner(
 	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(execCfg.Settings.Version)
 
 	plannerMon := mon.NewMonitor(mon.NewMonitorArgs{
-		Name:       redact.Sprintf("internal-planner.%s.%s", user, opName),
-		CurCount:   memMetrics.CurBytesCount,
-		MaxHist:    memMetrics.MaxBytesHist,
-		Noteworthy: noteworthyInternalMemoryUsageBytes,
-		Settings:   execCfg.Settings,
+		Name:     redact.Sprintf("internal-planner.%s.%s", user, opName),
+		CurCount: memMetrics.CurBytesCount,
+		MaxHist:  memMetrics.MaxBytesHist,
+		Settings: execCfg.Settings,
 	})
 	plannerMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
 	p.monitor = plannerMon

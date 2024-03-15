@@ -474,11 +474,10 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 		// Create a limited bytes monitor.
 		memoryBudget := int64(100 * 1024)
 		limitedMon := mon.NewMonitor(mon.NewMonitorArgs{
-			Name:       "timeseries-test-limited",
-			Limit:      memoryBudget,
-			Increment:  100,
-			Noteworthy: 100,
-			Settings:   cluster.MakeTestingClusterSettings(),
+			Name:      "timeseries-test-limited",
+			Limit:     memoryBudget,
+			Increment: 100,
+			Settings:  cluster.MakeTestingClusterSettings(),
 		})
 		limitedMon.StartNoReserved(context.Background(), tm.workerMemMonitor)
 		defer limitedMon.Stop(context.Background())

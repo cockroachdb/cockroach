@@ -295,16 +295,6 @@ func newTenantSpecificMetrics(
 	}
 }
 
-// noteworthySQLMemoryUsageBytes is the minimum size tracked by the
-// client SQL pool before the pool start explicitly logging overall
-// usage growth in the log.
-var noteworthySQLMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_SQL_MEMORY_USAGE", 100*1024*1024)
-
-// noteworthyConnMemoryUsageBytes is the minimum size tracked by the
-// connection monitor before the monitor start explicitly logging overall
-// usage growth in the log.
-var noteworthyConnMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_CONN_MEMORY_USAGE", 2*1024*1024)
-
 // MakeServer creates a Server.
 //
 // Start() needs to be called on the Server so it begins processing.
@@ -333,21 +323,19 @@ func MakeServer(
 		// monitor. Its children are the sql monitors for each new connection. The
 		// sum of those children, plus the extra memory in the "conn" monitor below,
 		// is more than enough metrics information about the monitors.
-		CurCount:   nil,
-		MaxHist:    nil,
-		Noteworthy: noteworthySQLMemoryUsageBytes,
-		Settings:   st,
+		CurCount: nil,
+		MaxHist:  nil,
+		Settings: st,
 	})
 	server.sqlMemoryPool.StartNoReserved(ctx, parentMemoryMonitor)
 	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
 
 	server.tenantSpecificConnMonitor = mon.NewMonitor(mon.NewMonitorArgs{
-		Name:       "conn",
-		CurCount:   server.tenantMetrics.ConnMemMetrics.CurBytesCount,
-		MaxHist:    server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
-		Increment:  int64(connReservationBatchSize) * baseSQLMemoryBudget,
-		Noteworthy: noteworthyConnMemoryUsageBytes,
-		Settings:   st,
+		Name:      "conn",
+		CurCount:  server.tenantMetrics.ConnMemMetrics.CurBytesCount,
+		MaxHist:   server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
+		Increment: int64(connReservationBatchSize) * baseSQLMemoryBudget,
+		Settings:  st,
 	})
 	server.tenantSpecificConnMonitor.StartNoReserved(ctx, server.sqlMemoryPool)
 
