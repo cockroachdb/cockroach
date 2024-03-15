@@ -16,13 +16,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Resource is an interface used to abstract the specifics of tracking bytes
-// usage by different types of resources.
-type Resource interface {
-	NewBudgetExceededError(requestedBytes int64, reservedBytes int64, budgetBytes int64) error
-}
+// Resource indicates the type of resource a BytesMonitor is tracking.
+type Resource int8
 
-func newMemoryBudgetExceededError(
+const (
+	MemoryResource Resource = iota
+	DiskResource
+)
+
+func NewMemoryBudgetExceededError(
 	requestedBytes int64, reservedBytes int64, budgetBytes int64,
 ) error {
 	return pgerror.WithCandidateCode(
@@ -36,51 +38,7 @@ func newMemoryBudgetExceededError(
 	)
 }
 
-// memoryResource is a Resource that represents memory.
-type memoryResource struct{}
-
-// MemoryResource is a utility singleton used as an argument when creating a
-// BytesMonitor to indicate that the monitor will be tracking memory usage.
-var MemoryResource Resource = memoryResource{}
-
-// NewBudgetExceededError implements the Resource interface.
-func (m memoryResource) NewBudgetExceededError(
-	requestedBytes int64, reservedBytes int64, budgetBytes int64,
-) error {
-	return newMemoryBudgetExceededError(requestedBytes, reservedBytes, budgetBytes)
-}
-
-// memoryResourceWithErrorHint is a Resource that represents memory and augments
-// the "budget exceeded" error with a hint.
-type memoryResourceWithErrorHint struct {
-	hint string
-}
-
-// NewMemoryResourceWithErrorHint returns a new memory Resource that augments
-// all "budget exceeded" errors with the given hint.
-func NewMemoryResourceWithErrorHint(hint string) Resource {
-	return memoryResourceWithErrorHint{hint: hint}
-}
-
-// NewBudgetExceededError implements the Resource interface.
-func (m memoryResourceWithErrorHint) NewBudgetExceededError(
-	requestedBytes int64, reservedBytes int64, budgetBytes int64,
-) error {
-	return errors.WithHint(
-		newMemoryBudgetExceededError(requestedBytes, reservedBytes, budgetBytes),
-		m.hint,
-	)
-}
-
-// diskResource is a Resource that represents disk.
-type diskResource struct{}
-
-// DiskResource is a utility singleton used as an argument when creating a
-// BytesMonitor to indicate that the monitor will be tracking disk usage.
-var DiskResource Resource = diskResource{}
-
-// NewBudgetExceededError implements the Resource interface.
-func (d diskResource) NewBudgetExceededError(
+func newDiskBudgetExceededError(
 	requestedBytes int64, reservedBytes int64, budgetBytes int64,
 ) error {
 	return pgerror.WithCandidateCode(
@@ -89,5 +47,16 @@ func (d diskResource) NewBudgetExceededError(
 			errors.Safe(requestedBytes),
 			errors.Safe(reservedBytes),
 			errors.Safe(budgetBytes),
-		), pgcode.DiskFull)
+		),
+		pgcode.DiskFull,
+	)
+}
+
+func newRootSQLMemoryMonitorBudgetExceededError(
+	requestedBytes int64, reservedBytes int64, budgetBytes int64,
+) error {
+	return errors.WithHint(
+		NewMemoryBudgetExceededError(requestedBytes, reservedBytes, budgetBytes),
+		"Consider increasing --max-sql-memory startup parameter.", /* hint */
+	)
 }

@@ -416,8 +416,10 @@ type ScanFlags struct {
 
 	// ForceIndex forces the use of a specific index (specified in Index).
 	// ForceIndex and NoIndexJoin cannot both be set at the same time.
-	ForceIndex  bool
-	ForceZigzag bool
+	ForceIndex bool
+	// ForceInvertedIndex forces the use of an inverted index.
+	ForceInvertedIndex bool
+	ForceZigzag        bool
 
 	// When the optimizer is performing unique constraint or foreign key
 	// constraint check, we will temporarily disable the not visible index feature
@@ -843,6 +845,12 @@ func (s *ScanPrivate) IsFullIndexScan(md *opt.Metadata) bool {
 	return (s.Constraint == nil || s.Constraint.IsUnconstrained()) &&
 		s.InvertedConstraint == nil &&
 		s.HardLimit == 0
+}
+
+// IsInvertedScan returns true if the index being scanned is an inverted
+// index.
+func (s *ScanPrivate) IsInvertedScan() bool {
+	return s.InvertedConstraint != nil
 }
 
 // IsVirtualTable returns true if the table being scanned is a virtual table.

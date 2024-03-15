@@ -12,7 +12,6 @@ package rowcontainer
 
 import (
 	"context"
-	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 func TestRowContainer(t *testing.T) {
@@ -37,9 +35,7 @@ func TestRowContainer(t *testing.T) {
 					resCol[i] = colinfo.ResultColumn{Typ: types.Int}
 				}
 				st := cluster.MakeTestingClusterSettings()
-				m := mon.NewUnlimitedMonitor(
-					ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
-				)
+				m := getUnlimitedMemoryMonitor(st)
 				rc := NewRowContainer(m.MakeBoundAccount(), colinfo.ColTypeInfoFromResCols(resCol))
 				row := make(tree.Datums, numCols)
 				for i := 0; i < numRows; i++ {
@@ -84,7 +80,7 @@ func TestRowContainerAtOutOfRange(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	m := mon.NewUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
+	m := getUnlimitedMemoryMonitor(st)
 	defer m.Stop(ctx)
 
 	resCols := colinfo.ResultColumns{colinfo.ResultColumn{Typ: types.Int}}
@@ -112,7 +108,7 @@ func TestRowContainerZeroCols(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	m := mon.NewUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
+	m := getUnlimitedMemoryMonitor(st)
 	defer m.Stop(ctx)
 
 	rc := NewRowContainer(m.MakeBoundAccount(), colinfo.ColTypeInfoFromResCols(nil))
@@ -165,9 +161,7 @@ func BenchmarkRowContainerAt(b *testing.B) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	m := mon.NewUnlimitedMonitor(
-		ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
-	)
+	m := getUnlimitedMemoryMonitor(st)
 	defer m.Stop(ctx)
 
 	resCol := make(colinfo.ResultColumns, numCols)

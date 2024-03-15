@@ -75,7 +75,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -141,11 +140,6 @@ var maxNumNonRootConnectionsReason = settings.RegisterStringSetting(
 		"server.cockroach_cloud.max_client_connections_per_gateway",
 	"cluster connections are limited",
 )
-
-// noteworthyMemoryUsageBytes is the minimum size tracked by a
-// transaction or session monitor before the monitor starts explicitly
-// logging overall usage growth in the log.
-var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_SESSION_MEMORY_USAGE", 1024*1024)
 
 // A connExecutor is in charge of executing queries received on a given client
 // connection. The connExecutor implements a state machine (dictated by the
@@ -1033,35 +1027,32 @@ func (s *Server) newConnExecutor(
 ) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
-	sessionRootMon := mon.NewMonitor(
-		"session root",
-		mon.MemoryResource,
-		memMetrics.CurBytesCount,
-		memMetrics.MaxBytesHist,
-		-1 /* increment */, math.MaxInt64, s.cfg.Settings,
-	)
-	sessionMon := mon.NewMonitor(
-		"session",
-		mon.MemoryResource,
-		memMetrics.SessionCurBytesCount,
-		memMetrics.SessionMaxBytesHist,
-		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings,
-	)
-	sessionPreparedMon := mon.NewMonitor(
-		"session prepared statements",
-		mon.MemoryResource,
-		memMetrics.SessionPreparedCurBytesCount,
-		memMetrics.SessionPreparedMaxBytesHist,
-		1024 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings,
-	)
+	sessionRootMon := mon.NewMonitor(mon.Options{
+		Name:     "session root",
+		CurCount: memMetrics.CurBytesCount,
+		MaxHist:  memMetrics.MaxBytesHist,
+		Settings: s.cfg.Settings,
+	})
+	sessionMon := mon.NewMonitor(mon.Options{
+		Name:     "session",
+		CurCount: memMetrics.SessionCurBytesCount,
+		MaxHist:  memMetrics.SessionMaxBytesHist,
+		Settings: s.cfg.Settings,
+	})
+	sessionPreparedMon := mon.NewMonitor(mon.Options{
+		Name:      "session prepared statements",
+		CurCount:  memMetrics.SessionPreparedCurBytesCount,
+		MaxHist:   memMetrics.SessionPreparedMaxBytesHist,
+		Increment: 1024,
+		Settings:  s.cfg.Settings,
+	})
 	// The txn monitor is started in txnState.resetForNewSQLTxn().
-	txnMon := mon.NewMonitor(
-		"txn",
-		mon.MemoryResource,
-		memMetrics.TxnCurBytesCount,
-		memMetrics.TxnMaxBytesHist,
-		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings,
-	)
+	txnMon := mon.NewMonitor(mon.Options{
+		Name:     "txn",
+		CurCount: memMetrics.TxnCurBytesCount,
+		MaxHist:  memMetrics.TxnMaxBytesHist,
+		Settings: s.cfg.Settings,
+	})
 	txnFingerprintIDCacheAcc := sessionMon.MakeBoundAccount()
 
 	nodeIDOrZero, _ := s.cfg.NodeInfo.NodeID.OptionalNodeID()

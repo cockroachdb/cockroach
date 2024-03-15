@@ -385,15 +385,10 @@ func (ec *Context) MustGetPlaceholderValue(p *tree.Placeholder) tree.Datum {
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
 func MakeTestingEvalContext(st *cluster.Settings) Context {
-	monitor := mon.NewMonitor(
-		"test-monitor",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
+	monitor := mon.NewMonitor(mon.Options{
+		Name:     "test-monitor",
+		Settings: st,
+	})
 	return MakeTestingEvalContextWithMon(st, monitor)
 }
 

@@ -596,8 +596,10 @@ func TestCollectionProperlyUsesMemoryMonitoring(t *testing.T) {
 	}
 
 	// Create a monitor to be used to track memory usage in a Collection.
-	monitor := mon.NewMonitor("test_monitor", mon.MemoryResource,
-		nil, nil, -1, 0, cluster.MakeTestingClusterSettings())
+	monitor := mon.NewMonitor(mon.Options{
+		Name:     "test_monitor",
+		Settings: cluster.MakeTestingClusterSettings(),
+	})
 
 	// Start the monitor with unlimited budget.
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
