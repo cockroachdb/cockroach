@@ -255,7 +255,7 @@ func TestAWSMachineType(t *testing.T) {
 				fmt.Sprintf("%s.%s", family, xlarge(1)), arch})
 			testCases = append(testCases, machineTypeTestCase{1, mem, true, arch,
 				fmt.Sprintf("%sd.%s", family, xlarge(1)), arch})
-			for i := 2; i <= 128; i += 2 {
+			for _, i := range []int{2, 4, 8, 16, 32, 64, 96, 128} {
 				if i > 16 && mem == spec.Auto {
 					if i > 80 {
 						// N.B. to keep parity with GCE, we use AMD Milan instead of Intel Ice Lake, keeping same 2GB RAM per CPU ratio.
@@ -266,8 +266,13 @@ func TestAWSMachineType(t *testing.T) {
 				}
 				testCases = append(testCases, machineTypeTestCase{i, mem, false, arch,
 					fmt.Sprintf("%s.%s", family, xlarge(i)), arch})
+				expectedMachineTypeWithLocalSSD := fmt.Sprintf("%sd.%s", family, xlarge(i))
+				if family == "c6a" {
+					// N.B. c6a doesn't support local SSD.
+					expectedMachineTypeWithLocalSSD = fmt.Sprintf("%s.%s", family, xlarge(i))
+				}
 				testCases = append(testCases, machineTypeTestCase{i, mem, true, arch,
-					fmt.Sprintf("%sd.%s", family, xlarge(i)), arch})
+					expectedMachineTypeWithLocalSSD, arch})
 			}
 		}
 	}
@@ -296,7 +301,7 @@ func TestAWSMachineType(t *testing.T) {
 			testCases = append(testCases, machineTypeTestCase{1, mem, true, vm.ArchARM64,
 				fmt.Sprintf("%sd.%s", family, xlarge(1)), vm.ArchARM64})
 		}
-		for i := 2; i <= 128; i += 2 {
+		for _, i := range []int{2, 4, 8, 16, 32, 64, 96, 128} {
 			if i > 16 && mem == spec.Auto {
 				family = "c7g"
 			}
@@ -316,8 +321,13 @@ func TestAWSMachineType(t *testing.T) {
 				// Expect fallback to AMD64.
 				testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
 					fmt.Sprintf("%s.%s", family, xlarge(i)), vm.ArchAMD64})
+				expectedMachineTypeWithLocalSSD := fmt.Sprintf("%sd.%s", family, xlarge(i))
+				if family == "c6a" {
+					// N.B. c6a doesn't support local SSD.
+					expectedMachineTypeWithLocalSSD = fmt.Sprintf("%s.%s", family, xlarge(i))
+				}
 				testCases = append(testCases, machineTypeTestCase{i, mem, true, vm.ArchARM64,
-					fmt.Sprintf("%sd.%s", family, xlarge(i)), vm.ArchAMD64})
+					expectedMachineTypeWithLocalSSD, vm.ArchAMD64})
 			} else {
 				testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
 					fmt.Sprintf("%s.%s", family, xlarge(i)), vm.ArchARM64})
@@ -371,7 +381,7 @@ func TestGCEMachineType(t *testing.T) {
 
 			testCases = append(testCases, machineTypeTestCase{1, mem, false, arch,
 				fmt.Sprintf("n2-%s-%d", series, 2), arch})
-			for i := 2; i <= 128; i += 2 {
+			for _, i := range []int{2, 4, 8, 16, 32, 64, 96, 128} {
 				if i > 16 && mem == spec.Auto {
 					var expectedMachineType string
 					if i > 80 {
@@ -413,7 +423,7 @@ func TestGCEMachineType(t *testing.T) {
 			testCases = append(testCases, machineTypeTestCase{1, mem, false, vm.ArchARM64,
 				fmt.Sprintf("t2a-%s-%d", series, 1), vm.ArchARM64})
 		}
-		for i := 2; i <= 128; i += 2 {
+		for _, i := range []int{2, 4, 8, 16, 32, 64, 96, 128} {
 			fallback = fallback || i > 48 || (i > 16 && mem == spec.Auto)
 
 			if fallback {
