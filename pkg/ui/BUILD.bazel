@@ -20,6 +20,7 @@ go_library(
         "//pkg/build",
         "//pkg/server/serverpb",
         "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/util/httputil",
         "//pkg/util/log",
     ],
