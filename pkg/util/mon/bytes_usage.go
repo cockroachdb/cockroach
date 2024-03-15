@@ -192,9 +192,14 @@ type BytesMonitor struct {
 		// reserved by the monitor during its lifetime.
 		curBytesCount *metric.Gauge
 
-		// maxBytesHist is the metric object used to track the high watermark of bytes
-		// allocated by the monitor during its lifetime.
-		maxBytesHist metric.IHistogram
+		// maxBytesHist is the metric object used to track the high watermark of
+		// bytes allocated by the monitor during its lifetime.
+		//
+		// Note that it's a pointer to an interface in order to reduce the size
+		// of the struct (interfaces take up 16 bytes). If metric.IHistogram
+		// ever becomes a concrete struct, then we should remove the layer of
+		// indirection.
+		maxBytesHist *metric.IHistogram
 
 		// head is the head of the doubly-linked list of children of this
 		// monitor.
@@ -271,8 +276,8 @@ type BytesMonitor struct {
 
 const (
 	// Consult with SQL Queries before increasing these values.
-	expectedMonitorSize     = 160
-	expectedMonitorSizeRace = 168
+	expectedMonitorSize     = 152
+	expectedMonitorSizeRace = 160
 	expectedAccountSize     = 24
 )
 
@@ -428,7 +433,9 @@ func NewMonitor(args NewMonitorArgs) *BytesMonitor {
 		settings:           args.Settings,
 	}
 	m.mu.curBytesCount = args.CurCount
-	m.mu.maxBytesHist = args.MaxHist
+	if args.MaxHist != nil {
+		m.mu.maxBytesHist = &args.MaxHist
+	}
 	m.mu.tracksDisk = args.Res == DiskResource
 	return m
 }
@@ -603,7 +610,8 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 		// how to do logarithmic y-axes yet. See the explanatory comments
 		// in sql/mem_metrics.go.
 		val := int64(1000 * math.Log(float64(mm.mu.maxAllocated)) / math.Ln10)
-		mm.mu.maxBytesHist.RecordValue(val)
+		hist := *mm.mu.maxBytesHist
+		hist.RecordValue(val)
 	}
 
 	if parent := mm.mu.curBudget.mon; parent != nil {
@@ -670,7 +678,9 @@ func (mm *BytesMonitor) SetMetrics(curCount *metric.Gauge, maxHist metric.IHisto
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 	mm.mu.curBytesCount = curCount
-	mm.mu.maxBytesHist = maxHist
+	if maxHist != nil {
+		mm.mu.maxBytesHist = &maxHist
+	}
 }
 
 // Resource returns the type of the resource the monitor is tracking.
