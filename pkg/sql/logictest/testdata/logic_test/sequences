@@ -1608,7 +1608,7 @@ SELECT nextval('cached_upper_bound_test');
 query I
 SELECT last_value FROM cached_upper_bound_test;
 ----
-10
+4
 
 # nextval() should return errors while still incrementing the underlying sequence
 # by 10 each time (cache size of 5 * increment of 2). Despite the underlying sequence changing,
@@ -1633,7 +1633,7 @@ SELECT currval('cached_upper_bound_test');
 query I
 SELECT last_value FROM cached_upper_bound_test;
 ----
-30
+4
 
 # Performing a schema change on the sequence to increase the bounds should reset the underlying
 # sequence to its original MAXVALUE.
@@ -1692,7 +1692,7 @@ SELECT nextval('cached_lower_bound_test');
 query I
 SELECT last_value FROM cached_lower_bound_test;
 ----
--10
+-4
 
 statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test" \(-4\)
 SELECT nextval('cached_lower_bound_test');
@@ -1703,7 +1703,7 @@ SELECT nextval('cached_lower_bound_test');
 query I
 SELECT last_value FROM cached_lower_bound_test;
 ----
--30
+-4
 
 statement ok
 ALTER SEQUENCE cached_lower_bound_test MINVALUE -100;
@@ -1750,7 +1750,7 @@ SELECT nextval('cached_lower_bound_test_2');
 query I
 SELECT last_value FROM cached_lower_bound_test_2;
 ----
--6
+-2
 
 statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
 SELECT nextval('cached_lower_bound_test_2');
@@ -1761,7 +1761,7 @@ SELECT nextval('cached_lower_bound_test_2');
 query I
 SELECT last_value FROM cached_lower_bound_test_2;
 ----
--26
+-2
 
 statement ok
 ALTER SEQUENCE cached_lower_bound_test_2 MINVALUE -100;
