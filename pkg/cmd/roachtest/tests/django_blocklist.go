@@ -165,6 +165,5 @@ var enabledDjangoTests = []string{
 var djangoBlocklist = blocklist{}
 
 var djangoIgnoreList = blocklist{
-	"schema.tests.SchemaTests.test_add_auto_field":   "unneeded once django-cockroachdb 4.1.1 is released",
-	"schema.tests.SchemaTests.test_autofield_to_o2o": "unneeded once django-cockroachdb 4.1.1 is released",
+	`select_for_update.tests.SelectForUpdateTests.test_nowait_raises_error_on_block`: "flaky; see #120196",
 }
