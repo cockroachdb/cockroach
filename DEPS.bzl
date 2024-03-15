@@ -2673,10 +2673,10 @@ def go_deps():
         name = "com_github_elastic_gosigar",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/elastic/gosigar",
-        sha256 = "f3462c11be4f93f4ddb6c629c90a1db2b5dcedcd2a6af02a2f0b7aca1d65e7ba",
-        strip_prefix = "github.com/elastic/gosigar@v0.14.1",
+        sha256 = "abbc9f20d419423001a1fa3d326082759d92b6f6ee0c40b703b036894702d65a",
+        strip_prefix = "github.com/elastic/gosigar@v0.14.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/elastic/gosigar/com_github_elastic_gosigar-v0.14.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/elastic/gosigar/com_github_elastic_gosigar-v0.14.3.zip",
         ],
     )
     go_repository(
