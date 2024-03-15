@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -342,8 +343,31 @@ func SyncDNS(l *logger.Logger, vms vm.List) error {
 }
 
 type AuthorizedKey struct {
-	User string
-	Key  string
+	User    string
+	Key     ssh.PublicKey
+	Comment string
+}
+
+// Format formats an authorized key for display. When `maxLen` is 0,
+// we return the entire key, truncating it to that length
+// otherwise. The comment associated with the key, if available, is
+// always displayed.
+func (k AuthorizedKey) Format(maxLen int) string {
+	formatted := string(ssh.MarshalAuthorizedKey(k.Key))
+	if maxLen > 0 {
+		formatted = formatted[:maxLen] + "..."
+	}
+
+	var comment string
+	if k.Comment != "" {
+		comment = fmt.Sprintf(" %s", k.Comment)
+	}
+
+	return fmt.Sprintf("%s%s", formatted, comment)
+}
+
+func (k AuthorizedKey) String() string {
+	return k.Format(0)
 }
 
 type AuthorizedKeys []AuthorizedKey
@@ -354,7 +378,7 @@ func (ak AuthorizedKeys) AsSSH() []byte {
 	var buf bytes.Buffer
 
 	for _, k := range ak {
-		buf.WriteString(fmt.Sprintf("%s\n", k.Key))
+		buf.WriteString(k.String() + "\n")
 	}
 
 	return buf.Bytes()
@@ -392,7 +416,11 @@ func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 			continue
 		}
 
-		authorizedKeys = append(authorizedKeys, AuthorizedKey{User: user, Key: key})
+		pubKey, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(key))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse public key in project metadata: %w\n%s", err, key)
+		}
+		authorizedKeys = append(authorizedKeys, AuthorizedKey{User: user, Key: pubKey, Comment: comment})
 	}
 
 	if err := scanner.Err(); err != nil {
