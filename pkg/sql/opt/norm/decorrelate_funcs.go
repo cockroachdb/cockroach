@@ -89,6 +89,97 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 		}
 	}
 
+	// Special handling for conditional expressions, which maintain invariants
+	// about when input expressions are evaluated.
+	switch scalar.Op() {
+	case opt.CaseOp, opt.CoalesceOp, opt.IfErrOp:
+		return c.deriveConditionalHasHoistableSubquery(scalar)
+	}
+
+	// If HasHoistableSubquery is true for any child, then it's true for this
+	// expression as well. The exception is conditional expressions, which are
+	// handled above.
+	for i, n := 0, scalar.ChildCount(); i < n; i++ {
+		child := scalar.Child(i).(opt.ScalarExpr)
+		if c.deriveHasHoistableSubquery(child) {
+			return true
+		}
+	}
+	return false
+}
+
+// deriveConditionalHasHoistableSubquery analyzes a conditional expression for
+// subqueries that can be "hoisted" into a join and replaced with a simple
+// variable reference.
+func (c *CustomFuncs) deriveConditionalHasHoistableSubquery(scalar opt.ScalarExpr) bool {
+	if !c.f.evalCtx.SessionData().OptimizerUseConditionalHoistFix {
+		return c.oldDeriveConditionalHasHoistableSubquery(scalar)
+	}
+	// Conditional expressions maintain invariants about when input expressions
+	// are evaluated. For example, a CASE statement does not evaluate a WHEN
+	// branch until its guard condition passes. A child expression that is
+	// conditionally evaluated can only be hoisted if it is leak-proof, since
+	// hoisting can change whether / how many times an expression is evaluated.
+	var sharedProps props.Shared
+	deriveCanHoistChild := func(child opt.ScalarExpr, isConditional bool) bool {
+		if c.deriveHasHoistableSubquery(child) {
+			if isConditional {
+				memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx)
+				return sharedProps.VolatilitySet.IsLeakproof()
+			}
+			return true
+		}
+		return false
+	}
+	switch t := scalar.(type) {
+	case *memo.CaseExpr:
+		// The input expression is always evaluated.
+		if c.deriveHasHoistableSubquery(t.Input) {
+			return true
+		}
+		for i := range t.Whens {
+			whenExpr := t.Whens[i].(*memo.WhenExpr)
+			if deriveCanHoistChild(whenExpr.Condition, i > 0) {
+				// The first condition is always evaluated. The remaining conditions are
+				// conditionally evaluated.
+				return true
+			}
+			// The WHEN branches are conditionally evaluated.
+			if deriveCanHoistChild(whenExpr.Value, true /* isConditional */) {
+				return true
+			}
+		}
+		// The ELSE branch is conditionally evaluated.
+		return deriveCanHoistChild(t.OrElse, true /* isConditional */)
+	case *memo.CoalesceExpr:
+		// The first argument is always evaluated. The remaining arguments are
+		// conditionally evaluated.
+		for i := range t.Args {
+			if deriveCanHoistChild(t.Args[i], i > 0) {
+				return true
+			}
+		}
+		return false
+	case *memo.IfErrExpr:
+		// The condition expression is always evaluated. The OrElse expressions are
+		// conditionally evaluated.
+		if c.deriveHasHoistableSubquery(t.Cond) {
+			return true
+		}
+		for i := range t.OrElse {
+			if deriveCanHoistChild(t.OrElse[i], true /* isConditional */) {
+				return true
+			}
+		}
+		return false
+	default:
+		panic(errors.AssertionFailedf("unhandled op: %v", scalar.Op()))
+	}
+}
+
+// oldDeriveConditionalHasHoistableSubquery contains the old logic for analyzing
+// conditional expressions.
+func (c *CustomFuncs) oldDeriveConditionalHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 	// If HasHoistableSubquery is true for any child, then it's true for this
 	// expression as well. The exception is Case/If branches that have side
 	// effects. These can only be executed if the branch test evaluates to true,
@@ -770,6 +861,7 @@ type subqueryHoister struct {
 	f       *Factory
 	mem     *memo.Memo
 	hoisted memo.RelExpr
+	scratch props.Shared
 }
 
 func (r *subqueryHoister) init(c *CustomFuncs, input memo.RelExpr) {
@@ -884,6 +976,11 @@ func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 			colID = subqueryProps.OutputCols.SingleColumn()
 		}
 		return r.f.ConstructVariable(colID)
+
+	case opt.CaseOp, opt.CoalesceOp, opt.IfErrOp:
+		if r.f.evalCtx.SessionData().OptimizerUseConditionalHoistFix {
+			return r.constructConditionalExpr(scalar)
+		}
 	}
 
 	return r.f.Replace(scalar, func(nd opt.Expr) opt.Expr {
@@ -902,6 +999,61 @@ func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 		}
 		return nd
 	}).(opt.ScalarExpr)
+}
+
+// constructConditionalExpr handles the special case of hoisting subqueries
+// within a conditional expression, which must maintain invariants as to when
+// its children are evaluated. For example, a branch of a CASE statement can
+// only be evaluated if its guard condition passes.
+func (r *subqueryHoister) constructConditionalExpr(scalar opt.ScalarExpr) opt.ScalarExpr {
+	maybeHoistChild := func(child opt.ScalarExpr, isConditional bool) opt.ScalarExpr {
+		if isConditional {
+			// This child expression is conditionally evaluated, so it can only be
+			// hoisted if it does not have side effects.
+			r.scratch = props.Shared{}
+			memo.BuildSharedProps(child, &r.scratch, r.f.evalCtx)
+			if !r.scratch.VolatilitySet.IsLeakproof() {
+				return child
+			}
+		}
+		return r.hoistAll(child)
+	}
+
+	switch t := scalar.(type) {
+	case *memo.CaseExpr:
+		// The input expression is unconditionally evaluated.
+		newInput := r.hoistAll(t.Input)
+		newWhens := make(memo.ScalarListExpr, len(t.Whens))
+		for i := range t.Whens {
+			// WHEN conditions other than the first are conditionally evaluated. The
+			// branches are always conditionally evaluated.
+			whenExpr := t.Whens[i].(*memo.WhenExpr)
+			newCond := maybeHoistChild(whenExpr.Condition, i > 0)
+			newVal := maybeHoistChild(whenExpr.Value, true /* isConditional */)
+			newWhens[i] = r.f.ConstructWhen(newCond, newVal)
+		}
+		// The ELSE branch is conditionally evaluated.
+		newOrElse := maybeHoistChild(t.OrElse, true /* isConditional */)
+		return r.f.ConstructCase(newInput, newWhens, newOrElse)
+	case *memo.CoalesceExpr:
+		// The first argument is unconditionally evaluated; the rest are
+		// conditional.
+		newArgs := make(memo.ScalarListExpr, len(t.Args))
+		for i, arg := range t.Args {
+			newArgs[i] = maybeHoistChild(arg, i > 0)
+		}
+		return r.f.ConstructCoalesce(newArgs)
+	case *memo.IfErrExpr:
+		// The condition expression is always evaluated. The OrElse expressions are
+		// conditionally evaluated.
+		newCond := r.hoistAll(t.Cond)
+		newOrElse := make(memo.ScalarListExpr, len(t.OrElse))
+		for i := range t.OrElse {
+			newOrElse[i] = maybeHoistChild(t.OrElse[i], true /* isConditional */)
+		}
+		return r.f.ConstructIfErr(newCond, newOrElse, t.ErrCode)
+	}
+	panic(errors.AssertionFailedf("unexpected op: %s", scalar.Op()))
 }
 
 // constructGroupByExists transforms a scalar Exists expression like this:

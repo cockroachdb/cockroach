@@ -485,6 +485,10 @@ message LocalOnlySessionData {
   // CloseCursorsAtCommit determines whether cursors remain open after their
   // parent transaction closes.
   bool close_cursors_at_commit = 122;
+  // OptimizerUseConditionalHoistFix, when true, prevents the optimizer from
+  // hoisting a volatile expression that is conditionally executed by a CASE,
+  // COALESCE, or IFERR expression.
+  bool optimizer_use_conditional_hoist_fix = 123;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

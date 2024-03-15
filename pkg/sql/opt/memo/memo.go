@@ -175,6 +175,7 @@ type Memo struct {
 	useLockOpForSerializable                   bool
 	useProvidedOrderingFix                     bool
 	mergeJoinsEnabled                          bool
+	useConditionalHoistFix                     bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -248,6 +249,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useLockOpForSerializable:                   evalCtx.SessionData().OptimizerUseLockOpForSerializable,
 		useProvidedOrderingFix:                     evalCtx.SessionData().OptimizerUseProvidedOrderingFix,
 		mergeJoinsEnabled:                          evalCtx.SessionData().OptimizerMergeJoinsEnabled,
+		useConditionalHoistFix:                     evalCtx.SessionData().OptimizerUseConditionalHoistFix,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -395,6 +397,7 @@ func (m *Memo) IsStale(
 		m.useLockOpForSerializable != evalCtx.SessionData().OptimizerUseLockOpForSerializable ||
 		m.useProvidedOrderingFix != evalCtx.SessionData().OptimizerUseProvidedOrderingFix ||
 		m.mergeJoinsEnabled != evalCtx.SessionData().OptimizerMergeJoinsEnabled ||
+		m.useConditionalHoistFix != evalCtx.SessionData().OptimizerUseConditionalHoistFix ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
