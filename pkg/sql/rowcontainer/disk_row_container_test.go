@@ -95,6 +95,42 @@ func compareRowToEncRow(
 	return 0, nil
 }
 
+func getMemoryMonitor(st *cluster.Settings) *mon.BytesMonitor {
+	return mon.NewMonitor(
+		"test-mem",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment: use default block size */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+}
+
+func getUnlimitedMemoryMonitor(st *cluster.Settings) *mon.BytesMonitor {
+	return mon.NewUnlimitedMonitor(
+		context.Background(),
+		"test-mem",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+}
+
+func getDiskMonitor(st *cluster.Settings) *mon.BytesMonitor {
+	return mon.NewMonitor(
+		"test-disk", /* name */
+		mon.DiskResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment: use default block size */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+}
+
 func TestDiskRowContainer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -142,15 +178,7 @@ func TestDiskRowContainer(t *testing.T) {
 
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := mon.NewMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
+	diskMonitor := getDiskMonitor(st)
 	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 	t.Run("EncodeDecode", func(t *testing.T) {
@@ -428,15 +456,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	defer tempEngine.Close()
 
 	// Make a monitor with no capacity.
-	monitor := mon.NewMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
+	monitor := getDiskMonitor(st)
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(0 /* capacity */))
 
 	d, _ := MakeDiskRowContainer(
@@ -468,15 +488,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	diskMonitor := mon.NewMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
+	diskMonitor := getDiskMonitor(st)
 	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
@@ -597,15 +609,7 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	monitor := mon.NewMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
+	monitor := getDiskMonitor(st)
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 
 	d, _ := MakeDiskRowContainer(monitor, types.OneIntCol, nil /* ordering */, tempEngine)
