@@ -59,6 +59,12 @@ type Statistics struct {
 	// expressions with Cardinality.Max > 0, RowCount will be >= epsilon.
 	RowCount float64
 
+	// VirtualCols is the set of virtual computed columns produced by our input
+	// that we have statistics on. Any of these could appear in ColStats. This set
+	// is maintained separately from OutputCols to allow lookup of statistics on
+	// virtual columns for expressions that synthesize virtual columns.
+	VirtualCols opt.ColSet
+
 	// ColStats is a collection of statistics that pertain to columns in an
 	// expression or table. It is keyed by a set of one or more columns over which
 	// the statistic is defined.
@@ -113,6 +119,7 @@ func (s *Statistics) RowCountIfAvailable() float64 {
 func (s *Statistics) CopyFrom(other *Statistics) {
 	s.Available = other.Available
 	s.RowCount = other.RowCount
+	s.VirtualCols = other.VirtualCols.Copy()
 	s.ColStats.CopyFrom(&other.ColStats)
 	s.Selectivity = other.Selectivity
 }
@@ -185,6 +192,9 @@ func (s *Statistics) stringImpl(includeHistograms bool) string {
 				}
 			}
 		}
+	}
+	if !s.VirtualCols.Empty() {
+		fmt.Fprintf(&buf, "\nvirtcolstats: %v", s.VirtualCols)
 	}
 
 	return buf.String()

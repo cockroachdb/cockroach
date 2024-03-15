@@ -662,7 +662,15 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			var colOrd int
 			for i := 0; i < stat.ColumnCount(); i++ {
 				colOrd = stat.ColumnOrdinal(i)
-				cols.Add(tabID.ColumnID(colOrd))
+				col := tabID.ColumnID(colOrd)
+				cols.Add(col)
+				if tab.Column(colOrd).IsVirtualComputed() {
+					// We only add virtual columns if we have statistics on them, so that
+					// in higher groups we can decide whether to look up statistics on
+					// virtual columns or on the columns used in their defining
+					// expressions.
+					stats.VirtualCols.Add(col)
+				}
 			}
 
 			// We currently only use average column sizes of single column
@@ -803,6 +811,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 
 	inputStats := sb.makeTableStatistics(scan.Table)
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	pred := scan.PartialIndexPredicate(sb.md)
 
 	// If the constraints and pred are nil, then this scan is an unconstrained
@@ -1030,6 +1039,7 @@ func (sb *statisticsBuilder) buildSelect(sel *SelectExpr, relProps *props.Relati
 	s.Available = sb.availabilityFromInput(sel)
 	inputStats := sel.Input.Relational().Statistics()
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 
 	sb.filterRelExpr(sel.Filters, sel, relProps.NotNullCols, relProps, s, &sel.Input.Relational().FuncDeps)
 
@@ -1072,6 +1082,7 @@ func (sb *statisticsBuilder) buildProject(prj *ProjectExpr, relProps *props.Rela
 	inputStats := prj.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -1171,6 +1182,7 @@ func (sb *statisticsBuilder) buildInvertedFilter(
 	// -----------------------------------
 	inputStats := invFilter.Input.Relational().Statistics()
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, invFilter, s)
 	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, invFilter, s, corr))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(invFilter, relProps.NotNullCols, constrainedCols))
@@ -1222,6 +1234,16 @@ func (sb *statisticsBuilder) buildJoin(
 	leftCols := h.leftProps.OutputCols.Copy()
 	rightCols := h.rightProps.OutputCols.Copy()
 	equivReps := h.filtersFD.EquivReps()
+
+	switch h.joinType {
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		// For semi- and anti-joins, colStatJoin will only be called with columns
+		// from the left side.
+		s.VirtualCols.UnionWith(leftStats.VirtualCols)
+	default:
+		s.VirtualCols.UnionWith(leftStats.VirtualCols)
+		s.VirtualCols.UnionWith(rightStats.VirtualCols)
+	}
 
 	// Shortcut if there are no ON conditions. Note that for lookup join, there
 	// are implicit equality conditions on KeyCols.
@@ -1741,6 +1763,8 @@ func (sb *statisticsBuilder) buildIndexJoin(indexJoin *IndexJoinExpr, relProps *
 	inputStats := indexJoin.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
+	s.VirtualCols.UnionWith(sb.makeTableStatistics(indexJoin.Table).VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -1818,6 +1842,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	s.Available = sb.availabilityFromInput(zigzag)
 
 	leftStats := zigzag.leftProps.Statistics()
+	rightStats := zigzag.rightProps.Statistics()
 	equivReps := h.filtersFD.EquivReps()
 
 	// We assume that we only plan zigzag joins in cases where the result set
@@ -1825,6 +1850,9 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// row counts, and where the left and right sides are indexes on the same
 	// table. Their row count should be the same, so use either row count.
 	s.RowCount = leftStats.RowCount
+
+	s.VirtualCols.UnionWith(leftStats.VirtualCols)
+	s.VirtualCols.UnionWith(rightStats.VirtualCols)
 
 	// Calculate distinct counts for constrained columns
 	// -------------------------------------------------
@@ -1916,6 +1944,9 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 	groupingPrivate := groupNode.Private().(*GroupingPrivate)
 	groupingColSet := groupingPrivate.GroupingCols
 
+	inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
+
 	if groupingColSet.Empty() {
 		if groupNode.Op() == opt.ScalarGroupByOp {
 			// ScalarGroupBy always returns exactly one row.
@@ -1924,12 +1955,9 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 			// GroupBy with empty grouping columns returns 0 or 1 rows, depending
 			// on whether input has rows. If input has < 1 row, use that, as that
 			// represents the probability of having 0 vs. 1 rows.
-			inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
 			s.RowCount = min(1, inputStats.RowCount)
 		}
 	} else {
-		inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
-
 		if groupingPrivate.ErrorOnDup != "" {
 			// If any input group has more than one row, then the distinct operator
 			// will raise an error, so in non-error cases it has the same number of
@@ -2027,6 +2055,12 @@ func (sb *statisticsBuilder) buildSetNode(setNode RelExpr, relProps *props.Relat
 
 	leftStats := sb.statsFromChild(setNode, 0 /* childIdx */)
 	rightStats := sb.statsFromChild(setNode, 1 /* childIdx */)
+
+	// TODO(michae2): Set operations and with-scans currently act as barriers for
+	// VirtualCols, due to the column ID translation. To fix this we would need to
+	// rewrite virtual computed column expressions in terms of the translated
+	// column IDs, and would need to store the rewritten expressions somewhere
+	// other than TableMeta.
 
 	// These calculations are an upper bound on the row count. It's likely that
 	// there is some overlap between the two sets, but not full overlap.
@@ -2233,6 +2267,7 @@ func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relati
 
 	// Copy row count from input.
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 
 	// Update row count if limit is a constant and row count is non-zero.
 	if cnst, ok := limit.Limit.(*ConstExpr); ok && inputStats.RowCount > 0 {
@@ -2275,6 +2310,7 @@ func (sb *statisticsBuilder) buildTopK(topK *TopKExpr, relProps *props.Relationa
 
 	// Copy row count from input.
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 
 	// Update row count if row count and k are non-zero.
 	if inputStats.RowCount > 0 && topK.K > 0 {
@@ -2316,6 +2352,7 @@ func (sb *statisticsBuilder) buildOffset(offset *OffsetExpr, relProps *props.Rel
 
 	// Copy row count from input.
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 
 	// Update row count if offset is a constant and row count is non-zero.
 	if cnst, ok := offset.Offset.(*ConstExpr); ok && inputStats.RowCount > 0 {
@@ -2397,6 +2434,7 @@ func (sb *statisticsBuilder) buildOrdinality(ord *OrdinalityExpr, relProps *prop
 	inputStats := ord.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2442,7 +2480,7 @@ func (sb *statisticsBuilder) buildWindow(window *WindowExpr, relProps *props.Rel
 
 	// The row count of a window is equal to the row count of its input.
 	s.RowCount = inputStats.RowCount
-
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2526,7 +2564,7 @@ func (sb *statisticsBuilder) buildProjectSet(
 	// Multiply by the input row count to get the total.
 	inputStats := projectSet.Input.Relational().Statistics()
 	s.RowCount = zipRowCount * inputStats.RowCount
-
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2640,6 +2678,13 @@ func (sb *statisticsBuilder) buildWithScan(
 
 	s.Available = bindingProps.Statistics().Available
 	s.RowCount = bindingProps.Statistics().RowCount
+
+	// TODO(michae2): Set operations and with-scans currently act as barriers for
+	// VirtualCols, due to the column ID translation. To fix this we would need to
+	// rewrite virtual computed column expressions in terms of the translated
+	// column IDs, and would need to store the rewritten expressions somewhere
+	// other than TableMeta.
+
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2677,6 +2722,7 @@ func (sb *statisticsBuilder) buildMutation(mutation RelExpr, relProps *props.Rel
 	inputStats := sb.statsFromChild(mutation, 0 /* childIdx */)
 
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2714,6 +2760,7 @@ func (sb *statisticsBuilder) buildLock(lock *LockExpr, relProps *props.Relationa
 	inputStats := lock.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2745,6 +2792,7 @@ func (sb *statisticsBuilder) buildBarrier(barrier *BarrierExpr, relProps *props.
 	inputStats := barrier.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
