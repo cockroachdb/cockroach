@@ -289,7 +289,7 @@ func sendRemoteAddSSTable(
 		return err
 	}
 
-	loc := kvpb.AddSSTableRequest_RemoteFile{
+	loc := kvpb.LinkExternalSSTableRequest_ExternalFile{
 		Locator:                 file.Dir.URI,
 		Path:                    file.Path,
 		ApproximatePhysicalSize: fileSize,
@@ -311,9 +311,8 @@ func sendRemoteAddSSTable(
 		batchTimestamp = execCtx.ExecCfg().DB.Clock().Now()
 	}
 
-	_, _, err = execCtx.ExecCfg().DB.AddRemoteSSTable(
+	return execCtx.ExecCfg().DB.LinkExternalSSTable(
 		ctx, file.BackupFileEntrySpan, loc, fileStats, batchTimestamp)
-	return err
 }
 
 // checkManifestsForOnlineCompat returns an error if the set of

@@ -783,8 +783,6 @@ func (db *DB) AdminRelocateRange(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-var noRemoteFile kvpb.AddSSTableRequest_RemoteFile
-
 // AddSSTable links a file into the Pebble log-structured merge-tree.
 //
 // The disallowConflicts, disallowShadowingBelow parameters
@@ -801,7 +799,7 @@ func (db *DB) AddSSTable(
 	batchTs hlc.Timestamp,
 ) (roachpb.Span, int64, error) {
 	b := &Batch{Header: kvpb.Header{Timestamp: batchTs}}
-	b.addSSTable(begin, end, data, noRemoteFile, disallowConflicts, disallowShadowing, disallowShadowingBelow,
+	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
 		stats, ingestAsWrites, hlc.Timestamp{} /* sstTimestampToRequestTimestamp */)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
@@ -814,24 +812,23 @@ func (db *DB) AddSSTable(
 	return resp.RangeSpan, resp.AvailableBytes, nil
 }
 
-func (db *DB) AddRemoteSSTable(
+func (db *DB) LinkExternalSSTable(
 	ctx context.Context,
 	span roachpb.Span,
-	file kvpb.AddSSTableRequest_RemoteFile,
+	file kvpb.LinkExternalSSTableRequest_ExternalFile,
 	stats *enginepb.MVCCStats,
 	batchTimestamp hlc.Timestamp,
-) (roachpb.Span, int64, error) {
+) error {
 	b := &Batch{Header: kvpb.Header{Timestamp: batchTimestamp}}
-	b.addSSTable(span.Key, span.EndKey, nil, file, false, false, hlc.Timestamp{}, stats, false, batchTimestamp)
+	b.linkExternalSSTable(span, file, stats, batchTimestamp)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
-		return roachpb.Span{}, 0, err
+		return err
 	}
 	if l := len(b.response.Responses); l != 1 {
-		return roachpb.Span{}, 0, errors.AssertionFailedf("expected single response, got %d", l)
+		return errors.AssertionFailedf("expected single response, got %d", l)
 	}
-	resp := b.response.Responses[0].GetAddSstable()
-	return resp.RangeSpan, resp.AvailableBytes, nil
+	return nil
 }
 
 // AddSSTableAtBatchTimestamp links a file into the Pebble log-structured
@@ -852,7 +849,7 @@ func (db *DB) AddSSTableAtBatchTimestamp(
 	batchTs hlc.Timestamp,
 ) (hlc.Timestamp, roachpb.Span, int64, error) {
 	b := &Batch{Header: kvpb.Header{Timestamp: batchTs}}
-	b.addSSTable(begin, end, data, noRemoteFile,
+	b.addSSTable(begin, end, data,
 		disallowConflicts, disallowShadowing, disallowShadowingBelow,
 		stats, ingestAsWrites, batchTs)
 	err := getOneErr(db.Run(ctx, b), b)

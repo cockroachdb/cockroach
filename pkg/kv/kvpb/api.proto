@@ -2127,43 +2127,6 @@ message AddSSTableRequest {
   // is likely non-empty. See AddSSTableResponse.FollowingLikelyNonEmptySpanStart.
   bool return_following_likely_non_empty_span_start = 9;
 
-  // RemoteFile indicates that the span indicated by the request start and end
-  // key of the file specified should be added. Data cannot be set if RemoteFile
-  // is non-empty, and many other request parameters such as collision/shadow
-  // checking, write-at-request-timestamp, or ingest-as-writes are unsupported.
-  //
-  // TODO(dt, msbutler, bilal): This is unsupported.
-  // TODO(msbutler): rename to ExternalFile.
-  message  RemoteFile {
-    string locator = 1;
-    string path = 2;
-    uint64 backing_file_size = 3;
-    uint64 approximate_physical_size = 4;
-    bytes synthetic_prefix = 5;
-
-  }
-  RemoteFile remote_file = 10 [(gogoproto.nullable) = false];
-
-  // AddSStableRequest_PrefixReplacement is used to represent a prefix to be
-  // replaced and the prefix with which to replace it.
-  //
-  // TODO(msbutler): delete prefix replacement plumbing.
-  message PrefixReplacement {
-    bytes from = 1;
-    bytes to = 2;
-  }
-
-  // PrefixReplacement is used to that keys in the sst with the prefix specified
-  // in "from" should instead appear to have that prefix replaced by "to", when
-  // during iteration, seeking, or other reads. For example, an SST containing
-  // keys a1, a2, and a3 when added with PrefixReplacement={From: a, To:x} would
-  // produce the same results for subsequent operations as adding an SST with
-  // the keys x1, x2, x3 instead. The implementaiton may however elect to defer
-  // these replacements until the file is read.
-  //
-  // TODO(dt,msbutler,bilal): This is unsupported.
-  PrefixReplacement prefix_replacement = 11 [(gogoproto.nullable) = false];
-
   // IgnoreKeysAboveTimestamp is used when ingesting an SSTable that contains
   // keys, including mvcc revisions of keys, captured over a time range, to
   // indicate that readers of that sstable should read it "as of" a the fixed
@@ -2171,6 +2134,8 @@ message AddSSTableRequest {
   //
   // TODO(dt,msbutler,bilal): This is unsupported.
   util.hlc.Timestamp ignore_keys_above_timestamp = 12 [(gogoproto.nullable) = false];
+
+  reserved 10, 11;
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
@@ -2198,6 +2163,47 @@ message AddSSTableResponse {
   // picked using cheaper, inconsistentent reads so it should be used only for
   // estimations of how ingested data and spans may overlap.
   bytes following_likely_non_empty_span_start = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+}
+
+message LinkExternalSSTableRequest {
+    RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // SSTTimestampToRequestTimestamp gives the timestamp used for all MVCC keys
+  // in the provided SST. If this timestamp differs from the request timestamp
+  // (e.g. if the request gets pushed) then all MVCC keys in the SST will be
+  // rewritten to the request timestamp during request evaluation. This ensures
+  // the writes comply with the timestamp cache and closed timestamp. It also
+  // causes the AddSSTable to be emitted via the range feed, since it respects
+  // the closed timestamp.
+  //
+  // Callers should always set this, except in very special circumstances when
+  // the timestamp cache and closed timestamp can safely be ignored (e.g.
+  // streaming replication into an offline tenant).
+  //
+  // Note that this alone is not sufficient to guarantee MVCC correctness, since
+  // it can write below or replace existing committed versions (the tscache is
+  // only bumped when the values are subsequently read).
+  util.hlc.Timestamp sst_timestamp_to_request_timestamp = 2 [
+    (gogoproto.customname) = "SSTTimestampToRequestTimestamp", (gogoproto.nullable) = false];
+
+  // MVCCStats, if set, is the MVCCStats for the contents of this SSTable and is
+  // used as-is during evaluation of the command to update the range
+  // MVCCStats, instead of computing the stats for the SSTable by iterating it.
+  // Including these stats can make the evaluation of LinkExternalSSTable much cheaper.
+  storage.enginepb.MVCCStats mvcc_stats = 3 [(gogoproto.customname) = "MVCCStats"];
+
+  message  ExternalFile {
+    string locator = 1;
+    string path = 2;
+    uint64 backing_file_size = 3;
+    uint64 approximate_physical_size = 4;
+    bytes synthetic_prefix = 5;
+  }
+  ExternalFile external_file = 4 [(gogoproto.nullable) = false];
+}
+
+message LinkExternalSSTableResponse {
+    ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no
@@ -2544,6 +2550,7 @@ message RequestUnion {
     BarrierRequest barrier = 53;
     ProbeRequest probe = 54;
     IsSpanEmptyRequest is_span_empty = 56;
+    LinkExternalSSTableRequest link_external_sstable = 57;
   }
   reserved 8, 15, 23, 25, 27, 31, 34, 52;
 }
@@ -2599,6 +2606,7 @@ message ResponseUnion {
     BarrierResponse barrier = 53;
     ProbeResponse probe = 54;
     IsSpanEmptyResponse is_span_empty = 56;
+    LinkExternalSSTableResponse link_external_sstable = 57;
   }
   reserved 8, 15, 23, 25, 27, 28, 31, 34, 52;
 }

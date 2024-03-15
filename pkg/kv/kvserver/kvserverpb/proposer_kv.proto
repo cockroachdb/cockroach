@@ -216,13 +216,8 @@ message ReplicatedEvalResult {
     // older have been applied on all replicas.
     bool at_write_timestamp = 4;
 
-    // TODO(msbutler,dt): bikeshed the name of these fields.
-    string remote_file_loc = 5;
-    string remote_file_path = 6;
-    uint64 backing_file_size = 7;
-    uint64 approximate_physical_size = 8;
-    util.hlc.Timestamp remote_rewrite_timestamp = 9 [(gogoproto.nullable) = false];
-    bytes remote_synthetic_prefix = 10;
+    // TODO(msbutler,dt): bikeshed the name of these fields
+    reserved 5, 6, 7, 8, 9, 10;
   }
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
 
@@ -258,6 +253,18 @@ message ReplicatedEvalResult {
   // application while ensuring correctness in the case where the lease transfer
   // is applied on the new leaseholder through a Raft snapshot.
   kv.kvserver.readsummary.ReadSummary prior_read_summary = 22;
+
+  message LinkExternalSSTable {
+    roachpb.Span span = 1 [(gogoproto.nullable) = false];
+    string remote_file_loc = 2;
+    string remote_file_path = 3;
+    uint64 backing_file_size = 4;
+    uint64 approximate_physical_size = 5;
+    util.hlc.Timestamp remote_rewrite_timestamp = 6 [(gogoproto.nullable) = false];
+    bytes remote_synthetic_prefix = 7;
+  }
+
+  LinkExternalSSTable link_external_sstable = 27 [(gogoproto.customname) = "LinkExternalSSTable"];
 
   reserved 1, 5, 7, 9, 10, 14, 15, 16, 19, 10001 to 10013;
 }

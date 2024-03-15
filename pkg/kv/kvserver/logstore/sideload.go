@@ -112,7 +112,7 @@ func MaybeSideloadEntries(
 		if err != nil {
 			return nil, 0, 0, 0, err
 		}
-		if e.Cmd.ReplicatedEvalResult.AddSSTable == nil {
+		if e.Cmd.ReplicatedEvalResult.AddSSTable == nil && e.Cmd.ReplicatedEvalResult.LinkExternalSSTable == nil {
 			// Still no AddSSTable; someone must've proposed a v2 command
 			// but not because it contains an inlined SSTable. Strange, but
 			// let's be future proof.
@@ -121,9 +121,13 @@ func MaybeSideloadEntries(
 		}
 		numSideloaded++
 
-		// Actually strip the command.
-		dataToSideload := e.Cmd.ReplicatedEvalResult.AddSSTable.Data
-		e.Cmd.ReplicatedEvalResult.AddSSTable.Data = nil
+		// Actually strip the addSStable cmd. NB: a LinkExternalSSTable cmd will
+		// sideload an empty data slice.
+		var dataToSideload []byte
+		if e.Cmd.ReplicatedEvalResult.AddSSTable != nil {
+			dataToSideload = e.Cmd.ReplicatedEvalResult.AddSSTable.Data
+			e.Cmd.ReplicatedEvalResult.AddSSTable.Data = nil
+		}
 
 		// Marshal the command and attach to the Raft entry.
 		//
@@ -202,7 +206,7 @@ func MaybeInlineSideloadedRaftCommand(
 		return nil, err
 	}
 
-	if len(e.Cmd.ReplicatedEvalResult.AddSSTable.Data) > 0 {
+	if addSSTable := e.Cmd.ReplicatedEvalResult.AddSSTable; addSSTable != nil && len(addSSTable.Data) > 0 {
 		// The entry we started out with was already "fat". This should never
 		// occur since it would imply that a) the entry was not properly
 		// sideloaded during append or b) the entry reached us through a
@@ -251,7 +255,7 @@ func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 		log.Fatalf(ctx, "%v", err)
 	}
 
-	if len(e.Cmd.ReplicatedEvalResult.AddSSTable.Data) == 0 {
+	if addSSTable := e.Cmd.ReplicatedEvalResult.AddSSTable; addSSTable != nil && len(addSSTable.Data) > 0 {
 		// The entry is "thin", which is what this assertion is checking for.
 		log.Fatalf(ctx, "found thin sideloaded raft command: %+v", e.Cmd)
 	}
