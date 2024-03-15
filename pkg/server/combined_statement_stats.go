@@ -666,7 +666,7 @@ func collectCombinedStatements(
 	activityTableHasAllData bool,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 	aostClause := testingKnobs.GetAOSTClause()
-	const expectedNumDatums = 10
+	const expectedNumDatums = 9
 	const queryFormat = `
 SELECT 
     fingerprint_id,
@@ -674,7 +674,6 @@ SELECT
     aggregated_ts,
     COALESCE(CAST(metadata -> 'distSQLCount' AS INT), 0)  AS distSQLCount,
     COALESCE(CAST(metadata -> 'fullScanCount' AS INT), 0) AS fullScanCount,
-    COALESCE(CAST(metadata -> 'failedCount' AS INT), 0)   AS failedCount,
     metadata ->> 'query'                                  AS query,
     metadata ->> 'querySummary'                           AS querySummary,
     (SELECT string_agg(elem::text, ',') 
@@ -709,7 +708,6 @@ SELECT
     aggregated_ts,
     COALESCE(CAST(metadata -> 'distSQLCount' AS INT), 0)  AS distSQLCount,
     COALESCE(CAST(metadata -> 'fullScanCount' AS INT), 0) AS fullScanCount,
-    COALESCE(CAST(metadata -> 'failedCount' AS INT), 0)   AS failedCount,
     metadata ->> 'query'                                  AS query,
     metadata ->> 'querySummary'                           AS querySummary,
     (SELECT string_agg(elem::text, ',') 
@@ -797,17 +795,15 @@ FROM (SELECT fingerprint_id,
 		aggregatedTs := tree.MustBeDTimestampTZ(row[2]).Time
 		distSQLCount := int64(*row[3].(*tree.DInt))
 		fullScanCount := int64(*row[4].(*tree.DInt))
-		failedCount := int64(*row[5].(*tree.DInt))
-		query := string(tree.MustBeDString(row[6]))
-		querySummary := string(tree.MustBeDString(row[7]))
-		databases := string(tree.MustBeDString(row[8]))
+		query := string(tree.MustBeDString(row[5]))
+		querySummary := string(tree.MustBeDString(row[6]))
+		databases := string(tree.MustBeDString(row[7]))
 
 		metadata := appstatspb.CollectedStatementStatistics{
 			Key: appstatspb.StatementStatisticsKey{
 				App:          app,
 				DistSQL:      distSQLCount > 0,
 				FullScan:     fullScanCount > 0,
-				Failed:       failedCount > 0,
 				Query:        query,
 				QuerySummary: querySummary,
 				Database:     databases,
@@ -815,7 +811,7 @@ FROM (SELECT fingerprint_id,
 		}
 
 		var stats appstatspb.StatementStatistics
-		statsJSON := tree.MustBeDJSON(row[9]).JSON
+		statsJSON := tree.MustBeDJSON(row[8]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &stats); err != nil {
 			return nil, srverrors.ServerError(ctx, err)
 		}

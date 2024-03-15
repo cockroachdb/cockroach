@@ -819,7 +819,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		f.FormatNode(ast)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 			f.CloseAndGetString(),
-			execErr != nil,
 			ex.implicitTxn(),
 			p.CurrentDatabase(),
 		)
@@ -2557,7 +2556,6 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		f.FormatNode(stmt.AST)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 			f.CloseAndGetString(),
-			execErr != nil,
 			ex.implicitTxn(),
 			p.CurrentDatabase(),
 		)

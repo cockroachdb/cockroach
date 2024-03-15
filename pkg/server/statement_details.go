@@ -111,13 +111,11 @@ func getStatementDetails(
 	// since the metadata is unique per plan hash.
 	// Update the statementTotal.Metadata.*Count with the counts from statementStatisticsPerPlanHash.keyData.
 	statementTotal.Metadata.DistSQLCount = 0
-	statementTotal.Metadata.FailedCount = 0
 	statementTotal.Metadata.FullScanCount = 0
 	statementTotal.Metadata.VecCount = 0
 	statementTotal.Metadata.TotalCount = 0
 	for _, planStats := range statementStatisticsPerPlanHash {
 		statementTotal.Metadata.DistSQLCount += planStats.Metadata.DistSQLCount
-		statementTotal.Metadata.FailedCount += planStats.Metadata.FailedCount
 		statementTotal.Metadata.FullScanCount += planStats.Metadata.FullScanCount
 		statementTotal.Metadata.VecCount += planStats.Metadata.VecCount
 		statementTotal.Metadata.TotalCount += planStats.Metadata.TotalCount
@@ -619,9 +617,6 @@ LIMIT $%d`, whereClause, len(args)), args...)
 		// have the correct count of each metric.
 		if aggregatedMetadata.DistSQLCount > 0 {
 			aggregatedMetadata.DistSQLCount = metadata.Stats.Count
-		}
-		if aggregatedMetadata.FailedCount > 0 {
-			aggregatedMetadata.FailedCount = metadata.Stats.Count
 		}
 		if aggregatedMetadata.FullScanCount > 0 {
 			aggregatedMetadata.FullScanCount = metadata.Stats.Count
