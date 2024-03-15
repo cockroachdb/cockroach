@@ -187,11 +187,9 @@ type WorkInfo struct {
 	// work within a (TenantID, Priority) pair -- earlier CreateTime is given
 	// preference.
 	CreateTime int64
-	// BypassAdmission allows the work to bypass admission control, but allows
-	// for it to be accounted for. Ignored unless TenantID is the
-	// SystemTenantID. It should be used for high-priority intra-KV work, and
-	// when KV work generates other KV work (to avoid deadlock). Ignored
-	// otherwise.
+	// BypassAdmission allows the work to bypass admission control, but allows for
+	// it to be accounted for. It should be used for high-priority intra-KV work,
+	// and when KV work generates other KV work (to avoid deadlock).
 	BypassAdmission bool
 	// RequestedCount is the requested number of tokens or slots. If unset:
 	// - For slot-based queues we treat it as an implicit request of 1;
@@ -624,7 +622,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			panic("unexpected ReplicatedWrite.Enabled on slot-based queue")
 		}
 	}
-	if info.BypassAdmission && roachpb.IsSystemTenantID(tenantID) && q.workKind == KVWork {
+	if info.BypassAdmission && q.workKind == KVWork {
 		tenant.used += uint64(info.RequestedCount)
 		if isInTenantHeap(tenant) {
 			q.mu.tenantHeap.fix(tenant)
