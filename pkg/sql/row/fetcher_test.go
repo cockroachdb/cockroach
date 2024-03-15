@@ -352,9 +352,8 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 	// we can test whether scans of wide tables are prevented if
 	// we have insufficient memory to do them.
 	memMon := mon.NewMonitor(mon.Options{
-		Name:       "test",
-		Noteworthy: 1000,
-		Settings:   settings,
+		Name:     "test",
+		Settings: settings,
 	})
 	memMon.Start(ctx, nil, mon.NewStandaloneBudget(1<<20))
 	defer memMon.Stop(ctx)

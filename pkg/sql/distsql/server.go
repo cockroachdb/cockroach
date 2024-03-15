@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
@@ -60,8 +59,6 @@ const minFlowDrainWait = 1 * time.Second
 //
 // See https://github.com/cockroachdb/cockroach/issues/47900.
 const MultiTenancyIssueNo = 47900
-
-var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 1024*1024 /* 1MB */)
 
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
@@ -90,10 +87,9 @@ func NewServer(
 			// Note that we don't use 'sql.mem.distsql.*' metrics here since
 			// that would double count them with the 'flow' monitor in
 			// setupFlow.
-			CurCount:   nil,
-			MaxHist:    nil,
-			Noteworthy: noteworthyMemoryUsageBytes,
-			Settings:   cfg.Settings,
+			CurCount: nil,
+			MaxHist:  nil,
+			Settings: cfg.Settings,
 		}),
 	}
 	ds.memMonitor.StartNoReserved(ctx, cfg.ParentMemoryMonitor)
@@ -264,11 +260,10 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	monitor = mon.NewMonitor(mon.Options{
-		Name:       "flow " + redact.RedactableString(req.Flow.FlowID.Short()),
-		CurCount:   ds.Metrics.CurBytesCount,
-		MaxHist:    ds.Metrics.MaxBytesHist,
-		Noteworthy: noteworthyMemoryUsageBytes,
-		Settings:   ds.Settings,
+		Name:     "flow " + redact.RedactableString(req.Flow.FlowID.Short()),
+		CurCount: ds.Metrics.CurBytesCount,
+		MaxHist:  ds.Metrics.MaxBytesHist,
+		Settings: ds.Settings,
 	})
 	monitor.Start(ctx, parentMonitor, reserved)
 
