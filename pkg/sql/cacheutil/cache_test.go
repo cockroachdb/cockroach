@@ -24,15 +24,10 @@ import (
 
 func TestCache(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
-	memoryMonitor := mon.NewMonitor(
-		"test-mem",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
+	memoryMonitor := mon.NewMonitor(mon.Options{
+		Name:     "test-mem",
+		Settings: st,
+	})
 	stopper := &stop.Stopper{}
 	ctx := context.Background()
 

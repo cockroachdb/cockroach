@@ -96,39 +96,25 @@ func compareRowToEncRow(
 }
 
 func getMemoryMonitor(st *cluster.Settings) *mon.BytesMonitor {
-	return mon.NewMonitor(
-		"test-mem",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment: use default block size */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
+	return mon.NewMonitor(mon.Options{
+		Name:     "test-mem",
+		Settings: st,
+	})
 }
 
 func getUnlimitedMemoryMonitor(st *cluster.Settings) *mon.BytesMonitor {
-	return mon.NewUnlimitedMonitor(
-		context.Background(),
-		"test-mem",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
+	return mon.NewUnlimitedMonitor(context.Background(), mon.Options{
+		Name:     "test-mem",
+		Settings: st,
+	})
 }
 
 func getDiskMonitor(st *cluster.Settings) *mon.BytesMonitor {
-	return mon.NewMonitor(
-		"test-disk", /* name */
-		mon.DiskResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment: use default block size */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
+	return mon.NewMonitor(mon.Options{
+		Name:     "test-disk",
+		Res:      mon.DiskResource,
+		Settings: st,
+	})
 }
 
 func TestDiskRowContainer(t *testing.T) {

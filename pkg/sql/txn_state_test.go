@@ -64,15 +64,11 @@ func makeTestContext(stopper *stop.Stopper) testContext {
 	return testContext{
 		clock:  clock,
 		mockDB: kv.NewDB(ambient, factory, clock, stopper),
-		mon: mon.NewMonitor(
-			"test root mon",
-			mon.MemoryResource,
-			nil,  /* curCount */
-			nil,  /* maxHist */
-			-1,   /* increment */
-			1000, /* noteworthy */
-			settings,
-		),
+		mon: mon.NewMonitor(mon.Options{
+			Name:       "test root mon",
+			Noteworthy: 1000,
+			Settings:   settings,
+		}),
 		tracer:   ambient.Tracer,
 		ctx:      context.Background(),
 		settings: settings,
@@ -84,14 +80,11 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 	sp := tc.tracer.StartSpan("createOpenState")
 	ctx := tracing.ContextWithSpan(tc.ctx, sp)
 
-	txnStateMon := mon.NewMonitor("test mon",
-		mon.MemoryResource,
-		nil,  /* curCount */
-		nil,  /* maxHist */
-		-1,   /* increment */
-		1000, /* noteworthy */
-		cluster.MakeTestingClusterSettings(),
-	)
+	txnStateMon := mon.NewMonitor(mon.Options{
+		Name:       "test mon",
+		Noteworthy: 1000,
+		Settings:   cluster.MakeTestingClusterSettings(),
+	})
 	txnStateMon.StartNoReserved(tc.ctx, tc.mon)
 
 	ts := txnState{
@@ -130,14 +123,11 @@ func (tc *testContext) createCommitWaitState() (fsm.State, *txnState, error) {
 }
 
 func (tc *testContext) createNoTxnState() (fsm.State, *txnState) {
-	txnStateMon := mon.NewMonitor("test mon",
-		mon.MemoryResource,
-		nil,  /* curCount */
-		nil,  /* maxHist */
-		-1,   /* increment */
-		1000, /* noteworthy */
-		cluster.MakeTestingClusterSettings(),
-	)
+	txnStateMon := mon.NewMonitor(mon.Options{
+		Name:       "test mon",
+		Noteworthy: 1000,
+		Settings:   cluster.MakeTestingClusterSettings(),
+	})
 	ts := txnState{mon: txnStateMon, connCtx: tc.ctx}
 	return stateNoTxn{}, &ts
 }

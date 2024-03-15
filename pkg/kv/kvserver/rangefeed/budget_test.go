@@ -12,7 +12,6 @@ package rangefeed
 
 import (
 	"context"
-	"math"
 	"testing"
 	"time"
 
@@ -22,15 +21,11 @@ import (
 )
 
 func getMemoryMonitor(s *cluster.Settings) *mon.BytesMonitor {
-	return mon.NewMonitor(
-		"rangefeed", /* name */
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		1,             /* increment */
-		math.MaxInt64, /* noteworthy */
-		s,
-	)
+	return mon.NewMonitor(mon.Options{
+		Name:      "rangefeed",
+		Increment: 1,
+		Settings:  s,
+	})
 }
 
 func TestFeedBudget(t *testing.T) {

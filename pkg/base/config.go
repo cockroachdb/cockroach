@@ -898,15 +898,13 @@ func newTempStorageConfig(
 	} else {
 		monitorName = "temp disk storage"
 	}
-	monitor := mon.NewMonitor(
-		monitorName,
-		mon.DiskResource,
-		nil,             /* curCount */
-		nil,             /* maxHist */
-		1024*1024,       /* increment */
-		maxSizeBytes/10, /* noteworthy */
-		st,
-	)
+	monitor := mon.NewMonitor(mon.Options{
+		Name:       monitorName,
+		Res:        mon.DiskResource,
+		Increment:  1024 * 1024,
+		Noteworthy: maxSizeBytes / 10,
+		Settings:   st,
+	})
 	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
 		InMemory: inMemory,

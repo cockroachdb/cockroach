@@ -86,15 +86,10 @@ func (r *RepeatableRowSource) ConsumerClosed() {}
 // (currently it would create an import cycle, so this code will need to be
 // moved).
 func NewTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
-	memMonitor := mon.NewMonitor(
-		"test-mem",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
+	memMonitor := mon.NewMonitor(mon.Options{
+		Name:     "test-mem",
+		Settings: st,
+	})
 	memMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	return memMonitor
 }
@@ -102,15 +97,11 @@ func NewTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMoni
 // NewTestDiskMonitor creates and starts a new disk monitor to be used in
 // tests.
 func NewTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
-	diskMonitor := mon.NewMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
+	diskMonitor := mon.NewMonitor(mon.Options{
+		Name:     "test-disk",
+		Res:      mon.DiskResource,
+		Settings: st,
+	})
 	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	return diskMonitor
 }

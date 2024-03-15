@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"math"
 	"net"
 	"net/url"
 	"os"
@@ -443,19 +442,15 @@ var vmoduleSetting = settings.RegisterStringSetting(
 // metrics.
 func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
 	rootSQLMetrics := sql.MakeBaseMemMetrics("root", opts.histogramWindowInterval)
-	// We do not set memory monitors or a noteworthy limit because the children of
-	// this monitor will be setting their own noteworthy limits.
-	rootSQLMemoryMonitor := mon.NewMonitor(
-		"root",
-		mon.NewMemoryResourceWithErrorHint(
+	rootSQLMemoryMonitor := mon.NewMonitor(mon.Options{
+		Name: "root",
+		Res: mon.NewMemoryResourceWithErrorHint(
 			"Consider increasing --max-sql-memory startup parameter.", /* hint */
 		),
-		rootSQLMetrics.CurBytesCount,
-		rootSQLMetrics.MaxBytesHist,
-		-1,            /* increment: use default increment */
-		math.MaxInt64, /* noteworthy */
-		opts.settings,
-	)
+		CurCount: rootSQLMetrics.CurBytesCount,
+		MaxHist:  rootSQLMetrics.MaxBytesHist,
+		Settings: opts.settings,
+	})
 	// Set the limit to the memoryPoolSize. Note that this memory monitor also
 	// serves as a parent for a memory monitor that accounts for memory used in
 	// the KV layer at the same node.
@@ -1152,15 +1147,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// to server, if server is closed, we don't have to worry about
 	// returning the memory allocated to internalDBMonitor since the
 	// parent monitor is being closed anyway.
-	internalDBMonitor := mon.NewMonitor(
-		"internal sql executor",
-		mon.MemoryResource,
-		internalMemMetrics.CurBytesCount,
-		internalMemMetrics.MaxBytesHist,
-		-1,            /* use default increment */
-		math.MaxInt64, /* noteworthy */
-		cfg.Settings,
-	)
+	internalDBMonitor := mon.NewMonitor(mon.Options{
+		Name:     "internal sql executor",
+		CurCount: internalMemMetrics.CurBytesCount,
+		MaxHist:  internalMemMetrics.MaxBytesHist,
+		Settings: cfg.Settings,
+	})
 	internalDBMonitor.StartNoReserved(ctx, pgServer.SQLServer.GetBytesMonitor())
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set

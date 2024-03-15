@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/json"
-	"math"
 	"net/url"
 	"sort"
 	"strings"
@@ -439,10 +438,10 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	monitor := mon.NewUnlimitedMonitor(
-		context.Background(), "test", mon.MemoryResource,
-		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
-	)
+	monitor := mon.NewUnlimitedMonitor(ctx, mon.Options{
+		Name:     "test",
+		Settings: st,
+	})
 
 	insightsProvider := insights.New(st, insights.NewMetrics())
 	sqlStats := sslocal.New(
@@ -555,15 +554,10 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	updater := st.MakeUpdater()
-	monitor := mon.NewUnlimitedMonitor(
-		context.Background(),
-		"test",
-		mon.MemoryResource,
-		nil,
-		nil,
-		math.MaxInt64,
-		st,
-	)
+	monitor := mon.NewUnlimitedMonitor(ctx, mon.Options{
+		Name:     "test",
+		Settings: st,
+	})
 
 	testutils.RunTrueAndFalse(t, "enabled", func(t *testing.T, enabled bool) {
 		// Establish the cluster setting.
@@ -1591,10 +1585,10 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	monitor := mon.NewUnlimitedMonitor(
-		context.Background(), "test", mon.MemoryResource,
-		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
-	)
+	monitor := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
+		Name:     "test",
+		Settings: st,
+	})
 	insightsProvider := insights.New(st, insights.NewMetrics())
 
 	sqlStats := sslocal.New(

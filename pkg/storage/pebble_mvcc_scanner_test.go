@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -185,7 +184,11 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 func scannerWithAccount(
 	ctx context.Context, st *cluster.Settings, scanner *pebbleMVCCScanner, limitBytes int64,
 ) (cleanup func()) {
-	m := mon.NewMonitor("test", mon.MemoryResource, nil, nil, 1, math.MaxInt64, st)
+	m := mon.NewMonitor(mon.Options{
+		Name:      "test",
+		Increment: 1,
+		Settings:  st,
+	})
 	m.Start(ctx, nil, mon.NewStandaloneBudget(limitBytes))
 	ba := m.MakeBoundAccount()
 	scanner.memAccount = &ba
