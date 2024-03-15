@@ -489,12 +489,12 @@ func (c *copyMachine) numInsertedRows() int {
 func (c *copyMachine) initMonitoring(ctx context.Context, parentMon *mon.BytesMonitor) {
 	// Create a monitor for the COPY command so it can be tracked separate from transaction or session.
 	memMetrics := &MemoryMetrics{}
-	const noteworthyCopyMemoryUsageBytes = 10 << 20
-	c.copyMon = mon.NewMonitor("copy",
-		mon.MemoryResource,
-		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
-		0, /* increment */
-		noteworthyCopyMemoryUsageBytes, c.p.ExecCfg().Settings)
+	c.copyMon = mon.NewMonitor(mon.Options{
+		Name:     "copy",
+		CurCount: memMetrics.CurBytesCount,
+		MaxHist:  memMetrics.MaxBytesHist,
+		Settings: c.p.ExecCfg().Settings,
+	})
 	c.copyMon.StartNoReserved(ctx, parentMon)
 	c.bufMemAcc = c.copyMon.MakeBoundAccount()
 	c.rowsMemAcc = c.copyMon.MakeBoundAccount()

@@ -1258,7 +1258,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 	const channelCapacity = totalEvents/2 + 10
 
 	s := cluster.MakeTestingClusterSettings()
-	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+	m := getMemoryMonitor(s)
 	m.Start(context.Background(), nil, mon.NewStandaloneBudget(math.MaxInt64))
 
 	b := m.MakeBoundAccount()
@@ -1390,7 +1390,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 
 func newTestBudget(limit int64) *FeedBudget {
 	s := cluster.MakeTestingClusterSettings()
-	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+	m := getMemoryMonitor(s)
 	m.Start(context.Background(), nil, mon.NewStandaloneBudget(limit))
 	b := m.MakeBoundAccount()
 	fb := NewFeedBudget(&b, 0, &s.SV)

@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 
 CLUSTER_NAME=cct-232
-PG_URL_N1=$(roachprod pgurl $CLUSTER_NAME:1 --secure)
-PG_URLS=$(roachprod pgurl $CLUSTER_NAME --secure)
+PG_URL_N1=$(./roachprod pgurl $CLUSTER_NAME:1 --secure --cluster=application --external | sed s/\'//g)
+PGURLS=$(./roachprod pgurl cct-232 --external --secure --cluster application | sed s/\'//g)
+
+read -r -a PGURLS_ARR <<< "$PGURLS"
+
+echo ">> Dropping old databases if they exist"
+./cockroach sql --url "${PG_URL_N1}" -e "DROP DATABASE IF EXISTS cct_tpcc_drop_old CASCADE;"
+./cockroach sql --url "${PG_URL_N1}" -e "DROP DATABASE IF EXISTS cct_tpcc_drop CASCADE;"
 
 j=0
 while true; do
@@ -18,7 +24,7 @@ while true; do
         --db cct_tpcc_drop \
         $PG_URL_N1 | tee "$INIT_LOG"
     echo ">> Dropping cct_tpcc_drop_old if it exists"
-    ./cockroach sql --url $PG_URL_N1 -e "DROP DATABASE cct_tpcc_drop_old CASCADE;"
+    ./cockroach sql --url "${PG_URL_N1}" -e "DROP DATABASE cct_tpcc_drop_old CASCADE;"
     sleep 5
     echo ">> Starting tpcc workload for 1h"
     ./cockroach workload run tpcc \
@@ -31,10 +37,10 @@ while true; do
         --display-every 5s \
         --duration 60m \
   --tolerate-errors \
-   $PG_URLS| tee "$RUN_LOG"
+   "${PGURLS_ARR[@]}" | tee "$RUN_LOG"
 
     echo ">> Renaming to cct_tpcc_drop_old"
-    ./cockroach sql --url $PG_URLS -e "ALTER DATABASE cct_tpcc_drop RENAME TO cct_tpcc_drop_old;"
+    ./cockroach sql --url "${PG_URL_N1}" -e "ALTER DATABASE cct_tpcc_drop RENAME TO cct_tpcc_drop_old;"
 
     sleep 1
 done

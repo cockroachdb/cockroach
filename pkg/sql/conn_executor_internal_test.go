@@ -11,7 +11,6 @@ package sql
 
 import (
 	"context"
-	"math"
 	"testing"
 	"time"
 
@@ -291,10 +290,10 @@ func startConnExecutor(
 	}
 	defer tempEngine.Close()
 	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
-	pool := mon.NewUnlimitedMonitor(
-		context.Background(), "test", mon.MemoryResource,
-		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
-	)
+	pool := mon.NewUnlimitedMonitor(ctx, mon.Options{
+		Name:     "test",
+		Settings: st,
+	})
 	// This pool should never be Stop()ed because, if the test is failing, memory
 	// is not properly released.
 	collectionFactory := descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec)

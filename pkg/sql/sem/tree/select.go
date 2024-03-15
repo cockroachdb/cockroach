@@ -317,6 +317,7 @@ type FamilyID = catid.FamilyID
 //   - NO_ZIGZAG_JOIN
 //   - NO_FULL_SCAN
 //   - IGNORE_FOREIGN_KEYS
+//   - FORCE_INVERTED_INDEX
 //   - FORCE_ZIGZAG
 //   - FORCE_ZIGZAG=<index_name|index_id>*
 //   - FAMILY=[family_id]
@@ -341,6 +342,9 @@ type IndexFlags struct {
 	// IgnoreUniqueWithoutIndexKeys disables optimizations based on unique without
 	// index constraints.
 	IgnoreUniqueWithoutIndexKeys bool
+	// ForceInvertedIndex indicates that we should only plan scans over inverted
+	// indexes.
+	ForceInvertedIndex bool
 	// Zigzag hinting fields are distinct:
 	// ForceZigzag means we saw a TABLE@{FORCE_ZIGZAG}
 	// ZigzagIndexes means we saw TABLE@{FORCE_ZIGZAG=name}
@@ -379,6 +383,9 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	if ih.IgnoreUniqueWithoutIndexKeys && other.IgnoreUniqueWithoutIndexKeys {
 		return errors.New("IGNORE_UNIQUE_WITHOUT_INDEX_KEYS specified multiple times")
 	}
+	if ih.ForceInvertedIndex && other.ForceInvertedIndex {
+		return errors.New("FORCE_INVERTED_INDEX specified multiple times")
+	}
 	result := *ih
 	result.NoIndexJoin = ih.NoIndexJoin || other.NoIndexJoin
 	result.NoZigzagJoin = ih.NoZigzagJoin || other.NoZigzagJoin
@@ -386,6 +393,7 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	result.IgnoreForeignKeys = ih.IgnoreForeignKeys || other.IgnoreForeignKeys
 	result.IgnoreUniqueWithoutIndexKeys = ih.IgnoreUniqueWithoutIndexKeys ||
 		other.IgnoreUniqueWithoutIndexKeys
+	result.ForceInvertedIndex = ih.ForceInvertedIndex || other.ForceInvertedIndex
 
 	if other.Direction != 0 {
 		if ih.Direction != 0 {
@@ -441,6 +449,9 @@ func (ih *IndexFlags) Check() error {
 	if ih.Direction != 0 && !ih.ForceIndex() {
 		return errors.New("ASC/DESC must be specified in conjunction with an index")
 	}
+	if ih.ForceInvertedIndex && ih.ForceIndex() {
+		return errors.New("FORCE_INVERTED_INDEX cannot be specified in conjunction with FORCE_INDEX")
+	}
 	if ih.zigzagForced() && ih.NoIndexJoin {
 		return errors.New("FORCE_ZIGZAG cannot be specified in conjunction with NO_INDEX_JOIN")
 	}
@@ -479,8 +490,7 @@ func TestingEnableFamilyIndexHint() func() {
 // Format implements the NodeFormatter interface.
 func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	ctx.WriteByte('@')
-	if !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.NoFullScan && !ih.IgnoreForeignKeys &&
-		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 && !ih.zigzagForced() && ih.FamilyID == nil {
+	if ih.indexOnlyHint() {
 		if ih.Index != "" {
 			ctx.FormatNode(&ih.Index)
 		} else {
@@ -530,6 +540,11 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 			ctx.WriteString("IGNORE_UNIQUE_WITHOUT_INDEX_KEYS")
 		}
 
+		if ih.ForceInvertedIndex {
+			sep()
+			ctx.WriteString("FORCE_INVERTED_INDEX")
+		}
+
 		if ih.ForceZigzag || len(ih.ZigzagIndexes) > 0 || len(ih.ZigzagIndexIDs) > 0 {
 			sep()
 			if ih.ForceZigzag {
@@ -559,6 +574,12 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 		}
 		ctx.WriteString("}")
 	}
+}
+
+func (ih *IndexFlags) indexOnlyHint() bool {
+	return !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.NoFullScan && !ih.IgnoreForeignKeys &&
+		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 && !ih.ForceInvertedIndex &&
+		!ih.zigzagForced() && ih.FamilyID == nil
 }
 
 func (ih *IndexFlags) zigzagForced() bool {

@@ -96,17 +96,10 @@ func newTimeSeriesMaintenanceQueue(
 		tsData:         tsData,
 		replicaCountFn: store.ReplicaCount,
 		db:             db,
-		mem: mon.NewUnlimitedMonitor(
-			context.Background(),
-			"timeseries-maintenance-queue",
-			mon.MemoryResource,
-			nil,
-			nil,
-			// Begin logging messages if we exceed our planned memory usage by
-			// more than triple.
-			TimeSeriesMaintenanceMemoryBudget*3,
-			store.cfg.Settings,
-		),
+		mem: mon.NewUnlimitedMonitor(context.Background(), mon.Options{
+			Name:     "timeseries-maintenance-queue",
+			Settings: store.cfg.Settings,
+		}),
 	}
 	q.baseQueue = newBaseQueue(
 		"timeSeriesMaintenance", q, store,

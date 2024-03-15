@@ -56,7 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -133,11 +132,6 @@ type systemAdminServer struct {
 	nodeLiveness *liveness.NodeLiveness
 	server       *topLevelServer
 }
-
-// noteworthyAdminMemoryUsageBytes is the minimum size tracked by the
-// admin SQL pool before the pool start explicitly logging overall
-// usage growth in the log.
-var noteworthyAdminMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_ADMIN_MEMORY_USAGE", 100*1024)
 
 var tableStatsMaxFetcherConcurrency = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
@@ -233,15 +227,10 @@ func newAdminServer(
 
 	// TODO(knz): We do not limit memory usage by admin operations
 	// yet. Is this wise?
-	server.memMonitor = mon.NewUnlimitedMonitor(
-		context.Background(),
-		"admin",
-		mon.MemoryResource,
-		nil,
-		nil,
-		noteworthyAdminMemoryUsageBytes,
-		cs,
-	)
+	server.memMonitor = mon.NewUnlimitedMonitor(context.Background(), mon.Options{
+		Name:     "admin",
+		Settings: cs,
+	})
 	return server
 }
 

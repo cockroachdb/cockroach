@@ -229,6 +229,9 @@ Put /Table/108/1/0/0 -> /TUPLE/
 Del /Table/108/2/1/0/0
 InitPut /Table/108/2/15/0/0 -> /BYTES/
 
+statement error pgcode XXUUU could not produce a query plan conforming to the FORCE_INVERTED_INDEX hint
+SELECT * from d@{FORCE_INVERTED_INDEX}
+
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
 ----

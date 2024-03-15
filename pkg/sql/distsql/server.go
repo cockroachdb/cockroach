@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
@@ -61,8 +60,6 @@ const minFlowDrainWait = 1 * time.Second
 // See https://github.com/cockroachdb/cockroach/issues/47900.
 const MultiTenancyIssueNo = 47900
 
-var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 1024*1024 /* 1MB */)
-
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
 	execinfra.ServerConfig
@@ -85,18 +82,15 @@ func NewServer(
 		toCharFormatCache: tochar.NewFormatCache(512),
 		flowRegistry:      flowinfra.NewFlowRegistry(),
 		remoteFlowRunner:  remoteFlowRunner,
-		memMonitor: mon.NewMonitor(
-			"distsql",
-			mon.MemoryResource,
+		memMonitor: mon.NewMonitor(mon.Options{
+			Name: "distsql",
 			// Note that we don't use 'sql.mem.distsql.*' metrics here since
 			// that would double count them with the 'flow' monitor in
 			// setupFlow.
-			nil, /* curCount */
-			nil, /* maxHist */
-			-1,  /* increment: use default block size */
-			noteworthyMemoryUsageBytes,
-			cfg.Settings,
-		),
+			CurCount: nil,
+			MaxHist:  nil,
+			Settings: cfg.Settings,
+		}),
 	}
 	ds.memMonitor.StartNoReserved(ctx, cfg.ParentMemoryMonitor)
 	// We have to initialize the flow runner at the same time we're creating
@@ -268,15 +262,12 @@ func (ds *ServerImpl) setupFlow(
 		)
 	}
 
-	monitor = mon.NewMonitor(
-		"flow "+redact.RedactableString(req.Flow.FlowID.Short()),
-		mon.MemoryResource,
-		ds.Metrics.CurBytesCount,
-		ds.Metrics.MaxBytesHist,
-		-1, /* use default block size */
-		noteworthyMemoryUsageBytes,
-		ds.Settings,
-	)
+	monitor = mon.NewMonitor(mon.Options{
+		Name:     "flow " + redact.RedactableString(req.Flow.FlowID.Short()),
+		CurCount: ds.Metrics.CurBytesCount,
+		MaxHist:  ds.Metrics.MaxBytesHist,
+		Settings: ds.Settings,
+	})
 	monitor.Start(ctx, parentMonitor, reserved)
 	diskMonitor = execinfra.NewMonitor(ctx, ds.ParentDiskMonitor, "flow-disk-monitor")
 
