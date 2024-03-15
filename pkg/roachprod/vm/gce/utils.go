@@ -20,6 +20,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
@@ -215,6 +216,9 @@ done
 sudo ua enable fips --assume-ye
 {{ end }}
 
+sudo -u {{ .SharedUser }} bash -c "mkdir ~/.ssh && chmod 700 ~/.ssh"
+sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
@@ -232,6 +236,13 @@ func writeStartupScript(
 		UseMultipleDisks bool
 		Zfs              bool
 		EnableFIPS       bool
+		SharedUser       string
+		PublicKey        string
+	}
+
+	publicKey, err := config.SSHPublicKey()
+	if err != nil {
+		return "", err
 	}
 
 	args := tmplParams{
@@ -239,6 +250,8 @@ func writeStartupScript(
 		UseMultipleDisks: useMultiple,
 		Zfs:              fileSystem == vm.Zfs,
 		EnableFIPS:       enableFIPS,
+		SharedUser:       config.SharedUser,
+		PublicKey:        publicKey,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")

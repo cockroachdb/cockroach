@@ -15,7 +15,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -144,16 +143,9 @@ func (p *Provider) Create(
 ) error {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
 	// Load the user's SSH public key to configure the resulting VMs.
-	var sshKey string
-	sshFile := os.ExpandEnv("${HOME}/.ssh/id_rsa.pub")
-	if _, err := os.Stat(sshFile); err == nil {
-		if bytes, err := os.ReadFile(sshFile); err == nil {
-			sshKey = string(bytes)
-		} else {
-			return errors.Wrapf(err, "could not read SSH public key file")
-		}
-	} else {
-		return errors.Wrapf(err, "could not find SSH public key file")
+	sshKey, err := config.SSHPublicKey()
+	if err != nil {
+		return err
 	}
 
 	m := getAzureDefaultLabelMap(opts)

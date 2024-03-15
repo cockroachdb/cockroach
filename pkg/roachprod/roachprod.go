@@ -600,13 +600,6 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 	if err != nil {
 		return err
 	}
-	// For GCP clusters we need to use the config.OSUser even if the client
-	// requested the shared user.
-	for i := range installCluster.VMs {
-		if cloudCluster.VMs[i].Provider == gce.ProviderName {
-			installCluster.VMs[i].RemoteUser = config.OSUser.Username
-		}
-	}
 	if err := installCluster.Wait(ctx, l); err != nil {
 		return err
 	}
