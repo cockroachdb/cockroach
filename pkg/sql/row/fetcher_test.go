@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
@@ -346,14 +345,11 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 
 	alloc := &tree.DatumAlloc{}
 
-	settings := cluster.MakeTestingClusterSettings()
-
 	// Give a 1 megabyte limit to the memory monitor, so that
 	// we can test whether scans of wide tables are prevented if
 	// we have insufficient memory to do them.
 	memMon := mon.NewMonitor(mon.NewMonitorArgs{
-		Name:     "test",
-		Settings: settings,
+		Name: "test",
 	})
 	memMon.Start(ctx, nil, mon.NewStandaloneBudget(1<<20))
 	defer memMon.Stop(ctx)

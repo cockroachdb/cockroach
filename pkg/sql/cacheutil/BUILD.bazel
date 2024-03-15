@@ -21,7 +21,6 @@ go_test(
     srcs = ["cache_test.go"],
     embed = [":cacheutil"],
     deps = [
-        "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
         "//pkg/util/mon",
         "//pkg/util/stop",

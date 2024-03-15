@@ -446,7 +446,6 @@ func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
 		Name:     "root",
 		CurCount: rootSQLMetrics.CurBytesCount,
 		MaxHist:  rootSQLMetrics.MaxBytesHist,
-		Settings: opts.settings,
 	})
 	rootSQLMemoryMonitor.MarkAsRootSQLMonitor()
 	// Set the limit to the memoryPoolSize. Note that this memory monitor also
@@ -1149,7 +1148,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		Name:     "internal sql executor",
 		CurCount: internalMemMetrics.CurBytesCount,
 		MaxHist:  internalMemMetrics.MaxBytesHist,
-		Settings: cfg.Settings,
 	})
 	internalDBMonitor.StartNoReserved(ctx, pgServer.SQLServer.GetBytesMonitor())
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a

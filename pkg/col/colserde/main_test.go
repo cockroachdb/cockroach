@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -40,8 +39,7 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	os.Exit(func() int {
 		ctx := context.Background()
-		st := cluster.MakeTestingClusterSettings()
-		testMemMonitor = execinfra.NewTestMemMonitor(ctx, st)
+		testMemMonitor = execinfra.NewTestMemMonitor(ctx)
 		defer testMemMonitor.Stop(ctx)
 		memAcc := testMemMonitor.MakeBoundAccount()
 		testMemAcc = &memAcc

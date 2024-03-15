@@ -93,8 +93,7 @@ func newFlowCtxForExplainPurposes(
 	ctx context.Context, p *planner,
 ) (_ *execinfra.FlowCtx, cleanup func()) {
 	monitor := mon.NewMonitor(mon.NewMonitorArgs{
-		Name:     "explain",
-		Settings: p.execCfg.Settings,
+		Name: "explain",
 	})
 	monitor.StartNoReserved(ctx, p.Mon())
 	cleanup = func() {

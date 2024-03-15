@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -274,7 +273,6 @@ func TestRollupMemoryConstraint(t *testing.T) {
 	adjustedMon := mon.NewMonitor(mon.NewMonitorArgs{
 		Name:      "timeseries-test-worker-adjusted",
 		Increment: 1,
-		Settings:  cluster.MakeTestingClusterSettings(),
 	})
 	adjustedMon.StartNoReserved(context.Background(), tm.workerMemMonitor)
 	defer adjustedMon.Stop(context.Background())

@@ -902,7 +902,6 @@ func newTempStorageConfig(
 		Name:      monitorName,
 		Res:       mon.DiskResource,
 		Increment: 1024 * 1024,
-		Settings:  st,
 	})
 	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{

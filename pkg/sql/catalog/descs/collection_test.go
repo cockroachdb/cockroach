@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -597,8 +596,7 @@ func TestCollectionProperlyUsesMemoryMonitoring(t *testing.T) {
 
 	// Create a monitor to be used to track memory usage in a Collection.
 	monitor := mon.NewMonitor(mon.NewMonitorArgs{
-		Name:     "test_monitor",
-		Settings: cluster.MakeTestingClusterSettings(),
+		Name: "test_monitor",
 	})
 
 	// Start the monitor with unlimited budget.

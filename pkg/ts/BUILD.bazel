@@ -80,7 +80,6 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
-        "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/localtestcluster",

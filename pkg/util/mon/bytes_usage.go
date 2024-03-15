@@ -16,7 +16,6 @@ import (
 	"math"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -265,14 +264,12 @@ type BytesMonitor struct {
 	// poolAllocationSize specifies the allocation unit for requests to the
 	// pool.
 	poolAllocationSize int64
-
-	settings *cluster.Settings
 }
 
 const (
 	// Consult with SQL Queries before increasing these values.
-	expectedMonitorSize     = 160
-	expectedMonitorSizeRace = 168
+	expectedMonitorSize     = 152
+	expectedMonitorSizeRace = 160
 	expectedAccountSize     = 24
 )
 
@@ -406,7 +403,6 @@ type NewMonitorArgs struct {
 	MaxHist  metric.IHistogram
 	// Increment is the block size used for upstream allocations from the pool.
 	Increment int64
-	Settings  *cluster.Settings
 }
 
 // NewMonitor creates a new monitor.
@@ -422,7 +418,6 @@ func NewMonitor(args NewMonitorArgs) *BytesMonitor {
 		configLimit:        args.Limit,
 		limit:              args.Limit,
 		poolAllocationSize: args.Increment,
-		settings:           args.Settings,
 	}
 	m.mu.curBytesCount = args.CurCount
 	m.mu.maxBytesHist = args.MaxHist
@@ -454,7 +449,6 @@ func NewMonitorInheritWithLimit(
 		CurCount:  nil, // CurCount is not inherited as we don't want to double count allocations
 		MaxHist:   nil, // MaxHist is not inherited as we don't want to double count allocations
 		Increment: m.poolAllocationSize,
-		Settings:  m.settings,
 	})
 }
 
@@ -587,7 +581,7 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 
 	if check && mm.mu.curAllocated != 0 {
 		logcrash.ReportOrPanic(
-			ctx, &mm.settings.SV,
+			ctx, nil, /* sv */
 			"%s: unexpected %d leftover bytes",
 			mm.name, mm.mu.curAllocated)
 		mm.releaseBytesLocked(ctx, mm.mu.curAllocated)
@@ -953,7 +947,7 @@ func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 		return
 	}
 	if b.used < delta {
-		logcrash.ReportOrPanic(ctx, &b.mon.settings.SV,
+		logcrash.ReportOrPanic(ctx, nil, /* sv */
 			"%s: no bytes in account to release, current %d, free %d",
 			b.mon.name, b.used, delta)
 		delta = b.used
@@ -990,7 +984,7 @@ func (b *EarmarkedBoundAccount) Shrink(ctx context.Context, delta int64) {
 		return
 	}
 	if b.used < delta {
-		logcrash.ReportOrPanic(ctx, &b.mon.settings.SV,
+		logcrash.ReportOrPanic(ctx, nil, /* sv */
 			"%s: no bytes in account to release, current %d, free %d",
 			b.mon.name, b.used, delta)
 		delta = b.used
@@ -1064,7 +1058,7 @@ func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 func (mm *BytesMonitor) releaseBytesLocked(ctx context.Context, sz int64) {
 	mm.mu.AssertHeld()
 	if mm.mu.curAllocated < sz {
-		logcrash.ReportOrPanic(ctx, &mm.settings.SV,
+		logcrash.ReportOrPanic(ctx, nil, /* sv */
 			"%s: no bytes to release, current %d, free %d",
 			mm.name, mm.mu.curAllocated, sz)
 		sz = mm.mu.curAllocated

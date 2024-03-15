@@ -15,7 +15,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -85,10 +84,9 @@ func (r *RepeatableRowSource) ConsumerClosed() {}
 // TODO(yuzefovich): consider reusing this in tree.MakeTestingEvalContext
 // (currently it would create an import cycle, so this code will need to be
 // moved).
-func NewTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
+func NewTestMemMonitor(ctx context.Context) *mon.BytesMonitor {
 	memMonitor := mon.NewMonitor(mon.NewMonitorArgs{
-		Name:     "test-mem",
-		Settings: st,
+		Name: "test-mem",
 	})
 	memMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	return memMonitor
@@ -96,11 +94,10 @@ func NewTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMoni
 
 // NewTestDiskMonitor creates and starts a new disk monitor to be used in
 // tests.
-func NewTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
+func NewTestDiskMonitor(ctx context.Context) *mon.BytesMonitor {
 	diskMonitor := mon.NewMonitor(mon.NewMonitorArgs{
-		Name:     "test-disk",
-		Res:      mon.DiskResource,
-		Settings: st,
+		Name: "test-disk",
+		Res:  mon.DiskResource,
 	})
 	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	return diskMonitor

@@ -112,7 +112,6 @@ func TestSampleReservoir(t *testing.T) {
 						Name:      "test-monitor",
 						Limit:     mem,
 						Increment: 1,
-						Settings:  st,
 					})
 					monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 					memAcc := monitor.MakeBoundAccount()

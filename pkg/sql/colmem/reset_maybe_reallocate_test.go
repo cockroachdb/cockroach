@@ -33,7 +33,7 @@ func TestResetMaybeReallocate(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	testMemMonitor := execinfra.NewTestMemMonitor(ctx)
 	defer testMemMonitor.Stop(ctx)
 	memAcc := testMemMonitor.MakeBoundAccount()
 	defer memAcc.Close(ctx)

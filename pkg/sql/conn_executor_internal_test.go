@@ -291,8 +291,7 @@ func startConnExecutor(
 	defer tempEngine.Close()
 	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
 	pool := mon.NewUnlimitedMonitor(ctx, mon.NewMonitorArgs{
-		Name:     "test",
-		Settings: st,
+		Name: "test",
 	})
 	// This pool should never be Stop()ed because, if the test is failing, memory
 	// is not properly released.
@@ -324,7 +323,7 @@ func startConnExecutor(
 					Metrics:           &distSQLMetrics,
 					NodeID:            nodeID,
 					TempFS:            tempFS,
-					ParentDiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
+					ParentDiskMonitor: execinfra.NewTestDiskMonitor(ctx),
 					CollectionFactory: collectionFactory,
 				},
 				flowinfra.NewRemoteFlowRunner(ambientCtx, stopper, nil /* acc */),

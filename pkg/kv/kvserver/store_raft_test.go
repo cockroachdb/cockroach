@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,12 +37,10 @@ import (
 func TestRaftReceiveQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	st := cluster.MakeTestingClusterSettings()
 	g := metric.NewGauge(metric.Metadata{})
 	m := mon.NewUnlimitedMonitor(context.Background(), mon.NewMonitorArgs{
 		Name:     "test",
 		CurCount: g,
-		Settings: st,
 	})
 	qs := raftReceiveQueues{mon: m}
 
