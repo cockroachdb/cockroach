@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -40,7 +41,6 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3/raftpb"
 )
 
 func makeClockTS(walltime int64, logical int32) hlc.ClockTimestamp {

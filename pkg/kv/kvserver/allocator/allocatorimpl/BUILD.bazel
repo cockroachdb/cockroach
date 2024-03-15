@@ -21,6 +21,8 @@ go_library(
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/raftutil",
+        "//pkg/raft",
+        "//pkg/raft/tracker",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -32,8 +34,6 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@io_etcd_go_raft_v3//:raft",
-        "@io_etcd_go_raft_v3//tracker",
     ],
 )
 
@@ -55,6 +55,8 @@ go_test(
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/replicastats",
+        "//pkg/raft",
+        "//pkg/raft/tracker",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils",
@@ -71,7 +73,5 @@ go_test(
         "@com_github_olekukonko_tablewriter//:tablewriter",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
-        "@io_etcd_go_raft_v3//:raft",
-        "@io_etcd_go_raft_v3//tracker",
     ],
 )

@@ -54,6 +54,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/diskmap",
         "//pkg/kv/kvserver/uncertainty",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -98,7 +99,6 @@ go_library(
         "@com_github_elastic_gosigar//:gosigar",
         "@com_github_gogo_protobuf//proto",
         "@com_github_prometheus_client_model//go",
-        "@io_etcd_go_raft_v3//raftpb",
     ],
 )
 

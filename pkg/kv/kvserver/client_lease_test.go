@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -46,8 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/tracker"
 )
 
 // TestStoreRangeLease verifies that regular ranges (not some special ones at

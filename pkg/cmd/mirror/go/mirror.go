@@ -267,8 +267,7 @@ func dumpPatchArgsForRepo(repoName string) error {
 func buildFileProtoModeForRepo(repoName string) string {
 	// Only generate code for protos in these three directories.
 	if repoName == "com_github_cockroachdb_errors" ||
-		repoName == "com_github_prometheus_client_model" ||
-		repoName == "io_etcd_go_raft_v3" {
+		repoName == "com_github_prometheus_client_model" {
 		return "default"
 	}
 	return "disable_global"
@@ -292,11 +291,6 @@ func dumpBuildDirectivesForRepo(repoName string) {
 	} else if repoName == "com_github_prometheus_client_model" {
 		directives = append(directives,
 			"gazelle:resolve go go github.com/golang/protobuf/ptypes/timestamp @com_github_golang_protobuf//ptypes/timestamp:go_default_library")
-	} else if repoName == "io_etcd_go_raft_v3" {
-		directives = append(directives, protoDirectives...)
-		directives = append(directives,
-			"gazelle:proto_import_prefix raft/v3")
-
 	} else if repoName == "io_opentelemetry_go_proto_otlp" {
 		directives = append(directives,
 			"gazelle:resolve go go github.com/golang/protobuf/descriptor @com_github_golang_protobuf//descriptor:go_default_library_gen")

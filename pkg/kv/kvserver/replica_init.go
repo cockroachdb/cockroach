@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -35,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"go.etcd.io/raft/v3"
 )
 
 const (

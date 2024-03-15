@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/build/engflow",
         "//pkg/build/util",
+        "//pkg/cmd/bazci/githubpost",
     ],
 )
 
