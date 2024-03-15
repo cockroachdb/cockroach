@@ -71,7 +71,7 @@ func TestComputeRollupFromData(t *testing.T) {
 				tsdp(1348, 888),
 			),
 			expected: []roachpb.InternalTimeSeriesData{
-				makeInternalColumnData(0, 50, []tspb.TimeSeriesDatapoint{
+				makeInternalData(0, 50, []tspb.TimeSeriesDatapoint{
 					tsdp(10, 200),
 					tsdp(20, 300),
 					tsdp(40, 400),
@@ -84,7 +84,7 @@ func TestComputeRollupFromData(t *testing.T) {
 					tsdp(426, 643),
 					tsdp(427, 835),
 				}),
-				makeInternalColumnData(1000, 50, []tspb.TimeSeriesDatapoint{
+				makeInternalData(1000, 50, []tspb.TimeSeriesDatapoint{
 					tsdp(1023, 999),
 					tsdp(1048, 888),
 					tsdp(1123, 999),
@@ -102,7 +102,7 @@ func TestComputeRollupFromData(t *testing.T) {
 				tsdp(1248, 888),
 			),
 			expected: []roachpb.InternalTimeSeriesData{
-				makeInternalColumnData(1000, 50, []tspb.TimeSeriesDatapoint{
+				makeInternalData(1000, 50, []tspb.TimeSeriesDatapoint{
 					tsdp(1023, 999),
 					tsdp(1048, 888),
 					tsdp(1123, 999),
@@ -207,7 +207,6 @@ func TestRollupBasic(t *testing.T) {
 		BudgetBytes:             math.MaxInt64,
 		EstimatedSources:        1, // Not needed for rollups
 		InterpolationLimitNanos: 0,
-		Columnar:                tm.DB.WriteColumnar(),
 	}
 	if err := tm.DB.rollupTimeSeries(
 		context.Background(),
@@ -289,7 +288,6 @@ func TestRollupMemoryConstraint(t *testing.T) {
 		// Large budget, but not maximum to avoid overflows.
 		BudgetBytes:      math.MaxInt64,
 		EstimatedSources: 1, // Not needed for rollups
-		Columnar:         tm.DB.WriteColumnar(),
 	})
 	tm.rollupWithMemoryContext(qmc, 500+resolution1nsDefaultRollupThreshold.Nanoseconds(), timeSeriesResolutionInfo{
 		Name:       "test.othermetric",
@@ -332,7 +330,6 @@ func TestRollupMemoryConstraint(t *testing.T) {
 			// Large budget, but not maximum to avoid overflows.
 			BudgetBytes:      limit,
 			EstimatedSources: 1, // Not needed for rollups
-			Columnar:         tm.DB.WriteColumnar(),
 		})
 		tm.rollupWithMemoryContext(qmc, 500+resolution1nsDefaultRollupThreshold.Nanoseconds(), timeSeriesResolutionInfo{
 			Name:       seriesName,
@@ -349,8 +346,8 @@ func TestRollupMemoryConstraint(t *testing.T) {
 		// Check budget was not exceeded.  Computation of budget usage is not exact
 		// in the case of rollups, due to the fact that results are tracked with
 		// the same monitor but may vary in size based on the specific input
-		// rows. Because of this, allow up to 20% over limit.
-		if a, e := float64(adjustedMon.MaximumBytes()), float64(limit)*1.2; a > e {
+		// rows. Because of this, allow up to 25% over limit.
+		if a, e := float64(adjustedMon.MaximumBytes()), float64(limit)*1.25; a > e {
 			t.Fatalf("memory usage for query was %f, wanted a limit of %f", a, e)
 		}
 

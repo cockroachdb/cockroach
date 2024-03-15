@@ -68,10 +68,6 @@ type testModelRunner struct {
 	workerMemMonitor  *mon.BytesMonitor
 	resultMemMonitor  *mon.BytesMonitor
 	queryMemoryBudget int64
-	// firstColumnarTimestamp is a map from a string name for a series to the
-	// first timestamp at which columnar data was inserted into that timestamp.
-	// This is used when computing the expected on-disk layout from the model.
-	firstColumnarTimestamp map[string]int64
 }
 
 // newTestModelRunner creates a new testModel instance. The Start() method must
@@ -97,13 +93,12 @@ func newTestModelRunner(t *testing.T) testModelRunner {
 		st,
 	)
 	return testModelRunner{
-		t:                      t,
-		model:                  testmodel.NewModelDB(),
-		LocalTestCluster:       &localtestcluster.LocalTestCluster{},
-		workerMemMonitor:       workerMonitor,
-		resultMemMonitor:       resultMonitor,
-		queryMemoryBudget:      math.MaxInt64,
-		firstColumnarTimestamp: make(map[string]int64),
+		t:                 t,
+		model:             testmodel.NewModelDB(),
+		LocalTestCluster:  &localtestcluster.LocalTestCluster{},
+		workerMemMonitor:  workerMonitor,
+		resultMemMonitor:  resultMonitor,
+		queryMemoryBudget: math.MaxInt64,
 	}
 }
 
@@ -164,11 +159,8 @@ func (tm *testModelRunner) getModelDiskLayout() map[string]roachpb.Value {
 			data = data.GroupByResolution(resolution.SampleDuration(), testmodel.AggregateLast)
 		}
 
-		// Depending on when column-based storage was activated, some slabs will
-		// be in row format and others in column format. Find the dividing line
-		// and generate two sets of slabs.
 		var allSlabs []roachpb.InternalTimeSeriesData
-		addSlabs := func(datapoints testmodel.DataSeries, columnar bool) {
+		func(datapoints testmodel.DataSeries) {
 			tsdata := tspb.TimeSeriesData{
 				Name:       seriesName,
 				Source:     source,
@@ -181,26 +173,13 @@ func (tm *testModelRunner) getModelDiskLayout() map[string]roachpb.Value {
 				rollup := computeRollupsFromData(tsdata, resolution.SampleDuration())
 				slabs, err = rollup.toInternal(resolution.SlabDuration(), resolution.SampleDuration())
 			} else {
-				slabs, err = tsdata.ToInternal(resolution.SlabDuration(), resolution.SampleDuration(), columnar)
+				slabs, err = tsdata.ToInternal(resolution.SlabDuration(), resolution.SampleDuration())
 			}
 			if err != nil {
 				tm.t.Fatalf("error converting testmodel data to internal format: %s", err.Error())
 			}
 			allSlabs = append(allSlabs, slabs...)
-		}
-
-		if resolution.IsRollup() {
-			addSlabs(data, true)
-		} else {
-			firstColumnTime, hasColumns := tm.firstColumnarTimestamp[name]
-			if !hasColumns {
-				addSlabs(data, false)
-			} else {
-				firstColumnTime = resolution.normalizeToSlab(firstColumnTime)
-				addSlabs(data.TimeSlice(math.MinInt64, firstColumnTime), false)
-				addSlabs(data.TimeSlice(firstColumnTime, math.MaxInt64), true)
-			}
-		}
+		}(data)
 
 		for _, slab := range allSlabs {
 			key := MakeDataKey(seriesName, source, resolution, slab.StartTimestampNanos)
@@ -234,12 +213,6 @@ func (tm *testModelRunner) storeInModel(r Resolution, data tspb.TimeSeriesData) 
 	}
 
 	key := resolutionModelKey(data.Name, r)
-	if tm.DB.WriteColumnar() {
-		firstColumar, ok := tm.firstColumnarTimestamp[key]
-		if candidate := data.Datapoints[0].TimestampNanos; !ok || candidate < firstColumar {
-			tm.firstColumnarTimestamp[key] = candidate
-		}
-	}
 	tm.model.Record(key, data.Source, data.Datapoints)
 }
 
@@ -339,7 +312,6 @@ func (tm *testModelRunner) rollup(nowNanos int64, timeSeries ...timeSeriesResolu
 		BudgetBytes:             math.MaxInt64,
 		EstimatedSources:        1, // Not needed for rollups
 		InterpolationLimitNanos: 0,
-		Columnar:                tm.DB.WriteColumnar(),
 	})
 	tm.rollupWithMemoryContext(qmc, nowNanos, timeSeries...)
 }
@@ -443,7 +415,7 @@ func (tm *testModelRunner) maintain(nowNanos int64) {
 				return data, false
 			}
 			targetResolution, hasRollup := res.TargetRollupResolution()
-			if hasRollup && tm.DB.WriteRollups() {
+			if hasRollup {
 				pruned := data.TimeSlice(thresholds[res], math.MaxInt64)
 				if len(pruned) != len(data) {
 					toRecord = append(toRecord, rollupRecordingData{
@@ -454,7 +426,7 @@ func (tm *testModelRunner) maintain(nowNanos int64) {
 					})
 					return pruned, true
 				}
-			} else if !hasRollup || !tm.DB.WriteRollups() {
+			} else {
 				pruned := data.TimeSlice(thresholds[res], math.MaxInt64)
 				if len(pruned) != len(data) {
 					return pruned, true
@@ -513,7 +485,6 @@ func (tm *testModelRunner) makeQuery(
 			BudgetBytes:             math.MaxInt64,
 			EstimatedSources:        currentEstimatedSources,
 			InterpolationLimitNanos: 0,
-			Columnar:                tm.DB.WriteColumnar(),
 		},
 		diskResolution:   diskResolution,
 		workerMemMonitor: tm.workerMemMonitor,
@@ -702,163 +673,172 @@ func (mds *modelDataSource) GetTimeSeriesData() []tspb.TimeSeriesData {
 // it is storing time series correctly.
 func TestStoreTimeSeries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
+	defer log.Scope(t).Close(t)
 
-		// Basic storage operation: one data point.
-		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-			tsd("test.metric", "",
-				tsdp(440000000000000000, 100),
-			),
-		})
-		tm.assertKeyCount(1)
-		tm.assertModelCorrect()
+	tm := newTestModelRunner(t)
+	tm.Start()
+	defer tm.Stop()
 
-		// Store data with different sources, and with multiple data points that
-		// aggregate into the same key.
-		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-			tsd("test.metric.float", "cpu01",
-				tsdp(1428713843000000000, 100.0),
-				tsdp(1428713843000000001, 50.2),
-				tsdp(1428713843000000002, 90.9),
-			),
-		})
-		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-			tsd("test.metric.float", "cpu02",
-				tsdp(1428713843000000000, 900.8),
-				tsdp(1428713843000000001, 30.12),
-				tsdp(1428713843000000002, 72.324),
-			),
-		})
-		tm.assertKeyCount(3)
-		tm.assertModelCorrect()
-
-		// A single storage operation that stores to multiple keys, including an
-		// existing key.
-		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-			tsd("test.metric", "",
-				tsdp(440000000000000000, 200),
-				tsdp(450000000000000001, 1),
-				tsdp(460000000000000000, 777),
-			),
-		})
-		tm.assertKeyCount(5)
-		tm.assertModelCorrect()
+	// Basic storage operation: one data point.
+	tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
+		tsd("test.metric", "",
+			tsdp(440000000000000000, 100),
+		),
 	})
+	tm.assertKeyCount(1)
+	tm.assertModelCorrect()
+
+	// Store data with different sources, and with multiple data points that
+	// aggregate into the same key.
+	tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
+		tsd("test.metric.float", "cpu01",
+			tsdp(1428713843000000000, 100.0),
+			tsdp(1428713843000000001, 50.2),
+			tsdp(1428713843000000002, 90.9),
+		),
+	})
+	tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
+		tsd("test.metric.float", "cpu02",
+			tsdp(1428713843000000000, 900.8),
+			tsdp(1428713843000000001, 30.12),
+			tsdp(1428713843000000002, 72.324),
+		),
+	})
+	tm.assertKeyCount(3)
+	tm.assertModelCorrect()
+
+	// A single storage operation that stores to multiple keys, including an
+	// existing key.
+	tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
+		tsd("test.metric", "",
+			tsdp(440000000000000000, 200),
+			tsdp(450000000000000001, 1),
+			tsdp(460000000000000000, 777),
+		),
+	})
+	tm.assertKeyCount(5)
+	tm.assertModelCorrect()
 }
 
 // TestPollSource verifies that polled data sources are called as expected.
 func TestPollSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
-		tr := tm.Cfg.AmbientCtx.Tracer
-		testSource := modelDataSource{
-			model:   tm,
-			r:       Resolution10s,
-			stopper: stop.NewStopper(stop.WithTracer(tr)),
-			datasets: [][]tspb.TimeSeriesData{
-				{
-					tsd("test.metric.float", "cpu01",
-						tsdp(1428713843000000000, 100.0),
-						tsdp(1428713843000000001, 50.2),
-						tsdp(1428713843000000002, 90.9),
-					),
-					tsd("test.metric.float", "cpu02",
-						tsdp(1428713843000000000, 900.8),
-						tsdp(1428713843000000001, 30.12),
-						tsdp(1428713843000000002, 72.324),
-					),
-				},
-				{
-					tsd("test.metric", "",
-						tsdp(1428713843000000000, 100),
-					),
-				},
-			},
-		}
+	defer log.Scope(t).Close(t)
 
-		ambient := log.MakeTestingAmbientContext(tr)
-		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
-		<-testSource.stopper.IsStopped()
-		if a, e := testSource.calledCount, 2; a != e {
-			t.Errorf("testSource was called %d times, expected %d", a, e)
-		}
-		tm.assertKeyCount(3)
-		tm.assertModelCorrect()
-	})
+	tm := newTestModelRunner(t)
+	tm.Start()
+	defer tm.Stop()
+
+	tr := tm.Cfg.AmbientCtx.Tracer
+	testSource := modelDataSource{
+		model:   tm,
+		r:       Resolution10s,
+		stopper: stop.NewStopper(stop.WithTracer(tr)),
+		datasets: [][]tspb.TimeSeriesData{
+			{
+				tsd("test.metric.float", "cpu01",
+					tsdp(1428713843000000000, 100.0),
+					tsdp(1428713843000000001, 50.2),
+					tsdp(1428713843000000002, 90.9),
+				),
+				tsd("test.metric.float", "cpu02",
+					tsdp(1428713843000000000, 900.8),
+					tsdp(1428713843000000001, 30.12),
+					tsdp(1428713843000000002, 72.324),
+				),
+			},
+			{
+				tsd("test.metric", "",
+					tsdp(1428713843000000000, 100),
+				),
+			},
+		},
+	}
+
+	ambient := log.MakeTestingAmbientContext(tr)
+	tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
+	<-testSource.stopper.IsStopped()
+	if a, e := testSource.calledCount, 2; a != e {
+		t.Errorf("testSource was called %d times, expected %d", a, e)
+	}
+	tm.assertKeyCount(3)
+	tm.assertModelCorrect()
 }
 
 // TestDisableStorage verifies that disabling timeseries storage via the cluster
 // setting works properly.
 func TestDisableStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
-		TimeseriesStorageEnabled.Override(ctx, &tm.Cfg.Settings.SV, false)
+	defer log.Scope(t).Close(t)
 
-		// Basic storage operation: one data point.
-		tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
-			tsd("test.metric", "",
-				tsdp(440000000000000000, 100),
-			),
-		})
-		tm.assertKeyCount(0)
-		tm.assertModelCorrect()
+	tm := newTestModelRunner(t)
+	tm.Start()
+	defer tm.Stop()
 
-		testSource := modelDataSource{
-			model:   tm,
-			r:       Resolution10s,
-			stopper: stop.NewStopper(),
-			datasets: [][]tspb.TimeSeriesData{
-				{
-					tsd("test.metric.float", "cpu01",
-						tsdp(1428713843000000000, 100.0),
-						tsdp(1428713843000000001, 50.2),
-						tsdp(1428713843000000002, 90.9),
-					),
-					tsd("test.metric.float", "cpu02",
-						tsdp(1428713843000000000, 900.8),
-						tsdp(1428713843000000001, 30.12),
-						tsdp(1428713843000000002, 72.324),
-					),
-				},
-				{
-					tsd("test.metric", "",
-						tsdp(1428713843000000000, 100),
-					),
-				},
-			},
-		}
+	TimeseriesStorageEnabled.Override(context.Background(), &tm.Cfg.Settings.SV, false)
 
-		ambient := log.MakeTestingAmbientCtxWithNewTracer()
-		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
-		select {
-		case <-testSource.stopper.IsStopped():
-			t.Error("testSource data exhausted when polling should have been enabled")
-		case <-time.After(50 * time.Millisecond):
-			testSource.stopper.Stop(context.Background())
-		}
-		if a, e := testSource.calledCount, 0; a != e {
-			t.Errorf("testSource was called %d times, expected %d", a, e)
-		}
-		tm.assertKeyCount(0)
-		tm.assertModelCorrect()
+	// Basic storage operation: one data point.
+	tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
+		tsd("test.metric", "",
+			tsdp(440000000000000000, 100),
+		),
 	})
+	tm.assertKeyCount(0)
+	tm.assertModelCorrect()
+
+	testSource := modelDataSource{
+		model:   tm,
+		r:       Resolution10s,
+		stopper: stop.NewStopper(),
+		datasets: [][]tspb.TimeSeriesData{
+			{
+				tsd("test.metric.float", "cpu01",
+					tsdp(1428713843000000000, 100.0),
+					tsdp(1428713843000000001, 50.2),
+					tsdp(1428713843000000002, 90.9),
+				),
+				tsd("test.metric.float", "cpu02",
+					tsdp(1428713843000000000, 900.8),
+					tsdp(1428713843000000001, 30.12),
+					tsdp(1428713843000000002, 72.324),
+				),
+			},
+			{
+				tsd("test.metric", "",
+					tsdp(1428713843000000000, 100),
+				),
+			},
+		},
+	}
+
+	ambient := log.MakeTestingAmbientCtxWithNewTracer()
+	tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
+	select {
+	case <-testSource.stopper.IsStopped():
+		t.Error("testSource data exhausted when polling should have been enabled")
+	case <-time.After(50 * time.Millisecond):
+		testSource.stopper.Stop(context.Background())
+	}
+	if a, e := testSource.calledCount, 0; a != e {
+		t.Errorf("testSource was called %d times, expected %d", a, e)
+	}
+	tm.assertKeyCount(0)
+	tm.assertModelCorrect()
 }
 
 // TestPruneThreshold verifies that `PruneThreshold` returns correct result in nanoseconds
 func TestPruneThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
-		db := NewDB(nil, tm.Cfg.Settings)
-		var expected int64
-		if db.WriteRollups() {
-			expected = resolution10sDefaultRollupThreshold.Nanoseconds()
-		} else {
-			expected = deprecatedResolution10sDefaultPruneThreshold.Nanoseconds()
-		}
-		result := db.PruneThreshold(Resolution10s)
-		if expected != result {
-			t.Errorf("prune threshold did not match expected value: %d != %d", expected, result)
-		}
-	})
+	defer log.Scope(t).Close(t)
+
+	tm := newTestModelRunner(t)
+	tm.Start()
+	defer tm.Stop()
+
+	db := NewDB(nil, tm.Cfg.Settings)
+	expected := resolution10sDefaultRollupThreshold.Nanoseconds()
+	result := db.PruneThreshold(Resolution10s)
+	if expected != result {
+		t.Errorf("prune threshold did not match expected value: %d != %d", expected, result)
+	}
 }
