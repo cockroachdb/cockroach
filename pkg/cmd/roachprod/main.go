@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh"
 	"golang.org/x/exp/maps"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
@@ -1192,7 +1193,7 @@ var grafanaAnnotationCmd = &cobra.Command{
 	Long: fmt.Sprintf(`Adds an annotation to the specified grafana instance
 
 --secure indicates if the grafana instance needs an authentication token to connect
-to. If set, a service account json and audience will be read in from the environment 
+to. If set, a service account json and audience will be read in from the environment
 variables %s and %s to attempt authentication through google IDP.
 
 --tags specifies the tags the annotation should have.
@@ -1200,7 +1201,7 @@ variables %s and %s to attempt authentication through google IDP.
 --dashboard-uid specifies the dashboard you want the annotation to be created in. If
 left empty, creates the annotation in the organization instead.
 
---time-range can be used to specify in epoch millisecond time the annotation's timestamp. 
+--time-range can be used to specify in epoch millisecond time the annotation's timestamp.
 If left empty, creates the annotation at the current time. If only start-time is specified,
 creates an annotation at start-time. If both start-time and end-time are specified,
 creates an annotation over time range.
@@ -1556,9 +1557,37 @@ var sshKeysListCmd = &cobra.Command{
 	}),
 }
 
+var sshKeysAddCmd = &cobra.Command{
+	Use:   "add <public-key-path> [--user user]",
+	Short: "add a new SSH public key to the set of keys installed on clusters managed by roachprod",
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		sshKeyPath := args[0]
+		pkBytes, err := os.ReadFile(sshKeyPath)
+		if err != nil {
+			return fmt.Errorf("error reading public key file: %w", err)
+		}
+
+		pubkey, comment, _, _, err := ssh.ParseAuthorizedKey(pkBytes)
+		if err != nil {
+			return fmt.Errorf("error parsing public key: %w", err)
+		}
+
+		ak := gce.AuthorizedKey{
+			User:    sshKeyUser,
+			Key:     pubkey,
+			Comment: comment,
+		}
+
+		fmt.Printf("Adding new public key for user %s...\n", ak.User)
+		return gce.AddUserAuthorizedKey(ak)
+	}),
+}
+
 var _ = func() struct{} {
 	sshKeysCmd.AddCommand(
 		sshKeysListCmd,
+		sshKeysAddCmd,
 	)
 
 	return struct{}{}

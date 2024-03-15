@@ -354,6 +354,10 @@ type AuthorizedKey struct {
 // always displayed.
 func (k AuthorizedKey) Format(maxLen int) string {
 	formatted := string(ssh.MarshalAuthorizedKey(k.Key))
+	// Drop new line character if present. We add it when formatting a
+	// set of keys in `AsSSSH` or `AsProjectMetadata`.
+	formatted = strings.TrimSuffix(formatted, "\n")
+
 	if maxLen > 0 {
 		formatted = formatted[:maxLen] + "..."
 	}
@@ -379,6 +383,19 @@ func (ak AuthorizedKeys) AsSSH() []byte {
 
 	for _, k := range ak {
 		buf.WriteString(k.String() + "\n")
+	}
+
+	return buf.Bytes()
+}
+
+// AsProjectMetadata returns a marshaled version of the authorized
+// keys in a format that can be pushed to GCE's project metadata
+// storage.
+func (ak AuthorizedKeys) AsProjectMetadata() []byte {
+	var buf bytes.Buffer
+
+	for _, k := range ak {
+		buf.WriteString(fmt.Sprintf("%s:%s\n", k.User, k.String()))
 	}
 
 	return buf.Bytes()
@@ -412,7 +429,7 @@ func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 		user := line[:colonIdx]
 		key := line[colonIdx+1:]
 
-		if user == config.RootUser || user == config.SharedUser {
+		if !isValidSSHUser(user) {
 			continue
 		}
 
@@ -433,4 +450,54 @@ func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 	})
 
 	return authorizedKeys, nil
+}
+
+// AddUserAuthorizedKey adds the authorized key provided to the set of
+// keys installed on clusters managed by roachprod. Currently, these
+// keys are stored in the project metadata for the roachprod's
+// `DefaultProject`.
+func AddUserAuthorizedKey(ak AuthorizedKey) (retErr error) {
+	existingKeys, err := GetUserAuthorizedKeys()
+	if err != nil {
+		return err
+	}
+
+	if !isValidSSHUser(ak.User) {
+		return fmt.Errorf("invalid SSH key username: %s", ak.User)
+	}
+
+	newKeys := append(existingKeys, ak)
+	tmpFile, err := os.CreateTemp("", "ssh-keys-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer func() {
+		retErr = errors.CombineErrors(retErr, os.Remove(tmpFile.Name()))
+	}()
+
+	if err := os.WriteFile(tmpFile.Name(), newKeys.AsProjectMetadata(), 0444); err != nil {
+		return fmt.Errorf("failed to write to temp file: %w", err)
+	}
+
+	cmd := exec.Command("gcloud", "compute", "project-info", "add-metadata",
+		fmt.Sprintf("--project=%s", DefaultProject()),
+		fmt.Sprintf("--metadata-from-file=ssh-keys=%s", tmpFile.Name()),
+	)
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error running `gcloud` command (output above): %w", err)
+	}
+
+	return nil
+}
+
+// isValidSSHUser returns whether the username provided is a valid
+// username for the purposes of the shared pool of SSH public keys to
+// be added to clusters. We don't add public keys to the root user or
+// the shared user (the shared user's `authorized_keys` is managed by
+// roachprod).
+func isValidSSHUser(user string) bool {
+	return user != config.RootUser && user != config.SharedUser
 }
