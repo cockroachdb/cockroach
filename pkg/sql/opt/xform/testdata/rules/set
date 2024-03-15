@@ -21,7 +21,7 @@ CREATE TABLE kuvw (
 memo expect=GenerateStreamingSetOp
 SELECT u,v,w FROM kuvw UNION SELECT w,v,u FROM kuvw
 ----
-memo (optimized, ~11KB, required=[presentation: u:13,v:14,w:15])
+memo (optimized, ~12KB, required=[presentation: u:13,v:14,w:15])
  ├── G1: (union G2 G3) (union G2 G3 ordering=+13,+14,+15) (union G2 G3 ordering=+15,+14,+13) (union G2 G3 ordering=+14,+15,+13) (union G2 G3 ordering=+14,+13,+15)
  │    └── [presentation: u:13,v:14,w:15]
  │         ├── best: (union G2="[ordering: +2,+3,+4]" G3="[ordering: +10,+9,+8]" ordering=+13,+14,+15)
