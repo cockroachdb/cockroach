@@ -17,6 +17,7 @@ PROTOBUF_TARGETS = [
     "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb:kvflowcontrolpb_proto",
     "//pkg/multitenant/mtinfopb:mtinfopb_proto",
     "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb:tenantcapabilitiespb_proto",
+    "//pkg/raft/raftpb:raftpb_proto",
     "//pkg/roachpb:roachpb_proto",
     "//pkg/rpc/rpcpb:rpcpb_proto",
     "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_proto",
@@ -58,5 +59,4 @@ PROTOBUF_TARGETS = [
     "@com_google_protobuf//:timestamp_proto",
     "@go_googleapis//google/api:annotations_proto",
     "@go_googleapis//google/api:http_proto",
-    "@io_etcd_go_raft_v3//raftpb:raftpb_proto",
 ]

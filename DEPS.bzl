@@ -10795,23 +10795,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "io_etcd_go_raft_v3",
-        build_directives = [
-            "gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto",
-            "gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto",
-            "gazelle:go_proto_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler",
-            "gazelle:go_grpc_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
-            "gazelle:proto_import_prefix raft/v3",
-        ],
-        build_file_proto_mode = "default",
-        importpath = "go.etcd.io/raft/v3",
-        sha256 = "8f70181a01633dda91a5c65f23fff75fdcc99e5b9ac1bb787963f6eb08f163e5",
-        strip_prefix = "go.etcd.io/raft/v3@v3.0.0-20240110140044-f1c02c9909c0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/raft/v3/io_etcd_go_raft_v3-v3.0.0-20240110140044-f1c02c9909c0.zip",
-        ],
-    )
-    go_repository(
         name = "io_goji",
         build_file_proto_mode = "disable_global",
         importpath = "goji.io",

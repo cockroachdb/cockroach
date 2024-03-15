@@ -13,9 +13,9 @@ package a
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/raft/v3"
 )
 
 var unsafeStr = "abc %d"

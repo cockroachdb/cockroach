@@ -24,20 +24,16 @@ import (
 	"encoding/xml"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/build/engflow"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost"
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 )
 
 var (
-	branch          = flag.String("branch", "", "currently checked out git branch")
 	eventStreamFile = flag.String("eventsfile", "", "eventstream file produced by bazel build --build_event_binary_file")
 	jsonOutFile     = flag.String("jsonoutfile", "", "if given, file path where to write the JSON test report")
 
@@ -57,60 +53,6 @@ func getSha() (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
-}
-
-func postOptions(res *engflow.TestResultWithXml, sha string, invocationId string) *issues.Options {
-	return &issues.Options{
-		Token:  githubApiToken,
-		Org:    "cockroachdb",
-		Repo:   "cockroach",
-		SHA:    sha,
-		Branch: *branch,
-		EngFlowOptions: &issues.EngFlowOptions{
-			Attempt:      int(res.Attempt),
-			InvocationID: invocationId,
-			Label:        res.Label,
-			Run:          int(res.Run),
-			Shard:        int(res.Shard),
-			ServerURL:    fmt.Sprintf("https://%s.cluster.engflow.com/", *serverName),
-		},
-		GetBinaryVersion: build.BinaryVersion,
-	}
-
-}
-
-func failurePoster(
-	res *engflow.TestResultWithXml, sha string, invocationId string,
-) githubpost.FailurePoster {
-	postOpts := postOptions(res, sha, invocationId)
-	formatter := func(ctx context.Context, failure githubpost.Failure) (issues.IssueFormatter, issues.PostRequest) {
-		fmter, req := githubpost.DefaultFormatter(ctx, failure)
-		// We don't want an artifacts link: there are none on EngFlow.
-		req.Artifacts = ""
-		if req.ExtraParams == nil {
-			req.ExtraParams = make(map[string]string)
-		}
-		if res.Run != 0 {
-			req.ExtraParams["run"] = fmt.Sprintf("%d", res.Run)
-		}
-		if res.Shard != 0 {
-			req.ExtraParams["shard"] = fmt.Sprintf("%d", res.Shard)
-		}
-		if res.Attempt != 0 {
-			req.ExtraParams["attempt"] = fmt.Sprintf("%d", res.Attempt)
-		}
-		if *extraParams != "" {
-			for _, key := range strings.Split(*extraParams, ",") {
-				req.ExtraParams[key] = "true"
-			}
-		}
-		return fmter, req
-	}
-	return func(ctx context.Context, failure githubpost.Failure) error {
-		fmter, req := formatter(ctx, failure)
-		_, err := issues.Post(ctx, log.Default(), fmter, req, postOpts)
-		return err
-	}
 }
 
 func process() error {
@@ -190,7 +132,13 @@ func process() error {
 			}
 			if seenNew {
 				if err := githubpost.PostFromTestXMLWithFailurePoster(
-					ctx, failurePoster(res, sha, invocation.InvocationId), testXml); err != nil {
+					ctx, engflow.FailurePoster(res, engflow.FailurePosterOptions{
+						Sha:            sha,
+						InvocationId:   invocation.InvocationId,
+						ServerName:     *serverName,
+						GithubApiToken: githubApiToken,
+						ExtraParams:    strings.Split(*extraParams, ","),
+					}), testXml); err != nil {
 					fmt.Printf("could not post to GitHub: got error %+v", err)
 				}
 			}
@@ -202,10 +150,6 @@ func process() error {
 
 func main() {
 	flag.Parse()
-	if *branch == "" {
-		fmt.Println("must provide -branch")
-		os.Exit(1)
-	}
 	if *eventStreamFile == "" {
 		fmt.Println("must provide -eventsfile")
 		os.Exit(1)

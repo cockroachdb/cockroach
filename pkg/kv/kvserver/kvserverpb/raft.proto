@@ -18,7 +18,7 @@ import "roachpb/metadata.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";
 import "kv/kvserver/kvflowcontrol/kvflowcontrolpb/kvflowcontrol.proto";
-import "raft/v3/raftpb/raft.proto";
+import "raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 

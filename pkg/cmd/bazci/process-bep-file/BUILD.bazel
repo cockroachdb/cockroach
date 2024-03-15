@@ -6,11 +6,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/bazci/process-bep-file",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/build",
         "//pkg/build/engflow",
         "//pkg/build/util",
         "//pkg/cmd/bazci/githubpost",
-        "//pkg/cmd/internal/issues",
     ],
 )
 

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
 	"github.com/jordanlewis/gcassert"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 )
@@ -289,6 +290,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`opentelemetry-proto/.*.proto$`),
 			// These files are copied from bazel upstream with its own license.
 			stream.GrepNot(`build/bazel/bes/.*.proto$`),
+			// These files are copied from raft upstream with its own license.
+			stream.GrepNot(`^raft/.*`),
 			// Generated files for plpgsql.
 			stream.GrepNot(`sql/plpgsql/parser/plpgsqllexbase/.*.go`),
 		), func(filename string) {
@@ -332,6 +335,88 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// TestRaftCopyrightHeaders checks that all the source files in pkg/raft have
+	// the original copyright headers from etcd-io/raft, and the modified files
+	// have Cockroach attribution.
+	t.Run("TestRaftCopyrightHeaders", func(t *testing.T) {
+		t.Parallel()
+		if pkgSpecified {
+			skip.IgnoreLint(t, "PKG specified")
+		}
+
+		apacheHeader := regexp.MustCompile(`// Copyright 20\d\d The etcd Authors
+//
+// Licensed under the Apache License, Version 2.0 \(the "License"\);
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+`)
+		cockroachCopyright := regexp.MustCompile(
+			`// This code has been modified from its original form by Cockroach Labs, Inc.
+// All modifications are Copyright 20\d\d Cockroach Labs, Inc.`)
+
+		raftDir := filepath.Join(pkgDir, "raft")
+		// These extensions identify source files that should have copyright headers.
+		// TODO(pav-kv): add "*.proto". Currently raft.proto has no header.
+		extensions := []string{"*.go"}
+
+		// The commit that imported etcd-io/raft into pkg/raft.
+		const baseSHA = "cd6f4f263bd42688096064825dfa668bde2d3720"
+		// modified will contain the set of all files in pkg/raft that were modified
+		// since importing etcd-io/raft into it.
+		modified := func() map[string]struct{} {
+			// List the source files that have been modified.
+			cmd, stderr, filter, err := dirCmd(raftDir, "git", append([]string{
+				"diff", baseSHA, "--name-status", "--diff-filter=M", "--"}, extensions...)...)
+			require.NoError(t, err)
+			require.NoError(t, cmd.Start())
+			// The command outputs lines of the form "M\t<filename>".
+			paths := make(map[string]struct{})
+			require.NoError(t, stream.ForEach(stream.Sequence(filter), func(row string) {
+				parts := strings.Split(row, "\t")
+				require.Len(t, parts, 2)
+				paths[parts[1]] = struct{}{}
+			}))
+			if err := cmd.Wait(); err != nil {
+				require.Empty(t, stderr.String(), "err=%s", err)
+			}
+			return paths
+		}()
+
+		cmd, stderr, filter, err := dirCmd(raftDir, "git",
+			append([]string{"ls-files", "--full-name"}, extensions...)...)
+		require.NoError(t, err)
+		require.NoError(t, cmd.Start())
+		require.NoError(t, stream.ForEach(stream.Sequence(filter,
+			stream.GrepNot(`\.pb\.go`),
+			stream.GrepNot(`_string\.go`),
+		), func(filename string) {
+			file, err := os.Open(filepath.Join(crdbDir, filename))
+			require.NoError(t, err)
+			defer file.Close()
+			data := make([]byte, 1024)
+			n, err := file.Read(data)
+			require.NoError(t, err)
+			data = data[0:n]
+			assert.NotNilf(t, apacheHeader.Find(data),
+				"did not find expected Apache license header in %s", filename)
+			if _, ok := modified[filename]; ok {
+				assert.NotNilf(t, cockroachCopyright.Find(data),
+					"did not find expected Cockroach copyright header in %s", filename)
+			}
+		}))
+		if err := cmd.Wait(); err != nil {
+			require.Empty(t, stderr.String(), "err=%s", err)
+		}
+	})
+
 	t.Run("TestMissingLeakTest", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(pkgDir, "util/leaktest/check-leaktest.sh")
@@ -366,6 +451,7 @@ func TestLint(t *testing.T) {
 			`context.TODO\(\)`,
 			"--",
 			"*_test.go",
+			":!raft/*.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -596,6 +682,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!*/doc.go",
+			":!raft/*.go",
 			":!util/syncutil/mutex_sync.go",
 			":!util/syncutil/mutex_sync_race.go",
 			":!testutils/lint/passes/deferunlockcheck/testdata/src/github.com/cockroachdb/cockroach/pkg/util/syncutil/mutex_sync.go",
@@ -824,7 +911,10 @@ func TestLint(t *testing.T) {
 	t.Run("TestTodoStyle", func(t *testing.T) {
 		t.Parallel()
 		// TODO(tamird): enforce presence of name.
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", `\sTODO\([^)]+\)[^:]`, "--", "*.go")
+		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", `\sTODO\([^)]+\)[^:]`, "--",
+			"*.go",
+			":!raft/*.go",
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1262,6 +1352,7 @@ func TestLint(t *testing.T) {
 			":!sql/*.pb.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
+			":!raft/*.go",
 			":!rpc/codec.go",
 			":!rpc/codec_test.go",
 			":!settings/settings_test.go",
@@ -1308,6 +1399,7 @@ func TestLint(t *testing.T) {
 			"*.go",
 			":!*.pb.go",
 			":!clusterversion/setting.go",
+			":!raft/*.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!util/encoding/encoding.go",
@@ -1353,6 +1445,7 @@ func TestLint(t *testing.T) {
 			`proto\.Equal`,
 			"--",
 			"*.go",
+			":!raft/*.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1447,6 +1540,7 @@ func TestLint(t *testing.T) {
 			":!cmd",
 			":!cli/exit",
 			":!bench/cmd",
+			":!raft/*.go",
 			":!sql/opt/optgen",
 			":!sql/colexec/execgen",
 			":!kv/kvpb/gen/main.go",

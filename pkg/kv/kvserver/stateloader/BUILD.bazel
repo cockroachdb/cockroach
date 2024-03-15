@@ -33,12 +33,12 @@ go_test(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/stop",
         "@com_github_stretchr_testify//require",
-        "@io_etcd_go_raft_v3//raftpb",
     ],
 )

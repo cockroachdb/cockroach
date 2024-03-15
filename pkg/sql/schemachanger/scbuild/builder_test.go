@@ -292,7 +292,7 @@ func TestBuildIsMemoryMonitored(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderDeadlock(t, "takes too long")
+	skip.UnderDuress(t, "takes too long; creates thousands of tables")
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{

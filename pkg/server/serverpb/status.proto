@@ -17,6 +17,7 @@ import "errorspb/errors.proto";
 import "gossip/gossip.proto";
 import "jobs/jobspb/jobs.proto";
 import "multitenant/mtinfopb/info.proto";
+import "raft/raftpb/raft.proto";
 import "roachpb/data.proto";
 import "roachpb/index_usage_stats.proto";
 import "roachpb/span_config.proto";
@@ -37,8 +38,6 @@ import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "util/log/logpb/log.proto";
 import "util/unresolved_addr.proto";
 import "util/tracing/tracingpb/tracing.proto";
-
-import "raft/v3/raftpb/raft.proto";
 
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
