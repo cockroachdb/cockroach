@@ -12,7 +12,6 @@ package colflow_test
 
 import (
 	"context"
-	"math"
 	"strings"
 	"testing"
 
@@ -41,15 +40,11 @@ func TestDrainingAfterRemoteError(t *testing.T) {
 	// Create a disk monitor for the temp storage only with 1 byte of space.
 	// This ensures that the query will run into "out of temporary storage"
 	// error.
-	diskMonitor := mon.NewMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
+	diskMonitor := mon.NewMonitor(mon.NewMonitorArgs{
+		Name:     "test-disk",
+		Res:      mon.DiskResource,
+		Settings: st,
+	})
 	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(1))
 
 	// Set up a two node cluster.

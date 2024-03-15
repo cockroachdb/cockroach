@@ -419,11 +419,13 @@ func newInternalPlanner(
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
 	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(execCfg.Settings.Version)
 
-	plannerMon := mon.NewMonitor(redact.Sprintf("internal-planner.%s.%s", user, opName),
-		mon.MemoryResource,
-		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
-		-1, /* increment */
-		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
+	plannerMon := mon.NewMonitor(mon.NewMonitorArgs{
+		Name:       redact.Sprintf("internal-planner.%s.%s", user, opName),
+		CurCount:   memMetrics.CurBytesCount,
+		MaxHist:    memMetrics.MaxBytesHist,
+		Noteworthy: noteworthyInternalMemoryUsageBytes,
+		Settings:   execCfg.Settings,
+	})
 	plannerMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
 	p.monitor = plannerMon
 

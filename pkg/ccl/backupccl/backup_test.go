@@ -8621,7 +8621,10 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	m := mon.NewMonitor("test-monitor", mon.MemoryResource, nil, nil, 0, 0, st)
+	m := mon.NewMonitor(mon.NewMonitorArgs{
+		Name:     "test-monitor",
+		Settings: st,
+	})
 	m.Start(ctx, nil, mon.NewStandaloneBudget(128<<20))
 	mem := m.MakeBoundAccount()
 	encOpts := &jobspb.BackupEncryptionOptions{

@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -180,15 +179,12 @@ func MakeInternalExecutor(
 func MakeInternalExecutorMemMonitor(
 	memMetrics MemoryMetrics, settings *cluster.Settings,
 ) *mon.BytesMonitor {
-	return mon.NewMonitor(
-		"internal SQL executor",
-		mon.MemoryResource,
-		memMetrics.CurBytesCount,
-		memMetrics.MaxBytesHist,
-		-1,            /* use default increment */
-		math.MaxInt64, /* noteworthy */
-		settings,
-	)
+	return mon.NewMonitor(mon.NewMonitorArgs{
+		Name:     "internal SQL executor",
+		CurCount: memMetrics.CurBytesCount,
+		MaxHist:  memMetrics.MaxBytesHist,
+		Settings: settings,
+	})
 }
 
 // SetSessionData binds the session variables that will be used by queries

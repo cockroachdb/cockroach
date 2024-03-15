@@ -774,16 +774,12 @@ func TestRouterDiskSpill(t *testing.T) {
 	// the number of rows that will eventually be added to the underlying
 	// rowContainer. This is a bytes value that will ensure we fall back to disk
 	// but use memory for at least a couple of rows.
-	monitor := mon.NewMonitorWithLimit(
-		"test-monitor",
-		mon.MemoryResource,
-		(numRows-routerRowBufSize)/2, /* limit */
-		nil,                          /* curCount */
-		nil,                          /* maxHist */
-		1,                            /* increment */
-		math.MaxInt64,                /* noteworthy */
-		st,
-	)
+	monitor := mon.NewMonitor(mon.NewMonitorArgs{
+		Name:      "test-monitor",
+		Limit:     (numRows - routerRowBufSize) / 2,
+		Increment: 1,
+		Settings:  st,
+	})
 	evalCtx := eval.MakeTestingEvalContextWithMon(st, monitor)
 	defer evalCtx.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{

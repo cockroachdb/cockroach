@@ -85,18 +85,16 @@ func NewServer(
 		toCharFormatCache: tochar.NewFormatCache(512),
 		flowRegistry:      flowinfra.NewFlowRegistry(),
 		remoteFlowRunner:  remoteFlowRunner,
-		memMonitor: mon.NewMonitor(
-			"distsql",
-			mon.MemoryResource,
+		memMonitor: mon.NewMonitor(mon.NewMonitorArgs{
+			Name: "distsql",
 			// Note that we don't use 'sql.mem.distsql.*' metrics here since
 			// that would double count them with the 'flow' monitor in
 			// setupFlow.
-			nil, /* curCount */
-			nil, /* maxHist */
-			-1,  /* increment: use default block size */
-			noteworthyMemoryUsageBytes,
-			cfg.Settings,
-		),
+			CurCount:   nil,
+			MaxHist:    nil,
+			Noteworthy: noteworthyMemoryUsageBytes,
+			Settings:   cfg.Settings,
+		}),
 	}
 	ds.memMonitor.StartNoReserved(ctx, cfg.ParentMemoryMonitor)
 	// We have to initialize the flow runner at the same time we're creating
@@ -265,15 +263,13 @@ func (ds *ServerImpl) setupFlow(
 		)
 	}
 
-	monitor = mon.NewMonitor(
-		"flow "+redact.RedactableString(req.Flow.FlowID.Short()),
-		mon.MemoryResource,
-		ds.Metrics.CurBytesCount,
-		ds.Metrics.MaxBytesHist,
-		-1, /* use default block size */
-		noteworthyMemoryUsageBytes,
-		ds.Settings,
-	)
+	monitor = mon.NewMonitor(mon.NewMonitorArgs{
+		Name:       "flow " + redact.RedactableString(req.Flow.FlowID.Short()),
+		CurCount:   ds.Metrics.CurBytesCount,
+		MaxHist:    ds.Metrics.MaxBytesHist,
+		Noteworthy: noteworthyMemoryUsageBytes,
+		Settings:   ds.Settings,
+	})
 	monitor.Start(ctx, parentMonitor, reserved)
 
 	makeLeaf := func() (*kv.Txn, error) {

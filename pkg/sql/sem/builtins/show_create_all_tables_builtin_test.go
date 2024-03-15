@@ -26,15 +26,10 @@ func TestTopologicalSort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	monitor := mon.NewMonitor(
-		"test-mem",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		cluster.MakeTestingClusterSettings(),
-	)
+	monitor := mon.NewMonitor(mon.NewMonitorArgs{
+		Name:     "test-mem",
+		Settings: cluster.MakeTestingClusterSettings(),
+	})
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	acc := monitor.MakeBoundAccount()
 

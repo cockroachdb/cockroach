@@ -286,15 +286,10 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	memMon := mon.NewMonitor(
-		"test",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment: use default block size */
-		math.MaxInt64, /* noteworthy */
-		cluster.MakeTestingClusterSettings(),
-	)
+	memMon := mon.NewMonitor(mon.NewMonitorArgs{
+		Name:     "test",
+		Settings: cluster.MakeTestingClusterSettings(),
+	})
 	memMon.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer memMon.Stop(context.Background())
 	memContext := ts.MakeQueryMemoryContext(

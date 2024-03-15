@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 	"testing"
 	"time"
@@ -51,15 +50,10 @@ func TestSessionCacheBasic(t *testing.T) {
 				d.ScanArgs(t, "timeToLive", &timeToLive)
 
 				st := &cluster.Settings{}
-				monitor := mon.NewUnlimitedMonitor(
-					ctx,
-					"test",
-					mon.MemoryResource,
-					nil, /* currCount */
-					nil, /* maxHist */
-					math.MaxInt64,
-					st,
-				)
+				monitor := mon.NewUnlimitedMonitor(ctx, mon.NewMonitorArgs{
+					Name:     "test",
+					Settings: st,
+				})
 				cache = NewClosedSessionCache(st, monitor, time.Now)
 
 				ClosedSessionCacheCapacity.Override(ctx, &st.SV, int64(capacity))

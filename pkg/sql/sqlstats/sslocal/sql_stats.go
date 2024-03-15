@@ -12,7 +12,6 @@ package sslocal
 
 import (
 	"context"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -67,15 +66,12 @@ func newSQLStats(
 	knobs *sqlstats.TestingKnobs,
 	latencyInformation insights.LatencyInformation,
 ) *SQLStats {
-	monitor := mon.NewMonitor(
-		"SQLStats",
-		mon.MemoryResource,
-		curMemBytesCount,
-		maxMemBytesHist,
-		-1, /* increment */
-		math.MaxInt64,
-		st,
-	)
+	monitor := mon.NewMonitor(mon.NewMonitorArgs{
+		Name:     "SQLStats",
+		CurCount: curMemBytesCount,
+		MaxHist:  maxMemBytesHist,
+		Settings: st,
+	})
 	s := &SQLStats{
 		st:                 st,
 		flushTarget:        flushTarget,

@@ -268,6 +268,29 @@ type BytesMonitor struct {
 	settings *cluster.Settings
 }
 
+const (
+	// Consult with SQL Queries before increasing these values.
+	expectedMonitorSize     = 208
+	expectedMonitorSizeRace = 216
+	expectedAccountSize     = 32
+)
+
+func init() {
+	monitorSize := unsafe.Sizeof(BytesMonitor{})
+	if util.RaceEnabled {
+		if monitorSize != expectedMonitorSizeRace {
+			panic(errors.AssertionFailedf("expected monitor size to be %d under race, found %d", expectedMonitorSizeRace, monitorSize))
+		}
+	} else {
+		if monitorSize != expectedMonitorSize {
+			panic(errors.AssertionFailedf("expected monitor size to be %d, found %d", expectedMonitorSize, monitorSize))
+		}
+	}
+	if accountSize := unsafe.Sizeof(BoundAccount{}); accountSize != expectedAccountSize {
+		panic(errors.AssertionFailedf("expected account size to be %d, found %d", expectedAccountSize, accountSize))
+	}
+}
+
 // MonitorState describes the current state of a single monitor.
 type MonitorState struct {
 	// Level tracks how many "generations" away the current monitor is from the
@@ -365,67 +388,55 @@ var maxAllocatedButUnusedBlocks = envutil.EnvOrDefaultInt("COCKROACH_MAX_ALLOCAT
 // to reserve and release bytes to a pool.
 var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_CHUNK_SIZE", 10*1024)
 
-// NewMonitor creates a new monitor.
-// Arguments:
-//
-//   - name is used to annotate log messages, can be used to distinguish
-//     monitors.
-//
-//   - resource specifies what kind of resource the monitor is tracking
-//     allocations for (e.g. memory or disk).
-//
-//   - curCount and maxHist are the metric objects to update with usage
-//     statistics. Can be nil.
-//
-//   - increment is the block size used for upstream allocations from
-//     the pool. Note: if set to 0 or lower, the default pool allocation
-//     size is used.
-//
-//   - noteworthy determines the minimum total allocated size beyond
-//     which the monitor starts to log increases. Use 0 to always log
-//     or math.MaxInt64 to never log.
-func NewMonitor(
-	name redact.RedactableString,
-	res Resource,
-	curCount *metric.Gauge,
-	maxHist metric.IHistogram,
-	increment int64,
-	noteworthy int64,
-	settings *cluster.Settings,
-) *BytesMonitor {
-	return NewMonitorWithLimit(
-		name, res, math.MaxInt64, curCount, maxHist, increment, noteworthy, settings)
+// NewMonitorArgs encompasses all arguments to the NewMonitor and
+// NewUnlimitedMonitor calls. If a particular argument is not set, then a
+// reasonable default will be used.
+type NewMonitorArgs struct {
+	// Name is used to annotate log messages, can be used to distinguish
+	// monitors.
+	Name redact.RedactableString
+	// Res specifies what kind of resource the monitor is tracking allocations
+	// for (e.g. memory or disk). If unset, MemoryResource is assumed.
+	Res   Resource
+	Limit int64
+	// CurCount and MaxHist are the metric objects to update with usage
+	// statistics.
+	CurCount *metric.Gauge
+	MaxHist  metric.IHistogram
+	// Increment is the block size used for upstream allocations from the pool.
+	Increment int64
+	// Noteworthy determines the minimum total allocated size beyond which the
+	// monitor starts to log increases. Use 0 to always log or math.MaxInt64 to
+	// never log.
+	Noteworthy int64
+	Settings   *cluster.Settings
 }
 
-// NewMonitorWithLimit creates a new monitor with a limit local to this
-// monitor.
-func NewMonitorWithLimit(
-	name redact.RedactableString,
-	res Resource,
-	limit int64,
-	curCount *metric.Gauge,
-	maxHist metric.IHistogram,
-	increment int64,
-	noteworthy int64,
-	settings *cluster.Settings,
-) *BytesMonitor {
-	if increment <= 0 {
-		increment = DefaultPoolAllocationSize
+// NewMonitor creates a new monitor.
+func NewMonitor(args NewMonitorArgs) *BytesMonitor {
+	if args.Res == nil {
+		args.Res = MemoryResource
 	}
-	if limit <= 0 {
-		limit = math.MaxInt64
+	if args.Limit <= 0 {
+		args.Limit = math.MaxInt64
+	}
+	if args.Increment <= 0 {
+		args.Increment = DefaultPoolAllocationSize
+	}
+	if args.Noteworthy <= 0 {
+		args.Noteworthy = math.MaxInt64
 	}
 	m := &BytesMonitor{
-		name:                 name,
-		resource:             res,
-		configLimit:          limit,
-		limit:                limit,
-		noteworthyUsageBytes: noteworthy,
-		poolAllocationSize:   increment,
-		settings:             settings,
+		name:                 args.Name,
+		resource:             args.Res,
+		configLimit:          args.Limit,
+		limit:                args.Limit,
+		noteworthyUsageBytes: args.Noteworthy,
+		poolAllocationSize:   args.Increment,
+		settings:             args.Settings,
 	}
-	m.mu.curBytesCount = curCount
-	m.mu.maxBytesHist = maxHist
+	m.mu.curBytesCount = args.CurCount
+	m.mu.maxBytesHist = args.MaxHist
 	return m
 }
 
@@ -442,16 +453,16 @@ func NewMonitorWithLimit(
 func NewMonitorInheritWithLimit(
 	name redact.RedactableString, limit int64, m *BytesMonitor,
 ) *BytesMonitor {
-	return NewMonitorWithLimit(
-		name,
-		m.resource,
-		limit,
-		nil, // curCount is not inherited as we don't want to double count allocations
-		nil, // maxHist is not inherited as we don't want to double count allocations
-		m.poolAllocationSize,
-		m.noteworthyUsageBytes,
-		m.settings,
-	)
+	return NewMonitor(NewMonitorArgs{
+		Name:       name,
+		Res:        m.resource,
+		Limit:      limit,
+		CurCount:   nil, // CurCount is not inherited as we don't want to double count allocations
+		MaxHist:    nil, // MaxHist is not inherited as we don't want to double count allocations
+		Increment:  m.poolAllocationSize,
+		Noteworthy: m.noteworthyUsageBytes,
+		Settings:   m.settings,
+	})
 }
 
 // noReserved is safe to be used by multiple monitors as the "reserved" account
@@ -529,29 +540,14 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 
 // NewUnlimitedMonitor creates a new monitor and starts the monitor in
 // "detached" mode without a pool and without a maximum budget.
-func NewUnlimitedMonitor(
-	ctx context.Context,
-	name redact.RedactableString,
-	res Resource,
-	curCount *metric.Gauge,
-	maxHist metric.IHistogram,
-	noteworthy int64,
-	settings *cluster.Settings,
-) *BytesMonitor {
+func NewUnlimitedMonitor(ctx context.Context, args NewMonitorArgs) *BytesMonitor {
 	if log.V(2) {
-		log.InfofDepth(ctx, 1, "%s: starting unlimited monitor", name)
+		log.InfofDepth(ctx, 1, "%s: starting unlimited monitor", args.Name)
 	}
-	m := &BytesMonitor{
-		name:                 name,
-		resource:             res,
-		limit:                math.MaxInt64,
-		noteworthyUsageBytes: noteworthy,
-		poolAllocationSize:   DefaultPoolAllocationSize,
-		reserved:             NewStandaloneBudget(math.MaxInt64),
-		settings:             settings,
-	}
-	m.mu.curBytesCount = curCount
-	m.mu.maxBytesHist = maxHist
+	// The limit is expected to not be set, but let's be conservative.
+	args.Limit = math.MaxInt64
+	m := NewMonitor(args)
+	m.reserved = NewStandaloneBudget(math.MaxInt64)
 	return m
 }
 

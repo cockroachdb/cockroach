@@ -87,9 +87,10 @@ func NewCollectionFactory(
 		systemDatabase:     leaseMgr.SystemDatabaseCache(),
 		spanConfigSplitter: spanConfigSplitter,
 		spanConfigLimiter:  spanConfigLimiter,
-		defaultMonitor: mon.NewUnlimitedMonitor(ctx, "CollectionFactoryDefaultUnlimitedMonitor",
-			mon.MemoryResource, nil /* curCount */, nil, /* maxHist */
-			0 /* noteworthy */, settings),
+		defaultMonitor: mon.NewUnlimitedMonitor(ctx, mon.NewMonitorArgs{
+			Name:     "CollectionFactoryDefaultUnlimitedMonitor",
+			Settings: settings,
+		}),
 		defaultDescriptorSessionDataProvider: defaultDescriptorSessionDataProvider,
 	}
 }

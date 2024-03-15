@@ -14,7 +14,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -41,10 +40,11 @@ func TestRaftReceiveQueue(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	g := metric.NewGauge(metric.Metadata{})
-	m := mon.NewUnlimitedMonitor(
-		context.Background(), "test", mon.MemoryResource, g,
-		nil, math.MaxInt64, st,
-	)
+	m := mon.NewUnlimitedMonitor(context.Background(), mon.NewMonitorArgs{
+		Name:     "test",
+		CurCount: g,
+		Settings: st,
+	})
 	qs := raftReceiveQueues{mon: m}
 
 	const r1 = roachpb.RangeID(1)

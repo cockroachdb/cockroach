@@ -70,11 +70,13 @@ func makeRangeFeedEvent(rnd *rand.Rand, valSize int, prevValSize int) *kvpb.Rang
 }
 
 func getBoundAccountWithBudget(budget int64) (account mon.BoundAccount, cleanup func()) {
-	mm := mon.NewMonitorWithLimit(
-		"test-mm", mon.MemoryResource, budget,
-		nil, nil,
-		128 /* small allocation increment */, 100,
-		cluster.MakeTestingClusterSettings())
+	mm := mon.NewMonitor(mon.NewMonitorArgs{
+		Name:       "test-mm",
+		Limit:      budget,
+		Increment:  128, /* small allocation increment */
+		Noteworthy: 100,
+		Settings:   cluster.MakeTestingClusterSettings(),
+	})
 	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(budget))
 	return mm.MakeBoundAccount(), func() { mm.Stop(context.Background()) }
 }

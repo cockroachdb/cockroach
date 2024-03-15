@@ -185,15 +185,10 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 
 	// Imitate a root SQL memory monitor with 1MiB size.
 	const rootPoolSize = 1 << 20 /* 1MiB */
-	rootMemMonitor := mon.NewMonitor(
-		"root", /* name */
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		cluster.MakeTestingClusterSettings(),
-	)
+	rootMemMonitor := mon.NewMonitor(mon.NewMonitorArgs{
+		Name:     "root",
+		Settings: cluster.MakeTestingClusterSettings(),
+	})
 	rootMemMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(rootPoolSize))
 	defer rootMemMonitor.Stop(ctx)
 

@@ -78,24 +78,14 @@ type testModelRunner struct {
 // be called before using it.
 func newTestModelRunner(t *testing.T) testModelRunner {
 	st := cluster.MakeTestingClusterSettings()
-	workerMonitor := mon.NewUnlimitedMonitor(
-		context.Background(),
-		"timeseries-test-worker",
-		mon.MemoryResource,
-		nil,
-		nil,
-		math.MaxInt64,
-		st,
-	)
-	resultMonitor := mon.NewUnlimitedMonitor(
-		context.Background(),
-		"timeseries-test-result",
-		mon.MemoryResource,
-		nil,
-		nil,
-		math.MaxInt64,
-		st,
-	)
+	workerMonitor := mon.NewUnlimitedMonitor(context.Background(), mon.NewMonitorArgs{
+		Name:     "timeseries-test-worker",
+		Settings: st,
+	})
+	resultMonitor := mon.NewUnlimitedMonitor(context.Background(), mon.NewMonitorArgs{
+		Name:     "timeseries-test-result",
+		Settings: st,
+	})
 	return testModelRunner{
 		t:                      t,
 		model:                  testmodel.NewModelDB(),

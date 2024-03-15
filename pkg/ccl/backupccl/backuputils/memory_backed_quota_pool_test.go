@@ -23,16 +23,12 @@ import (
 )
 
 func getMemoryMonitor(limit int64) *mon.BytesMonitor {
-	return mon.NewMonitorWithLimit(
-		"test-mon", /* name */
-		mon.MemoryResource,
-		limit,
-		nil, /* curCount */
-		nil, /* maxHist */
-		1,   /* increment */
-		0,   /* noteworthy */
-		cluster.MakeTestingClusterSettings(),
-	)
+	return mon.NewMonitor(mon.NewMonitorArgs{
+		Name:      "test-mon",
+		Limit:     limit,
+		Increment: 1,
+		Settings:  cluster.MakeTestingClusterSettings(),
+	})
 }
 
 func TestMemoryBackedQuotaPool(t *testing.T) {

@@ -1463,15 +1463,11 @@ func NewStore(
 	s.replRankings = NewReplicaRankings()
 	s.replRankingsByTenant = NewReplicaRankingsMap()
 
-	s.raftRecvQueues.mon = mon.NewUnlimitedMonitor(
-		ctx,
-		"raft-receive-queue",
-		mon.MemoryResource,
-		s.metrics.RaftRcvdQueuedBytes,
-		nil,
-		math.MaxInt64,
-		cfg.Settings,
-	)
+	s.raftRecvQueues.mon = mon.NewUnlimitedMonitor(ctx, mon.NewMonitorArgs{
+		Name:     "raft-receive-queue",
+		CurCount: s.metrics.RaftRcvdQueuedBytes,
+		Settings: cfg.Settings,
+	})
 
 	s.cfg.RangeLogWriter = newWrappedRangeLogWriter(
 		s.metrics.getCounterForRangeLogEventType,

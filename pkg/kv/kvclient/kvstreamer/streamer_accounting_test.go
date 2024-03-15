@@ -68,15 +68,10 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 		return res
 	}
 
-	monitor := mon.NewMonitor(
-		"streamer", /* name */
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		cluster.MakeTestingClusterSettings(),
-	)
+	monitor := mon.NewMonitor(mon.NewMonitorArgs{
+		Name:     "streamer",
+		Settings: cluster.MakeTestingClusterSettings(),
+	})
 	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer monitor.Stop(ctx)
 	acc := monitor.MakeBoundAccount()

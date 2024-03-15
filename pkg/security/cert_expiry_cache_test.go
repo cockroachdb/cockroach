@@ -12,7 +12,6 @@ package security_test
 
 import (
 	"context"
-	"math"
 	"sync"
 	"testing"
 
@@ -218,15 +217,10 @@ func newCache(
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	security.ClientCertExpirationCacheCapacity.Override(ctx, &st.SV, int64(capacity))
-	parentMon := mon.NewUnlimitedMonitor(
-		ctx,
-		"test", /* name */
-		mon.MemoryResource,
-		nil, /* currCount */
-		nil, /* maxHist */
-		math.MaxInt64,
-		st,
-	)
+	parentMon := mon.NewUnlimitedMonitor(ctx, mon.NewMonitorArgs{
+		Name:     "test",
+		Settings: st,
+	})
 	cache := security.NewClientCertExpirationCache(ctx, st, stopper, clock, parentMon)
 	return cache, aggmetric.MakeBuilder(security.SQLUserLabel).Gauge(metric.Metadata{})
 }

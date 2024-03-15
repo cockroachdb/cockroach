@@ -271,15 +271,11 @@ func TestRollupMemoryConstraint(t *testing.T) {
 
 	// Construct a memory monitor that will be used to measure the high-water
 	// mark of memory usage for the rollup process.
-	adjustedMon := mon.NewMonitor(
-		"timeseries-test-worker-adjusted",
-		mon.MemoryResource,
-		nil,
-		nil,
-		1,
-		math.MaxInt64,
-		cluster.MakeTestingClusterSettings(),
-	)
+	adjustedMon := mon.NewMonitor(mon.NewMonitorArgs{
+		Name:      "timeseries-test-worker-adjusted",
+		Increment: 1,
+		Settings:  cluster.MakeTestingClusterSettings(),
+	})
 	adjustedMon.StartNoReserved(context.Background(), tm.workerMemMonitor)
 	defer adjustedMon.Stop(context.Background())
 

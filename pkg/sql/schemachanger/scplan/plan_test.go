@@ -14,7 +14,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 	"testing"
@@ -272,15 +271,10 @@ func TestExplainPlanIsMemoryMonitored(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	monitor := mon.NewMonitor(
-		"test-sc-plan-mon",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		tt.ClusterSettings(),
-	)
+	monitor := mon.NewMonitor(mon.NewMonitorArgs{
+		Name:     "test-sc-plan-mon",
+		Settings: tt.ClusterSettings(),
+	})
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(5.243e+6 /* 5MiB */))
 	memAcc := monitor.MakeBoundAccount()
 	plan := sctestutils.MakePlan(t, incumbent, scop.EarliestPhase, &memAcc)
