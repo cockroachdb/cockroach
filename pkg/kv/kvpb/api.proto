@@ -498,6 +498,10 @@ message DeleteRangeRequest {
 //
 // To pass DeleteRangePredicates, the client must also pass UseRangeTombstone.
 message DeleteRangePredicates {
+  // ImportEpoch specifies that all keys with a non-zero
+  // MVCCValueHeader.ImportEpoch == ImportEmpoch should be deleted.
+  uint32 import_epoch = 1;
+
   // StartTime specifies an exclusive lower bound to surface keys
   // for deletion. If specified, DeleteRange will only issue tombstones to keys
   // within the span [startKey, endKey) that also have MVCC versions with
