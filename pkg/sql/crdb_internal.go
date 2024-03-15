@@ -1807,7 +1807,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   latency_seconds_max FLOAT,
   latency_seconds_p50 FLOAT,
   latency_seconds_p90 FLOAT,
-  latency_seconds_p99 FLOAT
+  latency_seconds_p99 FLOAT,
+  failure_count INT NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		shouldRedactError := false
@@ -1852,9 +1853,6 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			var flags string
 			if stats.Key.DistSQL {
 				flags = "+"
-			}
-			if stats.Key.Failed {
-				flags = "!" + flags
 			}
 
 			samplePlan := sqlstatsutil.ExplainTreePlanNodeToJSON(&stats.Stats.SensitiveInfo.MostRecentPlanDescription)
@@ -1961,6 +1959,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.P50)), // latency_seconds_p50
 				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.P90)), // latency_seconds_p90
 				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.P99)), // latency_seconds_p99
+				alloc.NewDInt(tree.DInt(stats.Stats.FailureCount)),        // failure_count
 			)
 			if err != nil {
 				return err

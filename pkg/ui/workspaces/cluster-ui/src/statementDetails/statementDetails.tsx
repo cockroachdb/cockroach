@@ -570,7 +570,6 @@ export class StatementDetails extends React.Component<
       app_names,
       databases,
       fingerprint_id,
-      failed_count,
       full_scan_count,
       vec_count,
       total_count,
@@ -596,6 +595,7 @@ export class StatementDetails extends React.Component<
     );
 
     const statementSampled = stats.exec_stats.count > Long.fromNumber(0);
+    const failureCount = stats.failure_count;
     const unavailableTooltip = !statementSampled && (
       <div>
         This metric is part of the statement execution and therefore will not be
@@ -768,8 +768,8 @@ export class StatementDetails extends React.Component<
             <Col className="gutter-row" span={12}>
               <SummaryCard className={cx("summary-card")}>
                 <SummaryCardItem
-                  label="Failed?"
-                  value={RenderCount(failed_count, total_count)}
+                  label="Failure Count"
+                  value={Count(failureCount.toNumber())}
                 />
                 <SummaryCardItem
                   label="Full scan?"

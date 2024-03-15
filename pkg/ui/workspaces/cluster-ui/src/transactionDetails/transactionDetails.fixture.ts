@@ -135,7 +135,6 @@ export const transactionDetailsData: StatementsResponse = {
           query: "SELECT * FROM crdb_internal.node_build_info",
           app: "$ cockroach sql",
           distSQL: false,
-          failed: false,
           implicit_txn: true,
           vec: true,
           full_scan: false,
@@ -151,6 +150,7 @@ export const transactionDetailsData: StatementsResponse = {
       },
       stats: {
         count: new Long(1),
+        failure_count: new Long(0),
         first_attempt_count: new Long(1),
         max_retries: new Long(0),
         legacy_last_err: "",
@@ -245,7 +245,6 @@ export const transactionDetailsData: StatementsResponse = {
           query: "SET sql_safe_updates = _",
           app: "$ cockroach sql",
           distSQL: false,
-          failed: false,
           implicit_txn: true,
           vec: true,
           full_scan: false,
@@ -261,6 +260,7 @@ export const transactionDetailsData: StatementsResponse = {
       },
       stats: {
         count: new Long(1),
+        failure_count: new Long(0),
         first_attempt_count: new Long(1),
         max_retries: new Long(0),
         legacy_last_err: "",
@@ -349,7 +349,6 @@ export const transactionDetailsData: StatementsResponse = {
           query: "SELECT * FROM users",
           app: "$ cockroach sql",
           distSQL: false,
-          failed: false,
           implicit_txn: true,
           vec: true,
           full_scan: true,
@@ -365,6 +364,7 @@ export const transactionDetailsData: StatementsResponse = {
       },
       stats: {
         count: new Long(2),
+        failure_count: new Long(0),
         first_attempt_count: new Long(2),
         max_retries: new Long(0),
         legacy_last_err: "",

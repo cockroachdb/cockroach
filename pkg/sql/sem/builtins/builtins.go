@@ -4560,7 +4560,6 @@ value if you rely on the HLC for accuracy.`,
 					metadata.Databases = util.CombineUnique(metadata.Databases, other.Databases)
 
 					metadata.DistSQLCount += other.DistSQLCount
-					metadata.FailedCount += other.FailedCount
 					metadata.FullScanCount += other.FullScanCount
 					metadata.VecCount += other.VecCount
 					metadata.TotalCount += other.TotalCount

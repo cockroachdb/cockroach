@@ -85,7 +85,6 @@ func (s *Container) RecordStatement(
 		key.Query,
 		key.ImplicitTxn,
 		key.Database,
-		key.Failed,
 		key.PlanHash,
 		key.TransactionFingerprintID,
 		createIfNonExistent,
@@ -110,9 +109,10 @@ func (s *Container) RecordStatement(
 	defer stats.mu.Unlock()
 
 	stats.mu.data.Count++
-	if key.Failed {
+	if value.Failed {
 		stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
 		stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
+		stats.mu.data.FailureCount++
 	}
 	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
 	if value.Plan != nil {
@@ -258,7 +258,6 @@ func (s *Container) RecordStatementExecStats(
 			key.Query,
 			key.ImplicitTxn,
 			key.Database,
-			key.Failed,
 			key.PlanHash,
 			key.TransactionFingerprintID,
 			false, /* createIfNotExists */
