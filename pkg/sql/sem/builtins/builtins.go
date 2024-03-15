@@ -7265,12 +7265,12 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+				hasPriv, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(ctx, privilege.REPAIRCLUSTERMETADATA)
 				if err != nil {
 					return nil, err
 				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.reset_sql_stats() requires admin privilege")
+				if !hasPriv {
+					return nil, errors.New("crdb_internal.reset_sql_stats() requires REPAIRCLUSTERMETADATA privilege")
 				}
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
@@ -7293,12 +7293,12 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+				hasPriv, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(ctx, privilege.REPAIRCLUSTERMETADATA)
 				if err != nil {
 					return nil, err
 				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.reset_activity_tables() requires admin privilege")
+				if !hasPriv {
+					return nil, errors.New("crdb_internal.reset_activity_tables() requires REPAIRCLUSTERMETADATA privilege")
 				}
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
@@ -7321,12 +7321,12 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+				hasPriv, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(ctx, privilege.REPAIRCLUSTERMETADATA)
 				if err != nil {
 					return nil, err
 				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.reset_insights_tables() requires admin privilege")
+				if !hasPriv {
+					return nil, errors.New("crdb_internal.reset_insights_tables() requires REPAIRCLUSTERMETADATA privilege")
 				}
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
