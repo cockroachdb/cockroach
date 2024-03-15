@@ -251,7 +251,6 @@ func newCFetcherWrapper(
 	// against the memory account provided by the caller.
 	detachedFetcherMon := mon.NewMonitor(mon.Options{
 		Name:     "cfetcher-wrapper-detached-monitor",
-		Settings: st,
 	})
 	detachedFetcherMon.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	detachedFetcherAcc := detachedFetcherMon.MakeBoundAccount()

@@ -848,7 +848,7 @@ func getStreamIngestionProcessor(
 		return nil, nil, errors.AssertionFailedf("non-nil streamclient required")
 	}
 
-	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer testDiskMonitor.Stop(ctx)
 
 	flowCtx := execinfra.FlowCtx{

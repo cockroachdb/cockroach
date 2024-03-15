@@ -493,7 +493,6 @@ func (c *copyMachine) initMonitoring(ctx context.Context, parentMon *mon.BytesMo
 		Name:     "copy",
 		CurCount: memMetrics.CurBytesCount,
 		MaxHist:  memMetrics.MaxBytesHist,
-		Settings: c.p.ExecCfg().Settings,
 	})
 	c.copyMon.StartNoReserved(ctx, parentMon)
 	c.bufMemAcc = c.copyMon.MakeBoundAccount()

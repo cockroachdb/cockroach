@@ -15,7 +15,6 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -23,10 +22,8 @@ import (
 )
 
 func TestCache(t *testing.T) {
-	st := cluster.MakeTestingClusterSettings()
 	memoryMonitor := mon.NewMonitor(mon.Options{
 		Name:     "test-mem",
-		Settings: st,
 	})
 	stopper := &stop.Stopper{}
 	ctx := context.Background()

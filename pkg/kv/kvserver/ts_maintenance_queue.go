@@ -98,7 +98,6 @@ func newTimeSeriesMaintenanceQueue(
 		db:             db,
 		mem: mon.NewUnlimitedMonitor(context.Background(), mon.Options{
 			Name:     "timeseries-maintenance-queue",
-			Settings: store.cfg.Settings,
 		}),
 	}
 	q.baseQueue = newBaseQueue(

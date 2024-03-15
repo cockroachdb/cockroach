@@ -51,7 +51,7 @@ func TestSpanAssembler(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	testMemMonitor := execinfra.NewTestMemMonitor(ctx)
 	defer testMemMonitor.Stop(ctx)
 	nTuples := 3 * coldata.BatchSize()
 	memAcc := testMemMonitor.MakeBoundAccount()

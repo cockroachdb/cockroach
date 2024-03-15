@@ -80,7 +80,6 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 				}
 				memMon := mon.NewMonitor(mon.Options{
 					Name:     "MemoryMonitor",
-					Settings: st,
 				})
 				if success {
 					memMon.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
@@ -208,7 +207,6 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				}
 				memMon := mon.NewMonitor(mon.Options{
 					Name:     "MemoryMonitor",
-					Settings: st,
 				})
 				flowCtx.Cfg.TestingKnobs = execinfra.TestingKnobs{}
 				if expectNoMemoryError {

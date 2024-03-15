@@ -89,7 +89,6 @@ func NewServer(
 			// setupFlow.
 			CurCount: nil,
 			MaxHist:  nil,
-			Settings: cfg.Settings,
 		}),
 	}
 	ds.memMonitor.StartNoReserved(ctx, cfg.ParentMemoryMonitor)
@@ -266,7 +265,6 @@ func (ds *ServerImpl) setupFlow(
 		Name:     "flow " + redact.RedactableString(req.Flow.FlowID.Short()),
 		CurCount: ds.Metrics.CurBytesCount,
 		MaxHist:  ds.Metrics.MaxBytesHist,
-		Settings: ds.Settings,
 	})
 	monitor.Start(ctx, parentMonitor, reserved)
 	diskMonitor = execinfra.NewMonitor(ctx, ds.ParentDiskMonitor, "flow-disk-monitor")

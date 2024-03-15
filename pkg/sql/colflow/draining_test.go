@@ -43,7 +43,6 @@ func TestDrainingAfterRemoteError(t *testing.T) {
 	diskMonitor := mon.NewMonitor(mon.Options{
 		Name:     "test-disk",
 		Res:      mon.DiskResource,
-		Settings: st,
 	})
 	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(1))
 

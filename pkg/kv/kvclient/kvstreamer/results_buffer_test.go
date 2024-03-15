@@ -50,7 +50,6 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	diskMonitor := mon.NewMonitor(mon.Options{
 		Name:     "test-disk",
 		Res:      mon.DiskResource,
-		Settings: st,
 	})
 	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)

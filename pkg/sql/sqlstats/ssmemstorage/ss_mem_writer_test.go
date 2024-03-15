@@ -45,7 +45,7 @@ func TestRecordStatement(t *testing.T) {
 		}
 		memContainer := New(settings,
 			nil, /* uniqueServerCount */
-			testMonitor(ctx, "test-mon", settings),
+			testMonitor(ctx, "test-mon"),
 			"test-app",
 			knobs,
 			nil, /* insightsWriter */
@@ -80,7 +80,7 @@ func TestRecordTransaction(t *testing.T) {
 		}
 		memContainer := New(settings,
 			nil, /* uniqueServerCount */
-			testMonitor(ctx, "test-mon", settings),
+			testMonitor(ctx, "test-mon"),
 			"test-app",
 			knobs,
 			nil, /* insightsWriter */
@@ -92,9 +92,8 @@ func TestRecordTransaction(t *testing.T) {
 	})
 }
 
-func testMonitor(ctx context.Context, name string, settings *cluster.Settings) *mon.BytesMonitor {
+func testMonitor(ctx context.Context, name string) *mon.BytesMonitor {
 	return mon.NewUnlimitedMonitor(ctx, mon.Options{
 		Name:     redact.RedactableString(name),
-		Settings: settings,
 	})
 }

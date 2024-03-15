@@ -46,8 +46,8 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	defer tempEngine.Close()
 
 	// These monitors are started and stopped by subtests.
-	memoryMonitor := getMemoryMonitor(st)
-	diskMonitor := getDiskMonitor(st)
+	memoryMonitor := getMemoryMonitor()
+	diskMonitor := getDiskMonitor()
 
 	const numRows = 10
 	const numCols = 1
@@ -316,8 +316,8 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 	defer tempEngine.Close()
 
 	// These monitors are started and stopped by subtests.
-	memoryMonitor := getMemoryMonitor(st)
-	diskMonitor := getDiskMonitor(st)
+	memoryMonitor := getMemoryMonitor()
+	diskMonitor := getDiskMonitor()
 
 	const numRowsInBucket = 4
 	const numRows = 12

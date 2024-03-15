@@ -1475,7 +1475,6 @@ func NewStore(
 	s.raftRecvQueues.mon = mon.NewUnlimitedMonitor(ctx, mon.Options{
 		Name:     "raft-receive-queue",
 		CurCount: s.metrics.RaftRcvdQueuedBytes,
-		Settings: cfg.Settings,
 	})
 
 	s.cfg.RangeLogWriter = newWrappedRangeLogWriter(

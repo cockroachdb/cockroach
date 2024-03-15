@@ -24,7 +24,6 @@ go_test(
     embed = [":backuputils"],
     tags = ["ccl_test"],
     deps = [
-        "//pkg/settings/cluster",
         "//pkg/util/leaktest",
         "//pkg/util/mon",
         "//pkg/util/quotapool",

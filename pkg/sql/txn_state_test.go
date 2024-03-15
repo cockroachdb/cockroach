@@ -66,7 +66,6 @@ func makeTestContext(stopper *stop.Stopper) testContext {
 		mockDB: kv.NewDB(ambient, factory, clock, stopper),
 		mon: mon.NewMonitor(mon.Options{
 			Name:     "test root mon",
-			Settings: settings,
 		}),
 		tracer:   ambient.Tracer,
 		ctx:      context.Background(),
@@ -81,7 +80,6 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 
 	txnStateMon := mon.NewMonitor(mon.Options{
 		Name:     "test mon",
-		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	txnStateMon.StartNoReserved(tc.ctx, tc.mon)
 
@@ -123,7 +121,6 @@ func (tc *testContext) createCommitWaitState() (fsm.State, *txnState, error) {
 func (tc *testContext) createNoTxnState() (fsm.State, *txnState) {
 	txnStateMon := mon.NewMonitor(mon.Options{
 		Name:     "test mon",
-		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	ts := txnState{mon: txnStateMon, connCtx: tc.ctx}
 	return stateNoTxn{}, &ts

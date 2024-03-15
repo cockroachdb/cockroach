@@ -24,7 +24,6 @@ func getMemoryMonitor(s *cluster.Settings) *mon.BytesMonitor {
 	return mon.NewMonitor(mon.Options{
 		Name:      "rangefeed",
 		Increment: 1,
-		Settings:  s,
 	})
 }
 

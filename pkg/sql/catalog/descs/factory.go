@@ -89,7 +89,6 @@ func NewCollectionFactory(
 		spanConfigLimiter:  spanConfigLimiter,
 		defaultMonitor: mon.NewUnlimitedMonitor(ctx, mon.Options{
 			Name:     "CollectionFactoryDefaultUnlimitedMonitor",
-			Settings: settings,
 		}),
 		defaultDescriptorSessionDataProvider: defaultDescriptorSessionDataProvider,
 	}

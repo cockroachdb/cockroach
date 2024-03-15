@@ -512,7 +512,6 @@ func DefaultTestTempStorageConfigWithSize(
 		Name:      "in-mem temp storage",
 		Res:       mon.DiskResource,
 		Increment: 1024 * 1024,
-		Settings:  st,
 	})
 	monitor.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{

@@ -440,7 +440,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	monitor := mon.NewUnlimitedMonitor(ctx, mon.Options{
 		Name:     "test",
-		Settings: st,
 	})
 
 	insightsProvider := insights.New(st, insights.NewMetrics())
@@ -556,7 +555,6 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 	updater := st.MakeUpdater()
 	monitor := mon.NewUnlimitedMonitor(ctx, mon.Options{
 		Name:     "test",
-		Settings: st,
 	})
 
 	testutils.RunTrueAndFalse(t, "enabled", func(t *testing.T, enabled bool) {
@@ -1587,7 +1585,6 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	monitor := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
 		Name:     "test",
-		Settings: st,
 	})
 	insightsProvider := insights.New(st, insights.NewMetrics())
 

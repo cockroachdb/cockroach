@@ -187,7 +187,6 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	const rootPoolSize = 1 << 20 /* 1MiB */
 	rootMemMonitor := mon.NewMonitor(mon.Options{
 		Name:     "root",
-		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	rootMemMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(rootPoolSize))
 	defer rootMemMonitor.Stop(ctx)
