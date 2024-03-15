@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
+	"github.com/cockroachdb/cockroach/pkg/util/slidingwindow"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
@@ -1061,7 +1062,10 @@ type Store struct {
 
 	ioThreshold struct {
 		syncutil.Mutex
-		t *admissionpb.IOThreshold // never nil
+		t                 *admissionpb.IOThreshold // never nil
+		maxL0NumSubLevels *slidingwindow.Swag
+		maxL0NumFiles     *slidingwindow.Swag
+		maxL0Size         *slidingwindow.Swag
 	}
 
 	counts struct {
@@ -1413,6 +1417,11 @@ func NewStore(
 		rangeFeedSlowClosedTimestampNudge: singleflight.NewGroup("rangfeed-ct-nudge", "range"),
 	}
 	s.ioThreshold.t = &admissionpb.IOThreshold{}
+	// Track the maxScore over the last 5 minutes, in one minute windows.
+	now := cfg.Clock.Now().GoTime()
+	s.ioThreshold.maxL0NumSubLevels = slidingwindow.NewMaxSwag(now, time.Minute, 5)
+	s.ioThreshold.maxL0NumFiles = slidingwindow.NewMaxSwag(now, time.Minute, 5)
+	s.ioThreshold.maxL0Size = slidingwindow.NewMaxSwag(now, time.Minute, 5)
 	var allocatorStorePool storepool.AllocatorStorePool
 	var storePoolIsDeterministic bool
 	if cfg.StorePool != nil {
@@ -2575,11 +2584,16 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	return s.storeGossip.GossipStore(ctx, useCached)
 }
 
-// UpdateIOThreshold updates the IOThreshold reported in the StoreDescriptor.
+// UpdateIOThreshold updates the IOThreshold and IOThresholdMax reported in the
+// StoreDescriptor.
 func (s *Store) UpdateIOThreshold(ioThreshold *admissionpb.IOThreshold) {
+	now := s.Clock().Now().GoTime()
 	s.ioThreshold.Lock()
 	defer s.ioThreshold.Unlock()
 	s.ioThreshold.t = ioThreshold
+	s.ioThreshold.maxL0NumSubLevels.Record(now, float64(ioThreshold.L0NumSubLevels))
+	s.ioThreshold.maxL0NumFiles.Record(now, float64(ioThreshold.L0NumFiles))
+	s.ioThreshold.maxL0Size.Record(now, float64(ioThreshold.L0Size))
 }
 
 // VisitReplicasOption optionally modifies store.VisitReplicas.
@@ -2925,9 +2939,17 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	capacity.CPUPerSecond = totalStoreCPUTimePerSecond
 	capacity.QueriesPerSecond = totalQueriesPerSecond
 	capacity.WritesPerSecond = totalWritesPerSecond
+	goNow := now.ToTimestamp().GoTime()
 	{
 		s.ioThreshold.Lock()
 		capacity.IOThreshold = *s.ioThreshold.t
+		capacity.IOThresholdMax = *s.ioThreshold.t
+		maxL0NumSubLevels, _ := s.ioThreshold.maxL0NumSubLevels.Query(goNow)
+		maxL0NumFiles, _ := s.ioThreshold.maxL0NumFiles.Query(goNow)
+		maxL0Size, _ := s.ioThreshold.maxL0Size.Query(goNow)
+		capacity.IOThresholdMax.L0NumSubLevels = int64(maxL0NumSubLevels)
+		capacity.IOThresholdMax.L0NumFiles = int64(maxL0NumFiles)
+		capacity.IOThresholdMax.L0Size = int64(maxL0Size)
 		s.ioThreshold.Unlock()
 	}
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
