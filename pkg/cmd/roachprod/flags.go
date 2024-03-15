@@ -94,6 +94,8 @@ var (
 		"user-password": install.AuthUserPassword,
 		"user-cert":     install.AuthUserCert,
 	}
+
+	sshKeyUser string
 )
 
 func initFlags() {
@@ -280,6 +282,10 @@ func initFlags() {
 
 	grafanaDumpCmd.Flags().StringVar(&grafanaDumpDir, "dump-dir", "",
 		"the absolute path to dump prometheus data to (use the contained 'prometheus-docker-run.sh' to visualize")
+
+	sshKeysAddCmd.Flags().StringVar(&sshKeyUser, "user", config.OSUser.Username,
+		"the user to be associated with the new key",
+	)
 
 	jaegerStartCmd.Flags().StringVar(&jaegerConfigNodes, "configure-nodes", "",
 		"the nodes on which to set the relevant CRDB cluster settings")
