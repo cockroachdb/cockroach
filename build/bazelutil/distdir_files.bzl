@@ -1180,7 +1180,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/bmatcuk-doublestar-v4.0.1-0-gf7a8118.tar.gz": "d11c3b3a45574f89d6a6b2f50e53feea50df60407b35f36193bf5815d32c79d1",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-protobuf-3f5d91f.tar.gz": "6d4e7fe1cbd958dee69ce9becbf8892d567f082b6782d3973a118d0aa00807a8",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_foreign_cc-8d34d77.tar.gz": "03afebfc3f173666a3820a29512265c710c3a08d0082ba77469779d3e3af5a11",
-    "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-457-gd2ae515.tar.gz": "d667ccdf672d5190d33f91ad0460cb7b69a21dc39124a4a9ded8621265302df7",
+    "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-458-g0e7e4e3.tar.gz": "c47bbf3fedda339cf41e9a17964bc76a404e4cb2f1213067cc42b453e8a2eb38",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/google-starlark-go-e043a3d.tar.gz": "a35c6468e0e0921833a63290161ff903295eaaf5915200bbce272cbc8dfd1c1c",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/googleapis-83c3605afb5a39952bf0a0809875d41cf2a558ca.zip": "ba694861340e792fd31cb77274eacaf6e4ca8bda97707898f41d8bebfd8a4984",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/platforms-0.0.4.tar.gz": "079945598e4b6cc075846f7fd6a9d0857c33a7afc0de868c2ccb96405225135d",
