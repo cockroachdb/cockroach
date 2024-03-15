@@ -12,7 +12,6 @@ package sql_test
 
 import (
 	"context"
-	"math"
 	"reflect"
 	"strings"
 	"sync"
@@ -627,7 +626,10 @@ func TestMergeProcessor(t *testing.T) {
 		settings := server.ClusterSettings()
 		execCfg := server.ExecutorConfig().(sql.ExecutorConfig)
 		evalCtx := eval.Context{Settings: settings, Codec: codec}
-		mm := mon.NewUnlimitedMonitor(ctx, "MemoryMonitor", mon.MemoryResource, nil, nil, math.MaxInt64, settings)
+		mm := mon.NewUnlimitedMonitor(ctx, mon.Options{
+			Name:     "MemoryMonitor",
+			Settings: settings,
+		})
 		flowCtx := execinfra.FlowCtx{
 			Cfg: &execinfra.ServerConfig{
 				DB:                execCfg.InternalDB,

@@ -325,25 +325,30 @@ func MakeServer(
 
 		tenantMetrics: newTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
 	}
-	server.sqlMemoryPool = mon.NewMonitor("sql",
-		mon.MemoryResource,
+	server.sqlMemoryPool = mon.NewMonitor(mon.Options{
+		Name: "sql",
 		// Note that we don't report metrics on this monitor. The reason for this is
 		// that we report metrics on the sum of all the child monitors of this pool.
 		// This monitor is the "main sql" monitor. It's a child of the root memory
 		// monitor. Its children are the sql monitors for each new connection. The
 		// sum of those children, plus the extra memory in the "conn" monitor below,
 		// is more than enough metrics information about the monitors.
-		nil, /* curCount */
-		nil, /* maxHist */
-		0, noteworthySQLMemoryUsageBytes, st)
+		CurCount:   nil,
+		MaxHist:    nil,
+		Noteworthy: noteworthySQLMemoryUsageBytes,
+		Settings:   st,
+	})
 	server.sqlMemoryPool.StartNoReserved(ctx, parentMemoryMonitor)
 	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
 
-	server.tenantSpecificConnMonitor = mon.NewMonitor("conn",
-		mon.MemoryResource,
-		server.tenantMetrics.ConnMemMetrics.CurBytesCount,
-		server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
-		int64(connReservationBatchSize)*baseSQLMemoryBudget, noteworthyConnMemoryUsageBytes, st)
+	server.tenantSpecificConnMonitor = mon.NewMonitor(mon.Options{
+		Name:       "conn",
+		CurCount:   server.tenantMetrics.ConnMemMetrics.CurBytesCount,
+		MaxHist:    server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
+		Increment:  int64(connReservationBatchSize) * baseSQLMemoryBudget,
+		Noteworthy: noteworthyConnMemoryUsageBytes,
+		Settings:   st,
+	})
 	server.tenantSpecificConnMonitor.StartNoReserved(ctx, server.sqlMemoryPool)
 
 	server.mu.Lock()

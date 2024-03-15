@@ -51,7 +51,11 @@ func TestMemoryAllocations(t *testing.T) {
 	var pool *BytesMonitor
 	var paramHeader func()
 
-	m := NewMonitor("test", MemoryResource, nil, nil, 0, 1000, st)
+	m := NewMonitor(Options{
+		Name:       "test",
+		Noteworthy: 1000,
+		Settings:   st,
+	})
 	m.StartNoReserved(ctx, nil /* pool */)
 	accs := make([]BoundAccount, 4)
 	for i := range accs {
@@ -159,7 +163,12 @@ func TestMemoryAllocations(t *testing.T) {
 
 					// We start with a fresh monitor for every set of
 					// parameters.
-					m = NewMonitor("test", MemoryResource, nil, nil, pa, 1000, st)
+					m = NewMonitor(Options{
+						Name:       "test",
+						Increment:  pa,
+						Noteworthy: 1000,
+						Settings:   st,
+					})
 					m.Start(ctx, pool, NewStandaloneBudget(pb))
 
 					for i := 0; i < numAccountOps; i++ {
@@ -332,8 +341,13 @@ func TestBytesMonitor(t *testing.T) {
 		t.Fatalf("incorrect current allocation: got %d, expected %d", m.mu.curAllocated, 0)
 	}
 
-	limitedMonitor := NewMonitorWithLimit(
-		"testlimit", MemoryResource, 10, nil, nil, 1, 1000, cluster.MakeTestingClusterSettings())
+	limitedMonitor := NewMonitor(Options{
+		Name:       "testlimit",
+		Limit:      10,
+		Increment:  1,
+		Noteworthy: 1000,
+		Settings:   cluster.MakeTestingClusterSettings(),
+	})
 	limitedMonitor.StartNoReserved(ctx, m)
 
 	if err := limitedMonitor.reserveBytes(ctx, 10); err != nil {
@@ -353,8 +367,12 @@ func TestMemoryAllocationEdgeCases(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	m := NewMonitor("test", MemoryResource,
-		nil /* curCount */, nil /* maxHist */, 1e9 /* increment */, 1e9 /* noteworthy */, st)
+	m := NewMonitor(Options{
+		Name:       "test",
+		Increment:  1e9,
+		Noteworthy: 1e9,
+		Settings:   st,
+	})
 	m.Start(ctx, nil, NewStandaloneBudget(1e9))
 
 	a := m.MakeBoundAccount()
@@ -374,8 +392,12 @@ func TestMultiSharedGauge(t *testing.T) {
 	resourceGauge := metric.NewGauge(metric.Metadata{})
 	minAllocation := int64(1000)
 
-	parent := NewMonitor("root", MemoryResource, resourceGauge, nil, minAllocation, 0,
-		cluster.MakeTestingClusterSettings())
+	parent := NewMonitor(Options{
+		Name:      "root",
+		CurCount:  resourceGauge,
+		Increment: minAllocation,
+		Settings:  cluster.MakeTestingClusterSettings(),
+	})
 	parent.Start(ctx, nil, NewStandaloneBudget(100000))
 
 	child := NewMonitorInheritWithLimit("child", 20000, parent)
@@ -398,10 +420,12 @@ func TestReservedAccountCleared(t *testing.T) {
 	reserved := root.MakeBoundAccount()
 	require.NoError(t, reserved.Grow(ctx, 100))
 
-	m := NewMonitor(
-		"test" /* name */, MemoryResource, nil /* curCount */, nil, /* maxHist */
-		1 /* increment */, 1000 /* noteworthy */, st,
-	)
+	m := NewMonitor(Options{
+		Name:       "test",
+		Increment:  1,
+		Noteworthy: 1000,
+		Settings:   st,
+	})
 	m.Start(ctx, nil /* pool */, &reserved)
 	acc := m.MakeBoundAccount()
 
@@ -430,7 +454,11 @@ func getMonitor(
 func getMonitorEx(
 	ctx context.Context, st *cluster.Settings, name string, parent *BytesMonitor, reservedBytes int64,
 ) *BytesMonitor {
-	m := NewMonitor(redact.RedactableString(name), MemoryResource, nil, nil, 1, math.MaxInt64, st)
+	m := NewMonitor(Options{
+		Name:      redact.RedactableString(name),
+		Increment: 1,
+		Settings:  st,
+	})
 	m.Start(ctx, parent, NewStandaloneBudget(reservedBytes))
 	return m
 }
@@ -603,9 +631,12 @@ func TestBytesMonitorNoDeadlocks(t *testing.T) {
 
 func BenchmarkBoundAccountGrow(b *testing.B) {
 	ctx := context.Background()
-	m := NewMonitor("test", MemoryResource,
-		nil /* curCount */, nil /* maxHist */, 1e9 /* increment */, 1e9, /* noteworthy */
-		cluster.MakeTestingClusterSettings())
+	m := NewMonitor(Options{
+		Name:       "test",
+		Increment:  1e9,
+		Noteworthy: 1e9,
+		Settings:   cluster.MakeTestingClusterSettings(),
+	})
 	m.Start(ctx, nil, NewStandaloneBudget(1e9))
 
 	a := m.MakeBoundAccount()
@@ -663,7 +694,11 @@ func TestLimit(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
-	m := NewMonitor("test", MemoryResource, nil, nil, 0, 1000, st)
+	m := NewMonitor(Options{
+		Name:       "test",
+		Noteworthy: 1000,
+		Settings:   st,
+	})
 
 	m.StartNoReserved(ctx, nil /* pool */)
 	require.Equal(t, int64(0), m.Limit())
@@ -673,7 +708,11 @@ func TestLimit(t *testing.T) {
 	require.Equal(t, int64(1000), m.Limit())
 	m.Stop(ctx)
 
-	m2 := NewMonitor("test", MemoryResource, nil, nil, 0, 1000, st)
+	m2 := NewMonitor(Options{
+		Name:       "test",
+		Noteworthy: 1000,
+		Settings:   st,
+	})
 
 	m2.StartNoReserved(ctx, m)
 	require.Equal(t, int64(1000), m2.Limit())

@@ -93,11 +93,9 @@ func TestRecordTransaction(t *testing.T) {
 }
 
 func testMonitor(ctx context.Context, name string, settings *cluster.Settings) *mon.BytesMonitor {
-	return mon.NewUnlimitedMonitor(ctx,
-		redact.RedactableString(name),
-		mon.MemoryResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		1,   /* noteworthy */
-		settings)
+	return mon.NewUnlimitedMonitor(ctx, mon.Options{
+		Name:       redact.RedactableString(name),
+		Noteworthy: 1,
+		Settings:   settings,
+	})
 }
