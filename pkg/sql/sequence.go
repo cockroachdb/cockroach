@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -155,41 +157,50 @@ func (p *planner) incrementSequenceUsingCache(
 		cacheSize = seqOpts.EffectiveCacheSize()
 	}
 
-	fetchNextValues := func() (currentValue, incrementAmount, sizeOfCache int64, err error) {
+	fetchNextValues := func() (nextValue, incrementAmount, sizeOfCache int64, err error) {
 		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(sequenceID))
-
-		// The planner txn is only used if the sequence is accessed in the same
-		// transaction that it was created. Otherwise, we *do not* use the planner
-		// txn here, since nextval does not respect transaction boundaries.
-		// This matches the specification at
-		// https://www.postgresql.org/docs/14/functions-sequence.html.
+		sizeOfCache = cacheSize
+		incrementAmount = seqOpts.Increment
+		var res kv.KeyValue
+		var currentValue int64
 		var endValue int64
+
+		var getSequenceValueFunc func() (kv.KeyValue, error)
+		var cputSequenceValueFunc func() error
 		if createdInCurrentTxn {
-			var res kv.KeyValue
-			res, err = p.txn.Inc(ctx, seqValueKey, seqOpts.Increment*cacheSize)
-			endValue = res.ValueInt()
+			// The planner txn is only used if the sequence is accessed in the same
+			// transaction that it was created. Otherwise, we *do not* use the planner
+			// txn here, since nextval does not respect transaction boundaries.
+			// This matches the specification at
+			// https://www.postgresql.org/docs/14/functions-sequence.html.
+			getSequenceValueFunc = func() (kv.KeyValue, error) {
+				return p.txn.Get(ctx, seqValueKey)
+			}
+			cputSequenceValueFunc = func() error {
+				return p.txn.CPut(ctx, seqValueKey, endValue, res.Value.TagAndDataBytes())
+			}
 		} else {
-			endValue, err = kv.IncrementValRetryable(
-				ctx, p.ExecCfg().DB, seqValueKey, seqOpts.Increment*cacheSize)
+			getSequenceValueFunc = func() (kv.KeyValue, error) {
+				return p.ExecCfg().DB.Get(ctx, seqValueKey)
+			}
+			cputSequenceValueFunc = func() error {
+				return p.ExecCfg().DB.CPut(ctx, seqValueKey, endValue, res.Value.TagAndDataBytes())
+			}
 		}
 
+		// Get the current value of the sequence.
+		res, err = getSequenceValueFunc()
 		if err != nil {
-			if errors.HasType(err, (*kvpb.IntegerOverflowError)(nil)) {
-				return 0, 0, 0, boundsExceededError(descriptor)
-			}
 			return 0, 0, 0, err
 		}
+		currentValue = res.ValueInt()
+		endValue = currentValue + incrementAmount*sizeOfCache
 
-		// This sequence has exceeded its bounds after performing this increment.
+		// If the endValue is outside the limits of the sequence,
+		// the cache will only increment upto the limit.
 		if endValue > seqOpts.MaxValue || endValue < seqOpts.MinValue {
-			// If the sequence exceeded its bounds prior to the increment, then return an error.
-			if (seqOpts.Increment > 0 && endValue-seqOpts.Increment*(cacheSize-1) > seqOpts.MaxValue) ||
-				(seqOpts.Increment < 0 && endValue-seqOpts.Increment*(cacheSize-1) < seqOpts.MinValue) {
-				return 0, 0, 0, boundsExceededError(descriptor)
-			}
-			// Otherwise, values between the limit and the value prior to incrementing can be cached.
 			limit := seqOpts.MaxValue
-			if seqOpts.Increment < 0 {
+			if incrementAmount < 0 {
 				limit = seqOpts.MinValue
 			}
 			abs := func(i int64) int64 {
@@ -198,28 +209,54 @@ func (p *planner) incrementSequenceUsingCache(
 				}
 				return i
 			}
-			currentValue = endValue - seqOpts.Increment*(cacheSize-1)
-			incrementAmount = seqOpts.Increment
-			sizeOfCache = abs(limit-(endValue-seqOpts.Increment*cacheSize)) / abs(seqOpts.Increment)
-			return currentValue, incrementAmount, sizeOfCache, nil
+			// Calculate the size of the cache the last value before the limit.
+			sizeOfCache = abs((limit - currentValue) / incrementAmount)
+			endValue = currentValue + incrementAmount*(sizeOfCache)
+			// If sizeOfCache is zero, the sequence is already out of bounds.
+			if sizeOfCache == 0 {
+				return 0, 0, 0, boundsExceededError(descriptor)
+			}
 		}
 
-		return endValue - seqOpts.Increment*(cacheSize-1), seqOpts.Increment, cacheSize, nil
+		// Write increased sequence value with CPut ensuring value consistency between calculations.
+		err = cputSequenceValueFunc()
+		if err != nil {
+			if errors.HasType(err, (*kvpb.IntegerOverflowError)(nil)) {
+				return 0, 0, 0, boundsExceededError(descriptor)
+			}
+			return 0, 0, 0, err
+		}
+
+		nextValue = currentValue + incrementAmount
+		return nextValue, incrementAmount, sizeOfCache, nil
+	}
+
+	// Wrap fetchNextValues with a retry function if cput fails to match the expected value.
+	// This can happen if multiple users or transcations update the sequence at once.
+	fetchNextValuesRetry := func() (nextValue, incrementAmount, sizeOfCache int64, err error) {
+		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
+			nextValue, incrementAmount, sizeOfCache, err = fetchNextValues()
+			if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
+				continue
+			}
+			break
+		}
+		return nextValue, incrementAmount, sizeOfCache, err
 	}
 
 	var val int64
 	var err error
 	if cacheSize == 1 {
-		val, _, _, err = fetchNextValues()
+		val, _, _, err = fetchNextValuesRetry()
 		if err != nil {
 			return 0, err
 		}
 	} else {
 		// If cache size option is 1 (default -> not cached), and node cache size option is not 0 (not default -> node-cached), then use node-level cache
 		if seqOpts.CacheSize == 1 && seqOpts.NodeCacheSize != 0 {
-			val, err = p.GetSequenceCacheNode().NextValue(sequenceID, uint32(descriptor.GetVersion()), fetchNextValues)
+			val, err = p.GetSequenceCacheNode().NextValue(sequenceID, uint32(descriptor.GetVersion()), fetchNextValuesRetry)
 		} else {
-			val, err = p.GetOrInitSequenceCache().NextValue(uint32(sequenceID), uint32(descriptor.GetVersion()), fetchNextValues)
+			val, err = p.GetOrInitSequenceCache().NextValue(uint32(sequenceID), uint32(descriptor.GetVersion()), fetchNextValuesRetry)
 		}
 		if err != nil {
 			return 0, err
