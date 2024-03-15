@@ -20,6 +20,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
@@ -254,6 +255,9 @@ sysctl --system  # reload sysctl settings
 sudo ua enable fips --assume-yes
 {{ end }}
 
+sudo -u {{ .SharedUser }} bash -c "mkdir ~/.ssh && chmod 700 ~/.ssh"
+sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
@@ -274,6 +278,13 @@ func writeStartupScript(
 		// TODO(DarrylWong): In the future, when all tests are run on Ubuntu 22.04, we can remove this check and default true.
 		// See: https://github.com/cockroachdb/cockroach/issues/112112
 		EnableRSAForSSH bool
+		SharedUser      string
+		PublicKey       string
+	}
+
+	publicKey, err := config.SSHPublicKey()
+	if err != nil {
+		return "", err
 	}
 
 	args := tmplParams{
@@ -282,6 +293,8 @@ func writeStartupScript(
 		Zfs:              fileSystem == vm.Zfs,
 		EnableFIPS:       enableFIPS,
 		EnableRSAForSSH:  enableRSAForSSH,
+		SharedUser:       config.SharedUser,
+		PublicKey:        publicKey,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")
