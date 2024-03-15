@@ -1080,7 +1080,6 @@ func resolveOptionsForRestoreJobDescription(
 		Detached:                         opts.Detached,
 		SkipLocalitiesCheck:              opts.SkipLocalitiesCheck,
 		DebugPauseOn:                     opts.DebugPauseOn,
-		IncludeAllSecondaryTenants:       opts.IncludeAllSecondaryTenants,
 		AsTenant:                         opts.AsTenant,
 		ForceTenantID:                    opts.ForceTenantID,
 		SchemaOnly:                       opts.SchemaOnly,
@@ -1181,9 +1180,6 @@ func restoreTypeCheck(
 			tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
 			tree.Exprs(restoreStmt.Options.IncrementalStorage),
 		),
-		exprutil.Bools{
-			restoreStmt.Options.IncludeAllSecondaryTenants,
-		},
 		exprutil.Strings{
 			restoreStmt.Subdir,
 			restoreStmt.Options.EncryptionPassphrase,
@@ -1350,19 +1346,7 @@ func restorePlanHook(
 		}
 	}
 
-	var restoreAllTenants bool
-	if restoreStmt.Options.IncludeAllSecondaryTenants != nil {
-		if restoreStmt.DescriptorCoverage != tree.AllDescriptors {
-			return nil, nil, nil, false, errors.New("the include_all_virtual_clusters option is only supported for full cluster restores")
-		}
-		var err error
-		restoreAllTenants, err = exprEval.Bool(ctx, restoreStmt.Options.IncludeAllSecondaryTenants)
-		if err != nil {
-			return nil, nil, nil, false, err
-		}
-	}
-
-	if restoreStmt.Options.ExperimentalOnline && (restoreStmt.Targets.TenantID.IsSet() || restoreStmt.Options.IncludeAllSecondaryTenants != nil) {
+	if restoreStmt.Options.ExperimentalOnline && restoreStmt.Targets.TenantID.IsSet() {
 		return nil, nil, nil, false, errors.New("cannot run Online Restore on a tenant")
 	}
 
@@ -1452,7 +1436,7 @@ func restorePlanHook(
 		// locality aware.
 
 		return doRestorePlan(
-			ctx, restoreStmt, &exprEval, p, from, incStorage, pw, kms, restoreAllTenants, intoDB,
+			ctx, restoreStmt, &exprEval, p, from, incStorage, pw, kms, intoDB,
 			newDBName, newTenantID, newTenantName, endTime, resultsCh, subdir, execLocality,
 		)
 	}
@@ -1692,7 +1676,6 @@ func doRestorePlan(
 	incFrom []string,
 	passphrase string,
 	kms []string,
-	restoreAllTenants bool,
 	intoDB string,
 	newDBName string,
 	newTenantID *roachpb.TenantID,
@@ -1903,7 +1886,7 @@ func doRestorePlan(
 	}
 
 	sqlDescs, restoreDBs, descsByTablePattern, tenants, err := selectTargets(
-		ctx, p, mainBackupManifests, layerToIterFactory, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime, restoreAllTenants,
+		ctx, p, mainBackupManifests, layerToIterFactory, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime,
 	)
 	if err != nil {
 		return errors.Wrap(err,

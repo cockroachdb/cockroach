@@ -3932,14 +3932,6 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{NewDBName: $3.expr()}
   }
-| include_all_clusters
-  {
-    $$.val = &tree.RestoreOptions{IncludeAllSecondaryTenants: tree.MakeDBool(true)}
-  }
-| include_all_clusters '=' a_expr
-  {
-    $$.val = &tree.RestoreOptions{IncludeAllSecondaryTenants: $3.expr()}
-  }
 | INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
 	{
 		$$.val = &tree.RestoreOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}

@@ -2721,8 +2721,6 @@ restore_options ::=
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'DEBUG_PAUSE_ON' '=' string_or_placeholder
 	| 'NEW_DB_NAME' '=' string_or_placeholder
-	| include_all_clusters
-	| include_all_clusters '=' a_expr
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| virtual_cluster_name '=' string_or_placeholder
 	| virtual_cluster_opt '=' string_or_placeholder

@@ -864,38 +864,6 @@ BACKUP INTO '_' WITH OPTIONS (detached, include_all_virtual_clusters = _) -- lit
 BACKUP INTO 'bar' WITH OPTIONS (detached, include_all_virtual_clusters = true) -- identifiers removed
 
 parse
-RESTORE FROM LATEST IN 'bar' WITH include_all_virtual_clusters = $1, detached
-----
-RESTORE FROM 'latest' IN 'bar' WITH OPTIONS (detached, include_all_virtual_clusters = $1) -- normalized!
-RESTORE FROM ('latest') IN ('bar') WITH OPTIONS (detached, include_all_virtual_clusters = ($1)) -- fully parenthesized
-RESTORE FROM '_' IN '_' WITH OPTIONS (detached, include_all_virtual_clusters = $1) -- literals removed
-RESTORE FROM 'latest' IN 'bar' WITH OPTIONS (detached, include_all_virtual_clusters = $1) -- identifiers removed
-
-parse
-RESTORE FROM LATEST IN 'bar' WITH include_all_virtual_clusters = $1, execution locality = $2, detached
-----
-RESTORE FROM 'latest' IN 'bar' WITH OPTIONS (detached, include_all_virtual_clusters = $1, execution locality = $2) -- normalized!
-RESTORE FROM ('latest') IN ('bar') WITH OPTIONS (detached, include_all_virtual_clusters = ($1), execution locality = ($2)) -- fully parenthesized
-RESTORE FROM '_' IN '_' WITH OPTIONS (detached, include_all_virtual_clusters = $1, execution locality = $1) -- literals removed
-RESTORE FROM 'latest' IN 'bar' WITH OPTIONS (detached, include_all_virtual_clusters = $1, execution locality = $2) -- identifiers removed
-
-parse
-RESTORE FROM LATEST IN 'bar' WITH include_all_virtual_clusters, detached
-----
-RESTORE FROM 'latest' IN 'bar' WITH OPTIONS (detached, include_all_virtual_clusters = true) -- normalized!
-RESTORE FROM ('latest') IN ('bar') WITH OPTIONS (detached, include_all_virtual_clusters = (true)) -- fully parenthesized
-RESTORE FROM '_' IN '_' WITH OPTIONS (detached, include_all_virtual_clusters = _) -- literals removed
-RESTORE FROM 'latest' IN 'bar' WITH OPTIONS (detached, include_all_virtual_clusters = true) -- identifiers removed
-
-parse
-RESTORE FROM LATEST IN 'bar' WITH include_all_secondary_tenants, detached
-----
-RESTORE FROM 'latest' IN 'bar' WITH OPTIONS (detached, include_all_virtual_clusters = true) -- normalized!
-RESTORE FROM ('latest') IN ('bar') WITH OPTIONS (detached, include_all_virtual_clusters = (true)) -- fully parenthesized
-RESTORE FROM '_' IN '_' WITH OPTIONS (detached, include_all_virtual_clusters = _) -- literals removed
-RESTORE FROM 'latest' IN 'bar' WITH OPTIONS (detached, include_all_virtual_clusters = true) -- identifiers removed
-
-parse
 RESTORE FROM LATEST IN 'bar' WITH unsafe_restore_incompatible_version, execution locality = 'abc', detached
 ----
 RESTORE FROM 'latest' IN 'bar' WITH OPTIONS (detached, unsafe_restore_incompatible_version, execution locality = 'abc') -- normalized!
@@ -1009,14 +977,6 @@ at or near "skip_missing_udfs": syntax error: skip_missing_udfs specified multip
 DETAIL: source SQL:
 RESTORE foo FROM 'bar' WITH skip_missing_udfs, skip_missing_views, skip_missing_udfs
                                                                    ^
-
-error
-RESTORE FROM 'bar' WITH include_all_virtual_clusters=false, include_all_secondary_tenants
-----
-at or near "EOF": syntax error: include_all_virtual_clusters specified multiple times
-DETAIL: source SQL:
-RESTORE FROM 'bar' WITH include_all_virtual_clusters=false, include_all_secondary_tenants
-                                                                                         ^
 
 error
 RESTORE FROM 'bar' WITH unsafe_restore_incompatible_version, unsafe_restore_incompatible_version

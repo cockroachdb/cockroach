@@ -76,7 +76,7 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_flow'
 ----
 
 restore expect-pausepoint tag=a
-RESTORE FROM LATEST IN 'nodelocal://1/cluster_with_tenants' WITH include_all_virtual_clusters
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/cluster_with_tenants'
 ----
 job paused at pausepoint
 
@@ -167,25 +167,3 @@ query-sql
 SELECT id,name,service_mode FROM system.tenants WHERE name = 'another-name';
 ----
 3 another-name 2
-
-new-cluster name=s3 share-io-dir=s1 disable-tenant
-----
-
-exec-sql expect-error-regex=(the include_all_virtual_clusters option is only supported for full cluster restores)
-RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/cluster_with_tenants' WITH include_all_virtual_clusters
-----
-regex matches error
-
-exec-sql expect-error-regex=(the include_all_virtual_clusters option is only supported for full cluster restores)
-RESTORE TABLE tab1 FROM LATEST IN 'nodelocal://1/cluster_with_tenants' WITH include_all_virtual_clusters
-----
-regex matches error
-
-exec-sql
-RESTORE FROM LATEST IN 'nodelocal://1/cluster_without_tenants'
-----
-
-query-sql
-SHOW TENANTS
-----
-1 system ready shared
