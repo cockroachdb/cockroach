@@ -14,7 +14,6 @@ import (
 	"context"
 	"io"
 	"math"
-	"math/bits"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -261,17 +260,13 @@ type BytesMonitor struct {
 	// relinquish all bytes on releaseBytes() call.
 	relinquishAllOnReleaseBytes bool
 
-	// noteworthyUsageBytes is the size beyond which total allocations start to
-	// become reported in the logs.
-	noteworthyUsageBytes int64
-
 	settings *cluster.Settings
 }
 
 const (
 	// Consult with SQL Queries before increasing these values.
-	expectedMonitorSize     = 208
-	expectedMonitorSizeRace = 216
+	expectedMonitorSize     = 200
+	expectedMonitorSizeRace = 208
 	expectedAccountSize     = 32
 )
 
@@ -405,11 +400,7 @@ type Options struct {
 	MaxHist  metric.IHistogram
 	// Increment is the block size used for upstream allocations from the pool.
 	Increment int64
-	// Noteworthy determines the minimum total allocated size beyond which the
-	// monitor starts to log increases. Use 0 to always log or math.MaxInt64 to
-	// never log.
-	Noteworthy int64
-	Settings   *cluster.Settings
+	Settings  *cluster.Settings
 }
 
 // NewMonitor creates a new monitor.
@@ -423,17 +414,13 @@ func NewMonitor(args Options) *BytesMonitor {
 	if args.Increment <= 0 {
 		args.Increment = DefaultPoolAllocationSize
 	}
-	if args.Noteworthy <= 0 {
-		args.Noteworthy = math.MaxInt64
-	}
 	m := &BytesMonitor{
-		name:                 args.Name,
-		resource:             args.Res,
-		configLimit:          args.Limit,
-		limit:                args.Limit,
-		noteworthyUsageBytes: args.Noteworthy,
-		poolAllocationSize:   args.Increment,
-		settings:             args.Settings,
+		name:               args.Name,
+		resource:           args.Res,
+		configLimit:        args.Limit,
+		limit:              args.Limit,
+		poolAllocationSize: args.Increment,
+		settings:           args.Settings,
 	}
 	m.mu.curBytesCount = args.CurCount
 	m.mu.maxBytesHist = args.MaxHist
@@ -454,14 +441,13 @@ func NewMonitorInheritWithLimit(
 	name redact.RedactableString, limit int64, m *BytesMonitor,
 ) *BytesMonitor {
 	return NewMonitor(Options{
-		Name:       name,
-		Res:        m.resource,
-		Limit:      limit,
-		CurCount:   nil, // CurCount is not inherited as we don't want to double count allocations
-		MaxHist:    nil, // MaxHist is not inherited as we don't want to double count allocations
-		Increment:  m.poolAllocationSize,
-		Noteworthy: m.noteworthyUsageBytes,
-		Settings:   m.settings,
+		Name:      name,
+		Res:       m.resource,
+		Limit:     limit,
+		CurCount:  nil, // CurCount is not inherited as we don't want to double count allocations
+		MaxHist:   nil, // MaxHist is not inherited as we don't want to double count allocations
+		Increment: m.poolAllocationSize,
+		Settings:  m.settings,
 	})
 }
 
@@ -1011,20 +997,6 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 	}
 	if mm.mu.maxAllocated < mm.mu.curAllocated {
 		mm.mu.maxAllocated = mm.mu.curAllocated
-	}
-
-	// Report "large" queries to the log for further investigation.
-	if log.V(1) {
-		if mm.mu.curAllocated > mm.noteworthyUsageBytes {
-			// We only report changes in binary magnitude of the size. This is to
-			// limit the amount of log messages when a size blowup is caused by
-			// many small allocations.
-			if bits.Len64(uint64(mm.mu.curAllocated)) != bits.Len64(uint64(mm.mu.curAllocated-x)) {
-				log.Infof(ctx, "%s: bytes usage increases to %s (+%d)",
-					mm.name,
-					humanizeutil.IBytes(mm.mu.curAllocated), x)
-			}
-		}
 	}
 
 	if log.V(2) {
