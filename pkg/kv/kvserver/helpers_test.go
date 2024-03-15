@@ -376,12 +376,11 @@ func (r *Replica) InitQuotaPool(quota uint64) error {
 		return err
 	}
 
-	r.mu.proposalQuotaBaseIndex = appliedIndex
+	r.mu.proposalQuotaAndDelayTracker.init(context.Background(), appliedIndex)
 	if r.mu.proposalQuota != nil {
 		r.mu.proposalQuota.Close("re-creating")
 	}
 	r.mu.proposalQuota = quotapool.NewIntPool(r.rangeStr.String(), quota)
-	r.mu.quotaReleaseQueue = nil
 	return nil
 }
 
@@ -405,7 +404,7 @@ func (r *Replica) GetProposalQuota() *quotapool.IntPool {
 func (r *Replica) QuotaReleaseQueueLen() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return len(r.mu.quotaReleaseQueue)
+	return r.mu.proposalQuotaAndDelayTracker.getQuotaReleaseQueueLen()
 }
 
 func (r *Replica) NumPendingProposals() int {

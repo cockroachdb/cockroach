@@ -907,6 +907,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
+	var appendMinIndex, appendMaxIndex kvpb.RaftIndex
 	if hasMsg(msgStorageAppend) {
 		if msgStorageAppend.Snapshot != nil {
 			if inSnap.Desc == nil {
@@ -1029,6 +1030,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				}
 			}
 
+			if n := len(m.Entries); n > 0 {
+				appendMinIndex = kvpb.RaftIndex(m.Entries[0].Index)
+				appendMaxIndex = kvpb.RaftIndex(m.Entries[n-1].Index)
+			}
 			if state, err = s.StoreEntries(ctx, state, m, cb, &stats.append); err != nil {
 				return stats, errors.Wrap(err, "while storing log entries")
 			}
@@ -1038,6 +1043,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Update protected state - last index, last term, raft log size, and raft
 	// leader ID.
 	r.mu.Lock()
+	if appendMaxIndex > 0 {
+		r.mu.proposalQuotaAndDelayTracker.raftAppend(appendMinIndex, appendMaxIndex, stats.tBegin)
+	}
 	// TODO(pavelkalinnikov): put logstore.RaftState to r.mu directly.
 	r.mu.lastIndexNotDurable = state.LastIndex
 	r.mu.lastTermNotDurable = state.LastTerm

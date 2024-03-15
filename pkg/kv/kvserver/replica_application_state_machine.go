@@ -182,6 +182,12 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	sm.r.prepareLocalResult(ctx, cmd)
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "%v", cmd.localResult.String())
+		sm.r.mu.Lock()
+		storeID, delay := sm.r.mu.proposalQuotaAndDelayTracker.lastStoreToProgress(cmd.Index())
+		sm.r.mu.Unlock()
+		if storeID != 0 {
+			log.VEventf(ctx, 2, "last store %v with delay %v", storeID, delay)
+		}
 	}
 
 	// Handle the ReplicatedEvalResult, executing any side effects of the last

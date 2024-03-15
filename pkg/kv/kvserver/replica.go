@@ -769,19 +769,7 @@ type Replica struct {
 		// replicas have persisted the corresponding entry into their logs.
 		proposalQuota *quotapool.IntPool
 
-		// The base index is the index up to (including) which quota was already
-		// released. That is, the first element in quotaReleaseQueue below is
-		// released as the base index moves up by one, etc.
-		proposalQuotaBaseIndex kvpb.RaftIndex
-
-		// Once the leader observes a proposal come 'out of Raft', we add the size
-		// of the associated command to a queue of quotas we have yet to release
-		// back to the quota pool. At that point ownership of the quota is
-		// transferred from r.mu.proposals to this queue.
-		// We'll release the respective quota once all replicas have persisted the
-		// corresponding entry into their logs (or once we give up waiting on some
-		// replica because it looks like it's dead).
-		quotaReleaseQueue []*quotapool.IntAlloc
+		proposalQuotaAndDelayTracker
 
 		// Counts calls to Replica.tick()
 		ticks int
@@ -1594,13 +1582,16 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = int64(r.mu.proposalQuota.ApproximateQuota())
-		ri.ProposalQuotaBaseIndex = int64(r.mu.proposalQuotaBaseIndex)
-		ri.ProposalQuotaReleaseQueue = make([]int64, len(r.mu.quotaReleaseQueue))
-		for i, a := range r.mu.quotaReleaseQueue {
+		ri.ProposalQuotaBaseIndex = int64(r.mu.proposalQuotaAndDelayTracker.getProposalQuotaBaseIndex())
+		ri.ProposalQuotaReleaseQueue =
+			make([]int64, r.mu.proposalQuotaAndDelayTracker.getQuotaReleaseQueueLen())
+		i := 0
+		r.mu.proposalQuotaAndDelayTracker.iterateQuotaQueue(func(a *quotapool.IntAlloc) {
 			if a != nil {
 				ri.ProposalQuotaReleaseQueue[i] = int64(a.Acquired())
 			}
-		}
+			i++
+		})
 	}
 	ri.RangeMaxBytes = r.mu.conf.RangeMaxBytes
 	if r.mu.tenantID != (roachpb.TenantID{}) {

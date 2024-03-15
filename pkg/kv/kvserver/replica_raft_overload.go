@@ -350,7 +350,7 @@ func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMa
 			})
 			return prs
 		},
-		minLiveMatchIndex: r.mu.proposalQuotaBaseIndex,
+		minLiveMatchIndex: r.mu.proposalQuotaAndDelayTracker.getProposalQuotaBaseIndex(),
 		seed:              seed,
 	}
 	r.mu.pausedFollowers, _ = computeExpendableOverloadedFollowers(ctx, d)

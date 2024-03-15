@@ -97,6 +97,7 @@ import (
 	"github.com/cockroachdb/redact"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"go.etcd.io/raft/v3"
+	"golang.org/x/exp/slices"
 	"golang.org/x/time/rate"
 )
 
@@ -3439,6 +3440,7 @@ func (s *Store) ComputeMetricsPeriodically(
 		e.StoreId = int32(s.StoreID())
 		log.StructuredEvent(ctx, &e)
 	}
+	s.computeAndLogReplicationStatsPeriodically(ctx)
 	return m, nil
 }
 
@@ -3448,6 +3450,50 @@ func (s *Store) ComputeMetricsPeriodically(
 func (s *Store) ComputeMetrics(ctx context.Context) error {
 	_, err := s.computeMetrics(ctx)
 	return err
+}
+
+func (s *Store) computeAndLogReplicationStatsPeriodically(ctx context.Context) {
+	var stats []storeQueueAndDelayStats
+	statsPerStore := map[roachpb.StoreID]*storeQueueAndDelayStats{}
+	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
+		rep.mu.Lock()
+		stats = rep.mu.proposalQuotaAndDelayTracker.getAndResetStoreStats(stats)
+		rep.mu.Unlock()
+		for i := range stats {
+			ss := statsPerStore[stats[i].StoreID]
+			if ss == nil {
+				ss = &storeQueueAndDelayStats{StoreID: stats[i].StoreID}
+				statsPerStore[stats[i].StoreID] = ss
+			}
+			ss.merge(stats[i].perStoreStats)
+			ss.numReplicas += stats[i].numReplicas
+		}
+		return true
+	})
+	storesAndStats := make([]*storeQueueAndDelayStats, 0, len(statsPerStore))
+	for _, ss := range statsPerStore {
+		storesAndStats = append(storesAndStats, ss)
+	}
+	// Top-5 quotapool full durations.
+	slices.SortFunc(storesAndStats, func(a, b *storeQueueAndDelayStats) bool {
+		return a.quotaUnavailableDuration > b.quotaUnavailableDuration
+	})
+	var buf strings.Builder
+	for i := 0; i < len(storesAndStats) && i < 5; i++ {
+		ss := storesAndStats[i]
+		if ss.quotaUnavailableDuration == 0 {
+			break
+		}
+		if buf.Len() == 0 {
+			fmt.Fprintf(&buf, "quotapool full durations caused by stores:")
+		}
+		fmt.Fprintf(&buf, " (%v dur: %v)", ss.StoreID, ss.quotaUnavailableDuration)
+	}
+	if buf.Len() != 0 {
+		log.Infof(ctx, "%s", redact.SafeString(buf.String()))
+	}
+	// TODO(sumeer): top-5: progressMatchDuration/progressMatchCount,
+	// quotaConsumed/numReplicas.
 }
 
 // ClusterNodeCount returns this store's view of the number of nodes in the
