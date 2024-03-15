@@ -146,8 +146,7 @@ func TestMemoryAllocations(t *testing.T) {
 	}
 
 	for _, max := range maxs {
-		pool = NewMonitor("test", MemoryResource, nil, nil, 1, 1000, st)
-		pool.Start(ctx, nil, NewStandaloneBudget(max))
+		pool = getMonitorEx(ctx, st, "test" /* name */, nil /* parent */, max /* reservedBytes */)
 
 		for _, hf := range hysteresisFactors {
 			maxAllocatedButUnusedBlocks = hf
@@ -225,8 +224,7 @@ func TestBoundAccount(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	m := NewMonitor("test", MemoryResource, nil, nil, 1, 1000, st)
-	m.Start(ctx, nil, NewStandaloneBudget(100))
+	m := getMonitorEx(ctx, st, "test" /* name */, nil /* parent */, 100 /* reservedBytes */)
 	m.poolAllocationSize = 1
 	maxAllocatedButUnusedBlocks = 1
 
@@ -302,8 +300,7 @@ func TestBytesMonitor(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	m := NewMonitor("test", MemoryResource, nil, nil, 1, 1000, st)
-	m.Start(ctx, nil, NewStandaloneBudget(100))
+	m := getMonitorEx(ctx, st, "test" /* name */, nil /* parent */, 100 /* reservedBytes */)
 	maxAllocatedButUnusedBlocks = 1
 
 	if err := m.reserveBytes(ctx, 10); err != nil {
@@ -394,11 +391,7 @@ func TestReservedAccountCleared(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
-	root := NewMonitor(
-		"root" /* name */, MemoryResource, nil /* curCount */, nil, /* maxHist */
-		1 /* increment */, 1000 /* noteworthy */, st,
-	)
-	root.Start(ctx, nil /* pool */, NewStandaloneBudget(math.MaxInt64))
+	root := getMonitor(ctx, st, "root" /* name */, nil /* parent */)
 	root.RelinquishAllOnReleaseBytes()
 
 	// Pre-reserve a budget of 100 bytes.

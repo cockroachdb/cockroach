@@ -36,15 +36,7 @@ import (
 )
 
 func newTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
-	diskMonitor := mon.NewMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
+	diskMonitor := getDiskMonitor(st)
 	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	return diskMonitor
 }
@@ -68,15 +60,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	const smallMemoryBudget = 40
 	rng, _ := randutil.NewTestRand()
 
-	memoryMonitor := mon.NewMonitor(
-		"test-mem",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
+	memoryMonitor := getMemoryMonitor(st)
 	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
@@ -155,15 +139,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	memoryMonitor := mon.NewMonitor(
-		"test-mem",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
+	memoryMonitor := getMemoryMonitor(st)
 	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
@@ -458,15 +434,7 @@ func makeNumberedContainerUsingIRC(
 func makeMemMonitorAndStart(
 	ctx context.Context, st *cluster.Settings, budget int64,
 ) *mon.BytesMonitor {
-	memoryMonitor := mon.NewMonitor(
-		"test-mem",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
+	memoryMonitor := getMemoryMonitor(st)
 	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(budget))
 	return memoryMonitor
 }
