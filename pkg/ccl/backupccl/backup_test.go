@@ -6805,30 +6805,21 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 		defer cleanupT20C2()
 
 		t.Run("cluster-restore", func(t *testing.T) {
-			t.Run("with-tenant", func(t *testing.T) {
-				// This is disallowed because the cluster restore includes other
-				// tenants, which can't be restored inside a tenant.
-				tenant20C2.ExpectErr(t, `only the system tenant can restore other tenants`,
-					`RESTORE FROM $1 WITH include_all_virtual_clusters`, httpAddr)
-			})
+			// Now restore a cluster backup taken from a system tenant that
+			// hasn't created any tenants.
+			httpAddrEmpty, cleanupEmptyHTTPServer := makeInsecureHTTPServer(t)
+			defer cleanupEmptyHTTPServer()
 
-			t.Run("with-no-tenant", func(t *testing.T) {
-				// Now restore a cluster backup taken from a system tenant that
-				// hasn't created any tenants.
-				httpAddrEmpty, cleanupEmptyHTTPServer := makeInsecureHTTPServer(t)
-				defer cleanupEmptyHTTPServer()
+			_, emptySystemDB, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode,
+				dir, InitManualReplication, base.TestClusterArgs{
+					ServerArgs: base.TestServerArgs{
+						DefaultTestTenant: base.TestControlsTenantsExplicitly,
+					},
+				})
+			defer cleanupEmptyCluster()
 
-				_, emptySystemDB, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode,
-					dir, InitManualReplication, base.TestClusterArgs{
-						ServerArgs: base.TestServerArgs{
-							DefaultTestTenant: base.TestControlsTenantsExplicitly,
-						},
-					})
-				defer cleanupEmptyCluster()
-
-				emptySystemDB.Exec(t, `BACKUP TO $1`, httpAddrEmpty)
-				tenant20C2.Exec(t, `RESTORE FROM $1`, httpAddrEmpty)
-			})
+			emptySystemDB.Exec(t, `BACKUP TO $1`, httpAddrEmpty)
+			tenant20C2.Exec(t, `RESTORE FROM $1`, httpAddrEmpty)
 		})
 
 		t.Run("database-restore-into-tenant", func(t *testing.T) {
@@ -6847,11 +6838,6 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	const numAccounts = 1
 
-	makeTenant := func(srv serverutils.TestServerInterface, tenant uint64) (*sqlutils.SQLRunner, func()) {
-		_, conn := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(tenant)})
-		cleanup := func() { conn.Close() }
-		return sqlutils.MakeSQLRunner(conn), cleanup
-	}
 	tc, systemDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
@@ -6863,26 +6849,10 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 	// NB: tenant certs for 2, 10, 11, and 20 are embedded. See:
 	_ = securitytest.EmbeddedTenantIDs()
 
-	// Create another server.
-	tc2, _, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		},
-	})
-	srv2 := tc2.Server(0)
-	defer cleanupEmptyCluster()
-
-	tenant2C2, cleanupT2C2 := makeTenant(srv2, 2)
-	defer cleanupT2C2()
-
 	systemDB.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING sql.notices.enabled = false`)
 	backup2HttpAddr, backup2Cleanup := makeInsecureHTTPServer(t)
 	defer backup2Cleanup()
 	systemDB.Exec(t, `BACKUP TO $1`, backup2HttpAddr)
-
-	t.Run("cluster-restore-into-tenant-with-tenant-settings-succeeds", func(t *testing.T) {
-		tenant2C2.Exec(t, `RESTORE FROM $1 WITH include_all_virtual_clusters`, backup2HttpAddr)
-	})
 
 	_, systemDB2, cleanupDB2 := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -6891,7 +6861,7 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 	})
 	defer cleanupDB2()
 	t.Run("cluster-restore-into-cluster-with-tenant-settings-succeeds", func(t *testing.T) {
-		systemDB2.Exec(t, `RESTORE FROM $1 WITH include_all_virtual_clusters`, backup2HttpAddr)
+		systemDB2.Exec(t, `RESTORE FROM $1`, backup2HttpAddr)
 		systemDB2.CheckQueryResults(t, `SELECT * FROM system.tenant_settings`, systemDB.QueryStr(t, `SELECT * FROM system.tenant_settings`))
 	})
 }
@@ -7008,30 +6978,21 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 		defer cleanupT20C2()
 
 		t.Run("cluster-restore", func(t *testing.T) {
-			t.Run("with-tenant", func(t *testing.T) {
-				// This is disallowed because the cluster restore includes other
-				// tenants, which can't be restored inside a tenant.
-				tenant20C2.ExpectErr(t, `only the system tenant can restore other tenants`,
-					`RESTORE FROM $1 WITH include_all_virtual_clusters`, httpAddr)
-			})
+			// Now restore a cluster backup taken from a system tenant that
+			// hasn't created any tenants.
+			httpAddrEmpty, cleanupEmptyHTTPServer := makeInsecureHTTPServer(t)
+			defer cleanupEmptyHTTPServer()
 
-			t.Run("with-no-tenant", func(t *testing.T) {
-				// Now restore a cluster backup taken from a system tenant that
-				// hasn't created any tenants.
-				httpAddrEmpty, cleanupEmptyHTTPServer := makeInsecureHTTPServer(t)
-				defer cleanupEmptyHTTPServer()
+			_, emptySystemDB, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode,
+				dir, InitManualReplication, base.TestClusterArgs{
+					ServerArgs: base.TestServerArgs{
+						DefaultTestTenant: base.TestControlsTenantsExplicitly,
+					},
+				})
+			defer cleanupEmptyCluster()
 
-				_, emptySystemDB, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode,
-					dir, InitManualReplication, base.TestClusterArgs{
-						ServerArgs: base.TestServerArgs{
-							DefaultTestTenant: base.TestControlsTenantsExplicitly,
-						},
-					})
-				defer cleanupEmptyCluster()
-
-				emptySystemDB.Exec(t, `BACKUP TO $1`, httpAddrEmpty)
-				tenant20C2.Exec(t, `RESTORE FROM $1`, httpAddrEmpty)
-			})
+			emptySystemDB.Exec(t, `BACKUP TO $1`, httpAddrEmpty)
+			tenant20C2.Exec(t, `RESTORE FROM $1`, httpAddrEmpty)
 		})
 
 		t.Run("database-restore-into-tenant", func(t *testing.T) {
@@ -7446,133 +7407,6 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
-	})
-
-	t.Run("restore-all-from-cluster-backup", func(t *testing.T) {
-		restoreTC := testcluster.StartTestCluster(
-			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-				ExternalIODir:     dir,
-				DefaultTestTenant: base.TestControlsTenantsExplicitly,
-				Knobs: base.TestingKnobs{
-					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-					TenantTestingKnobs: &sql.TenantTestingKnobs{
-						// This test expects a specific tenant ID to be selected after DROP TENANT.
-						EnableTenantIDReuse: true,
-					},
-				},
-			}},
-		)
-
-		defer restoreTC.Stopper().Stop(ctx)
-		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
-
-		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, 
-				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities'
-			from system.tenants`,
-			[][]string{
-				{
-					`1`, `true`, `system`,
-					strconv.Itoa(int(mtinfopb.DataStateReady)),
-					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{}`,
-				},
-			})
-		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide' WITH include_all_virtual_clusters`)
-		restoreDB.CheckQueryResults(t,
-			`select id, active, name, data_state, service_mode, 
-				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities' 
-			from system.tenants`,
-			[][]string{
-				{
-					`1`, `true`, `system`,
-					strconv.Itoa(int(mtinfopb.DataStateReady)),
-					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{}`,
-				},
-				{
-					`10`, `true`, `cluster-10`,
-					strconv.Itoa(int(mtinfopb.DataStateReady)),
-					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"canUseNodelocalStorage": true}`,
-				},
-				{
-					`11`, `true`, `cluster-11`,
-					strconv.Itoa(int(mtinfopb.DataStateReady)),
-					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"canUseNodelocalStorage": true}`,
-				},
-				{
-					`20`, `true`, `cluster-20`,
-					strconv.Itoa(int(mtinfopb.DataStateReady)),
-					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"canUseNodelocalStorage": true}`,
-				},
-			},
-		)
-
-		tenantID := roachpb.MustMakeTenantID(10)
-		if err := restoreTC.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {
-			t.Fatal(err)
-		}
-
-		_, restoreConn10 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: tenantID},
-		)
-		defer restoreConn10.Close()
-		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
-
-		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
-		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
-
-		// Verify cluster overrides.
-		restoreTenant10.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.read_payload_cost_per_mebibyte`, [][]string{{"123"}})
-		restoreTenant10.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.write_payload_cost_per_mebibyte`, [][]string{{"456"}})
-
-		tenantID = roachpb.MustMakeTenantID(11)
-		if err := restoreTC.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {
-			t.Fatal(err)
-		}
-
-		_, restoreConn11 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: tenantID},
-		)
-		defer restoreConn11.Close()
-		restoreTenant11 := sqlutils.MakeSQLRunner(restoreConn11)
-
-		restoreTenant11.CheckQueryResults(t, `select * from foo.baz`, tenant11.QueryStr(t, `select * from foo.baz`))
-
-		// Check the all-tenant override.
-		restoreTenant11.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.read_payload_cost_per_mebibyte`, [][]string{{"123"}})
-
-		restoreDB.Exec(t, `ALTER TENANT [20] STOP SERVICE`)
-		restoreDB.Exec(t, `DROP TENANT [20] IMMEDIATE`)
-
-		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster = '20', virtual_cluster_name = 'cluster-20'`)
-
-		tenantID = roachpb.MustMakeTenantID(20)
-		if err := restoreTC.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {
-			t.Fatal(err)
-		}
-
-		_, restoreConn20 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantName: "cluster-20", DisableCreateTenant: true},
-		)
-		defer restoreConn20.Close()
-		restoreTenant20 := sqlutils.MakeSQLRunner(restoreConn20)
-
-		// Tenant 20 gets results that matched the backed up tenant 11.
-		restoreTenant20.CheckQueryResults(t, `select * from foo.baz`, tenant11.QueryStr(t, `select * from foo.baz`))
-		// Check the all-tenant override.
-		restoreTenant20.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.read_payload_cost_per_mebibyte`, [][]string{{"123"}})
-
-		// Remove tenant 11, then confirm restoring 11 over 10 fails.
-		restoreDB.Exec(t, `ALTER TENANT [11] STOP SERVICE`)
-		restoreDB.Exec(t, `DROP TENANT [11] IMMEDIATE`)
-		restoreDB.ExpectErr(t, `exists`, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster_name = 'cluster-10'`)
-
-		// Verify tenant 20 is still unaffected.
-		restoreTenant20.CheckQueryResults(t, `select * from foo.baz`, tenant11.QueryStr(t, `select * from foo.baz`))
 	})
 
 	t.Run("restore-tenant10-to-ts1", func(t *testing.T) {

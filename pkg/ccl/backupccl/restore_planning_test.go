@@ -55,7 +55,6 @@ func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
 		Detached:                         true,
 		SkipLocalitiesCheck:              true,
 		DebugPauseOn:                     tree.NewDString("test expr"),
-		IncludeAllSecondaryTenants:       tree.DBoolTrue,
 		AsTenant:                         tree.NewDString("test expr"),
 		ForceTenantID:                    tree.NewDInt(42),
 		SchemaOnly:                       true,
