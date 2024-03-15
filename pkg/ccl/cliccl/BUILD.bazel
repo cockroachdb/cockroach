@@ -43,7 +43,6 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
-        "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lestrrat_go_jwx//jwk",
         "@com_github_olekukonko_tablewriter//:tablewriter",

@@ -160,8 +160,8 @@ func TestList(t *testing.T) {
 		var b bytes.Buffer
 		cmd.SetOut(&b)
 		cmd.SetErr(&b)
-		err = runList(cmd, []string{dir})
-		require.NoError(t, err)
+		require.NoError(t, cmd.Flags().Set("enterprise-encryption", encSpecStr))
+		require.NoError(t, runList(cmd, []string{dir}))
 		return b.String()
 	})
 }
