@@ -141,6 +141,8 @@ const (
 	AdminScatter
 	// AddSSTable links a file into the RocksDB log-structured merge-tree.
 	AddSSTable
+	// LinkExternallSSTable links an external sst into pebble.
+	LinkExternalSSTable
 	// Migrate updates the range state to conform to a specified cluster
 	// version. It is our main mechanism for phasing out legacy code below Raft.
 	Migrate

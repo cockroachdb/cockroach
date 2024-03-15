@@ -288,6 +288,13 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		}
 		res.AddSSTable = nil
 	}
+	if res.LinkExternalSSTable != nil {
+		if res.LinkExternalSSTable.RemoteRewriteTimestamp.IsSet() {
+			b.r.handleSSTableRaftMuLocked(ctx, nil, res.LinkExternalSSTable.Span, res.WriteTimestamp)
+		}
+		res.LinkExternalSSTable = nil
+
+	}
 
 	if res.Split != nil {
 		// Splits require a new HardState to be written to the new RHS

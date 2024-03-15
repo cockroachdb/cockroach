@@ -45,14 +45,13 @@ func EncodeCommand(
 		// prefix because the command ID is stored in a field in
 		// raft.ConfChange.
 		prefix = false
-	} else if command.ReplicatedEvalResult.AddSSTable != nil {
+	} else if command.ReplicatedEvalResult.AddSSTable != nil || command.ReplicatedEvalResult.LinkExternalSSTable != nil {
 		entryEncoding = EntryEncodingSideloadedWithoutAC
 		if raftAdmissionMeta != nil {
 			entryEncoding = EntryEncodingSideloadedWithAC
 		}
 
-		if command.ReplicatedEvalResult.AddSSTable.Data == nil &&
-			command.ReplicatedEvalResult.AddSSTable.RemoteFileLoc == "" {
+		if addSSTable := command.ReplicatedEvalResult.AddSSTable; addSSTable != nil && addSSTable.Data == nil {
 			return nil, errors.Errorf("cannot sideload empty SSTable")
 		}
 	}

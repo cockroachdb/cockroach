@@ -181,6 +181,7 @@ func (r *Replica) evalAndPropose(
 	// granularity of admission control doing token and size estimation (which
 	// is 15s). Also, admission control corrects for gaps in reporting.
 	writeBytes := kvadmission.NewStoreWriteBytes()
+	// TODO(msbutler): anything to do here for external sst linking?
 	if proposal.command.WriteBatch != nil {
 		writeBytes.WriteBytes = int64(len(proposal.command.WriteBatch.Data))
 	}

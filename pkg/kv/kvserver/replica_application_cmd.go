@@ -100,6 +100,7 @@ func (c *replicatedCmd) getStoreWriteByteSizes() (writeBytes int64, ingestedByte
 	if c.Cmd.WriteBatch != nil {
 		writeBytes = int64(len(c.Cmd.WriteBatch.Data))
 	}
+	// TODO(msbutler): do we need extra logic for external ssts?
 	if c.Cmd.ReplicatedEvalResult.AddSSTable != nil {
 		ingestedBytes = int64(len(c.Cmd.ReplicatedEvalResult.AddSSTable.Data))
 	}
