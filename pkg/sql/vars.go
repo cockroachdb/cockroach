@@ -3209,7 +3209,7 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	// CockroachDB extension.
+	// CockroachDB extension (oracle compatibility).
 	`close_cursors_at_commit`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`close_cursors_at_commit`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
@@ -3224,6 +3224,23 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().CloseCursorsAtCommit), nil
 		},
 		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension (oracle compatibility).
+	`plpgsql_use_strict_into`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().PLpgSQLUseStrictInto), nil
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("plpgsql_use_strict_into"),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("plpgsql_use_strict_into", s)
+			if err != nil {
+				return err
+			}
+			m.SetPLpgSQLUseStrictInto(b)
+			return nil
+		},
+		GlobalDefault: globalFalse,
 	},
 }
 

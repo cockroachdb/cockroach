@@ -483,8 +483,13 @@ message LocalOnlySessionData {
   // implicit transaction.
   bool autocommit_before_ddl = 121 [(gogoproto.customname) = "AutoCommitBeforeDDL"];
   // CloseCursorsAtCommit determines whether cursors remain open after their
-  // parent transaction closes.
+  // parent transaction closes. This is useful for oracle compatibility.
   bool close_cursors_at_commit = 122;
+  // PLpgSQLUseStrictInto causes PL/pgSQL "SELECT ... INTO" and "RETURNING INTO"
+  // syntax to always behave as if they were specified with the STRICT option,
+  // which throws a runtime error when the SQL statement doesn't return exactly
+  // one row. This is useful for oracle compatibility.
+  bool plpgsql_use_strict_into = 123 [(gogoproto.customname) = "PLpgSQLUseStrictInto"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
