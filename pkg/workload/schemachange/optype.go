@@ -265,7 +265,7 @@ var opWeights = []int{
 	alterFunctionRename:               1,
 	alterFunctionSetSchema:            1,
 	alterTableAddColumn:               1,
-	alterTableAddConstraintForeignKey: 1,
+	alterTableAddConstraintForeignKey: 0, // Disabled due to #119288.
 	alterTableAddConstraintUnique:     0,
 	alterTableAlterColumnType:         0, // Disabled and tracked with #66662.
 	alterTableAlterPrimaryKey:         1,
