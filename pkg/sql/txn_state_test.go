@@ -64,7 +64,7 @@ func makeTestContext(stopper *stop.Stopper) testContext {
 	return testContext{
 		clock:  clock,
 		mockDB: kv.NewDB(ambient, factory, clock, stopper),
-		mon: mon.NewMonitor(mon.NewMonitorArgs{
+		mon: mon.NewUnlimitedMonitor(context.Background(), mon.NewMonitorArgs{
 			Name: "test root mon",
 		}),
 		tracer:   ambient.Tracer,

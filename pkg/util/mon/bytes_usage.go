@@ -421,6 +421,7 @@ func NewMonitor(args NewMonitorArgs) *BytesMonitor {
 	}
 	m.mu.curBytesCount = args.CurCount
 	m.mu.maxBytesHist = args.MaxHist
+	m.mu.stopped = true
 	m.mu.tracksDisk = args.Res == DiskResource
 	return m
 }
@@ -472,7 +473,8 @@ func (mm *BytesMonitor) StartNoReserved(ctx context.Context, pool *BytesMonitor)
 // Arguments:
 //   - pool is the upstream monitor that provision allocations exceeding the
 //     pre-reserved budget. If pool is nil, no upstream allocations are possible
-//     and the pre-reserved budget determines the entire capacity of this monitor.
+//     and the pre-reserved budget determines the entire capacity of this
+//     monitor. pool is expected to have been Start()'ed already.
 //
 // - reserved is the pre-reserved budget (see above).
 func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved *BoundAccount) {
@@ -502,7 +504,7 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 	if pool != nil {
 		// If we have a "parent" monitor, then register mm as its child by
 		// making it the head of the doubly-linked list.
-		func() {
+		poolStarted := func() bool {
 			pool.mu.Lock()
 			defer pool.mu.Unlock()
 			if s := pool.mu.head; s != nil {
@@ -510,7 +512,15 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 				mm.parentMu.nextSibling = s
 			}
 			pool.mu.head = mm
+			return !pool.mu.stopped
 		}()
+		if !poolStarted {
+			// Ensure that the pool monitor has been started - this is needed so
+			// that the effective limit is computed correctly.
+			panic(errors.AssertionFailedf(
+				"%s: starting with pool %s that itself hasn't been started", mm.name, pool.name,
+			))
+		}
 		effectiveLimit = pool.limit
 	}
 
@@ -541,6 +551,8 @@ func NewUnlimitedMonitor(ctx context.Context, args NewMonitorArgs) *BytesMonitor
 	args.Limit = math.MaxInt64
 	m := NewMonitor(args)
 	m.reserved = NewStandaloneBudget(math.MaxInt64)
+	// The unlimited monitor doesn't need to be started.
+	m.mu.stopped = false
 	return m
 }
 

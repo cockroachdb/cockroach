@@ -676,7 +676,6 @@ func TestLimit(t *testing.T) {
 
 	m.Start(ctx, nil, NewStandaloneBudget(1000))
 	require.Equal(t, int64(1000), m.Limit())
-	m.Stop(ctx)
 
 	m2 := NewMonitor(NewMonitorArgs{
 		Name: "test",
