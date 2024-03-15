@@ -2373,6 +2373,7 @@ func (ds *DistSender) sendToReplicas(
 	// This loop will retry operations that fail with errors that reflect
 	// per-replica state and may succeed on other replicas.
 	var ambiguousError, replicaUnavailableError error
+	var leaseholderUnavailable bool
 	var br *kvpb.BatchResponse
 	attempts := int64(0)
 	for first := true; ; first, attempts = false, attempts+1 {
@@ -2495,7 +2496,6 @@ func (ds *DistSender) sendToReplicas(
 
 		} else if err != nil {
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
-
 			if grpcutil.IsAuthError(err) {
 				// Authentication or authorization error. Propagate.
 				if ambiguousError != nil {
@@ -2559,6 +2559,22 @@ func (ds *DistSender) sendToReplicas(
 			// retrying the writes, should it need to be propagated.
 			if withCommit && !grpcutil.RequestDidNotStart(err) {
 				ambiguousError = err
+			} else if lh := routing.Leaseholder(); lh != nil && lh.IsSame(curReplica) {
+				// If we get a gRPC error against the leaseholder, we don't want to
+				// backoff and keep trying the same leaseholder against the leaseholder.
+				// TODO(baptist): This should not be in an else block. Ideally
+				// we set leaseholderUnavailable to true even if there is an
+				// ambiguous error as it should be set independent of an
+				// ambiguous error. TestTransactionUnexpectedlyCommitted test
+				// fails otherwise. That test is expecting us to retry against
+				// the leaseholder after we received a gRPC error to validate
+				// that it now returns a WriteTooOld error. Once the proxy code
+				// is in place, this can be moved back out of the if block. In
+				// practice the only impact of having this in the else block is
+				// that we will retry more times against a leaseholder before
+				// moving on to the other replicas. There is not an easy way to
+				// modify the test without this being in the else block.
+				leaseholderUnavailable = true
 			}
 		} else {
 			// If the reply contains a timestamp, update the local HLC with it.
@@ -2669,16 +2685,18 @@ func (ds *DistSender) sendToReplicas(
 					// different range during intent resolution, and that range returns a
 					// RUE. In this case we just return it directly, as br.Error.
 					return br, nil
-				} else if replicaUnavailableError == nil {
-					// This is the first time we see a RUE. Record it, such that we'll
-					// return it if all other replicas fail (regardless of error).
-					replicaUnavailableError = br.Error.GoError()
-				} else if lh := routing.Leaseholder(); lh != nil && lh.IsSame(curReplica) {
+				}
+				if lh := routing.Leaseholder(); lh != nil && lh.IsSame(curReplica) {
 					// This error came from the supposed leaseholder. Record it, such that
 					// subsequent NLHEs pointing back to this one can be ignored instead
 					// of getting stuck in a retry loop. This ensures we'll eventually
 					// error out when the transport is exhausted even if multiple replicas
 					// return NLHEs to different replicas all returning RUEs.
+					replicaUnavailableError = br.Error.GoError()
+					leaseholderUnavailable = true
+				} else if replicaUnavailableError == nil {
+					// This is the first time we see a RUE. Record it, such that we'll
+					// return it if all other replicas fail (regardless of error).
 					replicaUnavailableError = br.Error.GoError()
 				}
 				// The circuit breaker may have tripped while a commit proposal was in
@@ -2713,15 +2731,15 @@ func (ds *DistSender) sendToReplicas(
 				lh := routing.Leaseholder()
 				// If we got new information, we use it. If not, we loop around and try
 				// the next replica.
-				var lhRUE bool // lease holder replica unavailable error
 				if lh != nil && !errLease.Empty() {
 					updatedLeaseholder := !lh.IsSame(*oldLeaseholder)
-					// If we've already tried this replica and it's unavailable due to
-					// a tripped replica circuit breaker, skip it to avoid loops.
-					if err := replicaUnavailableError; err != nil {
-						if rue := (*kvpb.ReplicaUnavailableError)(nil); errors.As(err, &rue) {
-							lhRUE = lh.IsSame(rue.Replica)
-						}
+					// If we changed leaseholder, reset whether we think the
+					// leaseholder was unavailable. In the worst case this will
+					// cause an extra pass through sendToReplicas, but it
+					// prevents accidentally returning a replica unavailable
+					// error too aggressively.
+					if updatedLeaseholder {
+						leaseholderUnavailable = false
 					}
 					// If the leaseholder is the replica that we've just tried, and
 					// we've tried this replica a bunch of times already, let's move on
@@ -2730,7 +2748,7 @@ func (ds *DistSender) sendToReplicas(
 					// (possibly because it hasn't applied its lease yet). Perhaps that
 					// lease expires and someone else gets a new one, so by moving on we
 					// get out of possibly infinite loops.
-					if (!lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit) && !lhRUE {
+					if (!lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit) && !leaseholderUnavailable {
 						moved := transport.MoveToFront(*lh)
 						if !moved {
 							// The transport always includes the client's view of the
@@ -2764,10 +2782,10 @@ func (ds *DistSender) sendToReplicas(
 					// there's a lease transfer in progress and the would-be leaseholder
 					// has not yet applied the new lease.
 					//
-					// If the leaseholder is unavailable (lhRUE), we don't backoff since
-					// we aren't trying the leaseholder again, instead we want to cycle
-					// through the remaining replicas to see if they have the lease before
-					// we return to sendPartialBatch.
+					// If the leaseholder is unavailable, we don't backoff since we aren't
+					// trying the leaseholder again, instead we want to cycle through the
+					// remaining replicas to see if they have the lease before we return
+					// to sendPartialBatch.
 					//
 					// TODO(arul): The idea here is for the client to not keep sending
 					// the would-be leaseholder multiple requests and backoff a bit to let
@@ -2777,7 +2795,7 @@ func (ds *DistSender) sendToReplicas(
 					// the replica we just tried), in which case we should backoff. With
 					// this scheme we'd no longer have to track "updatedLeaseholder" state
 					// when syncing the NLHE with the range cache.
-					shouldBackoff := !updatedLeaseholder && !intentionallySentToFollower && !lhRUE
+					shouldBackoff := !updatedLeaseholder && !intentionallySentToFollower && !leaseholderUnavailable
 					if shouldBackoff {
 						ds.metrics.InLeaseTransferBackoffs.Inc(1)
 						log.VErrEventf(ctx, 2, "backing off due to NotLeaseHolderErr with stale info")
