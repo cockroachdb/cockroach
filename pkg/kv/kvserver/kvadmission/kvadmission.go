@@ -80,7 +80,7 @@ var internalLowPriReadElasticControlEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kvadmission.low_pri_read_elastic_control.enabled",
 	"determines whether the internally submitted low priority reads reads integrate with elastic CPU control",
-	false,
+	true,
 )
 
 // exportRequestElasticControlEnabled determines whether export requests
