@@ -219,15 +219,18 @@ func (ds *ServerImpl) setupFlow(
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localState LocalState,
 ) (retCtx context.Context, _ flowinfra.Flow, _ execopnode.OpChains, retErr error) {
-	var sp *tracing.Span          // will be Finish()ed by Flow.Cleanup()
-	var monitor *mon.BytesMonitor // will be closed in Flow.Cleanup()
-	var onFlowCleanupEnd func()   // will be called at the very end of Flow.Cleanup()
+	var sp *tracing.Span                       // will be Finish()ed by Flow.Cleanup()
+	var monitor, diskMonitor *mon.BytesMonitor // will be closed in Flow.Cleanup()
+	var onFlowCleanupEnd func()                // will be called at the very end of Flow.Cleanup()
 	// Make sure that we clean up all resources (which in the happy case are
 	// cleaned up in Flow.Cleanup()) if an error is encountered.
 	defer func() {
 		if retErr != nil {
 			if monitor != nil {
 				monitor.Stop(ctx)
+			}
+			if diskMonitor != nil {
+				diskMonitor.Stop(ctx)
 			}
 			if onFlowCleanupEnd != nil {
 				onFlowCleanupEnd()
@@ -282,6 +285,7 @@ func (ds *ServerImpl) setupFlow(
 		ds.Settings,
 	)
 	monitor.Start(ctx, parentMonitor, reserved)
+	diskMonitor = execinfra.NewMonitor(ctx, ds.ParentDiskMonitor, "flow-disk-monitor")
 
 	makeLeaf := func() (*kv.Txn, error) {
 		tis := req.LeafTxnInputState
@@ -384,7 +388,7 @@ func (ds *ServerImpl) setupFlow(
 
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, monitor, makeLeaf, req.TraceKV,
+		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeaf, req.TraceKV,
 		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
@@ -473,7 +477,7 @@ func (ds *ServerImpl) newFlowContext(
 	ctx context.Context,
 	id execinfrapb.FlowID,
 	evalCtx *eval.Context,
-	monitor *mon.BytesMonitor,
+	monitor, diskMonitor *mon.BytesMonitor,
 	makeLeafTxn func() (*kv.Txn, error),
 	traceKV bool,
 	collectStats bool,
@@ -494,11 +498,7 @@ func (ds *ServerImpl) newFlowContext(
 		CollectStats:   collectStats,
 		Local:          localState.IsLocal,
 		Gateway:        isGatewayNode,
-		// The flow disk monitor is a child of the server's and is closed on
-		// Cleanup.
-		DiskMonitor: execinfra.NewMonitor(
-			ctx, ds.ParentDiskMonitor, "flow-disk-monitor",
-		),
+		DiskMonitor:    diskMonitor,
 	}
 
 	if localState.IsLocal && localState.Collection != nil {

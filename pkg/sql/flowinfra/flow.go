@@ -725,8 +725,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		}
 	}
 
-	// This closes the disk monitor opened in newFlowContext as well as the
-	// memory monitor opened in ServerImpl.setupFlow.
+	// This closes the monitors opened in ServerImpl.setupFlow.
 	if r := recover(); r != nil {
 		f.DiskMonitor.EmergencyStop(ctx)
 		f.Mon.EmergencyStop(ctx)
