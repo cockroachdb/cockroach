@@ -943,19 +943,25 @@ func TestStoreListString(t *testing.T) {
 					L0NumFiles:              int64(i),
 					L0NumFilesThreshold:     scale,
 				},
+				IOThresholdMax: admissionpb.IOThreshold{
+					L0NumSubLevels:          10 * int64(i),
+					L0NumSubLevelsThreshold: scale,
+					L0NumFiles:              10 * int64(i),
+					L0NumFilesThreshold:     scale,
+				},
 			},
 		})
 	}
 
 	require.Equal(t,
-		"  candidate: avg-ranges=0.00 avg-leases=0.00 avg-disk-usage=0 B avg-queries-per-second=0.00 avg-store-cpu-per-second=0µs <no candidates>",
+		"  candidate: avg-ranges=0.00 avg-leases=0.00 avg-disk-usage=0 B avg-queries-per-second=0.00 avg-store-cpu-per-second=0µs avg-io-overload=0.00(max=0.00) <no candidates>",
 		MakeStoreList([]roachpb.StoreDescriptor{}).String())
 
-	require.Equal(t, "  candidate: avg-ranges=30.00 avg-leases=30.00 avg-disk-usage=3.0 KiB avg-queries-per-second=30.00 avg-store-cpu-per-second=3µs\n"+
-		"  1: ranges=10 leases=10 disk-usage=1.0 KiB queries-per-second=10.00 store-cpu-per-second=1µs io-overload=0.10\n"+
-		"  2: ranges=20 leases=20 disk-usage=2.0 KiB queries-per-second=20.00 store-cpu-per-second=2µs io-overload=0.20\n"+
-		"  3: ranges=30 leases=30 disk-usage=3.0 KiB queries-per-second=30.00 store-cpu-per-second=3µs io-overload=0.30\n"+
-		"  4: ranges=40 leases=40 disk-usage=4.0 KiB queries-per-second=40.00 store-cpu-per-second=4µs io-overload=0.40\n"+
-		"  5: ranges=50 leases=50 disk-usage=5.0 KiB queries-per-second=50.00 store-cpu-per-second=5µs io-overload=0.50\n",
+	require.Equal(t, "  candidate: avg-ranges=30.00 avg-leases=30.00 avg-disk-usage=3.0 KiB avg-queries-per-second=30.00 avg-store-cpu-per-second=3µs avg-io-overload=0.30(max=3.00)\n"+
+		"  1: ranges=10 leases=10 disk-usage=1.0 KiB queries-per-second=10.00 store-cpu-per-second=1µs io-overload=0.10(max=1.00)\n"+
+		"  2: ranges=20 leases=20 disk-usage=2.0 KiB queries-per-second=20.00 store-cpu-per-second=2µs io-overload=0.20(max=2.00)\n"+
+		"  3: ranges=30 leases=30 disk-usage=3.0 KiB queries-per-second=30.00 store-cpu-per-second=3µs io-overload=0.30(max=3.00)\n"+
+		"  4: ranges=40 leases=40 disk-usage=4.0 KiB queries-per-second=40.00 store-cpu-per-second=4µs io-overload=0.40(max=4.00)\n"+
+		"  5: ranges=50 leases=50 disk-usage=5.0 KiB queries-per-second=50.00 store-cpu-per-second=5µs io-overload=0.50(max=5.00)\n",
 		MakeStoreList(stores).String())
 }

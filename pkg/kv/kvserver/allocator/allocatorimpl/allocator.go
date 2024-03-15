@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
@@ -2105,7 +2106,6 @@ func (a *Allocator) nonIOOverloadedLeaseTargets(
 	}
 
 	sl, _, _ := storePool.GetStoreListFromIDs(replDescsToStoreIDs(existingReplicas), storepool.StoreFilterSuspect)
-	avgIOOverload := sl.CandidateIOOverloadScores.Mean
 
 	for _, replDesc := range existingReplicas {
 		store, ok := sl.FindStoreByID(replDesc.StoreID)
@@ -2120,7 +2120,7 @@ func (a *Allocator) nonIOOverloadedLeaseTargets(
 		// Instead, we create a buffer between the two to avoid leases moving back
 		// and forth.
 		if (replDesc.StoreID == leaseStoreID) &&
-			(!ok || !ioOverloadOptions.existingLeaseCheck(ctx, store, avgIOOverload)) {
+			(!ok || !ioOverloadOptions.existingLeaseCheck(ctx, store, sl)) {
 			continue
 		}
 
@@ -2128,7 +2128,7 @@ func (a *Allocator) nonIOOverloadedLeaseTargets(
 		// if it is filtered out similar to above, or the replica store doesn't
 		// pass the lease transfer IO overload check.
 		if replDesc.StoreID != leaseStoreID &&
-			(!ok || !ioOverloadOptions.transferLeaseToCheck(ctx, store, avgIOOverload)) {
+			(!ok || !ioOverloadOptions.transferLeaseToCheck(ctx, store, sl)) {
 			continue
 		}
 
@@ -2148,7 +2148,6 @@ func (a *Allocator) leaseholderShouldMoveDueToIOOverload(
 	ioOverloadOptions IOOverloadOptions,
 ) bool {
 	sl, _, _ := storePool.GetStoreListFromIDs(replDescsToStoreIDs(existingReplicas), storepool.StoreFilterSuspect)
-	avgIOOverload := sl.CandidateIOOverloadScores.Mean
 
 	// Check the existing replicas for the leaseholder, if it doesn't meet the
 	// check return that the lease should be moved due to IO overload on the
@@ -2157,7 +2156,7 @@ func (a *Allocator) leaseholderShouldMoveDueToIOOverload(
 	// overloaded.
 	for _, replDesc := range existingReplicas {
 		if store, ok := sl.FindStoreByID(replDesc.StoreID); ok && replDesc.StoreID == leaseStoreID {
-			return !ioOverloadOptions.existingLeaseCheck(ctx, store, avgIOOverload)
+			return !ioOverloadOptions.existingLeaseCheck(ctx, store, sl)
 		}
 	}
 
@@ -2232,6 +2231,7 @@ func (a *Allocator) IOOverloadOptions() IOOverloadOptions {
 	return IOOverloadOptions{
 		ReplicaEnforcementLevel:      IOOverloadEnforcementLevel(ReplicaIOOverloadThresholdEnforcement.Get(&a.st.SV)),
 		LeaseEnforcementLevel:        IOOverloadEnforcementLevel(LeaseIOOverloadThresholdEnforcement.Get(&a.st.SV)),
+		UseIOThresholdMax:            a.st.Version.IsActive(context.Background(), clusterversion.V24_1_GossipMaximumIOOverload),
 		ReplicaIOOverloadThreshold:   ReplicaIOOverloadThreshold.Get(&a.st.SV),
 		LeaseIOOverloadThreshold:     LeaseIOOverloadThreshold.Get(&a.st.SV),
 		LeaseIOOverloadShedThreshold: LeaseIOOverloadShedThreshold.Get(&a.st.SV),

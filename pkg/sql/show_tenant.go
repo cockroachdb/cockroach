@@ -168,8 +168,9 @@ func (n *showTenantNode) getTenantValues(
 						// Protected timestamp might not be set yet, no need to fail.
 						log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d: %v",
 							tenantInfo.Name, jobId, err)
+					} else {
+						values.protectedTimestamp = record.Timestamp
 					}
-					values.protectedTimestamp = record.Timestamp
 				}
 			}
 		case mtinfopb.DataStateReady, mtinfopb.DataStateDrop:
