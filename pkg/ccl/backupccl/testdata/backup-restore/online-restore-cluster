@@ -1,0 +1,37 @@
+# This test ensures that cluster online restore publishes only one download job. 
+
+reset test-nodelocal
+----
+
+new-cluster name=s1 disable-tenant
+----
+
+exec-sql
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+CREATE TABLE foofoo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foofoo VALUES (10, 'x0');
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster/';
+----
+
+
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access disable-tenant
+----
+
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/cluster/' with EXPERIMENTAL DEFERRED COPY;
+----
+
+query-sql
+SELECT count(*) FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%';
+----
+1
+
+
+
+

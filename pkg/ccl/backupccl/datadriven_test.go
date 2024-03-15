@@ -712,6 +712,23 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				d.ScanArgs(t, "user", &user)
 			}
 			checkForClusterSetting(t, d.Input, ds.clusters[cluster].NumServers())
+			if d.HasArg("retry") {
+				var eventualOutput string
+				testutils.SucceedsSoon(t, func() error {
+					rows, err := ds.getSQLDB(t, cluster, user).Query(d.Input)
+					if err != nil {
+						return err
+					}
+					output, err := sqlutils.RowsToDataDrivenOutput(rows)
+					require.NoError(t, err)
+					if output != d.Expected {
+						return errors.Newf("latest output: %s\n expected: %s", output, d.Expected)
+					}
+					eventualOutput = output
+					return nil
+				})
+				return eventualOutput
+			}
 			rows, err := ds.getSQLDB(t, cluster, user).Query(d.Input)
 			if err != nil {
 				return err.Error()
