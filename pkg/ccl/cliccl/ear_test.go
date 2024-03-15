@@ -62,7 +62,7 @@ func TestDecrypt(t *testing.T) {
 	require.NoError(t, err)
 
 	// Find a manifest file to check.
-	files, err := p.List(dir)
+	files, err := p.Env().List(dir)
 	require.NoError(t, err)
 	sort.Strings(files)
 	var manifestPath string

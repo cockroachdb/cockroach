@@ -102,7 +102,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	assertExists := func(exists bool) {
 		t.Helper()
-		_, err := ss.eng.Stat(ss.dir)
+		_, err := ss.eng.Env().Stat(ss.dir)
 		if !exists {
 			require.True(t, oserror.IsNotExist(err), err)
 		} else {
@@ -260,7 +260,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		// First add a file that shouldn't be in the sideloaded storage to ensure
 		// sane behavior when directory can't be removed after full truncate.
 		nonRemovableFile := filepath.Join(ss.Dir(), "cantremove.xx")
-		f, err := eng.Create(nonRemovableFile)
+		f, err := eng.Env().Create(nonRemovableFile)
 		if err != nil {
 			t.Fatalf("could not create non i*.t* file in sideloaded storage: %+v", err)
 		}
@@ -273,18 +273,18 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		// is optional. But the file should still be there!
 		require.NoError(t, err)
 		{
-			_, err := eng.Stat(nonRemovableFile)
+			_, err := eng.Env().Stat(nonRemovableFile)
 			require.NoError(t, err)
 		}
 
 		// Now remove extra file and let truncation proceed to remove directory.
-		require.NoError(t, eng.Remove(nonRemovableFile))
+		require.NoError(t, eng.Env().Remove(nonRemovableFile))
 
 		// Test that directory is removed when filepath.Glob returns 0 matches.
 		_, _, err = ss.TruncateTo(ctx, math.MaxUint64)
 		require.NoError(t, err)
 		// Ensure directory is removed, now that all files should be gone.
-		_, err = eng.Stat(ss.Dir())
+		_, err = eng.Env().Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
 		// Ensure HasAnyEntry doesn't find anything.
 		found, err := ss.HasAnyEntry(ctx, 0, 10000)
@@ -323,7 +323,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		require.Zero(t, retainedByTruncateTo)
 		require.Equal(t, freedByTruncateTo, freed)
 		// Ensure directory is removed when all records are removed.
-		_, err = eng.Stat(ss.Dir())
+		_, err = eng.Env().Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
 	}()
 
@@ -570,7 +570,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			if test.size != size {
 				t.Fatalf("expected %d sideloadedSize, but found %d", test.size, size)
 			}
-			actKeys, err := sideloaded.eng.List(sideloaded.Dir())
+			actKeys, err := sideloaded.eng.Env().List(sideloaded.Dir())
 			if oserror.IsNotExist(err) {
 				t.Log("swallowing IsNotExist")
 				err = nil
@@ -638,7 +638,7 @@ func TestSideloadStorageSync(t *testing.T) {
 		ss = newTestingSideloadStorage(eng)
 
 		// The sideloaded directory must exist because all its parents are synced.
-		_, err = eng.Stat(ss.Dir())
+		_, err = eng.Env().Stat(ss.Dir())
 		require.NoError(t, err)
 
 		// The stored entry is still durable if we synced the sideloaded storage
