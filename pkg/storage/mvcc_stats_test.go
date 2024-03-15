@@ -2028,7 +2028,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			)
 		} else {
 			rangeTombstoneThreshold := s.rng.Int63n(5)
-			desc = fmt.Sprintf("mvccPredicateDeleteRange=%s, predicates=%s, rangeTombstoneThreshold=%d",
+			desc = fmt.Sprintf("mvccPredicateDeleteRange=%s, predicates=%#v rangeTombstoneThreshold=%d",
 				roachpb.Span{Key: mvccRangeDelKey, EndKey: mvccRangeDelEndKey}, predicates, rangeTombstoneThreshold)
 			const maxLockConflicts = 0        // unlimited
 			const targetLockConflictBytes = 0 // unlimited
