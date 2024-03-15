@@ -14,9 +14,9 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -75,7 +75,7 @@ for d in $(ls /dev/nvme?n? /dev/disk/by-id/google-persistent-disk-[1-9]); do
 # if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
 # then the disks will be selected for RAID'ing. If there are both Local SSDs and Persistent disks,
 # RAID'ing in this case can cause performance differences. So, to avoid this, local SSDs are ignored.
-# Scenarios: 
+# Scenarios:
 #   (local SSD = 0, Persistent Disk - 1) - no RAID'ing and Persistent Disk mounted
 #   (local SSD = 1, Persistent Disk - 0) - no RAID'ing and local SSD mounted
 #   (local SSD >= 1, Persistent Disk = 1) - no RAID'ing and Persistent Disk mounted
@@ -341,14 +341,33 @@ func SyncDNS(l *logger.Logger, vms vm.List) error {
 	return errors.Wrapf(err, "Command: %s\nOutput: %s\nZone file contents:\n%s", cmd, output, zoneBuilder.String())
 }
 
+type AuthorizedKey struct {
+	User string
+	Key  string
+}
+
+type AuthorizedKeys []AuthorizedKey
+
+// AsSSH returns a marshaled version of the authorized keys in a
+// format that can be used as SSH's `authorized_keys` file.
+func (ak AuthorizedKeys) AsSSH() []byte {
+	var buf bytes.Buffer
+
+	for _, k := range ak {
+		buf.WriteString(fmt.Sprintf("%s\n", k.Key))
+	}
+
+	return buf.Bytes()
+}
+
 // GetUserAuthorizedKeys retrieves reads a list of user public keys from the
 // gcloud cockroach-ephemeral project and returns them formatted for use in
 // an authorized_keys file.
-func GetUserAuthorizedKeys(l *logger.Logger) (authorizedKeys []byte, err error) {
+func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 	var outBuf bytes.Buffer
 	// The below command will return a stream of user:pubkey as text.
 	cmd := exec.Command("gcloud", "compute", "project-info", "describe",
-		"--project=cockroach-ephemeral",
+		fmt.Sprintf("--project=%s", DefaultProject()),
 		"--format=value(commonInstanceMetadata.ssh-keys)")
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = &outBuf
@@ -356,36 +375,34 @@ func GetUserAuthorizedKeys(l *logger.Logger) (authorizedKeys []byte, err error) 
 	if err := cmd.Run(); err != nil {
 		return nil, err
 	}
-	// Initialize a bufio.Reader with a large enough buffer that we will never
-	// expect a line prefix when processing lines and can return an error if a
-	// call to ReadLine ever returns a prefix.
-	var pubKeyBuf bytes.Buffer
-	r := bufio.NewReaderSize(&outBuf, 1<<16 /* 64 kB */)
-	for {
-		line, isPrefix, err := r.ReadLine()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if isPrefix {
-			return nil, fmt.Errorf("unexpectedly failed to read public key line")
-		}
-		if len(line) == 0 {
-			continue
-		}
-		colonIdx := bytes.IndexRune(line, ':')
+
+	var authorizedKeys AuthorizedKeys
+	scanner := bufio.NewScanner(&outBuf)
+	for scanner.Scan() {
+		line := scanner.Text()
+		colonIdx := strings.IndexRune(line, ':')
 		if colonIdx == -1 {
-			return nil, fmt.Errorf("malformed public key line %q", string(line))
+			return nil, fmt.Errorf("malformed public key line %q", line)
 		}
-		// Skip users named "root" or "ubuntu" which don't correspond to humans
-		// and should be removed from the gcloud project.
-		if name := string(line[:colonIdx]); name == "root" || name == "ubuntu" {
+
+		user := line[:colonIdx]
+		key := line[colonIdx+1:]
+
+		if user == config.RootUser || user == config.SharedUser {
 			continue
 		}
-		pubKeyBuf.Write(line[colonIdx+1:])
-		pubKeyBuf.WriteRune('\n')
+
+		authorizedKeys = append(authorizedKeys, AuthorizedKey{User: user, Key: key})
 	}
-	return pubKeyBuf.Bytes(), nil
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read public keys from project metadata: %w", err)
+	}
+
+	// For consistency, return keys sorted by username.
+	sort.Slice(authorizedKeys, func(i, j int) bool {
+		return authorizedKeys[i].User < authorizedKeys[j].User
+	})
+
+	return authorizedKeys, nil
 }
