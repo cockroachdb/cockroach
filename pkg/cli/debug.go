@@ -172,26 +172,34 @@ func (f *keyFormat) Type() string {
 	return "hex|base64"
 }
 
-// OpenEngine opens the engine at 'dir'. Depending on the supplied options,
-// an empty engine might be initialized.
-func OpenEngine(
-	dir string, stopper *stop.Stopper, rw fs.RWMode, opts ...storage.ConfigOption,
-) (storage.Engine, error) {
-	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
-	if err != nil {
-		return nil, err
-	}
+// OpenFilesystemEnv opens the filesystem environment at 'dir'. Note that
+// opening the fs.Env will acquire the directory lock and prevent opening of the
+// engine through [OpenEngine]. If the caller wishes to then open the storage
+// engine, they should manually open it using storage.Open. The returned Env has
+// 1 reference and the caller must ensure it's closed.
+func OpenFilesystemEnv(dir string, rw fs.RWMode) (*fs.Env, error) {
 	envConfig := fs.EnvConfig{RW: rw}
 	if PopulateEnvConfigHook != nil {
 		if err := PopulateEnvConfigHook(dir, &envConfig); err != nil {
 			return nil, err
 		}
 	}
-	env, err := fs.InitEnv(context.Background(), vfs.Default, dir, envConfig)
+	return fs.InitEnv(context.Background(), vfs.Default, dir, envConfig)
+}
+
+// OpenEngine opens the engine at 'dir'. Depending on the supplied options,
+// an empty engine might be initialized.
+func OpenEngine(
+	dir string, stopper *stop.Stopper, rw fs.RWMode, opts ...storage.ConfigOption,
+) (storage.Engine, error) {
+	env, err := OpenFilesystemEnv(dir, rw)
 	if err != nil {
 		return nil, err
 	}
-
+	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
+	if err != nil {
+		return nil, err
+	}
 	db, err := storage.Open(
 		context.Background(),
 		env,
