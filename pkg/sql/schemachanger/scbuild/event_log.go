@@ -11,6 +11,8 @@
 package scbuild
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -52,9 +54,11 @@ func (e *eventLogState) EventLogStateWithNewSourceElementID() scbuildstmt.EventL
 	}
 }
 
-func logEvents(b buildCtx, ts scpb.TargetState, loggedTargets []scpb.Target) {
+func logEvents(
+	b buildCtx, ts scpb.TargetState, loggedTargets []scpb.Target,
+) LogSchemaChangerEventsFn {
 	if len(loggedTargets) == 0 {
-		return
+		return stubLogSchemaChangerEventsFn
 	}
 	var swallowedError error
 	defer scerrors.StartEventf(
@@ -62,6 +66,8 @@ func logEvents(b buildCtx, ts scpb.TargetState, loggedTargets []scpb.Target) {
 		"event logging for declarative schema change targets built for %s",
 		redact.Safe(ts.Statements[loggedTargets[0].Metadata.StatementID].StatementTag),
 	).HandlePanicAndLogError(b.Context, &swallowedError)
+	detailSlice := make([]eventpb.CommonSQLEventDetails, 0, len(loggedTargets))
+	payLoadsSlice := make([]logpb.EventPayload, 0, len(loggedTargets))
 	for _, lt := range loggedTargets {
 		descID := screl.GetDescID(lt.Element())
 		stmtID := lt.Metadata.StatementID
@@ -86,9 +92,17 @@ func logEvents(b buildCtx, ts scpb.TargetState, loggedTargets []scpb.Target) {
 		if pl == nil {
 			continue
 		}
-		if err := b.EventLogger().LogEvent(b, details, pl); err != nil {
-			panic(err)
+		detailSlice = append(detailSlice, details)
+		payLoadsSlice = append(payLoadsSlice, pl)
+	}
+	// Return a function for logging schema change events.
+	return func(ctx context.Context) error {
+		for i := range detailSlice {
+			if err := b.EventLogger().LogEvent(ctx, detailSlice[i], payLoadsSlice[i]); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
 }
 

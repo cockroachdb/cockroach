@@ -311,6 +311,7 @@ func execStatementWithTestDeps(
 ) (stateAfterBuildingEachStatement []scpb.CurrentState) {
 	var jobID jobspb.JobID
 	var state scpb.CurrentState
+	var logSchemaChangesFn scbuild.LogSchemaChangerEventsFn
 	var err error
 
 	deps.WithTxn(func(s *sctestdeps.TestState) {
@@ -318,8 +319,9 @@ func execStatementWithTestDeps(
 		deps.IncrementPhase()
 		deps.LogSideEffectf("# begin %s", deps.Phase())
 		for _, stmt := range stmts {
-			state, err = scbuild.Build(ctx, deps, state, stmt.AST, nil /* memAcc */)
+			state, logSchemaChangesFn, err = scbuild.Build(ctx, deps, state, stmt.AST, nil /* memAcc */)
 			require.NoError(t, err, "error in builder")
+			require.NoError(t, logSchemaChangesFn(ctx), "error generating event log entries")
 			stateAfterBuildingEachStatement = append(stateAfterBuildingEachStatement, state)
 			state, _, err = scrun.RunStatementPhase(ctx, s.TestingKnobs(), s, state)
 			require.NoError(t, err, "error in %s", s.Phase())
