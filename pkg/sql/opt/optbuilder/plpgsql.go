@@ -615,9 +615,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			return b.callContinuation(&con, s)
 
 		case *ast.Execute:
-			if t.Strict {
-				panic(strictIntoErr)
-			}
 			if len(t.Target) > 1 {
 				seenTargets := make(map[ast.Variable]struct{})
 				for _, name := range t.Target {
@@ -627,6 +624,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					seenTargets[name] = struct{}{}
 				}
 			}
+			strict := t.Strict || b.ob.evalCtx.SessionData().PLpgSQLUseStrictInto
 
 			// Create a new continuation routine to handle executing a SQL statement.
 			execCon := b.makeContinuation("_stmt_exec")
@@ -652,21 +650,32 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			b.appendPlpgSQLStmts(&retCon, stmts[i+1:])
 
 			// Ensure that the SQL statement returns at most one row.
+			limitVal := tree.DInt(1)
+			if strict {
+				// Increase the limit so that it's possible to check that there is
+				// exactly one row.
+				limitVal = tree.DInt(2)
+			}
 			stmtScope.expr = b.ob.factory.ConstructLimit(
 				stmtScope.expr,
-				b.ob.factory.ConstructConst(tree.NewDInt(tree.DInt(1)), types.Int),
+				b.ob.factory.ConstructConst(tree.NewDInt(limitVal), types.Int),
 				stmtScope.makeOrderingChoice(),
 			)
 
-			// Ensure that the SQL statement returns at least one row. The RIGHT join
-			// ensures that when the SQL statement returns no rows, it is extended
-			// with a single row of NULL values.
-			stmtScope.expr = b.ob.factory.ConstructRightJoin(
-				stmtScope.expr,
-				b.ob.factory.ConstructNoColsRow(),
-				nil, /* on */
-				memo.EmptyJoinPrivate,
-			)
+			if strict {
+				// Check that the expression produces exactly one row.
+				b.addOneRowCheck(stmtScope)
+			} else {
+				// Ensure that the SQL statement returns at least one row. The RIGHT
+				// join ensures that when the SQL statement returns no rows, it is
+				// extended with a single row of NULL values.
+				stmtScope.expr = b.ob.factory.ConstructRightJoin(
+					stmtScope.expr,
+					b.ob.factory.ConstructNoColsRow(),
+					nil, /* on */
+					memo.EmptyJoinPrivate,
+				)
+			}
 
 			// Step 2: build the INTO statement into a continuation routine that calls
 			// the previously built continuation.
@@ -1003,28 +1012,34 @@ func (b *plpgsqlBuilder) buildInto(stmtScope *scope, target []ast.Variable) *sco
 	return intoScope
 }
 
-// buildPLpgSQLRaise builds a call to the crdb_internal.plpgsql_raise builtin
-// function, which implements the notice-sending behavior of RAISE statements.
+// buildPLpgSQLRaise builds a Project expression which implements the
+// notice-sending behavior of RAISE statements.
 func (b *plpgsqlBuilder) buildPLpgSQLRaise(inScope *scope, args memo.ScalarListExpr) *scope {
+	raiseColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_raise"))
+	raiseScope := inScope.push()
+	fn := b.makePLpgSQLRaiseFn(args)
+	b.ob.synthesizeColumn(raiseScope, raiseColName, types.Int, nil /* expr */, fn)
+	b.ob.constructProjectForScope(inScope, raiseScope)
+	return raiseScope
+}
+
+// makePLpgSQLRaiseFn builds a call to the crdb_internal.plpgsql_raise builtin
+// function, which implements the notice-sending behavior of RAISE statements.
+func (b *plpgsqlBuilder) makePLpgSQLRaiseFn(args memo.ScalarListExpr) opt.ScalarExpr {
 	const raiseFnName = "crdb_internal.plpgsql_raise"
-	props, overloads := builtinsregistry.GetBuiltinProperties(raiseFnName)
+	fnProps, overloads := builtinsregistry.GetBuiltinProperties(raiseFnName)
 	if len(overloads) != 1 {
 		panic(errors.AssertionFailedf("expected one overload for %s", raiseFnName))
 	}
-	raiseCall := b.ob.factory.ConstructFunction(
+	return b.ob.factory.ConstructFunction(
 		args,
 		&memo.FunctionPrivate{
 			Name:       raiseFnName,
 			Typ:        types.Int,
-			Properties: props,
+			Properties: fnProps,
 			Overload:   &overloads[0],
 		},
 	)
-	raiseColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_raise"))
-	raiseScope := inScope.push()
-	b.ob.synthesizeColumn(raiseScope, raiseColName, types.Int, nil /* expr */, raiseCall)
-	b.ob.constructProjectForScope(inScope, raiseScope)
-	return raiseScope
 }
 
 // getRaiseArgs validates the options attached to the given PLpgSQL RAISE
@@ -1113,6 +1128,23 @@ func (b *plpgsqlBuilder) getRaiseArgs(s *scope, raise *ast.Raise) memo.ScalarLis
 		}
 	}
 	return args
+}
+
+// makeConstRaiseArgs builds the arguments for a crdb_internal.plpgsql_raise
+// function call.
+func (b *plpgsqlBuilder) makeConstRaiseArgs(
+	severity, message, detail, hint, code string,
+) memo.ScalarListExpr {
+	makeConstStr := func(str string) opt.ScalarExpr {
+		return b.ob.factory.ConstructConstVal(tree.NewDString(str), types.String)
+	}
+	return memo.ScalarListExpr{
+		makeConstStr(severity),
+		makeConstStr(message),
+		makeConstStr(detail),
+		makeConstStr(hint),
+		makeConstStr(code),
+	}
 }
 
 // A PLpgSQL RAISE statement can specify a format string, where supplied
@@ -1303,16 +1335,13 @@ func (b *plpgsqlBuilder) handleEndOfFunction(inScope *scope) *scope {
 		return returnScope
 	}
 	// Build a RAISE statement which throws an end-of-function error if executed.
-	makeConstStr := func(str string) opt.ScalarExpr {
-		return b.ob.factory.ConstructConstVal(tree.NewDString(str), types.String)
-	}
-	args := memo.ScalarListExpr{
-		makeConstStr("ERROR"), /* severity */
-		makeConstStr("control reached end of function without RETURN"), /* message */
-		makeConstStr(""), /* detail */
-		makeConstStr(""), /* hint */
-		makeConstStr(pgcode.RoutineExceptionFunctionExecutedNoReturnStatement.String()), /* code */
-	}
+	args := b.makeConstRaiseArgs(
+		"ERROR", /* severity */
+		"control reached end of function without RETURN", /* message */
+		"", /* detail */
+		"", /* hint */
+		pgcode.RoutineExceptionFunctionExecutedNoReturnStatement.String(), /* code */
+	)
 	con := b.makeContinuation("_end_of_function")
 	con.def.Volatility = volatility.Volatile
 	b.appendBodyStmt(&con, b.buildPLpgSQLRaise(con.s, args))
@@ -1325,6 +1354,66 @@ func (b *plpgsqlBuilder) handleEndOfFunction(inScope *scope) *scope {
 	b.ob.constructProjectForScope(inScope, eofScope)
 	b.appendBodyStmt(&con, eofScope)
 	return b.callContinuation(&con, inScope)
+}
+
+// addOneRowCheck handles INTO STRICT, where a SQL statement is required to
+// return exactly one row, or an error occurs.
+func (b *plpgsqlBuilder) addOneRowCheck(s *scope) {
+	// Add a ScalarGroupBy which passes through input columns, and also computes a
+	// row count.
+	originalCols := s.colSet()
+	aggs := make(memo.AggregationsExpr, 0, len(s.cols)+1)
+	for j := range s.cols {
+		// Create a pass-through aggregation. AnyNotNull works here because if there
+		// is more than one row, execution will halt with an error and the rows will
+		// be discarded anyway.
+		agg := b.ob.factory.ConstructAnyNotNullAgg(b.ob.factory.ConstructVariable(s.cols[j].id))
+		aggs = append(aggs, b.ob.factory.ConstructAggregationsItem(agg, s.cols[j].id))
+	}
+	rowCountColName := b.makeIdentifier("_plpgsql_row_count")
+	rowCountCol := b.ob.factory.Metadata().AddColumn(rowCountColName, types.Int)
+	rowCountAgg := b.ob.factory.ConstructCountRows()
+	aggs = append(aggs, b.ob.factory.ConstructAggregationsItem(rowCountAgg, rowCountCol))
+	s.expr = b.ob.factory.ConstructScalarGroupBy(s.expr, aggs, &memo.GroupingPrivate{})
+
+	// Add a projections which checks the row count and
+	// calls crdb_internal.plpgsql_raise to throw an error if necessary.
+	tooFewRowsArgs := b.makeConstRaiseArgs(
+		"ERROR",                     /* severity */
+		"query returned no rows",    /* message */
+		"",                          /* detail */
+		"",                          /* hint */
+		pgcode.NoDataFound.String(), /* code */
+	)
+	tooManyRowsArgs := b.makeConstRaiseArgs(
+		"ERROR",                            /* severity */
+		"query returned more than one row", /* message */
+		"",                                 /* detail */
+		"Make sure the query returns a single row, or use LIMIT 1.", /* hint */
+		pgcode.TooManyRows.String(),                                 /* code */
+	)
+	tooFewRowsFn := b.makePLpgSQLRaiseFn(tooFewRowsArgs)
+	tooManyRowsFn := b.makePLpgSQLRaiseFn(tooManyRowsArgs)
+	rowCountVar := b.ob.factory.ConstructVariable(rowCountCol)
+	scalarOne := b.ob.factory.ConstructConstVal(tree.NewDInt(1), types.Int)
+	caseExpr := b.ob.factory.ConstructCase(
+		memo.TrueSingleton,
+		memo.ScalarListExpr{
+			b.ob.factory.ConstructWhen(b.ob.factory.ConstructLt(rowCountVar, scalarOne), tooFewRowsFn),
+			b.ob.factory.ConstructWhen(b.ob.factory.ConstructGt(rowCountVar, scalarOne), tooManyRowsFn),
+		},
+		b.ob.factory.ConstructNull(types.Int),
+	)
+	rowCheckColName := b.makeIdentifier("_plpgsql_row_count_check")
+	rowCheckCol := b.ob.factory.Metadata().AddColumn(rowCheckColName, types.Int)
+	projections := memo.ProjectionsExpr{b.ob.factory.ConstructProjectionsItem(caseExpr, rowCheckCol)}
+	s.expr = b.ob.factory.ConstructProject(s.expr, projections, originalCols)
+
+	// Add an optimization barrier to ensure that the row-count checks are not
+	// eliminated by column-pruning. Then, remove the temporary columns from the
+	// output.
+	b.addBarrier(s)
+	s.expr = b.ob.factory.ConstructProject(s.expr, memo.ProjectionsExpr{}, originalCols)
 }
 
 // buildFetch projects a call to the crdb_internal.plpgsql_fetch builtin
@@ -1922,9 +2011,6 @@ var (
 	)
 	continueCondErr = unimplemented.New("CONTINUE WHEN",
 		"conditional CONTINUE statements are not yet supported",
-	)
-	strictIntoErr = unimplemented.NewWithIssuef(107854,
-		"INTO STRICT statements are not yet implemented",
 	)
 	dupIntoErr = unimplemented.New("duplicate INTO target",
 		"assigning to a variable more than once in the same INTO statement is not supported",
