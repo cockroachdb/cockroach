@@ -90,6 +90,9 @@ const (
 	// SharedUser is the linux username for shared use on all vms.
 	SharedUser = "ubuntu"
 
+	// RootUser is the root username on all vms.
+	RootUser = "root"
+
 	// MemoryMax is passed to systemd-run; the cockroach process is killed if it
 	// uses more than this percentage of the host's memory.
 	MemoryMax = "95%"
