@@ -463,7 +463,8 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		// It is fixed in v23.2 and later, but there are no plans to fix it in v23.1
 		// version, so we ignore the error here.
 		// See: https://github.com/cockroachdb/cockroach/issues/115747#issuecomment-1855830157
-		if strings.Contains(pgErr.Error(), "job-rows-batch-insert: null value in column") {
+		if strings.Contains(pgErr.Error(), "job-rows-batch-insert: null value in column") ||
+			strings.Contains(pgErr.Error(), "job-rows-batch-insert: failed to satisfy CHECK constraint") {
 			return nil
 		}
 
