@@ -274,8 +274,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			Settings: s.ClusterSettings(),
 			Codec:    s.Codec(),
 			BackupMonitor: mon.NewUnlimitedMonitor(ctx, mon.NewMonitorArgs{
-				Name:     "test",
-				Settings: s.ClusterSettings(),
+				Name: "test",
 			}),
 			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
 		},

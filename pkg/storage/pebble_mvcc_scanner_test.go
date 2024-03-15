@@ -182,12 +182,11 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 }
 
 func scannerWithAccount(
-	ctx context.Context, st *cluster.Settings, scanner *pebbleMVCCScanner, limitBytes int64,
+	ctx context.Context, scanner *pebbleMVCCScanner, limitBytes int64,
 ) (cleanup func()) {
 	m := mon.NewMonitor(mon.NewMonitorArgs{
 		Name:      "test",
 		Increment: 1,
-		Settings:  st,
 	})
 	m.Start(ctx, nil, mon.NewStandaloneBudget(limitBytes))
 	ba := m.MakeBoundAccount()
@@ -202,7 +201,6 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
 	eng := createTestPebbleEngine()
 	defer eng.Close()
 
@@ -246,7 +244,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		ts:     hlc.Timestamp{WallTime: 50},
 	}
 	scanner.init(&txn1, ui1, &pebbleResults{})
-	cleanup := scannerWithAccount(ctx, st, scanner, 6000)
+	cleanup := scannerWithAccount(ctx, scanner, 6000)
 	resumeSpan, resumeReason, resumeNextBytes, err := scanner.scan(ctx)
 	require.Nil(t, resumeSpan)
 	require.Zero(t, resumeReason)
@@ -262,7 +260,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		ts:     hlc.Timestamp{WallTime: 50},
 	}
 	scanner.init(&txn1, ui1, &pebbleResults{})
-	cleanup = scannerWithAccount(ctx, st, scanner, 6000)
+	cleanup = scannerWithAccount(ctx, scanner, 6000)
 	resumeSpan, resumeReason, resumeNextBytes, err = scanner.scan(ctx)
 	require.Nil(t, resumeSpan)
 	require.Zero(t, resumeReason)
@@ -282,7 +280,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 			inconsistent: inconsistent,
 		}
 		scanner.init(nil, uncertainty.Interval{}, &pebbleResults{})
-		cleanup = scannerWithAccount(ctx, st, scanner, 100)
+		cleanup = scannerWithAccount(ctx, scanner, 100)
 		resumeSpan, resumeReason, resumeNextBytes, err = scanner.scan(ctx)
 		require.Nil(t, resumeSpan)
 		require.Zero(t, resumeReason)

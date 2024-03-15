@@ -47,7 +47,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,

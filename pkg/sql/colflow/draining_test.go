@@ -41,9 +41,8 @@ func TestDrainingAfterRemoteError(t *testing.T) {
 	// This ensures that the query will run into "out of temporary storage"
 	// error.
 	diskMonitor := mon.NewMonitor(mon.NewMonitorArgs{
-		Name:     "test-disk",
-		Res:      mon.DiskResource,
-		Settings: st,
+		Name: "test-disk",
+		Res:  mon.DiskResource,
 	})
 	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(1))
 

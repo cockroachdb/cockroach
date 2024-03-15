@@ -48,9 +48,8 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	require.NoError(t, err)
 	defer tempEngine.Close()
 	diskMonitor := mon.NewMonitor(mon.NewMonitorArgs{
-		Name:     "test-disk",
-		Res:      mon.DiskResource,
-		Settings: st,
+		Name: "test-disk",
+		Res:  mon.DiskResource,
 	})
 	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)

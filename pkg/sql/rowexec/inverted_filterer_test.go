@@ -128,7 +128,7 @@ func TestInvertedFilterer(t *testing.T) {
 	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(ctx)
 	testConfig := DefaultProcessorTestConfig()
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, testConfig.FlowCtx.Cfg.Settings)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 	testConfig.FlowCtx.DiskMonitor = diskMonitor
 	testConfig.FlowCtx.Txn = kv.NewTxn(ctx, server.DB(), server.NodeID())

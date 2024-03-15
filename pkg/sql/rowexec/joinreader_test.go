@@ -1060,7 +1060,7 @@ func TestJoinReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 	for i, td := range []catalog.TableDescriptor{tdSecondary, tdFamily} {
 		for _, c := range testCases {
@@ -1255,7 +1255,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -1365,7 +1365,7 @@ func TestJoinReaderDrain(t *testing.T) {
 
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
@@ -1662,7 +1662,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 		})
 		st          = s.ClusterSettings()
 		evalCtx     = eval.MakeTestingEvalContext(st)
-		diskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
+		diskMonitor = execinfra.NewTestDiskMonitor(ctx)
 		flowCtx     = execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
 			Mon:     evalCtx.TestingMon,
@@ -1931,7 +1931,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 		})
 		st          = s.ClusterSettings()
 		evalCtx     = eval.MakeTestingEvalContext(st)
-		diskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
+		diskMonitor = execinfra.NewTestDiskMonitor(ctx)
 		flowCtx     = execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
 			Mon:     evalCtx.TestingMon,

@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 	os.Exit(func() int {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
-		testMemMonitor = execinfra.NewTestMemMonitor(ctx, st)
+		testMemMonitor = execinfra.NewTestMemMonitor(ctx)
 		defer testMemMonitor.Stop(ctx)
 		memAcc := testMemMonitor.MakeBoundAccount()
 		testMemAcc = &memAcc
@@ -63,7 +63,7 @@ func TestMain(m *testing.M) {
 		testAllocator = colmem.NewAllocator(ctx, testMemAcc, testColumnFactory)
 		defer testMemAcc.Close(ctx)
 
-		testDiskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
+		testDiskMonitor = execinfra.NewTestDiskMonitor(ctx)
 		defer testDiskMonitor.Stop(ctx)
 		diskAcc := testDiskMonitor.MakeBoundAccount()
 		testDiskAcc = &diskAcc

@@ -417,7 +417,6 @@ func newInternalPlanner(
 		Name:     redact.Sprintf("internal-planner.%s.%s", user, opName),
 		CurCount: memMetrics.CurBytesCount,
 		MaxHist:  memMetrics.MaxBytesHist,
-		Settings: execCfg.Settings,
 	})
 	plannerMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
 	p.monitor = plannerMon

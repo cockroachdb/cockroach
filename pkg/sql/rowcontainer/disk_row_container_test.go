@@ -95,25 +95,22 @@ func compareRowToEncRow(
 	return 0, nil
 }
 
-func getMemoryMonitor(st *cluster.Settings) *mon.BytesMonitor {
+func getMemoryMonitor() *mon.BytesMonitor {
 	return mon.NewMonitor(mon.NewMonitorArgs{
-		Name:     "test-mem",
-		Settings: st,
+		Name: "test-mem",
 	})
 }
 
-func getUnlimitedMemoryMonitor(st *cluster.Settings) *mon.BytesMonitor {
+func getUnlimitedMemoryMonitor() *mon.BytesMonitor {
 	return mon.NewUnlimitedMonitor(context.Background(), mon.NewMonitorArgs{
-		Name:     "test-mem",
-		Settings: st,
+		Name: "test-mem",
 	})
 }
 
-func getDiskMonitor(st *cluster.Settings) *mon.BytesMonitor {
+func getDiskMonitor() *mon.BytesMonitor {
 	return mon.NewMonitor(mon.NewMonitorArgs{
-		Name:     "test-disk",
-		Res:      mon.DiskResource,
-		Settings: st,
+		Name: "test-disk",
+		Res:  mon.DiskResource,
 	})
 }
 
@@ -164,7 +161,7 @@ func TestDiskRowContainer(t *testing.T) {
 
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := getDiskMonitor(st)
+	diskMonitor := getDiskMonitor()
 	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 	t.Run("EncodeDecode", func(t *testing.T) {
@@ -442,7 +439,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	defer tempEngine.Close()
 
 	// Make a monitor with no capacity.
-	monitor := getDiskMonitor(st)
+	monitor := getDiskMonitor()
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(0 /* capacity */))
 
 	d, _ := MakeDiskRowContainer(
@@ -474,7 +471,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	diskMonitor := getDiskMonitor(st)
+	diskMonitor := getDiskMonitor()
 	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
@@ -595,7 +592,7 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	monitor := getDiskMonitor(st)
+	monitor := getDiskMonitor()
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 
 	d, _ := MakeDiskRowContainer(monitor, types.OneIntCol, nil /* ordering */, tempEngine)

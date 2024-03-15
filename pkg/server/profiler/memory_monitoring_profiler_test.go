@@ -34,7 +34,6 @@ func addMonitor(
 	m := mon.NewMonitor(mon.NewMonitorArgs{
 		Name:      redact.RedactableString(name),
 		Increment: 1,
-		Settings:  st,
 	})
 	m.Start(ctx, parent, mon.NewStandaloneBudget(reservedBytes))
 	if usedBytes != 0 {

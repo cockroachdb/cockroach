@@ -35,8 +35,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
-	diskMonitor := getDiskMonitor(st)
+func newTestDiskMonitor(ctx context.Context) *mon.BytesMonitor {
+	diskMonitor := getDiskMonitor()
 	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	return diskMonitor
 }
@@ -60,8 +60,8 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	const smallMemoryBudget = 40
 	rng, _ := randutil.NewTestRand()
 
-	memoryMonitor := getMemoryMonitor(st)
-	diskMonitor := newTestDiskMonitor(ctx, st)
+	memoryMonitor := getMemoryMonitor()
+	diskMonitor := newTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 
 	memoryBudget := math.MaxInt64
@@ -139,8 +139,8 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	memoryMonitor := getMemoryMonitor(st)
-	diskMonitor := newTestDiskMonitor(ctx, st)
+	memoryMonitor := getMemoryMonitor()
+	diskMonitor := newTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 
 	numRows := 200
@@ -234,7 +234,7 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	diskMonitor := newTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 
 	numRows := 200
@@ -262,9 +262,9 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 
 	var containers [2]numberedContainer
 	containers[0] = makeNumberedContainerUsingIRC(
-		ctx, t, types, &evalCtx, tempEngine, st, memoryBudget, diskMonitor)
+		ctx, t, types, &evalCtx, tempEngine, memoryBudget, diskMonitor)
 	containers[1] = makeNumberedContainerUsingNRC(
-		ctx, t, types, &evalCtx, tempEngine, st, memoryBudget, diskMonitor)
+		ctx, t, types, &evalCtx, tempEngine, memoryBudget, diskMonitor)
 	defer func() {
 		for _, rc := range containers {
 			rc.close(ctx)
@@ -369,11 +369,10 @@ func makeNumberedContainerUsingNRC(
 	types []*types.T,
 	evalCtx *eval.Context,
 	engine diskmap.Factory,
-	st *cluster.Settings,
 	memoryBudget int64,
 	diskMonitor *mon.BytesMonitor,
 ) numberedContainerUsingNRC {
-	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
+	memoryMonitor := makeMemMonitorAndStart(ctx, memoryBudget)
 	rc := NewDiskBackedNumberedRowContainer(false /* deDup */, types, evalCtx, engine, memoryMonitor, diskMonitor)
 	_, err := rc.SpillToDisk(ctx)
 	require.NoError(t, err)
@@ -420,21 +419,18 @@ func makeNumberedContainerUsingIRC(
 	types []*types.T,
 	evalCtx *eval.Context,
 	engine diskmap.Factory,
-	st *cluster.Settings,
 	memoryBudget int64,
 	diskMonitor *mon.BytesMonitor,
 ) numberedContainerUsingIRC {
-	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
+	memoryMonitor := makeMemMonitorAndStart(ctx, memoryBudget)
 	rc := NewDiskBackedIndexedRowContainer(
 		nil /* ordering */, types, evalCtx, engine, memoryMonitor, diskMonitor)
 	require.NoError(t, rc.SpillToDisk(ctx))
 	return numberedContainerUsingIRC{rc: rc, memoryMonitor: memoryMonitor}
 }
 
-func makeMemMonitorAndStart(
-	ctx context.Context, st *cluster.Settings, budget int64,
-) *mon.BytesMonitor {
-	memoryMonitor := getMemoryMonitor(st)
+func makeMemMonitorAndStart(ctx context.Context, budget int64) *mon.BytesMonitor {
+	memoryMonitor := getMemoryMonitor()
 	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(budget))
 	return memoryMonitor
 }
@@ -539,7 +535,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	}
 	defer tempEngine.Close()
 
-	diskMonitor := newTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 
 	// Each row is 10 string columns. Each string has a mean length of 5, and the
@@ -621,10 +617,10 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 					switch containerKind {
 					case "indexed":
 						nc = makeNumberedContainerUsingIRC(
-							ctx, b, typs, &evalCtx, tempEngine, st, memoryBudget, diskMonitor)
+							ctx, b, typs, &evalCtx, tempEngine, memoryBudget, diskMonitor)
 					case "numbered":
 						nc = makeNumberedContainerUsingNRC(
-							ctx, b, typs, &evalCtx, tempEngine, st, memoryBudget, diskMonitor)
+							ctx, b, typs, &evalCtx, tempEngine, memoryBudget, diskMonitor)
 					}
 					defer nc.close(ctx)
 					for i := 0; i < len(rows); i++ {

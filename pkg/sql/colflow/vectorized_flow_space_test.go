@@ -79,8 +79,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 					sources = append(sources, colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */, nil /* opToInitialize */))
 				}
 				memMon := mon.NewMonitor(mon.NewMonitorArgs{
-					Name:     "MemoryMonitor",
-					Settings: st,
+					Name: "MemoryMonitor",
 				})
 				if success {
 					memMon.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
@@ -207,8 +206,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					sources = append(sources, colexecop.NewRepeatableBatchSource(testAllocator, batch, typs))
 				}
 				memMon := mon.NewMonitor(mon.NewMonitorArgs{
-					Name:     "MemoryMonitor",
-					Settings: st,
+					Name: "MemoryMonitor",
 				})
 				flowCtx.Cfg.TestingKnobs = execinfra.TestingKnobs{}
 				if expectNoMemoryError {

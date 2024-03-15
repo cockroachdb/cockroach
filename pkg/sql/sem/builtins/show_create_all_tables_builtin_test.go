@@ -16,7 +16,6 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
@@ -27,8 +26,7 @@ func TestTopologicalSort(t *testing.T) {
 
 	ctx := context.Background()
 	monitor := mon.NewMonitor(mon.NewMonitorArgs{
-		Name:     "test-mem",
-		Settings: cluster.MakeTestingClusterSettings(),
+		Name: "test-mem",
 	})
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	acc := monitor.MakeBoundAccount()

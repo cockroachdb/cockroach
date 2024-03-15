@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -287,8 +286,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	}
 
 	memMon := mon.NewMonitor(mon.NewMonitorArgs{
-		Name:     "test",
-		Settings: cluster.MakeTestingClusterSettings(),
+		Name: "test",
 	})
 	memMon.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer memMon.Stop(context.Background())
