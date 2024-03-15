@@ -22,6 +22,8 @@ export interface DataFromServer {
   OIDCButtonText: string;
   OIDCGenerateJWTAuthTokenEnabled: boolean;
   FeatureFlags: FeatureFlags;
+  LicenseType: string;
+  SecondsUntilLicenseExpiry: number;
 }
 // Tell TypeScript about `window.dataFromServer`, which is set in a script
 // tag in index.html, the contents of which are generated in a Go template
