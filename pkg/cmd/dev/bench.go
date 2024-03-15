@@ -30,7 +30,10 @@ func makeBenchCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 	benchCmd := &cobra.Command{
 		Use:   "bench [pkg...]",
 		Short: `Run the specified benchmarks`,
-		Long:  `Run the specified benchmarks.`,
+		Long: `Run the specified benchmarks.
+
+Note that by default we explicitly restrict the benchmark to running on a single core (i.e., GOMAXPROCS=1).
+This behavior can be overridden with --test-args='-test.cpu N'`,
 		Example: `
 	dev bench pkg/sql/parser --filter=BenchmarkParse
 	dev bench pkg/bench -f='BenchmarkTracing/1node/scan/trace=off' --count=2 --bench-time=10x --bench-mem
@@ -120,11 +123,9 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_arg", "-test.bench=.")
 	} else {
 		args = append(args, "--test_arg", fmt.Sprintf("-test.bench=%s", filter))
-		// For sharded test packages, it doesn't make much sense to spawn multiple
-		// test processes that don't end up running anything. Default to running
-		// things in a single process if a filter is specified.
-		args = append(args, "--test_sharding_strategy=disabled")
 	}
+	args = append(args, "--test_sharding_strategy=disabled")
+	args = append(args, "--test_arg", "-test.cpu", "--test_arg", "1")
 	if short {
 		args = append(args, "--test_arg", "-test.short")
 	}
