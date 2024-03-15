@@ -140,7 +140,6 @@ type RestoreOptions struct {
 	SkipLocalitiesCheck              bool
 	DebugPauseOn                     Expr
 	NewDBName                        Expr
-	IncludeAllSecondaryTenants       Expr
 	IncrementalStorage               StringOrPlaceholderOptList
 	AsTenant                         Expr
 	ForceTenantID                    Expr
@@ -475,12 +474,6 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(o.NewDBName)
 	}
 
-	if o.IncludeAllSecondaryTenants != nil {
-		maybeAddSep()
-		ctx.WriteString("include_all_virtual_clusters = ")
-		ctx.FormatNode(o.IncludeAllSecondaryTenants)
-	}
-
 	if o.IncrementalStorage != nil {
 		maybeAddSep()
 		ctx.WriteString("incremental_location = ")
@@ -653,14 +646,6 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.VerifyData = other.VerifyData
 	}
 
-	if o.IncludeAllSecondaryTenants != nil {
-		if other.IncludeAllSecondaryTenants != nil {
-			return errors.New("include_all_virtual_clusters specified multiple times")
-		}
-	} else {
-		o.IncludeAllSecondaryTenants = other.IncludeAllSecondaryTenants
-	}
-
 	if o.UnsafeRestoreIncompatibleVersion {
 		if other.UnsafeRestoreIncompatibleVersion {
 			return errors.New("unsafe_restore_incompatible_version specified multiple times")
@@ -714,7 +699,6 @@ func (o RestoreOptions) IsDefault() bool {
 		o.ForceTenantID == options.ForceTenantID &&
 		o.SchemaOnly == options.SchemaOnly &&
 		o.VerifyData == options.VerifyData &&
-		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
 		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion &&
 		o.ExecutionLocality == options.ExecutionLocality &&
 		o.ExperimentalOnline == options.ExperimentalOnline &&
