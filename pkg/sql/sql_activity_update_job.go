@@ -108,7 +108,7 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 				updater := newSqlActivityUpdater(settings, execCtx.ExecCfg().InternalDB, nil)
 				if err := updater.TransferStatsToActivity(ctx); err != nil {
 					log.Warningf(ctx, "error running sql activity updater job: %v", err)
-					metrics.NumErrors.Inc(1)
+					metrics.NumFailedUpdates.Inc(1)
 				} else {
 					metrics.NumSuccessfulUpdates.Inc(1)
 				}
@@ -125,7 +125,7 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 // ActivityUpdaterMetrics must be public for metrics to get
 // registered
 type ActivityUpdaterMetrics struct {
-	NumErrors            *metric.Counter
+	NumFailedUpdates     *metric.Counter
 	NumSuccessfulUpdates *metric.Counter
 	UpdateLatency        metric.IHistogram
 }
@@ -134,10 +134,10 @@ func (m ActivityUpdaterMetrics) MetricStruct() {}
 
 func newActivityUpdaterMetrics() metric.Struct {
 	return ActivityUpdaterMetrics{
-		NumErrors: metric.NewCounter(metric.Metadata{
-			Name:        "jobs.metrics.task_failed",
-			Help:        "Number of metrics sql activity updater tasks that failed",
-			Measurement: "errors",
+		NumFailedUpdates: metric.NewCounter(metric.Metadata{
+			Name:        "sql.stats.activity.updates.failed",
+			Help:        "Number of update attempts made by the SQL activity updater job that failed with errors",
+			Measurement: "failed updatesgi",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_COUNTER,
 		}),
