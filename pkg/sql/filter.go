@@ -31,9 +31,7 @@ type filterNode struct {
 var _ eval.IndexedVarContainer = &filterNode{}
 
 // IndexedVarEval implements the eval.IndexedVarContainer interface.
-func (f *filterNode) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
+func (f *filterNode) IndexedVarEval(idx int) (tree.Datum, error) {
 	return f.source.plan.Values()[idx], nil
 }
 
