@@ -752,13 +752,12 @@ func (ef *execFactory) ConstructLookupJoin(
 	for i, c := range eqCols {
 		n.eqCols[i] = int(c)
 	}
-	pred := makePredicate(joinType, planColumns(input.(planNode)), planColumns(tableScan), nil /* onCond */)
+	n.columns = getJoinResultColumns(joinType, planColumns(input.(planNode)), planColumns(tableScan))
 	n.lookupExpr = lookupExpr
 	n.remoteLookupExpr = remoteLookupExpr
 	if onCond != tree.DBoolTrue {
 		n.onCond = onCond
 	}
-	n.columns = pred.cols
 	if isFirstJoinInPairedJoiner {
 		n.columns = append(n.columns, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
 	}
