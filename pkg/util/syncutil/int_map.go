@@ -187,17 +187,13 @@ func (m *IntMap) Store(key int64, value unsafe.Pointer) {
 // If the entry is expunged, tryStore returns false and leaves the entry
 // unchanged.
 func (e *entry) tryStore(r unsafe.Pointer) bool {
-	p := atomic.LoadPointer(&e.p)
-	if p == expunged {
-		return false
-	}
 	for {
-		if atomic.CompareAndSwapPointer(&e.p, p, r) {
-			return true
-		}
-		p = atomic.LoadPointer(&e.p)
+		p := atomic.LoadPointer(&e.p)
 		if p == expunged {
 			return false
+		}
+		if atomic.CompareAndSwapPointer(&e.p, p, r) {
+			return true
 		}
 	}
 }
