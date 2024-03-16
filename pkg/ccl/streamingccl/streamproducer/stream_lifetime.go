@@ -296,7 +296,7 @@ func buildReplicationStreamSpec(
 	// Partition the spans with SQLPlanner
 	dsp := jobExecCtx.DistSQLPlanner()
 	noLoc := roachpb.Locality{}
-	oracle := kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), noLoc)
+	oracle := kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), noLoc, kvfollowerreadsccl.StreakConfig{})
 
 	planCtx := dsp.NewPlanningCtxWithOracle(
 		ctx, jobExecCtx.ExtendedEvalContext(), nil /* planner */, nil /* txn */, sql.FullDistribution, oracle, noLoc,

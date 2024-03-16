@@ -215,7 +215,9 @@ func backup(
 
 	oracle := physicalplan.DefaultReplicaChooser
 	if useBulkOracle.Get(&evalCtx.Settings.SV) {
-		oracle = kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), execLocality)
+		oracle = kvfollowerreadsccl.NewBulkOracle(
+			dsp.ReplicaOracleConfig(evalCtx.Locality), execLocality, kvfollowerreadsccl.StreakConfig{},
+		)
 	}
 
 	// We don't return the compatible nodes here since PartitionSpans will
