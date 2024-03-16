@@ -13,6 +13,7 @@ package kvcoord
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -159,13 +160,7 @@ type DistSenderCircuitBreakers struct {
 	settings         *cluster.Settings
 	transportFactory TransportFactory
 	metrics          DistSenderMetrics
-
-	// TODO(erikgrinaker): consider using a generic sync.Map here, but needs
-	// benchmarking.
-	mu struct {
-		syncutil.RWMutex
-		replicas map[cbKey]*ReplicaCircuitBreaker
-	}
+	replicas         sync.Map // cbKey -> *ReplicaCircuitBreaker
 }
 
 // NewDistSenderCircuitBreakers creates new DistSender circuit breakers.
@@ -175,14 +170,12 @@ func NewDistSenderCircuitBreakers(
 	transportFactory TransportFactory,
 	metrics DistSenderMetrics,
 ) *DistSenderCircuitBreakers {
-	d := &DistSenderCircuitBreakers{
+	return &DistSenderCircuitBreakers{
 		stopper:          stopper,
 		settings:         settings,
 		transportFactory: transportFactory,
 		metrics:          metrics,
 	}
-	d.mu.replicas = map[cbKey]*ReplicaCircuitBreaker{}
-	return d
 }
 
 // Start starts the circuit breaker manager, and runs it until the stopper
@@ -203,8 +196,6 @@ func (d *DistSenderCircuitBreakers) Start() error {
 // probeStallLoop periodically scans replica circuit breakers to detect stalls
 // and launch probes.
 func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
-	var cbs []*ReplicaCircuitBreaker // reuse across scans
-
 	// We use the probe interval as the scan interval, since we can sort of
 	// consider this to be probing the replicas for a stall.
 	var timer timeutil.Timer
@@ -230,11 +221,12 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 
 		// Probe replicas for a stall if we haven't seen a response from them in the
 		// past probe threshold.
-		cbs = d.snapshot(cbs[:0])
 		nowNanos := timeutil.Now().UnixNano()
 		probeThreshold := CircuitBreakerProbeThreshold.Get(&d.settings.SV).Nanoseconds()
 
-		for _, cb := range cbs {
+		d.replicas.Range(func(_, v any) bool {
+			cb := v.(*ReplicaCircuitBreaker)
+
 			if cb.inflightReqs.Load() > 0 && nowNanos-cb.stallSince.Load() >= probeThreshold {
 				// Don't probe if the breaker is already tripped. It will be probed in
 				// response to user traffic, to reduce the number of concurrent probes.
@@ -242,7 +234,9 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 					cb.breaker.Probe()
 				}
 			}
-		}
+
+			return true
+		})
 	}
 }
 
@@ -257,9 +251,6 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 // breakers if the DistSender keeps sending requests to them for some
 // reason.
 func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
-	var cbs []*ReplicaCircuitBreaker // reuse across scans
-	var gc []cbKey
-
 	ticker := time.NewTicker(cbGCInterval)
 	defer ticker.Stop()
 	for {
@@ -271,63 +262,22 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 			return
 		}
 
-		// Collect circuit breakers eligible for GC.
-		cbs = d.snapshot(cbs[:0])
-		gc = gc[:0]
-
 		nowNanos := timeutil.Now().UnixNano()
 		gcBelow := nowNanos - cbGCThreshold.Nanoseconds()
 		gcBelowTripped := nowNanos - cbGCThresholdTripped.Nanoseconds()
 
-		for _, cb := range cbs {
+		d.replicas.Range(func(key, v any) bool {
+			cb := v.(*ReplicaCircuitBreaker)
+
 			if lastRequest := cb.lastRequest.Load(); lastRequest > 0 && lastRequest < gcBelow {
 				if !cb.isTripped() || lastRequest < gcBelowTripped {
-					gc = append(gc, cbKey{rangeID: cb.rangeID, replicaID: cb.desc.ReplicaID})
+					d.replicas.Delete(key)
 				}
 			}
-		}
 
-		// Garbage collect the replicas. We may have raced with concurrent requests,
-		// but that's ok.
-		func() {
-			d.mu.Lock()
-			defer d.mu.Unlock()
-
-			for i, key := range gc {
-				// Periodically release the mutex to avoid tail latency.
-				if i%cbGCBatchSize == 0 && i > 0 {
-					d.mu.Unlock()
-					d.mu.Lock()
-				}
-				delete(d.mu.replicas, key) // nolint:deferunlockcheck
-			}
-		}()
+			return true
+		})
 	}
-}
-
-// snapshot fetches a snapshot of the current replica circuit breakers, reusing
-// the given slice if it has sufficient capacity.
-func (d *DistSenderCircuitBreakers) snapshot(
-	buf []*ReplicaCircuitBreaker,
-) []*ReplicaCircuitBreaker {
-	// Make sure the slice has sufficient capacity first, to avoid growing it
-	// while holding the mutex. We give it an additional 10% capacity, to avoid
-	// frequent growth and races.
-	d.mu.RLock()
-	l := len(d.mu.replicas) // nolint:deferunlockcheck
-	d.mu.RUnlock()
-	if cap(buf) < l {
-		buf = make([]*ReplicaCircuitBreaker, 0, l+l/10)
-	} else {
-		buf = buf[:0]
-	}
-
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	for _, cb := range d.mu.replicas {
-		buf = append(buf, cb)
-	}
-	return buf
 }
 
 // ForReplica returns a circuit breaker for a given replica.
@@ -342,32 +292,14 @@ func (d *DistSenderCircuitBreakers) ForReplica(
 	key := cbKey{rangeID: rangeDesc.RangeID, replicaID: replDesc.ReplicaID}
 
 	// Fast path: use existing circuit breaker.
-	d.mu.RLock()
-	cb, ok := d.mu.replicas[key]
-	d.mu.RUnlock()
-	if ok {
-		return cb
+	if v, ok := d.replicas.Load(key); ok {
+		return v.(*ReplicaCircuitBreaker)
 	}
 
-	// Slow path: construct a new replica circuit breaker and insert it.
-	//
-	// We construct it outside of the lock to avoid holding it for too long, since
-	// it incurs a fair number of allocations. This can cause us to concurrently
-	// construct and then discard a bunch of circuit breakers, but it will be
-	// bounded by the number of concurrent requests to the replica, and is likely
-	// better than delaying requests to other, unrelated replicas.
-	cb = newReplicaCircuitBreaker(d, rangeDesc, replDesc)
-
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if c, ok := d.mu.replicas[key]; ok {
-		cb = c // we raced with a concurrent insert
-	} else {
-		d.mu.replicas[key] = cb
-	}
-
-	return cb
+	// Slow path: construct a new replica circuit breaker and insert it. If we
+	// race with a concurrent insert, return it instead.
+	v, _ := d.replicas.LoadOrStore(key, newReplicaCircuitBreaker(d, rangeDesc, replDesc))
+	return v.(*ReplicaCircuitBreaker)
 }
 
 // ReplicaCircuitBreaker is a circuit breaker for an individual replica.
