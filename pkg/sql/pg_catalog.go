@@ -4776,6 +4776,7 @@ var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.TupleFamily:       typCategoryPseudo,
 	types.OidFamily:         typCategoryNumeric,
 	types.PGLSNFamily:       typCategoryUserDefined,
+	types.PGVectorFamily:    typCategoryUserDefined,
 	types.RefCursorFamily:   typCategoryUserDefined,
 	types.UuidFamily:        typCategoryUserDefined,
 	types.INetFamily:        typCategoryNetworkAddr,

@@ -1,0 +1,143 @@
+# Basic smoke tests for pgvector evaluation.
+
+eval
+'[1,2]'::vector <-> '[1,2]'::vector
+----
+0.0
+
+eval
+'[1,2]'::vector <#> '[1,2]'::vector
+----
+-5.0
+
+eval
+'[1,2]'::vector <=> '[1,2]'::vector
+----
+0.0
+
+eval
+'[1,2,3]'::vector <-> '[3,1,2]'::vector
+----
+2.449489742783178
+
+eval
+'[1,2,3]'::vector <#> '[3,1,2]'::vector
+----
+-11.0
+
+eval
+'[1,2,3]'::vector <=> '[3,1,2]'::vector
+----
+0.2142857142857143
+
+eval
+'[1,2,3]'::vector - '[3,1,2]'::vector
+----
+[-2,1,1]
+
+eval
+'[1,2,3]'::vector + '[3,1,2]'::vector
+----
+[4,3,5]
+
+eval
+'[1,2,3]'::vector * '[3,1,2]'::vector
+----
+[3,2,6]
+
+eval
+cosine_distance('[1,2,3]'::vector, '[3,1,2]'::vector)
+----
+0.2142857142857143
+
+eval
+inner_product('[1,2,3]'::vector, '[3,1,2]'::vector)
+----
+11.0
+
+eval
+l1_distance('[1,2,3]'::vector, '[3,1,2]'::vector)
+----
+4.0
+
+eval
+l2_distance('[1,2,3]'::vector, '[3,1,2]'::vector)
+----
+2.449489742783178
+
+eval
+vector_dims('[1,2,3]'::vector)
+----
+3
+
+eval
+vector_norm('[1,2,3]'::vector)
+----
+3.7416573867739413
+
+eval
+'[1,2]'::vector < '[1,2]'::vector
+----
+false
+
+eval
+'[1,2]'::vector <= '[1,2]'::vector
+----
+true
+
+eval
+'[1,2]'::vector > '[1,2]'::vector
+----
+false
+
+eval
+'[1,2]'::vector >= '[1,2]'::vector
+----
+true
+
+eval
+'[1,2]'::vector < '[1,3]'::vector
+----
+true
+
+eval
+'[2,2]'::vector < '[1,3]'::vector
+----
+false
+
+eval
+'[2,2]'::vector > '[1,3]'::vector
+----
+true
+
+# Mixed dimension comparisons
+
+eval
+'[1]'::vector < '[1,1]'::vector
+----
+true
+
+eval
+'[1,1]'::vector < '[1]'::vector
+----
+false
+
+eval
+'[1]'::vector > '[1,1]'::vector
+----
+false
+
+eval
+'[1,1]'::vector > '[1]'::vector
+----
+true
+
+eval
+'[100000000000000000000000]'::vector * '[100000000000000000000]'::vector
+----
+value out of range: overflow
+
+eval
+'[.000000000000000000000001]'::vector * '[.0000000000000000000001]'::vector
+----
+value out of range: underflow

@@ -99,6 +99,13 @@ func TestLogic_mixed_version_can_login(
 	runLogicTest(t, "mixed_version_can_login")
 }
 
+func TestLogic_mixed_version_pgvector(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_pgvector")
+}
+
 func TestLogic_mixed_version_sequence_per_node_cache(
 	t *testing.T,
 ) {

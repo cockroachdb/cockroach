@@ -1,0 +1,103 @@
+# LogicTest: !local-mixed-23.2
+
+query F
+SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector
+----
+5.196152422706632
+
+statement error pgcode 42601 dimensions for type vector must be at least 1
+CREATE TABLE v (v vector(0))
+
+statement error pgcode 42601 dimensions for type vector cannot exceed 16000
+CREATE TABLE v (v vector(16001))
+
+statement error column v is of type vector and thus is not indexable
+CREATE TABLE v (v vector(2) PRIMARY KEY)
+
+statement ok
+CREATE TABLE v (v vector);
+CREATE TABLE v2 (v vector(2))
+
+statement ok
+INSERT INTO v VALUES('[1]'), ('[2,3]')
+
+query T rowsort
+SELECT * FROM v
+----
+[1]
+[2,3]
+
+query T
+SELECT * FROM v WHERE v = '[1,2]'
+----
+
+query error pgcode 22000 different vector dimensions 2 and 1
+SELECT l2_distance('[1,2]', '[1]')
+
+statement error pgcode 22000 expected 2 dimensions, not 1
+INSERT INTO v2 VALUES('[1]'), ('[2,3]')
+
+statement ok
+INSERT INTO v2 VALUES('[1,2]'), ('[3,4]')
+
+query T rowsort
+SELECT * FROM v2
+----
+[1,2]
+[3,4]
+
+query T
+SELECT * FROM v2 WHERE v = '[1,2]'
+----
+[1,2]
+
+query TT
+SELECT '[1,2]'::text::vector, ARRAY[1,2]::vector
+----
+[1,2]  [1,2]
+
+query error pgcode 22004 array must not contain nulls
+SELECT ARRAY[1,2,null]::vector
+
+query error pgcode 22000 expected 1 dimensions, not 2
+select '[3,1]'::vector(1)
+
+query error pgcode 22000 NaN not allowed in vector
+select '[3,NaN]'::vector
+
+query error pgcode 22000 infinite value not allowed in vector
+select '[3,Inf]'::vector
+
+query error pgcode 22000 infinite value not allowed in vector
+select '[3,-Inf]'::vector
+
+statement ok
+CREATE TABLE x (a float[], b real[])
+
+# Test implicit cast from vector to array.
+statement ok
+INSERT INTO x VALUES('[1,2]'::vector, '[3,4]'::vector)
+
+statement ok
+CREATE TABLE v3 (v1 vector(1), v2 vector(1));
+INSERT INTO v3 VALUES
+('[1]', '[2]'),
+('[1]', '[-2]'),
+(NULL, '[1]'),
+('[1]', NULL)
+
+query FFFTTT rowsort
+SELECT v1<->v2, v1<#>v2, v1<=>v2, v1+v2, v1-v2, v1*v2 FROM v3
+----
+1     -2    0     [3]   [-1]  [2]
+3     2     2     [-1]  [3]   [-2]
+NULL  NULL  NULL  NULL  NULL  NULL
+NULL  NULL  NULL  NULL  NULL  NULL
+
+query FFFFFI rowsort
+SELECT l1_distance(v1,v2), l2_distance(v1,v2), cosine_distance(v1,v2), inner_product(v1,v2), vector_norm(v1), vector_dims(v1) FROM v3
+----
+1     1     0     2     1     1
+3     3     2     -2    1     1
+NULL  NULL  NULL  NULL  NULL  NULL
+NULL  NULL  NULL  NULL  1     1

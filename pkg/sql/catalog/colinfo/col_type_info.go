@@ -132,6 +132,14 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 			)
 		}
 
+	case types.PGVectorFamily:
+		if !version.IsActive(ctx, clusterversion.V24_2) {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"pg_vector not supported until version 24.2",
+			)
+		}
+
 	case types.RefCursorFamily:
 		if !version.IsActive(ctx, clusterversion.V23_2) {
 			return pgerror.Newf(
@@ -212,6 +220,8 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 	case types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
 		return true
 	case types.TSVectorFamily, types.TSQueryFamily:
+		return true
+	case types.PGVectorFamily:
 		return true
 	}
 	return false
