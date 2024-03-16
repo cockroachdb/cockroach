@@ -1,0 +1,56 @@
+# LogicTest: !local-mixed-23.2
+
+query F
+SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector
+----
+5.196152422706632
+
+statement error dimensions for type vector must be at least 1
+CREATE TABLE v (v vector(0))
+
+statement error dimensions for type vector cannot exceed 16000
+CREATE TABLE v (v vector(16001))
+
+statement error column v is of type vector and thus is not indexable
+CREATE TABLE v (v vector(2) PRIMARY KEY)
+
+statement ok
+CREATE TABLE v (v vector);
+CREATE TABLE v2 (v vector(2))
+
+statement ok
+INSERT INTO v VALUES('[1]'), ('[2,3]')
+
+query T rowsort
+SELECT * FROM v
+----
+[1]
+[2,3]
+
+query error different vector dimensions 1 and 2
+SELECT * FROM v WHERE v = '[1,2]'
+
+statement error expected 2 dimensions, not 1
+INSERT INTO v2 VALUES('[1]'), ('[2,3]')
+
+statement ok
+INSERT INTO v2 VALUES('[1,2]'), ('[3,4]')
+
+query T rowsort
+SELECT * FROM v2
+----
+[1,2]
+[3,4]
+
+query T
+SELECT * FROM v2 WHERE v = '[1,2]'
+----
+[1,2]
+
+query TT
+SELECT '[1,2]'::text::vector, ARRAY[1,2]::vector
+----
+[1,2]  [1,2]
+
+query error array must not contain nulls
+SELECT ARRAY[1,2,null]::vector

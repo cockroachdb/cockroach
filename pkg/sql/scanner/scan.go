@@ -315,11 +315,35 @@ func (s *SQLScanner) Scan(lval ScanSymType) {
 			return
 		case '=': // <=
 			s.pos++
+			switch s.peek() {
+			case '>': // <=>
+				s.pos++
+				lval.SetID(lexbase.COS_DISTANCE)
+				return
+			}
 			lval.SetID(lexbase.LESS_EQUALS)
 			return
 		case '@': // <@
 			s.pos++
 			lval.SetID(lexbase.CONTAINED_BY)
+			return
+		case '-': // <-
+			s.pos++
+			switch s.peek() {
+			case '>': // <->
+				s.pos++
+				lval.SetID(lexbase.DISTANCE)
+				return
+			}
+			return
+		case '#': // <#
+			s.pos++
+			switch s.peek() {
+			case '>': // <#>
+				s.pos++
+				lval.SetID(lexbase.NEG_INNER_PRODUCT)
+				return
+			}
 			return
 		}
 		return
