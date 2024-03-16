@@ -31,6 +31,7 @@ import (
     "go/constant"
 
     "github.com/cockroachdb/cockroach/pkg/geo/geopb"
+    "github.com/cockroachdb/cockroach/pkg/geo/geopb"
     "github.com/cockroachdb/cockroach/pkg/security/username"
     "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
     "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -41,6 +42,7 @@ import (
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
     "github.com/cockroachdb/cockroach/pkg/sql/types"
+    "github.com/cockroachdb/cockroach/pkg/util/vector"
     "github.com/cockroachdb/errors"
     "github.com/lib/pq/oid"
 )
@@ -921,14 +923,14 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %token <str> CLUSTER CLUSTERS COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str> CONFLICT CONNECTION CONNECTIONS CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
-%token <str> CONVERSION CONVERT COPY COST COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
+%token <str> CONVERSION CONVERT COPY COS_DISTANCE COST COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
 %token <str> CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CURSOR CYCLE
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEBUG_IDS DEBUG_PAUSE_ON DEC DEBUG_DUMP_METADATA_SST DECIMAL DEFAULT DEFAULTS DEFINER
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED DETAILS
-%token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
+%token <str> DISCARD DISTANCE DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_INFO_DIR ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
@@ -971,7 +973,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
 
-%token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEW_KMS NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
+%token <str> NAN NAME NAMES NATURAL NEG_INNER_PRODUCT NEVER NEW_DB_NAME NEW_KMS NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NODE NOLOGIN NOMODIFYCLUSTERSETTING NOREPLICATION
 %token <str> NOSQLLOGIN NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT
 %token <str> NOTHING NOTHING_AFTER_RETURNING
@@ -1012,7 +1014,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSAFE_RESTORE_INCOMPATIBLE_VERSION UNSPLIT
 %token <str> UPDATE UPDATES_CLUSTER_MONITORING_METRICS UPSERT UNSET UNTIL USE USER USERS USING UUID
 
-%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VERIFY_BACKUP_TABLE_DATA VIEW VARIABLES VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIEWDEBUG
+%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VECTOR VERIFY_BACKUP_TABLE_DATA VIEW VARIABLES VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIEWDEBUG
 %token <str> VIEWCLUSTERMETADATA VIEWCLUSTERSETTING VIRTUAL VISIBLE INVISIBLE VISIBILITY VOLATILE VOTERS
 %token <str> VIRTUAL_CLUSTER_NAME VIRTUAL_CLUSTER
 
@@ -1593,6 +1595,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %type <*types.T> character_base
 %type <*types.T> geo_shape_type
 %type <*types.T> const_geo
+%type <*types.T> const_vector
 %type <str> extract_arg
 %type <bool> opt_varying
 
@@ -1750,7 +1753,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 // funny behavior of UNBOUNDED on the SQL standard, though.
 %nonassoc  UNBOUNDED         // ideally should have same precedence as IDENT
 %nonassoc  IDENT NULL PARTITION RANGE ROWS GROUPS PRECEDING FOLLOWING CUBE ROLLUP
-%left      CONCAT FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH REMOVE_PATH AT_AT  // multi-character ops
+%left      CONCAT FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH REMOVE_PATH AT_AT DISTANCE COS_DISTANCE NEG_INNER_PRODUCT // multi-character ops
 %left      '|'
 %left      '#'
 %left      '&'
@@ -14271,6 +14274,21 @@ const_geo:
     $$.val = types.MakeGeography($3.geoShapeType(), geopb.SRID(val))
   }
 
+const_vector:
+  VECTOR { $$.val = types.PGVector }
+| VECTOR '(' iconst32 ')'
+  {
+    dims := $3.int32()
+    if dims < 0 {
+      sqllex.Error("dimensions for type vector must be at least 1")
+      return 1
+    } else if dims > vector.MaxDim {
+      sqllex.Error(fmt.Sprintf("dimensions for type cannot exceed %d", vector.MaxDim))
+      return 1
+    }
+    $$.val = types.MakePGVector(dims)
+  }
+
 // We have a separate const_typename to allow defaulting fixed-length types such
 // as CHAR() and BIT() to an unspecified length. SQL9x requires that these
 // default to a length of one, but this makes no sense for constructs like CHAR
@@ -14288,6 +14306,7 @@ const_typename:
 | character_with_length
 | const_datetime
 | const_geo
+| const_vector
 
 opt_numeric_modifiers:
   '(' iconst32 ')'
@@ -14872,6 +14891,18 @@ a_expr:
 | a_expr AT_AT a_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.TSMatches), Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr DISTANCE a_expr
+  {
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Distance), Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr COS_DISTANCE a_expr
+  {
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.CosDistance), Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr NEG_INNER_PRODUCT a_expr
+  {
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.NegInnerProduct), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr INET_CONTAINS_OR_EQUALS a_expr
   {
@@ -16085,6 +16116,9 @@ all_op:
 | NOT_REGIMATCH { $$.val = treecmp.MakeComparisonOperator(treecmp.NotRegIMatch) }
 | AND_AND { $$.val = treecmp.MakeComparisonOperator(treecmp.Overlaps) }
 | AT_AT { $$.val = treecmp.MakeComparisonOperator(treecmp.TSMatches) }
+| DISTANCE { $$.val = treebin.MakeBinaryOperator(treebin.Distance) }
+| COS_DISTANCE { $$.val = treebin.MakeBinaryOperator(treebin.CosDistance) }
+| NEG_INNER_PRODUCT { $$.val = treebin.MakeBinaryOperator(treebin.NegInnerProduct) }
 | '~' { $$.val = tree.MakeUnaryOperator(tree.UnaryComplement) }
 | SQRT { $$.val = tree.MakeUnaryOperator(tree.UnarySqrt) }
 | CBRT { $$.val = tree.MakeUnaryOperator(tree.UnaryCbrt) }
@@ -18058,6 +18092,7 @@ bare_label_keywords:
 | VARCHAR
 | VARIABLES
 | VARIADIC
+| VECTOR
 | VERIFY_BACKUP_TABLE_DATA
 | VIEW
 | VIEWACTIVITY
@@ -18143,6 +18178,7 @@ col_name_keyword:
 | VALUES
 | VARBIT
 | VARCHAR
+| VECTOR
 | VIRTUAL
 | WORK
 

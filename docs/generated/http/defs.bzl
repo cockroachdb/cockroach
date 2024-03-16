@@ -50,6 +50,7 @@ PROTOBUF_TARGETS = [
     "//pkg/util/timeutil/pgdate:pgdate_proto",
     "//pkg/util/tracing/tracingpb:tracingpb_proto",
     "//pkg/util:util_proto",
+    "//pkg/util/vector/vectorpb:vectorpb_proto",
     "@com_github_prometheus_client_model//io/prometheus/client:io_prometheus_client_proto",
     "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
     "@com_github_gogo_protobuf//gogoproto:gogo_proto",

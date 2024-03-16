@@ -1,0 +1,37 @@
+query F
+SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector
+----
+5.196152422706632
+
+statement ok
+CREATE TABLE v (v vector);
+CREATE TABLE v2 (v vector(2))
+
+statement ok
+INSERT INTO v VALUES('[1]'), ('[2,3]')
+
+query T rowsort
+SELECT * FROM v
+----
+[1]
+[2,3]
+
+query error different vector dimensions 1 and 2
+SELECT * FROM v WHERE v = '[1,2]'
+
+statement error expected 2 dimensions, not 1
+INSERT INTO v2 VALUES('[1]'), ('[2,3]')
+
+statement ok
+INSERT INTO v2 VALUES('[1,2]'), ('[3,4]')
+
+query T rowsort
+SELECT * FROM v2
+----
+[1,2]
+[3,4]
+
+query T
+SELECT * FROM v2 WHERE v = '[1,2]'
+----
+[1,2]

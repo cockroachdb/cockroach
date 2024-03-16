@@ -1780,6 +1780,7 @@ const (
 	// Special case
 	JsonEmptyArray     Type = 42
 	JsonEmptyArrayDesc Type = 43
+	PGVector           Type = 44
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -2622,6 +2623,12 @@ func EncodeUntaggedFloatValue(appendTo []byte, f float64) []byte {
 	return EncodeUint64Ascending(appendTo, math.Float64bits(f))
 }
 
+// EncodeUntaggedFloat32Value encodes a float32 value, appends it to the supplied buffer,
+// and returns the final buffer.
+func EncodeUntaggedFloat32Value(appendTo []byte, f float32) []byte {
+	return EncodeUint32Ascending(appendTo, math.Float32bits(f))
+}
+
 // EncodeBytesValue encodes a byte array value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
 func EncodeBytesValue(appendTo []byte, colID uint32, data []byte) []byte {
@@ -2820,6 +2827,14 @@ func EncodeTSVectorValue(appendTo []byte, colID uint32, data []byte) []byte {
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
+// EncodePGVectorValue encodes an already-byte-encoded PGVector value with no
+// value tag but with a length prefix, appends it to the supplied buffer, and
+// returns the final buffer.
+func EncodePGVectorValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, PGVector)
+	return EncodeUntaggedBytesValue(appendTo, data)
+}
+
 // DecodeValueTag decodes a value encoded by EncodeValueTag, used as a prefix in
 // each of the other EncodeFooValue methods.
 //
@@ -2920,6 +2935,16 @@ func DecodeUntaggedFloatValue(b []byte) (remaining []byte, f float64, err error)
 	var i uint64
 	b, i, err = DecodeUint64Ascending(b)
 	return b, math.Float64frombits(i), err
+}
+
+// DecodeUntaggedFloat32Value decodes a value encoded by EncodeUntaggedFloat32Value.
+func DecodeUntaggedFloat32Value(b []byte) (remaining []byte, f float32, err error) {
+	if len(b) < 4 {
+		return b, 0, fmt.Errorf("float32 value should be exactly 4 bytes: %d", len(b))
+	}
+	var i uint32
+	b, i, err = DecodeUint32Ascending(b)
+	return b, math.Float32frombits(i), err
 }
 
 // DecodeBytesValue decodes a value encoded by EncodeBytesValue.
@@ -3208,7 +3233,7 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 		return dataOffset + n, err
 	case Float:
 		return dataOffset + floatValueEncodedLength, nil
-	case Bytes, Array, JSON, Geo, TSVector, TSQuery:
+	case Bytes, Array, JSON, Geo, TSVector, TSQuery, PGVector:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return dataOffset + n + int(i), err
 	case Box2D:

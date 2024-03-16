@@ -132,6 +132,14 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 			)
 		}
 
+	case types.PGVectorFamily:
+		if !version.IsActive(ctx, clusterversion.V24_1) {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"pg_vector not supported until version 24.1",
+			)
+		}
+
 	case types.RefCursorFamily:
 		if !version.IsActive(ctx, clusterversion.V23_2) {
 			return pgerror.Newf(
