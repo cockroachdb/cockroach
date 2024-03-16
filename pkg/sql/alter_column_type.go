@@ -107,7 +107,7 @@ func AlterColumnType(
 		}
 	}
 
-	err = colinfo.ValidateColumnDefType(ctx, params.EvalContext().Settings.Version, typ)
+	err = colinfo.ValidateColumnDefType(ctx, params.EvalContext().Settings, typ)
 	if err != nil {
 		return err
 	}

@@ -38,6 +38,7 @@ go_test(
     deps = [
         ":keyside",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/colinfo",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",

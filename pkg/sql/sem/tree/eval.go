@@ -801,6 +801,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			EvalOp:     &PlusPGLSNDecimalOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.PGVector,
+			RightType:  types.PGVector,
+			ReturnType: types.PGVector,
+			EvalOp:     &PlusPGVectorOp{},
+			Volatility: volatility.Immutable,
+		},
 	}},
 
 	treebin.Minus: {overloads: []*BinOp{
@@ -987,6 +994,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			EvalOp:     &MinusPGLSNOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.PGVector,
+			RightType:  types.PGVector,
+			ReturnType: types.PGVector,
+			EvalOp:     &MinusPGVectorOp{},
+			Volatility: volatility.Immutable,
+		},
 	}},
 
 	treebin.Mult: {overloads: []*BinOp{
@@ -1068,6 +1082,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			RightType:  types.Decimal,
 			ReturnType: types.Interval,
 			EvalOp:     &MultIntervalDecimalOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.PGVector,
+			RightType:  types.PGVector,
+			ReturnType: types.PGVector,
+			EvalOp:     &MultPGVectorOp{},
 			Volatility: volatility.Immutable,
 		},
 	}},
@@ -1382,6 +1403,33 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			Volatility: volatility.Immutable,
 		},
 	}},
+	treebin.Distance: {overloads: []*BinOp{
+		{
+			LeftType:   types.PGVector,
+			RightType:  types.PGVector,
+			ReturnType: types.Float,
+			EvalOp:     &DistanceVectorOp{},
+			Volatility: volatility.Immutable,
+		},
+	}},
+	treebin.CosDistance: {overloads: []*BinOp{
+		{
+			LeftType:   types.PGVector,
+			RightType:  types.PGVector,
+			ReturnType: types.Float,
+			EvalOp:     &CosDistanceVectorOp{},
+			Volatility: volatility.Immutable,
+		},
+	}},
+	treebin.NegInnerProduct: {overloads: []*BinOp{
+		{
+			LeftType:   types.PGVector,
+			RightType:  types.PGVector,
+			ReturnType: types.Float,
+			EvalOp:     &NegInnerProductVectorOp{},
+			Volatility: volatility.Immutable,
+		},
+	}},
 }
 
 // CmpOp is a comparison operator.
@@ -1575,6 +1623,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEqFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 		makeEqFn(types.Oid, types.Oid, volatility.Leakproof),
 		makeEqFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
+		makeEqFn(types.PGVector, types.PGVector, volatility.Leakproof),
 		makeEqFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
 		makeEqFn(types.String, types.String, volatility.Leakproof),
 		makeEqFn(types.Time, types.Time, volatility.Leakproof),
@@ -1635,6 +1684,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLtFn(types.Interval, types.Interval, volatility.Leakproof),
 		makeLtFn(types.Oid, types.Oid, volatility.Leakproof),
 		makeLtFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
+		makeLtFn(types.PGVector, types.PGVector, volatility.Leakproof),
 		makeLtFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
 		makeLtFn(types.String, types.String, volatility.Leakproof),
 		makeLtFn(types.Time, types.Time, volatility.Leakproof),
@@ -1694,6 +1744,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLeFn(types.Interval, types.Interval, volatility.Leakproof),
 		makeLeFn(types.Oid, types.Oid, volatility.Leakproof),
 		makeLeFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
+		makeLeFn(types.PGVector, types.PGVector, volatility.Leakproof),
 		makeLeFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
 		makeLeFn(types.String, types.String, volatility.Leakproof),
 		makeLeFn(types.Time, types.Time, volatility.Leakproof),
@@ -1774,6 +1825,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeIsFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 		makeIsFn(types.Oid, types.Oid, volatility.Leakproof),
 		makeIsFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
+		makeIsFn(types.PGVector, types.PGVector, volatility.Leakproof),
 		makeIsFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
 		makeIsFn(types.String, types.String, volatility.Leakproof),
 		makeIsFn(types.Time, types.Time, volatility.Leakproof),
@@ -1842,6 +1894,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEvalTupleIn(types.Jsonb, volatility.Leakproof),
 		makeEvalTupleIn(types.Oid, volatility.Leakproof),
 		makeEvalTupleIn(types.PGLSN, volatility.Leakproof),
+		makeEvalTupleIn(types.PGVector, volatility.Leakproof),
 		makeEvalTupleIn(types.RefCursor, volatility.Leakproof),
 		makeEvalTupleIn(types.String, volatility.Leakproof),
 		makeEvalTupleIn(types.Time, volatility.Leakproof),

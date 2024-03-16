@@ -2058,3 +2058,43 @@ SELECT my_func('a', 1, true)
 SELECT (my_func(('a'), (1), (true))) -- fully parenthesized
 SELECT my_func('_', _, _) -- literals removed
 SELECT _('a', 1, true) -- identifiers removed
+
+parse
+SELECT "[1,2]" <-> "[3,4]"
+----
+SELECT "[1,2]" <-> "[3,4]"
+SELECT (("[1,2]") <-> ("[3,4]")) -- fully parenthesized
+SELECT "[1,2]" <-> "[3,4]" -- literals removed
+SELECT _ <-> _ -- identifiers removed
+
+parse
+SELECT "[2,2]" <=> "[3,4]"
+----
+SELECT "[2,2]" <=> "[3,4]"
+SELECT (("[2,2]") <=> ("[3,4]")) -- fully parenthesized
+SELECT "[2,2]" <=> "[3,4]" -- literals removed
+SELECT _ <=> _ -- identifiers removed
+
+parse
+SELECT "[2,2]" <#> "[3,4]"
+----
+SELECT "[2,2]" <#> "[3,4]"
+SELECT (("[2,2]") <#> ("[3,4]")) -- fully parenthesized
+SELECT "[2,2]" <#> "[3,4]" -- literals removed
+SELECT _ <#> _ -- identifiers removed
+
+error
+SELECT "[2,2]" <# "[3,4]"
+----
+at or near "#": syntax error
+DETAIL: source SQL:
+SELECT "[2,2]" <# "[3,4]"
+                ^
+
+parse
+SELECT "[2,2]" <- "[3,4]"
+----
+SELECT "[2,2]" < (-"[3,4]") -- normalized!
+SELECT (("[2,2]") < ((-("[3,4]")))) -- fully parenthesized
+SELECT "[2,2]" < (-"[3,4]") -- literals removed
+SELECT _ < (-_) -- identifiers removed
