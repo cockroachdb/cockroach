@@ -274,8 +274,18 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 			refreshDNS = false
 		}
 	}
-	if !vm.Providers[aws.ProviderName].Active() {
+	// If there are no DNS required providers, we shouldn't refresh DNS,
+	// it's probably a misconfiguration.
+	if len(config.DNSRequiredProviders) == 0 {
 		refreshDNS = false
+	} else {
+		// If any of the required providers is not active, we shouldn't refresh DNS.
+		for _, p := range config.DNSRequiredProviders {
+			if !vm.Providers[p].Active() {
+				refreshDNS = false
+				break
+			}
+		}
 	}
 	// DNS entries are maintained in the GCE DNS registry for all vms, from all
 	// clouds.
@@ -284,7 +294,7 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 			l.Printf("Refreshing DNS entries...")
 		}
 		if err := gce.SyncDNS(l, vms); err != nil {
-			l.Errorf("failed to update %s DNS: %v", gce.Subdomain, err)
+			l.Errorf("failed to update DNS: %v", err)
 		}
 	} else {
 		if !config.Quiet {
@@ -983,7 +993,7 @@ func urlGenerator(
 ) ([]string, error) {
 	var urls []string
 	for i, node := range nodes {
-		host := vm.Name(c.Name, int(node)) + "." + gce.Subdomain
+		host := vm.Name(c.Name, int(node)) + "." + gce.DNSDomain()
 
 		// There are no DNS entries for local clusters.
 		if c.IsLocal() {
