@@ -508,7 +508,7 @@ func (r *ReplicaCircuitBreaker) Track(
 	// one isn't already running.
 	if err := r.Err(); err != nil {
 		r.d.metrics.CircuitBreaker.ReplicasRequestsRejected.Inc(1)
-		return nil, replicaCircuitBreakerToken{}, err
+		return nil, replicaCircuitBreakerToken{}, errors.Wrapf(err, "%s is unavailable")
 	}
 
 	// Set up the request token.
@@ -813,7 +813,7 @@ func (r *ReplicaCircuitBreaker) sendProbe(ctx context.Context, transport Transpo
 
 		// If the send context timed out, fail.
 		if ctxErr := sendCtx.Err(); ctxErr != nil {
-			return ctxErr
+			return errors.Wrapf(ctxErr, "probe timed out")
 		}
 
 		// Any other local error is likely a networking/gRPC issue. This includes if
@@ -833,7 +833,7 @@ func (r *ReplicaCircuitBreaker) sendProbe(ctx context.Context, transport Transpo
 			// the leaseholder -- this may otherwise never happen if clients time out
 			// before the replica returns the NLHE.
 			if tErr.Lease == nil || *tErr.Lease == (roachpb.Lease{}) {
-				return br.Error.GoError()
+				err = br.Error.GoError()
 			}
 		case *kvpb.RangeNotFoundError, *kvpb.RangeKeyMismatchError, *kvpb.StoreNotFoundError:
 			// If the replica no longer exists, stop probing.
@@ -842,12 +842,11 @@ func (r *ReplicaCircuitBreaker) sendProbe(ctx context.Context, transport Transpo
 			// us to also probe.
 		default:
 			// On any other error, trip the breaker.
-			return br.Error.GoError()
+			err = br.Error.GoError()
 		}
 	}
 
-	// Successful probe.
-	return nil
+	return errors.Wrapf(err, "probe failed")
 }
 
 // OnTrip implements circuit.EventHandler.
