@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
 
@@ -325,6 +326,12 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedBytesValue(b, encoded), nil
 	case *tree.DTSVector:
 		encoded, err := tsearch.EncodeTSVector(nil, t.TSVector)
+		if err != nil {
+			return nil, err
+		}
+		return encoding.EncodeUntaggedBytesValue(b, encoded), nil
+	case *tree.DPGVector:
+		encoded, err := vector.Encode(nil, t.T)
 		if err != nil {
 			return nil, err
 		}

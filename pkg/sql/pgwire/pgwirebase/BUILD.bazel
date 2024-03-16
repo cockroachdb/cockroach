@@ -42,6 +42,7 @@ go_library(
         "//pkg/util/tsearch",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
+        "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",

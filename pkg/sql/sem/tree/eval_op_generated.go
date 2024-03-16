@@ -77,6 +77,8 @@ type BinaryOpEvaluator interface {
 	EvalContainedByJsonbOp(context.Context, *ContainedByJsonbOp, Datum, Datum) (Datum, error)
 	EvalContainsArrayOp(context.Context, *ContainsArrayOp, Datum, Datum) (Datum, error)
 	EvalContainsJsonbOp(context.Context, *ContainsJsonbOp, Datum, Datum) (Datum, error)
+	EvalCosDistanceVectorOp(context.Context, *CosDistanceVectorOp, Datum, Datum) (Datum, error)
+	EvalDistanceVectorOp(context.Context, *DistanceVectorOp, Datum, Datum) (Datum, error)
 	EvalDivDecimalIntOp(context.Context, *DivDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalDivDecimalOp(context.Context, *DivDecimalOp, Datum, Datum) (Datum, error)
 	EvalDivFloatOp(context.Context, *DivFloatOp, Datum, Datum) (Datum, error)
@@ -121,6 +123,7 @@ type BinaryOpEvaluator interface {
 	EvalMinusJsonbStringOp(context.Context, *MinusJsonbStringOp, Datum, Datum) (Datum, error)
 	EvalMinusPGLSNDecimalOp(context.Context, *MinusPGLSNDecimalOp, Datum, Datum) (Datum, error)
 	EvalMinusPGLSNOp(context.Context, *MinusPGLSNOp, Datum, Datum) (Datum, error)
+	EvalMinusPGVectorOp(context.Context, *MinusPGVectorOp, Datum, Datum) (Datum, error)
 	EvalMinusTimeIntervalOp(context.Context, *MinusTimeIntervalOp, Datum, Datum) (Datum, error)
 	EvalMinusTimeOp(context.Context, *MinusTimeOp, Datum, Datum) (Datum, error)
 	EvalMinusTimeTZIntervalOp(context.Context, *MinusTimeTZIntervalOp, Datum, Datum) (Datum, error)
@@ -147,6 +150,8 @@ type BinaryOpEvaluator interface {
 	EvalMultIntervalDecimalOp(context.Context, *MultIntervalDecimalOp, Datum, Datum) (Datum, error)
 	EvalMultIntervalFloatOp(context.Context, *MultIntervalFloatOp, Datum, Datum) (Datum, error)
 	EvalMultIntervalIntOp(context.Context, *MultIntervalIntOp, Datum, Datum) (Datum, error)
+	EvalMultPGVectorOp(context.Context, *MultPGVectorOp, Datum, Datum) (Datum, error)
+	EvalNegInnerProductVectorOp(context.Context, *NegInnerProductVectorOp, Datum, Datum) (Datum, error)
 	EvalOverlapsArrayOp(context.Context, *OverlapsArrayOp, Datum, Datum) (Datum, error)
 	EvalOverlapsINetOp(context.Context, *OverlapsINetOp, Datum, Datum) (Datum, error)
 	EvalPlusDateIntOp(context.Context, *PlusDateIntOp, Datum, Datum) (Datum, error)
@@ -169,6 +174,7 @@ type BinaryOpEvaluator interface {
 	EvalPlusIntervalTimestampOp(context.Context, *PlusIntervalTimestampOp, Datum, Datum) (Datum, error)
 	EvalPlusIntervalTimestampTZOp(context.Context, *PlusIntervalTimestampTZOp, Datum, Datum) (Datum, error)
 	EvalPlusPGLSNDecimalOp(context.Context, *PlusPGLSNDecimalOp, Datum, Datum) (Datum, error)
+	EvalPlusPGVectorOp(context.Context, *PlusPGVectorOp, Datum, Datum) (Datum, error)
 	EvalPlusTimeDateOp(context.Context, *PlusTimeDateOp, Datum, Datum) (Datum, error)
 	EvalPlusTimeIntervalOp(context.Context, *PlusTimeIntervalOp, Datum, Datum) (Datum, error)
 	EvalPlusTimeTZDateOp(context.Context, *PlusTimeTZDateOp, Datum, Datum) (Datum, error)
@@ -353,6 +359,16 @@ func (op *ContainsArrayOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) 
 // Eval is part of the BinaryEvalOp interface.
 func (op *ContainsJsonbOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalContainsJsonbOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *CosDistanceVectorOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalCosDistanceVectorOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *DistanceVectorOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalDistanceVectorOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
@@ -576,6 +592,11 @@ func (op *MinusPGLSNOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Da
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *MinusPGVectorOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalMinusPGVectorOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *MinusTimeIntervalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusTimeIntervalOp(ctx, op, a, b)
 }
@@ -706,6 +727,16 @@ func (op *MultIntervalIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *MultPGVectorOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalMultPGVectorOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *NegInnerProductVectorOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalNegInnerProductVectorOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *OverlapsArrayOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalOverlapsArrayOp(ctx, op, a, b)
 }
@@ -813,6 +844,11 @@ func (op *PlusIntervalTimestampTZOp) Eval(ctx context.Context, e OpEvaluator, a,
 // Eval is part of the BinaryEvalOp interface.
 func (op *PlusPGLSNDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusPGLSNDecimalOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *PlusPGVectorOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalPlusPGVectorOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
