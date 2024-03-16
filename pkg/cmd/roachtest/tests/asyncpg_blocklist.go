@@ -85,4 +85,15 @@ var asyncpgBlocklist = blocklist{
 	`test_utils.TestUtils.test_mogrify_simple`:                                                            "multi-dim arrays - https://github.com/cockroachdb/cockroach/issues/32552",
 }
 
-var asyncpgIgnoreList = blocklist{}
+var asyncpgIgnoreList = blocklist{
+	`test_copy.TestCopyFrom.test_copy_from_table_large_rows`:          "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
+	`test_copy.TestCopyTo.test_copy_records_to_table_1`:               "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
+	`test_copy.TestCopyTo.test_copy_records_to_table_no_binary_codec`: "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
+	`test_copy.TestCopyTo.test_copy_to_table_basics`:                  "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
+	`test_copy.TestCopyTo.test_copy_to_table_fail_in_source_1`:        "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
+	`test_copy.TestCopyTo.test_copy_to_table_fail_in_source_2`:        "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
+	`test_copy.TestCopyTo.test_copy_to_table_from_bytes_like`:         "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
+	`test_copy.TestCopyTo.test_copy_to_table_from_file_path`:          "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
+	`test_copy.TestCopyTo.test_copy_to_table_large_rows`:              "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
+	`test_copy.TestCopyTo.test_copy_to_table_timeout`:                 "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
+}
