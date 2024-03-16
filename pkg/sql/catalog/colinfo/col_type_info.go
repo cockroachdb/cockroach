@@ -119,6 +119,15 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 			return unimplemented.NewWithIssue(70099, "cannot use table record type as table column")
 		}
 
+
+	case types.PGVectorFamily:
+		if !version.IsActive(ctx, clusterversion.V24_2) {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"pg_vector not supported until version 24.2",
+			)
+		}
+
 	default:
 		return pgerror.Newf(pgcode.InvalidTableDefinition,
 			"value type %s cannot be used for table columns", t.String())
@@ -191,6 +200,8 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 	case types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
 		return true
 	case types.TSVectorFamily, types.TSQueryFamily:
+		return true
+	case types.PGVectorFamily:
 		return true
 	}
 	return false

@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -3632,6 +3633,112 @@ func (d *DPGLSN) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
+// DPGVector is the Datum representation of the PGVector type.
+type DPGVector struct {
+	vector.T
+}
+
+// NewDPGVector returns a new PGVector Datum.
+func NewDPGVector(vector vector.T) *DPGVector { return &DPGVector{vector} }
+
+// AsDPGVector attempts to retrieve a DPGVector from an Expr, returning a
+// DPGVector and a flag signifying whether the assertion was successful. The
+// function should be used instead of direct type assertions wherever a
+// *DPGVector wrapped by a *DOidWrapper is possible.
+func AsDPGVector(e Expr) (*DPGVector, bool) {
+	switch t := e.(type) {
+	case *DPGVector:
+		return t, true
+	case *DOidWrapper:
+		return AsDPGVector(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDPGVector attempts to retrieve a DPGVector from an Expr, panicking if the
+// assertion fails.
+func MustBeDPGVector(e Expr) *DPGVector {
+	v, ok := AsDPGVector(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DPGVector, found %T", e))
+	}
+	return v
+}
+
+// ParseDPGVector takes a string of PGVector and returns a DPGVector value.
+func ParseDPGVector(s string) (Datum, error) {
+	v, err := vector.ParseVector(s)
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse vector")
+	}
+	return NewDPGVector(v), nil
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DPGVector) Format(ctx *FmtCtx) {
+	bareStrings := ctx.HasFlags(FmtFlags(lexbase.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+	ctx.WriteString(d.String())
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *DPGVector) ResolvedType() *types.T { return types.PGVector }
+
+// AmbiguousFormat implements the Datum interface.
+func (d *DPGVector) AmbiguousFormat() bool {
+	return true
+}
+
+func (d *DPGVector) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1, nil
+	}
+	v, ok := cmpCtx.UnwrapDatum(ctx, other).(*DPGVector)
+	if !ok {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	return d.T.Compare(v.T)
+}
+
+// Prev implements the Datum interface.
+func (d *DPGVector) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DPGVector) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DPGVector) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DPGVector) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DPGVector) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DPGVector) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) { return nil, false }
+
+// Size implements the Datum interface.
+func (d *DPGVector) Size() uintptr {
+	return unsafe.Sizeof(*d) + d.T.Size()
+}
+
 // DBox2D is the Datum representation of the Box2D type.
 type DBox2D struct {
 	geo.CartesianBoundingBox
@@ -3906,7 +4013,7 @@ func AsJSON(
 		// This is RFC3339Nano, but without the TZ fields.
 		return json.FromString(formatTime(t.UTC(), "2006-01-02T15:04:05.999999999")), nil
 	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D,
-		*DTSVector, *DTSQuery, *DPGLSN:
+		*DTSVector, *DTSQuery, *DPGLSN, *DPGVector:
 		return json.FromString(
 			AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc), FmtLocation(loc)),
 		), nil
@@ -5961,6 +6068,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.GeographyFamily:      {unsafe.Sizeof(DGeography{}), variableSize},
 	types.GeometryFamily:       {unsafe.Sizeof(DGeometry{}), variableSize},
 	types.PGLSNFamily:          {unsafe.Sizeof(DPGLSN{}), fixedSize},
+	types.PGVectorFamily:       {unsafe.Sizeof(DPGVector{}), variableSize},
 	types.RefCursorFamily:      {unsafe.Sizeof(DString("")), variableSize},
 	types.TimeFamily:           {unsafe.Sizeof(DTime(0)), fixedSize},
 	types.TimeTZFamily:         {unsafe.Sizeof(DTimeTZ{}), fixedSize},
@@ -6307,6 +6415,14 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 				typ.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
 				return nil, err
+			}
+		}
+	case types.PGVectorFamily:
+		if in, ok := inVal.(*DPGVector); ok {
+			width := int(typ.Width())
+			if width > 0 && len(in.T) != width {
+				return nil, pgerror.Newf(pgcode.DataException,
+					"expected %d dimensions, not %d", typ.Width(), len(in.T))
 			}
 		}
 	}

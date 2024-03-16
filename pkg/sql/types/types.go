@@ -487,6 +487,15 @@ var (
 		},
 	}
 
+	// PGVector is the type representing a PGVector object.
+	PGVector = &T{
+		InternalType: InternalType{
+			Family: PGVectorFamily,
+			Oid:    oidext.T_pgvector,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// Void is the type representing void.
 	Void = &T{
 		InternalType: InternalType{
@@ -561,6 +570,7 @@ var (
 		Uuid,
 		INet,
 		PGLSN,
+		PGVector,
 		RefCursor,
 		Time,
 		TimeTZ,
@@ -646,6 +656,10 @@ var (
 	// PGLSNArray is the type of an array value having PGLSN-typed elements.
 	PGLSNArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: PGLSN, Oid: oid.T__pg_lsn, Locale: &emptyLocale}}
+
+	// PGVectorArray is the type of an array value having PGVector-typed elements.
+	PGVectorArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: PGVector, Oid: oidext.T__pgvector, Locale: &emptyLocale}}
 
 	// RefCursorArray is the type of an array value having REFCURSOR-typed elements.
 	RefCursorArray = &T{InternalType: InternalType{
@@ -1218,6 +1232,17 @@ func MakeLabeledTuple(contents []*T, labels []string) *T {
 	}}
 }
 
+// MakePGVector constructs a new instance of a VECTOR type (pg_vector) that has
+// the given number of dimensions.
+func MakePGVector(dims int32) *T {
+	return &T{InternalType: InternalType{
+		Family: PGVectorFamily,
+		Oid:    oidext.T_pgvector,
+		Width:  dims,
+		Locale: &emptyLocale,
+	}}
+}
+
 // NewCompositeType constructs a new instance of a TupleFamily type with the
 // given field types and labels, and the given user-defined type OIDs.
 func NewCompositeType(typeOID, arrayTypeOID oid.Oid, contents []*T, labels []string) *T {
@@ -1294,6 +1319,7 @@ func (t *T) Locale() string {
 //	STRING        : max # of characters
 //	COLLATEDSTRING: max # of characters
 //	BIT           : max # of bits
+//	VECTOR        : # of dimensions
 //
 // Width is always 0 for other types.
 func (t *T) Width() int32 {
@@ -1344,7 +1370,7 @@ func (t *T) TypeModifier() int32 {
 			// var header size.
 			return width + 4
 		}
-	case BitFamily:
+	case BitFamily, PGVectorFamily:
 		if width := t.Width(); width != 0 {
 			return width
 		}
@@ -1507,6 +1533,7 @@ var familyNames = map[Family]redact.SafeString{
 	JsonFamily:           "jsonb",
 	OidFamily:            "oid",
 	PGLSNFamily:          "pg_lsn",
+	PGVectorFamily:       "vector",
 	RefCursorFamily:      "refcursor",
 	StringFamily:         "string",
 	TimeFamily:           "time",
@@ -1788,6 +1815,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		}
 	case PGLSNFamily:
 		return "pg_lsn"
+	case PGVectorFamily:
+		return "vector"
 	case RefCursorFamily:
 		return "refcursor"
 	case StringFamily, CollatedStringFamily:
@@ -1999,6 +2028,11 @@ func (t *T) SQLString() string {
 		// databases when this function is called to produce DDL like in SHOW
 		// CREATE.
 		return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
+	case PGVectorFamily:
+		if t.Width() == 0 {
+			return "VECTOR"
+		}
+		return fmt.Sprintf("VECTOR(%d)", t.Width())
 	}
 	return strings.ToUpper(t.Name())
 }
@@ -2046,7 +2080,7 @@ func (t *T) SQLStringForError() redact.RedactableString {
 		IntervalFamily, StringFamily, BytesFamily, TimestampTZFamily, CollatedStringFamily, OidFamily,
 		UnknownFamily, UuidFamily, INetFamily, TimeFamily, JsonFamily, TimeTZFamily, BitFamily,
 		GeometryFamily, GeographyFamily, Box2DFamily, VoidFamily, EncodedKeyFamily, TSQueryFamily,
-		TSVectorFamily, AnyFamily, PGLSNFamily, RefCursorFamily:
+		TSVectorFamily, AnyFamily, PGLSNFamily, PGVectorFamily, RefCursorFamily:
 		// These types do not contain other types, and do not require redaction.
 		return redact.Sprint(redact.SafeString(t.SQLString()))
 	}
@@ -2816,6 +2850,8 @@ func IsValidArrayElementType(t *T) (valid bool, issueNum int) {
 		return false, 90886
 	case TSVectorFamily:
 		return false, 90886
+	case PGVectorFamily:
+		return false, 121432
 	default:
 		return true, 0
 	}
