@@ -94,6 +94,13 @@ var cutoverSignalPollInterval = settings.RegisterDurationSetting(
 	settings.WithName("physical_replication.consumer.cutover_signal_poll_interval"),
 )
 
+var quantize = settings.RegisterDurationSettingWithExplicitUnit(
+	settings.SystemOnly,
+	"physical_replication.consumer.timestamp_granularity",
+	"the granularity at which replicated times are quantized to make tracking more efficient",
+	5*time.Second,
+)
+
 var streamIngestionResultTypes = []*types.T{
 	types.Bytes, // jobspb.ResolvedSpans
 }
@@ -874,7 +881,12 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 
 	lowestTimestamp := hlc.MaxTimestamp
 	highestTimestamp := hlc.MinTimestamp
+	d := quantize.Get(&sip.EvalCtx.Settings.SV)
 	for _, resolvedSpan := range resolvedSpans {
+		if d > 0 {
+			resolvedSpan.Timestamp.Logical = 0
+			resolvedSpan.Timestamp.WallTime -= resolvedSpan.Timestamp.WallTime % int64(d)
+		}
 		if resolvedSpan.Timestamp.Less(lowestTimestamp) {
 			lowestTimestamp = resolvedSpan.Timestamp
 		}
