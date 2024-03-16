@@ -220,6 +220,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalRepairableCatalogCorruptionsViewID: crdbInternalRepairableCatalogCorruptions,
 		catconstants.CrdbInternalKVProtectedTS:                      crdbInternalKVProtectedTSTable,
 		catconstants.CrdbInternalKVSessionBasedLeases:               crdbInternalSessionBasedLeases,
+		catconstants.CrdbInternalClusterReplicationResolvedViewID:   crdbInternalClusterReplicationResolvedView,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -8928,4 +8929,27 @@ func populateFlowTokensResponse(
 		}
 	}
 	return nil
+}
+
+var crdbInternalClusterReplicationResolvedView = virtualSchemaView{
+	schema: `
+		CREATE VIEW crdb_internal.cluster_replication_spans AS WITH spans AS (
+			SELECT
+				j.id AS job_id, jsonb_array_elements(crdb_internal.pb_to_json('progress', i.value)->'streamIngest'->'checkpoint'->'resolvedSpans') AS s
+			FROM system.jobs j LEFT JOIN system.job_info i ON j.id = i.job_id AND i.info_key = 'legacy_progress' 
+			WHERE j.job_type = 'REPLICATION STREAM INGESTION'
+			) SELECT
+				job_id,
+				crdb_internal.pretty_key(decode(s->'span'->>'key', 'base64'), 0) AS start_key,
+				crdb_internal.pretty_key(decode(s->'span'->>'endKey', 'base64'), 0) AS end_key,
+				((s->'timestamp'->>'wallTime')||'.'||COALESCE((s->'timestamp'->'logical'), '0'))::decimal AS resolved,
+				date_trunc('second', ((cluster_logical_timestamp() - (s->'timestamp'->>'wallTime')::int) /1e9)::interval) AS resolved_age
+			FROM spans`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "job_id", Typ: types.Int},
+		{Name: "start_key", Typ: types.String},
+		{Name: "end_key", Typ: types.String},
+		{Name: "resolved", Typ: types.Decimal},
+		{Name: "resolved_age", Typ: types.Interval},
+	},
 }
