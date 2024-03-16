@@ -2118,6 +2118,12 @@ func (d *DPGLSN) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (Typed
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
+func (d *DPGVector) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
+	return d, nil
+}
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
 func (d *DGeography) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
 	return d, nil
 }

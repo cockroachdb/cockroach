@@ -1918,6 +1918,8 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 90003   _geography             4294967103    NULL        -1      false     b
 90004   box2d                  4294967103    NULL        32      true      b
 90005   _box2d                 4294967103    NULL        -1      false     b
+90006   vector                 4294967103    NULL        -1      false     b
+90007   _vector                4294967103    NULL        -1      false     b
 100110  t1                     109           1546506610  -1      false     c
 100111  t1_m_seq               109           1546506610  -1      false     c
 100112  t1_n_seq               109           1546506610  -1      false     c
@@ -2033,6 +2035,8 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 90003   _geography             A            false           true          :         0         90002    0
 90004   box2d                  U            false           true          ,         0         0        90005
 90005   _box2d                 A            false           true          ,         0         90004    0
+90006   vector                 U            false           true          ,         0         0        90007
+90007   _vector                A            false           true          ,         0         90006    0
 100110  t1                     C            false           true          ,         110       0        0
 100111  t1_m_seq               C            false           true          ,         111       0        0
 100112  t1_n_seq               C            false           true          ,         112       0        0
@@ -2148,6 +2152,8 @@ oid     typname                typinput        typoutput        typreceive      
 90003   _geography             array_in        array_out        array_recv        array_send        0         0          0
 90004   box2d                  box2d_in        box2d_out        box2d_recv        box2d_send        0         0          0
 90005   _box2d                 array_in        array_out        array_recv        array_send        0         0          0
+90006   vector                 vectorin        vectorout        vectorrecv        vectorsend        0         0          0
+90007   _vector                array_in        array_out        array_recv        array_send        0         0          0
 100110  t1                     record_in       record_out       record_recv       record_send       0         0          0
 100111  t1_m_seq               record_in       record_out       record_recv       record_send       0         0          0
 100112  t1_n_seq               record_in       record_out       record_recv       record_send       0         0          0
@@ -2263,6 +2269,8 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 90003   _geography             NULL      NULL        false       0            -1
 90004   box2d                  NULL      NULL        false       0            -1
 90005   _box2d                 NULL      NULL        false       0            -1
+90006   vector                 NULL      NULL        false       0            -1
+90007   _vector                NULL      NULL        false       0            -1
 100110  t1                     NULL      NULL        false       0            -1
 100111  t1_m_seq               NULL      NULL        false       0            -1
 100112  t1_n_seq               NULL      NULL        false       0            -1
@@ -2378,6 +2386,8 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 90003   _geography             0         0             NULL           NULL        NULL
 90004   box2d                  0         0             NULL           NULL        NULL
 90005   _box2d                 0         0             NULL           NULL        NULL
+90006   vector                 0         0             NULL           NULL        NULL
+90007   _vector                0         0             NULL           NULL        NULL
 100110  t1                     0         0             NULL           NULL        NULL
 100111  t1_m_seq               0         0             NULL           NULL        NULL
 100112  t1_n_seq               0         0             NULL           NULL        NULL

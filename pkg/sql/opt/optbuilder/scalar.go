@@ -853,6 +853,12 @@ func (b *Builder) constructBinary(
 		return b.factory.ConstructFetchValPath(left, right)
 	case treebin.JSONFetchTextPath:
 		return b.factory.ConstructFetchTextPath(left, right)
+	case treebin.Distance:
+		return b.factory.ConstructVectorDistance(left, right)
+	case treebin.CosDistance:
+		return b.factory.ConstructVectorCosDistance(left, right)
+	case treebin.NegInnerProduct:
+		return b.factory.ConstructVectorNegInnerProduct(left, right)
 	}
 	panic(errors.AssertionFailedf("unhandled binary operator: %s", redact.Safe(bin)))
 }
