@@ -218,7 +218,7 @@ func (r bulkOracle) ChoosePreferredReplica(
 	desc *roachpb.RangeDescriptor,
 	leaseholder *roachpb.ReplicaDescriptor,
 	_ roachpb.RangeClosedTimestampPolicy,
-	_ replicaoracle.QueryState,
+	qs replicaoracle.QueryState,
 ) (_ roachpb.ReplicaDescriptor, ignoreMisplannedRanges bool, _ error) {
 	if leaseholder != nil && !checkFollowerReadsEnabled(r.cfg.Settings) {
 		return *leaseholder, false, nil
@@ -239,6 +239,37 @@ func (r bulkOracle) ChoosePreferredReplica(
 			return replicas[matches[randutil.FastUint32()%uint32(len(matches))]].ReplicaDescriptor, true, nil
 		}
 	}
+
+	// If the node of one of these replicas is the same node we last picked, we
+	// may want to choose that replica over some other replica, so that adjacent
+	// ranges are assigned to the same node when possible. However we still want
+	// to *distribute* work so we only pick this, instead of random, when the
+	// node has been assigned <1.2x avg.
+	low := -1 // lowest number of assigned ranges of any node in `replicas`.
+	prevChoiceIdx := -1
+	var prevChoiceAssigned int
+	for i := range replicas {
+		assigned := qs.RangesPerNode.GetDefault(int(replicas[i].NodeID))
+		if replicas[i].NodeID == qs.LastAssignment {
+			prevChoiceIdx = i
+			prevChoiceAssigned = assigned
+		}
+		if assigned < low || low == -1 {
+			low = assigned
+		}
+	}
+	// If the previously chosen node is a candidate in replicas, check if we want
+	// to pick it instead of picking a random one.
+	if prevChoiceIdx != -1 {
+		// If the previously chosen node been not been picked 10 times in a row, or
+		// has fewer than twice as many ranges assigned as the node with the fewest
+		// assigned, pick it again without worrying about overly skewing the spread
+		// of assignments.
+		if qs.NodeStreak < 10 || prevChoiceAssigned < low*2 {
+			return replicas[prevChoiceIdx].ReplicaDescriptor, true, nil
+		}
+	}
+
 	return replicas[randutil.FastUint32()%uint32(len(replicas))].ReplicaDescriptor, true, nil
 }
 

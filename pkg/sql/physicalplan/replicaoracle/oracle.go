@@ -122,6 +122,8 @@ var oracleFactories = map[Policy]OracleFactory{}
 type QueryState struct {
 	RangesPerNode  util.FastIntMap
 	AssignedRanges map[roachpb.RangeID]ReplicaDescriptorEx
+	LastAssignment roachpb.NodeID
+	NodeStreak     int
 }
 
 // ReplicaDescriptorEx is a small extension of the roachpb.ReplicaDescriptor
