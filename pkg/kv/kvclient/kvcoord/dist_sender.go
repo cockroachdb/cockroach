@@ -809,7 +809,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	// the stopper stops. This can only error if the server is shutting down, so
 	// ignore the returned error.
 	ds.circuitBreakers = NewDistSenderCircuitBreakers(
-		ds.stopper, ds.st, ds.transportFactory, ds.metrics)
+		ds.AmbientContext, ds.stopper, ds.st, ds.transportFactory, ds.metrics)
 	_ = ds.circuitBreakers.Start()
 
 	if cfg.TestingKnobs.LatencyFunc != nil {
