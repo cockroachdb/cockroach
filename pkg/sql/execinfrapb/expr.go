@@ -202,14 +202,12 @@ func (eh *exprHelper) IndexedVarResolvedType(idx int) *types.T {
 }
 
 // IndexedVarEval is part of the eval.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
+func (eh *exprHelper) IndexedVarEval(idx int) (tree.Datum, error) {
 	err := eh.row[idx].EnsureDecoded(eh.types[idx], eh.datumAlloc)
 	if err != nil {
 		return nil, err
 	}
-	return eh.row[idx].Datum.Eval(ctx, e)
+	return eh.row[idx].Datum, nil
 }
 
 // init initializes the exprHelper.
