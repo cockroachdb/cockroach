@@ -27,10 +27,8 @@ type testVarContainer []tree.Datum
 
 var _ eval.IndexedVarContainer = testVarContainer{}
 
-func (d testVarContainer) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
-	return d[idx].Eval(ctx, e)
+func (d testVarContainer) IndexedVarEval(idx int) (tree.Datum, error) {
+	return d[idx], nil
 }
 
 func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
