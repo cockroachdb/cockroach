@@ -59,20 +59,36 @@ func convertToVecTree(
 		func() {}, /* onFlowCleanupEnd */
 		"",        /* statementSQL */
 	)
-	creator := newVectorizedFlowCreator(
-		flowBase, nil /* componentCreator */, recordingStats,
-		colcontainer.DiskQueueCfg{}, flowCtx.Cfg.VecFDSemaphore,
-	)
 	fuseOpt := flowinfra.FuseNormally
 	if flowCtx.Local && !execinfra.HasParallelProcessors(flow) {
 		fuseOpt = flowinfra.FuseAggressively
 	}
+	_, _, err = flowBase.Setup(ctx, flow, fuseOpt)
+	if err != nil {
+		return nil, func() {}, errors.NewAssertionErrorWithWrappedErrf(err, "error on FlowBase.Setup")
+	}
+	creator := newVectorizedFlowCreator(
+		flowBase, nil /* componentCreator */, recordingStats,
+		colcontainer.DiskQueueCfg{}, flowCtx.Cfg.VecFDSemaphore,
+	)
 	opChains, _, err = creator.setupFlow(ctx, flow.Processors, fuseOpt)
 	cleanup = func() {
+		for _, opNode := range opChains {
+			closeRowSources(opNode)
+		}
 		creator.cleanup(ctx)
 		creator.Release()
 	}
 	return opChains, cleanup, err
+}
+
+func closeRowSources(opNode execopnode.OpNode) {
+	if rs, ok := opNode.(execinfra.RowSource); ok {
+		defer rs.ConsumerClosed()
+	}
+	for i := 0; i < opNode.ChildCount(true /* verbose */); i++ {
+		closeRowSources(opNode.Child(i, true /* verbose */))
+	}
 }
 
 // fakeBatchReceiver exists for the sole purpose of convertToVecTree method. In
