@@ -155,6 +155,7 @@ type cbKey struct {
 //
 // TODO(erikgrinaker): this needs comprehensive testing.
 type DistSenderCircuitBreakers struct {
+	ambientCtx       log.AmbientContext
 	stopper          *stop.Stopper
 	settings         *cluster.Settings
 	transportFactory TransportFactory
@@ -170,12 +171,14 @@ type DistSenderCircuitBreakers struct {
 
 // NewDistSenderCircuitBreakers creates new DistSender circuit breakers.
 func NewDistSenderCircuitBreakers(
+	ambientCtx log.AmbientContext,
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
 	transportFactory TransportFactory,
 	metrics DistSenderMetrics,
 ) *DistSenderCircuitBreakers {
 	d := &DistSenderCircuitBreakers{
+		ambientCtx:       ambientCtx,
 		stopper:          stopper,
 		settings:         settings,
 		transportFactory: transportFactory,
@@ -188,7 +191,7 @@ func NewDistSenderCircuitBreakers(
 // Start starts the circuit breaker manager, and runs it until the stopper
 // stops. It only returns an error if the server is already stopping.
 func (d *DistSenderCircuitBreakers) Start() error {
-	ctx := context.Background()
+	ctx := d.ambientCtx.AnnotateCtx(context.Background())
 	err := d.stopper.RunAsyncTask(ctx, "distsender-circuit-breakers-stall-probe", d.probeStallLoop)
 	if err != nil {
 		return err
@@ -666,8 +669,7 @@ func (r *ReplicaCircuitBreaker) done(
 // handling such that if 1 out of 1000 replicas are stalled we won't fail the
 // entire batch.
 func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
-	// TODO(erikgrinaker): use an annotated context here and elsewhere.
-	ctx := context.Background()
+	ctx := r.d.ambientCtx.AnnotateCtx(context.Background())
 	log.Eventf(ctx, "launching probe for %s", r.id())
 
 	name := fmt.Sprintf("distsender-replica-probe-%s", r.id())
