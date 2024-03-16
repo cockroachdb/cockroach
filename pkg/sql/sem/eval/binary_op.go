@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1229,6 +1230,33 @@ func (e *evaluator) EvalTSMatchesVectorQueryOp(
 	return tree.MakeDBool(tree.DBool(ret)), err
 }
 
+func (e *evaluator) EvalDistanceVectorOp(
+	ctx context.Context, _ *tree.DistanceVectorOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	v := tree.MustBeDPGVector(left)
+	q := tree.MustBeDPGVector(right)
+	ret, err := vector.L2Distance(q.T, v.T)
+	return tree.NewDFloat(tree.DFloat(ret)), err
+}
+
+func (e *evaluator) EvalCosDistanceVectorOp(
+	ctx context.Context, _ *tree.CosDistanceVectorOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	v := tree.MustBeDPGVector(left)
+	q := tree.MustBeDPGVector(right)
+	ret, err := vector.CosDistance(q.T, v.T)
+	return tree.NewDFloat(tree.DFloat(ret)), err
+}
+
+func (e *evaluator) EvalNegInnerProductVectorOp(
+	ctx context.Context, _ *tree.NegInnerProductVectorOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	v := tree.MustBeDPGVector(left)
+	q := tree.MustBeDPGVector(right)
+	ret, err := vector.NegInnerProduct(q.T, v.T)
+	return tree.NewDFloat(tree.DFloat(ret)), err
+}
+
 func (e *evaluator) EvalPlusDateIntOp(
 	ctx context.Context, _ *tree.PlusDateIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
@@ -1647,4 +1675,40 @@ func decimalPGLSNEval(
 		resultLSN *= 10
 	}
 	return tree.NewDPGLSN(resultLSN), nil
+}
+
+func (e *evaluator) EvalPlusPGVectorOp(
+	ctx context.Context, _ *tree.PlusPGVectorOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	t1 := tree.MustBeDPGVector(left)
+	t2 := tree.MustBeDPGVector(right)
+	ret, err := vector.Add(t1.T, t2.T)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDPGVector(ret), nil
+}
+
+func (e *evaluator) EvalMinusPGVectorOp(
+	ctx context.Context, _ *tree.MinusPGVectorOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	t1 := tree.MustBeDPGVector(left)
+	t2 := tree.MustBeDPGVector(right)
+	ret, err := vector.Minus(t1.T, t2.T)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDPGVector(ret), nil
+}
+
+func (e *evaluator) EvalMultPGVectorOp(
+	ctx context.Context, _ *tree.MultPGVectorOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	t1 := tree.MustBeDPGVector(left)
+	t2 := tree.MustBeDPGVector(right)
+	ret, err := vector.Mult(t1.T, t2.T)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDPGVector(ret), nil
 }

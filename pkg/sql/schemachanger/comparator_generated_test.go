@@ -2088,6 +2088,11 @@ func TestSchemaChangeComparator_vectorize_window(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/vectorize_window"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_vectoross(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/vectoross"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_views(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/views"

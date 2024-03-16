@@ -325,12 +325,12 @@ func mustUseValueEncodingForFingerprinting(t *types.T) bool {
 	// available, but for historical reasons we will keep on using the
 	// value-encoding (Fingerprint is used by hash routers, so changing its
 	// behavior can result in incorrect results in mixed version clusters).
-	case types.JsonFamily, types.TSQueryFamily, types.TSVectorFamily:
+	case types.JsonFamily, types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily:
 		return true
 	case types.ArrayFamily:
 		// Note that at time of this writing we don't support arrays of JSON
-		// (tracked via #23468) nor of TSQuery / TSVector types (tracked by
-		// #90886), so technically we don't need to do a recursive call here,
+		// (tracked via #23468) nor of TSQuery / TSVector / PGVector types (tracked by
+		// #90886, #121432), so technically we don't need to do a recursive call here,
 		// but we choose to be on the safe side, so we do it anyway.
 		return mustUseValueEncodingForFingerprinting(t.ArrayContents())
 	case types.TupleFamily:

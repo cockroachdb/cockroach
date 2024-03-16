@@ -2825,6 +2825,13 @@ func TestTenantLogicCCL_unique_read_committed(
 	runCCLLogicTest(t, "unique_read_committed")
 }
 
+func TestTenantLogicCCL_vector(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "vector")
+}
+
 func TestTenantLogicCCL_zone_config_secondary_tenants(
 	t *testing.T,
 ) {

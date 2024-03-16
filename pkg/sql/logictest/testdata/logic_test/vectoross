@@ -1,0 +1,5 @@
+# LogicTest: !local-mixed-23.2 !3node-tenant
+
+statement error OSS binaries do not include enterprise features
+CREATE TABLE v (v vector)
+
