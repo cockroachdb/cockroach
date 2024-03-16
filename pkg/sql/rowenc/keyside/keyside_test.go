@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -237,13 +238,5 @@ func genEncodingDirection() gopter.Gen {
 }
 
 func hasKeyEncoding(typ *types.T) bool {
-	// Only some types are round-trip key encodable.
-	switch typ.Family() {
-	case types.CollatedStringFamily, types.TupleFamily, types.DecimalFamily,
-		types.GeographyFamily, types.GeometryFamily, types.TSVectorFamily, types.TSQueryFamily:
-		return false
-	case types.ArrayFamily:
-		return hasKeyEncoding(typ.ArrayContents())
-	}
-	return true
+	return colinfo.MustBeValueEncoded(typ)
 }

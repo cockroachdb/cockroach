@@ -51,7 +51,7 @@ func newColSchema(numCols int) *colSchema {
 // that are not supported by the writer.
 func typSupported(typ *types.T) bool {
 	switch typ.Family() {
-	case types.AnyFamily, types.TSQueryFamily, types.TSVectorFamily, types.VoidFamily:
+	case types.AnyFamily, types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily, types.VoidFamily:
 		return false
 	case types.ArrayFamily:
 		if typ.ArrayContents().Family() == types.ArrayFamily || typ.ArrayContents().Family() == types.TupleFamily {

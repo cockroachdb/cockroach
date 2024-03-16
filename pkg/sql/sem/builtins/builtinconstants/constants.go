@@ -51,6 +51,7 @@ const (
 	CategoryJSON                = "JSONB"
 	CategoryMultiRegion         = "Multi-region"
 	CategoryMultiTenancy        = "Multi-tenancy"
+	CategoryPGVector            = "PGVector"
 	CategorySequences           = "Sequence"
 	CategorySpatial             = "Spatial"
 	CategoryString              = "String and byte"
