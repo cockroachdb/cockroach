@@ -858,6 +858,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RootSQLMemoryPoolSize:    cfg.MemoryPoolSize,
 	}
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
+	cfg.stopper.AddCloser(stop.CloserFn(func() {
+		cfg.TempStorageConfig.Mon.EmergencyStop(ctx)
+	}))
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
 	}
