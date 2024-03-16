@@ -17,6 +17,8 @@ package raft
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	pb "go.etcd.io/raft/v3/raftpb"
 )
 
@@ -36,23 +38,18 @@ func TestMsgAppFlowControlFull(t *testing.T) {
 	for i := 0; i < r.trk.MaxInflight; i++ {
 		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
 		ms := r.readMessages()
-		if len(ms) != 1 || ms[0].Type != pb.MsgApp {
-			t.Fatalf("#%d: len(ms) = %d, want 1 MsgApp", i, len(ms))
-		}
+		require.Len(t, ms, 1)
+		require.Equal(t, pb.MsgApp, ms[0].Type)
 	}
 
 	// ensure 1
-	if !pr2.IsPaused() {
-		t.Fatal("paused = false, want true")
-	}
+	require.True(t, pr2.IsPaused())
 
 	// ensure 2
 	for i := 0; i < 10; i++ {
 		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
 		ms := r.readMessages()
-		if len(ms) != 0 {
-			t.Fatalf("#%d: len(ms) = %d, want 0", i, len(ms))
-		}
+		require.Empty(t, ms)
 	}
 }
 
@@ -84,21 +81,16 @@ func TestMsgAppFlowControlMoveForward(t *testing.T) {
 		// fill in the inflights window again
 		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
 		ms := r.readMessages()
-		if len(ms) != 1 || ms[0].Type != pb.MsgApp {
-			t.Fatalf("#%d: len(ms) = %d, want 1 MsgApp", tt, len(ms))
-		}
+		require.Len(t, ms, 1)
+		require.Equal(t, pb.MsgApp, ms[0].Type)
 
 		// ensure 1
-		if !pr2.IsPaused() {
-			t.Fatalf("#%d: paused = false, want true", tt)
-		}
+		require.True(t, pr2.IsPaused())
 
 		// ensure 2
 		for i := 0; i < tt; i++ {
 			r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: uint64(i)})
-			if !pr2.IsPaused() {
-				t.Fatalf("#%d.%d: paused = false, want true", tt, i)
-			}
+			require.True(t, pr2.IsPaused())
 		}
 	}
 }
@@ -122,27 +114,21 @@ func TestMsgAppFlowControlRecvHeartbeat(t *testing.T) {
 	for tt := 1; tt < 5; tt++ {
 		// recv tt msgHeartbeatResp and expect one free slot
 		for i := 0; i < tt; i++ {
-			if !pr2.IsPaused() {
-				t.Fatalf("#%d.%d: paused = false, want true", tt, i)
-			}
+			require.True(t, pr2.IsPaused())
 			// Unpauses the progress, sends an empty MsgApp, and pauses it again.
 			r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
 			ms := r.readMessages()
-			if len(ms) != 1 || ms[0].Type != pb.MsgApp || len(ms[0].Entries) != 0 {
-				t.Fatalf("#%d.%d: len(ms) == %d, want 1 empty MsgApp", tt, i, len(ms))
-			}
+			require.Len(t, ms, 1)
+			require.Equal(t, pb.MsgApp, ms[0].Type)
+			require.Empty(t, ms[0].Entries)
 		}
 
 		// No more appends are sent if there are no heartbeats.
 		for i := 0; i < 10; i++ {
-			if !pr2.IsPaused() {
-				t.Fatalf("#%d.%d: paused = false, want true", tt, i)
-			}
+			require.True(t, pr2.IsPaused())
 			r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
 			ms := r.readMessages()
-			if len(ms) != 0 {
-				t.Fatalf("#%d.%d: len(ms) = %d, want 0", tt, i, len(ms))
-			}
+			require.Empty(t, ms)
 		}
 
 		// clear all pending messages.
