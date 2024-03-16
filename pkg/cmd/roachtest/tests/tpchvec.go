@@ -16,16 +16,19 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io"
 	"math"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -306,8 +309,23 @@ func (p *tpchVecPerfTest) postTestRunHook(
 				// however, the session variables might contain the old values,
 				// so we will open up new connections for each of the setups in
 				// order to get the correct cluster setup on each.
-				tempConn := c.Conn(ctx, t.L(), 1)
+				var tenantName string
+				if p.sharedProcessMT() {
+					tenantName = appTenantName
+				}
+				tempConn, err := c.ConnE(ctx, t.L(), 1, option.TenantName(tenantName))
+				if err != nil {
+					t.Fatal(err)
+				}
 				defer tempConn.Close()
+				sqlConnCtx := clisqlclient.Context{}
+				pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{
+					VirtualClusterName: tenantName,
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				connForBundle := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, pgURL[0])
 				if _, err := tempConn.Exec("USE tpch;"); err != nil {
 					t.Fatal(err)
 				}
@@ -319,41 +337,41 @@ func (p *tpchVecPerfTest) postTestRunHook(
 					if err != nil {
 						t.Fatal(err)
 					}
-					// The output of the command looks like:
-					//   Statement diagnostics bundle generated. Download from the Admin UI (Advanced
-					//   Debug -> Statement Diagnostics History), via the direct link below, or using
-					//   the command line.
-					//   Admin UI: http://Yahors-MacBook-Pro.local:8081
-					//   Direct link: http://Yahors-MacBook-Pro.local:8081/_admin/v1/stmtbundle/574364979110641665
-					//   Command line: cockroach statement-diag list / download
-					// We are interested in the line that contains the url that
-					// we will curl below.
-					directLinkPrefix := "Direct link: "
-					var line, url, debugOutput string
+					// The output of the command in both single-tenant and
+					// multi-tenant configs contains a line like
+					//
+					//   SQL shell: \statement-diag download 951198764631457793
+					//
+					// We'll use that command to figure out the bundle ID and
+					// then download the bundle into the artifacts.
+					sqlShellPrefix := `SQL shell: \statement-diag download `
+					var line, debugOutput string
+					var bundleID int64
 					for rows.Next() {
 						if err = rows.Scan(&line); err != nil {
 							t.Fatal(err)
 						}
 						debugOutput += line + "\n"
-						if strings.HasPrefix(line, directLinkPrefix) {
-							url = line[len(directLinkPrefix):]
+						if strings.HasPrefix(line, sqlShellPrefix) {
+							id, err := strconv.Atoi(line[len(sqlShellPrefix):])
+							if err != nil {
+								t.Fatalf("couldn't parse bundle ID in %d\n%v", id, debugOutput)
+							}
+							bundleID = int64(id)
 							break
 						}
 					}
 					if err = rows.Close(); err != nil {
 						t.Fatal(err)
 					}
-					if url == "" {
+					if bundleID == 0 {
 						t.Fatal(fmt.Sprintf("unexpectedly didn't find a line "+
 							"with %q prefix in EXPLAIN ANALYZE (DEBUG) output\n%s",
-							directLinkPrefix, debugOutput))
+							sqlShellPrefix, debugOutput))
 					}
-					// We will curl into the logs folder so that test runner
-					// retrieves the bundle together with the log files.
-					curlCmd := fmt.Sprintf(
-						"curl %s > logs/bundle_%s_%d.zip", url, runConfig.setupNames[setupIdx], i,
-					)
-					if err = c.RunE(ctx, c.Node(1), curlCmd); err != nil {
+					dest := fmt.Sprintf("%s/bundle_%d_%d.zip", t.ArtifactsDir(), setupIdx, i)
+					err = clisqlclient.StmtDiagDownloadBundle(ctx, connForBundle, bundleID, dest)
+					if err != nil {
 						t.Fatal(err)
 					}
 				}
