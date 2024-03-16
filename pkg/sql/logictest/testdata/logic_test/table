@@ -565,6 +565,7 @@ cluster_execution_insights              NULL
 cluster_inflight_traces                 NULL
 cluster_locks                           NULL
 cluster_queries                         NULL
+cluster_replication_spans               NULL
 cluster_sessions                        NULL
 cluster_settings                        NULL
 cluster_statement_statistics            NULL
