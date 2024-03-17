@@ -60,15 +60,6 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 				arg.Scan(t, i, &cfg.MaxCommittedSizePerReady)
 			case "disable-conf-change-validation":
 				arg.Scan(t, i, &cfg.DisableConfChangeValidation)
-			case "read-only":
-				switch arg.Vals[i] {
-				case "safe":
-					cfg.ReadOnlyOption = raft.ReadOnlySafe
-				case "lease-based":
-					cfg.ReadOnlyOption = raft.ReadOnlyLeaseBased
-				default:
-					return fmt.Errorf("invalid read-only option %q", arg.Vals[i])
-				}
 			case "step-down-on-removal":
 				arg.Scan(t, i, &cfg.StepDownOnRemoval)
 			}
