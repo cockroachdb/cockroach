@@ -14,7 +14,6 @@ import (
 	"context"
 	"math"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -129,12 +128,11 @@ func (q *raftReceiveQueue) Append(
 
 type raftReceiveQueues struct {
 	mon *mon.BytesMonitor
-	m   syncutil.IntMap // RangeID -> *raftReceiveQueue
+	m   syncutil.IntMap[roachpb.RangeID, raftReceiveQueue]
 }
 
 func (qs *raftReceiveQueues) Load(rangeID roachpb.RangeID) (*raftReceiveQueue, bool) {
-	value, ok := qs.m.Load(int64(rangeID))
-	return (*raftReceiveQueue)(value), ok
+	return qs.m.Load(rangeID)
 }
 
 func (qs *raftReceiveQueues) LoadOrCreate(
@@ -145,8 +143,7 @@ func (qs *raftReceiveQueues) LoadOrCreate(
 	}
 	q := &raftReceiveQueue{maxLen: maxLen}
 	q.acc.Init(context.Background(), qs.mon)
-	value, loaded := qs.m.LoadOrStore(int64(rangeID), unsafe.Pointer(q))
-	return (*raftReceiveQueue)(value), loaded
+	return qs.m.LoadOrStore(rangeID, q)
 }
 
 // Delete drains the queue and marks it as deleted. Future Appends
@@ -154,7 +151,7 @@ func (qs *raftReceiveQueues) LoadOrCreate(
 func (qs *raftReceiveQueues) Delete(rangeID roachpb.RangeID) {
 	if q, ok := qs.Load(rangeID); ok {
 		q.Delete()
-		qs.m.Delete(int64(rangeID))
+		qs.m.Delete(rangeID)
 	}
 }
 
@@ -743,7 +740,7 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	ctx := context.TODO()
 	s.updateLivenessMap()
 
-	s.mu.replicasByRangeID.Range(func(r *Replica) {
+	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
 		r.mu.RLock()
 		quiescent := r.mu.quiescent
 		lagging := r.mu.laggingFollowersOnQuiesce
@@ -751,6 +748,7 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		if quiescent && lagging.MemberStale(l) {
 			r.maybeUnquiesce(ctx, false /* wakeLeader */, false /* mayCampaign */) // already leader
 		}
+		return true
 	})
 }
 
