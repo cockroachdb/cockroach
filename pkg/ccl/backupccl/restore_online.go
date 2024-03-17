@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
@@ -46,6 +47,12 @@ var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
 	8,
 	settings.PositiveInt,
 )
+
+const downloadJobDescriptionPrefix = "Background Data Download"
+
+func (r *restoreResumer) isDownloadJob() bool {
+	return strings.Contains(r.job.Payload().Description, downloadJobDescriptionPrefix)
+}
 
 // sendAddRemoteSSTs is a stubbed out, very simplisitic version of restore used
 // to test out ingesting "remote" SSTs. It will be replaced with a real distsql
@@ -490,7 +497,7 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 
 	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
 	downloadJobRecord := jobs.Record{
-		Description: fmt.Sprintf("Background Data Download for %s", r.job.Payload().Description),
+		Description: fmt.Sprintf("%s for %s", downloadJobDescriptionPrefix, r.job.Payload().Description),
 		Username:    r.job.Payload().UsernameProto.Decode(),
 		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans, PostDownloadTableAutoStatsSettings: details.PostDownloadTableAutoStatsSettings},
 		Progress:    jobspb.RestoreProgress{},

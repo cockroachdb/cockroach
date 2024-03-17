@@ -1666,8 +1666,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err := maybeRelocateJobExecution(ctx, r.job.ID(), p, details.ExecutionLocality, "RESTORE"); err != nil {
 		return err
 	}
-
-	if len(details.DownloadSpans) > 0 {
+	if r.isDownloadJob() {
 		if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_do_download_files"); err != nil {
 			return err
 		}
@@ -1769,6 +1768,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			if err := fn(); err != nil {
 				return err
 			}
+		}
+		if err := r.maybeWriteDownloadJob(ctx, p.ExecCfg(), preData, mainData); err != nil {
+			return err
 		}
 		emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
 		return nil

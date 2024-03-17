@@ -177,6 +177,7 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	defer cleanupFnRestored()
 	rSQLDB.Exec(t, "CREATE DATABASE data")
 	var (
+		fullBackup                = "nodelocal://1/full-backup"
 		fullBackupWithRevs        = "nodelocal://1/full-backup-with-revs"
 		incrementalBackup         = "nodelocal://1/incremental-backup"
 		incrementalBackupWithRevs = "nodelocal://1/incremental-backup-with-revs"
@@ -206,6 +207,11 @@ func TestOnlineRestoreErrors(t *testing.T) {
 		rSQLDB.Exec(t, "BACKUP INTO 'userfile:///my_backups'")
 		rSQLDB.ExpectErr(t, "scheme userfile is not accessible during node startup",
 			"RESTORE DATABASE bank FROM LATEST IN 'userfile:///my_backups' WITH EXPERIMENTAL DEFERRED COPY")
+	})
+	t.Run("verify_backup_table_data not supported", func(t *testing.T) {
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", fullBackup))
+		sqlDB.ExpectErr(t, "cannot run online restore with verify_backup_table_data",
+			fmt.Sprintf("RESTORE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, schema_only, verify_backup_table_data", fullBackup))
 	})
 }
 
