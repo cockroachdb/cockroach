@@ -3757,6 +3757,10 @@ func (m *sessionDataMutator) SetDistSQLPlanGatewayBias(val int64) {
 	m.data.DistsqlPlanGatewayBias = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseVirtualComputedColumnStats(val bool) {
+	m.data.OptimizerUseVirtualComputedColumnStats = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
