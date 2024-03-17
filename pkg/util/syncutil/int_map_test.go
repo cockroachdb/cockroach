@@ -216,3 +216,53 @@ func TestIssue40999(t *testing.T) {
 		runtime.GC()
 	}
 }
+
+func TestMapRangeNestedCall(t *testing.T) { // Issue 46399
+	var m IntMap
+	for i := 0; i < 3; i++ {
+		m.Store(int64(i), unsafe.Pointer(new(int)))
+	}
+	m.Range(func(key int64, value unsafe.Pointer) bool {
+		m.Range(func(key int64, value unsafe.Pointer) bool {
+			// We should be able to load the key offered in the Range callback,
+			// because there are no concurrent Delete involved in this tested map.
+			if v, ok := m.Load(key); !ok || !reflect.DeepEqual(v, value) {
+				t.Fatalf("Nested Range loads unexpected value, got %+v want %+v", v, value)
+			}
+
+			// We didn't keep 42 and a value into the map before, if somehow we loaded
+			// a value from such a key, meaning there must be an internal bug regarding
+			// nested range in the Map.
+			if _, loaded := m.LoadOrStore(42, unsafe.Pointer(new(int))); loaded {
+				t.Fatalf("Nested Range loads unexpected value, want store a new value")
+			}
+
+			// Try to Store then LoadAndDelete the corresponding value with the key
+			// 42 to the Map. In this case, the key 42 and associated value should be
+			// removed from the Map. Therefore any future range won't observe key 42
+			// as we checked in above.
+			val := unsafe.Pointer(new(int))
+			m.Store(42, val)
+			if v, loaded := m.LoadAndDelete(42); !loaded || !reflect.DeepEqual(v, val) {
+				t.Fatalf("Nested Range loads unexpected value, got %v, want %v", v, val)
+			}
+			return true
+		})
+
+		// Remove key from Map on-the-fly.
+		m.Delete(key)
+		return true
+	})
+
+	// After a Range of Delete, all keys should be removed and any
+	// further Range won't invoke the callback. Hence length remains 0.
+	length := 0
+	m.Range(func(key int64, value unsafe.Pointer) bool {
+		length++
+		return true
+	})
+
+	if length != 0 {
+		t.Fatalf("Unexpected sync.Map size, got %v want %v", length, 0)
+	}
+}
