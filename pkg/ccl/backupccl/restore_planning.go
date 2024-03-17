@@ -1346,6 +1346,10 @@ func restorePlanHook(
 		}
 	}
 
+	if restoreStmt.Options.ExperimentalOnline && restoreStmt.Options.VerifyData {
+		return nil, nil, nil, false, errors.New("cannot run online restore with verify_backup_table_data")
+	}
+
 	var newTenantID *roachpb.TenantID
 	var newTenantName *roachpb.TenantName
 	if restoreStmt.Options.AsTenant != nil || restoreStmt.Options.ForceTenantID != nil {

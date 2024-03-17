@@ -511,7 +511,9 @@ message RestoreDetails {
   // end of the download job. 
   map<uint32,cockroach.sql.catalog.catpb.AutoStatsSettings> post_download_table_auto_stats_settings = 35;
 
-  // NEXT ID: 36.
+  bool download_job = 36;
+
+  // NEXT ID: 37.
 }
 
 
