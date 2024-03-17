@@ -313,6 +313,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().OptimizerUseImprovedJoinElimination = true
 	ot.evalCtx.SessionData().OptimizerUseProvidedOrderingFix = true
 	ot.evalCtx.SessionData().OptimizerMergeJoinsEnabled = true
+	ot.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = true
 
 	return ot
 }
