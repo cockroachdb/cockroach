@@ -56,20 +56,6 @@ const (
 	numStates
 )
 
-type ReadOnlyOption int
-
-const (
-	// ReadOnlySafe guarantees the linearizability of the read only request by
-	// communicating with the quorum. It is the default and suggested option.
-	ReadOnlySafe ReadOnlyOption = iota
-	// ReadOnlyLeaseBased ensures linearizability of the read only request by
-	// relying on the leader lease. It can be affected by clock drift.
-	// If the clock drift is unbounded, leader might keep the lease longer than it
-	// should (clock can move backward/pause without any bound). ReadIndex is not safe
-	// in that case.
-	ReadOnlyLeaseBased
-)
-
 // Possible values for CampaignType
 const (
 	// campaignPreElection represents the first phase of a normal election when
@@ -231,19 +217,6 @@ type Config struct {
 	// rejoins the cluster.
 	PreVote bool
 
-	// ReadOnlyOption specifies how the read only request is processed.
-	//
-	// ReadOnlySafe guarantees the linearizability of the read only request by
-	// communicating with the quorum. It is the default and suggested option.
-	//
-	// ReadOnlyLeaseBased ensures linearizability of the read only request by
-	// relying on the leader lease. It can be affected by clock drift.
-	// If the clock drift is unbounded, leader might keep the lease longer than it
-	// should (clock can move backward/pause without any bound). ReadIndex is not safe
-	// in that case.
-	// CheckQuorum MUST be enabled if ReadOnlyOption is ReadOnlyLeaseBased.
-	ReadOnlyOption ReadOnlyOption
-
 	// Logger is the logger used for raft log. For multinode which can host
 	// multiple raft group, each raft group can have its own logger
 	Logger Logger
@@ -331,10 +304,6 @@ func (c *Config) validate() error {
 		c.Logger = getLogger()
 	}
 
-	if c.ReadOnlyOption == ReadOnlyLeaseBased && !c.CheckQuorum {
-		return errors.New("CheckQuorum must be enabled when ReadOnlyOption is ReadOnlyLeaseBased")
-	}
-
 	return nil
 }
 
@@ -343,8 +312,6 @@ type raft struct {
 
 	Term uint64
 	Vote uint64
-
-	readStates []ReadState
 
 	// the log
 	raftLog *raftLog
@@ -396,8 +363,6 @@ type raft struct {
 	// term changes.
 	uncommittedSize entryPayloadSize
 
-	readOnly *readOnly
-
 	// number of ticks since it reached last electionTimeout when it is leader
 	// or candidate.
 	// number of ticks since it reached last electionTimeout or received a
@@ -424,12 +389,6 @@ type raft struct {
 	step stepFunc
 
 	logger Logger
-
-	// pendingReadIndexMessages is used to store messages of type MsgReadIndex
-	// that can't be answered as new leader didn't committed any log in
-	// current term. Those will be handled as fast as first log is committed in
-	// current term.
-	pendingReadIndexMessages []pb.Message
 }
 
 func newRaft(c *Config) *raft {
@@ -455,7 +414,6 @@ func newRaft(c *Config) *raft {
 		logger:                      c.Logger,
 		checkQuorum:                 c.CheckQuorum,
 		preVote:                     c.PreVote,
-		readOnly:                    newReadOnly(c.ReadOnlyOption),
 		disableProposalForwarding:   c.DisableProposalForwarding,
 		disableConfChangeValidation: c.DisableConfChangeValidation,
 		stepDownOnRemoval:           c.StepDownOnRemoval,
@@ -528,11 +486,9 @@ func (r *raft) send(m pb.Message) {
 		if m.Term != 0 {
 			r.logger.Panicf("term should not be set when sending %s (was %d)", m.Type, m.Term)
 		}
-		// do not attach term to MsgProp, MsgReadIndex
-		// proposals are a way to forward to the leader and
-		// should be treated as local message.
-		// MsgReadIndex is also forwarded to leader.
-		if m.Type != pb.MsgProp && m.Type != pb.MsgReadIndex {
+		// Do not attach term to MsgProp. Proposals are a way to forward to the
+		// leader, and should be treated as local message.
+		if m.Type != pb.MsgProp {
 			m.Term = r.Term
 		}
 	}
@@ -682,7 +638,7 @@ func (r *raft) maybeSendSnapshot(to uint64, pr *tracker.Progress) bool {
 }
 
 // sendHeartbeat sends a heartbeat RPC to the given peer.
-func (r *raft) sendHeartbeat(to uint64, ctx []byte) {
+func (r *raft) sendHeartbeat(to uint64) {
 	pr := r.trk.Progress[to]
 	// Attach the commit as min(to.matched, r.committed).
 	// When the leader sends out heartbeat message,
@@ -692,10 +648,9 @@ func (r *raft) sendHeartbeat(to uint64, ctx []byte) {
 	// an unmatched index.
 	commit := min(pr.Match, r.raftLog.committed)
 	r.send(pb.Message{
-		To:      to,
-		Type:    pb.MsgHeartbeat,
-		Commit:  commit,
-		Context: ctx,
+		To:     to,
+		Type:   pb.MsgHeartbeat,
+		Commit: commit,
 	})
 	pr.SentCommit(commit)
 }
@@ -713,20 +668,11 @@ func (r *raft) bcastAppend() {
 
 // bcastHeartbeat sends RPC, without entries to all the peers.
 func (r *raft) bcastHeartbeat() {
-	lastCtx := r.readOnly.lastPendingRequestCtx()
-	if len(lastCtx) == 0 {
-		r.bcastHeartbeatWithCtx(nil)
-	} else {
-		r.bcastHeartbeatWithCtx([]byte(lastCtx))
-	}
-}
-
-func (r *raft) bcastHeartbeatWithCtx(ctx []byte) {
 	r.trk.Visit(func(id uint64, _ *tracker.Progress) {
 		if id == r.id {
 			return
 		}
-		r.sendHeartbeat(id, ctx)
+		r.sendHeartbeat(id)
 	})
 }
 
@@ -800,7 +746,6 @@ func (r *raft) reset(term uint64) {
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
-	r.readOnly = newReadOnly(r.readOnly.option)
 }
 
 func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
@@ -1325,25 +1270,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		}
 		r.bcastAppend()
 		return nil
-	case pb.MsgReadIndex:
-		// only one voting member (the leader) in the cluster
-		if r.trk.IsSingleton() {
-			if resp := r.responseToReadIndexReq(m, r.raftLog.committed); resp.To != None {
-				r.send(resp)
-			}
-			return nil
-		}
 
-		// Postpone read only request when this leader has not committed
-		// any log entry at its term.
-		if !r.committedEntryInCurrentTerm() {
-			r.pendingReadIndexMessages = append(r.pendingReadIndexMessages, m)
-			return nil
-		}
-
-		sendMsgReadIndexResponse(r, m)
-
-		return nil
 	case pb.MsgForgetLeader:
 		return nil // noop on leader
 	}
@@ -1522,9 +1449,6 @@ func stepLeader(r *raft, m pb.Message) error {
 				}
 
 				if r.maybeCommit() {
-					// committed index has progressed for the term, so it is safe
-					// to respond to pending read index requests
-					releasePendingReadIndexMessages(r)
 					r.bcastAppend()
 				} else if r.id != m.From && pr.CanBumpCommit(r.raftLog.committed) {
 					// This node may be missing the latest commit index, so send it.
@@ -1571,20 +1495,6 @@ func stepLeader(r *raft, m pb.Message) error {
 			r.sendAppend(m.From)
 		}
 
-		if r.readOnly.option != ReadOnlySafe || len(m.Context) == 0 {
-			return nil
-		}
-
-		if r.trk.Voters.VoteResult(r.readOnly.recvAck(m.From, m.Context)) != quorum.VoteWon {
-			return nil
-		}
-
-		rss := r.readOnly.advance(m)
-		for _, rs := range rss {
-			if resp := r.responseToReadIndexReq(rs.req, rs.index); resp.To != None {
-				r.send(resp)
-			}
-		}
 	case pb.MsgSnapStatus:
 		if pr.State != tracker.StateSnapshot {
 			return nil
@@ -1724,10 +1634,6 @@ func stepFollower(r *raft, m pb.Message) error {
 		m.To = r.lead
 		r.send(m)
 	case pb.MsgForgetLeader:
-		if r.readOnly.option == ReadOnlyLeaseBased {
-			r.logger.Error("ignoring MsgForgetLeader due to ReadOnlyLeaseBased")
-			return nil
-		}
 		if r.lead != None {
 			r.logger.Infof("%x forgetting leader %x at term %d", r.id, r.lead, r.Term)
 			r.lead = None
@@ -1738,19 +1644,6 @@ func stepFollower(r *raft, m pb.Message) error {
 		// know we are not recovering from a partition so there is no need for the
 		// extra round trip.
 		r.hup(campaignTransfer)
-	case pb.MsgReadIndex:
-		if r.lead == None {
-			r.logger.Infof("%x no leader at term %d; dropping index reading msg", r.id, r.Term)
-			return nil
-		}
-		m.To = r.lead
-		r.send(m)
-	case pb.MsgReadIndexResp:
-		if len(m.Entries) != 1 {
-			r.logger.Errorf("%x invalid format of MsgReadIndexResp from %x, entries count: %d", r.id, m.From, len(m.Entries))
-			return nil
-		}
-		r.readStates = append(r.readStates, ReadState{Index: m.Index, RequestCtx: m.Entries[0].Data})
 	}
 	return nil
 }
@@ -2038,31 +1931,6 @@ func (r *raft) abortLeaderTransfer() {
 	r.leadTransferee = None
 }
 
-// committedEntryInCurrentTerm return true if the peer has committed an entry in its term.
-func (r *raft) committedEntryInCurrentTerm() bool {
-	// NB: r.Term is never 0 on a leader, so if zeroTermOnOutOfBounds returns 0,
-	// we won't see it as a match with r.Term.
-	return r.raftLog.zeroTermOnOutOfBounds(r.raftLog.term(r.raftLog.committed)) == r.Term
-}
-
-// responseToReadIndexReq constructs a response for `req`. If `req` comes from the peer
-// itself, a blank value will be returned.
-func (r *raft) responseToReadIndexReq(req pb.Message, readIndex uint64) pb.Message {
-	if req.From == None || req.From == r.id {
-		r.readStates = append(r.readStates, ReadState{
-			Index:      readIndex,
-			RequestCtx: req.Entries[0].Data,
-		})
-		return pb.Message{}
-	}
-	return pb.Message{
-		Type:    pb.MsgReadIndexResp,
-		To:      req.From,
-		Index:   readIndex,
-		Entries: req.Entries,
-	}
-}
-
 // increaseUncommittedSize computes the size of the proposed entries and
 // determines whether they would push leader over its maxUncommittedSize limit.
 // If the new entries would exceed the limit, the method returns false. If not,
@@ -2097,42 +1965,5 @@ func (r *raft) reduceUncommittedSize(s entryPayloadSize) {
 		r.uncommittedSize = 0
 	} else {
 		r.uncommittedSize -= s
-	}
-}
-
-func releasePendingReadIndexMessages(r *raft) {
-	if len(r.pendingReadIndexMessages) == 0 {
-		// Fast path for the common case to avoid a call to storage.LastIndex()
-		// via committedEntryInCurrentTerm.
-		return
-	}
-	if !r.committedEntryInCurrentTerm() {
-		r.logger.Error("pending MsgReadIndex should be released only after first commit in current term")
-		return
-	}
-
-	msgs := r.pendingReadIndexMessages
-	r.pendingReadIndexMessages = nil
-
-	for _, m := range msgs {
-		sendMsgReadIndexResponse(r, m)
-	}
-}
-
-func sendMsgReadIndexResponse(r *raft, m pb.Message) {
-	// thinking: use an internally defined context instead of the user given context.
-	// We can express this in terms of the term and index instead of a user-supplied value.
-	// This would allow multiple reads to piggyback on the same message.
-	switch r.readOnly.option {
-	// If more than the local vote is needed, go through a full broadcast.
-	case ReadOnlySafe:
-		r.readOnly.addRequest(r.raftLog.committed, m)
-		// The local node automatically acks the request.
-		r.readOnly.recvAck(r.id, m.Entries[0].Data)
-		r.bcastHeartbeatWithCtx(m.Entries[0].Data)
-	case ReadOnlyLeaseBased:
-		if resp := r.responseToReadIndexReq(m, r.raftLog.committed); resp.To != None {
-			r.send(resp)
-		}
 	}
 }

@@ -193,51 +193,6 @@ func TestDisableProposalForwarding(t *testing.T) {
 	require.Empty(t, r3.msgs)
 }
 
-// TestNodeReadIndexToOldLeader ensures that raftpb.MsgReadIndex to old leader
-// gets forwarded to the new leader and 'send' method does not attach its term.
-func TestNodeReadIndexToOldLeader(t *testing.T) {
-	r1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	r2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	r3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-
-	nt := newNetwork(r1, r2, r3)
-
-	// elect r1 as leader
-	nt.send(raftpb.Message{From: 1, To: 1, Type: raftpb.MsgHup})
-
-	var testEntries = []raftpb.Entry{{Data: []byte("testdata")}}
-
-	// send readindex request to r2(follower)
-	r2.Step(raftpb.Message{From: 2, To: 2, Type: raftpb.MsgReadIndex, Entries: testEntries})
-
-	// verify r2(follower) forwards this message to r1(leader) with term not set
-	require.Len(t, r2.msgs, 1)
-	readIndxMsg1 := raftpb.Message{From: 2, To: 1, Type: raftpb.MsgReadIndex, Entries: testEntries}
-	require.Equal(t, readIndxMsg1, r2.msgs[0])
-
-	// send readindex request to r3(follower)
-	r3.Step(raftpb.Message{From: 3, To: 3, Type: raftpb.MsgReadIndex, Entries: testEntries})
-
-	// verify r3(follower) forwards this message to r1(leader) with term not set as well.
-	require.Len(t, r3.msgs, 1)
-	readIndxMsg2 := raftpb.Message{From: 3, To: 1, Type: raftpb.MsgReadIndex, Entries: testEntries}
-	require.Equal(t, readIndxMsg2, r3.msgs[0])
-
-	// now elect r3 as leader
-	nt.send(raftpb.Message{From: 3, To: 3, Type: raftpb.MsgHup})
-
-	// let r1 steps the two messages previously we got from r2, r3
-	r1.Step(readIndxMsg1)
-	r1.Step(readIndxMsg2)
-
-	// verify r1(follower) forwards these messages again to r3(new leader)
-	require.Len(t, r1.msgs, 2)
-	readIndxMsg3 := raftpb.Message{From: 2, To: 3, Type: raftpb.MsgReadIndex, Entries: testEntries}
-	require.Equal(t, readIndxMsg3, r1.msgs[0])
-	readIndxMsg3 = raftpb.Message{From: 3, To: 3, Type: raftpb.MsgReadIndex, Entries: testEntries}
-	require.Equal(t, readIndxMsg3, r1.msgs[1])
-}
-
 // TestNodeProposeConfig ensures that node.ProposeConfChange sends the given configuration proposal
 // to the underlying raft.
 func TestNodeProposeConfig(t *testing.T) {
