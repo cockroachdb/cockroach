@@ -1164,9 +1164,12 @@ func (desc *wrapper) validateColumns() error {
 			return errors.Newf("both generated identity and computed expression specified for column %q", column.GetName())
 		}
 
-		// If the column is not in DELETE_ONLY and it's generated as identity, then
-		// the column has to have an enforced NOT NULL constraint.
-		if !column.DeleteOnly() && column.IsGeneratedAsIdentity() {
+		// If the column is public and it's generated as identity, then
+		// the column has to have an enforced NOT NULL constraint. In a mutation
+		// stage, the column is only accessible for non-user facing writes/deletes and its
+		// fine to not enforce the null constraint for identity columns until column
+		// moves to public.
+		if column.Public() && column.IsGeneratedAsIdentity() {
 			// A column's NOT NULL constraint is enforced when either the column
 			// descriptor is NOT NULL, or there is an enforced, functionally equivalent
 			// CHECK constraint, (col_name IS NOT NULL), in `desc`, which can happen

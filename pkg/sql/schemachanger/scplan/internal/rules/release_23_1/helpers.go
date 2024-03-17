@@ -285,3 +285,11 @@ func isOwner(e scpb.Element) bool {
 	}
 	return false
 }
+
+func isColumnNotNull(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ColumnNotNull:
+		return true
+	}
+	return false
+}

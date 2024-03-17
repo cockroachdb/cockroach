@@ -36,13 +36,16 @@ func init() {
 		},
 	)
 
+	// N.B. The column not null constraint should be added as per
+	// the "column public before non-index-backed constraint (including hash-sharded) is created"
+	// deprule.
 	registerDepRule(
 		"column dependents exist before column becomes public",
 		scgraph.Precedence,
 		"dependent", "column",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isColumnDependent),
+				from.TypeFilter(rulesVersionKey, isColumnDependent, Not(isColumnNotNull)),
 				to.Type((*scpb.Column)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
@@ -87,17 +90,17 @@ func init() {
 		},
 	)
 
-	// Column becomes writable in the same stage as column constraint is enforced.
+	// Column becomes public in the same stage as column constraint is enforced.
 	//
 	// This rule exists to prevent the case that the constraint becomes enforced
 	// (which means writes need to honor it) when the column itself is still
-	// in DELETE_ONLY and thus not visible to writes.
+	// in DELETE_ONLY/WRITE_ONLY and thus not visible to user-writes.
 	//
 	// N.B. It's essentially the same rule as "column constraint removed right
-	// before column reaches delete only" but on the adding path.
+	// before column reaches write only" but on the adding path.
 	// N.B. SameStage is enough; which transition happens first won't matter.
 	registerDepRule(
-		"column writable right before column constraint is enforced.",
+		"column public right before column constraint is enforced.",
 		scgraph.SameStagePrecedence,
 		"column", "column-constraint",
 		func(from, to NodeVars) rel.Clauses {
@@ -105,7 +108,7 @@ func init() {
 				from.Type((*scpb.Column)(nil)),
 				to.Type((*scpb.ColumnNotNull)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
-				StatusesToPublicOrTransient(from, scpb.Status_WRITE_ONLY, to, scpb.Status_WRITE_ONLY),
+				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_WRITE_ONLY),
 			}
 		},
 	)

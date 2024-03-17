@@ -21,6 +21,8 @@ import (
 // DEFAULT expression, etc. disappear once the column reaches a suitable state.
 func init() {
 
+	// N.B. This rules is superseded by the "column constraint removed right before
+	// column reaches write only" rule below for the not null column check.
 	registerDepRuleForDrop(
 		"column no longer public before dependents",
 		scgraph.Precedence,
@@ -29,7 +31,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),
-				to.TypeFilter(rulesVersionKey, isColumnDependent),
+				to.TypeFilter(rulesVersionKey, isColumnDependent, Not(isColumnNotNull)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
 			}
 		},
@@ -112,22 +114,22 @@ func init() {
 	)
 
 	// Column constraint disappears in the same stage as the column
-	// becomes non-writable.
+	// becomes WRITE_ONLY.
 	//
-	// Column constraint cannot disappear while the column is still writable
+	// Column constraint cannot disappear while the column is still publicly writable
 	// because we then allow incorrect writes that would violate the constraint.
 	//
 	// Column constraint cannot still be enforced when the column becomes
-	// non-writable because an enforced constraint means writes will see and
+	// non-public because an enforced constraint means writes will see and
 	// attempt to uphold it but the column is no longer visible to them.
 	//
 	// N.B. This rule supersedes the above "dependents removed before column" rule.
 	// N.B. SameStage is enough; which transition happens first won't matter.
 	registerDepRuleForDrop(
-		"column constraint removed right before column reaches delete only",
+		"column constraint removed right before column reaches write only",
 		scgraph.SameStagePrecedence,
 		"column-constraint", "column",
-		scpb.Status_ABSENT, scpb.Status_DELETE_ONLY,
+		scpb.Status_ABSENT, scpb.Status_WRITE_ONLY,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant),

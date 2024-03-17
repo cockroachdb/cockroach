@@ -3332,7 +3332,7 @@ INSERT INTO t_99035 VALUES (0,0);
 
 skipif config local-legacy-schema-changer
 skipif config local-mixed-23.1
-statement error validation of CHECK "j > 0:::INT8" failed on row: j=0, k=[0-9]+, p=30
+statement error validation of CHECK "j > 0:::INT8" failed on row: i=NULL, j=0, k=[0-9]+, p=30
 ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN p INT DEFAULT 30, ADD CHECK (j>0);
 
 query II
