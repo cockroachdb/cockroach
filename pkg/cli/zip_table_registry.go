@@ -638,6 +638,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"range_start",
 			"range_end",
 			"resolved",
+			"resolved_age",
 			"last_event",
 			"catchup",
 		},

@@ -7220,6 +7220,7 @@ CREATE TABLE crdb_internal.active_range_feeds (
   range_start STRING,
   range_end STRING,
   resolved DECIMAL,
+	resolved_age INTERVAL,
   last_event TIMESTAMPTZ,
   catchup BOOL,
   num_errs INT,
@@ -7256,6 +7257,9 @@ CREATE TABLE crdb_internal.active_range_feeds (
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.Key)),
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.EndKey)),
 					eval.TimestampToDecimalDatum(rf.Resolved),
+					tree.NewDInterval(duration.Age(
+						p.EvalContext().GetStmtTimestamp(), rf.Resolved.GoTime()), types.DefaultIntervalTypeMetadata,
+					),
 					lastEvent,
 					tree.MakeDBool(tree.DBool(rf.InCatchup)),
 					tree.NewDInt(tree.DInt(rf.NumErrs)),
