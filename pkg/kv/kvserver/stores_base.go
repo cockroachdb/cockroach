@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 	"strings"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,10 +35,8 @@ func MakeStoresIterator(stores *Stores) *StoresIterator {
 // ForEachStore is part of kvserverbase.StoresIterator.
 func (s *StoresIterator) ForEachStore(f func(kvserverbase.Store) error) error {
 	var err error
-	s.storeMap.Range(func(k int64, v unsafe.Pointer) bool {
-		store := (*Store)(v)
-
-		err = f((*baseStore)(store))
+	s.storeMap.Range(func(_ roachpb.StoreID, s *Store) bool {
+		err = f((*baseStore)(s))
 		return err == nil
 	})
 	return err

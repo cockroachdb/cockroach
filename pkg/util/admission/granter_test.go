@@ -17,7 +17,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -155,9 +154,9 @@ func TestGranterBasic(t *testing.T) {
 			var metricsProvider testMetricsProvider
 			metricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
 			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &metricsProvider, &metricsProvider)
-			unsafeGranter, ok := storeCoordinators.gcMap.Load(int64(1))
+			var ok bool
+			coord, ok = storeCoordinators.gcMap.Load(1)
 			require.True(t, ok)
-			coord = (*GrantCoordinator)(unsafeGranter)
 			kvStoreGranter := coord.granters[KVWork].(*kvStoreTokenGranter)
 			// Use the same model for all 3 kinds of models.
 			tlm := tokensLinearModel{multiplier: 0.5, constant: 50}
@@ -354,18 +353,16 @@ func TestStoreCoordinators(t *testing.T) {
 	// Now we have 1+2*2 = 5 KVWork requesters.
 	require.Equal(t, 5, len(requesters))
 	// Confirm that the store IDs are as expected.
-	var actualStores []int32
+	var actualStores []roachpb.StoreID
 
-	storeCoords.gcMap.Range(func(s int64, _ unsafe.Pointer) bool {
-		// The int32 conversion is lossless since we only store int32s in the
-		// gcMap.
-		actualStores = append(actualStores, int32(s))
+	storeCoords.gcMap.Range(func(s roachpb.StoreID, _ *GrantCoordinator) bool {
+		actualStores = append(actualStores, s)
 		// true indicates that iteration should continue after the
 		// current entry has been processed.
 		return true
 	})
 	sort.Slice(actualStores, func(i, j int) bool { return actualStores[i] < actualStores[j] })
-	require.Equal(t, []int32{10, 20}, actualStores)
+	require.Equal(t, []roachpb.StoreID{10, 20}, actualStores)
 	// Do tryGet on all requesters. The requester for the Regular
 	// GrantCoordinator will return false since it has 0 CPU slots. We are
 	// interested in the other ones, which have unlimited slots at this point in
