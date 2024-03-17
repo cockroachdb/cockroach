@@ -63,7 +63,7 @@ type StoreGrantCoordinators struct {
 	// These metrics are shared by WorkQueues across stores.
 	workQueueMetrics *WorkQueueMetrics
 
-	gcMap syncutil.IntMap[roachpb.StoreID, GrantCoordinator]
+	gcMap syncutil.Map[roachpb.StoreID, GrantCoordinator]
 	// numStores is used to track the number of stores which have been added
 	// to the gcMap. This is used because the IntMap doesn't expose a size
 	// api.

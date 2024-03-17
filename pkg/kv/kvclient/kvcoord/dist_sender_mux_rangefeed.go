@@ -57,7 +57,7 @@ type rangefeedMuxer struct {
 	// Accessed atomically.
 	seqID int64
 
-	muxClients syncutil.IntMap[roachpb.NodeID, future.Future[muxStreamOrError]]
+	muxClients syncutil.Map[roachpb.NodeID, future.Future[muxStreamOrError]]
 }
 
 // muxRangeFeed is an entry point to establish MuxRangeFeed
@@ -115,7 +115,7 @@ func muxRangeFeed(
 type muxStream struct {
 	nodeID roachpb.NodeID
 
-	streams syncutil.IntMap[int64, activeMuxRangeFeed]
+	streams syncutil.Map[int64, activeMuxRangeFeed]
 
 	// mu must be held when starting rangefeed.
 	mu struct {

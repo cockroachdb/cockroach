@@ -2900,7 +2900,7 @@ type TenantsStorageMetrics struct {
 	// everything will work with tenantsIDs in excess of math.MaxInt64
 	// except that should one ever look at this map through a debugger
 	// the int64->uint64 conversion has to be done manually.
-	tenants syncutil.IntMap[roachpb.TenantID, tenantStorageMetrics]
+	tenants syncutil.Map[roachpb.TenantID, tenantStorageMetrics]
 }
 
 // tenantsStorageMetricsSet returns the set of all metric names contained
