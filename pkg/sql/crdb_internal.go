@@ -7207,12 +7207,11 @@ CREATE VIEW crdb_internal.statement_statistics_persisted_v22_2 AS
 
 var crdbInternalActiveRangeFeedsTable = virtualSchemaTable{
 	comment: `node-level table listing all currently running range feeds`,
-	// NB: startTS is exclusive; consider renaming to startAfter.
 	schema: `
 CREATE TABLE crdb_internal.active_range_feeds (
   id INT,
   tags STRING,
-  startTS DECIMAL,
+  start_after DECIMAL,
   diff BOOL,
   node_id INT,
   range_id INT,

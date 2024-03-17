@@ -630,7 +630,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		nonSensitiveCols: NonSensitiveColumns{
 			"id",
 			"tags",
-			"startts",
+			"start_after",
 			"diff",
 			"node_id",
 			"range_id",
