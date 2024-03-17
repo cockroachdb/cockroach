@@ -33,7 +33,7 @@ func benchMap(b *testing.B, bench bench) {
 	for _, m := range [...]intMapInterface{
 		&DeepCopyMap[int64, int64]{},
 		&RWMutexMap[int64, int64]{},
-		&IntMap[int64, int64]{},
+		&Map[int64, int64]{},
 	} {
 		name := fmt.Sprintf("%T", m)
 		name = strings.Replace(name, "[int64,int64]", "", -1)

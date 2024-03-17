@@ -163,7 +163,7 @@ type raftSchedulerBatch struct {
 }
 
 func newRaftSchedulerBatch(
-	numShards int, priorityIDs *syncutil.IntMap[roachpb.RangeID, struct{}],
+	numShards int, priorityIDs *syncutil.Map[roachpb.RangeID, struct{}],
 ) *raftSchedulerBatch {
 	b := raftSchedulerBatchPool.Get().(*raftSchedulerBatch)
 	if cap(b.rangeIDs) >= numShards {
@@ -217,7 +217,7 @@ type raftScheduler struct {
 	// separate shards to reduce contention at high worker counts. Allocation
 	// is modulo range ID, with shard 0 reserved for priority ranges.
 	shards      []*raftSchedulerShard // 1 + RangeID % (len(shards) - 1)
-	priorityIDs syncutil.IntMap[roachpb.RangeID, struct{}]
+	priorityIDs syncutil.Map[roachpb.RangeID, struct{}]
 	done        sync.WaitGroup
 }
 

@@ -128,7 +128,7 @@ func (q *raftReceiveQueue) Append(
 
 type raftReceiveQueues struct {
 	mon *mon.BytesMonitor
-	m   syncutil.IntMap[roachpb.RangeID, raftReceiveQueue]
+	m   syncutil.Map[roachpb.RangeID, raftReceiveQueue]
 }
 
 func (qs *raftReceiveQueues) Load(rangeID roachpb.RangeID) (*raftReceiveQueue, bool) {
