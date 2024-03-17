@@ -51,7 +51,6 @@ import (
 // and LoadOrStore is a write operation when it returns loaded set to false.
 //
 // TODO(nvanbenschoten): rename to Map.
-// TODO(nvanbenschoten): rename int_mapXXX.go files.
 type IntMap[K comparable, V any] struct {
 	mu Mutex
 
