@@ -349,9 +349,7 @@ func TestSortInvalidLimit(t *testing.T) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
 		evalCtx := eval.MakeTestingEvalContext(st)
-		defer evalCtx.Stop(ctx)
 		diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
-		defer diskMonitor.Stop(ctx)
 		flowCtx := execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
 			Mon:     evalCtx.TestingMon,
