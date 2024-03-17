@@ -28,6 +28,7 @@ type mapInterface interface {
 	Load(int64) (unsafe.Pointer, bool)
 	Store(key int64, value unsafe.Pointer)
 	LoadOrStore(key int64, value unsafe.Pointer) (actual unsafe.Pointer, loaded bool)
+	LoadAndDelete(key int64) (value unsafe.Pointer, loaded bool)
 	Delete(int64)
 	Range(func(key int64, value unsafe.Pointer) (shouldContinue bool))
 }
@@ -68,6 +69,18 @@ func (m *RWMutexMap) LoadOrStore(
 	}
 	m.mu.Unlock()
 	return actual, loaded
+}
+
+func (m *RWMutexMap) LoadAndDelete(key int64) (value unsafe.Pointer, loaded bool) {
+	m.mu.Lock()
+	value, loaded = m.dirty[key]
+	if !loaded {
+		m.mu.Unlock()
+		return nil, false
+	}
+	delete(m.dirty, key)
+	m.mu.Unlock()
+	return value, loaded
 }
 
 func (m *RWMutexMap) Delete(key int64) {
@@ -138,6 +151,16 @@ func (m *DeepCopyMap) LoadOrStore(
 	}
 	m.mu.Unlock()
 	return actual, loaded
+}
+
+func (m *DeepCopyMap) LoadAndDelete(key int64) (value unsafe.Pointer, loaded bool) {
+	m.mu.Lock()
+	dirty := m.dirty()
+	value, loaded = dirty[key]
+	delete(dirty, key)
+	m.clean.Store(dirty)
+	m.mu.Unlock()
+	return
 }
 
 func (m *DeepCopyMap) Delete(key int64) {

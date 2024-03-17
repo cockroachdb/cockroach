@@ -279,8 +279,9 @@ func (e *entry) tryLoadOrStore(r unsafe.Pointer) (actual unsafe.Pointer, loaded,
 	}
 }
 
-// Delete deletes the value for a key.
-func (m *IntMap) Delete(key int64) {
+// LoadAndDelete deletes the value for a key, returning the previous value if any.
+// The loaded result reports whether the key was present.
+func (m *IntMap) LoadAndDelete(key int64) (value unsafe.Pointer, loaded bool) {
 	read := m.getRead()
 	e, ok := read.m[key]
 	if !ok && read.amended {
@@ -290,23 +291,33 @@ func (m *IntMap) Delete(key int64) {
 			read = m.getRead()
 			e, ok = read.m[key]
 			if !ok && read.amended {
-				delete(m.dirty, key)
+				e, ok = m.dirty[key]
+				// Regardless of whether the entry was present, record a miss: this key
+				// will take the slow path until the dirty map is promoted to the read
+				// map.
+				m.missLocked()
 			}
 		}()
 	}
 	if ok {
-		e.delete()
+		return e.delete()
 	}
+	return nil, false
 }
 
-func (e *entry) delete() (hadValue bool) {
+// Delete deletes the value for a key.
+func (m *IntMap) Delete(key int64) {
+	m.LoadAndDelete(key)
+}
+
+func (e *entry) delete() (value unsafe.Pointer, hadValue bool) {
 	for {
 		p := atomic.LoadPointer(&e.p)
 		if p == nil || p == expunged {
-			return false
+			return nil, false
 		}
 		if atomic.CompareAndSwapPointer(&e.p, p, nil) {
-			return true
+			return p, true
 		}
 	}
 }
