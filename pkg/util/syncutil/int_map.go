@@ -91,7 +91,8 @@ var expunged = unsafe.Pointer(new(int))
 type entry struct {
 	// p points to the value stored for the entry.
 	//
-	// If p == nil, the entry has been deleted and m.dirty == nil.
+	// If p == nil, the entry has been deleted, and either m.dirty == nil or
+	// m.dirty[key] is e.
 	//
 	// If p == expunged, the entry has been deleted, m.dirty != nil, and the entry
 	// is missing from m.dirty.
