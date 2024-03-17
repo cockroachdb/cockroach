@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "grafana",
-    srcs = ["dashboards.go"],
+    srcs = [
+        "annotations.go",
+        "dashboards.go",
+    ],
     embedsrcs = [
         "configs/changefeeds.json",
         "configs/distributed.json",
@@ -18,4 +21,12 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/httputil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_go_openapi_strfmt//:strfmt",
+        "@com_github_grafana_grafana_openapi_client_go//client",
+        "@com_github_grafana_grafana_openapi_client_go//models",
+        "@org_golang_google_api//idtoken",
+    ],
 )

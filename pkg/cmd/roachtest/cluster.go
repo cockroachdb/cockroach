@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -665,6 +666,11 @@ type clusterImpl struct {
 
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
+
+	// grafanaTags contains the cluster and test information that grafana will separate
+	// test runs by. This is used by the roachtest grafana API to create appropriately
+	// tagged grafana annotations. If empty, grafana is not available.
+	grafanaTags []string
 }
 
 // Name returns the cluster name, i.e. something like `teamcity-....`
@@ -2847,6 +2853,38 @@ func (c *clusterImpl) StartGrafana(
 
 func (c *clusterImpl) StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error {
 	return roachprod.StopGrafana(ctx, l, c.name, dumpDir)
+}
+
+// AddGrafanaAnnotation creates a grafana annotation for the centralized grafana instance.
+func (c *clusterImpl) AddGrafanaAnnotation(
+	ctx context.Context, l *logger.Logger, req grafana.AddAnnotationRequest,
+) error {
+	// If grafanaTags is empty, then grafana is not set up for this cluster.
+	if len(c.grafanaTags) == 0 {
+		return errors.New("Grafana is not available for this cluster")
+	}
+	// Add grafanaTags so we can filter annotations by test or by cluster.
+	req.Tags = append(req.Tags, c.grafanaTags...)
+
+	// CentralizedGrafanaHost is the host name for the centralized grafana instance that
+	// is set up for every roachtest run on GCE.
+	const CentralizedGrafanaHost = "grafana.testeng.crdb.io"
+
+	// The centralized grafana instance requires auth through Google IDP.
+	return roachprod.AddGrafanaAnnotation(ctx, CentralizedGrafanaHost, true /* secure */, req)
+}
+
+// AddInternalGrafanaAnnotation creates a grafana annotation for the internal grafana
+// instance spun up in roachtests through StartGrafana.
+func (c *clusterImpl) AddInternalGrafanaAnnotation(
+	ctx context.Context, l *logger.Logger, req grafana.AddAnnotationRequest,
+) error {
+	host, err := roachprod.GrafanaURL(ctx, l, c.name, false /* openInBrowser */)
+	if err != nil {
+		return err
+	}
+	// The internal grafana instance does not require auth.
+	return roachprod.AddGrafanaAnnotation(ctx, host, false /* secure */, req)
 }
 
 func (c *clusterImpl) WipeForReuse(

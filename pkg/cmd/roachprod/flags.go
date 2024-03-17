@@ -85,6 +85,10 @@ var (
 	externalProcessNodes string
 
 	revertUpdate bool
+
+	grafanaTags         []string
+	grafanaDashboardUID string
+	grafanaTimeRange    []int64
 )
 
 func initFlags() {
@@ -362,7 +366,7 @@ func initFlags() {
 		cmd.Flags().StringVarP(&config.Binary,
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}
-	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd, jaegerStartCmd} {
+	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd, jaegerStartCmd, grafanaAnnotationCmd} {
 		cmd.Flags().BoolVar(&secure,
 			"secure", false, "use a secure cluster")
 	}
@@ -373,4 +377,10 @@ func initFlags() {
 			"sql-instance", 0, "specific SQL/HTTP instance to connect to (this is a roachprod abstraction distinct from the internal instance ID)")
 	}
 
+	grafanaAnnotationCmd.Flags().StringArrayVar(&grafanaTags,
+		"tags", []string{}, "grafana annotation tags")
+	grafanaAnnotationCmd.Flags().StringVar(&grafanaDashboardUID,
+		"dashboard-uid", "", "grafana dashboard UID")
+	grafanaAnnotationCmd.Flags().Int64SliceVar(&grafanaTimeRange,
+		"time-range", []int64{}, "grafana annotation time range in epoch time")
 }
