@@ -21,8 +21,8 @@ import (
 	"unsafe"
 )
 
-// IntMap is like a Go map[int64]interface{} but is safe for concurrent use by
-// multiple goroutines without additional locking or coordination.
+// IntMap is like a Go map[int64]any but is safe for concurrent use by multiple
+// goroutines without additional locking or coordination.
 // Loads, stores, and deletes run in amortized constant time.
 //
 // The IntMap type is specialized. Most code should use a plain Go map instead,
