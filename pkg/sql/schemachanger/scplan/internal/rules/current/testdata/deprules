@@ -2135,9 +2135,9 @@ deprules
     - $parent-descriptor-Node[CurrentStatus] = DROPPED
     - joinTargetNode($back-reference-in-parent-descriptor, $back-reference-in-parent-descriptor-Target, $back-reference-in-parent-descriptor-Node)
     - joinTargetNode($parent-descriptor, $parent-descriptor-Target, $parent-descriptor-Node)
-- name: column constraint removed right before column reaches delete only
+- name: column constraint removed right before column reaches write only
   from: column-constraint-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: column-Node
   query:
     - $column-constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnNotNull', '*scpb.ForeignKeyConstraint', '*scpb.UniqueWithoutIndexConstraint']
@@ -2145,12 +2145,12 @@ deprules
     - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
     - toAbsent($column-constraint-Target, $column-Target)
     - $column-constraint-Node[CurrentStatus] = ABSENT
-    - $column-Node[CurrentStatus] = DELETE_ONLY
+    - $column-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
-- name: column constraint removed right before column reaches delete only
+- name: column constraint removed right before column reaches write only
   from: column-constraint-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: column-Node
   query:
     - $column-constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnNotNull', '*scpb.ForeignKeyConstraint', '*scpb.UniqueWithoutIndexConstraint']
@@ -2158,12 +2158,12 @@ deprules
     - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
     - transient($column-constraint-Target, $column-Target)
     - $column-constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - $column-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
     - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
-- name: column constraint removed right before column reaches delete only
+- name: column constraint removed right before column reaches write only
   from: column-constraint-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: column-Node
   query:
     - $column-constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnNotNull', '*scpb.ForeignKeyConstraint', '*scpb.UniqueWithoutIndexConstraint']
@@ -2172,12 +2172,12 @@ deprules
     - $column-constraint-Target[TargetStatus] = TRANSIENT_ABSENT
     - $column-constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
     - $column-Target[TargetStatus] = ABSENT
-    - $column-Node[CurrentStatus] = DELETE_ONLY
+    - $column-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
-- name: column constraint removed right before column reaches delete only
+- name: column constraint removed right before column reaches write only
   from: column-constraint-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: column-Node
   query:
     - $column-constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnNotNull', '*scpb.ForeignKeyConstraint', '*scpb.UniqueWithoutIndexConstraint']
@@ -2186,7 +2186,7 @@ deprules
     - $column-constraint-Target[TargetStatus] = ABSENT
     - $column-constraint-Node[CurrentStatus] = ABSENT
     - $column-Target[TargetStatus] = TRANSIENT_ABSENT
-    - $column-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
     - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
 - name: column dependents exist before column becomes public
@@ -2276,7 +2276,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
+    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - toAbsent($column-Target, $dependent-Target)
     - $column-Node[CurrentStatus] = WRITE_ONLY
@@ -2289,7 +2289,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
+    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - transient($column-Target, $dependent-Target)
     - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
@@ -2302,7 +2302,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
+    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - $column-Target[TargetStatus] = TRANSIENT_ABSENT
     - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
@@ -2316,7 +2316,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
+    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - $column-Target[TargetStatus] = ABSENT
     - $column-Node[CurrentStatus] = WRITE_ONLY
@@ -6218,9 +6218,9 @@ deprules
     - $parent-descriptor-Node[CurrentStatus] = DROPPED
     - joinTargetNode($back-reference-in-parent-descriptor, $back-reference-in-parent-descriptor-Target, $back-reference-in-parent-descriptor-Node)
     - joinTargetNode($parent-descriptor, $parent-descriptor-Target, $parent-descriptor-Node)
-- name: column constraint removed right before column reaches delete only
+- name: column constraint removed right before column reaches write only
   from: column-constraint-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: column-Node
   query:
     - $column-constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnNotNull', '*scpb.ForeignKeyConstraint', '*scpb.UniqueWithoutIndexConstraint']
@@ -6228,12 +6228,12 @@ deprules
     - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
     - toAbsent($column-constraint-Target, $column-Target)
     - $column-constraint-Node[CurrentStatus] = ABSENT
-    - $column-Node[CurrentStatus] = DELETE_ONLY
+    - $column-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
-- name: column constraint removed right before column reaches delete only
+- name: column constraint removed right before column reaches write only
   from: column-constraint-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: column-Node
   query:
     - $column-constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnNotNull', '*scpb.ForeignKeyConstraint', '*scpb.UniqueWithoutIndexConstraint']
@@ -6241,12 +6241,12 @@ deprules
     - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
     - transient($column-constraint-Target, $column-Target)
     - $column-constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - $column-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
     - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
-- name: column constraint removed right before column reaches delete only
+- name: column constraint removed right before column reaches write only
   from: column-constraint-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: column-Node
   query:
     - $column-constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnNotNull', '*scpb.ForeignKeyConstraint', '*scpb.UniqueWithoutIndexConstraint']
@@ -6255,12 +6255,12 @@ deprules
     - $column-constraint-Target[TargetStatus] = TRANSIENT_ABSENT
     - $column-constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
     - $column-Target[TargetStatus] = ABSENT
-    - $column-Node[CurrentStatus] = DELETE_ONLY
+    - $column-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
-- name: column constraint removed right before column reaches delete only
+- name: column constraint removed right before column reaches write only
   from: column-constraint-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: column-Node
   query:
     - $column-constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnNotNull', '*scpb.ForeignKeyConstraint', '*scpb.UniqueWithoutIndexConstraint']
@@ -6269,7 +6269,7 @@ deprules
     - $column-constraint-Target[TargetStatus] = ABSENT
     - $column-constraint-Node[CurrentStatus] = ABSENT
     - $column-Target[TargetStatus] = TRANSIENT_ABSENT
-    - $column-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
     - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
 - name: column dependents exist before column becomes public
@@ -6359,7 +6359,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
+    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - toAbsent($column-Target, $dependent-Target)
     - $column-Node[CurrentStatus] = WRITE_ONLY
@@ -6372,7 +6372,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
+    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - transient($column-Target, $dependent-Target)
     - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
@@ -6385,7 +6385,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
+    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - $column-Target[TargetStatus] = TRANSIENT_ABSENT
     - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
@@ -6399,7 +6399,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
+    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnDefaultExpression', '*scpb.ColumnName', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - $column-Target[TargetStatus] = ABSENT
     - $column-Node[CurrentStatus] = WRITE_ONLY

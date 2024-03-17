@@ -211,6 +211,13 @@ func isColumnDependent(e scpb.Element) bool {
 	return isColumnTypeDependent(e)
 }
 
+func isColumnNotNull(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ColumnNotNull:
+		return true
+	}
+	return false
+}
 func isColumnTypeDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.SequenceOwner, *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression:

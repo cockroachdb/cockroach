@@ -162,13 +162,6 @@ StatementPhase stage 1 of 1 with 154 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 109
       ParentSchemaID: 101
-    *scop.MakePublicColumnWriteOnly
-      ColumnID: 1
-      TableID: 109
-    *scop.SetColumnName
-      ColumnID: 1
-      Name: crdb_internal_column_1_name_placeholder
-      TableID: 109
     *scop.MakePublicColumnNotNullValidated
       ColumnID: 1
       TableID: 109
@@ -225,13 +218,6 @@ StatementPhase stage 1 of 1 with 154 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 108
       ParentSchemaID: 105
-    *scop.MakePublicColumnWriteOnly
-      ColumnID: 1
-      TableID: 108
-    *scop.SetColumnName
-      ColumnID: 1
-      Name: crdb_internal_column_1_name_placeholder
-      TableID: 108
     *scop.MakePublicColumnNotNullValidated
       ColumnID: 1
       TableID: 108
@@ -560,10 +546,12 @@ StatementPhase stage 1 of 1 with 154 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: root
-    *scop.AssertColumnFamilyIsRemoved
-      TableID: 109
-    *scop.MakeWriteOnlyColumnDeleteOnly
+    *scop.MakePublicColumnWriteOnly
       ColumnID: 1
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
@@ -574,10 +562,12 @@ StatementPhase stage 1 of 1 with 154 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 109
-    *scop.AssertColumnFamilyIsRemoved
-      TableID: 108
-    *scop.MakeWriteOnlyColumnDeleteOnly
+    *scop.MakePublicColumnWriteOnly
       ColumnID: 1
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
       TableID: 108
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
@@ -609,6 +599,11 @@ StatementPhase stage 1 of 1 with 154 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       TableID: 113
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 109
     *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 1
@@ -627,6 +622,11 @@ StatementPhase stage 1 of 1 with 154 MutationType ops
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 109
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 108
     *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 1
@@ -939,13 +939,6 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 109
       ParentSchemaID: 101
-    *scop.MakePublicColumnWriteOnly
-      ColumnID: 1
-      TableID: 109
-    *scop.SetColumnName
-      ColumnID: 1
-      Name: crdb_internal_column_1_name_placeholder
-      TableID: 109
     *scop.MakePublicColumnNotNullValidated
       ColumnID: 1
       TableID: 109
@@ -1002,13 +995,6 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 108
       ParentSchemaID: 105
-    *scop.MakePublicColumnWriteOnly
-      ColumnID: 1
-      TableID: 108
-    *scop.SetColumnName
-      ColumnID: 1
-      Name: crdb_internal_column_1_name_placeholder
-      TableID: 108
     *scop.MakePublicColumnNotNullValidated
       ColumnID: 1
       TableID: 108
@@ -1337,10 +1323,12 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: root
-    *scop.AssertColumnFamilyIsRemoved
-      TableID: 109
-    *scop.MakeWriteOnlyColumnDeleteOnly
+    *scop.MakePublicColumnWriteOnly
       ColumnID: 1
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
@@ -1351,10 +1339,12 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 109
-    *scop.AssertColumnFamilyIsRemoved
-      TableID: 108
-    *scop.MakeWriteOnlyColumnDeleteOnly
+    *scop.MakePublicColumnWriteOnly
       ColumnID: 1
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
       TableID: 108
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
@@ -1386,6 +1376,11 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       TableID: 113
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 109
     *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 1
@@ -1404,6 +1399,11 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 109
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 108
     *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 1

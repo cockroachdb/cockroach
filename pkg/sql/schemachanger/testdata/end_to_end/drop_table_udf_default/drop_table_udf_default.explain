@@ -37,8 +37,6 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │         └── 33 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":105}
- │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":105}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":105}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":105}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":105}
@@ -58,11 +56,13 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":105}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":105}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":105}
- │              ├── AssertColumnFamilyIsRemoved {"TableID":105}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":105}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":105}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":105}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":105}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":105}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":105}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":105}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":105}
  │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":105}
  │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":105}
  │              ├── MakeIndexAbsent {"IndexID":1,"TableID":105}
@@ -128,8 +128,6 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │         └── 36 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":105}
- │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":105}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":105}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":105}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":105}
@@ -149,11 +147,13 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":105}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":105}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":105}
- │              ├── AssertColumnFamilyIsRemoved {"TableID":105}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":105}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":105}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":105}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":105}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":105}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":105}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":105}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":105}
  │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":105}
  │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":105}
  │              ├── MakeIndexAbsent {"IndexID":1,"TableID":105}
