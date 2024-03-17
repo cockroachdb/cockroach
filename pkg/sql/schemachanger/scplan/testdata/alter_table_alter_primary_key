@@ -5,10 +5,8 @@ CREATE TABLE t (k INT NOT NULL, v STRING);
 ops
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 ----
-StatementPhase stage 1 of 1 with 14 MutationType ops
+StatementPhase stage 1 of 1 with 12 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
-    [[ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
@@ -89,17 +87,8 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
       IndexID: 4
       Kind: 2
       TableID: 104
-    *scop.MakePublicColumnWriteOnly
-      ColumnID: 3
-      TableID: 104
-    *scop.SetColumnName
-      ColumnID: 3
-      Name: crdb_internal_column_3_name_placeholder
-      TableID: 104
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Column:{DescID: 104, ColumnID: 3}, ABSENT], WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], BACKFILL_ONLY] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
@@ -117,10 +106,8 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 19 MutationType ops
+PreCommitPhase stage 2 of 2 with 17 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
-    [[ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
@@ -209,13 +196,6 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
       ColumnID: 2
       IndexID: 4
       Kind: 2
-      TableID: 104
-    *scop.MakePublicColumnWriteOnly
-      ColumnID: 3
-      TableID: 104
-    *scop.SetColumnName
-      ColumnID: 3
-      Name: crdb_internal_column_3_name_placeholder
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -423,9 +403,10 @@ PostCommitPhase stage 15 of 15 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 4
       TableID: 104
-PostCommitNonRevertiblePhase stage 1 of 4 with 15 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 4 with 16 MutationType ops
   transitions:
-    [[Column:{DescID: 104, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT], VALIDATED] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -443,11 +424,6 @@ PostCommitNonRevertiblePhase stage 1 of 4 with 15 MutationType ops
       ColumnID: 3
       TableID: 104
     *scop.RemoveColumnFromIndex
-      ColumnID: 3
-      IndexID: 3
-      Kind: 2
-      TableID: 104
-    *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 3
       TableID: 104
@@ -466,14 +442,20 @@ PostCommitNonRevertiblePhase stage 1 of 4 with 15 MutationType ops
       IndexID: 5
       Kind: 2
       TableID: 104
-    *scop.MakeWriteOnlyColumnDeleteOnly
+    *scop.MakePublicColumnWriteOnly
       ColumnID: 3
+      TableID: 104
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
       TableID: 104
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 104
-    *scop.MakeIndexAbsent
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
       IndexID: 3
+      Kind: 2
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 5
@@ -492,20 +474,27 @@ PostCommitNonRevertiblePhase stage 1 of 4 with 15 MutationType ops
       IndexID: 1
       Kind: 2
       Ordinal: 1
+      TableID: 104
+    *scop.MakeIndexAbsent
+      IndexID: 3
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 4 with 7 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 4 with 8 MutationType ops
   transitions:
+    [[Column:{DescID: 104, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_VALIDATED
     [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
   ops:
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 3
+      TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 104
@@ -631,10 +620,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
-  to:   [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT]
-  kind: Precedence
-  rule: column no longer public before dependents
-- from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
@@ -667,9 +652,9 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT]
-  to:   [Column:{DescID: 104, ColumnID: 3}, DELETE_ONLY]
+  to:   [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
   kind: SameStagePrecedence
-  rule: column constraint removed right before column reaches delete only
+  rule: column constraint removed right before column reaches write only
 - from: [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, PUBLIC]
   to:   [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, VALIDATED]
   kind: PreviousTransactionPrecedence
