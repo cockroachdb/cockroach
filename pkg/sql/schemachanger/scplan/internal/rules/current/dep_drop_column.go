@@ -111,6 +111,51 @@ func init() {
 		},
 	)
 
+	// This rule ensures that a column is dropped only after any virtual, computed column dependent
+	// on the column is dropped i.e. if B is a virtual, computed column using column A
+	// in its compute expression, this rule ensures that the compute expression of B is dropped before
+	// A is dropped. The rules above ensure that the column B is dropped before the expression is dropped
+	// so this rule also implicitly implies that column B is dropped before column A.
+	// This is relevant for expression and hash indexes which create an internal, virtual column
+	// which computes the hash/expression key for the index.
+	//
+	// N.B. This rules has been intentionally made very specific to only virtual, computed columns as opposed
+	// to all computed columns. This is due an edge case within the optimizer which actually allows
+	// the compute expressions of virtual computed columns to be evaluated during an active schema change.
+	// Without this rule, the optimizer is unable to read the dependent column as the dependent column
+	// moves to the WRITE_ONLY stage before the computed column is fully dropped. As of now, we don't
+	// need to apply to all computed columns as the optimizer doesn't evaluate their expressions while
+	// dropping them so the above rule where the column type is dropped before the column is sufficient
+	// to enforce the dependency.
+	registerDepRuleForDrop(
+		"Virtual computed column expression is dropped before the column it depends on",
+		scgraph.Precedence,
+		"virtual-column-expr", "column",
+		scpb.Status_ABSENT, scpb.Status_WRITE_ONLY,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.ColumnType)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				FilterElements("computedColumnTypeReferencesColumn", from, to,
+					func(colType *scpb.ColumnType, column *scpb.Column) bool {
+						if !colType.IsVirtual {
+							return false
+						}
+						if colType.ComputeExpr == nil {
+							return false
+						}
+						for _, refColumns := range colType.ComputeExpr.ReferencedColumnIDs {
+							if refColumns == column.ColumnID {
+								return true
+							}
+						}
+						return false
+					}),
+			}
+		},
+	)
+
 	// Column constraint disappears in the same stage as the column
 	// becomes non-writable.
 	//
@@ -133,6 +178,31 @@ func init() {
 				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant),
 				to.Type((*scpb.Column)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
+			}
+		},
+	)
+
+	// This rule enforces that a new primary index moves to the public stage only after all columns stored
+	// within the old primary index move to WRITE_ONLY. Without this, the new primary index is at risk of not
+	// storing all public columns within the table (as the column being dropped is still considered public
+	// before it moves to WRITE_ONLY but the new primary index does not contain it since the schema changer
+	// knows it is transitioning to a target status of ABSENT).
+	registerDepRule(
+		"New primary index should go public only after columns being dropped move to WRITE_ONLY",
+		scgraph.Precedence,
+		"column", "new-primary-index",
+		func(from, to NodeVars) rel.Clauses {
+			ic := MkNodeVars("index-column")
+			relationID, columnID, indexID := rel.Var("table-id"), rel.Var("column-id"), rel.Var("index-id")
+			return rel.Clauses{
+				from.Type((*scpb.Column)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil)),
+				ColumnInSourcePrimaryIndex(ic, to, relationID, columnID, indexID),
+				JoinOnColumnID(ic, from, relationID, columnID),
+				from.TargetStatus(scpb.ToAbsent),
+				from.CurrentStatus(scpb.Status_WRITE_ONLY),
+				to.TargetStatus(scpb.ToPublic),
+				to.CurrentStatus(scpb.Status_PUBLIC),
 			}
 		},
 	)
@@ -168,6 +238,7 @@ func init() {
 			}
 		},
 	)
+
 	registerDepRuleForDrop(
 		"secondary index partial no longer public before referenced column",
 		scgraph.Precedence,

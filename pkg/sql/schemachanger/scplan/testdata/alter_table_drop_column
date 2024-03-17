@@ -788,6 +788,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 107, ColumnID: 2}, WRITE_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
+  kind: Precedence
+  rule: New primary index should go public only after columns being dropped move to WRITE_ONLY
 - from: [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
@@ -2161,6 +2165,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 107, ColumnID: 3}, WRITE_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
+  kind: Precedence
+  rule: New primary index should go public only after columns being dropped move to WRITE_ONLY
 - from: [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
@@ -3172,6 +3180,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN udfcol;
   to:   [IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 107, ColumnID: 4}, WRITE_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
+  kind: Precedence
+  rule: New primary index should go public only after columns being dropped move to WRITE_ONLY
 - from: [ColumnDefaultExpression:{DescID: 107, ColumnID: 4, Expr: [FUNCTION 100109](), ReferencedFunctionIDs: [109]}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 4}, ABSENT]
   kind: Precedence
