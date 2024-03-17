@@ -676,21 +676,14 @@ func (f *FlowBase) GetOnCleanupFns() (startCleanup, endCleanup func()) {
 // portal model).
 //
 // Otherwise, this method is a noop.
-func (f *FlowBase) ConsumerClosedOnHeadProc() {
-	if !f.IsLocal() {
-		return
+// TODO: comment.
+
+func (f *FlowBase) ConsumerClosedOnAllProcessors() {
+	for _, p := range f.processors {
+		if rs, ok := p.(execinfra.RowSource); ok {
+			rs.ConsumerClosed()
+		}
 	}
-	if len(f.processors) != 1 {
-		return
-	}
-	if !f.headProcStarted {
-		return
-	}
-	rs, ok := f.processors[0].(execinfra.RowSource)
-	if !ok {
-		return
-	}
-	rs.ConsumerClosed()
 }
 
 // Cleanup is part of the Flow interface.

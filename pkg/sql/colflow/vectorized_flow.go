@@ -388,8 +388,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// as well as closes all the closers.
 	f.creator.cleanup(ctx)
 
-	// Ensure that the "head" processor is always closed.
-	f.ConsumerClosedOnHeadProc()
+	f.ConsumerClosedOnAllProcessors()
 
 	f.tempStorage.Lock()
 	created := f.tempStorage.path != ""
