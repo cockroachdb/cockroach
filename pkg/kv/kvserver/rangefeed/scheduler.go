@@ -154,7 +154,7 @@ type Scheduler struct {
 	// separate shards to reduce mutex contention. Allocation is modulo
 	// processors, with shard 0 reserved for priority processors.
 	shards      []*schedulerShard // 1 + id%(len(shards)-1)
-	priorityIDs syncutil.IntMap[int64, struct{}]
+	priorityIDs syncutil.Map[int64, struct{}]
 	wg          sync.WaitGroup
 }
 
@@ -586,9 +586,7 @@ type SchedulerBatch struct {
 	priorityIDs map[int64]bool
 }
 
-func newSchedulerBatch(
-	numShards int, priorityIDs *syncutil.IntMap[int64, struct{}],
-) *SchedulerBatch {
+func newSchedulerBatch(numShards int, priorityIDs *syncutil.Map[int64, struct{}]) *SchedulerBatch {
 	b := schedulerBatchPool.Get().(*SchedulerBatch)
 	if cap(b.ids) >= numShards {
 		b.ids = b.ids[:numShards]

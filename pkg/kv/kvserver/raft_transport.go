@@ -179,11 +179,11 @@ type RaftTransport struct {
 	//
 	// TODO(pav-kv): only SystemClass and "default" raft class slots are used.
 	// Find an efficient way to have only the necessary number of slots.
-	queues [rpc.NumConnectionClasses]syncutil.IntMap[roachpb.NodeID, raftSendQueue]
+	queues [rpc.NumConnectionClasses]syncutil.Map[roachpb.NodeID, raftSendQueue]
 
 	dialer                  *nodedialer.Dialer
-	incomingMessageHandlers syncutil.IntMap[roachpb.StoreID, IncomingRaftMessageHandler]
-	outgoingMessageHandlers syncutil.IntMap[roachpb.StoreID, OutgoingRaftMessageHandler]
+	incomingMessageHandlers syncutil.Map[roachpb.StoreID, IncomingRaftMessageHandler]
+	outgoingMessageHandlers syncutil.Map[roachpb.StoreID, OutgoingRaftMessageHandler]
 
 	kvflowControl struct {
 		// Everything nested under this struct is used to return flow tokens

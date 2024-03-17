@@ -1004,7 +1004,7 @@ type Store struct {
 		syncutil.RWMutex
 		// Map of replicas by Range ID (map[roachpb.RangeID]*Replica).
 		// May be read without holding Store.mu.
-		replicasByRangeID syncutil.IntMap[roachpb.RangeID, Replica]
+		replicasByRangeID syncutil.Map[roachpb.RangeID, Replica]
 		// A btree key containing objects of type *Replica or *ReplicaPlaceholder.
 		// Both types have an associated key range; the btree is keyed on their
 		// start keys.

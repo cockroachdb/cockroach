@@ -102,7 +102,7 @@ func applyCalls(m intMapInterface, calls []mapCall) (results []mapResult, final 
 }
 
 func applyMap(calls []mapCall) ([]mapResult, map[any]any) {
-	return applyCalls(new(IntMap[int64, int64]), calls)
+	return applyCalls(new(Map[int64, int64]), calls)
 }
 
 func applyRWMutexMap(calls []mapCall) ([]mapResult, map[any]any) {
@@ -128,7 +128,7 @@ func TestMapMatchesDeepCopy(t *testing.T) {
 func TestConcurrentRange(t *testing.T) {
 	const mapSize = 1 << 10
 
-	m := new(IntMap[int64, int64])
+	m := new(Map[int64, int64])
 	for n := int64(1); n <= mapSize; n++ {
 		v := new(int64)
 		*v = n
@@ -191,7 +191,7 @@ func TestConcurrentRange(t *testing.T) {
 }
 
 func TestIssue40999(t *testing.T) {
-	var m IntMap[int64, int64]
+	var m Map[int64, int64]
 	k := int64(0)
 	v := new(int64)
 
@@ -217,7 +217,7 @@ func TestIssue40999(t *testing.T) {
 }
 
 func TestMapRangeNestedCall(t *testing.T) { // Issue 46399
-	var m IntMap[int64, int64]
+	var m Map[int64, int64]
 	for i := 0; i < 3; i++ {
 		m.Store(int64(i), new(int64))
 	}

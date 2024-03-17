@@ -39,7 +39,7 @@ import (
 type Stores struct {
 	log.AmbientContext
 	clock    *hlc.Clock
-	storeMap syncutil.IntMap[roachpb.StoreID, Store]
+	storeMap syncutil.Map[roachpb.StoreID, Store]
 
 	mu struct {
 		syncutil.Mutex

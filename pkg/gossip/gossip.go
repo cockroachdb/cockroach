@@ -244,8 +244,8 @@ type Gossip struct {
 	addressIdx     int
 	addresses      []util.UnresolvedAddr
 	addressesTried map[int]struct{} // Set of attempted address indexes
-	nodeDescs      syncutil.IntMap[roachpb.NodeID, roachpb.NodeDescriptor]
-	storeDescs     syncutil.IntMap[roachpb.StoreID, roachpb.StoreDescriptor]
+	nodeDescs      syncutil.Map[roachpb.NodeID, roachpb.NodeDescriptor]
+	storeDescs     syncutil.Map[roachpb.StoreID, roachpb.StoreDescriptor]
 
 	// Membership sets for bootstrap addresses. bootstrapAddrs also tracks which
 	// address is associated with which node ID to enable faster node lookup by
