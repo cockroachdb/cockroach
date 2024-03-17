@@ -4,7 +4,7 @@ go_library(
     name = "syncutil",
     srcs = [
         "atomic.go",
-        "int_map.go",
+        "map.go",
         "mutex_deadlock.go",  # keep
         "mutex_sync.go",  # keep
         "mutex_sync_race.go",  # keep
@@ -22,9 +22,9 @@ go_test(
     size = "small",
     srcs = [
         "atomic_test.go",
-        "int_map_bench_test.go",
-        "int_map_reference_test.go",
-        "int_map_test.go",
+        "map_bench_test.go",
+        "map_reference_test.go",
+        "map_test.go",
         "mutex_sync_race_test.go",  # keep
         "mutex_tracing_test.go",
     ],
