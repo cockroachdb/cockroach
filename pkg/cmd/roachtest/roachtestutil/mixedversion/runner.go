@@ -26,6 +26,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
@@ -103,6 +104,11 @@ type (
 			mu    syncutil.Mutex
 			cache []*gosql.DB
 		}
+
+		// the following are test-only fields, allowing tests to simulate
+		// cluster properties without passing a cluster.Cluster
+		// implementation.
+		_addAnnotation func() error
 	}
 )
 
@@ -242,6 +248,13 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 	defer func() {
 		prefix := fmt.Sprintf("FINISHED [%s]", timeutil.Since(start))
 		tr.logStep(prefix, ss, l)
+		annotation := fmt.Sprintf("(%d): %s", ss.ID, ss.impl.Description())
+		err := tr.addGrafanaAnnotation(tr.ctx, tr.logger, grafana.AddAnnotationRequest{
+			Text: annotation, StartTime: start.UnixMilli(), EndTime: timeutil.Now().UnixMilli(),
+		})
+		if err != nil {
+			l.Printf("WARN: Adding Grafana annotation failed: %s", err)
+		}
 	}()
 
 	if err := panicAsError(l, func() error {
@@ -503,6 +516,16 @@ func (tr *testRunner) closeConnections() {
 			_ = db.Close()
 		}
 	}
+}
+
+func (tr *testRunner) addGrafanaAnnotation(
+	ctx context.Context, l *logger.Logger, req grafana.AddAnnotationRequest,
+) error {
+	if tr._addAnnotation != nil {
+		return tr._addAnnotation() // test-only
+	}
+
+	return tr.cluster.AddGrafanaAnnotation(ctx, l, req)
 }
 
 func newCRDBMonitor(
