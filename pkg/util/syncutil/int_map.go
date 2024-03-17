@@ -42,6 +42,13 @@ import (
 // The zero IntMap is valid and empty.
 //
 // An IntMap must not be copied after first use.
+//
+// In the terminology of the Go memory model, IntMap arranges that a write
+// operation “synchronizes before” any read operation that observes the effect
+// of the write, where read and write operations are defined as follows.
+// Load, LoadAndDelete, LoadOrStore are read operations;
+// Delete, LoadAndDelete, and Store are write operations;
+// and LoadOrStore is a write operation when it returns loaded set to false.
 type IntMap struct {
 	mu Mutex
 
