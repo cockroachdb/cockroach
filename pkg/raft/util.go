@@ -46,7 +46,6 @@ var isResponseMsg = [...]bool{
 	pb.MsgVoteResp:          true,
 	pb.MsgHeartbeatResp:     true,
 	pb.MsgUnreachable:       true,
-	pb.MsgReadIndexResp:     true,
 	pb.MsgPreVoteResp:       true,
 	pb.MsgStorageAppendResp: true,
 	pb.MsgStorageApplyResp:  true,
@@ -116,9 +115,6 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 	if !IsEmptyHardState(rd.HardState) {
 		fmt.Fprintf(&buf, "HardState %s", DescribeHardState(rd.HardState))
 		buf.WriteByte('\n')
-	}
-	if len(rd.ReadStates) > 0 {
-		fmt.Fprintf(&buf, "ReadStates %v\n", rd.ReadStates)
 	}
 	if len(rd.Entries) > 0 {
 		buf.WriteString("Entries:\n")

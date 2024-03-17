@@ -160,9 +160,6 @@ func (rn *RawNode) readyWithoutAccept() Ready {
 	if r.raftLog.hasNextUnstableSnapshot() {
 		rd.Snapshot = *r.raftLog.nextUnstableSnapshot()
 	}
-	if len(r.readStates) != 0 {
-		rd.ReadStates = r.readStates
-	}
 	rd.MustSync = MustSync(r.hardState(), rn.prevHardSt, len(rd.Entries))
 
 	if rn.asyncStorageWrites {
@@ -412,9 +409,6 @@ func (rn *RawNode) acceptReady(rd Ready) {
 	if !IsEmptyHardState(rd.HardState) {
 		rn.prevHardSt = rd.HardState
 	}
-	if len(rd.ReadStates) != 0 {
-		rn.raft.readStates = nil
-	}
 	if !rn.asyncStorageWrites {
 		if len(rn.stepsOnAdvance) != 0 {
 			rn.raft.logger.Panicf("two accepted Ready structs without call to Advance")
@@ -467,9 +461,6 @@ func (rn *RawNode) HasReady() bool {
 		return true
 	}
 	if r.raftLog.hasNextUnstableEnts() || r.raftLog.hasNextCommittedEnts(rn.applyUnstableEntries()) {
-		return true
-	}
-	if len(r.readStates) != 0 {
 		return true
 	}
 	return false
@@ -552,12 +543,4 @@ func (rn *RawNode) TransferLeader(transferee uint64) {
 // See (Node).ForgetLeader for details.
 func (rn *RawNode) ForgetLeader() error {
 	return rn.raft.Step(pb.Message{Type: pb.MsgForgetLeader})
-}
-
-// ReadIndex requests a read state. The read state will be set in ready.
-// Read State has a read index. Once the application advances further than the read
-// index, any linearizable read requests issued before the read request can be
-// processed safely. The read state will have the same rctx attached.
-func (rn *RawNode) ReadIndex(rctx []byte) {
-	_ = rn.raft.Step(pb.Message{Type: pb.MsgReadIndex, Entries: []pb.Entry{{Data: rctx}}})
 }
