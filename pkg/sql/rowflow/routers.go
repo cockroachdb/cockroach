@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -80,7 +81,10 @@ const routerRowBufSize = execinfra.RowChannelBufSize
 type routerOutput struct {
 	stream   execinfra.RowReceiver
 	streamID execinfrapb.StreamID
-	mu       struct {
+	// evalCtx is this output's copy of the eval context for initializing the
+	// row container.
+	evalCtx *eval.Context
+	mu      struct {
 		syncutil.Mutex
 		// cond is signaled whenever the main router routine adds a metadata item, a
 		// row, or sets producerDone.
@@ -277,44 +281,7 @@ func (rb *routerBase) init(
 	for i := range rb.outputs {
 		// This method must be called before we Start() so we don't need
 		// to take the mutex.
-		evalCtx := flowCtx.NewEvalCtx()
-		rb.outputs[i].memoryMonitor = execinfra.NewLimitedMonitor(
-			ctx, flowCtx.Mon, flowCtx,
-			redact.Sprintf("router-limited-%d", rb.outputs[i].streamID),
-		)
-		rb.outputs[i].diskMonitor = execinfra.NewMonitor(
-			ctx, flowCtx.DiskMonitor,
-			redact.Sprintf("router-disk-%d", rb.outputs[i].streamID),
-		)
-		// Note that the monitor is an unlimited one since we don't know how
-		// to fallback to disk if a memory budget error is encountered when
-		// we're popping rows from the row container into the row buffer.
-		rb.outputs[i].rowBufToPushFromMon = execinfra.NewMonitor(
-			ctx, flowCtx.Mon, redact.Sprintf("router-unlimited-%d", rb.outputs[i].streamID),
-		)
-		// These monitors are not long-living ones, and they are generally
-		// stopped at the end of the output's goroutine (that is created in
-		// Start), but if Start is never called (e.g. because the server is
-		// shutting down), then these monitors won't be closed. This doesn't
-		// result in a leak of resources because the flow monitor is always
-		// closed, so we have this hack in place to go around the "non-stopped
-		// short-living monitors" assertion. (Changing the DistSQL code to clean
-		// up the monitors when Start isn't called is non-trivial and doesn't
-		// seem worth it.)
-		rb.outputs[i].memoryMonitor.MarkLongLiving()
-		rb.outputs[i].diskMonitor.MarkLongLiving()
-		rb.outputs[i].rowBufToPushFromMon.MarkLongLiving()
-		memAcc := rb.outputs[i].rowBufToPushFromMon.MakeBoundAccount()
-		rb.outputs[i].rowBufToPushFromAcc = &memAcc
-
-		rb.outputs[i].mu.rowContainer.Init(
-			nil, /* ordering */
-			types,
-			evalCtx,
-			flowCtx.Cfg.TempStorage,
-			rb.outputs[i].memoryMonitor,
-			rb.outputs[i].diskMonitor,
-		)
+		rb.outputs[i].evalCtx = flowCtx.NewEvalCtx()
 
 		// Initialize any outboxes.
 		if o, ok := rb.outputs[i].stream.(*flowinfra.Outbox); ok {
@@ -323,8 +290,50 @@ func (rb *routerBase) init(
 	}
 }
 
+// completeInit sets up all the infrastructure of the routerOutput that touches
+// the memory monitors (which finalizes the initialization of the router
+// outputs). This needs to happen during Start() and not in init() so that the
+// monitor cleanup is always performed if Start() is called (for example, if the
+// server is quescing, then init() might be called but Start() isn't - leading
+// to non-stopped monitors).
+func (ro *routerOutput) completeInit(ctx context.Context, rb *routerBase) {
+	ro.memoryMonitor = execinfra.NewLimitedMonitor(
+		ctx, rb.flowCtx.Mon, rb.flowCtx,
+		redact.Sprintf("router-limited-%d", ro.streamID),
+	)
+	ro.diskMonitor = execinfra.NewMonitor(
+		ctx, rb.flowCtx.DiskMonitor,
+		redact.Sprintf("router-disk-%d", ro.streamID),
+	)
+	// Note that the monitor is an unlimited one since we don't know how
+	// to fall back to disk if a memory budget error is encountered when
+	// we're popping rows from the row container into the row buffer.
+	ro.rowBufToPushFromMon = execinfra.NewMonitor(
+		ctx, rb.flowCtx.Mon, redact.Sprintf("router-unlimited-%d", ro.streamID),
+	)
+	if ro.rowBufToPushFromAcc == nil {
+		// In some tests we might have already set rowBufToPushFromAcc - don't
+		// overwrite it if so.
+		memAcc := ro.rowBufToPushFromMon.MakeBoundAccount()
+		ro.rowBufToPushFromAcc = &memAcc
+	}
+	ro.mu.rowContainer.Init(
+		nil, /* ordering */
+		rb.types,
+		ro.evalCtx,
+		rb.flowCtx.Cfg.TempStorage,
+		ro.memoryMonitor,
+		ro.diskMonitor,
+	)
+}
+
 // Start must be called after init.
 func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) {
+	// Complete initialization of all outputs before spinning up a new goroutine
+	// for each.
+	for i := range rb.outputs {
+		rb.outputs[i].completeInit(ctx, rb)
+	}
 	wg.Add(len(rb.outputs))
 	for i := range rb.outputs {
 		go func(ctx context.Context, rb *routerBase, ro *routerOutput) {

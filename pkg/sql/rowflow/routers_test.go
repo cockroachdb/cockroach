@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -752,6 +753,7 @@ func TestRouterBlocks(t *testing.T) {
 // scenario.
 func TestRouterDiskSpill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numRows = 200
 	const numCols = 1
@@ -819,9 +821,6 @@ func TestRouterDiskSpill(t *testing.T) {
 		output := &rb.outputs[0]
 		if !memErrorWhenConsumingRows {
 			separateAcc := extraMemMonitor.MakeBoundAccount()
-			// NOTE: we need to close the memory account that routerBase
-			// created in init for the output since we're overriding it.
-			output.rowBufToPushFromAcc.Close(ctx)
 			output.rowBufToPushFromAcc = &separateAcc
 		}
 		rb.Start(ctx, &wg, nil /* ctxCancel */)
