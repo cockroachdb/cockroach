@@ -270,6 +270,7 @@ func (e *familyEvaluator) planAndRun(ctx context.Context) (err error) {
 	var prevCol catalog.Column
 	plan, prevCol, err = e.preparePlan(ctx)
 	if err != nil {
+		e.performCleanup()
 		return withErrorHint(err, e.currDesc.FamilyName, e.currDesc.HasOtherFamilies)
 	}
 
@@ -281,11 +282,7 @@ func (e *familyEvaluator) planAndRun(ctx context.Context) (err error) {
 func (e *familyEvaluator) preparePlan(
 	ctx context.Context,
 ) (plan sql.CDCExpressionPlan, prevCol catalog.Column, err error) {
-	if e.cleanup != nil {
-		e.cleanup()
-		e.cleanup = nil
-	}
-
+	e.performCleanup()
 	err = withPlanner(ctx, e.execCfg, e.statementTS, e.user, e.currDesc.SchemaTS, e.sessionData,
 		func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error {
 			e.cleanup = cleanup
@@ -480,6 +477,13 @@ func (e *familyEvaluator) setupContextForRow(
 	return nil
 }
 
+func (e *familyEvaluator) performCleanup() {
+	if e.cleanup != nil {
+		e.cleanup()
+		e.cleanup = nil
+	}
+}
+
 func (e *familyEvaluator) closeErr() error {
 	if e.errCh != nil {
 		// Must be deferred since planGroup  go routine might write.
@@ -489,15 +493,13 @@ func (e *familyEvaluator) closeErr() error {
 		}()
 	}
 
+	defer e.performCleanup()
 	if e.input != nil {
 		e.input.ProducerDone()
 		e.input = nil
 		return e.planGroup.Wait()
 	}
 
-	if e.cleanup != nil {
-		e.cleanup()
-	}
 	return nil
 }
 
