@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -26,11 +25,6 @@ import (
 )
 
 const rangeIDChunkSize = 1000
-
-// priorityIDsValue is a placeholder value for raftScheduler.priorityIDs. IntMap
-// requires an unsafe.Pointer value, but we don't care about the value (only
-// the key), so we can reuse the same allocation.
-var priorityIDsValue = unsafe.Pointer(new(bool))
 
 type rangeIDChunk struct {
 	// Valid contents are buf[rd:wr], read at buf[rd], write at buf[wr].
@@ -168,7 +162,9 @@ type raftSchedulerBatch struct {
 	priorityIDs map[roachpb.RangeID]bool
 }
 
-func newRaftSchedulerBatch(numShards int, priorityIDs *syncutil.IntMap) *raftSchedulerBatch {
+func newRaftSchedulerBatch(
+	numShards int, priorityIDs *syncutil.IntMap[roachpb.RangeID, struct{}],
+) *raftSchedulerBatch {
 	b := raftSchedulerBatchPool.Get().(*raftSchedulerBatch)
 	if cap(b.rangeIDs) >= numShards {
 		b.rangeIDs = b.rangeIDs[:numShards]
@@ -180,8 +176,8 @@ func newRaftSchedulerBatch(numShards int, priorityIDs *syncutil.IntMap) *raftSch
 	}
 	// Cache the priority range IDs in an owned map, since we expect this to be
 	// very small or empty and we do a lookup for every Add() call.
-	priorityIDs.Range(func(id int64, _ unsafe.Pointer) bool {
-		b.priorityIDs[roachpb.RangeID(id)] = true
+	priorityIDs.Range(func(id roachpb.RangeID, _ *struct{}) bool {
+		b.priorityIDs[id] = true
 		return true
 	})
 	return b
@@ -221,7 +217,7 @@ type raftScheduler struct {
 	// separate shards to reduce contention at high worker counts. Allocation
 	// is modulo range ID, with shard 0 reserved for priority ranges.
 	shards      []*raftSchedulerShard // 1 + RangeID % (len(shards) - 1)
-	priorityIDs syncutil.IntMap
+	priorityIDs syncutil.IntMap[roachpb.RangeID, struct{}]
 	done        sync.WaitGroup
 }
 
@@ -334,18 +330,18 @@ func (s *raftScheduler) Wait(context.Context) {
 
 // AddPriorityID adds the given range ID to the set of priority ranges.
 func (s *raftScheduler) AddPriorityID(rangeID roachpb.RangeID) {
-	s.priorityIDs.Store(int64(rangeID), priorityIDsValue)
+	s.priorityIDs.Store(rangeID, new(struct{}))
 }
 
 // RemovePriorityID removes the given range ID from the set of priority ranges.
 func (s *raftScheduler) RemovePriorityID(rangeID roachpb.RangeID) {
-	s.priorityIDs.Delete(int64(rangeID))
+	s.priorityIDs.Delete(rangeID)
 }
 
 // PriorityIDs returns the current priority ranges.
 func (s *raftScheduler) PriorityIDs() []roachpb.RangeID {
 	var priorityIDs []roachpb.RangeID
-	s.priorityIDs.Range(func(id int64, _ unsafe.Pointer) bool {
+	s.priorityIDs.Range(func(id roachpb.RangeID, _ *struct{}) bool {
 		priorityIDs = append(priorityIDs, roachpb.RangeID(id))
 		return true
 	})
@@ -488,7 +484,7 @@ func (ss *raftSchedulerShard) enqueue1Locked(
 
 func (s *raftScheduler) enqueue1(addFlags raftScheduleFlags, id roachpb.RangeID) {
 	now := nowNanos()
-	_, hasPriority := s.priorityIDs.Load(int64(id))
+	_, hasPriority := s.priorityIDs.Load(id)
 	shardIdx := shardIndex(id, len(s.shards), hasPriority)
 	shard := s.shards[shardIdx]
 	shard.Lock()

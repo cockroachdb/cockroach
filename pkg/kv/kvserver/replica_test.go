@@ -25,7 +25,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
@@ -13896,8 +13895,8 @@ func TestRangeInfoReturned(t *testing.T) {
 
 func tenantsWithMetrics(m *StoreMetrics) map[roachpb.TenantID]struct{} {
 	metricsTenants := map[roachpb.TenantID]struct{}{}
-	m.tenants.Range(func(tenID int64, _ unsafe.Pointer) bool {
-		metricsTenants[roachpb.MustMakeTenantID(uint64(tenID))] = struct{}{}
+	m.tenants.Range(func(tenID roachpb.TenantID, _ *tenantStorageMetrics) bool {
+		metricsTenants[tenID] = struct{}{}
 		return true // more
 	})
 	return metricsTenants

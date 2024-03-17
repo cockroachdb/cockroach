@@ -155,10 +155,11 @@ func (sh *storeForFlowControl) OnRaftTransportDisconnected(
 	ctx context.Context, storeIDs ...roachpb.StoreID,
 ) {
 	s := (*Store)(sh)
-	s.mu.replicasByRangeID.Range(func(replica *Replica) {
+	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, replica *Replica) bool {
 		replica.mu.Lock()
 		defer replica.mu.Unlock()
 		replica.mu.replicaFlowControlIntegration.onRaftTransportDisconnected(ctx, storeIDs...)
+		return true
 	})
 }
 

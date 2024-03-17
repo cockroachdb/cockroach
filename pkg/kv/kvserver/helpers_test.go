@@ -654,8 +654,9 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 		default:
 		}
 
-		store.mu.replicasByRangeID.Range(func(repl *Replica) {
-			m[repl.RangeID] = struct{}{}
+		store.mu.replicasByRangeID.Range(func(rangeID roachpb.RangeID, _ *Replica) bool {
+			m[rangeID] = struct{}{}
+			return true
 		})
 
 		for k := range m {

@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -40,7 +39,7 @@ import (
 type Stores struct {
 	log.AmbientContext
 	clock    *hlc.Clock
-	storeMap syncutil.IntMap // map[roachpb.StoreID]*Store
+	storeMap syncutil.IntMap[roachpb.StoreID, Store]
 
 	mu struct {
 		syncutil.Mutex
@@ -77,7 +76,7 @@ func (ls *Stores) IsMeta1Leaseholder(ctx context.Context, now hlc.ClockTimestamp
 // GetStoreCount returns the number of stores this node is exporting.
 func (ls *Stores) GetStoreCount() int {
 	var count int
-	ls.storeMap.Range(func(_ int64, _ unsafe.Pointer) bool {
+	ls.storeMap.Range(func(_ roachpb.StoreID, _ *Store) bool {
 		count++
 		return true
 	})
@@ -86,22 +85,22 @@ func (ls *Stores) GetStoreCount() int {
 
 // HasStore returns true if the specified store is owned by this Stores.
 func (ls *Stores) HasStore(storeID roachpb.StoreID) bool {
-	_, ok := ls.storeMap.Load(int64(storeID))
+	_, ok := ls.storeMap.Load(storeID)
 	return ok
 }
 
 // GetStore looks up the store by store ID. Returns an error
 // if not found.
 func (ls *Stores) GetStore(storeID roachpb.StoreID) (*Store, error) {
-	if value, ok := ls.storeMap.Load(int64(storeID)); ok {
-		return (*Store)(value), nil
+	if value, ok := ls.storeMap.Load(storeID); ok {
+		return value, nil
 	}
 	return nil, kvpb.NewStoreNotFoundError(storeID)
 }
 
 // AddStore adds the specified store to the store map.
 func (ls *Stores) AddStore(s *Store) {
-	if _, loaded := ls.storeMap.LoadOrStore(int64(s.Ident.StoreID), unsafe.Pointer(s)); loaded {
+	if _, loaded := ls.storeMap.LoadOrStore(s.Ident.StoreID, s); loaded {
 		panic(fmt.Sprintf("cannot add store twice: %+v", s.Ident))
 	}
 	// If we've already read the gossip bootstrap info, ensure that
@@ -118,7 +117,7 @@ func (ls *Stores) AddStore(s *Store) {
 
 // RemoveStore removes the specified store from the store map.
 func (ls *Stores) RemoveStore(s *Store) {
-	ls.storeMap.Delete(int64(s.Ident.StoreID))
+	ls.storeMap.Delete(s.Ident.StoreID)
 }
 
 // ForwardSideTransportClosedTimestampForRange forwards the side-transport
@@ -145,8 +144,8 @@ func (ls *Stores) ForwardSideTransportClosedTimestampForRange(
 // in random order.
 func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 	var err error
-	ls.storeMap.Range(func(k int64, v unsafe.Pointer) bool {
-		err = visitor((*Store)(v))
+	ls.storeMap.Range(func(k roachpb.StoreID, v *Store) bool {
+		err = visitor(v)
 		return err == nil
 	})
 	return err
@@ -240,8 +239,7 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	var err error
 
 	// Find the most recent bootstrap info.
-	ls.storeMap.Range(func(k int64, v unsafe.Pointer) bool {
-		s := (*Store)(v)
+	ls.storeMap.Range(func(_ roachpb.StoreID, s *Store) bool {
 		var storeBI gossip.BootstrapInfo
 		var ok bool
 		// TODO(sep-raft-log): probably state engine since it's random data
@@ -293,8 +291,7 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	ls.mu.latestBI = protoutil.Clone(bi).(*gossip.BootstrapInfo)
 	// Update all stores.
 	var err error
-	ls.storeMap.Range(func(k int64, v unsafe.Pointer) bool {
-		s := (*Store)(v)
+	ls.storeMap.Range(func(_ roachpb.StoreID, s *Store) bool {
 		// TODO(sep-raft-log): see ReadBootstrapInfo.
 		err = storage.MVCCPutProto(ctx, s.TODOEngine(), keys.StoreGossipKey(), hlc.Timestamp{}, bi, storage.MVCCWriteOptions{})
 		return err == nil

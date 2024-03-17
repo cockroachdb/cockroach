@@ -55,7 +55,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -245,8 +244,8 @@ type Gossip struct {
 	addressIdx     int
 	addresses      []util.UnresolvedAddr
 	addressesTried map[int]struct{} // Set of attempted address indexes
-	nodeDescs      syncutil.IntMap  // map[roachpb.NodeID]*roachpb.NodeDescriptor
-	storeDescs     syncutil.IntMap  // map[roachpb.StoreID]*roachpb.StoreDescriptor
+	nodeDescs      syncutil.IntMap[roachpb.NodeID, roachpb.NodeDescriptor]
+	storeDescs     syncutil.IntMap[roachpb.StoreID, roachpb.StoreDescriptor]
 
 	// Membership sets for bootstrap addresses. bootstrapAddrs also tracks which
 	// address is associated with which node ID to enable faster node lookup by
@@ -494,7 +493,7 @@ func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescript
 // GetNodeDescriptorCount gets the number of node descriptors.
 func (g *Gossip) GetNodeDescriptorCount() int {
 	count := 0
-	g.nodeDescs.Range(func(key int64, value unsafe.Pointer) bool {
+	g.nodeDescs.Range(func(_ roachpb.NodeID, _ *roachpb.NodeDescriptor) bool {
 		count++
 		return true
 	})
@@ -503,8 +502,7 @@ func (g *Gossip) GetNodeDescriptorCount() int {
 
 // GetStoreDescriptor looks up the descriptor of the node by ID.
 func (g *Gossip) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
-	if value, ok := g.storeDescs.Load(int64(storeID)); ok {
-		desc := (*roachpb.StoreDescriptor)(value)
+	if desc, ok := g.storeDescs.Load(storeID); ok {
 		return desc, nil
 	}
 	return nil, kvpb.NewStoreNotFoundError(storeID)
@@ -517,7 +515,7 @@ func (g *Gossip) LogStatus() {
 		var inc int
 		g.mu.RLock()
 		defer g.mu.RUnlock()
-		g.nodeDescs.Range(func(_ int64, _ unsafe.Pointer) bool {
+		g.nodeDescs.Range(func(_ roachpb.NodeID, _ *roachpb.NodeDescriptor) bool {
 			inc++
 			return true
 		})
@@ -727,10 +725,9 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 		return
 	}
 
-	if value, ok := g.nodeDescs.Load(int64(desc.NodeID)); ok {
-		existingDesc := (*roachpb.NodeDescriptor)(value)
+	if existingDesc, ok := g.nodeDescs.Load(desc.NodeID); ok {
 		if !existingDesc.Equal(&desc) {
-			g.nodeDescs.Store(int64(desc.NodeID), unsafe.Pointer(&desc))
+			g.nodeDescs.Store(desc.NodeID, &desc)
 		}
 		// Skip all remaining logic if the address hasn't changed, since that's all
 		// the logic cares about.
@@ -738,7 +735,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 			return
 		}
 	} else {
-		g.nodeDescs.Store(int64(desc.NodeID), unsafe.Pointer(&desc))
+		g.nodeDescs.Store(desc.NodeID, &desc)
 	}
 	g.recomputeMaxPeersLocked()
 
@@ -763,7 +760,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 }
 
 func (g *Gossip) removeNodeDescriptorLocked(nodeID roachpb.NodeID) {
-	g.nodeDescs.Delete(int64(nodeID))
+	g.nodeDescs.Delete(nodeID)
 	g.recomputeMaxPeersLocked()
 }
 
@@ -780,7 +777,7 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.storeDescs.Store(int64(desc.StoreID), unsafe.Pointer(&desc))
+	g.storeDescs.Store(desc.StoreID, &desc)
 }
 
 // recomputeMaxPeersLocked recomputes max peers based on size of
@@ -794,7 +791,7 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 // networks and I'm not sure what all the consequences of that might be.
 func (g *Gossip) recomputeMaxPeersLocked() {
 	var n int
-	g.nodeDescs.Range(func(_ int64, _ unsafe.Pointer) bool {
+	g.nodeDescs.Range(func(_ roachpb.NodeID, _ *roachpb.NodeDescriptor) bool {
 		n++
 		return true
 	})
@@ -810,8 +807,7 @@ func (g *Gossip) recomputeMaxPeersLocked() {
 func (g *Gossip) getNodeDescriptor(
 	nodeID roachpb.NodeID, locked bool,
 ) (*roachpb.NodeDescriptor, error) {
-	if value, ok := g.nodeDescs.Load(int64(nodeID)); ok {
-		desc := (*roachpb.NodeDescriptor)(value)
+	if desc, ok := g.nodeDescs.Load(nodeID); ok {
 		if desc.Address.IsEmpty() {
 			log.Fatalf(g.AnnotateCtx(context.Background()), "n%d has an empty address", nodeID)
 		}
