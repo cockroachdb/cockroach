@@ -165,7 +165,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 
 	withOnlineRestore := func() string {
 		onlineRestoreExtension := ""
-		if rng.Intn(2) != 0 && runSchemaOnlyExtension == "" {
+		if rng.Intn(2) != 0 {
 			onlineRestoreExtension = " , experimental deferred copy"
 		}
 		return onlineRestoreExtension
