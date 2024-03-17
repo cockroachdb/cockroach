@@ -358,7 +358,7 @@ func (n *controllerImpl) AdmitKVWork(
 		// If flow control is disabled or if work bypasses flow control, we still
 		// subject it above-raft, leaseholder-only IO admission control.
 		if !attemptFlowControl || !admitted {
-			storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
+			storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(ba.Replica.StoreID)
 			if storeAdmissionQ != nil {
 				//  NB: Even though we would know here we're bypassing admission (via
 				//  `bypassAdmission`), we still have to explicitly invoke `.Admit()`.
@@ -525,7 +525,7 @@ func (n *controllerImpl) SetTenantWeightProvider(
 				n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.SetTenantWeights(weights.Node)
 
 				for _, storeWeights := range weights.Stores {
-					q := n.storeGrantCoords.TryGetQueueForStore(int32(storeWeights.StoreID))
+					q := n.storeGrantCoords.TryGetQueueForStore(storeWeights.StoreID)
 					if q != nil {
 						if kvStoresDisabled {
 							storeWeights.Weights = nil
@@ -546,7 +546,7 @@ func (n *controllerImpl) SetTenantWeightProvider(
 func (n *controllerImpl) SnapshotIngestedOrWritten(
 	storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats, writeBytes uint64,
 ) {
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(storeID)
 	if storeAdmissionQ == nil {
 		return
 	}
@@ -560,7 +560,7 @@ func (n *controllerImpl) FollowerStoreWriteBytes(
 	if followerWriteBytes.WriteBytes == 0 && followerWriteBytes.IngestedBytes == 0 {
 		return
 	}
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(storeID)
 	if storeAdmissionQ == nil {
 		return
 	}
@@ -605,7 +605,7 @@ func (n *controllerImpl) AdmitRaftEntry(
 		)
 	}
 
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(storeID)
 	if storeAdmissionQ == nil {
 		log.Errorf(ctx, "unable to find queue for store: %s", storeID)
 		return // nothing to do

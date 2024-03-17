@@ -17,7 +17,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -2901,7 +2900,7 @@ type TenantsStorageMetrics struct {
 	// everything will work with tenantsIDs in excess of math.MaxInt64
 	// except that should one ever look at this map through a debugger
 	// the int64->uint64 conversion has to be done manually.
-	tenants syncutil.IntMap // map[int64(roachpb.TenantID)]*tenantStorageMetrics
+	tenants syncutil.IntMap[roachpb.TenantID, tenantStorageMetrics]
 }
 
 // tenantsStorageMetricsSet returns the set of all metric names contained
@@ -2952,10 +2951,8 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 		m.mu.refCount++
 		return false
 	}
-	key := int64(tenantID.ToUint64())
 	for {
-		if mPtr, ok := sm.tenants.Load(key); ok {
-			m := (*tenantStorageMetrics)(mPtr)
+		if m, ok := sm.tenants.Load(tenantID); ok {
 			if alreadyDestroyed := incRef(m); !alreadyDestroyed {
 				return &tenantMetricsRef{
 					_tenantID: tenantID,
@@ -2967,7 +2964,7 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 		} else {
 			m := &tenantStorageMetrics{}
 			m.mu.Lock()
-			_, loaded := sm.tenants.LoadOrStore(key, unsafe.Pointer(m))
+			_, loaded := sm.tenants.LoadOrStore(tenantID, m)
 			if loaded {
 				// Lost the race with another goroutine to add the instance, go back
 				// around.
@@ -3055,7 +3052,7 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 		(*gptr).Unlink()
 		*gptr = nil
 	}
-	sm.tenants.Delete(int64(ref._tenantID.ToUint64()))
+	sm.tenants.Delete(ref._tenantID)
 }
 
 // getTenant is a helper method used to retrieve the metrics for a tenant. The
@@ -3064,12 +3061,11 @@ func (sm *TenantsStorageMetrics) getTenant(
 	ctx context.Context, ref *tenantMetricsRef,
 ) *tenantStorageMetrics {
 	ref.assert(ctx)
-	key := int64(ref._tenantID.ToUint64())
-	mPtr, ok := sm.tenants.Load(key)
+	m, ok := sm.tenants.Load(ref._tenantID)
 	if !ok {
 		log.Fatalf(ctx, "no metrics exist for tenant %v", ref._tenantID)
 	}
-	return (*tenantStorageMetrics)(mPtr)
+	return m
 }
 
 type tenantStorageMetrics struct {
