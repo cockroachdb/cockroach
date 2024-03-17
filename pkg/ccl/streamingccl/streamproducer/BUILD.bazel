@@ -13,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/kvccl/kvfollowerreadsccl",
         "//pkg/ccl/streamingccl",
         "//pkg/ccl/streamingccl/replicationutils",
         "//pkg/ccl/utilccl",
