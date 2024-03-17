@@ -66,7 +66,7 @@ func (c mapCall) apply(m mapInterface) (unsafe.Pointer, bool) {
 }
 
 type mapResult struct {
-	value interface{}
+	value any
 	ok    bool
 }
 
@@ -85,15 +85,13 @@ func (mapCall) Generate(r *rand.Rand, size int) reflect.Value {
 	return reflect.ValueOf(c)
 }
 
-func applyCalls(
-	m mapInterface, calls []mapCall,
-) (results []mapResult, final map[interface{}]interface{}) {
+func applyCalls(m mapInterface, calls []mapCall) (results []mapResult, final map[any]any) {
 	for _, c := range calls {
 		v, ok := c.apply(m)
 		results = append(results, mapResult{v, ok})
 	}
 
-	final = make(map[interface{}]interface{})
+	final = make(map[any]any)
 	m.Range(func(k int64, v unsafe.Pointer) bool {
 		final[k] = v
 		return true
@@ -102,15 +100,15 @@ func applyCalls(
 	return results, final
 }
 
-func applyMap(calls []mapCall) ([]mapResult, map[interface{}]interface{}) {
+func applyMap(calls []mapCall) ([]mapResult, map[any]any) {
 	return applyCalls(new(IntMap), calls)
 }
 
-func applyRWMutexMap(calls []mapCall) ([]mapResult, map[interface{}]interface{}) {
+func applyRWMutexMap(calls []mapCall) ([]mapResult, map[any]any) {
 	return applyCalls(new(RWMutexMap), calls)
 }
 
-func applyDeepCopyMap(calls []mapCall) ([]mapResult, map[interface{}]interface{}) {
+func applyDeepCopyMap(calls []mapCall) ([]mapResult, map[any]any) {
 	return applyCalls(new(DeepCopyMap), calls)
 }
 
