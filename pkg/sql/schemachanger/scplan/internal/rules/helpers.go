@@ -140,6 +140,11 @@ func ColumnInSwappedInPrimaryIndex(
 	return columnInSwappedInPrimaryIndexUntyped(indexColumn.El, index.El, relationIDVar, columnIDVar, indexIDVar)
 }
 
+func ColumnInSourcePrimaryIndex(indexColumn, index NodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
+) rel.Clause {
+	return columnInSourcePrimaryIndex(indexColumn.El, index.El, relationIDVar, columnIDVar, indexIDVar)
+}
+
 // IsPotentialSecondaryIndexSwap determines if a secondary index recreate is
 // occurring because of a primary key alter.
 func IsPotentialSecondaryIndexSwap(indexIdVar rel.Var, tableIDVar rel.Var) rel.Clauses {
@@ -289,6 +294,21 @@ var (
 					indexColumn, index, tableID, columnID, indexID,
 				),
 				sourceIndexIsSetUntyped(index),
+			}
+		})
+
+	columnInSourcePrimaryIndex = screl.Schema.Def5(
+		"ColumnInSourcePrimaryIndex",
+		"index-column", "index", "table-id", "column-id", "index-id", func(
+			indexColumn, index, tableID, columnID, indexID rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				indexColumn.Type((*scpb.IndexColumn)(nil)),
+				indexColumn.AttrEqVar(screl.DescID, rel.Blank),
+				indexColumn.AttrEqVar(screl.ColumnID, columnID),
+				indexColumn.AttrEqVar(screl.IndexID, indexID),
+				index.AttrEqVar(screl.SourceIndexID, indexID),
+				JoinOnDescIDUntyped(index, indexColumn, tableID),
 			}
 		})
 

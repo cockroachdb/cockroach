@@ -628,6 +628,21 @@ deprules
     - descriptorIsDataNotBeingAdded-24.1($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: New primary index should go public only after columns being dropped move to WRITE_ONLY
+  from: column-Node
+  kind: Precedence
+  to: new-primary-index-Node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $new-primary-index[Type] = '*scpb.PrimaryIndex'
+    - ColumnInSourcePrimaryIndex($index-column, $new-primary-index, $table-id, $column-id, $index-id)
+    - joinOnColumnID($index-column, $column, $table-id, $column-id)
+    - $column-Target[TargetStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - $new-primary-index-Target[TargetStatus] = PUBLIC
+    - $new-primary-index-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($new-primary-index, $new-primary-index-Target, $new-primary-index-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
   kind: PreviousTransactionPrecedence
@@ -2107,6 +2122,64 @@ deprules
     - descriptorIsDataNotBeingAdded-24.1($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: Virtual computed column expression is dropped before the column it depends on
+  from: virtual-column-expr-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $virtual-column-expr[Type] = '*scpb.ColumnType'
+    - $column[Type] = '*scpb.Column'
+    - joinOnDescID($virtual-column-expr, $column, $table-id)
+    - computedColumnTypeReferencesColumn(*scpb.ColumnType, *scpb.Column)($virtual-column-expr, $column)
+    - toAbsent($virtual-column-expr-Target, $column-Target)
+    - $virtual-column-expr-Node[CurrentStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($virtual-column-expr, $virtual-column-expr-Target, $virtual-column-expr-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: Virtual computed column expression is dropped before the column it depends on
+  from: virtual-column-expr-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $virtual-column-expr[Type] = '*scpb.ColumnType'
+    - $column[Type] = '*scpb.Column'
+    - joinOnDescID($virtual-column-expr, $column, $table-id)
+    - computedColumnTypeReferencesColumn(*scpb.ColumnType, *scpb.Column)($virtual-column-expr, $column)
+    - transient($virtual-column-expr-Target, $column-Target)
+    - $virtual-column-expr-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
+    - joinTargetNode($virtual-column-expr, $virtual-column-expr-Target, $virtual-column-expr-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: Virtual computed column expression is dropped before the column it depends on
+  from: virtual-column-expr-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $virtual-column-expr[Type] = '*scpb.ColumnType'
+    - $column[Type] = '*scpb.Column'
+    - joinOnDescID($virtual-column-expr, $column, $table-id)
+    - computedColumnTypeReferencesColumn(*scpb.ColumnType, *scpb.Column)($virtual-column-expr, $column)
+    - $virtual-column-expr-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $virtual-column-expr-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-Target[TargetStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($virtual-column-expr, $virtual-column-expr-Target, $virtual-column-expr-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: Virtual computed column expression is dropped before the column it depends on
+  from: virtual-column-expr-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $virtual-column-expr[Type] = '*scpb.ColumnType'
+    - $column[Type] = '*scpb.Column'
+    - joinOnDescID($virtual-column-expr, $column, $table-id)
+    - computedColumnTypeReferencesColumn(*scpb.ColumnType, *scpb.Column)($virtual-column-expr, $column)
+    - $virtual-column-expr-Target[TargetStatus] = ABSENT
+    - $virtual-column-expr-Node[CurrentStatus] = ABSENT
+    - $column-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
+    - joinTargetNode($virtual-column-expr, $virtual-column-expr-Target, $virtual-column-expr-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
 - name: all adding indexes reached BACKFILL_ONLY before any of their columns disappear
   from: index-Node
   kind: Precedence
@@ -4711,6 +4784,21 @@ deprules
     - descriptorIsDataNotBeingAdded-24.1($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: New primary index should go public only after columns being dropped move to WRITE_ONLY
+  from: column-Node
+  kind: Precedence
+  to: new-primary-index-Node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $new-primary-index[Type] = '*scpb.PrimaryIndex'
+    - ColumnInSourcePrimaryIndex($index-column, $new-primary-index, $table-id, $column-id, $index-id)
+    - joinOnColumnID($index-column, $column, $table-id, $column-id)
+    - $column-Target[TargetStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - $new-primary-index-Target[TargetStatus] = PUBLIC
+    - $new-primary-index-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($new-primary-index, $new-primary-index-Target, $new-primary-index-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
   kind: PreviousTransactionPrecedence
@@ -6190,6 +6278,64 @@ deprules
     - descriptorIsDataNotBeingAdded-24.1($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: Virtual computed column expression is dropped before the column it depends on
+  from: virtual-column-expr-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $virtual-column-expr[Type] = '*scpb.ColumnType'
+    - $column[Type] = '*scpb.Column'
+    - joinOnDescID($virtual-column-expr, $column, $table-id)
+    - computedColumnTypeReferencesColumn(*scpb.ColumnType, *scpb.Column)($virtual-column-expr, $column)
+    - toAbsent($virtual-column-expr-Target, $column-Target)
+    - $virtual-column-expr-Node[CurrentStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($virtual-column-expr, $virtual-column-expr-Target, $virtual-column-expr-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: Virtual computed column expression is dropped before the column it depends on
+  from: virtual-column-expr-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $virtual-column-expr[Type] = '*scpb.ColumnType'
+    - $column[Type] = '*scpb.Column'
+    - joinOnDescID($virtual-column-expr, $column, $table-id)
+    - computedColumnTypeReferencesColumn(*scpb.ColumnType, *scpb.Column)($virtual-column-expr, $column)
+    - transient($virtual-column-expr-Target, $column-Target)
+    - $virtual-column-expr-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
+    - joinTargetNode($virtual-column-expr, $virtual-column-expr-Target, $virtual-column-expr-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: Virtual computed column expression is dropped before the column it depends on
+  from: virtual-column-expr-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $virtual-column-expr[Type] = '*scpb.ColumnType'
+    - $column[Type] = '*scpb.Column'
+    - joinOnDescID($virtual-column-expr, $column, $table-id)
+    - computedColumnTypeReferencesColumn(*scpb.ColumnType, *scpb.Column)($virtual-column-expr, $column)
+    - $virtual-column-expr-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $virtual-column-expr-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-Target[TargetStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($virtual-column-expr, $virtual-column-expr-Target, $virtual-column-expr-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: Virtual computed column expression is dropped before the column it depends on
+  from: virtual-column-expr-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $virtual-column-expr[Type] = '*scpb.ColumnType'
+    - $column[Type] = '*scpb.Column'
+    - joinOnDescID($virtual-column-expr, $column, $table-id)
+    - computedColumnTypeReferencesColumn(*scpb.ColumnType, *scpb.Column)($virtual-column-expr, $column)
+    - $virtual-column-expr-Target[TargetStatus] = ABSENT
+    - $virtual-column-expr-Node[CurrentStatus] = ABSENT
+    - $column-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
+    - joinTargetNode($virtual-column-expr, $virtual-column-expr-Target, $virtual-column-expr-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
 - name: all adding indexes reached BACKFILL_ONLY before any of their columns disappear
   from: index-Node
   kind: Precedence
