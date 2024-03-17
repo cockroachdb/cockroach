@@ -246,8 +246,12 @@ func (r *MonitorRegistry) Close(ctx context.Context) {
 
 // Reset prepares the registry for reuse.
 func (r *MonitorRegistry) Reset() {
-	// There is no need to deeply reset the memory monitoring infra slices
-	// because these objects are very tiny in the grand scheme of things.
+	for i := range r.accounts {
+		r.accounts[i] = nil
+	}
+	for i := range r.monitors {
+		r.monitors[i] = nil
+	}
 	r.accounts = r.accounts[:0]
 	r.monitors = r.monitors[:0]
 }
