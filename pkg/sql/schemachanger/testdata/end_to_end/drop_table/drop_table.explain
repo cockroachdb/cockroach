@@ -50,10 +50,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":107}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":107}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":107}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":107}
- │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":107}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":3,"TableID":107}
- │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":107}
  │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":107}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":107}
@@ -69,15 +66,18 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              ├── RemoveColumnNotNull {"ColumnID":3,"TableID":107}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":107}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":107}
- │              ├── AssertColumnFamilyIsRemoved {"TableID":107}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":107}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":107}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":107}
  │              ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":1,"TableID":107}
  │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Kind":2,"TableID":107}
  │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":107}
  │              ├── MakeIndexAbsent {"IndexID":1,"TableID":107}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":107}
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":107}
@@ -156,10 +156,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":107}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":107}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":107}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":107}
- │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":107}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":3,"TableID":107}
- │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":107}
  │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":107}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":107}
@@ -175,15 +172,18 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              ├── RemoveColumnNotNull {"ColumnID":3,"TableID":107}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":107}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":107}
- │              ├── AssertColumnFamilyIsRemoved {"TableID":107}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":107}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":107}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":107}
  │              ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":1,"TableID":107}
  │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Kind":2,"TableID":107}
  │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":107}
  │              ├── MakeIndexAbsent {"IndexID":1,"TableID":107}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":107}
