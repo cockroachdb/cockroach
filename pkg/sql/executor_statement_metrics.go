@@ -77,6 +77,7 @@ type StatsMetrics struct {
 
 	SQLStatsFlushStarted            *metric.Counter
 	SQLStatsFlushDoneSignalsIgnored *metric.Counter
+	SQLStatsFlushFingerprintCount   *metric.Counter
 	SQLStatsFlushFailure            *metric.Counter
 	SQLStatsFlushDuration           metric.IHistogram
 	SQLStatsRemovedRows             *metric.Counter

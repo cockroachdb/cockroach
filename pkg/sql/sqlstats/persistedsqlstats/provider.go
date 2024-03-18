@@ -50,6 +50,7 @@ type Config struct {
 	FlushDuration           metric.IHistogram
 	FlushDoneSignalsIgnored *metric.Counter
 	FailureCounter          *metric.Counter
+	FlushedFingerprintCount *metric.Counter
 
 	// Testing knobs.
 	Knobs *sqlstats.TestingKnobs
