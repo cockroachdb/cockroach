@@ -146,10 +146,14 @@ func MakeColumnDefDescs(
 			return nil, errors.AssertionFailedf(
 				"column %s is of invalid generated as identity type (neither ALWAYS nor BY DEFAULT)", string(d.Name))
 		}
+		// GeneratedAsIdentitySequenceOption is used to populate the sequence options for the column information schema.
+		// An empty string will populate default values and null will generate null values.
+		s := ""
 		if genSeqOpt := d.GeneratedIdentity.SeqOptions; genSeqOpt != nil {
-			s := tree.Serialize(&d.GeneratedIdentity.SeqOptions)
-			col.GeneratedAsIdentitySequenceOption = &s
+			// Override GeneratedAsIdentitySequenceOption default values with specified SeqOptions.
+			s = tree.Serialize(&d.GeneratedIdentity.SeqOptions)
 		}
+		col.GeneratedAsIdentitySequenceOption = &s
 	}
 
 	// Validate and assign column type.
