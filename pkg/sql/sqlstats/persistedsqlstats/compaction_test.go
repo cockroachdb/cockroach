@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -74,8 +73,6 @@ func TestSQLStatsCompactorNilTestingKnobCheck(t *testing.T) {
 func TestSQLStatsCompactor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 120092)
 
 	ctx := context.Background()
 
@@ -216,7 +213,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 			}
 
 			generateFingerprints(t, sqlConn, tc.stmtCount)
-			serverSQLStats.Flush(ctx, srv.AppStopper())
+			serverSQLStats.Flush(ctx, server.AppStopper())
 
 			sqlStatsKnobs := sqlstats.CreateTestingKnobs()
 			sqlStatsKnobs.OnCleanupStartForShard = cleanupInterceptor.intercept
@@ -252,12 +249,11 @@ func TestSQLStatsCompactor(t *testing.T) {
 
 			actualNumberOfWideScans := kvInterceptor.getTotalWideScans()
 
-			require.Equal(t,
-				expectedNumberOfWideScans,
-				actualNumberOfWideScans,
-				"expected %d number of wide scans issued, but %d number of "+
-					"wide scan issued", expectedNumberOfWideScans, actualNumberOfWideScans,
-			)
+			if expectedNumberOfWideScans != actualNumberOfWideScans {
+				t.Fatalf("expected %d number of wide scans issued, but %d number of "+
+					"wide scan issued\ndetails: %v", expectedNumberOfWideScans,
+					actualNumberOfWideScans, kvInterceptor.wideScanDetails)
+			}
 
 			actualStmtFingerprints, actualTxnFingerprints :=
 				getTopSortedFingerprints(t, sqlConn, 0 /* limit */)
@@ -395,11 +391,15 @@ func generateFingerprints(t *testing.T, sqlConn *sqlutils.SQLRunner, distinctFin
 	}
 }
 
-var kvReqWideScanStartKeyPattern = regexp.MustCompile(`(/Tenant/\d+)?/Table/\d+/[0-9]{1,2}/[0-9]$`)
+// Tables 42 and 43 and are the IDs of the statement and transactions
+// tables respectively. See `StatementStatisticsTableID` and
+// `TransactionStatisticsTableID`.
+var kvReqWideScanStartKeyPattern = regexp.MustCompile(`(/Tenant/\d+)?/Table/((42)|(43))/[0-9]{1,2}/[0-9]$`)
 
 type kvScanInterceptor struct {
-	totalWideScan int64
-	enabled       int32
+	totalWideScan   int64
+	enabled         int32
+	wideScanDetails []string
 
 	mu struct {
 		syncutil.Mutex
@@ -412,6 +412,7 @@ type kvScanInterceptor struct {
 
 func (k *kvScanInterceptor) reset() {
 	atomic.StoreInt64(&k.totalWideScan, 0)
+	k.wideScanDetails = []string{}
 }
 
 func (k *kvScanInterceptor) getTotalWideScans() int64 {
@@ -443,6 +444,7 @@ func (k *kvScanInterceptor) intercept(ctx context.Context, ba *kvpb.BatchRequest
 			keyMatchedWideScan := kvReqWideScanStartKeyPattern.MatchString(prettyKey)
 
 			if keyMatchedWideScan {
+				k.wideScanDetails = append(k.wideScanDetails, fmt.Sprintf("wide scan in %v", ba))
 				atomic.AddInt64(&k.totalWideScan, 1)
 			}
 		}
