@@ -676,7 +676,7 @@ func queryJobUntil(
 	t *testing.T, db sqlutils.DBHandle, jobID jobspb.JobID, isDone func(js jobState) bool,
 ) (js jobState) {
 	t.Helper()
-	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
+	for r := retry.StartWithCtx(context.Background(), base.DefaultRetryOptions()); r.Next(); {
 		js = queryJob(db, jobID)
 		if js.err != nil || isDone(js) {
 			break

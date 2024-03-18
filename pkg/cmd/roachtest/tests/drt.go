@@ -206,7 +206,7 @@ func (ep *tpccChaosEventProcessor) queryPrometheus(
 	rOpts := base.DefaultRetryOptions()
 	rOpts.MaxRetries = 5
 	var warnings promv1.Warnings
-	for r := retry.Start(rOpts); r.Next(); {
+	for r := retry.StartWithCtx(ctx, rOpts); r.Next(); {
 		val, warnings, err = ep.promClient.Query(
 			ctx,
 			q,

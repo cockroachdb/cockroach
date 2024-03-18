@@ -242,7 +242,7 @@ func ingestWithRetries(
 	ro := getRetryPolicy(execCtx.ExecCfg().StreamingTestingKnobs)
 	var err error
 	var lastReplicatedTime hlc.Timestamp
-	for r := retry.Start(ro); r.Next(); {
+	for r := retry.StartWithCtx(ctx, ro); r.Next(); {
 		err = ingest(ctx, execCtx, resumer)
 		if err == nil {
 			break

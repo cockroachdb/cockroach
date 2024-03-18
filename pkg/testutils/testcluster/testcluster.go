@@ -1425,7 +1425,8 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*kvserver.Store
 // TODO(andrei): This method takes inexplicably long.
 // I think it shouldn't need any retries. See #38565.
 func (tc *TestCluster) WaitForFullReplication() error {
-	log.Infof(context.TODO(), "WaitForFullReplication")
+	ctx := context.TODO()
+	log.Infof(ctx, "WaitForFullReplication")
 	start := timeutil.Now()
 	defer func() {
 		end := timeutil.Now()
@@ -1444,7 +1445,7 @@ func (tc *TestCluster) WaitForFullReplication() error {
 	}
 
 	notReplicated := true
-	for r := retry.Start(opts); r.Next() && notReplicated; {
+	for r := retry.StartWithCtx(ctx, opts); r.Next() && notReplicated; {
 		notReplicated = false
 		for _, s := range tc.Servers {
 			err := s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {

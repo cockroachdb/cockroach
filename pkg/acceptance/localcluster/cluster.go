@@ -680,16 +680,14 @@ func (n *Node) AdvertiseAddr() (s string) {
 }
 
 func (n *Node) waitUntilLive(dur time.Duration) error {
-	ctx := context.Background()
-	closer := make(chan struct{})
-	defer time.AfterFunc(dur, func() { close(closer) }).Stop()
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer time.AfterFunc(dur, func() { cancelCtx() }).Stop()
 	opts := retry.Options{
 		InitialBackoff: time.Millisecond,
 		MaxBackoff:     500 * time.Millisecond,
 		Multiplier:     2,
-		Closer:         closer,
 	}
-	for r := retry.Start(opts); r.Next(); {
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		var pid int
 		n.Lock()
 		if n.cmd != nil {
