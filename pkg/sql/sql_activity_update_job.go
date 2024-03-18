@@ -137,7 +137,7 @@ func newActivityUpdaterMetrics() metric.Struct {
 		NumFailedUpdates: metric.NewCounter(metric.Metadata{
 			Name:        "sql.stats.activity.updates.failed",
 			Help:        "Number of update attempts made by the SQL activity updater job that failed with errors",
-			Measurement: "failed updatesgi",
+			Measurement: "failed updates",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_COUNTER,
 		}),
