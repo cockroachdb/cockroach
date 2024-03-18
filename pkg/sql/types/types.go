@@ -2731,7 +2731,7 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 }
 
 // EnumValueNotYetPublicError enum value is not public yet.
-var EnumValueNotYetPublicError = errors.New("enum value is not yet public")
+var EnumValueNotYetPublicError = pgerror.New(pgcode.InvalidParameterValue, "enum value is not yet public")
 
 // EnumGetIdxOfLogical returns the index within the TypeMeta's slice of
 // enum logical representations that matches the input string.
