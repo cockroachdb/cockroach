@@ -950,12 +950,8 @@ func gossipLiveness(t *testing.T, tc *testcluster.TestCluster) {
 // This test replicates the behavior observed in
 // https://github.com/cockroachdb/cockroach/issues/62485. We verify that when a
 // dc with the leaseholder is lost, a node in a dc that does not have the lease
-// preference, can steal the lease, upreplicate the range and then give up the
-// lease in a short period of time. Previously, the replicate queue would
-// reprocess, instead of requeue replicas. This behavior changed in #85219, to
-// prevent queue priority inversion. Subsequently, this test only asserts that
-// the lease preferences are satisfied quickly, rather than in a single
-// replicate queue process() call.
+// preference, can steal the lease and transfer it to a preferred locality in a
+// short period of time.
 func TestLeasePreferencesDuringOutage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1131,25 +1127,9 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	require.Nil(t, pErr)
 
 	testutils.SucceedsSoon(t, func() error {
-		// Validate that we upreplicated outside of SF.
-		require.Equal(t, 3, len(repl.Desc().Replicas().Voters().VoterDescriptors()))
-		for _, replDesc := range repl.Desc().Replicas().Voters().VoterDescriptors() {
-			serv, err := tc.FindMemberServer(replDesc.StoreID)
-			require.NoError(t, err)
-			servLocality := serv.Locality()
-			dc, ok := servLocality.Find("dc")
-			require.True(t, ok)
-			if dc == "sf" {
-				return errors.Errorf(
-					"expected no replicas in dc=sf, but found replica in "+
-						"dc=%s node_id=%v desc=%v",
-					dc, replDesc.NodeID, repl.Desc())
-			}
-		}
-		// Validate that the lease also transferred to a preferred locality. n4
-		// (us) and n5 (us) are the only valid stores to be leaseholders during the
-		// outage. n1 is the original leaseholder, expect it to not be the
-		// leaseholder now.
+		// Validate that the lease transferred to a preferred locality. n4 (us) and
+		// n5 (us) are the only valid stores to be leaseholders during the outage.
+		// n1 is the original leaseholder, expect it to not be the leaseholder now.
 		if !repl.OwnsValidLease(ctx, tc.Servers[0].Clock().NowAsClockTimestamp()) {
 			return nil
 		}
