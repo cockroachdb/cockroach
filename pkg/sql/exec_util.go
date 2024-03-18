@@ -125,6 +125,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
 func init() {
@@ -1092,6 +1093,20 @@ var (
 		Help:        "Number of times SQL Stats are flushed to persistent storage",
 		Measurement: "SQL Stats Flush",
 		Unit:        metric.Unit_COUNT,
+	}
+	MetaSQLStatsFlushFingerprintCount = metric.Metadata{
+		Name:        "sql.stats.flush.fingerprint.count",
+		Help:        "The number of unique statement and transaction fingerprints included in the SQL Stats flush",
+		Measurement: "statement & transaction fingerprints",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaSQLStatsFlushDoneSignalsIgnored = metric.Metadata{
+		Name: "sql.stats.flush.done_signals.ignored",
+		Help: "Number of times the SQL Stats activity update job ignored the signal sent to it indicating " +
+			"a flush has completed",
+		Measurement: "flush done signals ignored",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
 	MetaSQLStatsFlushFailure = metric.Metadata{
 		Name:        "sql.stats.flush.error",
