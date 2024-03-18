@@ -842,7 +842,7 @@ func waitUntilProducerActive(
 	// Make sure the producer job is active before start the stream replication.
 	var status streampb.StreamReplicationStatus
 	var err error
-	for r := retry.StartWithCtx(ctx, ro); r.Next(); {
+	for r := retry.Start(ctx, ro); r.Next(); {
 		status, err = client.Heartbeat(ctx, streamID, heartbeatTimestamp)
 		if err != nil {
 			return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job %d error",

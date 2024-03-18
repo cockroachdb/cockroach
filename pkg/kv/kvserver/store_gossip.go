@@ -128,7 +128,7 @@ func (s *Store) startGossip() {
 				// case we want to retry quickly.
 				retryOptions := base.DefaultRetryOptions()
 				retryOptions.Closer = s.stopper.ShouldQuiesce()
-				for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
+				for r := retry.Start(ctx, retryOptions); r.Next(); {
 					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key)); repl != nil {
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if err := gossipFn.fn(annotatedCtx, repl); err != nil {

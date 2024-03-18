@@ -202,7 +202,7 @@ func Start[E rangefeedbuffer.Event](
 		defer cancel()
 
 		const aWhile = 5 * time.Minute // arbitrary but much longer than a retry
-		for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+		for r := retry.Start(ctx, base.DefaultRetryOptions()); r.Next(); {
 			started := timeutil.Now()
 			if err := c.Run(ctx); err != nil {
 				if errors.Is(err, context.Canceled) {

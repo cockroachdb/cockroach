@@ -258,7 +258,7 @@ func (s storage) acquire(
 	}()
 	// Run a retry loop to deal with AmbiguousResultErrors. All other error types
 	// are propagated up to the caller.
-	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
+	for r := retry.Start(ctx, retry.Options{}); r.Next(); {
 		err := s.db.KV().Txn(ctx, acquireInTxn)
 		switch {
 		case startup.IsRetryableReplicaError(err):
@@ -321,7 +321,7 @@ func (s storage) release(
 	}()
 	// This transaction is idempotent; the retry was put in place because of
 	// NodeUnavailableErrors.
-	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
+	for r := retry.Start(ctx, retryOptions); r.Next(); {
 		log.VEventf(ctx, 2, "storage releasing lease %+v", lease)
 		instanceID := s.nodeIDContainer.SQLInstanceID()
 		if instanceID == 0 {

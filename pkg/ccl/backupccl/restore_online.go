@@ -460,7 +460,7 @@ func (r *restoreResumer) sendDownloadWorker(
 		ctx, tsp := tracing.ChildSpan(ctx, "backupccl.sendDownloadWorker")
 		defer tsp.Finish()
 
-		for rt := retry.StartWithCtx(
+		for rt := retry.Start(
 			ctx, retry.Options{InitialBackoff: time.Millisecond * 100, MaxBackoff: time.Second * 10},
 		); ; rt.Next() {
 			if err := ctx.Err(); err != nil {
@@ -567,7 +567,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	}
 
 	var lastProgressUpdate time.Time
-	for rt := retry.StartWithCtx(
+	for rt := retry.Start(
 		ctx, retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second * 10},
 	); ; rt.Next() {
 

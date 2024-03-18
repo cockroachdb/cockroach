@@ -2220,7 +2220,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 	taskCtx := r.AnnotateCtx(context.Background())
 	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {
 		var pushTxnRes *kvpb.PushTxnResponse
-		for retry := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); retry.Next(); {
+		for retry := retry.Start(ctx, base.DefaultRetryOptions()); retry.Next(); {
 			// Wait for the merge transaction to complete by attempting to push it. We
 			// don't want to accidentally abort the merge transaction, so we use the
 			// minimum transaction priority. Note that a push type of
@@ -2270,7 +2270,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 			// record before our PushTxn arrived. To figure out what happened, we
 			// need to look in meta2.
 			var getRes *kvpb.GetResponse
-			for retry := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); retry.Next(); {
+			for retry := retry.Start(ctx, base.DefaultRetryOptions()); retry.Next(); {
 				metaKey := keys.RangeMetaKey(desc.EndKey)
 				res, pErr := kv.SendWrappedWith(ctx, r.store.DB().NonTransactionalSender(), kvpb.Header{
 					// Use READ_UNCOMMITTED to avoid trying to resolve intents, since

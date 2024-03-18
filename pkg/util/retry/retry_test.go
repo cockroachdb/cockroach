@@ -27,7 +27,7 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 		MaxRetries:     10,
 	}
 
-	r := StartWithCtx(context.Background(), opts)
+	r := Start(context.Background(), opts)
 	r.opts.RandomizationFactor = 0
 	for i := 0; i < 10; i++ {
 		d := r.retryIn()
@@ -47,7 +47,7 @@ func TestRetryExceedsMaxAttempts(t *testing.T) {
 	}
 
 	attempts := 0
-	for r := StartWithCtx(context.Background(), opts); r.Next(); attempts++ {
+	for r := Start(context.Background(), opts); r.Next(); attempts++ {
 	}
 
 	if expAttempts := opts.MaxRetries + 1; attempts != expAttempts {
@@ -68,7 +68,7 @@ func TestRetryReset(t *testing.T) {
 	attempts := 0
 	// Backoff loop has 1 allowed retry; we always call Reset, so
 	// just make sure we get to 2 attempts and then break.
-	for r := StartWithCtx(context.Background(), opts); r.Next(); attempts++ {
+	for r := Start(context.Background(), opts); r.Next(); attempts++ {
 		if attempts == expAttempts {
 			break
 		}
@@ -92,7 +92,7 @@ func TestRetryStop(t *testing.T) {
 	var attempts int
 
 	// Create a retry loop which will never stop without stopper.
-	for r := StartWithCtx(context.Background(), opts); r.Next(); attempts++ {
+	for r := Start(context.Background(), opts); r.Next(); attempts++ {
 		go close(closer)
 		// Don't race the stopper, just wait for it to do its thing.
 		<-opts.Closer
@@ -111,7 +111,7 @@ func TestRetryNextCh(t *testing.T) {
 		Multiplier:     2,
 		MaxRetries:     1,
 	}
-	for r := StartWithCtx(context.Background(), opts); attempts < 3; attempts++ {
+	for r := Start(context.Background(), opts); attempts < 3; attempts++ {
 		c := r.NextCh()
 		if r.currentAttempt != attempts {
 			t.Errorf("expected attempt=%d; got %d", attempts, r.currentAttempt)

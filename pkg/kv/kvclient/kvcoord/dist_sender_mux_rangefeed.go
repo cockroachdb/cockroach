@@ -249,7 +249,7 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 	}
 
 	// Start a retry loop for sending the batch to the range.
-	for r := retry.StartWithCtx(ctx, m.ds.rpcRetryOptions); r.Next(); {
+	for r := retry.Start(ctx, m.ds.rpcRetryOptions); r.Next(); {
 		// If we've cleared the descriptor on failure, re-lookup.
 		if !s.token.Valid() {
 			ri, err := m.ds.getRoutingInfo(ctx, s.rSpan.Key, rangecache.EvictionToken{}, false)

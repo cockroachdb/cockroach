@@ -687,7 +687,7 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		MaxBackoff:     500 * time.Millisecond,
 		Multiplier:     2,
 	}
-	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+	for r := retry.Start(ctx, opts); r.Next(); {
 		var pid int
 		n.Lock()
 		if n.cmd != nil {

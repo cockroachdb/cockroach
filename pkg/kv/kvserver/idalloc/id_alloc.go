@@ -106,7 +106,7 @@ func (ia *Allocator) start() {
 		for {
 			var newValue int64
 			var err error
-			for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+			for r := retry.Start(ctx, base.DefaultRetryOptions()); r.Next(); {
 				if stopperErr := ia.opts.Stopper.RunTask(ctx, "idalloc: allocating block",
 					func(ctx context.Context) {
 						newValue, err = ia.opts.Incrementer(ctx, ia.opts.Key, ia.opts.BlockSize)

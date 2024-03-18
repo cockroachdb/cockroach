@@ -161,7 +161,7 @@ func runWithMaybeRetry(
 	var res = &RunResultDetails{}
 	var cmdErr, err error
 
-	for r := retry.StartWithCtx(ctx, *retryOpts); r.Next(); {
+	for r := retry.Start(ctx, *retryOpts); r.Next(); {
 		res, err = f(ctx)
 		if err != nil {
 			// non retryable roachprod error

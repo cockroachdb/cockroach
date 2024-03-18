@@ -151,7 +151,7 @@ func (p *scanRequestScanner) tryAcquireMemory(
 
 	// We failed to acquire memory for this export.  Begin retry loop -- we may succeed
 	// in the future, once somebody releases memory.
-	for attempt := retry.StartWithCtx(ctx, retryOpts); attempt.Next(); {
+	for attempt := retry.Start(ctx, retryOpts); attempt.Next(); {
 		// Sink implements memory allocator interface, so acquire
 		// memory needed to hold scan reply.
 		if logMemAcquireEvery.ShouldLog() {

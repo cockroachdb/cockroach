@@ -131,7 +131,7 @@ func (s *fdCountingSemaphore) Acquire(ctx context.Context, n int) error {
 		RandomizationFactor: 0.25,
 		MaxRetries:          s.acquireMaxRetries,
 	}
-	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+	for r := retry.Start(ctx, opts); r.Next(); {
 		if s.TryAcquire(n) {
 			return nil
 		}

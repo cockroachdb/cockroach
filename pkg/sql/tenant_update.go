@@ -333,7 +333,7 @@ func stepTenantServiceState(
 		log.Infof(ctx, "waiting for all nodes to stop service for tenant %d", inInfo.ID)
 		if err := timeutil.RunWithTimeout(ctx, "wait-for-tenant-stop", 10*time.Minute, func(ctx context.Context) error {
 			retryOpts := retry.Options{MaxBackoff: 10 * time.Second}
-			for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
+			for re := retry.Start(ctx, retryOpts); re.Next(); {
 				resp, err := statusSrv.TenantServiceStatus(ctx, &serverpb.TenantServiceStatusRequest{TenantID: inInfo.ID})
 				if err != nil {
 					return errors.Wrap(err, "failed waiting for tenant service status")

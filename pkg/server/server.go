@@ -2277,7 +2277,7 @@ func (s *topLevelServer) runIdempontentSQLForInitType(
 		MaxBackoff:     10 * time.Second,
 		InitialBackoff: time.Second,
 	}
-	for r := retry.StartWithCtx(ctx, rOpts); r.Next(); {
+	for r := retry.Start(ctx, rOpts); r.Next(); {
 		if err := initAttempt(); err != nil {
 			log.Errorf(ctx, "cluster initialization attempt failed: %s", err.Error())
 			continue

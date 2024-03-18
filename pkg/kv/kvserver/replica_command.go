@@ -642,7 +642,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 	retryOpts.RandomizationFactor = 0.5
 	var lastErr error
 	splitRetryLogLimiter := log.Every(10 * time.Second)
-	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
+	for retryable := retry.Start(ctx, retryOpts); retryable.Next(); {
 		// The replica may have been destroyed since the start of the retry loop.
 		// We need to explicitly check this condition. Having a valid lease, as we
 		// verify below, does not imply that the range still exists: even after a
@@ -1004,7 +1004,7 @@ func (r *Replica) WaitForLeaseAppliedIndex(
 		Multiplier:     2,
 		MaxBackoff:     time.Second,
 	}
-	for retry := retry.StartWithCtx(ctx, retryOpts); retry.Next(); {
+	for retry := retry.Start(ctx, retryOpts); retry.Next(); {
 		if currentLAI := r.GetLeaseAppliedIndex(); currentLAI >= lai {
 			return currentLAI, nil
 		}
@@ -1910,7 +1910,7 @@ func (r *Replica) initializeRaftLearners(
 	descriptorOK := false
 	start := timeutil.Now()
 	retOpts := retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second, MaxRetries: 10}
-	for re := retry.StartWithCtx(ctx, retOpts); re.Next(); {
+	for re := retry.Start(ctx, retOpts); re.Next(); {
 		rDesc := r.Desc()
 		if rDesc.Generation >= desc.Generation {
 			descriptorOK = true
@@ -2330,7 +2330,7 @@ func prepareChangeReplicasTrigger(
 func within10s(ctx context.Context, fn func() error) error {
 	retOpts := retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second, MaxRetries: 10}
 	var err error
-	for re := retry.StartWithCtx(ctx, retOpts); re.Next(); {
+	for re := retry.Start(ctx, retOpts); re.Next(); {
 		err = fn()
 		if err == nil {
 			return nil
@@ -3597,7 +3597,7 @@ func (r *Replica) relocateReplicas(
 
 	every := log.Every(time.Minute)
 	for {
-		for re := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: 5 * time.Second}); re.Next(); {
+		for re := retry.Start(ctx, retry.Options{MaxBackoff: 5 * time.Second}); re.Next(); {
 			if err := ctx.Err(); err != nil {
 				return rangeDesc, err
 			}
@@ -4129,7 +4129,7 @@ func (r *Replica) adminScatter(
 	}
 
 	// Loop until we hit an error or until we hit `maxAttempts` for the range.
-	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
+	for re := retry.Start(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
 			break
 		}

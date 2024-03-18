@@ -246,7 +246,7 @@ func writeToRangeLogTable(
 		if err := stopper.RunAsyncTask(
 			asyncCtx, "rangelog-async", func(ctx context.Context) {
 				defer stopCancel()
-				for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+				for r := retry.Start(ctx, retryOpts); r.Next(); {
 					if err := timeutil.RunWithTimeout(ctx, "rangelog-timeout", perAttemptTimeout, func(ctx context.Context) error {
 						return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn.DB(), logEvent)
 					}); err != nil {

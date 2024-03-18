@@ -68,7 +68,7 @@ func (s *Store) getOrCreateReplica(
 	// process of being removed or may need to be removed. Retries in the loop
 	// imply that a removal is actually being carried out, not that we're waiting
 	// on a queue.
-	r := retry.StartWithCtx(ctx, retry.Options{
+	r := retry.Start(ctx, retry.Options{
 		InitialBackoff: time.Microsecond,
 		// Set the backoff up to only a small amount to wait for data that
 		// might need to be cleared.
