@@ -352,6 +352,13 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
 		},
 	},
+	`"".crdb_internal.cluster_replication_spans`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"job_id",
+			"resolved",
+			"resolved_age",
+		},
+	},
 	"crdb_internal.default_privileges": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"database_name",
