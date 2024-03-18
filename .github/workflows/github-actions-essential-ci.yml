@@ -111,6 +111,8 @@ jobs:
           submodules: true
       - name: compute metadata
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      # We need this commit for TestRaftCopyrightHeaders.
+      - run: git fetch --depth 1 origin cd6f4f263bd42688096064825dfa668bde2d3720
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run lint tests

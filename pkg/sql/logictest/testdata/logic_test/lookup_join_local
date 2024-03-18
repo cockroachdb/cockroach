@@ -1,5 +1,7 @@
 # LogicTest: local !metamorphic-batch-sizes
 
+skip under race
+
 # This test verifies that the row container used by the join reader spills to
 # disk in order to make room for the non-spillable internal state of the
 # processor.

@@ -131,13 +131,17 @@ func process() error {
 				}
 			}
 			if seenNew {
+				var extraParamsSlice []string
+				if *extraParams != "" {
+					extraParamsSlice = strings.Split(*extraParams, ",")
+				}
 				if err := githubpost.PostFromTestXMLWithFailurePoster(
 					ctx, engflow.FailurePoster(res, engflow.FailurePosterOptions{
 						Sha:            sha,
 						InvocationId:   invocation.InvocationId,
 						ServerName:     *serverName,
 						GithubApiToken: githubApiToken,
-						ExtraParams:    strings.Split(*extraParams, ","),
+						ExtraParams:    extraParamsSlice,
 					}), testXml); err != nil {
 					fmt.Printf("could not post to GitHub: got error %+v", err)
 				}
