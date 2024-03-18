@@ -249,6 +249,17 @@ func (sb *statisticsBuilder) clear() {
 	sb.md = nil
 }
 
+// colStatCols returns the set of columns which may be looked up in
+// props.Statistics().ColStats, which includes props.OutputCols and any virtual
+// computed columns we have statistics on that are in scope.
+func (sb *statisticsBuilder) colStatCols(props *props.Relational) opt.ColSet {
+	if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
+		!props.Statistics().VirtualCols.Empty() {
+		return props.OutputCols.Union(props.Statistics().VirtualCols)
+	}
+	return props.OutputCols
+}
+
 // colStatFromChild retrieves a column statistic from a specific child of the
 // given expression.
 func (sb *statisticsBuilder) colStatFromChild(
@@ -259,7 +270,7 @@ func (sb *statisticsBuilder) colStatFromChild(
 	child := e.Child(childIdx).(RelExpr)
 	childProps := child.Relational()
 	if !colSet.SubsetOf(childProps.OutputCols) {
-		colSet = colSet.Intersection(childProps.OutputCols)
+		colSet = colSet.Intersection(sb.colStatCols(childProps))
 		if colSet.Empty() {
 			// All the columns in colSet are outer columns; therefore, we can treat
 			// them as a constant.
@@ -338,24 +349,26 @@ func (sb *statisticsBuilder) colStatFromInput(
 
 	if lookupJoin != nil || invertedJoin != nil || zigzagJoin != nil ||
 		opt.IsJoinOp(e) || e.Op() == opt.MergeJoinOp {
+
 		var leftProps *props.Relational
 		if zigzagJoin != nil {
 			leftProps = &zigzagJoin.leftProps
 		} else {
 			leftProps = e.Child(0).(RelExpr).Relational()
 		}
+		intersectsLeft := sb.colStatCols(leftProps).Intersects(colSet)
 
-		intersectsLeft := leftProps.OutputCols.Intersects(colSet)
-		var intersectsRight bool
+		var rightProps *props.Relational
 		if lookupJoin != nil {
-			intersectsRight = lookupJoin.lookupProps.OutputCols.Intersects(colSet)
+			rightProps = &lookupJoin.lookupProps
 		} else if invertedJoin != nil {
-			intersectsRight = invertedJoin.lookupProps.OutputCols.Intersects(colSet)
+			rightProps = &invertedJoin.lookupProps
 		} else if zigzagJoin != nil {
-			intersectsRight = zigzagJoin.rightProps.OutputCols.Intersects(colSet)
+			rightProps = &zigzagJoin.rightProps
 		} else {
-			intersectsRight = e.Child(1).(RelExpr).Relational().OutputCols.Intersects(colSet)
+			rightProps = e.Child(1).(RelExpr).Relational()
 		}
+		intersectsRight := sb.colStatCols(rightProps).Intersects(colSet)
 
 		// It's possible that colSet intersects both left and right if we have a
 		// lookup join that was converted from an index join, so check the left
@@ -1092,7 +1105,7 @@ func (sb *statisticsBuilder) colStatProject(
 	// Columns may be passed through from the input, or they may reference a
 	// higher scope (in the case of a correlated subquery), or they
 	// may be synthesized by the projection operation.
-	inputCols := prj.Input.Relational().OutputCols
+	inputCols := sb.colStatCols(prj.Input.Relational())
 	reqInputCols := colSet.Intersection(inputCols)
 	nonNullFound := false
 	reqSynthCols := colSet.Difference(inputCols)
@@ -1107,6 +1120,7 @@ func (sb *statisticsBuilder) colStatProject(
 		for i := range prj.Projections {
 			item := &prj.Projections[i]
 			if reqSynthCols.Contains(item.Col) {
+				// TODO(michae2): Check for matching virtual column expressions here.
 				reqInputCols.UnionWith(item.scalar.OuterCols)
 
 				// If the element is not a null constant, account for that
@@ -1228,8 +1242,8 @@ func (sb *statisticsBuilder) buildJoin(
 
 	leftStats := h.leftProps.Statistics()
 	rightStats := h.rightProps.Statistics()
-	leftCols := h.leftProps.OutputCols.Copy()
-	rightCols := h.rightProps.OutputCols.Copy()
+	leftCols := sb.colStatCols(h.leftProps)
+	rightCols := sb.colStatCols(h.rightProps)
 	equivReps := h.filtersFD.EquivReps()
 
 	switch h.joinType {
@@ -1313,8 +1327,8 @@ func (sb *statisticsBuilder) buildJoin(
 	constrainedCols = sb.tryReduceJoinCols(
 		constrainedCols,
 		s,
-		h.leftProps.OutputCols,
-		h.rightProps.OutputCols,
+		leftCols,
+		rightCols,
 		&h.leftProps.FuncDeps,
 		&h.rightProps.FuncDeps,
 	)
@@ -1331,7 +1345,7 @@ func (sb *statisticsBuilder) buildJoin(
 		// calculations. It will be fixed below.
 		s.RowCount = leftStats.RowCount
 		s.ApplySelectivity(sb.selectivityFromEquivalenciesSemiJoin(
-			equivReps, h.leftProps.OutputCols, h.rightProps.OutputCols, &h.filtersFD, join, s,
+			equivReps, leftCols, rightCols, &h.filtersFD, join, s,
 		))
 		var oredTermSelectivity props.Selectivity
 		oredTermSelectivity, numUnappliedConjuncts =
@@ -1374,7 +1388,7 @@ func (sb *statisticsBuilder) buildJoin(
 	switch h.joinType {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		// Keep only column stats from the left side.
-		s.ColStats.RemoveIntersecting(h.rightProps.OutputCols)
+		s.ColStats.RemoveIntersecting(rightCols)
 	}
 
 	// The above calculation is for inner joins. Other joins need to remove stats
@@ -1383,12 +1397,12 @@ func (sb *statisticsBuilder) buildJoin(
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		// Keep only column stats from the right side. The stats from the left side
 		// are not valid.
-		s.ColStats.RemoveIntersecting(h.leftProps.OutputCols)
+		s.ColStats.RemoveIntersecting(leftCols)
 
 	case opt.RightJoinOp:
 		// Keep only column stats from the left side. The stats from the right side
 		// are not valid.
-		s.ColStats.RemoveIntersecting(h.rightProps.OutputCols)
+		s.ColStats.RemoveIntersecting(rightCols)
 
 	case opt.FullJoinOp:
 		// Do not keep any column stats.
@@ -1459,8 +1473,8 @@ func (sb *statisticsBuilder) buildJoin(
 				sb.adjustNullCountsForOuterJoins(
 					colStat,
 					h.joinType,
-					leftSideCols,
-					rightSideCols,
+					leftSideCols.Empty(),
+					rightSideCols.Empty(),
 					leftNullCount,
 					leftStats.RowCount,
 					rightNullCount,
@@ -1514,6 +1528,9 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		rightProps = join.Child(1).(RelExpr).Relational()
 	}
 
+	leftCols := sb.colStatCols(leftProps)
+	rightCols := sb.colStatCols(rightProps)
+
 	switch joinType {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		// Column stats come from left side of join.
@@ -1523,10 +1540,6 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		return colStat
 
 	default:
-		// Column stats come from both sides of join.
-		leftCols := leftProps.OutputCols.Intersection(colSet)
-		rightCols := rightProps.OutputCols.Intersection(colSet)
-
 		// Join selectivity affects the distinct counts for different columns
 		// in different ways depending on the type of join.
 		//
@@ -1544,14 +1557,17 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		inputRowCount := leftProps.Statistics().RowCount * rightProps.Statistics().RowCount
 		leftNullCount := leftProps.Statistics().RowCount
 		rightNullCount := rightProps.Statistics().RowCount
-		if rightCols.Empty() {
+
+		leftColsAreEmpty := !leftCols.Intersects(colSet)
+		rightColsAreEmpty := !rightCols.Intersects(colSet)
+		if rightColsAreEmpty {
 			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinLeft(colSet, join))
 			leftNullCount = colStat.NullCount
 			switch joinType {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.RightJoinOp:
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
-		} else if leftCols.Empty() {
+		} else if leftColsAreEmpty {
 			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinRight(colSet, join))
 			rightNullCount = colStat.NullCount
 			switch joinType {
@@ -1560,8 +1576,8 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 			}
 		} else {
 			// Make a copy of the input column stats so we don't modify the originals.
-			leftColStat := *sb.colStatFromJoinLeft(leftCols, join)
-			rightColStat := *sb.colStatFromJoinRight(rightCols, join)
+			leftColStat := *sb.colStatFromJoinLeft(leftCols.Intersection(colSet), join)
+			rightColStat := *sb.colStatFromJoinRight(rightCols.Intersection(colSet), join)
 
 			leftNullCount = leftColStat.NullCount
 			rightNullCount = rightColStat.NullCount
@@ -1595,8 +1611,8 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 			sb.adjustNullCountsForOuterJoins(
 				colStat,
 				joinType,
-				leftCols,
-				rightCols,
+				leftColsAreEmpty,
+				rightColsAreEmpty,
 				leftNullCount,
 				leftProps.Statistics().RowCount,
 				rightNullCount,
@@ -1669,19 +1685,19 @@ func innerJoinNullCount(
 func (sb *statisticsBuilder) adjustNullCountsForOuterJoins(
 	colStat *props.ColumnStatistic,
 	joinType opt.Operator,
-	leftCols, rightCols opt.ColSet,
+	leftColsAreEmpty, rightColsAreEmpty bool,
 	leftNullCount, leftRowCount, rightNullCount, rightRowCount, rowCount, innerJoinRowCount float64,
 ) {
 	// Adjust null counts for non-inner joins, adding nulls created due to column
 	// extension - such as right columns for non-matching rows in left joins.
 	switch joinType {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-		if !rightCols.Empty() {
+		if !rightColsAreEmpty {
 			colStat.NullCount += (rowCount - innerJoinRowCount) * leftNullCount / leftRowCount
 		}
 
 	case opt.RightJoinOp:
-		if !leftCols.Empty() {
+		if !leftColsAreEmpty {
 			colStat.NullCount += (rowCount - innerJoinRowCount) * rightNullCount / rightRowCount
 		}
 
@@ -1689,10 +1705,10 @@ func (sb *statisticsBuilder) adjustNullCountsForOuterJoins(
 		leftJoinRowCount := max(innerJoinRowCount, leftRowCount)
 		rightJoinRowCount := max(innerJoinRowCount, rightRowCount)
 
-		if !leftCols.Empty() {
+		if !leftColsAreEmpty {
 			colStat.NullCount += (rightJoinRowCount - innerJoinRowCount) * rightNullCount / rightRowCount
 		}
-		if !rightCols.Empty() {
+		if !rightColsAreEmpty {
 			colStat.NullCount += (leftJoinRowCount - innerJoinRowCount) * leftNullCount / leftRowCount
 		}
 	}
@@ -1753,7 +1769,7 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 	s := relProps.Statistics()
 
 	inputProps := join.Input.Relational()
-	inputCols := inputProps.OutputCols
+	inputCols := sb.colStatCols(inputProps)
 
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
@@ -2543,7 +2559,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 
 	inputProps := projectSet.Input.Relational()
 	inputStats := inputProps.Statistics()
-	inputCols := inputProps.OutputCols
+	inputCols := sb.colStatCols(inputProps)
 
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
@@ -2598,7 +2614,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 					zipColsNullCount *= (s.RowCount - inputStats.RowCount) / s.RowCount
 				}
 
-				if item.ScalarProps().OuterCols.Intersects(inputProps.OutputCols) {
+				if item.ScalarProps().OuterCols.Intersects(inputCols) {
 					// The column(s) are correlated with the input, so they may have a
 					// distinct value for each distinct row of the input.
 					zipColsDistinctCount *= inputStats.RowCount * UnknownDistinctCountRatio
@@ -3045,8 +3061,8 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 			panic(errors.AssertionFailedf("rowsProcessed not supported for operator type %v", redact.Safe(e.Op())))
 		}
 
-		leftCols := e.Child(0).(RelExpr).Relational().OutputCols
-		rightCols := e.Child(1).(RelExpr).Relational().OutputCols
+		leftCols := sb.colStatCols(e.Child(0).(RelExpr).Relational())
+		rightCols := sb.colStatCols(e.Child(1).(RelExpr).Relational())
 		filters := e.Child(2).(*FiltersExpr)
 
 		// Remove ON conditions that are not equality conditions,
@@ -3259,6 +3275,7 @@ func (sb *statisticsBuilder) applyFilters(
 func (sb *statisticsBuilder) applyFiltersItem(
 	filter *FiltersItem, e RelExpr, relProps *props.Relational,
 ) (numUnappliedConjuncts float64, constrainedCols, histCols opt.ColSet) {
+	// TODO(michae2): Check for matching virtual column expressions here.
 	if isEqualityWithTwoVars(filter.Condition) {
 		// Equalities are handled by applyEquivalencies.
 		return 0, opt.ColSet{}, opt.ColSet{}
@@ -4376,6 +4393,7 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 			// is able to build column equivalencies.
 			switch disjuncts[i].(type) {
 			case *EqExpr, *AndExpr:
+				// TODO(michae2): Check for matching virtual column expressions here.
 				if andFilters, ok = addEqExprConjuncts(disjuncts[i], andFilters, e.Memo()); !ok {
 					numUnappliedConjuncts++
 					continue
@@ -4406,7 +4424,8 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 			equivReps := FD.EquivReps()
 			if semiJoin {
 				singleSelectivity = sb.selectivityFromEquivalenciesSemiJoin(
-					equivReps, h.leftProps.OutputCols, h.rightProps.OutputCols, FD, e, s,
+					equivReps, sb.colStatCols(h.leftProps), sb.colStatCols(h.rightProps),
+					FD, e, s,
 				)
 			} else {
 				singleSelectivity = sb.selectivityFromEquivalencies(equivReps, FD, e, s)
