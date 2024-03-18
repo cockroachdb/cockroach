@@ -551,7 +551,7 @@ func TestEngineMustExist(t *testing.T) {
 	if !strings.Contains(fmt.Sprint(err), "does not exist") {
 		t.Fatal(err)
 	}
-	require.NoError(t, env.Close())
+	env.Close()
 }
 
 func TestEngineTimeBound(t *testing.T) {

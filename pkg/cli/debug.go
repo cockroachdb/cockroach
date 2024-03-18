@@ -208,7 +208,8 @@ func OpenEngine(
 		storage.CacheSize(server.DefaultCacheSize),
 		storage.CombineOptions(opts...))
 	if err != nil {
-		return nil, errors.WithSecondaryError(err, env.Close())
+		env.Close()
+		return nil, err
 	}
 
 	stopper.AddCloser(db)
