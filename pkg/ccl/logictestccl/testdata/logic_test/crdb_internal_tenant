@@ -449,16 +449,16 @@ true
 # Check that privileged builtins are only allowed for 'root'
 user testuser
 
-query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
+query error user testuser does not have REPAIRCLUSTER system privilege
 select crdb_internal.force_panic('foo')
 
-query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
+query error user testuser does not have REPAIRCLUSTER system privilege
 select crdb_internal.force_log_fatal('foo')
 
-query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
+query error user testuser does not have REPAIRCLUSTER system privilege
 select crdb_internal.set_vmodule('')
 
-query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
+query error user testuser does not have REPAIRCLUSTER system privilege
 select crdb_internal.get_vmodule()
 
 query error user testuser does not have VIEWCLUSTERMETADATA system privilege

@@ -611,9 +611,9 @@ func (n *alterRoleSetNode) getRoleName(
 				"only users with the admin role are allowed to alter another admin")
 		}
 
-		// Note that admins implicitly have the REPAIRCLUSTERMETADATA privilege.
+		// Note that admins implicitly have the REPAIRCLUSTER privilege.
 		if err := params.p.CheckPrivilege(
-			params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+			params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 		); err != nil {
 			return false, username.SQLUsername{}, err
 		}

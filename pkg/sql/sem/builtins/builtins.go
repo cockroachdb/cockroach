@@ -4880,7 +4880,7 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// The user must have VIEWCLUSTERMETADATA to use this builtin.
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -4912,9 +4912,9 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// The user must have REPAIRCLUSTERMETADATA to use this builtin.
+				// The user must have REPAIRCLUSTER to use this builtin.
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -5660,9 +5660,9 @@ SELECT
 			Types:      tree.ParamTypes{{Name: "msg", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// The user must have REPAIRCLUSTERMETADATA to use this builtin.
+				// The user must have REPAIRCLUSTER to use this builtin.
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -5693,9 +5693,9 @@ SELECT
 			Types:      tree.ParamTypes{{Name: "msg", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// The user must have REPAIRCLUSTERMETADATA to use this builtin.
+				// The user must have REPAIRCLUSTER to use this builtin.
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -6172,9 +6172,9 @@ SELECT
 			Types:      tree.ParamTypes{{Name: "vmodule_string", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// The user must have REPAIRCLUSTERMETADATA to use this builtin.
+				// The user must have REPAIRCLUSTER to use this builtin.
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -6204,7 +6204,7 @@ SELECT
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -6671,7 +6671,7 @@ SELECT
 				if !enableUnsafeTestBuiltins {
 					return nil, errors.Errorf("requires COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 				} else if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -6917,7 +6917,7 @@ Parameters:` + randgencfg.ConfigDoc,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7229,7 +7229,7 @@ table's zone configuration this will return NULL.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7255,7 +7255,7 @@ table's zone configuration this will return NULL.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7281,7 +7281,7 @@ table's zone configuration this will return NULL.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7307,7 +7307,7 @@ table's zone configuration this will return NULL.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7418,7 +7418,7 @@ table's zone configuration this will return NULL.`,
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7438,7 +7438,7 @@ table's zone configuration this will return NULL.`,
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7510,7 +7510,7 @@ table's zone configuration this will return NULL.`,
 					return nil, errors.AssertionFailedf("schema telemetry controller not set")
 				}
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7643,7 +7643,7 @@ active for the current transaction.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7673,7 +7673,7 @@ One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC', 'raftlog',
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7720,7 +7720,7 @@ run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7768,7 +7768,7 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7822,7 +7822,7 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7871,7 +7871,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				// TODO(adityamaru): Figure out the correct permissions for collecting a
 				// job profiler bundle. For now only allow the VIEWCLUSTERMETADATA privilege.
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7913,7 +7913,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -7964,7 +7964,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
