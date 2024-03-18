@@ -3156,7 +3156,7 @@ func (s *systemAdminServer) EnqueueRange(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if err := s.privilegeChecker.RequireRepairClusterMetadataPermission(ctx); err != nil {
+	if err := s.privilegeChecker.RequireRepairClusterPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -3304,7 +3304,7 @@ func (s *systemAdminServer) SendKVBatch(
 	ctx = s.AnnotateCtx(ctx)
 	// Note: the root user will bypass SQL auth checks, which is useful in case of
 	// a cluster outage.
-	err := s.privilegeChecker.RequireRepairClusterMetadataPermission(ctx)
+	err := s.privilegeChecker.RequireRepairClusterPermission(ctx)
 	if err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
@@ -3395,7 +3395,7 @@ func (s *systemAdminServer) RecoveryStagePlan(
 	ctx context.Context, request *serverpb.RecoveryStagePlanRequest,
 ) (*serverpb.RecoveryStagePlanResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	err := s.privilegeChecker.RequireRepairClusterMetadataPermission(ctx)
+	err := s.privilegeChecker.RequireRepairClusterPermission(ctx)
 	if err != nil {
 		return nil, err
 	}

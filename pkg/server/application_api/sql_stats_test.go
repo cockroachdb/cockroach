@@ -1300,7 +1300,7 @@ func TestUnprivilegedUserResetIndexUsageStats(t *testing.T) {
 		"SELECT crdb_internal.reset_index_usage_stats()",
 	)
 
-	require.Contains(t, err.Error(), "user non_admin_user does not have REPAIRCLUSTERMETADATA system privilege")
+	require.Contains(t, err.Error(), "user non_admin_user does not have REPAIRCLUSTER system privilege")
 }
 
 // TestCombinedStatementUsesCorrectSourceTable tests that requests read from

@@ -42,13 +42,22 @@ GRANT SYSTEM VIEWACTIVITY TO testuser2 WITH GRANT OPTION
 statement ok
 GRANT SYSTEM EXTERNALCONNECTION TO testuser2
 
+# Verify that REPAIRCLUSTER and REPAIRCLUSTERMETADATA alias to the same thing.
+statement ok
+GRANT SYSTEM REPAIRCLUSTER TO testuser2
+
+statement ok
+GRANT SYSTEM REPAIRCLUSTERMETADATA TO testuser
+
 query TTB colnames,rowsort
 SHOW SYSTEM GRANTS
 ----
 grantee    privilege_type        is_grantable
 testuser   EXTERNALCONNECTION    true
 testuser   MODIFYCLUSTERSETTING  false
+testuser   REPAIRCLUSTER         false
 testuser2  EXTERNALCONNECTION    false
+testuser2  REPAIRCLUSTER         false
 testuser2  VIEWACTIVITY          true
 
 query TTB colnames,rowsort
@@ -56,6 +65,7 @@ SHOW SYSTEM GRANTS FOR testuser2
 ----
 grantee    privilege_type      is_grantable
 testuser2  EXTERNALCONNECTION  false
+testuser2  REPAIRCLUSTER       false
 testuser2  VIEWACTIVITY        true
 
 query TTB colnames,rowsort
@@ -64,7 +74,9 @@ SHOW SYSTEM GRANTS FOR testuser, testuser2
 grantee    privilege_type        is_grantable
 testuser   EXTERNALCONNECTION    true
 testuser   MODIFYCLUSTERSETTING  false
+testuser   REPAIRCLUSTER         false
 testuser2  EXTERNALCONNECTION    false
+testuser2  REPAIRCLUSTER         false
 testuser2  VIEWACTIVITY          true
 
 # SHOW SYSTEM GRANTS FOR <user> should not require admin/root privileges

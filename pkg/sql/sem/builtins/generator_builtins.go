@@ -150,7 +150,7 @@ var generators = map[string]builtinDefinition{
 			spanKeyIteratorType,
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -171,7 +171,7 @@ var generators = map[string]builtinDefinition{
 			spanKeyIteratorType,
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
@@ -2122,7 +2122,7 @@ func makeCheckConsistencyGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	if err := evalCtx.SessionAccessor.CheckPrivilege(
-		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 	); err != nil {
 		return nil, err
 	}
@@ -2423,7 +2423,7 @@ func makeRangeKeyIterator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	if err := evalCtx.SessionAccessor.CheckPrivilege(
-		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 	); err != nil {
 		return nil, err
 	}
@@ -2490,7 +2490,7 @@ func makePayloadsForSpanGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	if err := evalCtx.SessionAccessor.CheckPrivilege(
-		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 	); err != nil {
 		return nil, err
 	}
@@ -2587,7 +2587,7 @@ func makePayloadsForTraceGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	if err := evalCtx.SessionAccessor.CheckPrivilege(
-		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 	); err != nil {
 		return nil, err
 	}
@@ -3294,7 +3294,7 @@ func makeTableMetricsGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	if err := evalCtx.SessionAccessor.CheckPrivilege(
-		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 	); err != nil {
 		return nil, err
 	}
@@ -3399,7 +3399,7 @@ func makeStorageInternalKeysGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	if err := evalCtx.SessionAccessor.CheckPrivilege(
-		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 	); err != nil {
 		return nil, err
 	}
@@ -3555,7 +3555,7 @@ func makeInternallyExecutedQueryGeneratorOverload(
 		internallyExecutedQueryGeneratorType,
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 			if err := evalCtx.SessionAccessor.CheckPrivilege(
-				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 			); err != nil {
 				return nil, err
 			}
