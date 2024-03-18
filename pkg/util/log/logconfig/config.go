@@ -43,6 +43,10 @@ const DefaultFluentFormat = `json-fluent-compact`
 // when not specified in a configuration.
 const DefaultHTTPFormat = `json-compact`
 
+// DefaultFilePerms is the default permissions used in file-defaults. It
+// is applied literally via os.Chmod, without considering the umask.
+const DefaultFilePerms = FilePermissions(0o640)
+
 // DefaultConfig returns a suitable default configuration when logging
 // is meant to primarily go to files.
 func DefaultConfig() (c Config) {

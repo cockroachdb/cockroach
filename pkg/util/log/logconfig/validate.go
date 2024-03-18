@@ -66,7 +66,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		BufferedWrites:  &bt,
 		MaxFileSize:     &zeroByteSize,
 		MaxGroupSize:    &zeroByteSize,
-		FilePermissions: func() *FilePermissions { s := FilePermissions(0o644); return &s }(),
+		FilePermissions: func() *FilePermissions { s := DefaultFilePerms; return &s }(),
 		CommonSinkConfig: CommonSinkConfig{
 			Format:      func() *string { s := DefaultFileFormat; return &s }(),
 			Criticality: &bt,
