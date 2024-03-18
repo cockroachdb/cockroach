@@ -1202,6 +1202,34 @@ func (r SpanPartitionReason) String() string {
 type SpanPartition struct {
 	SQLInstanceID base.SQLInstanceID
 	Spans         roachpb.Spans
+
+	haveRangeInfo bool
+	numRanges     int
+}
+
+// NumRanges returns the number of ranges in a partition only if this
+// information is present. The returned bool indicates if the result is correct.
+// Note that the returned count is not for distinct ranges. If there are two
+// spans belonging to the same range in the partition (ex. two disjoint spans),
+// this counts as two ranges.
+func (sp *SpanPartition) NumRanges() (int, bool) {
+	if !sp.haveRangeInfo {
+		return 0, false
+	}
+	return sp.numRanges, true
+}
+
+// MakeSpanPartitionWithRangeCount constructs a SpanPartition with the
+// specified count of ranges.
+func MakeSpanPartitionWithRangeCount(
+	instanceID base.SQLInstanceID, spans roachpb.Spans, numRanges int,
+) SpanPartition {
+	return SpanPartition{
+		SQLInstanceID: instanceID,
+		Spans:         spans,
+		haveRangeInfo: true,
+		numRanges:     numRanges,
+	}
 }
 
 type distSQLNodeHealth struct {
@@ -1307,7 +1335,8 @@ func (dsp *DistSQLPlanner) partitionSpansEx(
 		// always ignore misplanned ranges for local-only plans, and we choose
 		// to return `true` to explicitly highlight this fact, yet the boolean
 		// doesn't really matter.
-		return []SpanPartition{{dsp.gatewaySQLInstanceID, spans}}, true /* ignoreMisplannedRanges */, nil
+		return []SpanPartition{{SQLInstanceID: dsp.gatewaySQLInstanceID, Spans: spans}},
+			true /* ignoreMisplannedRanges */, nil
 	}
 	if dsp.useGossipPlanning(ctx, planCtx) {
 		return dsp.deprecatedPartitionSpansSystem(ctx, planCtx, spans)
@@ -1382,7 +1411,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 		partitionIdx, inNodeMap := nodeMap[sqlInstanceID]
 		if !inNodeMap {
 			partitionIdx = len(partitions)
-			partitions = append(partitions, SpanPartition{SQLInstanceID: sqlInstanceID})
+			partitions = append(partitions, SpanPartition{SQLInstanceID: sqlInstanceID, numRanges: 0, haveRangeInfo: true})
 			nodeMap[sqlInstanceID] = partitionIdx
 		}
 		partition := &partitions[partitionIdx]
@@ -1394,6 +1423,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 			// Thus, we include the span into partition.Spans without trying to
 			// merge it with the last span.
 			partition.Spans = append(partition.Spans, span)
+			partition.numRanges += 1
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.VEventf(ctx, 2, "partition span: %s, instance ID: %d, reason: %s",
 					span, sqlInstanceID, reason)
@@ -1419,6 +1449,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 		} else {
 			partition.Spans = append(partition.Spans, partitionedSpan)
 		}
+		partition.numRanges += 1
 
 		if !endKey.Less(rSpan.EndKey) {
 			// Done.
@@ -1988,7 +2019,7 @@ func (dsp *DistSQLPlanner) maybeParallelizeLocalScans(
 		if err != nil {
 			// For some reason we couldn't partition the spans - fallback to
 			// having a single TableReader.
-			spanPartitions = []SpanPartition{{dsp.gatewaySQLInstanceID, info.spans}}
+			spanPartitions = []SpanPartition{{SQLInstanceID: dsp.gatewaySQLInstanceID, Spans: info.spans}}
 			parallelizeLocal = false
 			return spanPartitions, parallelizeLocal
 		}
@@ -2041,7 +2072,7 @@ func (dsp *DistSQLPlanner) maybeParallelizeLocalScans(
 				// We weren't able to acquire the quota for any additional
 				// goroutines, so we will fallback to having a single
 				// TableReader.
-				spanPartitions = []SpanPartition{{dsp.gatewaySQLInstanceID, info.spans}}
+				spanPartitions = []SpanPartition{{SQLInstanceID: dsp.gatewaySQLInstanceID, Spans: info.spans}}
 			}
 		}
 		if len(spanPartitions) == 1 {
@@ -2051,7 +2082,7 @@ func (dsp *DistSQLPlanner) maybeParallelizeLocalScans(
 			parallelizeLocal = false
 		}
 	} else {
-		spanPartitions = []SpanPartition{{dsp.gatewaySQLInstanceID, info.spans}}
+		spanPartitions = []SpanPartition{{SQLInstanceID: dsp.gatewaySQLInstanceID, Spans: info.spans}}
 	}
 	return spanPartitions, parallelizeLocal
 }
@@ -2084,7 +2115,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		if err != nil {
 			return err
 		}
-		spanPartitions = []SpanPartition{{sqlInstanceID, info.spans}}
+		spanPartitions = []SpanPartition{{SQLInstanceID: sqlInstanceID, Spans: info.spans}}
 		// The spans to scan might actually live on different nodes, so we don't
 		// want to create "misplanned ranges" metadata since it can result in
 		// false positives.

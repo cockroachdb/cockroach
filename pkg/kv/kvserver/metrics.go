@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2355,6 +2356,60 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDiskReadCount = metric.Metadata{
+		Name:        "storage.disk.read.count",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        "Disk read operations on the store's disk since this process started (as reported by the OS)",
+	}
+	metaDiskReadBytes = metric.Metadata{
+		Name:        "storage.disk.read.bytes",
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Bytes",
+		Help:        "Bytes read from the store's disk since this process started (as reported by the OS)",
+	}
+	metaDiskReadTime = metric.Metadata{
+		Name:        "storage.disk.read.time",
+		Unit:        metric.Unit_NANOSECONDS,
+		Measurement: "Time",
+		Help:        "Time spent reading from the store's disk since this process started (as reported by the OS)",
+	}
+	metaDiskWriteCount = metric.Metadata{
+		Name:        "storage.disk.write.count",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        "Disk write operations on the store's disk since this process started (as reported by the OS)",
+	}
+	metaDiskWriteBytes = metric.Metadata{
+		Name:        "storage.disk.write.bytes",
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Bytes",
+		Help:        "Bytes written to the store's disk since this process started (as reported by the OS)",
+	}
+	metaDiskWriteTime = metric.Metadata{
+		Name:        "storage.disk.write.time",
+		Unit:        metric.Unit_NANOSECONDS,
+		Measurement: "Time",
+		Help:        "Time spent writing to the store's disks since this process started (as reported by the OS)",
+	}
+	metaDiskIOTime = metric.Metadata{
+		Name:        "storage.disk.io.time",
+		Unit:        metric.Unit_NANOSECONDS,
+		Measurement: "Time",
+		Help:        "Time spent reading from or writing to the store's disk since this process started (as reported by the OS)",
+	}
+	metaDiskWeightedIOTime = metric.Metadata{
+		Name:        "storage.disk.weightedio.time",
+		Unit:        metric.Unit_NANOSECONDS,
+		Measurement: "Time",
+		Help:        "Weighted time spent reading from or writing to the store's disk since this process started (as reported by the OS)",
+	}
+	metaIopsInProgress = metric.Metadata{
+		Name:        "storage.disk.iopsinprogress",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        "IO operations currently in progress on the store's disk (as reported by the OS)",
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -2750,6 +2805,17 @@ type StoreMetrics struct {
 
 	FlushUtilization *metric.GaugeFloat64
 	FsyncLatency     *metric.ManualWindowHistogram
+
+	// Disk metrics
+	DiskReadBytes      *metric.Gauge
+	DiskReadCount      *metric.Gauge
+	DiskReadTime       *metric.Gauge
+	DiskWriteBytes     *metric.Gauge
+	DiskWriteCount     *metric.Gauge
+	DiskWriteTime      *metric.Gauge
+	DiskIOTime         *metric.Gauge
+	DiskWeightedIOTime *metric.Gauge
+	IopsInProgress     *metric.Gauge
 }
 
 type tenantMetricsRef struct {
@@ -3491,6 +3557,16 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		ReplicaReadBatchDroppedLatchesBeforeEval: metric.NewCounter(metaReplicaReadBatchDroppedLatchesBeforeEval),
 		ReplicaReadBatchWithoutInterleavingIter:  metric.NewCounter(metaReplicaReadBatchWithoutInterleavingIter),
+
+		DiskReadBytes:      metric.NewGauge(metaDiskReadBytes),
+		DiskReadCount:      metric.NewGauge(metaDiskReadCount),
+		DiskReadTime:       metric.NewGauge(metaDiskReadTime),
+		DiskWriteBytes:     metric.NewGauge(metaDiskWriteBytes),
+		DiskWriteCount:     metric.NewGauge(metaDiskWriteCount),
+		DiskWriteTime:      metric.NewGauge(metaDiskWriteTime),
+		DiskIOTime:         metric.NewGauge(metaDiskIOTime),
+		DiskWeightedIOTime: metric.NewGauge(metaDiskWeightedIOTime),
+		IopsInProgress:     metric.NewGauge(metaIopsInProgress),
 	}
 
 	storeRegistry.AddMetricStruct(sm)
@@ -3698,6 +3774,18 @@ func (sm *StoreMetrics) updateCrossLocalityMetricsOnOutgoingRaftMsg(
 
 func (sm *StoreMetrics) updateEnvStats(stats fs.EnvStats) {
 	sm.EncryptionAlgorithm.Update(int64(stats.EncryptionType))
+}
+
+func (sm *StoreMetrics) updateDiskStats(stats disk.Stats) {
+	sm.DiskReadCount.Update(int64(stats.ReadsCount))
+	sm.DiskReadBytes.Update(int64(stats.BytesRead()))
+	sm.DiskReadTime.Update(int64(stats.ReadsDuration))
+	sm.DiskWriteCount.Update(int64(stats.WritesCount))
+	sm.DiskWriteBytes.Update(int64(stats.BytesWritten()))
+	sm.DiskWriteTime.Update(int64(stats.WritesDuration))
+	sm.DiskIOTime.Update(int64(stats.CumulativeDuration))
+	sm.DiskWeightedIOTime.Update(int64(stats.WeightedIODuration))
+	sm.IopsInProgress.Update(int64(stats.InProgressCount))
 }
 
 func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.Metrics) {

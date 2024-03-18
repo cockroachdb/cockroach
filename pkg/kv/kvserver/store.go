@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -1094,6 +1095,9 @@ type Store struct {
 	spanConfigUpdateQueueRateLimiter   *quotapool.RateLimiter
 
 	rangeFeedSlowClosedTimestampNudge *singleflight.Group
+
+	// diskMonitor provides metrics for the disk associated with this store.
+	diskMonitor *disk.Monitor
 }
 
 var _ kv.Sender = &Store{}
@@ -3361,6 +3365,15 @@ func (s *Store) computeMetrics(ctx context.Context) (m storage.Metrics, err erro
 			dirs = nil
 		}
 		s.metrics.RdbCheckpoints.Update(int64(len(dirs)))
+	}
+
+	// Get disk stats for the disk associated with this store.
+	if s.diskMonitor != nil {
+		diskStats, err := s.diskMonitor.CumulativeStats()
+		if err != nil {
+			return m, err
+		}
+		s.metrics.updateDiskStats(diskStats)
 	}
 
 	return m, nil
