@@ -3904,6 +3904,14 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	enumQuery := With([]CTE{
 		{"descriptors", descJSONQuery},
 		{"enums", enumDescsQuery},
+	}, `SELECT
+				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
+				COALESCE((descriptor->'state')::INT != 0, false) AS non_public
+			FROM enums
+		`)
+	enumMemberQuery := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"enums", enumDescsQuery},
 		{"enum_members", enumMemberDescsQuery},
 	}, `SELECT
 				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
@@ -3919,6 +3927,10 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	if err != nil {
 		return nil, err
 	}
+	enumMembers, err := Collect(ctx, og, tx, pgx.RowToMap, enumMemberQuery)
+	if err != nil {
+		return nil, err
+	}
 	schemas, err := Collect(ctx, og, tx, pgx.RowTo[string], schemasQuery)
 	if err != nil {
 		return nil, err
@@ -3930,20 +3942,28 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	useParamRefs := og.randIntn(2) == 0
 	useReturnRefs := og.randIntn(2) == 0
 
-	var droppingEnums []string
+	var nonPublicEnums []string
+	var droppingEnumMembers []string
 	var possibleBodyReferences []string
 	var possibleParamReferences []string
 	var possibleReturnReferences []string
 	var fnDuplicate bool
 
 	for i, enum := range enums {
-		if enum["dropping"].(bool) {
-			droppingEnums = append(droppingEnums, enum["name"].(string))
+		if enum["non_public"].(bool) {
+			nonPublicEnums = append(nonPublicEnums, enum["name"].(string))
 			continue
 		}
 		possibleReturnReferences = append(possibleReturnReferences, enum["name"].(string))
 		possibleParamReferences = append(possibleParamReferences, fmt.Sprintf(`enum_%d %s`, i, enum["name"]))
-		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf(`(%s::%s IS NULL)`, enum["value"], enum["name"]))
+	}
+
+	for _, member := range enumMembers {
+		if member["dropping"].(bool) {
+			droppingEnumMembers = append(droppingEnumMembers, fmt.Sprintf(`%s::%s`, member["value"], member["name"]))
+			continue
+		}
+		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf(`(%s::%s IS NULL)`, member["value"], member["name"]))
 	}
 
 	for _, table := range tables {
@@ -3959,8 +3979,11 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 		"Schema": func() (string, error) {
 			return PickOne(og.params.rng, schemas)
 		},
-		"DroppingEnum": func() (string, error) {
-			return PickOne(og.params.rng, droppingEnums)
+		"NonPublicEnum": func() (string, error) {
+			return PickOne(og.params.rng, nonPublicEnums)
+		},
+		"DroppingEnumMember": func() (string, error) {
+			return PickOne(og.params.rng, droppingEnumMembers)
 		},
 		"ParamRefs": func() (string, error) {
 			refs, err := PickBetween(og.params.rng, 1, 99, possibleParamReferences)
@@ -3998,7 +4021,9 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 		// 4. Reference a UDT that does not exist.
 		{pgcode.UndefinedObject, `CREATE FUNCTION { UniqueName } (IN p1 "ThisTypeDoesNotExist") RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
 		// 5. Reference an Enum that's in the process of being dropped
-		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } (IN p1 { DroppingEnum }) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
+		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } (IN p1 { NonPublicEnum }) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
+		// 6. Reference an Enum value that's in the process of being dropped
+		{pgcode.InvalidParameterValue, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT { DroppingEnumMember } $$`},
 	}, placeholderMap)
 	if err != nil {
 		return nil, err
