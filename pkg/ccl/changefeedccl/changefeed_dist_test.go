@@ -296,7 +296,11 @@ func newRangeDistributionTester(
 
 	// Distribute the leases exponentially across the first 5 nodes.
 	for i := 0; i < 64; i += 1 {
-		nodeID := int(math.Floor(math.Log2(float64(i)))) + 1
+		nodeID := 1
+		// Avoid log(0).
+		if i != 0 {
+			nodeID = int(math.Floor(math.Log2(float64(i)))) + 1
+		}
 		cmd := fmt.Sprintf(`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], %d)`,
 			nodeID, i,
 		)
