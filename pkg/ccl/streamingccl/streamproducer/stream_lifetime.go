@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -294,8 +295,11 @@ func buildReplicationStreamSpec(
 
 	// Partition the spans with SQLPlanner
 	dsp := jobExecCtx.DistSQLPlanner()
-	planCtx := dsp.NewPlanningCtx(
-		ctx, jobExecCtx.ExtendedEvalContext(), nil /* planner */, nil /* txn */, sql.FullDistribution,
+	noLoc := roachpb.Locality{}
+	oracle := kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), noLoc)
+
+	planCtx := dsp.NewPlanningCtxWithOracle(
+		ctx, jobExecCtx.ExtendedEvalContext(), nil /* planner */, nil /* txn */, sql.FullDistribution, oracle, noLoc,
 	)
 
 	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, targetSpans)
