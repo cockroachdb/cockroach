@@ -3748,25 +3748,26 @@ func (s *systemStatusServer) Stores(
 
 	resp := &serverpb.StoresResponse{}
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
-		storeDetails := serverpb.StoreDetails{
-			StoreID: store.Ident.StoreID,
-		}
-
-		envStats, err := store.TODOEngine().GetEnvStats()
+		eng := store.TODOEngine()
+		envStats, err := eng.GetEnvStats()
 		if err != nil {
 			return err
 		}
-
-		if len(envStats.EncryptionStatus) > 0 {
-			storeDetails.EncryptionStatus = envStats.EncryptionStatus
+		props := eng.Properties()
+		storeDetails := serverpb.StoreDetails{
+			StoreID:          store.Ident.StoreID,
+			NodeID:           nodeID,
+			EncryptionStatus: envStats.EncryptionStatus,
+			TotalFiles:       envStats.TotalFiles,
+			TotalBytes:       envStats.TotalBytes,
+			ActiveKeyFiles:   envStats.ActiveKeyFiles,
+			ActiveKeyBytes:   envStats.ActiveKeyBytes,
+			Dir:              props.Dir,
 		}
-		storeDetails.TotalFiles = envStats.TotalFiles
-		storeDetails.TotalBytes = envStats.TotalBytes
-		storeDetails.ActiveKeyFiles = envStats.ActiveKeyFiles
-		storeDetails.ActiveKeyBytes = envStats.ActiveKeyBytes
-
+		if props.WalFailoverPath != nil {
+			storeDetails.WalFailoverPath = *props.WalFailoverPath
+		}
 		resp.Stores = append(resp.Stores, storeDetails)
-
 		return nil
 	})
 	if err != nil {

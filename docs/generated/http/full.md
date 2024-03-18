@@ -4090,11 +4090,14 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | store_id | [int32](#cockroach.server.serverpb.StoresResponse-int32) |  |  | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.StoresResponse-int32) |  |  | [reserved](#support-status) |
 | encryption_status | [bytes](#cockroach.server.serverpb.StoresResponse-bytes) |  | encryption_status is a serialized ccl/storageccl/engineccl/enginepbccl/stats.go::EncryptionStatus protobuf. | [reserved](#support-status) |
 | total_files | [uint64](#cockroach.server.serverpb.StoresResponse-uint64) |  | Basic file stats when encryption is enabled. Total files/bytes. | [reserved](#support-status) |
 | total_bytes | [uint64](#cockroach.server.serverpb.StoresResponse-uint64) |  |  | [reserved](#support-status) |
 | active_key_files | [uint64](#cockroach.server.serverpb.StoresResponse-uint64) |  | Files/bytes using the active data key. | [reserved](#support-status) |
 | active_key_bytes | [uint64](#cockroach.server.serverpb.StoresResponse-uint64) |  |  | [reserved](#support-status) |
+| dir | [string](#cockroach.server.serverpb.StoresResponse-string) |  | dir is the path to the store's data directory on the node. | [reserved](#support-status) |
+| wal_failover_path | [string](#cockroach.server.serverpb.StoresResponse-string) |  | wal_failover_path encodes the path to the secondary WAL directory used for failover in the event of high write latency to the primary WAL. | [reserved](#support-status) |
 
 
 
