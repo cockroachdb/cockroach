@@ -490,6 +490,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		Knobs:                   cfg.SQLStatsTestingKnobs,
 		FlushCounter:            serverMetrics.StatsMetrics.SQLStatsFlushStarted,
 		FlushDoneSignalsIgnored: serverMetrics.StatsMetrics.SQLStatsFlushDoneSignalsIgnored,
+		FlushedFingerprintCount: serverMetrics.StatsMetrics.SQLStatsFlushFingerprintCount,
 		FailureCounter:          serverMetrics.StatsMetrics.SQLStatsFlushFailure,
 		FlushDuration:           serverMetrics.StatsMetrics.SQLStatsFlushDuration,
 	}, memSQLStats)
@@ -590,6 +591,7 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 			DiscardedStatsCount:                 metric.NewCounter(MetaDiscardedSQLStats),
 			SQLStatsFlushStarted:                metric.NewCounter(MetaSQLStatsFlushStarted),
 			SQLStatsFlushDoneSignalsIgnored:     metric.NewCounter(MetaSQLStatsFlushDoneSignalsIgnored),
+			SQLStatsFlushFingerprintCount:       metric.NewCounter(MetaSQLStatsFlushFingerprintCount),
 
 			SQLStatsFlushFailure: metric.NewCounter(MetaSQLStatsFlushFailure),
 			SQLStatsFlushDuration: metric.NewHistogram(metric.HistogramOptions{
