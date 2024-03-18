@@ -112,17 +112,8 @@ CALL p(foo())
 statement error pgcode 42723 function "p" already exists with same argument types
 CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
 
-# TODO(mgartner): The error should state "procedure definition" too.
-statement error pgcode 0A000 unimplemented: CALL usage inside a function definition
-CREATE OR REPLACE PROCEDURE p2() LANGUAGE SQL AS $$
-  CALL p();
-$$
-
 statement error pgcode 42809 p\(\) is a procedure
 CREATE FUNCTION err(i INT) RETURNS VOID LANGUAGE SQL AS 'SELECT p()'
-
-statement error pgcode 0A000 unimplemented: CALL usage inside a function definition
-CREATE FUNCTION err(i INT) RETURNS VOID LANGUAGE SQL AS 'CALL p()'
 
 statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
 CREATE TABLE err (i INT DEFAULT p())

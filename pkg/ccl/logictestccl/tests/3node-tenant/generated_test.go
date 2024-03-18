@@ -1432,6 +1432,13 @@ func TestTenantLogic_privileges_table(
 	runLogicTest(t, "privileges_table")
 }
 
+func TestTenantLogic_proc_invokes_proc(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "proc_invokes_proc")
+}
+
 func TestTenantLogic_procedure(
 	t *testing.T,
 ) {
