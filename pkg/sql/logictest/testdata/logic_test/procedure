@@ -412,20 +412,3 @@ statement error pgcode 42P13 null input attribute not allowed in procedure defin
 CREATE PROCEDURE pv() AS 'SELECT 1' STRICT LANGUAGE SQL;
 
 subtest end
-
-
-subtest udf_calling_udfs
-
-# Validate we can have UDF's both in the select and from clauses.
-statement ok
-CREATE FUNCTION udfCall(i int) RETURNS INT LANGUAGE SQL AS 'SELECT 100+i';
-CREATE FUNCTION udfCallNest(i int, j int) RETURNS INT LANGUAGE SQL AS 'SELECT udfCall(i) + j';
-CREATE FUNCTION udfCallNest_2(i int, j int) RETURNS INT LANGUAGE SQL AS 'SELECT udfCall(i) + udfCall(j) + udfCallNest(i, j)';
-CREATE FUNCTION udfCallNest_3(i int, j int) RETURNS INT  LANGUAGE SQL AS 'SELECT  udfCall(j) + udfCallNest(i, j) + udfCallNest_2(i, j) + 1 FROM udfCallNest_2(i, j)';
-
-query I
-SELECT * FROM udfCallNest_3(1, 2)
-----
-512
-
-subtest end

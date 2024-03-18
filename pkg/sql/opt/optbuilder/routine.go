@@ -280,7 +280,7 @@ func (b *Builder) buildRoutine(
 		}
 		// Add a VALUES (NULL) statement if the return type of the function is
 		// VOID. We cannot simply project NULL from the last statement because
-		// all column would be pruned and the contents of last statement would
+		// all columns would be pruned and the contents of last statement would
 		// not be executed.
 		// TODO(mgartner): This will add some planning overhead for every
 		// invocation of the function. Is there a more efficient way to do this?
