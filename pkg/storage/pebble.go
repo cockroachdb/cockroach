@@ -205,6 +205,14 @@ var SingleDeleteCrashOnIneffectual = settings.RegisterBoolSetting(
 	settings.WithVisibility(settings.Reserved),
 )
 
+var walFailoverUnhealthyOpThreshold = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"storage.wal_failover.unhealthy_op_threshold",
+	"the latency of a WAL write considered unhealthy and triggers a failover to a secondary WAL location",
+	100*time.Millisecond,
+	settings.WithPublic,
+)
+
 // ShouldUseEFOS returns true if either of the UseEFOS or UseExciseForSnapshots
 // cluster settings are enabled, and EventuallyFileOnlySnapshots must be used
 // to guarantee snapshot-like semantics.
@@ -1468,7 +1476,7 @@ func (p *Pebble) Close() {
 
 	handleErr(p.db.Close())
 	if p.env != nil {
-		handleErr(p.env.Close())
+		p.env.Close()
 		p.env = nil
 	}
 }

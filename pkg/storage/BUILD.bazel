@@ -93,6 +93,7 @@ go_library(
         "@com_github_cockroachdb_pebble//replay",
         "@com_github_cockroachdb_pebble//sstable",
         "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_cockroachdb_pebble//wal",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_redact//interfaces",
         "@com_github_dustin_go_humanize//:go-humanize",

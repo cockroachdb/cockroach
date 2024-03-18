@@ -35,7 +35,7 @@ func runDecrypt(cmd *cobra.Command, args []string) (returnErr error) {
 	if err != nil {
 		return errors.Wrap(err, "could not open store")
 	}
-	defer func() { returnErr = errors.CombineErrors(returnErr, env.Close()) }()
+	defer env.Close()
 
 	// Open the specified file through the FS, decrypting it.
 	f, err := env.DefaultFS.Open(inPath)
@@ -88,7 +88,7 @@ func runList(cmd *cobra.Command, args []string) (returnErr error) {
 	if err != nil {
 		return errors.Wrap(err, "could not open store")
 	}
-	defer func() { returnErr = errors.CombineErrors(returnErr, env.Close()) }()
+	defer env.Close()
 
 	if env.Registry == nil {
 		return errors.Newf("encryption-at-rest not enabled")

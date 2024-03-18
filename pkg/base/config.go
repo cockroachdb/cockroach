@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -835,6 +836,64 @@ type TempStorageConfig struct {
 	// Settings stores the cluster.Settings this TempStoreConfig will use. Must
 	// not be nil.
 	Settings *cluster.Settings
+}
+
+// WALFailoverMode configures a node's stores behavior under high write latency
+// to their write-ahead logs.
+type WALFailoverMode int8
+
+const (
+	// WALFailoverDefault leaves the WAL failover configuration unspecified. Today
+	// this is interpreted as FailoverDisabled but future releases may default to
+	// another mode.
+	WALFailoverDefault WALFailoverMode = iota
+	// WALFailoverDisabled leaves WAL failover disabled. Commits to the storage
+	// engine observe the latency of a store's primary WAL directly.
+	WALFailoverDisabled
+	// WALFailoverAmongStores enables WAL failover among multiple stores within a
+	// node. This setting has no effect if the node has a single store. When a
+	// storage engine observes high latency writing to its WAL, it may
+	// transparently failover to an arbitrary, predetermined other store's data
+	// directory. If successful in syncing log entries to the other store's
+	// volume, the batch commit latency is insulated from the effects of momentary
+	// disk stalls.
+	WALFailoverAmongStores
+)
+
+// Type implements the pflag.Value interface.
+func (m *WALFailoverMode) Type() string { return "string" }
+
+// String implements fmt.Stringer.
+func (m *WALFailoverMode) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements the refact.SafeFormatter interface.
+func (m *WALFailoverMode) SafeFormat(p redact.SafePrinter, _ rune) {
+	switch *m {
+	case WALFailoverDefault:
+		// Empty
+	case WALFailoverDisabled:
+		p.SafeString("disabled")
+	case WALFailoverAmongStores:
+		p.SafeString("among-stores")
+	default:
+		p.Printf("<unknown WALFailoverMode %d>", int8(*m))
+	}
+}
+
+// Set implements the pflag.Value interface.
+func (m *WALFailoverMode) Set(s string) error {
+	switch s {
+	case "disabled":
+		*m = WALFailoverDisabled
+	case "among-stores":
+		*m = WALFailoverAmongStores
+	default:
+		return errors.Newf("invalid --wal-failover setting: %s "+
+			"(possible values: disabled, among-stores)", s)
+	}
+	return nil
 }
 
 // ExternalIODirConfig describes various configuration options pertaining
