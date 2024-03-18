@@ -1023,7 +1023,7 @@ func (r *Replica) AdminTransferLease(
 	if count := r.store.TestingKnobs().LeaseTransferRejectedRetryLoopCount; count != 0 {
 		retryOpts.MaxRetries = count
 	}
-	transferRejectedRetry := retry.StartWithCtx(ctx, retryOpts)
+	transferRejectedRetry := retry.Start(ctx, retryOpts)
 	transferRejectedRetry.Next() // The first call to Next does not block.
 
 	// Loop while there's an extension in progress.

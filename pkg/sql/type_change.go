@@ -1300,7 +1300,7 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 		MaxBackoff:     20 * time.Second,
 		Multiplier:     1.5,
 	}
-	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+	for r := retry.Start(ctx, opts); r.Next(); {
 		if err := t.execCfg.JobRegistry.CheckPausepoint("typeschemachanger.before.exec"); err != nil {
 			return err
 		}

@@ -644,7 +644,7 @@ func asyncWriteToOtelAndSystemEventsTable(
 			// by db.Txn)
 			retryOpts := base.DefaultRetryOptions()
 			retryOpts.MaxRetries = int(maxAttempts)
-			for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			for r := retry.Start(ctx, retryOpts); r.Next(); {
 				// Don't try too long to write if the system table is unavailable.
 				if err := timeutil.RunWithTimeout(ctx, "record-events", perAttemptTimeout, func(ctx context.Context) error {
 					return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {

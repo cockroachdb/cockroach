@@ -892,7 +892,7 @@ func (q *Queue) startQueryPusherTxn(
 		func(ctx context.Context) {
 			// We use a backoff/retry here in case the pusher transaction
 			// doesn't yet exist.
-			for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+			for r := retry.Start(ctx, base.DefaultRetryOptions()); r.Next(); {
 				var pErr *kvpb.Error
 				var updatedPusher *roachpb.Transaction
 				updatedPusher, waitingTxns, pErr = q.queryTxnStatus(

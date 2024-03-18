@@ -157,7 +157,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 			MaxBackoff:     time.Hour,
 			Multiplier:     2,
 		}
-		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		for r := retry.Start(ctx, retryOpts); r.Next(); {
 			// Nodes are already dead, but are in active state. Internal checks doesn't
 			// allow us throwing nodes away, and they need to go through legal state
 			// transitions within liveness to succeed. To achieve that we mark nodes as

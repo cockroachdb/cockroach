@@ -84,7 +84,7 @@ func (is Server) WaitForApplication(
 		// TODO(benesch): Once Replica changefeeds land, see if we can implement
 		// this request handler without polling.
 		retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond}
-		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		for r := retry.Start(ctx, retryOpts); r.Next(); {
 			// Long-lived references to replicas are frowned upon, so re-fetch the
 			// replica on every turn of the loop.
 			repl, err := s.GetReplica(req.RangeID)
@@ -127,7 +127,7 @@ func (is Server) WaitForReplicaInit(
 	resp := &WaitForReplicaInitResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader, func(ctx context.Context, s *Store) error {
 		retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond}
-		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		for r := retry.Start(ctx, retryOpts); r.Next(); {
 			// Long-lived references to replicas are frowned upon, so re-fetch the
 			// replica on every turn of the loop.
 			if repl, err := s.GetReplica(req.RangeID); err == nil && repl.IsInitialized() {

@@ -1970,7 +1970,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 			everySecond := log.Every(time.Second)
 			var err error
 			// Avoid retry.ForDuration because of https://github.com/cockroachdb/cockroach/issues/25091.
-			for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+			for r := retry.Start(ctx, opts); r.Next(); {
 				err = nil
 				if numRemaining := transferAllAway(ctx); numRemaining > 0 {
 					// Report progress to the Drain RPC.
@@ -3783,7 +3783,7 @@ func (s *Store) WaitForSpanConfigSubscription(ctx context.Context) error {
 		return nil // nothing to do here
 	}
 
-	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+	for r := retry.Start(ctx, base.DefaultRetryOptions()); r.Next(); {
 		if !s.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
 			return nil
 		}

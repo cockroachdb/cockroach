@@ -618,7 +618,7 @@ func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
 func (p *Provider) waitForIPs(
 	l *logger.Logger, names []string, regions []string, opts *ProviderOpts,
 ) error {
-	waitForIPRetry := retry.StartWithCtx(context.Background(), retry.Options{
+	waitForIPRetry := retry.Start(context.Background(), retry.Options{
 		InitialBackoff: 100 * time.Millisecond,
 		MaxBackoff:     500 * time.Millisecond,
 		MaxRetries:     120, // wait a bit less than 90s for IPs
@@ -1528,7 +1528,7 @@ func (p *Provider) CreateVolume(
 
 	waitForVolumeCloser := make(chan struct{})
 
-	waitForVolume := retry.StartWithCtx(context.Background(), retry.Options{
+	waitForVolume := retry.Start(context.Background(), retry.Options{
 		InitialBackoff: 100 * time.Millisecond,
 		MaxBackoff:     500 * time.Millisecond,
 		MaxRetries:     10,

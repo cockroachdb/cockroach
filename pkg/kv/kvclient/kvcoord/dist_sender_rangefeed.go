@@ -588,7 +588,7 @@ func (ds *DistSender) partialRangeFeed(
 	span := rs.AsRawSpanWithNoLocals()
 
 	// Start a retry loop for sending the batch to the range.
-	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
+	for r := retry.Start(ctx, ds.rpcRetryOptions); r.Next(); {
 		// If we've cleared the descriptor on a send failure, re-lookup.
 		if !token.Valid() {
 			var err error

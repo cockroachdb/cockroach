@@ -2713,7 +2713,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 		// for other retriable reasons so we run it in an exponential backoff retry
 		// loop. The loop terminates only if the context is canceled.
 		var scErr error
-		for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		for r := retry.Start(ctx, opts); r.Next(); {
 			// Note that r.Next always returns true on first run so exec will be
 			// called at least once before there is a chance for this loop to exit.
 			if err := p.ExecCfg().JobRegistry.CheckPausepoint("schemachanger.before.exec"); err != nil {

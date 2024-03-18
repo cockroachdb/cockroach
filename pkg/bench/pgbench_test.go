@@ -66,7 +66,7 @@ func BenchmarkPgbenchQueryParallel(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			src := rand.New(rand.NewSource(5432))
-			r := retry.StartWithCtx(context.Background(), retryOpts)
+			r := retry.Start(context.Background(), retryOpts)
 			var err error
 			for pb.Next() {
 				r.Reset()

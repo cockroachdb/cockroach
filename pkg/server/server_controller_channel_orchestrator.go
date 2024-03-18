@@ -360,7 +360,7 @@ func (o *channelOrchestrator) startControlledServer(
 		var tenantStopper *stop.Stopper
 
 		var tenantServer orchestratedServer
-		for retry := retry.StartWithCtx(ctx, retryOpts); retry.Next(); {
+		for retry := retry.Start(ctx, retryOpts); retry.Next(); {
 			tenantStopper = stop.NewStopper()
 
 			// Task that is solely responsible for propagating ungraceful exits.

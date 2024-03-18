@@ -211,7 +211,7 @@ func (cc *Collector) UpdateCorpus() error {
 // lockCorpus locks the corpus file on disk for reading/writing.
 func (cr *Reader) lockCorpus() (unlockFn func(), err error) {
 	var f *os.File
-	r := retry.StartWithCtx(context.Background(), retry.Options{})
+	r := retry.Start(context.Background(), retry.Options{})
 	// File creation/deletion is atomic so use it to lock the corpus on disk.
 	// Note: On Linux/Unix we can do better and use unix.Flock, but that won't
 	// be platform independent.

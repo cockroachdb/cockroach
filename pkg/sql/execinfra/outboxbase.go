@@ -43,7 +43,7 @@ func GetConnForOutbox(
 	ctx context.Context, dialer Dialer, sqlInstanceID base.SQLInstanceID, timeout time.Duration,
 ) (conn *grpc.ClientConn, err error) {
 	firstConnectionAttempt := timeutil.Now()
-	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+	for r := retry.Start(ctx, base.DefaultRetryOptions()); r.Next(); {
 		conn, err = dialer.DialNoBreaker(ctx, roachpb.NodeID(sqlInstanceID), rpc.DefaultClass)
 		if err == nil || timeutil.Since(firstConnectionAttempt) > timeout {
 			break

@@ -40,11 +40,11 @@ type Retry struct {
 	isReset        bool
 }
 
-// StartWithCtx returns a new Retry initialized to some default values. The
-// Retry can then be used in an exponential-backoff retry loop. If the provided
-// context is canceled (see Context.Done), the retry loop ends early, but will
-// always run at least once.
-func StartWithCtx(ctx context.Context, opts Options) Retry {
+// Start returns a new Retry initialized to some default values. The Retry can
+// then be used in an exponential-backoff retry loop. If the provided context is
+// canceled (see Context.Done), the retry loop ends early, but will always run
+// at least once.
+func Start(ctx context.Context, opts Options) Retry {
 	if opts.InitialBackoff == 0 {
 		opts.InitialBackoff = 50 * time.Millisecond
 	}
@@ -162,7 +162,7 @@ func (r *Retry) CurrentAttempt() int {
 // return is prompted by a successful invocation of `fn`.
 func (opts Options) Do(ctx context.Context, fn func(ctx context.Context) error) error {
 	var err error
-	for r := StartWithCtx(ctx, opts); r.Next(); {
+	for r := Start(ctx, opts); r.Next(); {
 		err = fn(ctx)
 		if err == nil {
 			return nil
