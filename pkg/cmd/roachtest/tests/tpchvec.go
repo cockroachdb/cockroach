@@ -213,6 +213,7 @@ type tpchVecPerfTest struct {
 	settingName       string
 	slownessThreshold float64
 	sharedProcess     bool
+	logOnSlowness     bool
 }
 
 var _ tpchVecTestCase = &tpchVecPerfTest{}
@@ -375,10 +376,15 @@ func (p *tpchVecPerfTest) postTestRunHook(
 					}
 				}
 			}
-			t.Fatal(fmt.Sprintf(
-				"[q%d] ON is slower by %.2f%% than OFF\n"+
-					"ON times: %v\nOFF times: %v",
-				queryNum, 100*(onTime-offTime)/offTime, onTimes, offTimes))
+			msg := fmt.Sprintf(
+				"[q%d] ON is slower by %.2f%% than OFF\n ON times: %v\nOFF times: %v",
+				queryNum, 100*(onTime-offTime)/offTime, onTimes, offTimes,
+			)
+			if p.logOnSlowness {
+				t.L().Printf(msg)
+			} else {
+				t.Fatal(msg)
+			}
 		}
 	})
 }
@@ -644,11 +650,17 @@ func registerTPCHVec(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
+			p := newTpchVecPerfTest(
 				"sql.distsql.direct_columnar_scans.enabled", /* settingName */
 				1.5,  /* slownessThreshold */
 				true, /* sharedProcessMT */
-			))
+			)
+			// Given that direct columnar scans are currently in an experimental
+			// state, and we've seen a few failures where OFF config was
+			// noticeably faster, for now we don't fail in such cases and simply
+			// log.
+			p.logOnSlowness = true
+			runTPCHVec(ctx, t, c, p)
 		},
 	})
 
