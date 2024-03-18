@@ -317,6 +317,12 @@ func create(
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
 	// Append is almost always more efficient than O_RDRW on most modern file systems.
 	f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
+	if err == nil {
+		// os.OpenFile above applied CockroachDB's umask to the fileMode, but we want to apply the
+		// specified permissions literally. This os.Chmod call will broaden the permissions to the
+		// exact value requested.
+		err = os.Chmod(fname, fileMode)
+	}
 	return f, updatedRotation, fname, symlink, errors.Wrapf(err, "log: cannot create output file")
 }
 
