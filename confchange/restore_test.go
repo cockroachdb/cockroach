@@ -21,6 +21,8 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/stretchr/testify/assert"
+
 	pb "go.etcd.io/raft/v3/raftpb"
 	"go.etcd.io/raft/v3/tracker"
 )
@@ -90,8 +92,7 @@ func TestRestore(t *testing.T) {
 			LastIndex: 10,
 		}
 		cfg, trk, err := Restore(chg, cs)
-		if err != nil {
-			t.Error(err)
+		if !assert.NoError(t, err) {
 			return false
 		}
 		chg.Tracker.Config = cfg
@@ -109,12 +110,9 @@ func TestRestore(t *testing.T) {
 		cs2 := chg.Tracker.ConfState()
 		// NB: cs.Equivalent does the same "sorting" dance internally, but let's
 		// test it a bit here instead of relying on it.
-		if reflect.DeepEqual(cs, cs2) && cs.Equivalent(cs2) == nil && cs2.Equivalent(cs) == nil {
+		if assert.Equal(t, cs, cs2) && assert.NoError(t, cs.Equivalent(cs2)) && assert.NoError(t, cs2.Equivalent(cs)) {
 			return true // success
 		}
-		t.Errorf(`
-before: %+#v
-after:  %+#v`, cs, cs2)
 		return false
 	}
 
@@ -134,9 +132,7 @@ after:  %+#v`, cs, cs2)
 		}
 	}
 
-	if err := quick.Check(func(cs rndConfChange) bool {
+	assert.NoError(t, quick.Check(func(cs rndConfChange) bool {
 		return f(pb.ConfState(cs))
-	}, &cfg); err != nil {
-		t.Error(err)
-	}
+	}, &cfg))
 }
