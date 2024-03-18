@@ -1,0 +1,404 @@
+# Test that we propagate statistics for virtual computed columns correctly.
+
+exec-ddl
+CREATE TABLE ab (a INT PRIMARY KEY, b INT AS (a % 10) VIRTUAL, INDEX (b))
+----
+
+# Use statistics from:
+#   INSERT INTO ab (a) SELECT generate_series(0, 19)
+# Assume we have collected statistics on b, including histograms.
+exec-ddl
+ALTER TABLE ab INJECT STATISTICS '[
+    {
+        "avg_size": 8,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2024-03-06 19:42:11.250622",
+        "distinct_count": 20,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "0"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "3"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "4"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "5"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "6"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "7"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "8"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "9"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "10"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "11"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "12"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "13"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "14"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "15"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "16"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "17"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "18"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "19"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "null_count": 0,
+        "row_count": 20
+    },
+    {
+        "avg_size": 8,
+        "columns": [
+            "b"
+        ],
+        "created_at": "2024-03-06 19:42:11.250622",
+        "distinct_count": 10,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 2,
+                "num_range": 0,
+                "upper_bound": "0"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 2,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 2,
+                "num_range": 0,
+                "upper_bound": "2"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 2,
+                "num_range": 0,
+                "upper_bound": "3"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 2,
+                "num_range": 0,
+                "upper_bound": "4"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 2,
+                "num_range": 0,
+                "upper_bound": "5"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 2,
+                "num_range": 0,
+                "upper_bound": "6"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 2,
+                "num_range": 0,
+                "upper_bound": "7"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 2,
+                "num_range": 0,
+                "upper_bound": "8"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 2,
+                "num_range": 0,
+                "upper_bound": "9"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "null_count": 0,
+        "row_count": 20
+    }
+]'
+----
+
+# Check that we can call colStatScan with a virtual column, even without the
+# usual project in place.
+norm colstat=2
+SELECT a FROM ab
+----
+scan ab
+ ├── columns: a:1(int!null)
+ ├── computed column expressions
+ │    └── b:2
+ │         └── a:1 % 10 [type=int]
+ ├── stats: [rows=20, distinct(2)=10, null(2)=0]
+ │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+ │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │   virtcolstats: (2)
+ └── key: (1)
+
+# It should also work with the usual project on top.
+norm colstat=2
+SELECT b FROM ab
+----
+project
+ ├── columns: b:2(int!null)
+ ├── immutable
+ ├── stats: [rows=20, distinct(2)=10, null(2)=0]
+ │   virtcolstats: (2)
+ ├── scan ab
+ │    ├── columns: a:1(int!null)
+ │    ├── computed column expressions
+ │    │    └── b:2
+ │    │         └── a:1 % 10 [type=int]
+ │    ├── stats: [rows=20, distinct(2)=10, null(2)=0]
+ │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │   virtcolstats: (2)
+ │    └── key: (1)
+ └── projections
+      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+
+# Push a select below the project.
+norm colstat=1 colstat=2 expect=PushSelectIntoProject
+SELECT b FROM ab WHERE a % 2 = 0
+----
+project
+ ├── columns: b:2(int!null)
+ ├── immutable
+ ├── stats: [rows=6.666667, distinct(1)=6.66667, null(1)=0, distinct(2)=5.55556, null(2)=0]
+ │   virtcolstats: (2)
+ ├── select
+ │    ├── columns: a:1(int!null)
+ │    ├── immutable
+ │    ├── stats: [rows=6.666667, distinct(1)=6.66667, null(1)=0, distinct(2)=5.55556, null(2)=0]
+ │    │   virtcolstats: (2)
+ │    ├── key: (1)
+ │    ├── scan ab
+ │    │    ├── columns: a:1(int!null)
+ │    │    ├── computed column expressions
+ │    │    │    └── b:2
+ │    │    │         └── a:1 % 10 [type=int]
+ │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
+ │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
+ │    │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │    │   virtcolstats: (2)
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (a:1 % 2) = 0 [type=bool, outer=(1), immutable]
+ └── projections
+      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+
+# TODO(michae2): We need special handling for InlineSelectVirtualColumns, so
+# skip filtering on b until we have that.
+
+# Distinct on top of the project.
+norm
+SELECT DISTINCT b FROM ab
+----
+distinct-on
+ ├── columns: b:2(int!null)
+ ├── grouping columns: b:2(int!null)
+ ├── immutable
+ ├── stats: [rows=10, distinct(2)=10, null(2)=0]
+ │   virtcolstats: (2)
+ ├── key: (2)
+ └── project
+      ├── columns: b:2(int!null)
+      ├── immutable
+      ├── stats: [rows=20, distinct(2)=10, null(2)=0]
+      │   virtcolstats: (2)
+      ├── scan ab
+      │    ├── columns: a:1(int!null)
+      │    ├── computed column expressions
+      │    │    └── b:2
+      │    │         └── a:1 % 10 [type=int]
+      │    ├── stats: [rows=20, distinct(2)=10, null(2)=0]
+      │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+      │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+      │    │   virtcolstats: (2)
+      │    └── key: (1)
+      └── projections
+           └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+
+# Push a join below the project.
+opt colstat=1 colstat=2
+SELECT ab1.b FROM ab ab1 JOIN ab ab2 ON ab1.a = ab2.a + 1 WHERE ab2.a < 5
+----
+project
+ ├── columns: b:2(int!null)
+ ├── immutable
+ ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=4.01263, null(2)=0]
+ │   virtcolstats: (2,6)
+ └── project
+      ├── columns: b:2(int!null) a:1(int!null) column9:9(int!null)
+      ├── immutable
+      ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=4.01263, null(2)=0, distinct(9)=5, null(9)=0]
+      │   virtcolstats: (2,6)
+      ├── fd: (1)-->(2), (1)==(9), (9)==(1)
+      ├── inner-join (lookup ab)
+      │    ├── columns: a:1(int!null) column9:9(int!null)
+      │    ├── key columns: [9] = [1]
+      │    ├── lookup columns are key
+      │    ├── immutable
+      │    ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(9)=5, null(9)=0]
+      │    │   virtcolstats: (2,6)
+      │    ├── fd: (1)==(9), (9)==(1)
+      │    ├── project
+      │    │    ├── columns: column9:9(int!null)
+      │    │    ├── immutable
+      │    │    ├── stats: [rows=5, distinct(9)=5, null(9)=0]
+      │    │    │   virtcolstats: (6)
+      │    │    ├── scan ab
+      │    │    │    ├── columns: a:5(int!null)
+      │    │    │    ├── constraint: /5: [ - /4]
+      │    │    │    ├── stats: [rows=5, distinct(5)=5, null(5)=0]
+      │    │    │    │   histogram(5)=  0  1  0  1  0  1  0  1  0  1
+      │    │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4
+      │    │    │    │   virtcolstats: (6)
+      │    │    │    └── key: (5)
+      │    │    └── projections
+      │    │         └── a:5 + 1 [as=column9:9, type=int, outer=(5), immutable]
+      │    └── filters (true)
+      └── projections
+           └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+
+# Push a limit below the project.
+norm colstat=1 colstat=2
+SELECT a, b FROM ab ORDER BY a LIMIT 5
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=4.375, null(2)=0]
+ │   virtcolstats: (2)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── ordering: +1
+ ├── limit
+ │    ├── columns: a:1(int!null)
+ │    ├── internal-ordering: +1
+ │    ├── cardinality: [0 - 5]
+ │    ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=4.375, null(2)=0]
+ │    │   virtcolstats: (2)
+ │    ├── key: (1)
+ │    ├── ordering: +1
+ │    ├── scan ab
+ │    │    ├── columns: a:1(int!null)
+ │    │    ├── computed column expressions
+ │    │    │    └── b:2
+ │    │    │         └── a:1 % 10 [type=int]
+ │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
+ │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
+ │    │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │    │   virtcolstats: (2)
+ │    │    ├── key: (1)
+ │    │    ├── ordering: +1
+ │    │    └── limit hint: 5.00
+ │    └── 5 [type=int]
+ └── projections
+      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
