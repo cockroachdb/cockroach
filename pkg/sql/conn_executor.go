@@ -484,13 +484,15 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		DB: NewInternalDB(
 			s, MemoryMetrics{}, sqlStatsInternalExecutorMonitor,
 		),
-		ClusterID:      s.cfg.NodeInfo.LogicalClusterID,
-		SQLIDContainer: cfg.NodeInfo.NodeID,
-		JobRegistry:    s.cfg.JobRegistry,
-		Knobs:          cfg.SQLStatsTestingKnobs,
-		FlushCounter:   serverMetrics.StatsMetrics.SQLStatsFlushStarted,
-		FailureCounter: serverMetrics.StatsMetrics.SQLStatsFlushFailure,
-		FlushDuration:  serverMetrics.StatsMetrics.SQLStatsFlushDuration,
+		ClusterID:               s.cfg.NodeInfo.LogicalClusterID,
+		SQLIDContainer:          cfg.NodeInfo.NodeID,
+		JobRegistry:             s.cfg.JobRegistry,
+		Knobs:                   cfg.SQLStatsTestingKnobs,
+		FlushCounter:            serverMetrics.StatsMetrics.SQLStatsFlushStarted,
+		FlushDoneSignalsIgnored: serverMetrics.StatsMetrics.SQLStatsFlushDoneSignalsIgnored,
+		FlushedFingerprintCount: serverMetrics.StatsMetrics.SQLStatsFlushFingerprintCount,
+		FailureCounter:          serverMetrics.StatsMetrics.SQLStatsFlushFailure,
+		FlushDuration:           serverMetrics.StatsMetrics.SQLStatsFlushDuration,
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
@@ -588,7 +590,10 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(MetaReportedSQLStatsMemCurBytes),
 			DiscardedStatsCount:                 metric.NewCounter(MetaDiscardedSQLStats),
 			SQLStatsFlushStarted:                metric.NewCounter(MetaSQLStatsFlushStarted),
-			SQLStatsFlushFailure:                metric.NewCounter(MetaSQLStatsFlushFailure),
+			SQLStatsFlushDoneSignalsIgnored:     metric.NewCounter(MetaSQLStatsFlushDoneSignalsIgnored),
+			SQLStatsFlushFingerprintCount:       metric.NewCounter(MetaSQLStatsFlushFingerprintCount),
+
+			SQLStatsFlushFailure: metric.NewCounter(MetaSQLStatsFlushFailure),
 			SQLStatsFlushDuration: metric.NewHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     MetaSQLStatsFlushDuration,
