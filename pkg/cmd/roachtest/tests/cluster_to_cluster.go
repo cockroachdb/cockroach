@@ -531,14 +531,14 @@ func (rd *replicationDriver) setupC2C(
 
 	overrideSrcAndDestTenantTTL(t, srcSQL, destSQL, rd.rs.overrideTenantTTL)
 
-	createTenantAdminRole(t, "src-system", srcSQL)
-	createTenantAdminRole(t, "dst-system", destSQL)
+	deprecatedCreateTenantAdminRole(t, "src-system", srcSQL)
+	deprecatedCreateTenantAdminRole(t, "dst-system", destSQL)
 
 	srcTenantID, destTenantID := 2, 2
 	srcTenantName := "src-tenant"
 	destTenantName := "destination-tenant"
 
-	createInMemoryTenant(ctx, t, c, srcTenantName, srcCluster, true)
+	deprecatedCreateInMemoryTenant(ctx, t, c, srcTenantName, srcCluster, true)
 
 	pgURL, err := copyPGCertsAndMakeURL(ctx, t, c, srcNode, srcClusterSetting.PGUrlCertsDir, addr[0])
 	require.NoError(t, err)
@@ -983,7 +983,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.metrics.cutoverEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
 
 	rd.t.L().Printf("starting the destination tenant")
-	conn := startInMemoryTenant(ctx, rd.t, rd.c, rd.setup.dst.name, rd.setup.dst.gatewayNodes)
+	conn := deprecatedStartInMemoryTenant(ctx, rd.t, rd.c, rd.setup.dst.name, rd.setup.dst.gatewayNodes)
 	conn.Close()
 
 	rd.metrics.export(rd.t, len(rd.setup.src.nodes))
