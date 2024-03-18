@@ -40,12 +40,6 @@ type Retry struct {
 	isReset        bool
 }
 
-// Start returns a new Retry initialized to some default values. The Retry can
-// then be used in an exponential-backoff retry loop.
-func Start(opts Options) Retry {
-	return StartWithCtx(context.Background(), opts)
-}
-
 // StartWithCtx returns a new Retry initialized to some default values. The
 // Retry can then be used in an exponential-backoff retry loop. If the provided
 // context is canceled (see Context.Done), the retry loop ends early, but will

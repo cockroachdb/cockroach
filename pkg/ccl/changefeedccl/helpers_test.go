@@ -678,7 +678,7 @@ var jobRecordRetryOpts = retry.Options{
 
 // waitForCheckpoint waits for the specified job to have a non-empty checkpoint
 func waitForCheckpoint(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Registry) {
-	for r := retry.Start(jobRecordRetryOpts); ; {
+	for r := retry.StartWithCtx(context.Background(), jobRecordRetryOpts); ; {
 		t.Log("waiting for checkpoint")
 		progress := loadProgress(t, jf, jr)
 		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
@@ -693,7 +693,7 @@ func waitForCheckpoint(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Reg
 
 // waitForHighwater waits for the specified job to have a non-nil highwater.
 func waitForHighwater(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Registry) {
-	for r := retry.Start(jobRecordRetryOpts); ; {
+	for r := retry.StartWithCtx(context.Background(), jobRecordRetryOpts); ; {
 		t.Log("waiting for highwater")
 		progress := loadProgress(t, jf, jr)
 		if hw := progress.GetHighWater(); hw != nil && !hw.IsEmpty() {

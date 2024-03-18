@@ -179,7 +179,7 @@ func (m *Manager) WaitForNoVersion(
 	// takes longer than the lease duration.
 	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForNoVersion)
 	defer decAfterWait()
-	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+	for lastCount, r := 0, retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		now := m.storage.clock.Now()
 		count, err := CountLeases(ctx, m.storage.db, m.Codec(), cachedDatabaseRegions, m.settings, versions, now, true /*forAnyVersion*/)
 		if err != nil {
@@ -224,7 +224,7 @@ func (m *Manager) WaitForOneVersion(
 	// takes longer than the lease duration.
 	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForOneVersion)
 	defer decAfterWait()
-	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+	for lastCount, r := 0, retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		if err := m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			// Use the lower-level MaybeGetDescriptorByIDUnvalidated to avoid
 			// performing validation while waiting for leases to drain.

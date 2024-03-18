@@ -92,7 +92,7 @@ func TestLeasingClusterVersionStarvation(t *testing.T) {
 			return
 		}
 		resumeBump <- struct{}{}
-		for retry := retry.Start(retry.Options{}); retry.Next(); {
+		for retry := retry.StartWithCtx(ctx, retry.Options{}); retry.Next(); {
 			_, err = tx.Exec("SELECT name from system.settings where name='version' FOR UPDATE")
 			if err != nil {
 				rollbackErr := tx.Rollback()

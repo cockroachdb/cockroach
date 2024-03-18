@@ -155,7 +155,7 @@ func (m *Manager) PublishMultiple(
 ) (map[descpb.ID]catalog.Descriptor, error) {
 	errLeaseVersionChanged := errors.New("lease version changed")
 	// Retry while getting errLeaseVersionChanged.
-	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
+	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// Wait until there are no unexpired leases on the previous versions
 		// of the descriptors.
 		expectedVersions := make(map[descpb.ID]descpb.DescriptorVersion)

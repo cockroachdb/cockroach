@@ -255,7 +255,7 @@ CREATE INDEX foo ON t.test (v)
 	}
 
 	// Wait until index is created.
-	for r := retry.Start(retryOpts); r.Next(); {
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
 			kvDB, keys.SystemSQLCodec, "t", "test")
 		if len(tableDesc.PublicNonPrimaryIndexes()) == 1 {
@@ -281,7 +281,7 @@ CREATE INDEX foo ON t.test (v)
 
 	mTest.Exec(t, `ALTER INDEX t.test@foo RENAME TO ufo`)
 
-	for r := retry.Start(retryOpts); r.Next(); {
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		// Ensure that the version gets incremented.
 		tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
 			kvDB, keys.SystemSQLCodec, "t", "test")
@@ -302,7 +302,7 @@ CREATE INDEX foo ON t.test (v)
 		mTest.Exec(t, fmt.Sprintf(`CREATE INDEX foo%d ON t.test (v)`, i))
 	}
 	// Wait until indexes are created.
-	for r := retry.Start(retryOpts); r.Next(); {
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
 			kvDB, keys.SystemSQLCodec, "t", "test")
 		if len(tableDesc.PublicNonPrimaryIndexes()) == count+1 {
