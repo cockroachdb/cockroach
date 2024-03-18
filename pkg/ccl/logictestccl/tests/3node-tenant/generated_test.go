@@ -2216,6 +2216,13 @@ func TestTenantLogic_udf_delete(
 	runLogicTest(t, "udf_delete")
 }
 
+func TestTenantLogic_udf_deps(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_deps")
+}
+
 func TestTenantLogic_udf_fk(
 	t *testing.T,
 ) {
