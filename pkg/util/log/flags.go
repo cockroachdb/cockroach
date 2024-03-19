@@ -165,7 +165,7 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 		bt, bf := true, false
 		mf := logconfig.ByteSize(math.MaxInt64)
 		f := logconfig.DefaultFileFormat
-		fm := logconfig.FilePermissions(0o644)
+		fm := logconfig.DefaultFilePerms
 		fakeConfig := logconfig.FileSinkConfig{
 			FileDefaults: logconfig.FileDefaults{
 				CommonSinkConfig: logconfig.CommonSinkConfig{
