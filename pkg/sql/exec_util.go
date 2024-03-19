@@ -1088,10 +1088,10 @@ var (
 		Measurement: "Discarded SQL Stats",
 		Unit:        metric.Unit_COUNT,
 	}
-	MetaSQLStatsFlushStarted = metric.Metadata{
-		Name:        "sql.stats.flush.count",
-		Help:        "Number of times SQL Stats are flushed to persistent storage",
-		Measurement: "SQL Stats Flush",
+	MetaSQLStatsFlushesSuccessful = metric.Metadata{
+		Name:        "sql.stats.flushes.successful",
+		Help:        "Number of times SQL Stats are flushed successfully to persistent storage",
+		Measurement: "successful flushes",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaSQLStatsFlushFingerprintCount = metric.Metadata{
@@ -1108,16 +1108,16 @@ var (
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
-	MetaSQLStatsFlushFailure = metric.Metadata{
-		Name:        "sql.stats.flush.error",
-		Help:        "Number of errors encountered when flushing SQL Stats",
-		Measurement: "SQL Stats Flush",
+	MetaSQLStatsFlushesFailed = metric.Metadata{
+		Name:        "sql.stats.flushes.failed",
+		Help:        "Number of attempted SQL Stats flushes that failed with errors",
+		Measurement: "failed flushes",
 		Unit:        metric.Unit_COUNT,
 	}
-	MetaSQLStatsFlushDuration = metric.Metadata{
-		Name:        "sql.stats.flush.duration",
-		Help:        "Time took to in nanoseconds to complete SQL Stats flush",
-		Measurement: "SQL Stats Flush",
+	MetaSQLStatsFlushLatency = metric.Metadata{
+		Name:        "sql.stats.flush.latency",
+		Help:        "The latency of SQL Stats flushes to persistent storage. Includes failed flush attempts",
+		Measurement: "nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	MetaSQLStatsRemovedRows = metric.Metadata{

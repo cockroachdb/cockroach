@@ -168,12 +168,13 @@ func (s *PersistedSQLStats) doFlush(ctx context.Context, workFn func() error, er
 
 	defer func() {
 		if err != nil {
-			s.cfg.FailureCounter.Inc(1)
+			s.cfg.FlushesFailed.Inc(1)
 			log.Warningf(ctx, "%s: %s", errMsg, err)
+		} else {
+			s.cfg.FlushesSuccessful.Inc(1)
 		}
 		flushDuration := s.getTimeNow().Sub(flushBegin)
-		s.cfg.FlushDuration.RecordValue(flushDuration.Nanoseconds())
-		s.cfg.FlushCounter.Inc(1)
+		s.cfg.FlushLatency.RecordValue(flushDuration.Nanoseconds())
 	}()
 
 	err = workFn()

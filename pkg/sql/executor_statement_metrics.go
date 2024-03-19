@@ -75,11 +75,11 @@ type StatsMetrics struct {
 
 	DiscardedStatsCount *metric.Counter
 
-	SQLStatsFlushStarted            *metric.Counter
+	SQLStatsFlushesSuccessful       *metric.Counter
 	SQLStatsFlushDoneSignalsIgnored *metric.Counter
 	SQLStatsFlushFingerprintCount   *metric.Counter
-	SQLStatsFlushFailure            *metric.Counter
-	SQLStatsFlushDuration           metric.IHistogram
+	SQLStatsFlushesFailed           *metric.Counter
+	SQLStatsFlushLatency            metric.IHistogram
 	SQLStatsRemovedRows             *metric.Counter
 
 	SQLTxnStatsCollectionOverhead metric.IHistogram
