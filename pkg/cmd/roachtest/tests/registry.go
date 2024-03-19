@@ -154,4 +154,5 @@ func RegisterTests(r registry.Registry) {
 	registerYCSB(r)
 	registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r)
 	registerMultiRegionMixedVersion(r)
+	registerMultiRegionSystemDatabase(r)
 }
