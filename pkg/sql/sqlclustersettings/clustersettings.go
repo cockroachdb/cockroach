@@ -79,6 +79,15 @@ var SecondaryTenantsAllZoneConfigsEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+// MultiRegionSystemDatabaseEnabled controls if system tenants are allowed
+// to be set up to be multi-region.
+var MultiRegionSystemDatabaseEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"sql.multiregion.preview_multiregion_system_database.enabled",
+	"enable option to set up system database as multi-region",
+	false,
+)
+
 // RequireSystemTenantOrClusterSetting returns a setting disabled error if
 // executed from inside a secondary tenant that does not have the specified
 // cluster setting.
