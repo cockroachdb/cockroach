@@ -660,7 +660,15 @@ func addSSTablePreApply(
 		)
 
 		start := storage.EngineKey{Key: sst.Span.Key}
-		end := storage.EngineKey{Key: sst.Span.EndKey}
+		// NB: sst.Span.EndKey may be nil if the span represents a single key. In
+		// that case, we produce an inclusive end bound equal to the start.
+		// Otherwise we produce an exclusive end bound.
+		end := start
+		endInclusive := true
+		if sst.Span.EndKey != nil {
+			end = storage.EngineKey{Key: sst.Span.EndKey}
+			endInclusive = false
+		}
 		var syntheticSuffix []byte
 		if sst.RemoteRewriteTimestamp.IsSet() {
 			syntheticSuffix = storage.EncodeMVCCTimestampSuffix(sst.RemoteRewriteTimestamp)
@@ -671,13 +679,13 @@ func addSSTablePreApply(
 		}
 
 		externalFile := pebble.ExternalFile{
-			Locator: remote.Locator(sst.RemoteFileLoc),
-			ObjName: sst.RemoteFilePath,
-			Size:    sst.ApproximatePhysicalSize,
-			Bounds: pebble.KeyRange{
-				Start: start.Encode(),
-				End:   end.Encode(),
-			},
+			Locator:           remote.Locator(sst.RemoteFileLoc),
+			ObjName:           sst.RemoteFilePath,
+			Size:              sst.ApproximatePhysicalSize,
+			StartKey:          start.Encode(),
+			EndKey:            end.Encode(),
+			EndKeyIsInclusive: endInclusive,
+
 			SyntheticSuffix: syntheticSuffix,
 			SyntheticPrefix: syntheticPrefix,
 			// TODO(dt): pass pebble the backing file size to avoid a stat call.
