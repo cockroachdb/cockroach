@@ -38,7 +38,7 @@ func runDecrypt(cmd *cobra.Command, args []string) (returnErr error) {
 	defer env.Close()
 
 	// Open the specified file through the FS, decrypting it.
-	f, err := env.DefaultFS.Open(inPath)
+	f, err := env.Open(inPath)
 	if err != nil {
 		return errors.Wrapf(err, "could not open input file %s", inPath)
 	}

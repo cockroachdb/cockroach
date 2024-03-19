@@ -93,7 +93,7 @@ func getInitialStateEngine(
 	}
 
 	// We now copy the initial state to the desired FS.
-	ok, err := vfs.Clone(vfs.Default, env.DefaultFS, dataDir, env.Dir, vfs.CloneSync)
+	ok, err := vfs.Clone(vfs.Default, env, dataDir, env.Dir, vfs.CloneSync)
 	require.NoError(b, err)
 	require.True(b, ok)
 

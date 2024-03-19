@@ -269,11 +269,10 @@ func WALFailover(mode base.WALFailoverMode, storeEnvs fs.Envs) ConfigOption {
 			secondaryEnv.Close()
 		})
 
-		secondaryFS := secondaryEnv.DefaultFS
 		secondary := wal.Dir{
-			FS: secondaryFS,
+			FS: secondaryEnv,
 			// Use auxiliary/wals-among-stores within the other stores directory.
-			Dirname: secondaryFS.PathJoin(secondaryEnv.Dir, base.AuxiliaryDir, "wals-among-stores"),
+			Dirname: secondaryEnv.PathJoin(secondaryEnv.Dir, base.AuxiliaryDir, "wals-among-stores"),
 		}
 
 		if mode == base.WALFailoverAmongStores {
@@ -352,7 +351,7 @@ func Open(
 	cfg.Env = env
 	cfg.Settings = settings
 	cfg.Opts = DefaultPebbleOptions()
-	cfg.Opts.FS = env.DefaultFS
+	cfg.Opts.FS = env
 	cfg.Opts.ReadOnly = env.IsReadOnly()
 	for _, opt := range opts {
 		if err := opt(&cfg); err != nil {

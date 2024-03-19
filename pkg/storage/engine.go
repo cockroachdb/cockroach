@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/sstable"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
@@ -1080,8 +1079,6 @@ type Engine interface {
 	// of the callback since it could cause a deadlock (since the callback may
 	// be invoked while holding mutexes).
 	RegisterFlushCompletedCallback(cb func())
-	// Filesystem functionality.
-	vfs.FS
 	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used. If spans is not empty, the checkpoint excludes
