@@ -178,4 +178,67 @@ CALL get_rows(3);
 ----
 NOTICE: (1,)
 
+subtest exit_continue_cond
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(a INT, b INT, c INT) AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    LOOP
+      RAISE NOTICE 'iteration %', i;
+      i := i + 1;
+      CONTINUE WHEN i = a;
+      RAISE NOTICE 'new value of i: %', i;
+      EXIT WHEN i >= b;
+      CONTINUE WHEN i <> c;
+      RAISE NOTICE 'returning';
+      RETURN;
+    END LOOP;
+    RAISE NOTICE 'exited loop';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p(2, 1, 4);
+----
+NOTICE: iteration 0
+NOTICE: new value of i: 1
+NOTICE: exited loop
+
+query T noticetrace
+CALL p(2, 3, 4);
+----
+NOTICE: iteration 0
+NOTICE: new value of i: 1
+NOTICE: iteration 1
+NOTICE: iteration 2
+NOTICE: new value of i: 3
+NOTICE: exited loop
+
+query T noticetrace
+CALL p(2, 4, 4);
+----
+NOTICE: iteration 0
+NOTICE: new value of i: 1
+NOTICE: iteration 1
+NOTICE: iteration 2
+NOTICE: new value of i: 3
+NOTICE: iteration 3
+NOTICE: new value of i: 4
+NOTICE: exited loop
+
+query T noticetrace
+CALL p(2, 5, 4);
+----
+NOTICE: iteration 0
+NOTICE: new value of i: 1
+NOTICE: iteration 1
+NOTICE: iteration 2
+NOTICE: new value of i: 3
+NOTICE: iteration 3
+NOTICE: new value of i: 4
+NOTICE: returning
+
 subtest end
