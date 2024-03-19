@@ -33,7 +33,10 @@ func registerJasyncSQL(r registry.Registry) {
 		// jasync does not support changing the default sslmode for postgresql, defaulting
 		// sslmode=disable. See: https://github.com/jasync-sql/jasync-sql/issues/422
 		// TODO(darrylwong): If the above issue is addressed we can enable secure mode
-		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(install.SecureOption(false)), c.All())
+		c.Start(
+			ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB),
+			install.MakeClusterSettings(install.SecureOption(false)),
+		)
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {

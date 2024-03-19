@@ -100,7 +100,7 @@ func importBankDataSplit(
 
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
-	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings())
 	runImportBankDataSplit(ctx, rows, ranges, t, c)
 	return dest
 }
@@ -635,13 +635,13 @@ func runBackupMVCCRangeTombstones(
 ) {
 	if !config.skipClusterSetup {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
-		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings())
 	}
 	t.Status("starting csv servers")
 	c.Run(ctx, option.WithNodes(c.All()), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 	// c2c tests still use the old multitenant API, which does not support non root authentication
-	conn := c.Conn(ctx, t.L(), 1, option.TenantName(config.tenantName), option.AuthMode(install.AuthRootCert))
+	conn := c.Conn(ctx, t.L(), 1, option.VirtualClusterName(config.tenantName), option.AuthMode(install.AuthRootCert))
 
 	// Configure cluster.
 	t.Status("configuring cluster")

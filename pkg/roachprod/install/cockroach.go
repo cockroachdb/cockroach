@@ -136,11 +136,11 @@ type StartOpts struct {
 	EncryptedStores bool
 
 	// -- Options that apply only to the StartServiceForVirtualCluster target --
-	VirtualClusterName string
-	VirtualClusterID   int
-	SQLInstance        int
-	KVAddrs            string
-	KVCluster          *SyncedCluster
+	VirtualClusterName     string
+	VirtualClusterID       int
+	VirtualClusterLocation string // where separate process virtual clusters will be started
+	SQLInstance            int
+	StorageCluster         *SyncedCluster
 }
 
 func (s *StartOpts) IsVirtualCluster() bool {
@@ -416,7 +416,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 
 		l.Printf("virtual cluster ID: %d", startOpts.VirtualClusterID)
 
-		if err := c.distributeTenantCerts(ctx, l, startOpts.KVCluster, startOpts.VirtualClusterID); err != nil {
+		if err := c.distributeTenantCerts(ctx, l, startOpts.StorageCluster, startOpts.VirtualClusterID); err != nil {
 			return err
 		}
 	} else {
@@ -459,8 +459,8 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	// and convenient to manage.
 	if !startOpts.SkipInit {
 		storageCluster := c
-		if startOpts.KVCluster != nil {
-			storageCluster = startOpts.KVCluster
+		if startOpts.StorageCluster != nil {
+			storageCluster = startOpts.StorageCluster
 		}
 
 		// We use the `storageCluster` even if starting a virtual cluster
@@ -562,7 +562,7 @@ const (
 	DefaultPassword = "cockroachdb"
 )
 
-// NodeURL constructs a postgres URL. If sharedTenantName is not empty, it will
+// NodeURL constructs a postgres URL. If virtualClusterName is not empty, it will
 // be used as the virtual cluster name in the URL. This is used to connect to a
 // shared process running services for multiple virtual clusters.
 func (c *SyncedCluster) NodeURL(
@@ -924,7 +924,12 @@ func (c *SyncedCluster) generateStartArgs(
 		args = append(args, fmt.Sprintf("--join=%s", strings.Join(addresses, ",")))
 	}
 	if startOpts.Target == StartServiceForVirtualCluster {
-		args = append(args, fmt.Sprintf("--kv-addrs=%s", startOpts.KVAddrs))
+		storageAddrs, err := startOpts.StorageCluster.allPublicAddrs(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		args = append(args, fmt.Sprintf("--kv-addrs=%s", storageAddrs))
 		args = append(args, fmt.Sprintf("--tenant-id=%d", startOpts.VirtualClusterID))
 	}
 
@@ -1279,7 +1284,7 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts,
 ) (int, error) {
 	runSQL := func(stmt string) (string, error) {
-		results, err := startOpts.KVCluster.ExecSQL(ctx, l, startOpts.KVCluster.Nodes[:1], "", 0, []string{
+		results, err := startOpts.StorageCluster.ExecSQL(ctx, l, startOpts.StorageCluster.Nodes[:1], "", 0, []string{
 			"--format", "csv", "-e", stmt,
 		})
 		if err != nil {

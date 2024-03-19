@@ -34,19 +34,16 @@ func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluste
 
 	// Start a virtual cluster.
 	const virtualClusterName = "acceptance-tenant"
-	const sqlInstance = 0 // only one instance of this virtual cluster
 	virtualClusterNode := c.Node(1)
 	c.StartServiceForVirtualCluster(
-		ctx, t.L(), virtualClusterNode,
-		option.DefaultStartVirtualClusterOpts(virtualClusterName, sqlInstance),
+		ctx, t.L(),
+		option.StartVirtualClusterOpts(virtualClusterName, virtualClusterNode),
 		install.MakeClusterSettings(),
-		storageNodes,
 	)
 
 	virtualClusterURL := func() string {
 		urls, err := c.ExternalPGUrl(ctx, t.L(), virtualClusterNode, roachprod.PGURLOptions{
 			VirtualClusterName: virtualClusterName,
-			SQLInstance:        sqlInstance,
 		})
 		require.NoError(t, err)
 
@@ -64,12 +61,11 @@ func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluste
 	t.L().Printf("stopping the virtual cluster instance")
 	c.StopServiceForVirtualCluster(
 		ctx, t.L(),
-		option.DefaultStopVirtualClusterOpts(virtualClusterName, sqlInstance),
-		virtualClusterNode,
+		option.StopVirtualClusterOpts(virtualClusterName, virtualClusterNode),
 	)
 
 	db := c.Conn(
-		ctx, t.L(), virtualClusterNode[0], option.TenantName(virtualClusterName), option.SQLInstance(sqlInstance),
+		ctx, t.L(), virtualClusterNode[0], option.VirtualClusterName(virtualClusterName),
 	)
 	defer db.Close()
 
