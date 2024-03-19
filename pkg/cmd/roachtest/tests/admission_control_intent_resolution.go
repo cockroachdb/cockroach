@@ -65,7 +65,7 @@ func registerIntentResolutionOverload(r registry.Registry) {
 			err := c.StartGrafana(ctx, t.L(), promCfg)
 			require.NoError(t, err)
 
-			startOpts := option.DefaultStartOptsNoBackups()
+			startOpts := option.NewStartOpts(option.NoBackupSchedule)
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				"--vmodule=io_load_listener=2")
 			roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)

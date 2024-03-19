@@ -33,7 +33,7 @@ func registerPop(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		startOpts := option.DefaultStartOptsInMemory()
+		startOpts := option.NewStartOpts(sqlClientsInMemoryDB)
 		// pop expects secure clusters, indicated by cockroach_ssl, to have SQL Port 26259.
 		// See: https://github.com/gobuffalo/pop/blob/main/database.yml#L26-L28
 		startOpts.RoachprodOpts.SQLPort = 26259

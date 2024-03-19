@@ -93,7 +93,7 @@ func registerIndexBackfill(r registry.Registry) {
 						// is not running.
 						c.Run(ctx, option.WithNodes(c.All()), fmt.Sprintf("cp %s ./cockroach", path))
 						settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
-						startOpts := option.DefaultStartOptsNoBackups()
+						startOpts := option.NewStartOpts(option.NoBackupSchedule)
 						roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
 						if err := c.StartE(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes)); err != nil {
 							t.Fatal(err)
@@ -151,7 +151,7 @@ func registerIndexBackfill(r registry.Registry) {
 			// large index backfills while it's running.
 			runTPCE(ctx, t, c, tpceOptions{
 				start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					startOpts := option.DefaultStartOptsNoBackups()
+					startOpts := option.NewStartOpts(option.NoBackupSchedule)
 					roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
 					roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
 					settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))

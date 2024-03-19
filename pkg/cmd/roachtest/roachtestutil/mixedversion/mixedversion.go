@@ -763,13 +763,12 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *H
 		return err
 	}
 
-	startOpts := option.DefaultStartOptsNoBackups()
 	clusterSettings := append(
 		append([]install.ClusterSettingOption{}, s.settings...),
 		install.BinaryOption(binaryPath),
 	)
 	return clusterupgrade.StartWithSettings(
-		ctx, l, h.runner.cluster, h.runner.crdbNodes, startOpts, clusterSettings...,
+		ctx, l, h.runner.cluster, h.runner.crdbNodes, startOpts(), clusterSettings...,
 	)
 }
 
@@ -849,12 +848,7 @@ func (s restartWithNewBinaryStep) Run(
 		l,
 		h.runner.cluster,
 		h.runner.cluster.Node(s.node),
-		// Disable regular backups in mixed-version tests, as some tests
-		// check for running jobs and the scheduled backup may make
-		// things non-deterministic. In the future, we should change the
-		// default and add an API for tests to opt-out of the default
-		// scheduled backup if necessary.
-		option.DefaultStartOptsNoBackups(),
+		startOpts(),
 		s.version,
 		s.settings...,
 	)
@@ -974,6 +968,16 @@ func (s concurrentRunStep) Description() string {
 // made to it do not affect this step's view of the context.
 func newSingleStep(context *Context, impl singleStepProtocol, rng *rand.Rand) *singleStep {
 	return &singleStep{context: context.clone(), impl: impl, rng: rng}
+}
+
+// startOpts returns the start options used when starting (or
+// restarting) cockroach processes in mixedversion tests.  We disable
+// regular backups as some tests check for running jobs and the
+// scheduled backup may make things non-deterministic. In the future,
+// we should change the default and add an API for tests to opt-out of
+// the default scheduled backup if necessary.
+func startOpts() option.StartOpts {
+	return option.NewStartOpts(option.NoBackupSchedule)
 }
 
 // prefixedLogger returns a logger instance off of the given `l`

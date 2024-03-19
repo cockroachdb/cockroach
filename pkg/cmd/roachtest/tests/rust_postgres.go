@@ -33,7 +33,7 @@ func registerRustPostgres(r registry.Registry) {
 		t.Status("setting up cockroach")
 
 		// We hardcode port 5433 since that's the port rust-postgres expects.
-		startOpts := option.DefaultStartOptsInMemory()
+		startOpts := option.NewStartOpts(sqlClientsInMemoryDB)
 		startOpts.RoachprodOpts.SQLPort = 5433
 		// rust-postgres currently doesn't support changing the config through
 		// the environment, which means we can't pass it ssl connection details

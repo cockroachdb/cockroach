@@ -39,7 +39,7 @@ func runConnectionLatencyTest(
 
 	settings := install.MakeClusterSettings()
 	// Don't start a backup schedule as this roachtest reports roachperf results.
-	err = c.StartE(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings)
+	err = c.StartE(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings)
 	require.NoError(t, err)
 
 	urlTemplate := func(host string) string {

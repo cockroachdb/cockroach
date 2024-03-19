@@ -74,9 +74,13 @@ func runMultiTenantDistSQL(
 	for i := 0; i < numInstances; i++ {
 		node := (i % c.Spec().NodeCount) + 1
 		sqlInstance := i / c.Spec().NodeCount
-		instStartOps := option.DefaultStartVirtualClusterOpts(tenantName, sqlInstance)
+		instStartOps := option.StartVirtualClusterOpts(
+			tenantName, c.Node(node),
+			option.StorageCluster(storageNodes),
+			option.VirtualClusterInstance(sqlInstance),
+		)
 		t.L().Printf("Starting instance %d on node %d", i, node)
-		c.StartServiceForVirtualCluster(ctx, t.L(), c.Node(node), instStartOps, settings, storageNodes)
+		c.StartServiceForVirtualCluster(ctx, t.L(), instStartOps, settings)
 		nodes.Add(i + 1)
 	}
 
@@ -87,7 +91,7 @@ func runMultiTenantDistSQL(
 
 	m := c.NewMonitor(ctx, c.Nodes(1, 2, 3))
 
-	inst1Conn, err := c.ConnE(ctx, t.L(), 1, option.TenantName(tenantName))
+	inst1Conn, err := c.ConnE(ctx, t.L(), 1, option.VirtualClusterName(tenantName))
 	require.NoError(t, err)
 	_, err = inst1Conn.Exec("CREATE TABLE t(n INT, i INT,s STRING, PRIMARY KEY(n,i))")
 	require.NoError(t, err)
@@ -106,7 +110,7 @@ func runMultiTenantDistSQL(
 		m.Go(func(ctx context.Context) error {
 			node := (li % c.Spec().NodeCount) + 1
 			sqlInstance := li / c.Spec().NodeCount
-			dbi, err := c.ConnE(ctx, t.L(), node, option.TenantName(tenantName), option.SQLInstance(sqlInstance))
+			dbi, err := c.ConnE(ctx, t.L(), node, option.VirtualClusterName(tenantName), option.SQLInstance(sqlInstance))
 			require.NoError(t, err)
 			iter := 0
 			for {

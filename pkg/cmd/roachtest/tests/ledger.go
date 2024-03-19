@@ -42,7 +42,7 @@ func registerLedger(r registry.Registry) {
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 			// Don't start a scheduled backup on this perf sensitive roachtest that reports to roachperf.
-			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), roachNodes)
+			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), roachNodes)
 
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, roachNodes)
