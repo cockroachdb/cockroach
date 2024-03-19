@@ -386,11 +386,14 @@ func (ex *connExecutor) execStmtInOpenState(
 	os := ex.machine.CurState().(stateOpen)
 
 	isExtendedProtocol := portal != nil && portal.Stmt != nil
+	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
+
 	if isExtendedProtocol {
 		stmt = makeStatementFromPrepared(portal.Stmt, queryID)
 	} else {
-		stmt = makeStatement(parserStmt, queryID)
+		stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
 	}
+	stmtFingerprint := stmt.StmtNoConstants
 
 	var queryTimeoutTicker *time.Timer
 	var txnTimeoutTicker *time.Timer
@@ -607,6 +610,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		// TODO(radu): should we trim the "EXPLAIN ANALYZE (DEBUG)" part from
 		// stmt.SQL?
 
+		// Recompute statement fingerprint since the AST has changed.
+		flags := tree.FmtHideConstants | stmtFingerprintFmtMask
+		f := tree.NewFmtCtx(flags)
+		f.FormatNode(ast)
+		stmtFingerprint = f.CloseAndGetString()
+
 		// Clear any ExpectedTypes we set if we prepared this statement (they
 		// reflect the column types of the EXPLAIN itself and not those of the inner
 		// statement).
@@ -638,6 +647,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.ExpectedTypes = ps.Columns
 		stmt.StmtNoConstants = ps.StatementNoConstants
 		stmt.StmtSummary = ps.StatementSummary
+		stmtFingerprint = stmt.StmtNoConstants
 		res.ResetStmtType(ps.AST)
 
 		if e.DiscardRows {
@@ -815,10 +825,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		if p, ok := retPayload.(payloadWithError); ok {
 			execErr = p.errorCause()
 		}
-		f := tree.NewFmtCtx(tree.FmtHideConstants)
-		f.FormatNode(ast)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
-			f.CloseAndGetString(),
+			stmtFingerprint,
 			ex.implicitTxn(),
 			p.CurrentDatabase(),
 		)
@@ -929,6 +937,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				NumAnnotations:  stmt.NumAnnotations,
 			},
 			ex.server.cfg.GenerateID(),
+			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
 		)
 		var rawTypeHints []oid.Oid
 
@@ -2541,7 +2550,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		}
 
 		p := &ex.planner
-		stmt := makeStatement(parserStmt, ex.server.cfg.GenerateID())
+		stmt := makeStatement(parserStmt, ex.server.cfg.GenerateID(),
+			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)))
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
@@ -2552,10 +2562,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			execErr = p.errorCause()
 		}
 
-		f := tree.NewFmtCtx(tree.FmtHideConstants)
-		f.FormatNode(stmt.AST)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
-			f.CloseAndGetString(),
+			stmt.StmtNoConstants,
 			ex.implicitTxn(),
 			p.CurrentDatabase(),
 		)

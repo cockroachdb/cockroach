@@ -3828,22 +3828,29 @@ func HashForReporting(secret, appName string) string {
 // formatStatementHideConstants formats the statement using
 // tree.FmtHideConstants. It does *not* anonymize the statement, since
 // the result will still contain names and identifiers.
-func formatStatementHideConstants(ast tree.Statement) string {
+func formatStatementHideConstants(ast tree.Statement, optFlags ...tree.FmtFlags) string {
 	if ast == nil {
 		return ""
 	}
-	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
+	fmtFlags := tree.FmtHideConstants
+	for _, f := range optFlags {
+		fmtFlags |= f
+	}
+	return tree.AsStringWithFlags(ast, fmtFlags)
 }
 
 // formatStatementSummary formats the statement using tree.FmtSummary
 // and tree.FmtHideConstants. This returns a summarized version of the
 // query. It does *not* anonymize the statement, since the result will
 // still contain names and identifiers.
-func formatStatementSummary(ast tree.Statement) string {
+func formatStatementSummary(ast tree.Statement, optFlags ...tree.FmtFlags) string {
 	if ast == nil {
 		return ""
 	}
 	fmtFlags := tree.FmtSummary | tree.FmtHideConstants
+	for _, f := range optFlags {
+		fmtFlags |= f
+	}
 	return tree.AsStringWithFlags(ast, fmtFlags)
 }
 
