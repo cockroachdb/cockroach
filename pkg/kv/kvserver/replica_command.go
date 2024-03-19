@@ -3604,7 +3604,7 @@ func (roo *replicaRelocateOneOptions) LoadSpanConfig(
 	if err != nil {
 		return nil, errors.Wrap(err, "can't relocate range")
 	}
-	conf, err := confReader.GetSpanConfigForKey(ctx, startKey)
+	conf, _, err := confReader.GetSpanConfigForKey(ctx, startKey)
 	if err != nil {
 		return nil, err
 	}

@@ -181,14 +181,8 @@ func (m *mockSpanConfigSubscriber) ComputeSplitKey(
 
 func (m *mockSpanConfigSubscriber) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, error) {
-	return m.Store.GetSpanConfigForKey(ctx, key)
-}
-
-func (m *mockSpanConfigSubscriber) GetSpanConfigForKeyWithBounds(
-	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, roachpb.Span, error) {
-	return m.Store.GetSpanConfigForKeyWithBounds(ctx, key)
+	return m.Store.GetSpanConfigForKey(ctx, key)
 }
 
 func (m *mockSpanConfigSubscriber) GetProtectionTimestamps(

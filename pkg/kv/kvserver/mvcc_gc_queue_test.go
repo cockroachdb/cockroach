@@ -872,7 +872,7 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 		}
 		defer snap.Close()
 
-		conf, err := cfg.GetSpanConfigForKey(ctx, desc.StartKey)
+		conf, _, err := cfg.GetSpanConfigForKey(ctx, desc.StartKey)
 		if err != nil {
 			t.Fatalf("could not find zone config for range %s: %+v", tc.repl, err)
 		}
@@ -1468,7 +1468,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conf, err := confReader.GetSpanConfigForKey(ctx, roachpb.RKey("key"))
+	conf, _, err := confReader.GetSpanConfigForKey(ctx, roachpb.RKey("key"))
 	if err != nil {
 		t.Fatalf("could not find span config for range %s", err)
 	}

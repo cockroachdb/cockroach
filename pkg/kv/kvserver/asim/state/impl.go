@@ -1237,17 +1237,6 @@ func (s *state) ComputeSplitKey(
 // SpanConfigConformanceReport.
 func (s *state) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, error) {
-	rng := s.rangeFor(ToKey(key.AsRawKey()))
-	if rng == nil {
-		panic(fmt.Sprintf("programming error: range for key %s doesn't exist", key))
-	}
-	return *rng.config, nil
-}
-
-// GetSpanConfigForKeyWithBounds is added for the spanconfig.StoreReader interface.
-func (s *state) GetSpanConfigForKeyWithBounds(
-	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, roachpb.Span, error) {
 	rng := s.rangeFor(ToKey(key.AsRawKey()))
 	if rng == nil {
