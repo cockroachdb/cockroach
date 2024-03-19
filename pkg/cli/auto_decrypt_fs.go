@@ -267,7 +267,7 @@ func (afs *autoDecryptFS) maybeSwitchFS(path string) (vfs.FS, error) {
 	if e, err := afs.getEnv(path); err != nil {
 		return nil, err
 	} else if e != nil {
-		return e.DefaultFS, nil
+		return e, nil
 	}
 	return vfs.Default, nil
 }
