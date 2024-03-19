@@ -46,7 +46,7 @@ func TestFileSSTSinkExtendOneFile(t *testing.T) {
 
 	getKeys := func(prefix string, n int) []byte {
 		var b bytes.Buffer
-		sst := storage.MakeBackupSSTWriter(ctx, nil, &b)
+		sst := storage.MakeBackupSSTWriter(ctx, cluster.MakeTestingClusterSettings(), &b)
 		for i := 0; i < n; i++ {
 			require.NoError(t, sst.PutUnversioned([]byte(fmt.Sprintf("%s%08d", prefix, i)), nil))
 		}
