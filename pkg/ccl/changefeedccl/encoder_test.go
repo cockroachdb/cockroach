@@ -522,25 +522,41 @@ func TestAvroArrayCap(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
-func TestAvroCollatedString(t *testing.T) {
+func TestCollatedString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b string collate "fr-CA")`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'désolée' collate "fr-CA")`)
+	for _, tc := range []struct {
+		format   changefeedbase.FormatType
+		expected string
+	}{
+		{
+			format:   changefeedbase.OptFormatAvro,
+			expected: `foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"désolée"}}}}`,
+		},
+		{
+			format:   changefeedbase.OptFormatJSON,
+			expected: `foo: [1]->{"after": {"a": 1, "b": "désolée"}}`,
+		},
+		{
+			format:   changefeedbase.OptFormatCSV,
+			expected: `foo: ->1,désolée`,
+		},
+	} {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b string collate "fr-CA")`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'désolée' collate "fr-CA")`)
 
-		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
-			`WITH format=%s`,
-			changefeedbase.OptFormatAvro))
-		defer closeFeed(t, foo)
-		assertPayloads(t, foo, []string{
-			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"désolée"}}}}`,
-		})
+			foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+				`WITH format=%s, initial_scan_only`, tc.format))
+			defer closeFeed(t, foo)
+			assertPayloads(t, foo, []string{
+				tc.expected,
+			})
+		}
+		cdcTest(t, testFn, feedTestForceSink("kafka"))
 	}
-
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAvroEnum(t *testing.T) {
