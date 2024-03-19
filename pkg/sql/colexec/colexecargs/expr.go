@@ -47,5 +47,5 @@ func (h *ExprHelper) ProcessExpr(
 	if expr.LocalExpr != nil {
 		return expr.LocalExpr, nil
 	}
-	return execinfrapb.DeserializeExprWithTypes(ctx, expr.Expr, typs, h.SemaCtx, evalCtx)
+	return execinfrapb.DeserializeExpr(ctx, expr, typs, h.SemaCtx, evalCtx)
 }

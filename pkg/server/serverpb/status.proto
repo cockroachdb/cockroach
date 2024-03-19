@@ -1598,6 +1598,11 @@ message StoreDetails {
     (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
   ];
+  int32 node_id = 7 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
 
   // TODO(mberhault): add a lot more information about stores. eg:
   // - path
@@ -1615,6 +1620,11 @@ message StoreDetails {
   // Files/bytes using the active data key.
   uint64 active_key_files = 5;
   uint64 active_key_bytes = 6;
+  // dir is the path to the store's data directory on the node.
+  string dir = 8;
+  // wal_failover_path encodes the path to the secondary WAL directory used for
+  // failover in the event of high write latency to the primary WAL.
+  string wal_failover_path = 9 [(gogoproto.nullable) = true];
 }
 
 message StoresResponse {

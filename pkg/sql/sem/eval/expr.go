@@ -285,7 +285,7 @@ func (e *evaluator) EvalIndexedVar(ctx context.Context, iv *tree.IndexedVar) (tr
 		return nil, errors.AssertionFailedf(
 			"indexed var container of type %T may not be evaluated", e.IVarContainer)
 	}
-	return eivc.IndexedVarEval(ctx, iv.Idx, e)
+	return eivc.IndexedVarEval(iv.Idx)
 }
 
 func (e *evaluator) EvalIndirectionExpr(

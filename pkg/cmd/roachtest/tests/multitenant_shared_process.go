@@ -27,7 +27,7 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:             "multitenant/shared-process/basic",
-		Owner:            registry.OwnerMultiTenant,
+		Owner:            registry.OwnerDisasterRecovery,
 		Cluster:          r.MakeClusterSpec(crdbNodeCount + 1),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,

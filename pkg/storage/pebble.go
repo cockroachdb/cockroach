@@ -1100,8 +1100,6 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		}
 	}
 
-	storeProps := computeStoreProperties(ctx, cfg.Dir, opts.ReadOnly, cfg.Env.Encryption != nil /* encryptionEnabled */)
-
 	p = &Pebble{
 		readOnly:          opts.ReadOnly,
 		path:              cfg.Dir,
@@ -1110,7 +1108,7 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		ballastSize:       cfg.BallastSize,
 		maxSize:           cfg.MaxSize,
 		attrs:             cfg.Attrs,
-		properties:        storeProps,
+		properties:        computeStoreProperties(ctx, cfg),
 		settings:          cfg.Settings,
 		env:               cfg.Env,
 		logger:            opts.LoggerAndTracer,
