@@ -8,9 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
+import { INodeStatus } from "../util";
 import {
+  Nodes,
+  Stores,
   getNodesByRegionString,
+  getNodeIdsFromStoreIds,
   normalizePrivileges,
   normalizeRoles,
 } from "./util";
@@ -18,7 +21,7 @@ import {
 describe("Getting nodes by region string", () => {
   describe("is not tenant", () => {
     it("when all nodes different regions", () => {
-      const nodes = [1, 2, 3];
+      const nodes: Nodes = { kind: "node", ids: [1, 2, 3] };
       const regions = {
         "1": "region1",
         "2": "region2",
@@ -29,7 +32,7 @@ describe("Getting nodes by region string", () => {
     });
 
     it("when all nodes same region", () => {
-      const nodes = [1, 2, 3];
+      const nodes: Nodes = { kind: "node", ids: [1, 2, 3] };
       const regions = {
         "1": "region1",
         "2": "region1",
@@ -40,7 +43,7 @@ describe("Getting nodes by region string", () => {
     });
 
     it("when some nodes different regions", () => {
-      const nodes = [1, 2, 3];
+      const nodes: Nodes = { kind: "node", ids: [1, 2, 3] };
       const regions = {
         "1": "region1",
         "2": "region1",
@@ -51,14 +54,14 @@ describe("Getting nodes by region string", () => {
     });
 
     it("when region map is empty", () => {
-      const nodes = [1, 2, 3];
+      const nodes: Nodes = { kind: "node", ids: [1, 2, 3] };
       const regions = {};
       const result = getNodesByRegionString(nodes, regions, false);
       expect(result).toEqual("");
     });
 
     it("when nodes are empty", () => {
-      const nodes: number[] = [];
+      const nodes: Nodes = { kind: "node", ids: [] };
       const regions = {
         "1": "region1",
         "2": "region1",
@@ -67,6 +70,79 @@ describe("Getting nodes by region string", () => {
       const result = getNodesByRegionString(nodes, regions, false);
       expect(result).toEqual("");
     });
+  });
+});
+
+describe("getNodeIdsFromStoreIds", () => {
+  it("returns the correct node ids when all nodes have multiple stores", () => {
+    const stores: Stores = { kind: "store", ids: [1, 3, 6, 2, 4, 5] };
+    const nodeStatuses: INodeStatus[] = [
+      {
+        desc: {
+          node_id: 1,
+        },
+        store_statuses: [{ desc: { store_id: 1 } }, { desc: { store_id: 2 } }],
+      },
+      {
+        desc: {
+          node_id: 2,
+        },
+        store_statuses: [{ desc: { store_id: 3 } }, { desc: { store_id: 5 } }],
+      },
+      {
+        desc: {
+          node_id: 3,
+        },
+        store_statuses: [{ desc: { store_id: 4 } }, { desc: { store_id: 6 } }],
+      },
+    ];
+    const result = getNodeIdsFromStoreIds(stores, nodeStatuses);
+    expect(result).toEqual({ kind: "node", ids: [1, 2, 3] });
+  });
+
+  it("returns an empty list when no stores ids are provided", () => {
+    const stores: Stores = { kind: "store", ids: [] };
+    const result = getNodeIdsFromStoreIds(stores, []);
+    expect(result).toEqual({ kind: "node", ids: [] });
+  });
+
+  it("returns the correct node ids when there is one store per node", () => {
+    const stores: Stores = { kind: "store", ids: [1, 3, 4] };
+    const nodeStatuses: INodeStatus[] = [
+      {
+        desc: {
+          node_id: 1,
+        },
+        store_statuses: [{ desc: { store_id: 1 } }],
+      },
+      {
+        desc: {
+          node_id: 2,
+        },
+        store_statuses: [{ desc: { store_id: 3 } }],
+      },
+      {
+        desc: {
+          node_id: 3,
+        },
+        store_statuses: [{ desc: { store_id: 4 } }],
+      },
+    ];
+    const result = getNodeIdsFromStoreIds(stores, nodeStatuses);
+    expect(result).toEqual({ kind: "node", ids: [1, 2, 3] });
+  });
+  it("returns the correct node ids when there is only one node", () => {
+    const stores: Stores = { kind: "store", ids: [3] };
+    const nodeStatuses: INodeStatus[] = [
+      {
+        desc: {
+          node_id: 1,
+        },
+        store_statuses: [{ desc: { store_id: 3 } }],
+      },
+    ];
+    const result = getNodeIdsFromStoreIds(stores, nodeStatuses);
+    expect(result).toEqual({ kind: "node", ids: [1] });
   });
 });
 

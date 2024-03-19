@@ -81,10 +81,13 @@ export class TimeScaleState {
         fixedWindowEnd: val.fixedWindowEnd && moment(val.fixedWindowEnd),
       };
     } catch (e) {
-      console.warn(
-        `Couldn't retrieve or parse TimeScale options from SessionStorage`,
-        e,
-      );
+      // Don't log this in tests because it pollutes the output.
+      if (process.env.NODE_ENV !== "test") {
+        console.warn(
+          `Couldn't retrieve or parse TimeScale options from SessionStorage`,
+          e,
+        );
+      }
     }
     this.scale = timeScale || {
       ...defaultTimeScaleOptions["Past 10 Minutes"],
