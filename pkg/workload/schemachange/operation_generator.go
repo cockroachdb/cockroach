@@ -799,9 +799,17 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	}
 
 	fetchInvalidChild := og.randIntn(100) < og.params.fkChildInvalidPct
-	// Potentially create an error by choosing the wrong type for the child column.
 	childType := parentColumn.typ
+	// We block the refcursor type from being added as a foreign key by instead allowing it to fall into
+	// the fetchInvalidChild route. We don't allow indexes on refcursor types - which is required for an FK
+	// relation. Also, validating that an insert doesn't violate an FK constraint requires a
+	// direct <refcursor> = <refcursor> comparison in the future.
+	if childType == types.RefCursor {
+		fetchInvalidChild = true
+	}
+
 	if fetchInvalidChild {
+		// Potentially create an error by choosing the wrong type for the child column.
 		_, typ, err := og.randType(ctx, tx, og.pctExisting(true))
 		if err != nil {
 			return nil, err
