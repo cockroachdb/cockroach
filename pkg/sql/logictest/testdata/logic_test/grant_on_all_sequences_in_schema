@@ -32,11 +32,22 @@ SET ROLE root
 statement ok
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA s TO testuser
 
-query TTTTTB colnames
+# This should be a no-op, since backup privellege is not
+# supported on sequences.
+query T noticetrace
+GRANT BACKUP ON ALL TABLES IN SCHEMA S TO testuser
+----
+NOTICE: some privileges have no effect on sequences: [BACKUP]
+
+statement error pgcode 0LP01 invalid privilege type BACKUP for sequence
+GRANT BACKUP ON ALL SEQUENCES IN SCHEMA S TO testuser
+
+query TTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
 test           s            q              testuser  SELECT          false
+test           s            t              testuser  BACKUP          false
 
 statement ok
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA s TO testuser
@@ -47,6 +58,7 @@ SHOW GRANTS FOR testuser
 database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
 test           s            q              testuser  SELECT          false
 test           s            q              testuser  USAGE           false
+test           s            t              testuser  BACKUP          false
 
 statement ok
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA s, s2 TO testuser, testuser2
@@ -58,6 +70,7 @@ database_name  schema_name  relation_name  grantee    privilege_type  is_grantab
 test           s            q              testuser   SELECT          false
 test           s            q              testuser   USAGE           false
 test           s            q              testuser2  SELECT          false
+test           s            t              testuser   BACKUP          false
 test           s2           q              testuser   SELECT          false
 test           s2           q              testuser2  SELECT          false
 
@@ -70,6 +83,7 @@ SHOW GRANTS FOR testuser, testuser2
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
 test           s            q              testuser   ALL             false
 test           s            q              testuser2  ALL             false
+test           s            t              testuser   BACKUP          false
 test           s2           q              testuser   ALL             false
 test           s2           q              testuser2  ALL             false
 
@@ -102,6 +116,7 @@ SHOW GRANTS FOR testuser, testuser2
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
 test           s            q              testuser   ALL             false
 test           s            q              testuser2  ALL             false
+test           s            t              testuser   BACKUP          false
 test           s2           q              testuser   ALL             false
 test           s2           q              testuser2  ALL             false
 
