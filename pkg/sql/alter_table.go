@@ -18,6 +18,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -491,7 +492,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"remove all data in that column and drop any indexes that reference that column")
 				if !params.extendedEvalCtx.TxnIsSingleStmt {
 					err = errors.WithIssueLink(err, errors.IssueLink{
-						IssueURL: "https://github.com/cockroachdb/cockroach/issues/46541",
+						IssueURL: build.MakeIssueURL(46541),
 						Detail: "when used in an explicit transaction combined with other " +
 							"schema changes to the same table, DROP COLUMN can result in data " +
 							"loss if one of the other schema change fails or is canceled",
