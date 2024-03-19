@@ -292,6 +292,11 @@ func init() {
 	}
 }
 
+// disableMonitorTreeTracking indicates whether tracking of all children of a
+// BytesMonitor (which is what powers TraverseTree) is disabled.
+var disableMonitorTreeTracking = envutil.EnvOrDefaultBool(
+	"COCKROACH_DISABLE_MONITOR_TREE", false)
+
 // MonitorState describes the current state of a single monitor.
 type MonitorState struct {
 	// Level tracks how many "generations" away the current monitor is from the
@@ -509,17 +514,19 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 
 	var effectiveLimit int64
 	if pool != nil {
-		// If we have a "parent" monitor, then register mm as its child by
-		// making it the head of the doubly-linked list.
-		func() {
-			pool.mu.Lock()
-			defer pool.mu.Unlock()
-			if s := pool.mu.head; s != nil {
-				s.parentMu.prevSibling = mm
-				mm.parentMu.nextSibling = s
-			}
-			pool.mu.head = mm
-		}()
+		if !disableMonitorTreeTracking {
+			// If we have a "parent" monitor, then register mm as its child by
+			// making it the head of the doubly-linked list.
+			func() {
+				pool.mu.Lock()
+				defer pool.mu.Unlock()
+				if s := pool.mu.head; s != nil {
+					s.parentMu.prevSibling = mm
+					mm.parentMu.nextSibling = s
+				}
+				pool.mu.head = mm
+			}()
+		}
 		effectiveLimit = pool.limit
 	}
 
