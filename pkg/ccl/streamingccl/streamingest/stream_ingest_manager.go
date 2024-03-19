@@ -64,16 +64,10 @@ func newStreamIngestManagerWithPrivilegesCheck(
 			pgcode.CCLValidLicenseRequired, "physical replication requires an enterprise license on the secondary (and primary) cluster")
 	}
 
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
+		syntheticprivilege.GlobalPrivilegeObject,
+		privilege.MANAGEVIRTUALCLUSTER); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
-			syntheticprivilege.GlobalPrivilegeObject,
-			privilege.MANAGEVIRTUALCLUSTER); err != nil {
-			return nil, err
-		}
 	}
 
 	return &streamIngestManagerImpl{

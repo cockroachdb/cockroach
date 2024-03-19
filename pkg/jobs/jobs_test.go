@@ -236,6 +236,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.failOrCancelCh = make(chan error)
 	rts.resumeCheckCh = make(chan struct{})
 	rts.failOrCancelCheckCh = make(chan struct{})
+	rts.sqlDB.Exec(t, "CREATE USER testuser")
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
@@ -727,11 +728,11 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	// Attempt to mark success, but fail, but fail that also.
 	t.Run("fail marking success and fail OnFailOrCancel", func(t *testing.T) {
-		var triedToMarkSucceeded atomic.Value
-		triedToMarkSucceeded.Store(false)
+		var triedToMarkSucceeded atomic.Bool
+		var injectFailures atomic.Bool
 		rts := registryTestSuite{beforeUpdate: func(orig, updated jobs.JobMetadata) error {
 			// Fail marking succeeded.
-			if updated.Status == jobs.StatusSucceeded {
+			if updated.Status == jobs.StatusSucceeded && injectFailures.Load() {
 				triedToMarkSucceeded.Store(true)
 				return errors.New("injected failure at marking as succeeded")
 			}
@@ -740,6 +741,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
+		injectFailures.Store(true)
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
@@ -768,7 +770,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		// First retry.
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		require.True(t, triedToMarkSucceeded.Load().(bool))
+		require.True(t, triedToMarkSucceeded.Load())
 		rts.check(t, jobs.StatusReverting)
 		rts.failOrCancelCh <- errors.New("injected failure while blocked in reverting")
 		rts.mu.e.OnFailOrCancelExit = true
@@ -889,12 +891,16 @@ func TestRegistryLifecycle(t *testing.T) {
 	t.Run("dump traces on pause-unpause-success", func(t *testing.T) {
 		ctx := context.Background()
 		completeCh := make(chan struct{})
+		var blockAfterJobStateMachine atomic.Bool
 		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
-			completeCh <- struct{}{}
+			if blockAfterJobStateMachine.Load() {
+				completeCh <- struct{}{}
+			}
 		}}
 		rts.setUp(t)
 		defer rts.tearDown()
 
+		blockAfterJobStateMachine.Store(true)
 		pauseUnpauseJob := func(expectedNumFiles int) {
 			j, err := jobs.TestingCreateAndStartJob(context.Background(), rts.registry, rts.idb(), rts.mockJob)
 			if err != nil {
@@ -932,12 +938,16 @@ func TestRegistryLifecycle(t *testing.T) {
 	t.Run("dump traces on fail", func(t *testing.T) {
 		ctx := context.Background()
 		completeCh := make(chan struct{})
+		var blockAfterJobStateMachine atomic.Bool
 		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
-			completeCh <- struct{}{}
+			if blockAfterJobStateMachine.Load() {
+				completeCh <- struct{}{}
+			}
 		}}
 		rts.setUp(t)
 		defer rts.tearDown()
 
+		blockAfterJobStateMachine.Store(true)
 		runJobAndFail := func(expectedNumFiles int) {
 			j, err := jobs.TestingCreateAndStartJob(ctx, rts.registry, rts.idb(), rts.mockJob)
 			if err != nil {
@@ -968,11 +978,16 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("dump traces on cancel", func(t *testing.T) {
 		completeCh := make(chan struct{})
+		var blockAfterJobStateMachine atomic.Bool
 		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
-			completeCh <- struct{}{}
+			if blockAfterJobStateMachine.Load() {
+				completeCh <- struct{}{}
+			}
 		}}
 		rts.setUp(t)
 		defer rts.tearDown()
+
+		blockAfterJobStateMachine.Store(true)
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
@@ -2056,6 +2071,8 @@ func TestShowJobWhenComplete(t *testing.T) {
 		Details:  jobspb.ImportDetails{},
 		Progress: jobspb.ImportProgress{},
 	}
+	_, err := db.Exec("CREATE USER testuser")
+	require.NoError(t, err)
 	done := make(chan struct{})
 	defer close(done)
 	jobs.RegisterConstructor(
@@ -3350,6 +3367,7 @@ func TestJobTypeMetrics(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "CREATE USER testuser")
 	reg := s.JobRegistry().(*jobs.Registry)
 
 	waitForPausedCount := func(typ jobspb.Type, numPaused int64) {

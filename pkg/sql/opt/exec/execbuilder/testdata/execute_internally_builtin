@@ -136,7 +136,7 @@ COMMIT;
 
 user testuser
 
-statement error crdb_internal.execute_internally\(\) requires admin privilege
+statement error user testuser does not have REPAIRCLUSTER system privilege
 SELECT crdb_internal.execute_internally('SELECT session_user;');
 
 user root

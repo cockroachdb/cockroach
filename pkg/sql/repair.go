@@ -709,7 +709,7 @@ func checkPlannerStateForRepairFunctions(ctx context.Context, p *planner, method
 	if p.extendedEvalCtx.TxnReadOnly {
 		return readOnlyError(method)
 	}
-	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER); err != nil {
 		return err
 	}
 	return nil
@@ -766,7 +766,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 }
 
 func (p *planner) ExternalReadFile(ctx context.Context, uri string) ([]byte, error) {
-	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER); err != nil {
 		return nil, err
 	}
 
@@ -783,7 +783,7 @@ func (p *planner) ExternalReadFile(ctx context.Context, uri string) ([]byte, err
 }
 
 func (p *planner) ExternalWriteFile(ctx context.Context, uri string, content []byte) error {
-	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER); err != nil {
 		return err
 	}
 

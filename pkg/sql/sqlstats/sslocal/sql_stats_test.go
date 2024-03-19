@@ -701,7 +701,7 @@ func TestUnprivilegedUserReset(t *testing.T) {
 		"SELECT crdb_internal.reset_sql_stats()",
 	)
 
-	require.Contains(t, err.Error(), "requires admin privilege")
+	require.Contains(t, err.Error(), "user non_admin_user does not have REPAIRCLUSTER system privilege")
 }
 
 func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {

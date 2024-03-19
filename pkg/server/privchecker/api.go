@@ -47,7 +47,7 @@ type CheckerForRPCHandlers interface {
 	RequireViewClusterSettingOrModifyClusterSettingPermission(ctx context.Context) error
 	RequireViewActivityAndNoViewActivityRedactedPermission(ctx context.Context) error
 	RequireViewClusterMetadataPermission(ctx context.Context) error
-	RequireRepairClusterMetadataPermission(ctx context.Context) error
+	RequireRepairClusterPermission(ctx context.Context) error
 	RequireViewDebugPermission(ctx context.Context) error
 }
 

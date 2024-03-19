@@ -131,7 +131,7 @@ func (p *planner) UpdateTenantResourceLimits(
 	asOfConsumedRequestUnits float64,
 ) error {
 	const op = "update-resource-limits"
-	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER); err != nil {
 		return err
 	}
 

@@ -83,6 +83,7 @@ func newTestHelperForTables(
 	s, db, _ := serverutils.StartServer(t, args)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "CREATE USER testuser")
 
 	if envTableType == jobstest.UseTestTables {
 		sqlDB.Exec(t, jobstest.GetScheduledJobsTableSchema(env))

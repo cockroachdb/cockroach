@@ -401,7 +401,9 @@ func (p *planner) getOwnerOfPrivilegeObject(
 	return owner, nil
 }
 
-// isOwner returns if the role has ownership on the privilege object.
+// isOwner returns if the role has ownership on the privilege object. The admin
+// and root roles implicitly have ownership of all objects that are not
+// owned by node, and node implicitly owns all objects.
 func isOwner(
 	ctx context.Context, p *planner, privilegeObject privilege.Object, role username.SQLUsername,
 ) (bool, error) {
@@ -409,11 +411,19 @@ func isOwner(
 	if err != nil {
 		return false, err
 	}
+	if role.IsNodeUser() {
+		return true, nil
+	}
+	if !owner.IsNodeUser() {
+		if role.IsAdminRole() || role.IsRootUser() {
+			return true, nil
+		}
+	}
 	return role == owner, nil
 }
 
 // HasOwnership returns if the role or any role the role is a member of
-// has ownership privilege of the desc.
+// has ownership privilege of the desc. Admins have ownership of all objects.
 // TODO(richardjcai): SUPERUSER has implicit ownership.
 // We do not have SUPERUSER privilege yet but should we consider root a superuser?
 func (p *planner) HasOwnership(
@@ -1057,27 +1067,19 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(
 	// We check for VIEWACTIVITYREDACTED first as users can have both
 	// VIEWACTIVITY and VIEWACTIVITYREDACTED, where VIEWACTIVITYREDACTED
 	// takes precedence (i.e. we must redact senstitive values).
-	if hasViewRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+	if hasViewRedacted, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWACTIVITYREDACTED); err != nil {
 		return false, false, err
 	} else if hasViewRedacted {
 		return true, true, nil
 	}
 
-	if hasView, err := p.HasViewActivity(ctx); err != nil {
+	if hasView, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWACTIVITY); err != nil {
 		return false, false, err
 	} else if hasView {
 		return true, false, nil
 	}
 
 	return false, false, nil
-}
-
-func (p *planner) HasViewActivityRedacted(ctx context.Context) (bool, error) {
-	return p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWACTIVITYREDACTED)
-}
-
-func (p *planner) HasViewActivity(ctx context.Context) (bool, error) {
-	return p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWACTIVITY)
 }
 
 func insufficientPrivilegeError(
