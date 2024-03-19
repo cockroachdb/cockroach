@@ -1215,7 +1215,22 @@ func (r *Replica) GetGCHint() roachpb.GCHint {
 func (r *Replica) ExcludeDataFromBackup(ctx context.Context, sp roachpb.Span) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	return r.entireSpanExcludedFromBackupRLocked(ctx, sp)
+}
 
+func (r *Replica) excludeReplicaFromBackupRLocked(ctx context.Context, rspan roachpb.RSpan) bool {
+	// We ignore the error here to avoid failing requests that
+	// don't need to fail.
+	excluded, _ := r.entireSpanExcludedFromBackupRLocked(ctx, rspan.AsRawSpanWithNoLocals())
+	return excluded
+}
+
+// entireSpanExcludedFromBackupRLocked returns true if this replica
+// has ExcludeDataFromBackup set in its span configuration and that
+// span configuration covers the entire given span.
+func (r *Replica) entireSpanExcludedFromBackupRLocked(
+	ctx context.Context, sp roachpb.Span,
+) (bool, error) {
 	if r.mu.conf.ExcludeDataFromBackup {
 		// If ExcludeDataFromBackup is set, we also want to ensure that
 		// we only elide data if the span configuration we currently
@@ -1224,24 +1239,14 @@ func (r *Replica) ExcludeDataFromBackup(ctx context.Context, sp roachpb.Span) (b
 			return false, errors.Newf("replica's span configuration bounds not set")
 		}
 		if !r.mu.confSpan.Contains(sp) {
-			log.Warningf(ctx, "ExcludeDataFromBackup requested for span %q not containd by span config bounds %q",
+			log.Warningf(ctx, "ExcludeDataFromBackup set but span %q not containd by span config bounds %q",
 				sp,
 				r.mu.confSpan)
+
 			return false, nil
 		}
 	}
 	return r.mu.conf.ExcludeDataFromBackup, nil
-}
-
-func (r *Replica) excludeReplicaFromBackupRLocked(rspan roachpb.RSpan) bool {
-	if r.mu.conf.ExcludeDataFromBackup {
-		// If ExcludeDataFromBackup is set, we also want to ensure that
-		// we only elide data if the span configuration we currently
-		// have actually contains the requested span.
-		sp := rspan.AsRawSpanWithNoLocals()
-		return r.mu.confSpan.Contains(sp)
-	}
-	return r.mu.conf.ExcludeDataFromBackup
 }
 
 // Version returns the replica version.
@@ -1856,7 +1861,7 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	// TODO(aayush): The above description intentionally omits some details, as
 	// they are going to be changed as part of
 	// https://github.com/cockroachdb/cockroach/issues/55293.
-	return r.checkTSAboveGCThresholdRLocked(ba.EarliestActiveTimestamp(), st, ba.IsAdmin(), rSpan)
+	return r.checkTSAboveGCThresholdRLocked(ctx, ba.EarliestActiveTimestamp(), st, ba.IsAdmin(), rSpan)
 }
 
 // checkExecutionCanProceedRWOrAdmin returns an error if a batch request going
@@ -1938,7 +1943,7 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	} else if !r.isRangefeedEnabledRLocked() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return errors.Errorf("[r%d] rangefeeds require the kv.rangefeed.enabled setting. See %s",
 			r.RangeID, docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
-	} else if err := r.checkTSAboveGCThresholdRLocked(ts, status, false /* isAdmin */, rSpan); err != nil {
+	} else if err := r.checkTSAboveGCThresholdRLocked(ctx, ts, status, false /* isAdmin */, rSpan); err != nil {
 		return err
 	}
 	return nil
@@ -1958,7 +1963,11 @@ func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSp
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified by
 // its read timestamp) wants to read below the range's GC threshold.
 func (r *Replica) checkTSAboveGCThresholdRLocked(
-	ts hlc.Timestamp, st kvserverpb.LeaseStatus, isAdmin bool, rspan roachpb.RSpan,
+	ctx context.Context,
+	ts hlc.Timestamp,
+	st kvserverpb.LeaseStatus,
+	isAdmin bool,
+	rspan roachpb.RSpan,
 ) error {
 	threshold := r.getImpliedGCThresholdRLocked(st, isAdmin)
 	if threshold.Less(ts) {
@@ -1967,7 +1976,7 @@ func (r *Replica) checkTSAboveGCThresholdRLocked(
 	return &kvpb.BatchTimestampBeforeGCError{
 		Timestamp:              ts,
 		Threshold:              threshold,
-		DataExcludedFromBackup: r.excludeReplicaFromBackupRLocked(rspan),
+		DataExcludedFromBackup: r.excludeReplicaFromBackupRLocked(ctx, rspan),
 	}
 }
 
