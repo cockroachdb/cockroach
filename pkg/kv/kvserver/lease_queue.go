@@ -97,7 +97,7 @@ func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue 
 func (lq *leaseQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
-	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
+	conf, _, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
 	if err != nil {
 		return false, 0
 	}
@@ -115,7 +115,7 @@ func (lq *leaseQueue) process(
 	}
 	defer repl.allocatorToken.Release(ctx)
 
-	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
+	conf, _, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
 	if err != nil {
 		return false, err
 	}
