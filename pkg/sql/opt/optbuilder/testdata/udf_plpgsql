@@ -1688,7 +1688,105 @@ $$ LANGUAGE PLpgSQL;
 build format=show-scalars
 SELECT f(5)
 ----
-error (0A000): unimplemented: conditional EXIT statements are not yet supported
+project
+ ├── columns: f:21
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:21]
+           ├── args
+           │    └── const: 5
+           ├── params: n:1
+           └── body
+                └── limit
+                     ├── columns: stmt_loop_3:20
+                     ├── project
+                     │    ├── columns: stmt_loop_3:20
+                     │    ├── project
+                     │    │    ├── columns: i:3!null sum:2!null
+                     │    │    ├── project
+                     │    │    │    ├── columns: sum:2!null
+                     │    │    │    ├── values
+                     │    │    │    │    └── tuple
+                     │    │    │    └── projections
+                     │    │    │         └── const: 0 [as=sum:2]
+                     │    │    └── projections
+                     │    │         └── const: 0 [as=i:3]
+                     │    └── projections
+                     │         └── udf: stmt_loop_3 [as=stmt_loop_3:20]
+                     │              ├── args
+                     │              │    ├── variable: n:1
+                     │              │    ├── variable: sum:2
+                     │              │    └── variable: i:3
+                     │              ├── params: n:8 sum:9 i:10
+                     │              └── body
+                     │                   └── project
+                     │                        ├── columns: stmt_if_5:19
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── case [as=stmt_if_5:19]
+                     │                                  ├── true
+                     │                                  ├── when
+                     │                                  │    ├── gt
+                     │                                  │    │    ├── variable: i:10
+                     │                                  │    │    └── variable: n:8
+                     │                                  │    └── subquery
+                     │                                  │         └── project
+                     │                                  │              ├── columns: loop_exit_1:17
+                     │                                  │              ├── values
+                     │                                  │              │    └── tuple
+                     │                                  │              └── projections
+                     │                                  │                   └── udf: loop_exit_1 [as=loop_exit_1:17]
+                     │                                  │                        ├── args
+                     │                                  │                        │    ├── variable: n:8
+                     │                                  │                        │    ├── variable: sum:9
+                     │                                  │                        │    └── variable: i:10
+                     │                                  │                        ├── params: n:4 sum:5 i:6
+                     │                                  │                        └── body
+                     │                                  │                             └── project
+                     │                                  │                                  ├── columns: stmt_return_2:7
+                     │                                  │                                  ├── values
+                     │                                  │                                  │    └── tuple
+                     │                                  │                                  └── projections
+                     │                                  │                                       └── variable: sum:5 [as=stmt_return_2:7]
+                     │                                  └── subquery
+                     │                                       └── project
+                     │                                            ├── columns: stmt_if_4:18
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── udf: stmt_if_4 [as=stmt_if_4:18]
+                     │                                                      ├── args
+                     │                                                      │    ├── variable: n:8
+                     │                                                      │    ├── variable: sum:9
+                     │                                                      │    └── variable: i:10
+                     │                                                      ├── params: n:11 sum:12 i:13
+                     │                                                      └── body
+                     │                                                           └── project
+                     │                                                                ├── columns: stmt_loop_3:16
+                     │                                                                ├── project
+                     │                                                                │    ├── columns: i:15 sum:14
+                     │                                                                │    ├── project
+                     │                                                                │    │    ├── columns: sum:14
+                     │                                                                │    │    ├── values
+                     │                                                                │    │    │    └── tuple
+                     │                                                                │    │    └── projections
+                     │                                                                │    │         └── plus [as=sum:14]
+                     │                                                                │    │              ├── variable: sum:12
+                     │                                                                │    │              └── variable: i:13
+                     │                                                                │    └── projections
+                     │                                                                │         └── plus [as=i:15]
+                     │                                                                │              ├── variable: i:13
+                     │                                                                │              └── const: 1
+                     │                                                                └── projections
+                     │                                                                     └── udf: stmt_loop_3 [as=stmt_loop_3:16]
+                     │                                                                          ├── args
+                     │                                                                          │    ├── variable: n:11
+                     │                                                                          │    ├── variable: sum:14
+                     │                                                                          │    └── variable: i:15
+                     │                                                                          └── recursive-call
+                     └── const: 1
 
 exec-ddl
 CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
@@ -1709,7 +1807,100 @@ $$ LANGUAGE PLpgSQL;
 build format=show-scalars
 SELECT f(5)
 ----
-error (0A000): unimplemented: conditional CONTINUE statements are not yet supported
+project
+ ├── columns: f:21
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:21]
+           ├── args
+           │    └── const: 5
+           ├── params: n:1
+           └── body
+                └── limit
+                     ├── columns: stmt_loop_3:20
+                     ├── project
+                     │    ├── columns: stmt_loop_3:20
+                     │    ├── project
+                     │    │    ├── columns: i:3!null sum:2!null
+                     │    │    ├── project
+                     │    │    │    ├── columns: sum:2!null
+                     │    │    │    ├── values
+                     │    │    │    │    └── tuple
+                     │    │    │    └── projections
+                     │    │    │         └── const: 0 [as=sum:2]
+                     │    │    └── projections
+                     │    │         └── const: 0 [as=i:3]
+                     │    └── projections
+                     │         └── udf: stmt_loop_3 [as=stmt_loop_3:20]
+                     │              ├── args
+                     │              │    ├── variable: n:1
+                     │              │    ├── variable: sum:2
+                     │              │    └── variable: i:3
+                     │              ├── params: n:8 sum:9 i:10
+                     │              └── body
+                     │                   └── project
+                     │                        ├── columns: stmt_if_5:19
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── case [as=stmt_if_5:19]
+                     │                                  ├── true
+                     │                                  ├── when
+                     │                                  │    ├── eq
+                     │                                  │    │    ├── mod
+                     │                                  │    │    │    ├── variable: i:10
+                     │                                  │    │    │    └── const: 2
+                     │                                  │    │    └── const: 0
+                     │                                  │    └── subquery
+                     │                                  │         └── project
+                     │                                  │              ├── columns: stmt_loop_3:17
+                     │                                  │              ├── values
+                     │                                  │              │    └── tuple
+                     │                                  │              └── projections
+                     │                                  │                   └── udf: stmt_loop_3 [as=stmt_loop_3:17]
+                     │                                  │                        ├── args
+                     │                                  │                        │    ├── variable: n:8
+                     │                                  │                        │    ├── variable: sum:9
+                     │                                  │                        │    └── variable: i:10
+                     │                                  │                        └── recursive-call
+                     │                                  └── subquery
+                     │                                       └── project
+                     │                                            ├── columns: stmt_if_4:18
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── udf: stmt_if_4 [as=stmt_if_4:18]
+                     │                                                      ├── args
+                     │                                                      │    ├── variable: n:8
+                     │                                                      │    ├── variable: sum:9
+                     │                                                      │    └── variable: i:10
+                     │                                                      ├── params: n:11 sum:12 i:13
+                     │                                                      └── body
+                     │                                                           └── project
+                     │                                                                ├── columns: stmt_loop_3:16
+                     │                                                                ├── project
+                     │                                                                │    ├── columns: i:15 sum:14
+                     │                                                                │    ├── project
+                     │                                                                │    │    ├── columns: sum:14
+                     │                                                                │    │    ├── values
+                     │                                                                │    │    │    └── tuple
+                     │                                                                │    │    └── projections
+                     │                                                                │    │         └── plus [as=sum:14]
+                     │                                                                │    │              ├── variable: sum:12
+                     │                                                                │    │              └── variable: i:13
+                     │                                                                │    └── projections
+                     │                                                                │         └── plus [as=i:15]
+                     │                                                                │              ├── variable: i:13
+                     │                                                                │              └── const: 1
+                     │                                                                └── projections
+                     │                                                                     └── udf: stmt_loop_3 [as=stmt_loop_3:16]
+                     │                                                                          ├── args
+                     │                                                                          │    ├── variable: n:11
+                     │                                                                          │    ├── variable: sum:14
+                     │                                                                          │    └── variable: i:15
+                     │                                                                          └── recursive-call
+                     └── const: 1
 
 # Testing RAISE statements.
 exec-ddl

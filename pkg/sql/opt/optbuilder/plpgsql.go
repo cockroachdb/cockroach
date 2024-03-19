@@ -564,17 +564,19 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					ElseBody:  []ast.Statement{&ast.Exit{}},
 				}},
 			}
-			newStmts := make([]ast.Statement, 0, len(stmts))
-			newStmts = append(newStmts, loop)
-			newStmts = append(newStmts, stmts[i+1:]...)
-			return b.buildPLpgSQLStatements(newStmts, s)
+			return b.buildPLpgSQLStatements(b.prependStmt(loop, stmts[i+1:]), s)
 
 		case *ast.Exit:
 			if t.Label != "" {
 				panic(exitLabelErr)
 			}
 			if t.Condition != nil {
-				panic(exitCondErr)
+				// EXIT with a condition is syntactic sugar for EXIT inside an IF stmt.
+				ifStmt := &ast.If{
+					Condition: t.Condition,
+					ThenBody:  []ast.Statement{&ast.Exit{Label: t.Label}},
+				}
+				return b.buildPLpgSQLStatements(b.prependStmt(ifStmt, stmts[i+1:]), s)
 			}
 			// EXIT statements are handled by calling the function that executes the
 			// statements after a loop. Errors if used outside a loop.
@@ -589,7 +591,13 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				panic(continueLabelErr)
 			}
 			if t.Condition != nil {
-				panic(continueCondErr)
+				// CONTINUE with a condition is syntactic sugar for CONTINUE inside an
+				// IF stmt.
+				ifStmt := &ast.If{
+					Condition: t.Condition,
+					ThenBody:  []ast.Statement{&ast.Continue{Label: t.Label}},
+				}
+				return b.buildPLpgSQLStatements(b.prependStmt(ifStmt, stmts[i+1:]), s)
 			}
 			// CONTINUE statements are handled by calling the function that executes
 			// the loop body. Errors if used outside a loop.
@@ -1747,6 +1755,12 @@ func (b *plpgsqlBuilder) resolveVariableForAssign(name ast.Variable) *types.T {
 	panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", name))
 }
 
+func (b *plpgsqlBuilder) prependStmt(stmt ast.Statement, stmts []ast.Statement) []ast.Statement {
+	newStmts := make([]ast.Statement, 0, len(stmts)+1)
+	newStmts = append(newStmts, stmt)
+	return append(newStmts, stmts...)
+}
+
 func (b *plpgsqlBuilder) ensureScopeHasExpr(s *scope) {
 	if s.expr == nil {
 		s.expr = b.ob.factory.ConstructNoColsRow()
@@ -2003,14 +2017,8 @@ var (
 	exitLabelErr = unimplemented.New("EXIT label",
 		"EXIT statement labels are not yet supported",
 	)
-	exitCondErr = unimplemented.New("EXIT WHEN",
-		"conditional EXIT statements are not yet supported",
-	)
 	continueLabelErr = unimplemented.New("CONTINUE label",
 		"CONTINUE statement labels are not yet supported",
-	)
-	continueCondErr = unimplemented.New("CONTINUE WHEN",
-		"conditional CONTINUE statements are not yet supported",
 	)
 	dupIntoErr = unimplemented.New("duplicate INTO target",
 		"assigning to a variable more than once in the same INTO statement is not supported",
