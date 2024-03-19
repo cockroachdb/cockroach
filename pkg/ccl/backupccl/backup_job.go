@@ -1510,7 +1510,7 @@ func getTenantInfo(
 	}
 	if len(tenants) > 0 && jobDetails.RevisionHistory {
 		return spans, tenants, errors.UnimplementedError(
-			errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/47896"},
+			errors.IssueLink{IssueURL: build.MakeIssueURL(47896)},
 			"can not backup tenants with revision history",
 		)
 	}

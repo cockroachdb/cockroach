@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -2430,7 +2431,7 @@ func (kl *keyLocks) maybeDisallowLockPromotion(
 ) error {
 	if held == lock.Shared && reAcquisitionStr > held {
 		return MarkLockPromotionError(errors.UnimplementedErrorf(
-			errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/110435"},
+			errors.IssueLink{IssueURL: build.MakeIssueURL(110435)},
 			"lock promotion from %s to %s is not allowed", held, reAcquisitionStr,
 		))
 	}
