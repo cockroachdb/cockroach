@@ -397,7 +397,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 									descs,
 									DescriptorWithObjectType{
 										descriptor: mut,
-										objectType: privilege.Table,
+										objectType: mut.GetObjectType(),
 									})
 							}
 						}
