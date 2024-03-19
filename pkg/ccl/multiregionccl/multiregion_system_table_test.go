@@ -48,7 +48,7 @@ func TestMrSystemDatabase(t *testing.T) {
 		return cs
 	}
 
-	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3,
+	cluster, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3,
 		base.TestingKnobs{},
 		multiregionccltestutils.WithSettings(makeSettings()))
 	defer cleanup()
@@ -80,6 +80,15 @@ func TestMrSystemDatabase(t *testing.T) {
 	// Run schema validations to ensure the manual descriptor modifications are
 	// okay.
 	tDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.invalid_objects`, [][]string{})
+
+	_, err = sqlDB.Exec(`SET CLUSTER SETTING sql.multiregion.preview_multiregion_system_database.enabled = true`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`ALTER DATABASE system ADD REGION "us-east2"`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`ALTER DATABASE system ADD REGION "us-east3"`)
+	require.NoError(t, err)
 
 	t.Run("Sqlliveness", func(t *testing.T) {
 		row := tDB.QueryRow(t, `SELECT crdb_region, session_id, expiration FROM system.sqlliveness LIMIT 1`)
