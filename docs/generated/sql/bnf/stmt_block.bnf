@@ -3428,6 +3428,8 @@ alter_table_cmd ::=
 	| 'ALTER' opt_column column_name set_generated_always
 	| 'ALTER' opt_column column_name set_generated_default
 	| 'ALTER' opt_column column_name identity_option_list
+	| 'ALTER' opt_column column_name 'DROP' 'IDENTITY'
+	| 'ALTER' opt_column column_name 'DROP' 'IDENTITY' 'IF' 'EXISTS'
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
 	| 'ALTER' opt_column column_name 'SET' 'NOT' 'NULL'
 	| 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior
