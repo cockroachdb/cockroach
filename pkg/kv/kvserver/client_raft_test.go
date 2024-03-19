@@ -6130,10 +6130,10 @@ func TestRaftPreVote(t *testing.T) {
 				// We install a proposal filter which rejects proposals to the range
 				// during the partition (typically txn record cleanup via GC requests,
 				// but also e.g. lease extensions).
-				var partitioned atomic.Bool
+				var partitioned, blocked atomic.Bool
 				var rangeID roachpb.RangeID
 				propFilter := func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
-					if partitioned.Load() && args.Req.RangeID == rangeID {
+					if blocked.Load() && args.Req.RangeID == rangeID {
 						t.Logf("r%d proposal rejected: %s", rangeID, args.Req)
 						return kvpb.NewError(errors.New("rejected"))
 					}
@@ -6206,13 +6206,45 @@ func TestRaftPreVote(t *testing.T) {
 				tc.WaitForValues(t, key, []int64{2, 2, 2})
 				t.Logf("n1 has lease")
 
-				// Wait for the range to quiesce, if enabled.
+				// Block new proposals to the range.
+				blocked.Store(true)
+				t.Logf("n1 proposals blocked")
+
+				// Wait for the range to quiesce, if enabled. Otherwise, wait for the
+				// range to stabilize such that the leader's log does not change for a
+				// second, and has been replicated to all followers.
 				if quiesce {
 					require.Eventually(t, repl3.IsQuiescent, 10*time.Second, 100*time.Millisecond)
 					t.Logf("n3 quiesced")
 				} else {
 					require.False(t, repl3.IsQuiescent())
 					t.Logf("n3 not quiesced")
+
+					var lastIndex uint64
+					var lastChanged time.Time
+					require.Eventually(t, func() bool {
+						status := repl1.RaftStatus()
+						require.Equal(t, raft.StateLeader, status.RaftState)
+						if i := status.Progress[1].Match; i > lastIndex {
+							t.Logf("n1 last index changed: %d -> %d", lastIndex, i)
+							lastIndex, lastChanged = i, timeutil.Now()
+							return false
+						}
+						for i, pr := range status.Progress {
+							if pr.Match != lastIndex {
+								t.Logf("n%d match %d not at n1 last index %d, waiting", i, pr.Match, lastIndex)
+								return false
+							}
+						}
+						if since := timeutil.Since(lastChanged); since < time.Second {
+							t.Logf("n1 last index %d changed %s ago, waiting",
+								lastIndex, since.Truncate(time.Millisecond))
+							return false
+						}
+						return true
+					}, 10*time.Second, 200*time.Millisecond)
+					t.Logf("n1 stabilized range")
+					logStatus(repl1.RaftStatus())
 				}
 
 				// Partition n3.
@@ -6266,7 +6298,9 @@ func TestRaftPreVote(t *testing.T) {
 				}
 				t.Logf("n1 is still leader")
 
-				// Heal the partition, and wait for the replica to become a follower.
+				// Heal the partition and unblock proposals, then wait for the replica
+				// to become a follower.
+				blocked.Store(false)
 				partitioned.Store(false)
 				t.Logf("n3 partition healed")
 
