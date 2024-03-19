@@ -828,7 +828,7 @@ UPSERT INTO system.public.transaction_activity
                   ts.fingerprint_id,
                   max(ts.agg_interval) as agg_interval,
                   max(ts.metadata) AS metadata,
-                  crdb_internal.merge_transaction_stats(array_agg(statistics)) AS merge_stats
+                  merge_transaction_stats(statistics) AS merge_stats
            FROM system.public.transaction_statistics ts
                     inner join (SELECT fingerprint_id, app_name
                                 FROM (SELECT fingerprint_id, app_name,
@@ -843,7 +843,7 @@ UPSERT INTO system.public.transaction_activity
                                             (merge_stats -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float as contentionTime,
                                             (merge_stats -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::float as cpuTime
                                             FROM (SELECT fingerprint_id, app_name,
-                                                   crdb_internal.merge_transaction_stats(array_agg(statistics)) AS merge_stats
+                                                   merge_transaction_stats(statistics) AS merge_stats
                                             FROM system.public.transaction_statistics
                                             WHERE aggregated_ts = '2023-09-27 14:00:00.000000 +00:00' and
                                                   app_name not like '$ internal%'
@@ -871,134 +871,119 @@ vectorized: true
 │ arbiter indexes: primary
 │
 └── • project
-    │ columns: (aggregated_ts, fingerprint_id, app_name, max, max, merge_stats, query, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "?column?", aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics, query, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds, max, max, merge_stats, query, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "?column?", aggregated_ts)
+    │ columns: (aggregated_ts, fingerprint_id, app_name, max, max, merge_transaction_stats, query, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "?column?", aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics, query, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds, max, max, merge_transaction_stats, query, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "?column?", aggregated_ts)
     │
     └── • lookup join (left outer)
-        │ columns: (query, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "?column?", aggregated_ts, fingerprint_id, app_name, max, max, merge_stats, aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics, query, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
+        │ columns: (query, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "?column?", aggregated_ts, fingerprint_id, app_name, max, max, merge_transaction_stats, aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics, query, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
         │ estimated row count: 1
         │ table: transaction_activity@primary
         │ equality: (aggregated_ts, fingerprint_id, app_name) = (aggregated_ts,fingerprint_id,app_name)
         │ equality cols are key
         │
         └── • distinct
-            │ columns: (query, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "?column?", aggregated_ts, fingerprint_id, app_name, max, max, merge_stats)
+            │ columns: (query, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "?column?", aggregated_ts, fingerprint_id, app_name, max, max, merge_transaction_stats)
             │ estimated row count: 1
             │ distinct on: fingerprint_id, app_name
             │ nulls are distinct
             │ error on duplicate
             │
             └── • render
-                │ columns: (query, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "?column?", aggregated_ts, fingerprint_id, app_name, max, max, merge_stats)
+                │ columns: (query, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "?column?", aggregated_ts, fingerprint_id, app_name, max, max, merge_transaction_stats)
                 │ render query: ''
-                │ render int8: ((merge_stats->'statistics')->>'cnt')::INT8
-                │ render ?column?: ((merge_stats->'statistics')->>'cnt')::FLOAT8 * (((merge_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
+                │ render int8: ((merge_transaction_stats->'statistics')->>'cnt')::INT8
+                │ render ?column?: ((merge_transaction_stats->'statistics')->>'cnt')::FLOAT8 * (((merge_transaction_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
                 │ render execution_total_cluster_seconds: 142.0
-                │ render coalesce: COALESCE((((merge_stats->'execution_statistics')->'contentionTime')->>'mean')::FLOAT8, 0.0)
-                │ render coalesce: COALESCE((((merge_stats->'execution_statistics')->'cpuSQLNanos')->>'mean')::FLOAT8, 0.0)
-                │ render float8: (((merge_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
+                │ render coalesce: COALESCE((((merge_transaction_stats->'execution_statistics')->'contentionTime')->>'mean')::FLOAT8, 0.0)
+                │ render coalesce: COALESCE((((merge_transaction_stats->'execution_statistics')->'cpuSQLNanos')->>'mean')::FLOAT8, 0.0)
+                │ render float8: (((merge_transaction_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
                 │ render ?column?: 0.0
-                │ render aggregated_ts: aggregated_ts
+                │ render aggregated_ts: any_not_null
                 │ render fingerprint_id: fingerprint_id
                 │ render app_name: app_name
                 │ render max: max
                 │ render max: max
-                │ render merge_stats: merge_stats
+                │ render merge_transaction_stats: merge_transaction_stats
                 │
-                └── • render
-                    │ columns: (merge_stats, aggregated_ts, fingerprint_id, app_name, max, max)
-                    │ render merge_stats: crdb_internal.merge_transaction_stats(array_agg)
-                    │ render aggregated_ts: any_not_null
-                    │ render fingerprint_id: fingerprint_id
-                    │ render app_name: app_name
-                    │ render max: max
-                    │ render max: max
+                └── • group (hash)
+                    │ columns: (fingerprint_id, app_name, max, max, merge_transaction_stats, any_not_null)
+                    │ estimated row count: 1
+                    │ aggregate 0: max(agg_interval)
+                    │ aggregate 1: max(metadata)
+                    │ aggregate 2: merge_transaction_stats(statistics)
+                    │ aggregate 3: any_not_null(aggregated_ts)
+                    │ group by: fingerprint_id, app_name
                     │
-                    └── • group (hash)
-                        │ columns: (fingerprint_id, app_name, max, max, array_agg, any_not_null)
-                        │ estimated row count: 1
-                        │ aggregate 0: max(agg_interval)
-                        │ aggregate 1: max(metadata)
-                        │ aggregate 2: array_agg(statistics)
-                        │ aggregate 3: any_not_null(aggregated_ts)
-                        │ group by: fingerprint_id, app_name
+                    └── • project
+                        │ columns: (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics)
                         │
-                        └── • project
-                            │ columns: (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics)
+                        └── • hash join (inner)
+                            │ columns: (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics, fingerprint_id, app_name, row_number, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1, row_number)
+                            │ estimated row count: 1
+                            │ equality: (app_name, fingerprint_id) = (app_name, fingerprint_id)
+                            │ right cols are key
                             │
-                            └── • hash join (inner)
-                                │ columns: (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics, fingerprint_id, app_name, row_number, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1, row_number)
-                                │ estimated row count: 1
-                                │ equality: (app_name, fingerprint_id) = (app_name, fingerprint_id)
-                                │ right cols are key
+                            ├── • scan
+                            │     columns: (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics)
+                            │     estimated row count: 83,333 (8.3% of the table; stats collected <hidden> ago)
+                            │     table: transaction_statistics@primary
+                            │     spans: /0/2023-09-27T14:00:00Z-/0/2023-09-27T14:00:00.000000001Z /1/2023-09-27T14:00:00Z-/1/2023-09-27T14:00:00.000000001Z /2/2023-09-27T14:00:00Z-/2/2023-09-27T14:00:00.000000001Z /3/2023-09-27T14:00:00Z-/3/2023-09-27T14:00:00.000000001Z /4/2023-09-27T14:00:00Z-/4/2023-09-27T14:00:00.000000001Z /5/2023-09-27T14:00:00Z-/5/2023-09-27T14:00:00.000000001Z /6/2023-09-27T14:00:00Z-/6/2023-09-27T14:00:00.000000001Z /7/2023-09-27T14:00:00Z-/7/2023-09-27T14:00:00.000000001Z
+                            │
+                            └── • filter
+                                │ columns: (fingerprint_id, app_name, row_number, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1, row_number)
+                                │ estimated row count: 24,120
+                                │ filter: ((((row_number < 500) OR (row_number < 500)) OR (row_number < 500)) OR (row_number < 500)) OR (row_number < 500)
                                 │
-                                ├── • scan
-                                │     columns: (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics)
-                                │     estimated row count: 83,333 (8.3% of the table; stats collected <hidden> ago)
-                                │     table: transaction_statistics@primary
-                                │     spans: /0/2023-09-27T14:00:00Z-/0/2023-09-27T14:00:00.000000001Z /1/2023-09-27T14:00:00Z-/1/2023-09-27T14:00:00.000000001Z /2/2023-09-27T14:00:00Z-/2/2023-09-27T14:00:00.000000001Z /3/2023-09-27T14:00:00Z-/3/2023-09-27T14:00:00.000000001Z /4/2023-09-27T14:00:00Z-/4/2023-09-27T14:00:00.000000001Z /5/2023-09-27T14:00:00Z-/5/2023-09-27T14:00:00.000000001Z /6/2023-09-27T14:00:00Z-/6/2023-09-27T14:00:00.000000001Z /7/2023-09-27T14:00:00Z-/7/2023-09-27T14:00:00.000000001Z
-                                │
-                                └── • filter
+                                └── • window
                                     │ columns: (fingerprint_id, app_name, row_number, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1, row_number)
-                                    │ estimated row count: 24,120
-                                    │ filter: ((((row_number < 500) OR (row_number < 500)) OR (row_number < 500)) OR (row_number < 500)) OR (row_number < 500)
+                                    │ estimated row count: 27,778
+                                    │ window 0: row_number() OVER (ORDER BY row_number_5_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
                                     │
                                     └── • window
-                                        │ columns: (fingerprint_id, app_name, row_number, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1, row_number)
+                                        │ columns: (fingerprint_id, app_name, row_number, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1)
                                         │ estimated row count: 27,778
-                                        │ window 0: row_number() OVER (ORDER BY row_number_5_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                                        │ window 0: row_number() OVER (ORDER BY row_number_4_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
                                         │
                                         └── • window
-                                            │ columns: (fingerprint_id, app_name, row_number, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1)
+                                            │ columns: (fingerprint_id, app_name, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1)
                                             │ estimated row count: 27,778
-                                            │ window 0: row_number() OVER (ORDER BY row_number_4_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                                            │ window 0: row_number() OVER (ORDER BY row_number_3_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
                                             │
                                             └── • window
-                                                │ columns: (fingerprint_id, app_name, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1)
+                                                │ columns: (fingerprint_id, app_name, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1)
                                                 │ estimated row count: 27,778
-                                                │ window 0: row_number() OVER (ORDER BY row_number_3_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                                                │ window 0: row_number() OVER (ORDER BY row_number_2_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
                                                 │
                                                 └── • window
-                                                    │ columns: (fingerprint_id, app_name, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1)
+                                                    │ columns: (fingerprint_id, app_name, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1)
                                                     │ estimated row count: 27,778
-                                                    │ window 0: row_number() OVER (ORDER BY row_number_2_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                                                    │ window 0: row_number() OVER (ORDER BY row_number_1_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
                                                     │
-                                                    └── • window
-                                                        │ columns: (fingerprint_id, app_name, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1)
-                                                        │ estimated row count: 27,778
-                                                        │ window 0: row_number() OVER (ORDER BY row_number_1_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                                                    └── • render
+                                                        │ columns: (fingerprint_id, app_name, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1)
+                                                        │ render row_number_1_orderby_1_1: ((merge_transaction_stats->'statistics')->>'cnt')::INT8
+                                                        │ render row_number_2_orderby_1_1: (((merge_transaction_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
+                                                        │ render row_number_3_orderby_1_1: ((merge_transaction_stats->'statistics')->>'cnt')::FLOAT8 * (((merge_transaction_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
+                                                        │ render row_number_4_orderby_1_1: COALESCE((((merge_transaction_stats->'execution_statistics')->'contentionTime')->>'mean')::FLOAT8, 0.0)
+                                                        │ render row_number_5_orderby_1_1: COALESCE((((merge_transaction_stats->'execution_statistics')->'cpuSQLNanos')->>'mean')::FLOAT8, 0.0)
+                                                        │ render fingerprint_id: fingerprint_id
+                                                        │ render app_name: app_name
                                                         │
-                                                        └── • render
-                                                            │ columns: (fingerprint_id, app_name, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1)
-                                                            │ render row_number_1_orderby_1_1: ((merge_stats->'statistics')->>'cnt')::INT8
-                                                            │ render row_number_2_orderby_1_1: (((merge_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
-                                                            │ render row_number_3_orderby_1_1: ((merge_stats->'statistics')->>'cnt')::FLOAT8 * (((merge_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
-                                                            │ render row_number_4_orderby_1_1: COALESCE((((merge_stats->'execution_statistics')->'contentionTime')->>'mean')::FLOAT8, 0.0)
-                                                            │ render row_number_5_orderby_1_1: COALESCE((((merge_stats->'execution_statistics')->'cpuSQLNanos')->>'mean')::FLOAT8, 0.0)
-                                                            │ render fingerprint_id: fingerprint_id
-                                                            │ render app_name: app_name
+                                                        └── • group (hash)
+                                                            │ columns: (fingerprint_id, app_name, merge_transaction_stats)
+                                                            │ estimated row count: 27,778
+                                                            │ aggregate 0: merge_transaction_stats(statistics)
+                                                            │ group by: fingerprint_id, app_name
                                                             │
-                                                            └── • render
-                                                                │ columns: (merge_stats, fingerprint_id, app_name)
-                                                                │ render merge_stats: crdb_internal.merge_transaction_stats(array_agg)
-                                                                │ render fingerprint_id: fingerprint_id
-                                                                │ render app_name: app_name
+                                                            └── • project
+                                                                │ columns: (fingerprint_id, app_name, statistics)
                                                                 │
-                                                                └── • group (hash)
-                                                                    │ columns: (fingerprint_id, app_name, array_agg)
+                                                                └── • filter
+                                                                    │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
                                                                     │ estimated row count: 27,778
-                                                                    │ aggregate 0: array_agg(statistics)
-                                                                    │ group by: fingerprint_id, app_name
+                                                                    │ filter: app_name NOT LIKE '$ internal%'
                                                                     │
-                                                                    └── • project
-                                                                        │ columns: (fingerprint_id, app_name, statistics)
-                                                                        │
-                                                                        └── • filter
-                                                                            │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                            │ estimated row count: 27,778
-                                                                            │ filter: app_name NOT LIKE '$ internal%'
-                                                                            │
-                                                                            └── • scan
-                                                                                  columns: (aggregated_ts, fingerprint_id, app_name, statistics)
-                                                                                  estimated row count: 83,333 (8.3% of the table; stats collected <hidden> ago)
-                                                                                  table: transaction_statistics@primary
-                                                                                  spans: /0/2023-09-27T14:00:00Z-/0/2023-09-27T14:00:00.000000001Z /1/2023-09-27T14:00:00Z-/1/2023-09-27T14:00:00.000000001Z /2/2023-09-27T14:00:00Z-/2/2023-09-27T14:00:00.000000001Z /3/2023-09-27T14:00:00Z-/3/2023-09-27T14:00:00.000000001Z /4/2023-09-27T14:00:00Z-/4/2023-09-27T14:00:00.000000001Z /5/2023-09-27T14:00:00Z-/5/2023-09-27T14:00:00.000000001Z /6/2023-09-27T14:00:00Z-/6/2023-09-27T14:00:00.000000001Z /7/2023-09-27T14:00:00Z-/7/2023-09-27T14:00:00.000000001Z
+                                                                    └── • scan
+                                                                          columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                          estimated row count: 83,333 (8.3% of the table; stats collected <hidden> ago)
+                                                                          table: transaction_statistics@primary
+                                                                          spans: /0/2023-09-27T14:00:00Z-/0/2023-09-27T14:00:00.000000001Z /1/2023-09-27T14:00:00Z-/1/2023-09-27T14:00:00.000000001Z /2/2023-09-27T14:00:00Z-/2/2023-09-27T14:00:00.000000001Z /3/2023-09-27T14:00:00Z-/3/2023-09-27T14:00:00.000000001Z /4/2023-09-27T14:00:00Z-/4/2023-09-27T14:00:00.000000001Z /5/2023-09-27T14:00:00Z-/5/2023-09-27T14:00:00.000000001Z /6/2023-09-27T14:00:00Z-/6/2023-09-27T14:00:00.000000001Z /7/2023-09-27T14:00:00Z-/7/2023-09-27T14:00:00.000000001Z
