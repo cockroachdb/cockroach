@@ -182,12 +182,10 @@ func (c *adminPrivilegeChecker) RequireViewClusterMetadataPermission(
 		privilege.VIEWCLUSTERMETADATA.DisplayName())
 }
 
-// RequireRepairClusterMetadataPermission requires the user have admin
-// or the VIEWCLUSTERMETADATA system privilege and returns an error if
+// RequireRepairClusterPermission requires the user have admin
+// or the REPAIRCLUSTER system privilege and returns an error if
 // the user does not have it.
-func (c *adminPrivilegeChecker) RequireRepairClusterMetadataPermission(
-	ctx context.Context,
-) (err error) {
+func (c *adminPrivilegeChecker) RequireRepairClusterPermission(ctx context.Context) (err error) {
 	userName, isAdmin, err := c.GetUserAndRole(ctx)
 	if err != nil {
 		return srverrors.ServerError(ctx, err)
@@ -195,14 +193,14 @@ func (c *adminPrivilegeChecker) RequireRepairClusterMetadataPermission(
 	if isAdmin {
 		return nil
 	}
-	if hasRepairClusterMetadata, err := c.HasGlobalPrivilege(ctx, userName, privilege.REPAIRCLUSTERMETADATA); err != nil {
+	if hasRepairCluster, err := c.HasGlobalPrivilege(ctx, userName, privilege.REPAIRCLUSTER); err != nil {
 		return srverrors.ServerError(ctx, err)
-	} else if hasRepairClusterMetadata {
+	} else if hasRepairCluster {
 		return nil
 	}
 	return grpcstatus.Errorf(
 		codes.PermissionDenied, "this operation requires the %s system privilege",
-		privilege.REPAIRCLUSTERMETADATA.DisplayName())
+		privilege.REPAIRCLUSTER.DisplayName())
 }
 
 // RequireViewDebugPermission requires the user have admin or the

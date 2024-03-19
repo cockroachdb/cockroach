@@ -134,7 +134,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 
 		// Check that the user has privileges or is the owner of the schedules being altered.
 		hasPriv, err := params.p.HasPrivilege(
-			params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA, params.p.User(),
+			params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER, params.p.User(),
 		)
 		if err != nil {
 			return err
@@ -142,7 +142,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 		isOwner := schedule.Owner() == params.p.User()
 		if !hasPriv && !isOwner {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "must have %s privilege or be owner of the "+
-				"schedule %d to %s it", privilege.REPAIRCLUSTERMETADATA, schedule.ScheduleID(), n.command.String())
+				"schedule %d to %s it", privilege.REPAIRCLUSTER, schedule.ScheduleID(), n.command.String())
 		}
 
 		switch n.command {

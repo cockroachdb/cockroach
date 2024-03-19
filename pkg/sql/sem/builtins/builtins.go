@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -4876,13 +4877,11 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// The user must be an admin to use this builtin.
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				// The user must have VIEWCLUSTERMETADATA to use this builtin.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 
 				sp := tracing.SpanFromContext(ctx)
@@ -4912,13 +4911,11 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// The user must be an admin to use this builtin.
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				// The user must have REPAIRCLUSTER to use this builtin.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 
 				traceID := tracingpb.TraceID(*(args[0].(*tree.DInt)))
@@ -5662,13 +5659,13 @@ SELECT
 			Types:      tree.ParamTypes{{Name: "msg", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				// The user must have REPAIRCLUSTER to use this builtin.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
 				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
-				}
+
 				s, ok := tree.AsDString(args[0])
 				if !ok {
 					return nil, errors.Newf("expected string value, got %T", args[0])
@@ -5695,13 +5692,13 @@ SELECT
 			Types:      tree.ParamTypes{{Name: "msg", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				// The user must have REPAIRCLUSTER to use this builtin.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
 				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
-				}
+
 				s, ok := tree.AsDString(args[0])
 				if !ok {
 					return nil, errors.Newf("expected string value, got %T", args[0])
@@ -6174,12 +6171,11 @@ SELECT
 			Types:      tree.ParamTypes{{Name: "vmodule_string", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				// The user must have REPAIRCLUSTER to use this builtin.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 
 				s, ok := tree.AsDString(args[0])
@@ -6206,13 +6202,10 @@ SELECT
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
-				// The user must be an admin to use this builtin.
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 				return tree.NewDString(log.GetVModule()), nil
 			},
@@ -6676,10 +6669,10 @@ SELECT
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if !enableUnsafeTestBuiltins {
 					return nil, errors.Errorf("requires COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
-				} else if isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx); err != nil {
+				} else if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				} else if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 
 				rangeID := roachpb.RangeID(*args[0].(*tree.DInt))
@@ -6922,12 +6915,10 @@ Parameters:` + randgencfg.ConfigDoc,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 				nodeID := int32(tree.MustBeDInt(args[0]))
 				storeID := int32(tree.MustBeDInt(args[1]))
@@ -7236,12 +7227,10 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.reset_index_usage_stats() requires admin privilege")
 				}
 				if evalCtx.IndexUsageStatsController == nil {
 					return nil, errors.AssertionFailedf("index usage stats controller not set")
@@ -7264,12 +7253,10 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.reset_sql_stats() requires admin privilege")
 				}
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
@@ -7292,12 +7279,10 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.reset_activity_tables() requires admin privilege")
 				}
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
@@ -7320,12 +7305,10 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.reset_insights_tables() requires admin privilege")
 				}
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
@@ -7433,12 +7416,10 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 				return tree.DVoidDatum, evalCtx.Planner.ValidateTTLScheduledJobsInCurrentDB(ctx)
 			},
@@ -7455,12 +7436,10 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 				oid := tree.MustBeDOid(args[0])
 				if err := evalCtx.Planner.RepairTTLScheduledJobForTable(ctx, int64(oid.Oid)); err != nil {
@@ -7529,13 +7508,10 @@ table's zone configuration this will return NULL.`,
 				if evalCtx.SchemaTelemetryController == nil {
 					return nil, errors.AssertionFailedf("schema telemetry controller not set")
 				}
-				// The user must be an admin to use this builtin.
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 				id, err := evalCtx.SchemaTelemetryController.CreateSchemaTelemetryJob(
 					ctx,
@@ -7665,12 +7641,10 @@ active for the current transaction.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 
 				queue := string(tree.MustBeDString(args[0]))
@@ -7697,12 +7671,10 @@ One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC', 'raftlog',
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 
 				queue := string(tree.MustBeDString(args[0]))
@@ -7746,12 +7718,10 @@ run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 
 				rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
@@ -7796,12 +7766,10 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 
 				rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
@@ -7852,12 +7820,10 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 
 				rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
@@ -7902,13 +7868,11 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// TODO(adityamaru): Figure out the correct permissions for collecting a
-				// job profiler bundle. For now only allow the admin role.
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				// job profiler bundle. For now only allow the VIEWCLUSTERMETADATA privilege.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errors.New("must be admin to request a job profiler bundle")
 				}
 
 				jobID := int(tree.MustBeDInt(args[0]))
@@ -7947,12 +7911,10 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errInsufficientPriv
 				}
 				nodeID := int32(tree.MustBeDInt(args[0]))
 				storeID := int32(tree.MustBeDInt(args[1]))
@@ -7960,7 +7922,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				if compactionConcurrency < 0 {
 					return nil, errors.AssertionFailedf("compaction_concurrency must be > 0")
 				}
-				if err = evalCtx.SetCompactionConcurrency(
+				if err := evalCtx.SetCompactionConcurrency(
 					ctx, nodeID, storeID, uint64(compactionConcurrency)); err != nil {
 					return nil, err
 				}
@@ -8000,12 +7962,10 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.fingerprint() requires admin privilege")
 				}
 
 				if len(args) != 2 {
@@ -9269,12 +9229,11 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 func verboseFingerprint(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (tree.Datum, error) {
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !isAdmin {
-		return nil, errors.New("crdb_internal.fingerprint() requires admin privilege")
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject,
+		privilege.VIEWCLUSTERMETADATA,
+	); err != nil {
+		return nil, pgerror.Wrap(err, pgcode.InsufficientPrivilege, "crdb_internal.fingerprint()")
 	}
 
 	if len(args) != 3 {
@@ -11274,10 +11233,6 @@ func CleanEncodingName(s string) string {
 	return string(b)
 }
 
-var errInsufficientPriv = pgerror.New(
-	pgcode.InsufficientPrivilege, "insufficient privilege",
-)
-
 // EvalFollowerReadOffset is a function used often with AS OF SYSTEM TIME queries
 // to determine the appropriate offset from now which is likely to be safe for
 // follower reads. It is injected by followerreadsccl. An error may be returned
@@ -11537,31 +11492,20 @@ true, then any plan other then the specified gist will be used`
 		Types:      typs,
 		ReturnType: tree.FixedReturnType(types.Bool),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			hasViewActivity, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(
-				ctx, privilege.VIEWACTIVITY)
+			hasPriv, shouldRedact, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
 			if err != nil {
 				return nil, err
 			}
-
-			if !hasViewActivity {
-				return nil, errors.New("requesting statement bundle requires " +
-					"VIEWACTIVITY or ADMIN role option")
-			}
-
-			isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			hasViewActivityRedacted, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(
-				ctx, privilege.VIEWACTIVITYREDACTED)
-			if err != nil {
-				return nil, err
-			}
-
-			if !isAdmin && hasViewActivityRedacted {
-				return nil, errors.New("VIEWACTIVITYREDACTED role option cannot request " +
-					"statement bundle")
+			if shouldRedact {
+				return nil, pgerror.Newf(
+					pgcode.InsufficientPrivilege,
+					"users with VIEWACTIVITYREDACTED privilege cannot request statement bundle",
+				)
+			} else if !hasPriv {
+				return nil, pgerror.Newf(
+					pgcode.InsufficientPrivilege,
+					"requesting statement bundle requires VIEWACTIVITY privilege",
+				)
 			}
 
 			if args[0] == tree.DNull {

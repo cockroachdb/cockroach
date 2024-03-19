@@ -12,12 +12,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -37,21 +37,17 @@ func init() {
 			// reason to look at so in the interest of least privilege we put it
 			// behind the VIEWCLUSTERSETTING privilige.
 			session := evalCtx.SessionAccessor
-			isAdmin, err := session.HasAdminRole(ctx)
+			hasView, err := session.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWCLUSTERSETTING)
 			if err != nil {
 				return nil, err
+			} else if !hasView {
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+					"user %s does not have %s system privilege",
+					evalCtx.SessionData().User(),
+					privilege.VIEWCLUSTERSETTING,
+				)
 			}
-			if !isAdmin {
-				hasView, err := session.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
-				if err != nil {
-					return nil, err
-				}
-				if !hasView {
-					if err := session.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING); err != nil {
-						return nil, err
-					}
-				}
-			}
+
 			return tree.MakeDBool(tree.DBool(IsFIPSReady())), nil
 		},
 		Class:      tree.NormalClass,

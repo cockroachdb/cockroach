@@ -130,7 +130,7 @@ func doAlterBackupSchedules(
 	}
 
 	// Check that the user has privileges or is the owner of the schedules being altered.
-	hasPriv, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA, p.User())
+	hasPriv, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER, p.User())
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func doAlterBackupSchedules(
 	isOwnerOfIncJob := s.incJob == nil || s.incJob.Owner() == p.User()
 	if !hasPriv && !(isOwnerOfFullJob && isOwnerOfIncJob) {
 		return pgerror.Newf(pgcode.InsufficientPrivilege, "must be admin or the owner of the "+
-			"schedules being altered, or have %s privilege", privilege.REPAIRCLUSTERMETADATA)
+			"schedules being altered, or have %s privilege", privilege.REPAIRCLUSTER)
 	}
 
 	if s, err = processFullBackupRecurrence(

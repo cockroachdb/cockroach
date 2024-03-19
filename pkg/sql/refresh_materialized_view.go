@@ -47,18 +47,12 @@ func (p *planner) RefreshMaterializedView(
 		}
 	}
 
-	// Only the owner or an admin (superuser) can refresh the view.
-	hasAdminRole, err := p.HasAdminRole(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	hasOwnership, err := p.HasOwnership(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
 
-	if !(hasOwnership || hasAdminRole) {
+	if !hasOwnership {
 		return nil, pgerror.Newf(
 			pgcode.InsufficientPrivilege,
 			"must be owner of materialized view %s",
