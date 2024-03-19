@@ -1063,6 +1063,12 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		// can handle overloads with the same name.
 		def, err := t.Func.Resolve(s.builder.ctx, semaCtx.SearchPath, semaCtx.FunctionResolver)
 		if err != nil {
+			if t.InCall && errors.Is(err, tree.ErrRoutineUndefined) {
+				panic(errors.WithHint(
+					pgerror.Newf(pgcode.UndefinedFunction, "procedure %s does not exist", t.Func),
+					"No procedure matches the given name.",
+				))
+			}
 			panic(err)
 		}
 

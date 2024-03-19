@@ -116,11 +116,7 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	// Type-check the procedure.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 	b.semaCtx.Properties.Require("CALL argument", tree.RejectSubqueries)
-	b.semaCtx.Properties.Ancestors.Push(tree.CallAncestor)
-	typedExpr, err := tree.TypeCheck(b.ctx, c.Proc, b.semaCtx, types.Any)
-	if err != nil {
-		panic(err)
-	}
+	typedExpr := inScope.resolveType(c.Proc, types.Any)
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
 		panic(errors.AssertionFailedf("expected FuncExpr"))
@@ -149,7 +145,7 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	}
 
 	// Build the routine.
-	routine, _ := b.buildRoutine(c.Proc, def, inScope, nil /* colRefs */)
+	routine, _ := b.buildRoutine(f, def, inScope, nil /* colRefs */)
 	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
 		nil /* outScope */, nil /* outCol */)
 
