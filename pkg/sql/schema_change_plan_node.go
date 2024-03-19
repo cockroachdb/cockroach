@@ -69,7 +69,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	scs := p.extendedEvalCtx.SchemaChangerState
 	scs.stmts = append(scs.stmts, p.stmt.SQL)
 	deps := p.newSchemaChangeBuilderDependencies(scs.stmts)
-	state, err := scbuild.Build(ctx, deps, scs.state, stmt, &scs.memAcc)
+	state, logSchemaChangesFn, err := scbuild.Build(ctx, deps, scs.state, stmt, &scs.memAcc)
 	if scerrors.HasNotImplemented(err) &&
 		mode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
 		return nil, nil
@@ -89,10 +89,11 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	p.curPlan.instrumentation.schemaChangerMode = schemaChangerModeDeclarative
 
 	return &schemaChangePlanNode{
-		stmt:         stmt,
-		sql:          p.stmt.SQL,
-		lastState:    scs.state,
-		plannedState: state,
+		stmt:               stmt,
+		sql:                p.stmt.SQL,
+		lastState:          scs.state,
+		plannedState:       state,
+		logSchemaChangesFn: logSchemaChangesFn,
 	}, nil
 }
 
@@ -196,12 +197,13 @@ type schemaChangePlanNode struct {
 	// need to re-plan if the lastState and the plannedState do not match, since
 	// we are executing DDL statements in an unexpected way.
 	plannedState scpb.CurrentState
+	// logSchemaChangesFn is used to log schema change events before execution.
+	logSchemaChangesFn scbuild.LogSchemaChangerEventsFn
 }
 
 func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.ExtendedEvalContext().SchemaChangerState
-
 	// Current schema change state (as tracked in `scs.state` in the planner)
 	// does not match that when we previously planned and created `s` (as tracked
 	// in `s.lastState` and was previously set to `scs.state` in the planner).
@@ -210,15 +212,23 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	// re-build the plan with an updated incumbent state.
 	if !reflect.DeepEqual(s.lastState.Current, scs.state.Current) {
 		deps := p.newSchemaChangeBuilderDependencies(scs.stmts)
-		state, err := scbuild.Build(params.ctx, deps, scs.state, s.stmt, &scs.memAcc)
+		state, logSchemaChangesFn, err := scbuild.Build(params.ctx, deps, scs.state, s.stmt, &scs.memAcc)
 		if err != nil {
 			return err
 		}
 		// Update with the re-planned state.
 		scs.memAcc.Shrink(params.ctx, s.plannedState.ByteSize())
 		s.plannedState = state
+		s.logSchemaChangesFn = logSchemaChangesFn
 	}
 
+	// First log events from the statement we just built.
+	if s.logSchemaChangesFn != nil {
+		err := s.logSchemaChangesFn(params.ctx)
+		if err != nil {
+			return err
+		}
+	}
 	// Disable KV tracing for statement phase execution.
 	// Operation side effects are in-memory only.
 	const kvTrace = false

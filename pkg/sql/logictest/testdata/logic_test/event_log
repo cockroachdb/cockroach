@@ -1138,3 +1138,22 @@ LIMIT 2
 ----
 drop_function    {"EventType": "drop_function", "FunctionName": "defaultdb.public.f", "Statement": "DROP FUNCTION \"\".\"\".f", "Tag": "DROP FUNCTION", "User": "root"}
 create_function  {"EventType": "create_function", "FunctionName": "defaultdb.public.f", "Statement": "CREATE FUNCTION defaultdb.public.f(IN input INT8)\n\tRETURNS INT8\n\tSTABLE\n\tLANGUAGE SQL\n\tAS $$SELECT 123;$$", "Tag": "CREATE FUNCTION", "User": "root"}
+
+subtest event_logs_not_on_explain
+
+statement ok
+CREATE TABLE t1(n int);
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t1 ADD COLUMN j int;
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+WHERE "eventType" = 'alter_table'
+AND info::JSONB->>'Statement' LIKE 'ALTER TABLE t1%'
+ORDER BY "timestamp" DESC, info
+----
+
+
+statement ok
+DROP table t1;
