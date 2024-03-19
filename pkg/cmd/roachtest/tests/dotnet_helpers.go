@@ -83,6 +83,7 @@ func extractFailureFromTRX(contents []byte) ([]string, []status, map[string]stri
 
 	npgsqlFlakeErrors := []string{
 		"Received backend message ReadyForQuery while expecting",
+		"Received unexpected backend message ReadyForQuery",
 		"Got idle connector but State is Copy",
 	}
 	isAnyFlakeError := func(s string) bool {
