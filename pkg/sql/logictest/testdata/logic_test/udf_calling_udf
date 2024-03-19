@@ -107,3 +107,22 @@ statement ok
 DROP FUNCTION ins;
 DROP FUNCTION ins_ab;
 DROP TABLE ab;
+
+statement ok
+CREATE FUNCTION identity1(n INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT n;
+$$
+
+statement ok
+CREATE FUNCTION identity2(n INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT identity1(n);
+$$
+
+query I
+SELECT identity2(11)
+----
+11
+
+statement ok
+DROP FUNCTION identity2;
+DROP FUNCTION identity1;

@@ -94,8 +94,11 @@ SELECT p(1)
 
 # The error message for a non-existent procedure should mention "procedure" not
 # "function".
-statement error pgcode 42883 procedure no_exist does not exist\nHINT: No procedure matches the given name and argument types. You might need to add explicit type casts.
+statement error pgcode 42883 procedure no_exist does not exist\nHINT: No procedure matches the given name.
 CALL no_exist()
+
+statement error pgcode 42883 procedure p\(int, string\) does not exist\nHINT: No procedure matches the given name and argument types. You might need to add explicit type casts.
+CALL p(1, 'foo')
 
 # The error message for a non-existent function within a procedure call should
 # still mention "function".
@@ -496,5 +499,31 @@ statement ok
 DROP PROCEDURE ins3;
 DROP PROCEDURE ins_ab;
 DROP TABLE ab;
+
+statement ok
+CREATE TABLE i (i INT);
+
+statement ok
+CREATE PROCEDURE insert1(n INT) LANGUAGE SQL AS $$
+  INSERT INTO i VALUES (n);
+$$
+
+statement ok
+CREATE PROCEDURE insert2(n INT) LANGUAGE SQL AS $$
+  CALL insert1(n);
+$$
+
+statement ok
+CALL insert2(11)
+
+query I
+SELECT * FROM i
+----
+11
+
+statement ok
+DROP PROCEDURE insert2;
+DROP PROCEDURE insert1;
+DROP TABLE i;
 
 subtest end
