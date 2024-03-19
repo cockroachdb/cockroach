@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -282,7 +283,31 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 
 			privileges := descriptor.GetPrivileges()
 			for _, grantee := range n.grantees {
-				changed, err := n.changePrivilege(privileges, n.desiredprivs, grantee)
+				// Ensure we are only setting privilleges valid for this object type.
+				// i.e. We only expect this for sequences.
+				validPrivs, err := privilege.GetValidPrivilegesForObject(objType)
+				if err != nil {
+					return err
+				}
+				targetPrivs := n.desiredprivs.ToBitField() & validPrivs.ToBitField()
+				// If all privileges are discarded for a given object, and it's not
+				// a sequence log a message.
+				if targetPrivs == 0 {
+					missingPrivs, err := privilege.ListFromBitField(
+						n.desiredprivs.ToBitField()&^targetPrivs, privilege.Any)
+					if err != nil {
+						return err
+					}
+					if objType != privilege.Sequence {
+						log.Warningf(ctx, "object type %s does not support privilege %v", objType, missingPrivs.SortedDisplayNames())
+					}
+					break
+				}
+				privsToSet, err := privilege.ListFromBitField(targetPrivs, objType)
+				if err != nil {
+					return err
+				}
+				changed, err := n.changePrivilege(privileges, privsToSet, grantee)
 				if err != nil {
 					return err
 				}
