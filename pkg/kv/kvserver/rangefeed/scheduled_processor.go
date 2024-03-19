@@ -439,99 +439,90 @@ func (p *ScheduledProcessor) sendEvent(ctx context.Context, e event, timeout tim
 	return false
 }
 
+func (p *ScheduledProcessor) trySendEvent(
+	ctx context.Context, ev *event, timeout time.Duration,
+) (success bool, needsCleanup bool) {
+	select {
+	case p.eventC <- ev:
+		return true, false
+	case <-p.stoppedC:
+		return true, true
+	case <-ctx.Done():
+		p.sendStop(newErrBufferCapacityExceeded())
+		return false, true
+	}
+}
+
+func (p *ScheduledProcessor) tryEnqueueEvent(
+	ctx context.Context, e *event, timeout time.Duration,
+) (success bool, needsCleanup bool) {
+	if timeout == 0 {
+		return p.trySendEvent(ctx, e, timeout)
+	}
+
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, timeout) // nolint:context
+	defer cancel()
+
+	select {
+	case p.eventC <- e:
+		return true, false
+	case <-p.stoppedC:
+		return true, true
+	default:
+		return p.trySendEvent(ctx, e, timeout)
+	}
+}
+
+func (p *ScheduledProcessor) tryAllocateMemory(
+	ctx context.Context, e event, timeout time.Duration,
+) (*SharedBudgetAllocation, error) {
+	if p.MemBudget == nil {
+		return nil, nil
+	}
+	size := calculateDateEventSize(e)
+	if size <= 0 {
+		return nil, nil
+	}
+
+	alloc, err := p.MemBudget.TryGet(ctx, size)
+	if err == nil || errors.Is(err, budgetClosedError) {
+		return alloc, nil
+	}
+
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout) // nolint:context
+		defer cancel()
+		timeout = 0
+	}
+
+	p.Metrics.RangeFeedBudgetBlocked.Inc(1)
+	// Try once again aftern waiting
+	alloc, err = p.MemBudget.WaitAndGet(ctx, size)
+	if err == nil || errors.Is(err, budgetClosedError) {
+		return alloc, nil
+	}
+	p.Metrics.RangeFeedBudgetExhausted.Inc(1)
+	return nil, err
+}
+
 func (p *ScheduledProcessor) enqueueEventInternal(
 	ctx context.Context, e event, timeout time.Duration,
 ) bool {
-	// The code is a bit unwieldy because we try to avoid any allocations on fast
-	// path where we have enough budget and outgoing channel is free. If not, we
-	// try to set up timeout for acquiring budget and then reuse this timeout when
-	// inserting value into channel.
-	var alloc *SharedBudgetAllocation
-	if p.MemBudget != nil {
-		size := calculateDateEventSize(e)
-		if size > 0 {
-			var err error
-			// First we will try non-blocking fast path to allocate memory budget.
-			alloc, err = p.MemBudget.TryGet(ctx, size)
-			// If budget is already closed, then just let it through because processor
-			// is terminating.
-			if err != nil && !errors.Is(err, budgetClosedError) {
-				// Since we don't have enough budget, we should try to wait for
-				// allocation returns before failing.
-				if timeout > 0 {
-					var cancel context.CancelFunc
-					ctx, cancel = context.WithTimeout(ctx, timeout) // nolint:context
-					defer cancel()
-					// We reset timeout here so that subsequent channel write op doesn't
-					// try to wait beyond what is already set up.
-					timeout = 0
-				}
-				p.Metrics.RangeFeedBudgetBlocked.Inc(1)
-				alloc, err = p.MemBudget.WaitAndGet(ctx, size)
-			}
-			if err != nil && !errors.Is(err, budgetClosedError) {
-				p.Metrics.RangeFeedBudgetExhausted.Inc(1)
-				p.sendStop(newErrBufferCapacityExceeded())
-				return false
-			}
-			// Always release allocation pointer after sending as it is nil safe.
-			// In normal case its value is moved into event, in case of allocation
-			// errors it is nil, in case of send errors it is non-nil and this call
-			// ensures that unused allocation is released.
-			defer func() {
-				alloc.Release(ctx)
-			}()
-		}
+	alloc, err := p.tryAllocateMemory(ctx, e, timeout)
+	if err != nil {
+		p.sendStop(newErrBufferCapacityExceeded())
+		return false
 	}
 	ev := getPooledEvent(e)
 	ev.alloc = alloc
-	if timeout == 0 {
-		// Timeout is zero if no timeout was requested or timeout is already set on
-		// the context by budget allocation. Just try to write using context as a
-		// timeout.
-		select {
-		case p.eventC <- ev:
-			// Reset allocation after successful posting to prevent deferred cleanup
-			// from freeing it (see comment on defer for explanation).
-			alloc = nil
-		case <-p.stoppedC:
-			// Already stopped. Do nothing.
-		case <-ctx.Done():
-			p.sendStop(newErrBufferCapacityExceeded())
-			return false
-		}
-	} else {
-		// First try fast path operation without blocking and without creating any
-		// contexts in case channel has capacity.
-		select {
-		case p.eventC <- ev:
-			// Reset allocation after successful posting to prevent deferred cleanup
-			// from freeing it (see comment on defer for explanation).
-			alloc = nil
-		case <-p.stoppedC:
-			// Already stopped. Do nothing.
-		default:
-			// Fast path failed since we don't have capacity in channel. Wait for
-			// slots to clear up using context timeout.
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, timeout) // nolint:context
-			defer cancel()
-			select {
-			case p.eventC <- ev:
-				// Reset allocation after successful posting to prevent deferred cleanup
-				// from freeing it  (see comment on defer for explanation).
-				alloc = nil
-			case <-p.stoppedC:
-				// Already stopped. Do nothing.
-			case <-ctx.Done():
-				// Sending on the eventC channel would have blocked.
-				// Instead, tear down the processor and return immediately.
-				p.sendStop(newErrBufferCapacityExceeded())
-				return false
-			}
-		}
+
+	success, needsCleanUp := p.tryEnqueueEvent(ctx, ev, timeout)
+	if needsCleanUp {
+		alloc.Release(ctx)
 	}
-	return true
+	return success
 }
 
 // setResolvedTSInitialized informs the Processor that its resolved timestamp has
