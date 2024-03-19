@@ -146,20 +146,17 @@ type plpgsqlBuilder struct {
 	// expressions.
 	colRefs *opt.ColSet
 
-	// returnType is the return type of the PL/pgSQL function.
+	// returnType is the return type of the PL/pgSQL routine.
 	returnType *types.T
 
-	// continuations is used to model the control flow of a PL/pgSQL function.
-	// The head of the continuations stack is used upon reaching the end of a
-	// statement block to call a function that models the statements that come
-	// next after the block. In the context of a loop, this is used to recursively
-	// call back into the loop body.
+	// continuations is a stack of sub-routines that are called to resume
+	// execution from a certain point within the PL/pgSQL routine. For example,
+	// branches of an IF-statement will call a continuation to resume execution
+	// with the statements following the IF-statement.
+	//
+	// Each continuation stores its context, and callers filter depending on this
+	// context; see also continuationType.
 	continuations []continuation
-
-	// exitContinuations is similar to continuations, but is used upon reaching an
-	// EXIT statement within a loop. It is used to resume execution with the
-	// statements that follow the loop.
-	exitContinuations []continuation
 
 	// blocks is a stack containing every block in the path from the root block to
 	// the current block. It is necessary to track the entire stack because
@@ -297,9 +294,6 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		// There should always be a root block for the routine parameters.
 		panic(errors.AssertionFailedf("expected at least one PLpgSQL block"))
 	}
-	if astBlock.Label != "" {
-		panic(blockLabelErr)
-	}
 	b.ensureScopeHasExpr(s)
 	block := b.pushBlock(plBlock{
 		label:     astBlock.Label,
@@ -402,7 +396,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// For a nested block, push a continuation with the remaining statements
 			// before calling recursively into buildBlock. The continuation will be
 			// called when the control flow within the nested block terminates.
-			blockCon := b.makeContinuation("nested_block")
+			blockCon := b.makeContinuationWithTyp("nested_block", t.Label, continuationBlockExit)
 			b.appendPlpgSQLStmts(&blockCon, stmts[i+1:])
 			b.pushContinuation(blockCon)
 			return b.buildBlock(t, s)
@@ -521,9 +515,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			return returnScope
 
 		case *ast.Loop:
-			if t.Label != "" {
-				panic(loopLabelErr)
-			}
 			// LOOP control flow is handled similarly to IF statements, but two
 			// continuation functions are used - one that executes the loop body, and
 			// one that executes the statements following the LOOP statement. These
@@ -534,14 +525,15 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// statement, the loop body function is called. Upon reaching an EXIT
 			// statement, the exit continuation is called to model returning control
 			// flow to the statements outside the loop.
-			exitCon := b.makeContinuation("loop_exit")
+			exitCon := b.makeContinuationWithTyp("loop_exit", t.Label, continuationLoopExit)
 			b.appendPlpgSQLStmts(&exitCon, stmts[i+1:])
-			b.pushExitContinuation(exitCon)
-			loopContinuation := b.makeRecursiveContinuation("stmt_loop")
+			b.pushContinuation(exitCon)
+			loopContinuation := b.makeContinuationWithTyp("stmt_loop", t.Label, continuationLoopContinue)
+			loopContinuation.def.IsRecursive = true
 			b.pushContinuation(loopContinuation)
 			b.appendPlpgSQLStmts(&loopContinuation, t.Body)
 			b.popContinuation()
-			b.popExitContinuation()
+			b.popContinuation()
 			return b.callContinuation(&loopContinuation, s)
 
 		case *ast.While:
@@ -571,9 +563,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			return b.buildPLpgSQLStatements(b.prependStmt(loop, stmts[i+1:]), s)
 
 		case *ast.Exit:
-			if t.Label != "" {
-				panic(exitLabelErr)
-			}
 			if t.Condition != nil {
 				// EXIT with a condition is syntactic sugar for EXIT inside an IF stmt.
 				ifStmt := &ast.If{
@@ -583,17 +572,18 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				return b.buildPLpgSQLStatements(b.prependStmt(ifStmt, stmts[i+1:]), s)
 			}
 			// EXIT statements are handled by calling the function that executes the
-			// statements after a loop. Errors if used outside a loop.
-			if con := b.getExitContinuation(); con != nil {
-				return b.callContinuation(con, s)
-			} else {
-				panic(exitOutsideLoopErr)
+			// statements after a loop. Errors if used outside either a loop or a
+			// block with a label.
+			conTypes := continuationLoopExit
+			if t.Label != unspecifiedLabel {
+				conTypes |= continuationBlockExit
 			}
+			if con := b.getContinuation(conTypes, t.Label); con != nil {
+				return b.callContinuation(con, s)
+			}
+			panic(exitOutsideLoopErr)
 
 		case *ast.Continue:
-			if t.Label != "" {
-				panic(continueLabelErr)
-			}
 			if t.Condition != nil {
 				// CONTINUE with a condition is syntactic sugar for CONTINUE inside an
 				// IF stmt.
@@ -605,11 +595,10 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			// CONTINUE statements are handled by calling the function that executes
 			// the loop body. Errors if used outside a loop.
-			if con := b.getLoopContinuation(); con != nil {
+			if con := b.getContinuation(continuationLoopContinue, t.Label); con != nil {
 				return b.callContinuation(con, s)
-			} else {
-				panic(continueOutsideLoopErr)
 			}
+			panic(continueOutsideLoopErr)
 
 		case *ast.Raise:
 			// RAISE statements allow the PLpgSQL function to send an error or a
@@ -904,8 +893,10 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			panic(unsupportedPLStmtErr)
 		}
 	}
-	// Call the parent continuation to execute the rest of the function.
-	return b.callContinuation(b.getContinuation(), s)
+	// Call the parent continuation to execute the rest of the function. Ignore
+	// loop exit continuations, which are only invoked by EXIT statements.
+	conTypes := continuationDefault | continuationLoopContinue | continuationBlockExit
+	return b.callContinuation(b.getContinuation(conTypes, unspecifiedLabel), s)
 }
 
 // resolveOpenQuery finds and validates the query that is bound to cursor for
@@ -1589,15 +1580,19 @@ func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 			BlockState:        b.block().state,
 			RoutineType:       tree.UDFRoutine,
 		},
-		s: s,
+		typ: continuationDefault,
+		s:   s,
 	}
 }
 
-// makeRecursiveContinuation allocates a new continuation routine that can
-// recursively invoke itself.
-func (b *plpgsqlBuilder) makeRecursiveContinuation(name string) continuation {
+// makeContinuationWithTyp allocates a continuation for a loop or block, with
+// the correct label and continuation type.
+func (b *plpgsqlBuilder) makeContinuationWithTyp(
+	name, label string, typ continuationType,
+) continuation {
 	con := b.makeContinuation(name)
-	con.def.IsRecursive = true
+	con.label = label
+	con.typ = typ
 	return con
 }
 
@@ -1840,7 +1835,41 @@ type continuation struct {
 	// s is a scope initialized with the parameters of the routine. It should be
 	// used to construct the routine body statement.
 	s *scope
+
+	// label is the label of the block or loop that gave rise to this
+	// continuation, if any.
+	label string
+
+	// typ defines the context of the continuation.
+	typ continuationType
 }
+
+const unspecifiedLabel = ""
+
+// continuationType defines the context of the continuation, e.g. loop exit vs
+// continue. This is used to filter continuations when determining which one
+// must be called next.
+type continuationType uint8
+
+const (
+	// continuationDefault is used for continuations that don't interact with
+	// EXIT and CONTINUE statements.
+	continuationDefault continuationType = 1 << iota
+
+	// continuationLoopContinue encapsulates the body of a loop. CONTINUE
+	// statements jump execution to this type of continuation, as can terminal
+	// statements within the loop body.
+	continuationLoopContinue
+
+	// continuationLoopExit encapsulates the statements following a loop. Only
+	// EXIT statements can jump execution to this type of continuation.
+	continuationLoopExit
+
+	// continuationBlockExit encapsulates the statements following a PL/pgSQL
+	// block. EXIT statements can jump execution to this type of continuation, as
+	// can terminal statements within the block body.
+	continuationBlockExit
+)
 
 func (b *plpgsqlBuilder) pushContinuation(con continuation) {
 	b.continuations = append(b.continuations, con)
@@ -1852,35 +1881,23 @@ func (b *plpgsqlBuilder) popContinuation() {
 	}
 }
 
-func (b *plpgsqlBuilder) getContinuation() *continuation {
-	if len(b.continuations) == 0 {
-		return nil
-	}
-	return &b.continuations[len(b.continuations)-1]
-}
-
-func (b *plpgsqlBuilder) pushExitContinuation(con continuation) {
-	b.exitContinuations = append(b.exitContinuations, con)
-}
-
-func (b *plpgsqlBuilder) popExitContinuation() {
-	if len(b.exitContinuations) > 0 {
-		b.exitContinuations = b.exitContinuations[:len(b.exitContinuations)-1]
-	}
-}
-
-func (b *plpgsqlBuilder) getExitContinuation() *continuation {
-	if len(b.exitContinuations) == 0 {
-		return nil
-	}
-	return &b.exitContinuations[len(b.exitContinuations)-1]
-}
-
-func (b *plpgsqlBuilder) getLoopContinuation() *continuation {
+// getContinuation attempts to retrieve the most recent continuation from the
+// stack with the given required type and label.
+//
+// - allowedTypes is a bitset with each of the allowed continuation types.
+func (b *plpgsqlBuilder) getContinuation(
+	allowedTypes continuationType, label string,
+) *continuation {
 	for i := len(b.continuations) - 1; i >= 0; i-- {
-		if b.continuations[i].def.IsRecursive {
-			return &b.continuations[i]
+		if allowedTypes&b.continuations[i].typ == 0 {
+			// The caller requested to skip continuations of this type.
+			continue
 		}
+		if label != unspecifiedLabel && b.continuations[i].label != label {
+			// The caller specified the label of the continuation to retrieve.
+			continue
+		}
+		return &b.continuations[i]
 	}
 	return nil
 }
@@ -2039,18 +2056,6 @@ var (
 	)
 	recordVarErr = unimplemented.NewWithIssueDetail(114874, "RECORD variable",
 		"RECORD type for PL/pgSQL variables is not yet supported",
-	)
-	blockLabelErr = unimplemented.New("block label",
-		"block labels are not yet supported",
-	)
-	loopLabelErr = unimplemented.New("LOOP label",
-		"LOOP statement labels are not yet supported",
-	)
-	exitLabelErr = unimplemented.New("EXIT label",
-		"EXIT statement labels are not yet supported",
-	)
-	continueLabelErr = unimplemented.New("CONTINUE label",
-		"CONTINUE statement labels are not yet supported",
 	)
 	dupIntoErr = unimplemented.New("duplicate INTO target",
 		"assigning to a variable more than once in the same INTO statement is not supported",
