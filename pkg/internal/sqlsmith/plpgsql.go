@@ -37,7 +37,7 @@ func (s *Smither) makePLpgSQLBlock(scope plpgsqlBlockScope) *ast.Block {
 	const maxStmts = 11
 	decls, newScope := s.makePLpgSQLDeclarations(scope)
 	body := s.makePLpgSQLStatements(newScope, maxStmts)
-	// TODO(#115271): optionally add a label when block labels are supported.
+	// TODO(#106368): optionally add a label.
 	return &ast.Block{
 		Decls: decls,
 		Body:  body,
