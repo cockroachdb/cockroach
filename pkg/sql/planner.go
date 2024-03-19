@@ -919,9 +919,9 @@ func (p *planner) resetPlanner(
 
 // GetReplicationStreamManager returns a ReplicationStreamManager.
 func (p *planner) GetReplicationStreamManager(
-	ctx context.Context,
+	ctx context.Context, requireLicense bool,
 ) (eval.ReplicationStreamManager, error) {
-	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID)
+	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID, requireLicense)
 }
 
 // GetStreamIngestManager returns a StreamIngestManager.

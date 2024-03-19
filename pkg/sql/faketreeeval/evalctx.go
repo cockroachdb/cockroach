@@ -151,7 +151,7 @@ type DummyStreamManagerFactory struct{}
 
 // GetReplicationStreamManager implements the eval.StreamManagerFactory interface.
 func (smf *DummyStreamManagerFactory) GetReplicationStreamManager(
-	ctx context.Context,
+	ctx context.Context, requireLicense bool,
 ) (eval.ReplicationStreamManager, error) {
 	return nil, errors.WithStack(errors.New("Stream manager factory not implemented"))
 }

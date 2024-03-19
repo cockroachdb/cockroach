@@ -21,7 +21,7 @@ import (
 
 // GetReplicationStreamManagerHook is the hook to get access to the producer side replication APIs.
 // Used by builtin functions to trigger streaming replication.
-var GetReplicationStreamManagerHook func(ctx context.Context, evalCtx *eval.Context, txn isql.Txn, sessionID clusterunique.ID) (eval.ReplicationStreamManager, error)
+var GetReplicationStreamManagerHook func(ctx context.Context, evalCtx *eval.Context, txn isql.Txn, sessionID clusterunique.ID, requireLicense bool) (eval.ReplicationStreamManager, error)
 
 // GetStreamIngestManagerHook is the hook to get access to the ingestion side replication APIs.
 // Used by builtin functions to trigger streaming replication.
@@ -29,12 +29,16 @@ var GetStreamIngestManagerHook func(ctx context.Context, evalCtx *eval.Context, 
 
 // GetReplicationStreamManager returns a ReplicationStreamManager if a CCL binary is loaded.
 func GetReplicationStreamManager(
-	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, sessionID clusterunique.ID,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	txn isql.Txn,
+	sessionID clusterunique.ID,
+	requireLicense bool,
 ) (eval.ReplicationStreamManager, error) {
 	if GetReplicationStreamManagerHook == nil {
 		return nil, errors.New("replication streaming requires a CCL binary")
 	}
-	return GetReplicationStreamManagerHook(ctx, evalCtx, txn, sessionID)
+	return GetReplicationStreamManagerHook(ctx, evalCtx, txn, sessionID, requireLicense)
 }
 
 // GetStreamIngestManager returns a StreamIngestManager if a CCL binary is loaded.

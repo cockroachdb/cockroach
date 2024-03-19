@@ -817,7 +817,7 @@ func UnwrapDatum(ctx context.Context, evalCtx *Context, d tree.Datum) tree.Datum
 
 // StreamManagerFactory stores methods that return the streaming managers.
 type StreamManagerFactory interface {
-	GetReplicationStreamManager(ctx context.Context) (ReplicationStreamManager, error)
+	GetReplicationStreamManager(ctx context.Context, requireLicense bool) (ReplicationStreamManager, error)
 	GetStreamIngestManager(ctx context.Context) (StreamIngestManager, error)
 }
 
@@ -827,6 +827,11 @@ type ReplicationStreamManager interface {
 	// StartReplicationStream starts a stream replication job for the specified
 	// tenant on the producer side.
 	StartReplicationStream(ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest) (streampb.ReplicationProducerSpec, error)
+
+	// StartHistoryProtectionJob starts a stream replication job
+	// configured to protect the entire cluster at the given
+	// timestamp rather than a particular tenant.
+	StartHistoryProtectionJob(ctx context.Context, desc string, protectTime hlc.Timestamp) (jobspb.JobID, error)
 
 	// SetupSpanConfigsStream creates and plans a replication stream to stream the span config updates for a specific tenant.
 	SetupSpanConfigsStream(ctx context.Context, tenantName roachpb.TenantName) (ValueGenerator, error)

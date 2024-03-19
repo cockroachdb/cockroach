@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func makeTenantSpan(tenantID uint64) roachpb.Span {
@@ -61,6 +62,27 @@ func makeProducerJobRecord(
 		},
 		Progress: jobspb.StreamReplicationProgress{
 			Expiration: expiration,
+		},
+	}
+}
+
+func makeJobRecordForClusterPTSRetention(
+	registry *jobs.Registry,
+	expirationWindow time.Duration,
+	user username.SQLUsername,
+	desc string,
+	ptsID uuid.UUID,
+) jobs.Record {
+	return jobs.Record{
+		JobID:       registry.MakeJobID(),
+		Description: fmt.Sprintf("History Retention for %s", desc),
+		Username:    user,
+		Details: jobspb.StreamReplicationDetails{
+			ProtectedTimestampRecordID: ptsID,
+			ExpirationWindow:           expirationWindow,
+		},
+		Progress: jobspb.StreamReplicationProgress{
+			Expiration: timeutil.Now().Add(expirationWindow),
 		},
 	}
 }
@@ -108,14 +130,14 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 			}
 			if err != nil {
 				if jobs.HasJobNotFoundError(err) {
-					return errors.Wrapf(err, "replication stream %d failed loading producer job progress", p.job.ID())
+					return errors.Wrapf(err, "%s failed loading job progress", p.jobDescription())
 				}
 				log.Errorf(ctx,
-					"replication stream %d failed loading producer job progress (retrying): %v", p.job.ID(), err)
+					"%s failed loading job progress (retrying): %v", p.jobDescription(), err)
 				continue
 			}
 			if progress == nil {
-				log.Errorf(ctx, "replication stream %d cannot find producer job progress (retrying)", p.job.ID())
+				log.Errorf(ctx, "%s cannot find job progress (retrying)", p.jobDescription())
 				continue
 			}
 
@@ -134,15 +156,23 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 				return errors.New("destination cluster job finished unsuccessfully")
 			case jobspb.StreamReplicationProgress_NOT_FINISHED:
 				expiration := progress.Expiration
-				log.VEventf(ctx, 1, "checking if stream replication expiration %s timed out", expiration)
+				log.VEventf(ctx, 1, "checking if expiration %s timed out", expiration)
 				if expiration.Before(p.timeSource.Now()) {
-					return errors.Errorf("replication stream %d timed out", p.job.ID())
+					return errors.Errorf("%s timed out", p.jobDescription())
 				}
 			default:
 				return errors.New("unrecognized stream ingestion status")
 			}
 		}
 	}
+}
+
+func (p *producerJobResumer) jobDescription() redact.SafeString {
+	tenantID := p.job.Details().(jobspb.StreamReplicationDetails).TenantID
+	if !tenantID.IsSet() {
+		return redact.SafeString(fmt.Sprintf("history retention %d", p.job.ID()))
+	}
+	return redact.SafeString(fmt.Sprintf("replication producer stream %d", p.job.ID()))
 }
 
 // OnFailOrCancel implements jobs.Resumer interface
@@ -163,6 +193,9 @@ func (p *producerJobResumer) removeJobFromTenantRecord(
 	ctx context.Context, execCfg *sql.ExecutorConfig,
 ) error {
 	tenantID := p.job.Details().(jobspb.StreamReplicationDetails).TenantID
+	if !tenantID.IsSet() {
+		return nil
+	}
 	jobID := p.job.ID()
 	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		tenantRecord, err := sql.GetTenantRecordByID(ctx, txn, tenantID, execCfg.Settings)
