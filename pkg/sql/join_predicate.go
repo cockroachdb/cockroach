@@ -52,11 +52,9 @@ type joinPredicate struct {
 	// Used mainly for pretty-printing.
 	rightColNames tree.NameList
 
-	// For ON predicates or joins with an added filter expression,
-	// we need an IndexedVarHelper, the DataSourceInfo, a row buffer
-	// and the expression itself.
-	iVarHelper tree.IndexedVarHelper
-	curRow     tree.Datums
+	// For ON predicates or joins with an added filter expression we need a row
+	// buffer.
+	curRow tree.Datums
 	// The ON condition that needs to be evaluated (in addition to the
 	// equality columns).
 	onCond tree.TypedExpr
@@ -91,29 +89,24 @@ func getJoinResultColumns(
 
 // makePredicate constructs a joinPredicate object for joins. The equality
 // columns / on condition must be initialized separately.
-func makePredicate(joinType descpb.JoinType, left, right colinfo.ResultColumns) *joinPredicate {
-	pred := &joinPredicate{
+func makePredicate(
+	joinType descpb.JoinType, left, right colinfo.ResultColumns, onCond tree.TypedExpr,
+) *joinPredicate {
+	return &joinPredicate{
 		joinType:     joinType,
 		numLeftCols:  len(left),
 		numRightCols: len(right),
 		leftCols:     left,
 		rightCols:    right,
 		cols:         getJoinResultColumns(joinType, left, right),
+		onCond:       onCond,
+		curRow:       make(tree.Datums, len(left)+len(right)),
 	}
-	// We must initialize the indexed var helper in all cases, even when
-	// there is no on condition, so that getNeededColumns() does not get
-	// confused.
-	pred.curRow = make(tree.Datums, len(left)+len(right))
-	pred.iVarHelper = tree.MakeIndexedVarHelper(pred, len(pred.curRow))
-
-	return pred
 }
 
 // IndexedVarEval implements the eval.IndexedVarContainer interface.
-func (p *joinPredicate) IndexedVarEval(
-	ctx context.Context, idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
-	return p.curRow[idx].Eval(ctx, e)
+func (p *joinPredicate) IndexedVarEval(idx int) (tree.Datum, error) {
+	return p.curRow[idx], nil
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
@@ -135,7 +128,7 @@ func (p *joinPredicate) eval(
 	if p.onCond != nil {
 		copy(p.curRow[:len(leftRow)], leftRow)
 		copy(p.curRow[len(leftRow):], rightRow)
-		evalCtx.PushIVarContainer(p.iVarHelper.Container())
+		evalCtx.PushIVarContainer(p)
 		pred, err := execinfrapb.RunFilter(ctx, p.onCond, evalCtx)
 		evalCtx.PopIVarContainer()
 		return pred, err
