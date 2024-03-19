@@ -2864,7 +2864,8 @@ func (ex *connExecutor) execCopyOut(
 
 		// Log the query for sampling.
 		// These fields are not available in COPY, so use the empty value.
-		f := tree.NewFmtCtx(tree.FmtHideConstants)
+		flags := tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
+		f := tree.NewFmtCtx(flags)
 		f.FormatNode(cmd.Stmt)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 			f.CloseAndGetString(),
@@ -3128,7 +3129,8 @@ func (ex *connExecutor) execCopyIn(
 			res.SetRowsAffected(ctx, numInsertedRows)
 		}
 		// These fields are not available in COPY, so use the empty value.
-		f := tree.NewFmtCtx(tree.FmtHideConstants)
+		flags := tree.FmtHideConstants | tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
+		f := tree.NewFmtCtx(flags)
 		f.FormatNode(cmd.Stmt)
 		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 			f.CloseAndGetString(),
@@ -3521,6 +3523,14 @@ var allowSnapshotIsolation = settings.RegisterBoolSetting(
 )
 
 var logIsolationLevelLimiter = log.Every(10 * time.Second)
+
+// Bitmask for enabling various query fingerprint formatting styles.
+var queryFormattingForFingerprintsMask = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.statement_fingerprint.format_mask",
+	"enables setting additional fmt flags for statement fingerprint formatting",
+	0,
+)
 
 func (ex *connExecutor) txnIsolationLevelToKV(
 	ctx context.Context, level tree.IsolationLevel,
