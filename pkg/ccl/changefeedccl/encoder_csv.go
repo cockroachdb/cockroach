@@ -54,7 +54,14 @@ func (e *csvEncoder) EncodeValue(
 	e.buf.Reset()
 	if err := updatedRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		e.formatter.Reset()
-		e.formatter.FormatNode(d)
+
+		switch di := d.(type) {
+		case *tree.DCollatedString:
+			e.formatter.WriteString(di.Contents)
+		default:
+			e.formatter.FormatNode(d)
+		}
+
 		return e.writer.WriteField(&e.formatter.Buffer)
 	}); err != nil {
 		return nil, err
