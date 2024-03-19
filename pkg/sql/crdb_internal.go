@@ -6956,7 +6956,7 @@ SELECT
   plan_hash,
   app_name,
   max(metadata) as metadata,
-  crdb_internal.merge_statement_stats(array_agg(DISTINCT statistics)),
+  merge_statement_stats(DISTINCT statistics),
   max(sampled_plan),
   aggregation_interval,
   array_remove(array_cat_agg(index_recommendations), NULL) AS index_recommendations
@@ -7353,7 +7353,7 @@ SELECT
   fingerprint_id,
   app_name,
   max(metadata),
-  crdb_internal.merge_transaction_stats(array_agg(statistics)),
+  merge_transaction_stats(statistics),
   aggregation_interval
 FROM (
   SELECT

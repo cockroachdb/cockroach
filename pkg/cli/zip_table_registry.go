@@ -1358,8 +1358,8 @@ var zipSystemTables = DebugZipTableRegistry{
        ss.plan_hash,
        ss.app_name,
        ss.agg_interval,
-       crdb_internal.merge_stats_metadata(array_agg(ss.metadata))    AS metadata,
-       crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
+       merge_stats_metadata(ss.metadata)    AS metadata,
+       merge_statement_stats(ss.statistics) AS statistics,
        ss.plan,
        ss.index_recommendations
      FROM system.public.statement_statistics ss
@@ -1391,8 +1391,8 @@ limit 5000;`,
        ss.plan_hash,
        ss.app_name,
        ss.agg_interval,
-       crdb_internal.merge_stats_metadata(array_agg(ss.metadata))    AS metadata,
-       crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
+       merge_stats_metadata(ss.metadata)    AS metadata,
+       merge_statement_stats(ss.statistics) AS statistics,
        ss.plan,
        ss.index_recommendations
      FROM system.public.statement_statistics ss
