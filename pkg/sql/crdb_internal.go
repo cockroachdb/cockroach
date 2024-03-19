@@ -7182,20 +7182,20 @@ CREATE VIEW crdb_internal.statement_statistics_persisted_v22_2 AS
 
 var crdbInternalActiveRangeFeedsTable = virtualSchemaTable{
 	comment: `node-level table listing all currently running range feeds`,
-	// NB: startTS is exclusive; consider renaming to startAfter.
 	schema: `
 CREATE TABLE crdb_internal.active_range_feeds (
   id INT,
   tags STRING,
-  startTS STRING,
+  start_after DECIMAL,
   diff BOOL,
   node_id INT,
   range_id INT,
   created INT,
   range_start STRING,
   range_end STRING,
-  resolved STRING,
-  last_event_utc INT,
+  resolved DECIMAL,
+	resolved_age INTERVAL,
+  last_event TIMESTAMPTZ,
   catchup BOOL,
   num_errs INT,
   last_err STRING
@@ -7207,7 +7207,11 @@ CREATE TABLE crdb_internal.active_range_feeds (
 				if rf.LastValueReceived.IsZero() {
 					lastEvent = tree.DNull
 				} else {
-					lastEvent = tree.NewDInt(tree.DInt(rf.LastValueReceived.UTC().UnixNano()))
+					e, err := tree.MakeDTimestampTZ(rf.LastValueReceived, time.Microsecond)
+					if err != nil {
+						return err
+					}
+					lastEvent = e
 				}
 				var lastErr tree.Datum
 				if rf.LastErr == nil {
@@ -7219,14 +7223,17 @@ CREATE TABLE crdb_internal.active_range_feeds (
 				return addRow(
 					tree.NewDInt(tree.DInt(rfCtx.ID)),
 					tree.NewDString(rfCtx.CtxTags),
-					tree.NewDString(rf.StartAfter.AsOfSystemTime()),
+					eval.TimestampToDecimalDatum(rf.StartAfter),
 					tree.MakeDBool(tree.DBool(rfCtx.WithDiff)),
 					tree.NewDInt(tree.DInt(rf.NodeID)),
 					tree.NewDInt(tree.DInt(rf.RangeID)),
 					tree.NewDInt(tree.DInt(rf.CreatedTime.UTC().UnixNano())),
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.Key)),
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.EndKey)),
-					tree.NewDString(rf.Resolved.AsOfSystemTime()),
+					eval.TimestampToDecimalDatum(rf.Resolved),
+					tree.NewDInterval(duration.Age(
+						p.EvalContext().GetStmtTimestamp(), rf.Resolved.GoTime()), types.DefaultIntervalTypeMetadata,
+					),
 					lastEvent,
 					tree.MakeDBool(tree.DBool(rf.InCatchup)),
 					tree.NewDInt(tree.DInt(rf.NumErrs)),
