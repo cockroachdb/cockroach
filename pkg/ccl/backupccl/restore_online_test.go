@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
 
@@ -150,13 +151,31 @@ func TestOnlineRestoreTenant(t *testing.T) {
 
 	systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 INTO '%s'`, externalStorage))
 
-	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
+	restoreTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
 	defer cleanupFnRestored()
 
 	var preRestoreTs float64
 	tenant10.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
 
-	rSQLDB.ExpectErr(t, "cannot run Online Restore on a tenant", fmt.Sprintf("RESTORE TENANT 10 FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage))
+	rSQLDB.Exec(t, fmt.Sprintf("RESTORE TENANT 10 FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage))
+
+	ten10Stopper := stop.NewStopper()
+	_, restoreConn10 := serverutils.StartTenant(
+		t, restoreTC.Server(0), base.TestTenantArgs{
+			TenantID: roachpb.MustMakeTenantID(10), Stopper: ten10Stopper,
+		},
+	)
+	defer func() {
+		restoreConn10.Close()
+		ten10Stopper.Stop(context.Background())
+	}()
+	restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
+	restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
+
+	// Ensure the restore of a tenant was not mvcc
+	var maxRestoreMVCCTimestamp float64
+	restoreTenant10.QueryRow(t, "SELECT max(crdb_internal_mvcc_timestamp) FROM foo.bar").Scan(&maxRestoreMVCCTimestamp)
+	require.Greater(t, preRestoreTs, maxRestoreMVCCTimestamp)
 }
 
 func TestOnlineRestoreErrors(t *testing.T) {

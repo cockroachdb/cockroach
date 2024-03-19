@@ -1362,10 +1362,6 @@ func restorePlanHook(
 		}
 	}
 
-	if restoreStmt.Options.ExperimentalOnline && (restoreStmt.Targets.TenantID.IsSet() || restoreStmt.Options.IncludeAllSecondaryTenants != nil) {
-		return nil, nil, nil, false, errors.New("cannot run Online Restore on a tenant")
-	}
-
 	var newTenantID *roachpb.TenantID
 	var newTenantName *roachpb.TenantName
 	if restoreStmt.Options.AsTenant != nil || restoreStmt.Options.ForceTenantID != nil {

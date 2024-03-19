@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -171,6 +172,22 @@ func sendAddRemoteSSTWorker(
 		}
 
 		for entry := range restoreSpanEntriesCh {
+			// If we're restoring a tenant, we need to move the end key of any spans
+			// that ended at the exclusive end of the tenant span, i.e. the start key
+			// of the next tenant ID, into the prefix of this tenant span instead so
+			// that that end key can be rewritten to the restoring tenant ID's prefix.
+			// We do this be replacing any key equal to TenantSpan.EndKey (tID+1) with
+			// tenantSpan.Key followed by keyMax, since keyMax sorts able all table
+			// keys, including within the subspace of a tenant span.
+			if entry.ElidedPrefix == execinfrapb.ElidePrefix_Tenant {
+				_, id, err := keys.DecodeTenantPrefix(entry.Span.Key)
+				if err != nil {
+					return err
+				}
+				if tSpan := keys.MakeTenantSpan(id); entry.Span.EndKey.Equal(tSpan.EndKey) {
+					entry.Span.EndKey = append(tSpan.Key, keys.MaxKey...)
+				}
+			}
 			firstSplitDone := false
 			if err := assertCommonPrefix(entry.Span, entry.ElidedPrefix); err != nil {
 				return err
@@ -360,7 +377,7 @@ func checkBackupElidedPrefixForOnlineCompat(
 	case execinfrapb.ElidePrefix_TenantAndTable:
 		return nil
 	case execinfrapb.ElidePrefix_Tenant:
-		return errors.AssertionFailedf("online restore disallowed for restores of tenants. previous check failed.")
+		return nil
 	case execinfrapb.ElidePrefix_None:
 		for oldID, rw := range rewrites {
 			if rw.ID != oldID {
