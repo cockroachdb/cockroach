@@ -1220,6 +1220,13 @@ or the delegate being too busy to send.
 		// (0 to 1.0) so it probably won't produce useful results here.
 		Unit: metric.Unit_COUNT,
 	}
+	// Raft entry bytes loaded in memory.
+	metaRaftLoadedEntriesBytes = metric.Metadata{
+		Name:        "raft.loaded_entries.bytes",
+		Help:        `Bytes allocated by raft Storage.Entries calls that are still kept in memory`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 
 	// Raft processing metrics.
 	metaRaftTicks = metric.Metadata{
@@ -2581,6 +2588,7 @@ type StoreMetrics struct {
 	RaftProposalsDropped       *metric.Counter
 	RaftProposalsDroppedLeader *metric.Counter
 	RaftQuotaPoolPercentUsed   metric.IHistogram
+	RaftLoadedEntriesBytes     *metric.Gauge
 	RaftWorkingDurationNanos   *metric.Counter
 	RaftTickingDurationNanos   *metric.Counter
 	RaftCommandsProposed       *metric.Counter
@@ -3268,6 +3276,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			SigFigs:      1,
 			BucketConfig: metric.Percent100Buckets,
 		}),
+		RaftLoadedEntriesBytes:    metric.NewGauge(metaRaftLoadedEntriesBytes),
 		RaftWorkingDurationNanos:  metric.NewCounter(metaRaftWorkingDurationNanos),
 		RaftTickingDurationNanos:  metric.NewCounter(metaRaftTickingDurationNanos),
 		RaftCommandsProposed:      metric.NewCounter(metaRaftCommandsProposed),

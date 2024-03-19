@@ -751,8 +751,8 @@ func (r *Replica) handleRaftReady(
 }
 
 func (r *Replica) attachRaftEntriesMonitorRaftMuLocked() {
-	// TODO(pav-kv): add a per-store metric.
-	r.raftMu.bytesAccount = r.store.cfg.RaftEntriesMonitor.NewAccount(nil)
+	r.raftMu.bytesAccount = r.store.cfg.RaftEntriesMonitor.NewAccount(
+		r.store.metrics.RaftLoadedEntriesBytes)
 }
 
 func (r *Replica) detachRaftEntriesMonitorRaftMuLocked() {
