@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
 
@@ -150,13 +151,50 @@ func TestOnlineRestoreTenant(t *testing.T) {
 
 	systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 INTO '%s'`, externalStorage))
 
-	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
+	restoreTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
 	defer cleanupFnRestored()
 
 	var preRestoreTs float64
 	tenant10.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
 
-	rSQLDB.ExpectErr(t, "cannot run Online Restore on a tenant", fmt.Sprintf("RESTORE TENANT 10 FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage))
+	// Restore the tenant twice: once below and once above the old ID, to show
+	// that we can rewrite it in either direction.
+	rSQLDB.Exec(t, fmt.Sprintf("RESTORE TENANT 10 FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, TENANT_NAME = 'below', TENANT = '2'", externalStorage))
+	rSQLDB.Exec(t, fmt.Sprintf("RESTORE TENANT 10 FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, TENANT_NAME = 'above', TENANT = '20'", externalStorage))
+	rSQLDB.Exec(t, "ALTER TENANT below STOP SERVICE")
+	rSQLDB.Exec(t, "ALTER TENANT above STOP SERVICE")
+	rSQLDB.CheckQueryResults(t, "SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT below]",
+		rSQLDB.QueryStr(t, `SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT above]`))
+
+	secondaryStopper := stop.NewStopper()
+	_, cBelow := serverutils.StartTenant(
+		t, restoreTC.Server(0), base.TestTenantArgs{
+			TenantName: "below",
+			TenantID:   roachpb.MustMakeTenantID(2),
+			Stopper:    secondaryStopper,
+		})
+	_, cAbove := serverutils.StartTenant(
+		t, restoreTC.Server(0), base.TestTenantArgs{
+			TenantName: "above",
+			TenantID:   roachpb.MustMakeTenantID(20),
+			Stopper:    secondaryStopper,
+		})
+
+	defer func() {
+		cBelow.Close()
+		cAbove.Close()
+		secondaryStopper.Stop(context.Background())
+	}()
+	dbBelow, dbAbove := sqlutils.MakeSQLRunner(cBelow), sqlutils.MakeSQLRunner(cAbove)
+	dbBelow.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
+	dbAbove.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
+
+	// Ensure the restore of a tenant was not mvcc
+	var maxRestoreMVCCTimestamp float64
+	dbBelow.QueryRow(t, "SELECT max(crdb_internal_mvcc_timestamp) FROM foo.bar").Scan(&maxRestoreMVCCTimestamp)
+	require.Greater(t, preRestoreTs, maxRestoreMVCCTimestamp)
+	dbAbove.QueryRow(t, "SELECT max(crdb_internal_mvcc_timestamp) FROM foo.bar").Scan(&maxRestoreMVCCTimestamp)
+	require.Greater(t, preRestoreTs, maxRestoreMVCCTimestamp)
 }
 
 func TestOnlineRestoreErrors(t *testing.T) {
