@@ -3,6 +3,7 @@
 set -euxo pipefail
 
 bazel build --config crosslinux //pkg/cmd/cockroach-short \
+    --bes_keywords integration-test-artifact-build \
     --jobs 100 $(./build/github/engflow-args.sh)
 
 ARTIFACTSDIR=$PWD/artifacts
