@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -41,7 +40,6 @@ func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
 		Name:      "test-mm",
 		Limit:     budget,
 		Increment: 128, /* small allocation increment */
-		Settings:  cluster.MakeTestingClusterSettings(),
 	})
 	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(budget))
 	return mm

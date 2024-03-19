@@ -444,7 +444,6 @@ func mvccScanToCols(
 		// connected to the memory accounting system.
 		monitor = mon.NewMonitor(mon.Options{
 			Name:     "mvcc-scan-to-cols",
-			Settings: st,
 		})
 		monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 		defer monitor.Stop(ctx)

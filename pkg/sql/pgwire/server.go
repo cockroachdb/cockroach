@@ -325,7 +325,6 @@ func MakeServer(
 		// is more than enough metrics information about the monitors.
 		CurCount: nil,
 		MaxHist:  nil,
-		Settings: st,
 	})
 	server.sqlMemoryPool.StartNoReserved(ctx, parentMemoryMonitor)
 	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
@@ -335,7 +334,6 @@ func MakeServer(
 		CurCount:  server.tenantMetrics.ConnMemMetrics.CurBytesCount,
 		MaxHist:   server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
 		Increment: int64(connReservationBatchSize) * baseSQLMemoryBudget,
-		Settings:  st,
 	})
 	server.tenantSpecificConnMonitor.StartNoReserved(ctx, server.sqlMemoryPool)
 

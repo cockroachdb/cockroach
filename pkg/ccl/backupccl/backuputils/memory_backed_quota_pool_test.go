@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -27,7 +26,6 @@ func getMemoryMonitor(limit int64) *mon.BytesMonitor {
 		Name:      "test-mon",
 		Limit:     limit,
 		Increment: 1,
-		Settings:  cluster.MakeTestingClusterSettings(),
 	})
 }
 

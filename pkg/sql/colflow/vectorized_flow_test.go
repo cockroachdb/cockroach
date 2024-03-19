@@ -298,7 +298,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 					EvalCtx:     &evalCtx,
 					Mon:         evalCtx.TestingMon,
 					NodeID:      base.TestingIDContainer,
-					DiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
+					DiskMonitor: execinfra.NewTestDiskMonitor(ctx),
 				},
 			},
 		).(*vectorizedFlow)

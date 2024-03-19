@@ -150,7 +150,7 @@ func TestEval(t *testing.T) {
 				EvalCtx: evalCtx,
 				Mon:     evalCtx.TestingMon,
 			}
-			memMonitor := execinfra.NewTestMemMonitor(ctx, st)
+			memMonitor := execinfra.NewTestMemMonitor(ctx)
 			defer memMonitor.Stop(ctx)
 			acc := memMonitor.MakeBoundAccount()
 			defer acc.Close(ctx)

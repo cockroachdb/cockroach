@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 	os.Exit(func() int {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
-		testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+		testMemMonitor := execinfra.NewTestMemMonitor(ctx)
 		defer testMemMonitor.Stop(ctx)
 		memAcc := testMemMonitor.MakeBoundAccount()
 		evalCtx := eval.MakeTestingEvalContext(st)

@@ -219,7 +219,6 @@ func newCache(
 	security.ClientCertExpirationCacheCapacity.Override(ctx, &st.SV, int64(capacity))
 	parentMon := mon.NewUnlimitedMonitor(ctx, mon.Options{
 		Name:     "test",
-		Settings: st,
 	})
 	cache := security.NewClientCertExpirationCache(ctx, st, stopper, clock, parentMon)
 	return cache, aggmetric.MakeBuilder(security.SQLUserLabel).Gauge(metric.Metadata{})

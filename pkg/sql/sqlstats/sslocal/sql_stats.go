@@ -70,7 +70,6 @@ func newSQLStats(
 		Name:     "SQLStats",
 		CurCount: curMemBytesCount,
 		MaxHist:  maxMemBytesHist,
-		Settings: st,
 	})
 	s := &SQLStats{
 		st:                 st,

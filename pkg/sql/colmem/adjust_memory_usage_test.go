@@ -34,7 +34,7 @@ func TestAdjustMemoryUsage(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	unlimitedMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	unlimitedMemMonitor := execinfra.NewTestMemMonitor(ctx)
 	defer unlimitedMemMonitor.Stop(ctx)
 	unlimitedMemAcc := unlimitedMemMonitor.MakeBoundAccount()
 	defer unlimitedMemAcc.Close(ctx)

@@ -148,7 +148,6 @@ func NewPreServeConnHandler(
 			CurCount:  metrics.PreServeCurBytes,
 			MaxHist:   metrics.PreServeMaxBytes,
 			Increment: int64(connReservationBatchSize) * baseSQLMemoryBudget,
-			Settings:  st,
 		}),
 	}
 	s.tenantIndependentConnMonitor.StartNoReserved(ctx, parentMemoryMonitor)

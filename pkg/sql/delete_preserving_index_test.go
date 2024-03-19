@@ -627,8 +627,7 @@ func TestMergeProcessor(t *testing.T) {
 		execCfg := server.ExecutorConfig().(sql.ExecutorConfig)
 		evalCtx := eval.Context{Settings: settings, Codec: codec}
 		mm := mon.NewUnlimitedMonitor(ctx, mon.Options{
-			Name:     "MemoryMonitor",
-			Settings: settings,
+			Name: "MemoryMonitor",
 		})
 		flowCtx := execinfra.FlowCtx{
 			Cfg: &execinfra.ServerConfig{

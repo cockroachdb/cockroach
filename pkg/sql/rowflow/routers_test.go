@@ -88,7 +88,7 @@ func TestRouters(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 
 	// Generate tables of possible values for each column; we have fewer possible
@@ -301,7 +301,7 @@ func TestConsumerStatus(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 
 	testCases := []struct {
@@ -457,7 +457,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 
 	testCases := []struct {
@@ -670,7 +670,7 @@ func TestRouterBlocks(t *testing.T) {
 			ctx := context.Background()
 			evalCtx := eval.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(ctx)
-			diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+			diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 			defer diskMonitor.Stop(ctx)
 			flowCtx := execinfra.FlowCtx{
 				Cfg: &execinfra.ServerConfig{
@@ -762,7 +762,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	ctx := tracing.ContextWithSpan(context.Background(), sp)
 
 	st := cluster.MakeTestingClusterSettings()
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
@@ -778,7 +778,6 @@ func TestRouterDiskSpill(t *testing.T) {
 		Name:      "test-monitor",
 		Limit:     (numRows - routerRowBufSize) / 2,
 		Increment: 1,
-		Settings:  st,
 	})
 	evalCtx := eval.MakeTestingEvalContextWithMon(st, monitor)
 	defer evalCtx.Stop(ctx)
@@ -793,7 +792,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	}
 	alloc := &tree.DatumAlloc{}
 
-	extraMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	extraMemMonitor := execinfra.NewTestMemMonitor(ctx)
 	defer extraMemMonitor.Stop(ctx)
 	// memErrorWhenConsumingRows indicates whether we expect an OOM error to
 	// occur when we're consuming rows from the row channel. By default, it
@@ -1006,7 +1005,7 @@ func BenchmarkRouter(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 
 	input := execinfra.NewRepeatableRowSource(types.OneIntCol, randgen.MakeIntRows(numRows, numCols))

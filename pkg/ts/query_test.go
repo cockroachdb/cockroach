@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -403,7 +402,6 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 			adjustedMon := mon.NewMonitor(mon.Options{
 				Name:      "timeseries-test-worker-adjusted",
 				Increment: 1,
-				Settings:  cluster.MakeTestingClusterSettings(),
 			})
 			adjustedMon.StartNoReserved(context.Background(), tm.workerMemMonitor)
 			defer adjustedMon.Stop(context.Background())
@@ -477,7 +475,6 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 			Name:      "timeseries-test-limited",
 			Limit:     memoryBudget,
 			Increment: 100,
-			Settings:  cluster.MakeTestingClusterSettings(),
 		})
 		limitedMon.StartNoReserved(context.Background(), tm.workerMemMonitor)
 		defer limitedMon.Stop(context.Background())

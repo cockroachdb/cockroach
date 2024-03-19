@@ -66,12 +66,12 @@ type testUtils struct {
 
 func newTestUtils(ctx context.Context) *testUtils {
 	st := cluster.MakeTestingClusterSettings()
-	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	testMemMonitor := execinfra.NewTestMemMonitor(ctx)
 	memAcc := testMemMonitor.MakeBoundAccount()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
 	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
-	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	diskAcc := testDiskMonitor.MakeBoundAccount()
 	return &testUtils{
 		testAllocator:     testAllocator,

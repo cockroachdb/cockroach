@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -413,7 +412,6 @@ func TestMemoryMonitor(t *testing.T) {
 		Name:      "test-mm",
 		Limit:     budget,
 		Increment: 128, /* small allocation increment */
-		Settings:  cluster.MakeTestingClusterSettings(),
 	})
 	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(budget))
 

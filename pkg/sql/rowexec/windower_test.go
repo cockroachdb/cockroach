@@ -44,11 +44,10 @@ func TestWindowerAccountingForResults(t *testing.T) {
 		Name:      "test-monitor",
 		Limit:     100000,
 		Increment: 5000,
-		Settings:  st,
 	})
 	evalCtx := eval.MakeTestingEvalContextWithMon(st, monitor)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
@@ -201,7 +200,7 @@ func BenchmarkWindower(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 
 	flowCtx := &execinfra.FlowCtx{

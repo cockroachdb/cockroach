@@ -51,7 +51,7 @@ func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 
-	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer testDiskMonitor.Stop(ctx)
 
 	// Set up the test so that the test context is canceled after the first entry
@@ -148,7 +148,7 @@ func TestRunGenerativeSplitAndScatterRandomizedDestOnFailScatter(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(st)
 	evalCtx.NodeID = base.NewSQLIDContainerForNode(s0.RPCContext().NodeID)
 
-	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer testDiskMonitor.Stop(ctx)
 
 	registry := s0.JobRegistry().(*jobs.Registry)

@@ -8623,7 +8623,6 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 
 	m := mon.NewMonitor(mon.Options{
 		Name:     "test-monitor",
-		Settings: st,
 	})
 	m.Start(ctx, nil, mon.NewStandaloneBudget(128<<20))
 	mem := m.MakeBoundAccount()

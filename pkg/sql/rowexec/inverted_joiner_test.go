@@ -635,7 +635,7 @@ func TestInvertedJoiner(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
@@ -776,7 +776,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 	defer tempEngine.Close()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx)
 	defer diskMonitor.Stop(ctx)
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
 	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)

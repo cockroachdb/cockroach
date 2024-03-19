@@ -45,15 +45,13 @@ const increment = -1
 
 func getAllocator(increment int64) (_ *colmem.Allocator, _ *mon.BoundAccount, cleanup func()) {
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
 	testMemMonitor := mon.NewMonitor(mon.Options{
 		Name:      "test-mem",
 		Increment: increment,
-		Settings:  st,
 	})
 	testMemMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	memAcc := testMemMonitor.MakeBoundAccount()
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
 	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
 	cleanup = func() {

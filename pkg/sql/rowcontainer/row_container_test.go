@@ -106,7 +106,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 		}
 	}
 
-	m := getUnlimitedMemoryMonitor(st)
+	m := getUnlimitedMemoryMonitor()
 	defer m.Stop(ctx)
 
 	var mc MemRowContainer
@@ -222,8 +222,8 @@ func TestDiskBackedRowContainer(t *testing.T) {
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
 	getRowContainer := func(memReserved, diskReserved *mon.BoundAccount) (rc *DiskBackedRowContainer, memoryMonitor, diskMonitor *mon.BytesMonitor, cleanup func(context.Context)) {
-		memoryMonitor = getMemoryMonitor(st)
-		diskMonitor = getDiskMonitor(st)
+		memoryMonitor = getMemoryMonitor()
+		diskMonitor = getDiskMonitor()
 		memoryMonitor.Start(ctx, nil, memReserved)
 		diskMonitor.Start(ctx, nil, diskReserved)
 
@@ -409,8 +409,8 @@ func TestDiskBackedRowContainerDeDuping(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	memoryMonitor := getMemoryMonitor(st)
-	diskMonitor := newTestDiskMonitor(ctx, st)
+	memoryMonitor := getMemoryMonitor()
+	diskMonitor := newTestDiskMonitor(ctx)
 
 	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
@@ -528,8 +528,8 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	memoryMonitor := getMemoryMonitor(st)
-	diskMonitor := getDiskMonitor(st)
+	memoryMonitor := getMemoryMonitor()
+	diskMonitor := getDiskMonitor()
 
 	const numTestRuns = 10
 	const numRows = 10
@@ -717,7 +717,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 
 			// Use a separate memory monitor so that we could start it with a
 			// fixed small budget.
-			memMonitor := getMemoryMonitor(st)
+			memMonitor := getMemoryMonitor()
 			memMonitor.Start(ctx, nil, mon.NewStandaloneBudget(budget))
 			defer memMonitor.Stop(ctx)
 
@@ -984,8 +984,8 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 	}
 	defer tempEngine.Close()
 
-	memoryMonitor := getMemoryMonitor(st)
-	diskMonitor := getDiskMonitor(st)
+	memoryMonitor := getMemoryMonitor()
+	diskMonitor := getDiskMonitor()
 	rows := randgen.MakeIntRows(numRows, numCols)
 	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
