@@ -10,6 +10,7 @@ package streamproducer
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
@@ -145,6 +146,39 @@ func StartReplicationProducerJob(
 		SourceClusterID:      evalCtx.ClusterID,
 		ReplicationStartTime: replicationStartTime,
 	}, nil
+}
+
+// StartHistoryProtectionJob replication stream producer job
+// responsible for managing a cluster-level protected timestamp.
+func StartHistoryProtectionJob(
+	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, desc string, protectTime hlc.Timestamp,
+) (jobspb.JobID, error) {
+	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+	registry := execConfig.JobRegistry
+	ptsID := uuid.MakeV4()
+
+	jr := makeJobRecordForClusterPTSRetention(registry,
+		defaultExpirationWindow,
+		evalCtx.SessionData().User(),
+		desc,
+		ptsID)
+
+	targetToProtect := ptpb.MakeClusterTarget()
+	allTablesSpan := roachpb.Span{
+		Key:    execConfig.Codec.TablePrefix(0),
+		EndKey: execConfig.Codec.TablePrefix(math.MaxUint32).PrefixEnd(),
+	}
+	ptp := execConfig.ProtectedTimestampProvider.WithTxn(txn)
+	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), protectTime,
+		[]roachpb.Span{allTablesSpan}, jobsprotectedts.Jobs, targetToProtect)
+
+	if err := ptp.Protect(ctx, pts); err != nil {
+		return 0, err
+	}
+	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
+		return 0, err
+	}
+	return jr.JobID, nil
 }
 
 // Convert the producer job's status into corresponding replication
