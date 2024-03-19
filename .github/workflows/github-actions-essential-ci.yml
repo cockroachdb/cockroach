@@ -163,7 +163,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_linux_amd64_build:
+  linux_amd64_build:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -181,7 +181,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_linux_amd64_fips_build:
+  linux_amd64_fips_build:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
@@ -199,7 +199,7 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  EXPERIMENTAL_linux_arm64_build:
+  linux_arm64_build:
     runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
