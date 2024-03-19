@@ -11,6 +11,7 @@ REGIONS=(
 "europe-west2-a" "europe-west2-b" "europe-west2-c"
 "europe-central2-a" "europe-central2-b" "europe-central2-c"
 )
+SECURE_ONLY=true
 
 # Templates below are defined as `prom_` and support replacing {project} and {region}
 # Workload templates also replace {port} for the range supplied above.
@@ -197,6 +198,7 @@ prom_cockroach_secure=$(cat <<'EOF'
       target_label: region
 EOF
 )
+
 prom_workload=$(cat <<'EOF'
 - job_name: 'workload-{port}-{project}-{region}'
   gce_sd_configs:
@@ -263,7 +265,9 @@ replace_and_write "$prom_header"
 # Generate cockroach, cockroach-secure & system
 for region in "${REGIONS[@]}"; do
     replace_and_write "$prom_sys" "$region"
-    replace_and_write "$prom_cockroach" "$region"
+    if [[ -z "$SECURE_ONLY" ]] || [[ "$SECURE_ONLY" == "false" ]]; then
+      replace_and_write "$prom_cockroach" "$region"
+    fi
     replace_and_write "$prom_cockroach_secure" "$region"
 done
 
