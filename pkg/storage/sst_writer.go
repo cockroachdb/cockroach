@@ -82,6 +82,7 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 		format = sstable.TableFormatPebblev4
 	}
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
+	opts.Compression = getCompressionAlgorithm(cs)
 	opts.MergerName = "nullptr"
 	return opts
 }
