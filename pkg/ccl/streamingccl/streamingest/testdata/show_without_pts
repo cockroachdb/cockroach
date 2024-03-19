@@ -1,0 +1,19 @@
+# This test verifies that SHOW TENANT works even if a dest pts hasn't been set.
+
+create-replication-clusters
+----
+
+exec-sql as=destination-system
+SET CLUSTER SETTING jobs.debug.pausepoints = 'stream_ingestion.before_protection';
+----
+
+start-replication-stream
+----
+
+job as=destination-system wait-for-state=paused
+----
+
+query-sql as=destination-system
+SELECT replicated_time FROM [SHOW VIRTUAL CLUSTER destination WITH REPLICATION STATUS];
+----
+<nil>
