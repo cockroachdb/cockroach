@@ -488,11 +488,11 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		SQLIDContainer:          cfg.NodeInfo.NodeID,
 		JobRegistry:             s.cfg.JobRegistry,
 		Knobs:                   cfg.SQLStatsTestingKnobs,
-		FlushCounter:            serverMetrics.StatsMetrics.SQLStatsFlushStarted,
+		FlushesSuccessful:       serverMetrics.StatsMetrics.SQLStatsFlushesSuccessful,
 		FlushDoneSignalsIgnored: serverMetrics.StatsMetrics.SQLStatsFlushDoneSignalsIgnored,
 		FlushedFingerprintCount: serverMetrics.StatsMetrics.SQLStatsFlushFingerprintCount,
-		FailureCounter:          serverMetrics.StatsMetrics.SQLStatsFlushFailure,
-		FlushDuration:           serverMetrics.StatsMetrics.SQLStatsFlushDuration,
+		FlushesFailed:           serverMetrics.StatsMetrics.SQLStatsFlushesFailed,
+		FlushLatency:            serverMetrics.StatsMetrics.SQLStatsFlushLatency,
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
@@ -589,14 +589,14 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 			}),
 			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(MetaReportedSQLStatsMemCurBytes),
 			DiscardedStatsCount:                 metric.NewCounter(MetaDiscardedSQLStats),
-			SQLStatsFlushStarted:                metric.NewCounter(MetaSQLStatsFlushStarted),
+			SQLStatsFlushesSuccessful:           metric.NewCounter(MetaSQLStatsFlushesSuccessful),
 			SQLStatsFlushDoneSignalsIgnored:     metric.NewCounter(MetaSQLStatsFlushDoneSignalsIgnored),
 			SQLStatsFlushFingerprintCount:       metric.NewCounter(MetaSQLStatsFlushFingerprintCount),
 
-			SQLStatsFlushFailure: metric.NewCounter(MetaSQLStatsFlushFailure),
-			SQLStatsFlushDuration: metric.NewHistogram(metric.HistogramOptions{
+			SQLStatsFlushesFailed: metric.NewCounter(MetaSQLStatsFlushesFailed),
+			SQLStatsFlushLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
-				Metadata:     MetaSQLStatsFlushDuration,
+				Metadata:     MetaSQLStatsFlushLatency,
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
