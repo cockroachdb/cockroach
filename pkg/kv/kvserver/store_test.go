@@ -3526,20 +3526,11 @@ func (m *mockSpanConfigReader) ComputeSplitKey(
 
 func (m *mockSpanConfigReader) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, error) {
-	if e, ok := m.overrides[string(key)]; ok {
-		return e.conf, nil
-	}
-	return m.GetSpanConfigForKey(ctx, key)
-}
-
-func (m *mockSpanConfigReader) GetSpanConfigForKeyWithBounds(
-	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, roachpb.Span, error) {
 	if e, ok := m.overrides[string(key)]; ok {
-		return e.conf, e.bounds, nil
+		return e.conf, roachpb.Span{}, nil
 	}
-	return m.GetSpanConfigForKeyWithBounds(ctx, key)
+	return m.GetSpanConfigForKey(ctx, key)
 }
 
 var _ spanconfig.StoreReader = &mockSpanConfigReader{}

@@ -123,16 +123,6 @@ func (s *Store) ComputeSplitKey(
 // GetSpanConfigForKey is part of the spanconfig.StoreReader interface.
 func (s *Store) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	conf, _, err := s.getSpanConfigForKeyRLocked(ctx, key)
-	return conf, err
-}
-
-// GetSpanConfigForKeyWithBounds is part of the spanconfig.StoreReader interface.
-func (s *Store) GetSpanConfigForKeyWithBounds(
-	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, roachpb.Span, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

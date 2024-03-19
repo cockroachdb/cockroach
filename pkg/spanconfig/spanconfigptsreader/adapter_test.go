@@ -187,12 +187,6 @@ func (m *manualSubscriber) ComputeSplitKey(
 
 func (m *manualSubscriber) GetSpanConfigForKey(
 	context.Context, roachpb.RKey,
-) (roachpb.SpanConfig, error) {
-	panic("unimplemented")
-}
-
-func (m *manualSubscriber) GetSpanConfigForKeyWithBounds(
-	context.Context, roachpb.RKey,
 ) (roachpb.SpanConfig, roachpb.Span, error) {
 	panic("unimplemented")
 }

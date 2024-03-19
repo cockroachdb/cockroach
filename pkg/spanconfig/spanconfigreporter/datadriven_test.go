@@ -281,15 +281,8 @@ func (s *mockCluster) ComputeSplitKey(
 // GetSpanConfigForKey implements spanconfig.StoreReader.
 func (s *mockCluster) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, error) {
-	return s.store.GetSpanConfigForKey(ctx, key)
-}
-
-// GetSpanConfigForKeyWithBounds implements spanconfig.StoreReader.
-func (s *mockCluster) GetSpanConfigForKeyWithBounds(
-	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, roachpb.Span, error) {
-	return s.store.GetSpanConfigForKeyWithBounds(ctx, key)
+	return s.store.GetSpanConfigForKey(ctx, key)
 }
 
 func (s *mockCluster) addNode(desc roachpb.NodeDescriptor) {

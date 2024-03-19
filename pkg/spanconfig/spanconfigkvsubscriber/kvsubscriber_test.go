@@ -231,13 +231,6 @@ func (m *manualStore) ComputeSplitKey(
 // GetSpanConfigForKey implements the spanconfig.Store interface.
 func (m *manualStore) GetSpanConfigForKey(
 	context.Context, roachpb.RKey,
-) (roachpb.SpanConfig, error) {
-	panic("unimplemented")
-}
-
-// GetSpanConfigForKeyWithBounds implements the spanconfig.Store interface.
-func (m *manualStore) GetSpanConfigForKeyWithBounds(
-	context.Context, roachpb.RKey,
 ) (roachpb.SpanConfig, roachpb.Span, error) {
 	panic("unimplemented")
 }

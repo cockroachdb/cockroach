@@ -470,7 +470,7 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	}
 
 	// Find span config for this range.
-	conf, sp, err := confReader.GetSpanConfigForKeyWithBounds(ctx, desc.StartKey)
+	conf, sp, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to lookup span config", r)
 	}
