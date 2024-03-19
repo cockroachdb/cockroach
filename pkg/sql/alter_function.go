@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -227,7 +228,7 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	if len(dependentFuncs) > 0 {
 		return errors.UnimplementedErrorf(
 			errors.IssueLink{
-				IssueURL: "https://github.com/cockroachdb/cockroach/issues/83233",
+				IssueURL: build.MakeIssueURL(83233),
 				Detail:   "renames are disallowed because references are by name",
 			},
 			"cannot rename function %q because other functions ([%v]) still depend on it",

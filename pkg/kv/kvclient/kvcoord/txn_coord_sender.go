@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"runtime/debug"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -1037,7 +1038,7 @@ func sanityCheckErrWithTxn(
 	)
 	err = errors.WithAssertionFailure(
 		errors.WithIssueLink(err, errors.IssueLink{
-			IssueURL: "https://github.com/cockroachdb/cockroach/issues/103817",
+			IssueURL: build.MakeIssueURL(103817),
 			Detail: "you have encountered a known bug in CockroachDB, please consider " +
 				"reporting on the Github issue or reach out via Support.",
 		}))

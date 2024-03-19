@@ -23,6 +23,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -3992,7 +3993,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 						"but some of the DDL statement(s) failed.\nManual inspection may be "+
 						"required to determine the actual state of the database.")
 				newErr = errors.WithIssueLink(newErr,
-					errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/42061"})
+					errors.IssueLink{IssueURL: build.MakeIssueURL(42061)})
 				res.SetError(newErr)
 			}
 		}
