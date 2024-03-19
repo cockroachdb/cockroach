@@ -2286,6 +2286,13 @@ func TestTenantLogic_udf_privileges_mutations(
 	runLogicTest(t, "udf_privileges_mutations")
 }
 
+func TestTenantLogic_udf_procedure_mix(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_procedure_mix")
+}
+
 func TestTenantLogic_udf_record(
 	t *testing.T,
 ) {

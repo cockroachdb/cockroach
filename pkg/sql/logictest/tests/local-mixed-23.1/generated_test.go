@@ -2157,6 +2157,13 @@ func TestLogic_udf_privileges(
 	runLogicTest(t, "udf_privileges")
 }
 
+func TestLogic_udf_procedure_mix(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_procedure_mix")
+}
+
 func TestLogic_udf_record(
 	t *testing.T,
 ) {
