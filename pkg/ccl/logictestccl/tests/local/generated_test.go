@@ -92,6 +92,13 @@ func TestCCLLogic_auto_rehoming(
 	runCCLLogicTest(t, "auto_rehoming")
 }
 
+func TestCCLLogic_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "builtins")
+}
+
 func TestCCLLogic_case_sensitive_names(
 	t *testing.T,
 ) {

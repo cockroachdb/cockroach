@@ -2571,6 +2571,7 @@ var builtinOidsArray = []string{
 	2603: `crdb_internal.execute_internally(query: string, overrides: string, use_session_txn: bool) -> string`,
 	2604: `crdb_internal.execute_internally(query: string, session_bound: bool, overrides: string, use_session_txn: bool) -> string`,
 	2605: `merge_aggregated_stmt_metadata(arg1: jsonb) -> jsonb`,
+	2606: `crdb_internal.protect_cluster(timestamp: decimal, description: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
