@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
@@ -743,16 +744,26 @@ type ProjectsVal struct {
 // If the geo flag is specified, nodes are distributed between zones.
 // These are GCP zones available according to this page:
 // https://cloud.google.com/compute/docs/regions-zones#available
-var defaultZones = []string{
-	"us-east1-b",
-	"us-west1-b",
-	"europe-west2-b",
-	"us-east1-c",
-	"us-west1-c",
-	"europe-west2-c",
-	"us-east1-d",
-	"us-west1-a",
-	"europe-west2-a",
+//
+// Note that the default zone (the first zone returned by this
+// function) is always in the us-east1 region, but we randomize the
+// specific zone. This is to avoid "zone exhausted" errors in one
+// particular zone, especially during nightly roachtest runs.
+func defaultZones() []string {
+	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
+	rand.Shuffle(len(zones), func(i, j int) { zones[i], zones[j] = zones[j], zones[i] })
+
+	return []string{
+		zones[0],
+		"us-west1-b",
+		"europe-west2-b",
+		zones[1],
+		"us-west1-c",
+		"europe-west2-c",
+		zones[2],
+		"us-west1-a",
+		"europe-west2-a",
+	}
 }
 
 // Set is part of the pflag.Value interface.
@@ -830,7 +841,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		fmt.Sprintf("Zones for cluster. If zones are formatted as AZ:N where N is an integer, the zone\n"+
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
-			strings.Join(defaultZones, ",")))
+			strings.Join(defaultZones(), ",")))
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
 		"use preemptible GCE instances (lifetime cannot exceed 24h)")
 	flags.BoolVar(&o.useSpot, ProviderName+"-use-spot", false,
@@ -955,9 +966,9 @@ func (p *Provider) Create(
 	}
 	if len(zones) == 0 {
 		if opts.GeoDistributed {
-			zones = defaultZones
+			zones = defaultZones()
 		} else {
-			zones = []string{defaultZones[0]}
+			zones = []string{defaultZones()[0]}
 		}
 	}
 
