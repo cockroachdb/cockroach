@@ -254,14 +254,15 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 		descPrivsChanged := false
 
 		if len(n.desiredprivs) > 0 {
-			var sequencePrivilegesNoOp privilege.List
+			privsToIgnore := privilege.List{}
+			unsupportedPrivsForType := make(map[privilege.ObjectType]struct{})
 			for _, priv := range n.desiredprivs {
 				// Only allow granting/revoking privileges that the requesting
 				// user themselves have on the descriptor.
 				if err := p.CheckPrivilege(ctx, descriptor, priv); err != nil {
 					return err
 				}
-
+				// Track privileges that do not apply to sequences.
 				if objType == privilege.Sequence {
 					switch priv {
 					case privilege.ALL,
@@ -270,7 +271,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 						privilege.SELECT,
 						privilege.DROP:
 					default:
-						sequencePrivilegesNoOp = append(sequencePrivilegesNoOp, priv)
+						privsToIgnore = append(privsToIgnore, priv)
 					}
 				}
 			}
@@ -281,8 +282,52 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 			}
 
 			privileges := descriptor.GetPrivileges()
+			// Ensure we are only setting privilleges valid for this object type.
+			// i.e. We only expect this for sequences.
+			validPrivs, err := privilege.GetValidPrivilegesForObject(objType)
+			if err != nil {
+				return err
+			}
+			targetPrivs := n.desiredprivs.ToBitField() & validPrivs.ToBitField()
+			// If there are privs that are ignored for sequences, lets exclude
+			// those here.
+			privsToIgnoreBits := privsToIgnore.ToBitField()
+			targetPrivs = targetPrivs & (^privsToIgnoreBits)
+			// If any privileges have been dropped or ignored, then lets log
+			// a message for this type.
+			if targetPrivs != n.desiredprivs.ToBitField() {
+				missingPrivs, err := privilege.ListFromBitField(
+					n.desiredprivs.ToBitField()&(^targetPrivs), privilege.Any)
+				if err != nil {
+					return err
+				}
+				if _, ok := unsupportedPrivsForType[objType]; !ok {
+					params.p.BufferClientNotice(
+						ctx,
+						pgnotice.Newf(
+							"some privileges have no effect on %ss: %s",
+							objType,
+							missingPrivs.SortedDisplayNames(),
+						),
+					)
+					unsupportedPrivsForType[objType] = struct{}{}
+				}
+				// For the purpose of revoke restore ignored fields back,
+				// so we can at least remove them from the object.
+				if !n.isGrant {
+					targetPrivs = targetPrivs | privsToIgnoreBits
+				}
+				// If nothing will be applied move to the next descriptor.
+				if targetPrivs == 0 {
+					continue
+				}
+			}
+			privsToSet, err := privilege.ListFromBitField(targetPrivs, objType)
+			if err != nil {
+				return err
+			}
 			for _, grantee := range n.grantees {
-				changed, err := n.changePrivilege(privileges, n.desiredprivs, grantee)
+				changed, err := n.changePrivilege(privileges, privsToSet, grantee)
 				if err != nil {
 					return err
 				}
@@ -298,17 +343,6 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 					)
 				}
 			}
-
-			if len(sequencePrivilegesNoOp) > 0 {
-				params.p.BufferClientNotice(
-					ctx,
-					pgnotice.Newf(
-						"some privileges have no effect on sequences: %s",
-						sequencePrivilegesNoOp.SortedDisplayNames(),
-					),
-				)
-			}
-
 			// Ensure superusers have exactly the allowed privilege set.
 			// Postgres does not actually enforce this, instead of checking that
 			// superusers have all the privileges, Postgres allows superusers to
