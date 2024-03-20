@@ -64,6 +64,16 @@ var targetOnlineRestoreSpanSize = settings.RegisterByteSizeSetting(
 	16<<30,
 )
 
+var maxFileCount = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"backup.restore_span.max_file_count",
+	"the maximum number of backup files an extending restore span may contain",
+	defaultMaxFileCount,
+	settings.PositiveInt,
+)
+
+const defaultMaxFileCount = int64(200)
+
 // backupManifestFileIterator exposes methods that can be used to iterate over
 // the `BackupManifest_Files` field of a manifest.
 type backupManifestFileIterator interface {
@@ -138,6 +148,7 @@ type spanCoveringFilter struct {
 	introducedSpanFrontier   spanUtils.Frontier
 	useFrontierCheckpointing bool
 	targetSize               int64
+	maxFileCount             int
 }
 
 func makeSpanCoveringFilter(
@@ -146,15 +157,24 @@ func makeSpanCoveringFilter(
 	highWater roachpb.Key,
 	introducedSpanFrontier spanUtils.Frontier,
 	targetSize int64,
+	maxFileCount int64,
 	useFrontierCheckpointing bool,
 ) (spanCoveringFilter, error) {
 	f, err := loadCheckpointFrontier(requiredSpans, checkpointedSpans)
 	if err != nil {
 		return spanCoveringFilter{}, err
 	}
+	if maxFileCount == 0 {
+		// A 0 valued maxFileCount may get passed in a mixed version cluster:
+		// specifically, when the job coordinator is on an older version and the
+		// generative split and scatter processor is on a newer version. In this
+		// case, ensure the maxFileCount is set to default.
+		maxFileCount = defaultMaxFileCount
+	}
 	sh := spanCoveringFilter{
 		introducedSpanFrontier:   introducedSpanFrontier,
 		targetSize:               targetSize,
+		maxFileCount:             int(maxFileCount),
 		highWaterMark:            highWater,
 		useFrontierCheckpointing: useFrontierCheckpointing,
 		checkpointFrontier:       f,
@@ -429,16 +449,12 @@ func generateAndSendImportSpans(
 					lastCovSpanCount = newCovFilesCount
 				} else {
 					// We have room to add to the last span if doing so would remain below
-					// both the target byte size and 200 total files. We limit the number
+					// both the target byte size and maxFileCount total files. We limit the number
 					// of files since we default to running multiple concurrent workers so
 					// we want to bound sum total open files across all of them to <= 1k.
 					// We bound the span byte size to improve work distribution and make
 					// the progress more granular.
-					// We waive the file count limit if the target size is >8GB, as a size
-					// this large clearly indicates we want lots of files (such as during
-					// online restores where we don't open them).
-					fileCountOK := lastCovSpanCount+newCovFilesCount <= 200 || filter.targetSize > 8<<30
-					fits := lastCovSpanSize+newCovFilesSize <= filter.targetSize && fileCountOK
+					fits := lastCovSpanSize+newCovFilesSize <= filter.targetSize && lastCovSpanCount+newCovFilesCount <= filter.maxFileCount
 
 					if (newCovFilesCount == 0 || fits) && !firstInSpan {
 						// If there are no new files that cover this span or if we can add the
