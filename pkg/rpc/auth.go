@@ -306,19 +306,24 @@ func (a kvAuth) authenticateNetworkRequest(ctx context.Context) (authnResult, er
 	// In that case, we only allow RPCs if the principal is 'node' or
 	// 'root' and the tenant scope in the cert matches this server
 	// (either the cert has scope "global" or its scope tenant ID
-	// matches our own).
+	// matches our own). The client could also present a certificate with subject
+	// DN equalling rootSubject or nodeSubject set using
+	// root-cert-distinguished-name and node-cert-distinguished-name cli flags
+	// respectively.
 	//
 	// TODO(benesch): the vast majority of RPCs should be limited to
 	// just NodeUser. This is not a security concern, as RootUser has
 	// access to read and write all data, merely good hygiene. For
 	// example, there is no reason to permit the root user to send raw
 	// Raft RPCs.
-	certUserScope, err := security.GetCertificateUserScope(clientCert)
-	if err != nil {
-		return nil, err
-	}
-	if err := checkRootOrNodeInScope(certUserScope, a.tenant.tenantID); err != nil {
-		return nil, err
+	if !security.CheckCertDNMatchesRootDNorNodeDN(clientCert) {
+		certUserScope, err := security.GetCertificateUserScope(clientCert)
+		if err != nil {
+			return nil, err
+		}
+		if err := checkRootOrNodeInScope(certUserScope, a.tenant.tenantID); err != nil {
+			return nil, err
+		}
 	}
 
 	if tenantIDFromMetadata.IsSet() {

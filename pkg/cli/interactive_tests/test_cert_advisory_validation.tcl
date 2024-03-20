@@ -13,6 +13,8 @@ eexpect $prompt
 # create some cert without an IP address in there.
 set db_dir "logs/db"
 set certs_dir "my-safe-directory"
+set root_dn "'O=Cockroach,CN=root'"
+set node_dn "'O=Cockroach,CN=node'"
 send "mkdir -p $certs_dir\r"
 eexpect $prompt
 
@@ -41,6 +43,17 @@ expect {
   }
   "node starting" {}
 }
+interrupt
+eexpect "interrupted"
+expect $prompt
+end_test
+
+start_test "Check that the root cert distinguished name can take a subject DN string."
+send "$argv cert create-client root --certs-dir=$certs_dir --ca-key=$certs_dir/ca.key\r"
+eexpect $prompt
+
+send "$argv start-single-node --store=$db_dir --certs-dir=$certs_dir --root-cert-distinguished-name=$root_dn --node-cert-distinguished-name=$node_dn --advertise-addr=localhost\r"
+eexpect "node starting"
 interrupt
 eexpect "interrupted"
 expect $prompt

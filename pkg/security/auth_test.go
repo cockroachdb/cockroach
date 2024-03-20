@@ -338,18 +338,20 @@ func TestAuthenticationHook(t *testing.T) {
 	fieldMismatchSubjectDNString := "O=Cockroach,OU=Marketing Team,UID=b8b40653-7f74-4f14-8a61-59f7f3b18184,CN=foo"
 	subsetSubjectDNString := "O=Cockroach,OU=Order Processing Team,CN=foo"
 	fieldMismatchOnlyOnCommonNameString := "O=Cockroach,OU=Order Processing Team,UID=b8b40653-7f74-4f14-8a61-59f7f3b18184,CN=bar"
+	rootDNString := "O=Cockroach,OU=Order Processing Team,UID=b8b40653-7f74-4f14-8a61-59f7f3b18184,CN=root"
+	nodeDNString := "O=Cockroach,OU=Order Processing Team,UID=b8b40653-7f74-4f14-8a61-59f7f3b18184,CN=node"
 
 	testCases := []struct {
-		insecure               bool
-		tlsSpec                string
-		username               username.SQLUsername
-		principalMap           string
-		buildHookSuccess       bool
-		publicHookSuccess      bool
-		privateHookSuccess     bool
-		tenantID               roachpb.TenantID
-		isSubjectRoleOptionSet bool
-		expectedErr            string
+		insecure                   bool
+		tlsSpec                    string
+		username                   username.SQLUsername
+		principalMap               string
+		buildHookSuccess           bool
+		publicHookSuccess          bool
+		privateHookSuccess         bool
+		tenantID                   roachpb.TenantID
+		isSubjectRoleOptionOrDNSet bool
+		expectedErr                string
 	}{
 		// Insecure mode, empty username.
 		{true, "", username.SQLUsername{}, "", true, false, false, roachpb.SystemTenantID, false, `user is missing`},
@@ -412,6 +414,10 @@ func TestAuthenticationHook(t *testing.T) {
 		// matching) having DNS as foo.
 		{false, "(" + fieldMismatchOnlyOnCommonNameString + ")dns:foo", fooUser, "", true, false, false, roachpb.MustMakeTenantID(123),
 			true, `certificate authentication failed for user "foo"`},
+		{false, "(" + rootDNString + ")", username.RootUserName(), "", true, true, false, roachpb.MustMakeTenantID(123),
+			true, `user "root" is not allowed`},
+		{false, "(" + nodeDNString + ")", username.NodeUserName(), "", true, true, true, roachpb.MustMakeTenantID(123),
+			true, ""},
 	}
 
 	ctx := context.Background()
@@ -424,8 +430,24 @@ func TestAuthenticationHook(t *testing.T) {
 			}
 
 			var roleSubject *ldap.DN
-			if tc.isSubjectRoleOptionSet {
-				roleSubject, _ = distinguishedname.ParseDN(subjectDNString)
+			if tc.isSubjectRoleOptionOrDNSet {
+				switch tc.username {
+				case username.RootUserName():
+					err = security.SetRootSubject(rootDNString)
+					if err != nil {
+						t.Fatalf("could not set root subject DN, err: %v", err)
+					}
+				case username.NodeUserName():
+					err = security.SetNodeSubject(nodeDNString)
+					if err != nil {
+						t.Fatalf("could not set node subject DN, err: %v", err)
+					}
+				default:
+					roleSubject, err = distinguishedname.ParseDN(subjectDNString)
+					if err != nil {
+						t.Fatalf("could not set role subject, err: %v", err)
+					}
+				}
 			}
 
 			hook, err := security.UserAuthCertHook(
@@ -458,6 +480,9 @@ func TestAuthenticationHook(t *testing.T) {
 				require.Regexp(t, tc.expectedErr, err.Error())
 				return
 			}
+			// post test execution unset root and node DN set
+			security.UnsetRootSubject()
+			security.UnsetNodeSubject()
 		})
 	}
 }

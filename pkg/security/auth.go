@@ -32,6 +32,16 @@ var certPrincipalMap struct {
 	m map[string]string
 }
 
+var rootSubject struct {
+	syncutil.RWMutex
+	dn *ldap.DN
+}
+
+var nodeSubject struct {
+	syncutil.RWMutex
+	dn *ldap.DN
+}
+
 // CertificateUserScope indicates the scope of a user certificate i.e. which
 // tenant the user is allowed to authenticate on. Older client certificates
 // without a tenant scope are treated as global certificates which can
@@ -62,6 +72,84 @@ type UserAuthHook func(
 	systemIdentity username.SQLUsername,
 	clientConnection bool,
 ) error
+
+func SetRootSubject(rootDNString string) error {
+	if len(rootDNString) == 0 {
+		return nil
+	}
+	rootDN, err := distinguishedname.ParseDN(rootDNString)
+	if err != nil {
+		return errors.Errorf("invalid root cert distinguished name: %q", rootDNString)
+	}
+	rootSubject.Lock()
+	rootSubject.dn = rootDN
+	rootSubject.Unlock()
+	return nil
+}
+
+func UnsetRootSubject() {
+	rootSubject.Lock()
+	rootSubject.dn = nil
+	rootSubject.Unlock()
+}
+
+// getRootOrNodeSubject returns distinguished name set for root or node user via
+// root-cert-distinguished-name and node-cert-distinguished flags respectively.
+func getRootOrNodeSubject(systemIdentity username.SQLUsername) (dn *ldap.DN) {
+	switch {
+	case systemIdentity.IsRootUser():
+		rootSubject.RLock()
+		dn = rootSubject.dn
+		rootSubject.RUnlock()
+	case systemIdentity.IsNodeUser():
+		nodeSubject.RLock()
+		dn = nodeSubject.dn
+		nodeSubject.RUnlock()
+	}
+	return dn
+}
+
+func CheckCertDNMatchesRootDNorNodeDN(cert *x509.Certificate) bool {
+	rootSubject.RLock()
+	rootDN := rootSubject.dn
+	rootSubject.RUnlock()
+
+	nodeSubject.RLock()
+	nodeDN := nodeSubject.dn
+	nodeSubject.RUnlock()
+
+	if rootDN != nil || nodeDN != nil {
+		certDN, err := distinguishedname.ParseDNFromCertificate(cert)
+		if err != nil {
+			return false
+		}
+		if rootDN != nil && certDN.Equal(rootDN) || nodeDN != nil && certDN.Equal(nodeDN) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func SetNodeSubject(nodeDNString string) error {
+	if len(nodeDNString) == 0 {
+		return nil
+	}
+	nodeDN, err := distinguishedname.ParseDN(nodeDNString)
+	if err != nil {
+		return errors.Errorf("invalid node cert distinguished name: %q", nodeDNString)
+	}
+	nodeSubject.Lock()
+	nodeSubject.dn = nodeDN
+	nodeSubject.Unlock()
+	return nil
+}
+
+func UnsetNodeSubject() {
+	nodeSubject.Lock()
+	nodeSubject.dn = nil
+	nodeSubject.Unlock()
+}
 
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
 // list must either be empty or have the format <source>:<dest>. The principal
@@ -199,6 +287,9 @@ func UserAuthCertHook(
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
+		if roleSubject == nil {
+			roleSubject = getRootOrNodeSubject(systemIdentity)
+		}
 		var certSubject *ldap.DN
 		if roleSubject != nil {
 			var err error
