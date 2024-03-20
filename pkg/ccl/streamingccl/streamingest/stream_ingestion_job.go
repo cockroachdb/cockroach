@@ -310,6 +310,10 @@ func (s *streamIngestionResumer) handleResumeError(
 func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// Protect the destination tenant's keyspan from garbage collection.
 	jobExecCtx := execCtx.(sql.JobExecContext)
+
+	if err := jobExecCtx.ExecCfg().JobRegistry.CheckPausepoint("stream_ingestion.before_protection"); err != nil {
+		return err
+	}
 	err := s.protectDestinationTenant(ctx, jobExecCtx)
 	if err != nil {
 		return s.handleResumeError(ctx, jobExecCtx, err)
