@@ -628,6 +628,8 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 			next.parentMu.prevSibling = prev
 		}
 		parent.mu.numChildren--
+		// Lose the references to siblings to aid GC.
+		mm.parentMu.prevSibling, mm.parentMu.nextSibling = nil, nil
 		parent.mu.Unlock()
 	}
 	// If this monitor still has children, let's lose the reference to them as
