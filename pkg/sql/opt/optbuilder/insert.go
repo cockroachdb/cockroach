@@ -350,6 +350,17 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		mb.buildUpsert(returning)
 	}
 
+	if b.trackSchemaDeps {
+		dep := opt.SchemaDep{DataSource: tab}
+		// Track dependencies on insert columns.
+		for i := range mb.insertColIDs {
+			if mb.insertColIDs[i] != 0 && !mb.implicitInsertCols.Contains(mb.insertColIDs[i]) {
+				dep.ColumnOrdinals.Add(i)
+			}
+		}
+		b.schemaDeps = append(b.schemaDeps, dep)
+	}
+
 	return mb.outScope
 }
 

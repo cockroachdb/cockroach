@@ -104,7 +104,7 @@ statement error pgcode 2BP01 cannot drop table ab because other objects depend o
 DROP TABLE ab
 
 onlyif config local-legacy-schema-changer
-statement error pgcode 2BP01 pq: cannot drop relation \"ab\" because function \"ins\" depends on it\nHINT: consider dropping \"ins\" first.
+statement error pgcode 2BP01 pq: cannot drop relation \"ab\" because function \"ins_ab\" depends on it\nHINT: consider dropping \"ins_ab\" first.
 DROP TABLE ab
 
 statement error pgcode 2BP01 cannot drop function \"ins_ab\" because other objects \(\[test.public.ins\]\) still depend on it
