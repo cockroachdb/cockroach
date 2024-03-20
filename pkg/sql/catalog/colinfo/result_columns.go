@@ -295,34 +295,41 @@ func init() {
 var TenantColumns = ResultColumns{
 	{Name: "id", Typ: types.Int},
 	{Name: "name", Typ: types.String},
+}
+
+// TenantColumnsNoReplication appear in all SHOW VIRTUAL CLUSTER queries, except
+// for SHOW VIRTUAL CLUSTER ... WITH REPLICATION STATUS.
+var TenantColumnsNoReplication = ResultColumns{
 	{Name: "data_state", Typ: types.String},
 	{Name: "service_mode", Typ: types.String},
 }
 
-// TenantColumnsWithReplication is appended to TenantColumns for
-// SHOW VIRTUAL CLUSTER ... WITH REPLICATION STATUS queries.
+// TenantColumnsWithReplication is appended to TenantColumns for SHOW VIRTUAL
+// CLUSTER ... WITH REPLICATION STATUS queries.
 var TenantColumnsWithReplication = ResultColumns{
 	{Name: "source_tenant_name", Typ: types.String},
 	{Name: "source_cluster_uri", Typ: types.String},
-	{Name: "replication_job_id", Typ: types.Int},
-	{Name: "replication_lag", Typ: types.Interval},
-	// The latest fully replicated time.
-	{Name: "replicated_time", Typ: types.TimestampTZ},
 	// The protected timestamp on the destination cluster, meaning we cannot
 	// cutover to before this time.
 	{Name: "retained_time", Typ: types.TimestampTZ},
+	// The latest fully replicated time.
+	{Name: "replicated_time", Typ: types.TimestampTZ},
+	{Name: "replication_lag", Typ: types.Interval},
 	{Name: "cutover_time", Typ: types.Decimal},
+	{Name: "status", Typ: types.String},
 }
 
-// TenantColumnsWithPriorReplication is appended to TenantColumns for
-// SHOW VIRTUAL CLUSTER ... WITH PRIOR REPLICATION DETAILS queries.
+// TenantColumnsWithPriorReplication is appended to TenantColumns and
+// TenantColumnsNoReplication for SHOW VIRTUAL CLUSTER ... WITH PRIOR
+// REPLICATION DETAILS queries.
 var TenantColumnsWithPriorReplication = ResultColumns{
 	{Name: "source_id", Typ: types.String},
 	{Name: "activation_time", Typ: types.Decimal},
 }
 
-// TenantColumnsWithCapabilities is appended to TenantColumns for
-// SHOW VIRTUAL CLUSTER ... WITH CAPABILITIES queries.
+// TenantColumnsWithCapabilities is appended to TenantColumns and
+// TenantColumnsNoReplication for SHOW VIRTUAL CLUSTER ... WITH CAPABILITIES
+// queries.
 var TenantColumnsWithCapabilities = ResultColumns{
 	{Name: "capability_name", Typ: types.String},
 	{Name: "capability_value", Typ: types.String},
