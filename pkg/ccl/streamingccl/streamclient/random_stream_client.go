@@ -467,6 +467,7 @@ func (m *RandomStreamClient) Close(_ context.Context) error {
 func (m *RandomStreamClient) Subscribe(
 	_ context.Context,
 	_ streampb.StreamID,
+	_ int32,
 	spec SubscriptionToken,
 	initialScanTime hlc.Timestamp,
 	_ hlc.Timestamp,
