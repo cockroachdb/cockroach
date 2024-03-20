@@ -143,8 +143,8 @@ go_test(
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":storage"],
-    exec_properties = {"Pool": "medium"},
-    shard_count = 2,
+    exec_properties = {"Pool": "large"},
+    shard_count = 4,
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
