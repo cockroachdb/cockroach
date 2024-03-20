@@ -164,6 +164,7 @@ type plpgsqlBuilder struct {
 	// outParams is the set of OUT parameters for the routine.
 	outParams []ast.Variable
 
+	routineName  string
 	isProcedure  bool
 	identCounter int
 }
@@ -178,7 +179,7 @@ type routineParam struct {
 
 func newPLpgSQLBuilder(
 	ob *Builder,
-	routineName string,
+	routineName, rootBlockLabel string,
 	colRefs *opt.ColSet,
 	routineParams []routineParam,
 	returnType *types.T,
@@ -190,12 +191,13 @@ func newPLpgSQLBuilder(
 		colRefs:     colRefs,
 		returnType:  returnType,
 		blocks:      make([]plBlock, 0, initialBlocksCap),
+		routineName: routineName,
 		isProcedure: isProcedure,
 	}
 	// Build the initial block for the routine parameters, which are considered
 	// PL/pgSQL variables.
 	b.pushBlock(plBlock{
-		label:    routineName,
+		label:    rootBlockLabel,
 		vars:     make([]ast.Variable, 0, len(routineParams)),
 		varTypes: make(map[ast.Variable]*types.T),
 	})
@@ -575,7 +577,24 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			if con := b.getContinuation(conTypes, t.Label); con != nil {
 				return b.callContinuation(con, s)
 			}
-			panic(exitOutsideLoopErr)
+			if t.Label == unspecifiedLabel {
+				panic(exitOutsideLoopErr)
+			}
+			if t.Label == b.rootBlock().label {
+				// An EXIT from the root block has the same handling as when the routine
+				// ends with no RETURN statement.
+				return b.handleEndOfFunction(s)
+			}
+			if t.Label == b.routineName {
+				// An EXIT from the routine name itself results in an end-of-function
+				// error, even for a VOID-returning routine or one with OUT-parameters.
+				eofCon := b.makeContinuationWithTyp("root_exit", t.Label, continuationBlockExit)
+				b.buildEndOfFunctionRaise(&eofCon)
+				return b.callContinuation(&eofCon, s)
+			}
+			panic(pgerror.Newf(pgcode.Syntax,
+				"there is no label \"%s\" attached to any block or loop enclosing this statement", t.Label,
+			))
 
 		case *ast.Continue:
 			if t.Condition != nil {
@@ -589,10 +608,24 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			// CONTINUE statements are handled by calling the function that executes
 			// the loop body. Errors if used outside a loop.
-			if con := b.getContinuation(continuationLoopContinue, t.Label); con != nil {
+			conTypes := continuationLoopContinue
+			if t.Label != unspecifiedLabel {
+				conTypes |= continuationBlockExit
+			}
+			if con := b.getContinuation(conTypes, t.Label); con != nil {
+				if con.typ == continuationBlockExit {
+					panic(pgerror.Newf(pgcode.Syntax,
+						"block label \"%s\" cannot be used in CONTINUE", t.Label,
+					))
+				}
 				return b.callContinuation(con, s)
 			}
-			panic(continueOutsideLoopErr)
+			if t.Label == unspecifiedLabel {
+				panic(continueOutsideLoopErr)
+			}
+			panic(pgerror.Newf(pgcode.Syntax,
+				"there is no label \"%s\" attached to any block or loop enclosing this statement", t.Label,
+			))
 
 		case *ast.Raise:
 			// RAISE statements allow the PLpgSQL function to send an error or a
@@ -1332,6 +1365,18 @@ func (b *plpgsqlBuilder) handleEndOfFunction(inScope *scope) *scope {
 		return returnScope
 	}
 	// Build a RAISE statement which throws an end-of-function error if executed.
+	con := b.makeContinuation("_end_of_function")
+	b.buildEndOfFunctionRaise(&con)
+	return b.callContinuation(&con, inScope)
+}
+
+// buildEndOfFunctionRaise adds to the given continuation a RAISE statement that
+// throws an end-of-function error, as well as a typed RETURN NULL to ensure
+// that type-checking works out.
+//
+// returns a continuation which will throw the
+// end-of-function error.
+func (b *plpgsqlBuilder) buildEndOfFunctionRaise(con *continuation) {
 	args := b.makeConstRaiseArgs(
 		"ERROR", /* severity */
 		"control reached end of function without RETURN", /* message */
@@ -1339,18 +1384,17 @@ func (b *plpgsqlBuilder) handleEndOfFunction(inScope *scope) *scope {
 		"", /* hint */
 		pgcode.RoutineExceptionFunctionExecutedNoReturnStatement.String(), /* code */
 	)
-	con := b.makeContinuation("_end_of_function")
 	con.def.Volatility = volatility.Volatile
-	b.appendBodyStmt(&con, b.buildPLpgSQLRaise(con.s, args))
+	b.appendBodyStmt(con, b.buildPLpgSQLRaise(con.s, args))
+
 	// Build a dummy statement that returns NULL. It won't be executed, but
 	// ensures that the continuation routine's return type is correct.
 	eofColName := scopeColName("").WithMetadataName(b.makeIdentifier("end_of_function"))
 	eofScope := con.s.push()
 	typedNull := b.ob.factory.ConstructNull(b.returnType)
 	b.ob.synthesizeColumn(eofScope, eofColName, b.returnType, nil /* expr */, typedNull)
-	b.ob.constructProjectForScope(inScope, eofScope)
-	b.appendBodyStmt(&con, eofScope)
-	return b.callContinuation(&con, inScope)
+	b.ob.constructProjectForScope(con.s, eofScope)
+	b.appendBodyStmt(con, eofScope)
 }
 
 // addOneRowCheck handles INTO STRICT, where a SQL statement is required to
