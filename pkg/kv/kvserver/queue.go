@@ -348,6 +348,14 @@ type queueConfig struct {
 	// disabledConfig is a reference to the cluster setting that controls enabling
 	// and disabling queues.
 	disabledConfig *settings.BoolSetting
+	// skipIfReplicaHasExternalFilesConfig is a reference to the
+	// clsuter setting that controls whether replicas should be
+	// processed in this queueu if they have external files. May
+	// be nil.
+	//
+	// skipIfReplicaHasExternalFilesConfig is only consulted after
+	// shouldQueue rturns true. for the given replica.
+	skipIfReplicaHasExternalFilesConfig *settings.BoolSetting
 }
 
 // baseQueue is the base implementation of the replicaQueue interface. Queue
@@ -678,6 +686,17 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, confReader)
 	if !should {
 		return
+	}
+
+	extConf := bq.skipIfReplicaHasExternalFilesConfig
+	if extConf != nil && extConf.Get(&bq.store.cfg.Settings.SV) {
+		if hasExternal, err := realRepl.HasExternalBytes(); err != nil {
+			log.Warningf(ctx, "could not determine if %s has external bytes: %s", realRepl, err)
+			return
+		} else if hasExternal {
+			log.Infof(ctx, "skipping %s for %s because it has external bytes", bq.name, realRepl)
+			return
+		}
 	}
 	_, err = bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority)
 	if !isExpectedQueueError(err) {
