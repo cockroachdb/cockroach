@@ -112,6 +112,11 @@ func newRemoteSession(l *logger.Logger, command *remoteCommand) *remoteSession {
 		}
 	}
 
+	// Debug(herko): Force SSH logs from CLI
+	loggingArgs = []string{
+		"-vvv", "-E", fmt.Sprintf("./ssh_%s.log", timeutil.Now().Format(`150405.000000000`)),
+	}
+
 	args := []string{
 		command.user + "@" + command.host,
 

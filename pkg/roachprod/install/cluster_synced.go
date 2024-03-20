@@ -1368,14 +1368,16 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 			var err error
 			cmd := "test -e /mnt/data1/.roachprod-initialized"
 			opts := defaultCmdOpts("wait-init")
-			for j := 0; j < 600; j++ {
+			for j := 0; j < 30; j++ {
 				res, err = c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 				if err != nil {
 					return nil, err
 				}
 
 				if res.Err != nil {
-					time.Sleep(500 * time.Millisecond)
+					// Debug(herko): Log issues
+					l.Printf("SSH-DEBUG: %2d: %v\n\n", node, res.Err)
+					time.Sleep(5000 * time.Millisecond)
 					continue
 				}
 				return res, nil
