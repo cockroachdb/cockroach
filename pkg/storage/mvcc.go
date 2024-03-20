@@ -7911,6 +7911,14 @@ func mvccExportToWriter(
 				return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
 			}
 
+			// Checksums include the key, but *exported* keys no longer live at that
+			// key once they are exported, and could be restored as some other key, so
+			// zero out the checksum. We could also, rather than giving up the
+			// checksum entirely, write a new checksum here by passing a sentinel key
+			// (nil?, "exported"?) that would then be checked in Verify() as a
+			// fallback only after checking with the passed key fails; given how few
+			// callers actaully verify these however this seems of dubious value.
+			mvccValue.Value.ClearChecksum()
 			if !ok && opts.IncludeMVCCValueHeader {
 				buf, canRetainBuf, err := EncodeMVCCValueForExport(mvccValue, valueScratch[:0])
 				if err != nil {
