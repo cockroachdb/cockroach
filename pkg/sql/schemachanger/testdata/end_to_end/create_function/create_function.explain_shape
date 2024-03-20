@@ -20,7 +20,7 @@ EXPLAIN (DDL, SHAPE) CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANG
   SELECT nextval('sq1');
 $$;
 ----
-Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(IN ‹a› ‹notmyworkday›)
+Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(‹a› ‹notmyworkday›)
 	RETURNS INT8
 	VOLATILE
 	LANGUAGE SQL

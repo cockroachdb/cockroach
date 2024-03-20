@@ -26,7 +26,7 @@ EXPLAIN (DDL, SHAPE) CREATE FUNCTION f3(a notmyworkday)  RETURNS INT VOLATILE LA
   SELECT f2(a) + f(a);
 $$;
 ----
-Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f3›(IN ‹a› ‹notmyworkday›)
+Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f3›(‹a› ‹notmyworkday›)
 	RETURNS INT8
 	VOLATILE
 	LANGUAGE SQL

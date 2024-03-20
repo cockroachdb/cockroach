@@ -359,18 +359,18 @@ type RoutineParam struct {
 // Format implements the NodeFormatter interface.
 func (node *RoutineParam) Format(ctx *FmtCtx) {
 	switch node.Class {
+	case RoutineParamDefault:
 	case RoutineParamIn:
-		ctx.WriteString("IN")
+		ctx.WriteString("IN ")
 	case RoutineParamOut:
-		ctx.WriteString("OUT")
+		ctx.WriteString("OUT ")
 	case RoutineParamInOut:
-		ctx.WriteString("INOUT")
+		ctx.WriteString("INOUT ")
 	case RoutineParamVariadic:
-		ctx.WriteString("VARIADIC")
+		ctx.WriteString("VARIADIC ")
 	default:
 		panic(pgerror.New(pgcode.InvalidParameterValue, "unknown routine option"))
 	}
-	ctx.WriteString(" ")
 	if node.Name != "" {
 		ctx.FormatNode(&node.Name)
 		ctx.WriteString(" ")
@@ -386,8 +386,11 @@ func (node *RoutineParam) Format(ctx *FmtCtx) {
 type RoutineParamClass int
 
 const (
+	// RoutineParamDefault indicates that RoutineParamClass was unspecified
+	// (in almost all cases it is equivalent to RoutineParamIn).
+	RoutineParamDefault RoutineParamClass = iota
 	// RoutineParamIn args can only be used as input.
-	RoutineParamIn RoutineParamClass = iota
+	RoutineParamIn
 	// RoutineParamOut args can only be used as output.
 	RoutineParamOut
 	// RoutineParamInOut args can be used as both input and output.
@@ -397,10 +400,10 @@ const (
 )
 
 // IsInParamClass returns true if the given parameter class specifies an input
-// parameter (i.e. either IN or INOUT).
+// parameter (i.e. either unspecified, IN or, INOUT).
 func IsInParamClass(class RoutineParamClass) bool {
 	switch class {
-	case RoutineParamIn, RoutineParamInOut:
+	case RoutineParamDefault, RoutineParamIn, RoutineParamInOut:
 		return true
 	default:
 		return false
