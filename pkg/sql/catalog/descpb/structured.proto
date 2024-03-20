@@ -1210,7 +1210,28 @@ message TableDescriptor {
   // gets incremented while preparing the table for ingestion.
   optional uint32 import_epoch = 59 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportEpoch"];
 
-  // Next ID: 60
+  // ImportType is the type of import that is running if
+  // ImportStartWallTime is set.
+  optional ImportType import_type = 60 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportType"];
+
+  // Next ID: 61
+}
+
+// ImportType indicates the type of IMPORT that is in progress for a
+// TableDescriptor.
+enum ImportType {
+  // IMPORT_WITH_START_TIME_ONLY indicates that this import set the
+  // ImportStartWallTime on the descriptor but did not set increment
+  // the ImportEpoch. Such imports cannot be rolled back without MVCC
+  // timestamp filtering.
+  //
+  // Note this is purposefuly 0 since in progress imports from before
+  // this field was added won't have this set.
+  IMPORT_WITH_START_TIME_ONLY = 0;
+  // IMPORT_WITH_IMPORT_EPOCH indicates that the running import did
+  // increment the import epoch. Such imports can be rolled back using
+  // an ImportEpoch deletion predicate.
+  IMPORT_WITH_IMPORT_EPOCH = 1;
 }
 
 // SurvivalGoal is the survival goal for a database.
