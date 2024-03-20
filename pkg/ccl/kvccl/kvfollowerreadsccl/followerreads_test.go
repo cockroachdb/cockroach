@@ -703,31 +703,106 @@ func TestOracle(t *testing.T) {
 		var noLeaseholder *roachpb.ReplicaDescriptor
 		var noCTPolicy roachpb.RangeClosedTimestampPolicy
 		var noQueryState replicaoracle.QueryState
+		sk := StreakConfig{Min: 10, SmallPlanMin: 3, SmallPlanThreshold: 3, MaxSkew: 0.95}
+		// intMap(k1, v1, k2, v2, ...) is a FastIntMaps constructor shorthand.
+		intMap := func(pairs ...int) util.FastIntMap {
+			f := util.FastIntMap{}
+			for i := 0; i < len(pairs); i += 2 {
+				f.Set(pairs[i], pairs[i+1])
+			}
+			return f
+		}
 
 		t.Run("no-followers", func(t *testing.T) {
-			br := NewBulkOracle(cfg(stNoFollowers), roachpb.Locality{})
+			br := NewBulkOracle(cfg(stNoFollowers), roachpb.Locality{}, sk)
 			leaseholder := &roachpb.ReplicaDescriptor{NodeID: 99}
 			picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, leaseholder, noCTPolicy, noQueryState)
 			require.NoError(t, err)
 			require.Equal(t, leaseholder.NodeID, picked.NodeID, "no follower reads means we pick the leaseholder")
 		})
 		t.Run("no-filter", func(t *testing.T) {
-			br := NewBulkOracle(cfg(st), roachpb.Locality{})
+			br := NewBulkOracle(cfg(st), roachpb.Locality{}, sk)
 			picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, noQueryState)
 			require.NoError(t, err)
 			require.NotNil(t, picked, "no filter picks some node but could be any node")
 		})
 		t.Run("filter", func(t *testing.T) {
-			br := NewBulkOracle(cfg(st), region("b"))
+			br := NewBulkOracle(cfg(st), region("b"), sk)
 			picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, noQueryState)
 			require.NoError(t, err)
 			require.Equal(t, roachpb.NodeID(2), picked.NodeID, "filter means we pick the node that matches the filter")
 		})
 		t.Run("filter-no-match", func(t *testing.T) {
-			br := NewBulkOracle(cfg(st), region("z"))
+			br := NewBulkOracle(cfg(st), region("z"), sk)
 			picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, noQueryState)
 			require.NoError(t, err)
 			require.NotNil(t, picked, "no match still picks some non-zero node")
+		})
+		t.Run("streak-short", func(t *testing.T) {
+			br := NewBulkOracle(cfg(st), roachpb.Locality{}, sk)
+			for _, r := range replicas { // Check for each to show it isn't random.
+				picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, replicaoracle.QueryState{
+					NodeStreak:     1,
+					LastAssignment: r.NodeID,
+				})
+				require.NoError(t, err)
+				require.Equal(t, r.NodeID, picked.NodeID)
+			}
+		})
+		t.Run("streak-medium", func(t *testing.T) {
+			br := NewBulkOracle(cfg(st), roachpb.Locality{}, sk)
+			for _, r := range replicas { // Check for each to show it isn't random.
+				picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, replicaoracle.QueryState{
+					NodeStreak:     9,
+					RangesPerNode:  intMap(1, 3, 2, 3, 3, 3),
+					LastAssignment: r.NodeID,
+				})
+				require.NoError(t, err)
+				require.Equal(t, r.NodeID, picked.NodeID)
+			}
+		})
+		t.Run("streak-long-even", func(t *testing.T) {
+			br := NewBulkOracle(cfg(st), roachpb.Locality{}, sk)
+			for _, r := range replicas { // Check for each to show it isn't random.
+				picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, replicaoracle.QueryState{
+					NodeStreak:     50,
+					RangesPerNode:  intMap(1, 1000, 2, 1002, 3, 1005),
+					LastAssignment: r.NodeID,
+				})
+				require.NoError(t, err)
+				require.Equal(t, r.NodeID, picked.NodeID)
+			}
+		})
+		t.Run("streak-long-skewed-to-other", func(t *testing.T) {
+			br := NewBulkOracle(cfg(st), roachpb.Locality{}, sk)
+			for i := 0; i < 10; i++ { // Prove it isn't just randomly picking n2.
+				qs := replicaoracle.QueryState{
+					NodeStreak:     50,
+					RangesPerNode:  intMap(1, 10, 2, 10, 3, 1005),
+					LastAssignment: 2,
+				}
+				picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, qs)
+				require.NoError(t, err)
+				require.Equal(t, roachpb.NodeID(2), picked.NodeID)
+			}
+		})
+		t.Run("streak-long-skewed-randomizes", func(t *testing.T) {
+			br := NewBulkOracle(cfg(st), roachpb.Locality{}, sk)
+			qs := replicaoracle.QueryState{
+				NodeStreak:     50,
+				RangesPerNode:  intMap(1, 10, 2, 10, 3, 1005),
+				LastAssignment: 3,
+			}
+			randomized := false
+			for i := 0; i < 100; i++ { // .33^100 is close enough to zero that this shouldn't flake.
+				picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, qs)
+				require.NoError(t, err)
+				if picked.NodeID != qs.LastAssignment {
+					randomized = true
+					break
+				}
+			}
+			require.True(t, randomized)
 		})
 	})
 }

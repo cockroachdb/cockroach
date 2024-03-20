@@ -301,5 +301,11 @@ func (it *spanResolverIterator) ReplicaInfo(
 		ReplDesc:               repl,
 		IgnoreMisplannedRanges: ignoreMisplannedRanges,
 	}
+	if it.queryState.LastAssignment == repl.NodeID {
+		it.queryState.NodeStreak++
+	} else {
+		it.queryState.NodeStreak = 0
+	}
+	it.queryState.LastAssignment = repl.NodeID
 	return repl, ignoreMisplannedRanges, nil
 }
