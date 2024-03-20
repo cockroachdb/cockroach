@@ -316,16 +316,26 @@ func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
 		}
 		k.Key = suffix
 
-		v, err := iter.UnsafeValue()
+		raw, err := iter.UnsafeValue()
 		if err != nil {
 			return err
 		}
+		v, err := storage.DecodeValueFromMVCCValue(raw)
+		if err != nil {
+			return errors.Wrapf(err, "decoding mvcc value %s", k)
+		}
+
+		// Checksums include the key, but *exported* keys no longer live at that
+		// key once they are exported, and could be restored as some other key, so
+		// zero out the checksum.
+		v.ClearChecksum()
+
 		if k.Timestamp.IsEmpty() {
-			if err := s.sst.PutUnversioned(k.Key, v); err != nil {
+			if err := s.sst.PutUnversioned(k.Key, v.RawBytes); err != nil {
 				return err
 			}
 		} else {
-			if err := s.sst.PutRawMVCC(k, v); err != nil {
+			if err := s.sst.PutRawMVCC(k, v.RawBytes); err != nil {
 				return err
 			}
 		}
