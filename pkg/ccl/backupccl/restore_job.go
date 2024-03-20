@@ -327,6 +327,7 @@ func restore(
 			job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
 			introducedSpanFrontier,
 			targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV),
+			maxFileCount.Get(&execCtx.ExecCfg().Settings.SV),
 			progressTracker.useFrontier)
 	}(); err != nil {
 		return roachpb.RowCount{}, err
