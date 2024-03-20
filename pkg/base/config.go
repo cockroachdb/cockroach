@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -838,8 +839,7 @@ type TempStorageConfig struct {
 	Settings *cluster.Settings
 }
 
-// WALFailoverMode configures a node's stores behavior under high write latency
-// to their write-ahead logs.
+// WALFailoverMode specifies the mode of WAL failover.
 type WALFailoverMode int8
 
 const (
@@ -858,10 +858,10 @@ const (
 	// volume, the batch commit latency is insulated from the effects of momentary
 	// disk stalls.
 	WALFailoverAmongStores
+	// WALFailoverExplicitPath enables WAL failover for a single-store node to an
+	// explicitly specified path.
+	WALFailoverExplicitPath
 )
-
-// Type implements the pflag.Value interface.
-func (m *WALFailoverMode) Type() string { return "string" }
 
 // String implements fmt.Stringer.
 func (m *WALFailoverMode) String() string {
@@ -877,23 +877,108 @@ func (m *WALFailoverMode) SafeFormat(p redact.SafePrinter, _ rune) {
 		p.SafeString("disabled")
 	case WALFailoverAmongStores:
 		p.SafeString("among-stores")
+	case WALFailoverExplicitPath:
+		p.SafeString("path")
 	default:
 		p.Printf("<unknown WALFailoverMode %d>", int8(*m))
 	}
 }
 
+// WALFailoverConfig configures a node's stores behavior under high write
+// latency to their write-ahead logs.
+type WALFailoverConfig struct {
+	Mode WALFailoverMode
+	// Path is the non-store path to which WALs should be written when failing
+	// over. It must be nonempty if and only if Mode == WALFailoverExplicitPath.
+	Path string
+	// PrevPath is the previously used non-store path. It may be set with Mode ==
+	// WALFailoverExplicitPath (when changing the secondary path) or
+	// WALFailoverDisabled (when disabling WAL failover after it was previously
+	// enabled). It must be empty for other modes.
+	PrevPath string
+}
+
+// Type implements the pflag.Value interface.
+func (c *WALFailoverConfig) Type() string { return "string" }
+
+// String implements fmt.Stringer.
+func (c *WALFailoverConfig) String() string {
+	return redact.StringWithoutMarkers(c)
+}
+
+// SafeFormat implements the refact.SafeFormatter interface.
+func (c *WALFailoverConfig) SafeFormat(p redact.SafePrinter, _ rune) {
+	switch c.Mode {
+	case WALFailoverDefault:
+		// Empty
+	case WALFailoverDisabled:
+		p.SafeString("disabled")
+		if c.PrevPath != "" {
+			p.SafeString(",prev_path=")
+			p.SafeString(redact.SafeString(c.PrevPath))
+		}
+	case WALFailoverAmongStores:
+		p.SafeString("among-stores")
+	case WALFailoverExplicitPath:
+		p.SafeString("path=")
+		p.SafeString(redact.SafeString(c.Path))
+		if c.PrevPath != "" {
+			p.SafeString(",prev_path=")
+			p.SafeString(redact.SafeString(c.PrevPath))
+		}
+	default:
+		p.Printf("<unknown WALFailoverMode %d>", int8(c.Mode))
+	}
+}
+
 // Set implements the pflag.Value interface.
-func (m *WALFailoverMode) Set(s string) error {
-	switch s {
-	case "disabled":
-		*m = WALFailoverDisabled
-	case "among-stores":
-		*m = WALFailoverAmongStores
+func (c *WALFailoverConfig) Set(s string) error {
+	switch {
+	case strings.HasPrefix(s, "disabled"):
+		c.Mode = WALFailoverDisabled
+		var ok bool
+		c.Path, c.PrevPath, ok = parseWALFailoverPathFields(strings.TrimPrefix(s, "disabled"))
+		if !ok || c.Path != "" {
+			return errors.Newf("invalid disabled --wal-failover setting: %s "+
+				"expect disabled[,prev_path=<prev_path>]", s)
+		}
+	case s == "among-stores":
+		c.Mode = WALFailoverAmongStores
+	case strings.HasPrefix(s, "path="):
+		c.Mode = WALFailoverExplicitPath
+		var ok bool
+		c.Path, c.PrevPath, ok = parseWALFailoverPathFields(s)
+		if !ok || c.Path == "" {
+			return errors.Newf("invalid path --wal-failover setting: %s "+
+				"expect path=<path>[,prev_path=<prev_path>]", s)
+		}
 	default:
 		return errors.Newf("invalid --wal-failover setting: %s "+
-			"(possible values: disabled, among-stores)", s)
+			"(possible values: disabled, among-stores, path=<path>)", s)
 	}
 	return nil
+}
+
+func parseWALFailoverPathFields(s string) (path, prevPath string, ok bool) {
+	if s == "" {
+		return "", "", true
+	}
+	if s2 := strings.TrimPrefix(s, "path="); len(s2) < len(s) {
+		s = s2
+		if i := strings.IndexByte(s, ','); i == -1 {
+			return s, "", true
+		} else {
+			path = s[:i]
+			s = s[i:]
+		}
+	}
+
+	// Any remainder must be a prev_path= field.
+	if !strings.HasPrefix(s, ",prev_path=") {
+		return "", "", false
+	}
+	prevPath = strings.TrimPrefix(s, ",prev_path=")
+	return path, prevPath, true
 }
 
 // ExternalIODirConfig describes various configuration options pertaining
