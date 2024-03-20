@@ -152,7 +152,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX g
 ----
 start_key                    end_key                      replicas  lease_holder
 …/<IndexMin>                 …/"foo"/1152921574000000000  {2}       2
-…/"foo"/1152921574000000000  <after:/Max>                 {1}       1
+…/"foo"/1152921574000000000  …/<IndexMax>                 {1}       1
 
 # Distributed.
 query I
