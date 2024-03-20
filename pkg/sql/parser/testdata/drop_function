@@ -34,18 +34,18 @@ DROP FUNCTION _, _ -- identifiers removed
 parse
 DROP FUNCTION f(int)
 ----
-DROP FUNCTION f(IN INT8) -- normalized!
-DROP FUNCTION f(IN INT8) -- fully parenthesized
-DROP FUNCTION f(IN INT8) -- literals removed
-DROP FUNCTION _(IN INT8) -- identifiers removed
+DROP FUNCTION f(INT8) -- normalized!
+DROP FUNCTION f(INT8) -- fully parenthesized
+DROP FUNCTION f(INT8) -- literals removed
+DROP FUNCTION _(INT8) -- identifiers removed
 
 parse
 DROP FUNCTION f(a int)
 ----
-DROP FUNCTION f(IN a INT8) -- normalized!
-DROP FUNCTION f(IN a INT8) -- fully parenthesized
-DROP FUNCTION f(IN a INT8) -- literals removed
-DROP FUNCTION _(IN _ INT8) -- identifiers removed
+DROP FUNCTION f(a INT8) -- normalized!
+DROP FUNCTION f(a INT8) -- fully parenthesized
+DROP FUNCTION f(a INT8) -- literals removed
+DROP FUNCTION _(_ INT8) -- identifiers removed
 
 parse
 DROP FUNCTION f(a IN int)
@@ -58,7 +58,7 @@ DROP FUNCTION _(IN _ INT8) -- identifiers removed
 parse
 DROP FUNCTION f(a int, b string)
 ----
-DROP FUNCTION f(IN a INT8, IN b STRING) -- normalized!
-DROP FUNCTION f(IN a INT8, IN b STRING) -- fully parenthesized
-DROP FUNCTION f(IN a INT8, IN b STRING) -- literals removed
-DROP FUNCTION _(IN _ INT8, IN _ STRING) -- identifiers removed
+DROP FUNCTION f(a INT8, b STRING) -- normalized!
+DROP FUNCTION f(a INT8, b STRING) -- fully parenthesized
+DROP FUNCTION f(a INT8, b STRING) -- literals removed
+DROP FUNCTION _(_ INT8, _ STRING) -- identifiers removed
