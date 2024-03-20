@@ -337,6 +337,11 @@ func (b *Builder) buildStmt(
 			if !activeVersion.IsActive(clusterversion.V23_2) {
 				panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition is not supported until version 23.2", stmt.StatementTag()))
 			}
+		case *tree.Call:
+			activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
+			if !activeVersion.IsActive(clusterversion.V24_1) {
+				panic(unimplemented.Newf("stored procedures", "%s usage inside a routine definition is not supported until version 24.1", stmt.StatementTag()))
+			}
 		default:
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}
@@ -494,7 +499,7 @@ func (b *Builder) trackReferencedColumnForViews(col *scopeColumn) {
 
 func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 	if b.trackSchemaDeps {
-		if texpr.ResolvedType().Identical(types.RegClass) {
+		if texpr != nil && texpr.ResolvedType().Identical(types.RegClass) {
 			// We do not add a dependency if the RegClass Expr contains variables,
 			// we cannot resolve the variables in this context. This matches Postgres
 			// behavior.
@@ -528,7 +533,7 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 
 func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
 	if b.trackSchemaDeps {
-		if texpr.ResolvedType().UserDefined() {
+		if texpr != nil && texpr.ResolvedType().UserDefined() {
 			typedesc.GetTypeDescriptorClosure(texpr.ResolvedType()).ForEach(func(id descpb.ID) {
 				b.schemaTypeDeps.Add(int(id))
 			})

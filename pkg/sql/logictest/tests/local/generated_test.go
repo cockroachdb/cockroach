@@ -1562,6 +1562,13 @@ func TestLogic_privileges_table(
 	runLogicTest(t, "privileges_table")
 }
 
+func TestLogic_proc_invokes_proc(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "proc_invokes_proc")
+}
+
 func TestLogic_procedure(
 	t *testing.T,
 ) {

@@ -2101,13 +2101,6 @@ func TestLogic_udf(
 	runLogicTest(t, "udf")
 }
 
-func TestLogic_udf_calling_udf(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_calling_udf")
-}
-
 func TestLogic_udf_in_column_defaults(
 	t *testing.T,
 ) {

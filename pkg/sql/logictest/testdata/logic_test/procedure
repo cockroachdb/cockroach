@@ -112,17 +112,8 @@ CALL p(foo())
 statement error pgcode 42723 function "p" already exists with same argument types
 CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
 
-# TODO(mgartner): The error should state "procedure definition" too.
-statement error pgcode 0A000 unimplemented: CALL usage inside a function definition
-CREATE OR REPLACE PROCEDURE p2() LANGUAGE SQL AS $$
-  CALL p();
-$$
-
 statement error pgcode 42809 p\(\) is a procedure
 CREATE FUNCTION err(i INT) RETURNS VOID LANGUAGE SQL AS 'SELECT p()'
-
-statement error pgcode 0A000 unimplemented: CALL usage inside a function definition
-CREATE FUNCTION err(i INT) RETURNS VOID LANGUAGE SQL AS 'CALL p()'
 
 statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
 CREATE TABLE err (i INT DEFAULT p())
@@ -410,22 +401,5 @@ CREATE PROCEDURE pv() AS 'SELECT 1' CALLED ON NULL INPUT LANGUAGE SQL;
 
 statement error pgcode 42P13 null input attribute not allowed in procedure definition
 CREATE PROCEDURE pv() AS 'SELECT 1' STRICT LANGUAGE SQL;
-
-subtest end
-
-
-subtest udf_calling_udfs
-
-# Validate we can have UDF's both in the select and from clauses.
-statement ok
-CREATE FUNCTION udfCall(i int) RETURNS INT LANGUAGE SQL AS 'SELECT 100+i';
-CREATE FUNCTION udfCallNest(i int, j int) RETURNS INT LANGUAGE SQL AS 'SELECT udfCall(i) + j';
-CREATE FUNCTION udfCallNest_2(i int, j int) RETURNS INT LANGUAGE SQL AS 'SELECT udfCall(i) + udfCall(j) + udfCallNest(i, j)';
-CREATE FUNCTION udfCallNest_3(i int, j int) RETURNS INT  LANGUAGE SQL AS 'SELECT  udfCall(j) + udfCallNest(i, j) + udfCallNest_2(i, j) + 1 FROM udfCallNest_2(i, j)';
-
-query I
-SELECT * FROM udfCallNest_3(1, 2)
-----
-512
 
 subtest end
