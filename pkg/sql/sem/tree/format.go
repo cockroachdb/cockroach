@@ -172,7 +172,16 @@ const (
 	// FmtShortenConstants shortens long lists in tuples, VALUES and array
 	// expressions. FmtHideConstants takes precedence over it.
 	FmtShortenConstants
+
+	// FmtCollapseLists instructs the pretty-printer to shorten lists
+	// containing only literals, placeholders and/or similar subexpressions
+	// of literals/placeholders to their first element (scrubbed) followed
+	// by "__more__". E.g.
+	//  SELECT * FROM foo where v IN (1, 2+2, $1, $2*3) => SELECT * FROM foo where v IN (_, __more__)
+	FmtCollapseLists
 )
+
+const genericArityIndicator = "__more__"
 
 // PasswordSubstitution is the string that replaces
 // passwords unless FmtShowPasswords is specified.

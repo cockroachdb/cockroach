@@ -360,7 +360,7 @@ func TestFormatExpr2(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// This tests formatting from an expr AST. Suitable for use if your input
+	// This tests formatting from an stmt AST. Suitable for use if your input
 	// isn't easily creatable from a string without running an Eval.
 	testData := []struct {
 		expr     tree.Expr
@@ -652,4 +652,93 @@ func BenchmarkFormatRandomStatements(b *testing.B) {
 			}
 		}
 	})
+}
+
+// Verify FmtCollapseLists format flag works as expected.
+func TestFmtCollapseListsFormatFlag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		stmt     string
+		expected string
+	}{
+		{
+			stmt:     `VALUES (())`,
+			expected: `VALUES (())`,
+		},
+		{
+			stmt:     `VALUES (1)`,
+			expected: `VALUES (1)`,
+		},
+		{
+			stmt:     `VALUES ((1, 2), (3, 4)), ((5, 6), (7, 8))`,
+			expected: `VALUES ((1, __more__), __more__), (__more__)`,
+		},
+		{
+			// For VALUES clauses, we always shorten the list of values.
+			// The first expression will be shortened if possible, and the
+			// rest of the values are replaced with __more__ regardless of
+			// whether or not they contain names.
+			stmt:     `VALUES ((a, b), (3, 4)), ((a, b), (1, 2))`,
+			expected: `VALUES ((a, b), (3, __more__)), (__more__)`,
+		},
+		{
+			stmt:     `SELECT * FROM foo WHERE f IN ()`,
+			expected: `SELECT * FROM foo WHERE f IN ()`,
+		},
+		{
+			stmt:     `SELECT * FROM foo WHERE f IN ($1)`,
+			expected: `SELECT * FROM foo WHERE f IN ($1,)`,
+		},
+		{
+			stmt:     `SELECT * FROM foo WHERE f IN (2, (3 - $1)::INT, 2*3, -$2, NULL, 'ok', (3,$3))`,
+			expected: `SELECT * FROM foo WHERE f IN (2, __more__)`,
+		},
+		{
+			stmt:     `SELECT * FROM foo WHERE f IN (1, 2, a, b, c)`,
+			expected: `SELECT * FROM foo WHERE f IN (1, 2, a, b, c)`,
+		},
+		{
+			stmt:     `SELECT * FROM foo WHERE f IN (1, 2, a + 1)`,
+			expected: `SELECT * FROM foo WHERE f IN (1, 2, a + 1)`,
+		},
+		{
+			stmt:     `SELECT ARRAY[]`,
+			expected: `SELECT ARRAY[]`,
+		},
+		{
+			stmt:     `SELECT ARRAY['crdb', 'world', CAST((2*2*3) AS FLOAT)]`,
+			expected: `SELECT ARRAY['crdb', __more__]`,
+		},
+		{
+			stmt:     `SELECT ARRAY[1+2, -2, $1::INT, NULL, 4*$2::INT, 'hello-world']`,
+			expected: `SELECT ARRAY[1 + 2, __more__]`,
+		},
+		{
+			stmt:     `SELECT ARRAY[1, 2, 3]`,
+			expected: `SELECT ARRAY[1, __more__]`,
+		},
+		{
+			stmt:     `SELECT ARRAY[1, 2, 3, a]`,
+			expected: `SELECT ARRAY[1, 2, 3, a]`,
+		},
+		{
+			stmt:     `SELECT * FROM foo WHERE f IN (1) AND f IN (2)`,
+			expected: `SELECT * FROM foo WHERE (f IN (1,)) AND (f IN (2,))`,
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d %s", i, test.stmt), func(t *testing.T) {
+			stmt, err := parser.ParseOne(test.stmt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			exprStr := tree.AsStringWithFlags(stmt.AST, tree.FmtCollapseLists)
+			if exprStr != test.expected {
+				t.Fatalf("expected %q, got %q", test.expected, exprStr)
+			}
+		})
+	}
 }
