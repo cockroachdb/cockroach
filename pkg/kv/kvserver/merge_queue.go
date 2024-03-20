@@ -60,7 +60,7 @@ var SkipMergeQueueForExternalBytes = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.range_merge.skip_external_bytes.enabled",
 	"skip the merge queue for external bytes",
-	true,
+	false,
 )
 
 // mergeQueue manages a queue of ranges slated to be merged with their right-
@@ -124,17 +124,18 @@ func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 			// hard to determine ahead of time. An alternative would be to calculate
 			// the timeout with a function that additionally considers the replication
 			// factor.
-			processTimeoutFunc:   makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
-			needsLease:           true,
-			needsSpanConfigs:     true,
-			acceptsUnsplitRanges: false,
-			successes:            store.metrics.MergeQueueSuccesses,
-			failures:             store.metrics.MergeQueueFailures,
-			storeFailures:        store.metrics.StoreFailures,
-			pending:              store.metrics.MergeQueuePending,
-			processingNanos:      store.metrics.MergeQueueProcessingNanos,
-			purgatory:            store.metrics.MergeQueuePurgatory,
-			disabledConfig:       kvserverbase.MergeQueueEnabled,
+			processTimeoutFunc:                  makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
+			needsLease:                          true,
+			needsSpanConfigs:                    true,
+			acceptsUnsplitRanges:                false,
+			successes:                           store.metrics.MergeQueueSuccesses,
+			failures:                            store.metrics.MergeQueueFailures,
+			storeFailures:                       store.metrics.StoreFailures,
+			pending:                             store.metrics.MergeQueuePending,
+			processingNanos:                     store.metrics.MergeQueueProcessingNanos,
+			purgatory:                           store.metrics.MergeQueuePurgatory,
+			disabledConfig:                      kvserverbase.MergeQueueEnabled,
+			skipIfReplicaHasExternalFilesConfig: SkipMergeQueueForExternalBytes,
 		},
 	)
 	return mq
@@ -172,18 +173,6 @@ func (mq *mergeQueue) shouldQueue(
 		// This range is above the minimum size threshold. It does not need to be
 		// merged.
 		return false, 0
-	}
-
-	if SkipMergeQueueForExternalBytes.Get(&repl.ClusterSettings().SV) {
-		if hasExternal, err := repl.HasExternalBytes(); err != nil {
-			log.Warningf(ctx, "could not determine if %s has external bytes: %s",
-				repl, err)
-			return false, 0
-		} else if hasExternal {
-			log.Infof(ctx, "skipping merge for range %s because it has external bytes",
-				desc.RangeID)
-			return false, 0
-		}
 	}
 
 	// Invert sizeRatio to compute the priority so that smaller ranges are merged
