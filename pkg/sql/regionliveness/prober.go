@@ -114,6 +114,7 @@ type RegionProvider interface {
 type CachedDatabaseRegions interface {
 	IsMultiRegion() bool
 	GetRegionEnumTypeDesc() catalog.RegionEnumTypeDescriptor
+	GetSystemDatabaseVersion() *roachpb.Version
 }
 
 type livenessProber struct {
