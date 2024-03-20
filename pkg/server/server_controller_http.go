@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -107,8 +108,20 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		defaultTenantName := roachpb.TenantName(multitenant.DefaultTenantSelect.Get(&c.st.SV))
 		s, _, err = c.getServer(ctx, defaultTenantName)
 		if err != nil {
-			log.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
-			w.WriteHeader(http.StatusInternalServerError)
+			if log.V(1) {
+				// This could get triggered often if a customer has the default
+				// tenant set up but not active yet. Every DB Console HTTP
+				// request will go through this branch in that scenario.
+				log.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
+			}
+			sys, _, errSystem := c.getServer(ctx, catconstants.SystemTenantName)
+			if errSystem != nil {
+				log.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
+				log.Warningf(ctx, "unable to find server for system tenant: %v", errSystem)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			sys.getHTTPHandlerFn()(w, r)
 			return
 		}
 		s.getHTTPHandlerFn()(w, r)

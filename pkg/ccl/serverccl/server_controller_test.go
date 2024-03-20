@@ -534,6 +534,32 @@ func TestServerStartStop(t *testing.T) {
 	s.Stopper().Stop(ctx)
 }
 
+func TestServerControllerSystemTenantHTTPFallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	_, err := db.Exec("CREATE VIRTUAL CLUSTER 'demo'")
+	require.NoError(t, err)
+	_, err = db.Exec("SET CLUSTER SETTING server.controller.default_target_cluster = 'demo'")
+	require.NoError(t, err)
+
+	s := srv.ApplicationLayer()
+	c, err := s.GetUnauthenticatedHTTPClient()
+	require.NoError(t, err)
+
+	resp, err := c.Get(s.AdminURL().String())
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, 200, resp.StatusCode)
+}
+
 func TestServerControllerLoginLogout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
