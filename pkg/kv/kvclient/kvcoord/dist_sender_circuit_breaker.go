@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -403,7 +404,7 @@ type ReplicaCircuitBreaker struct {
 
 		// cancelFns contains context cancellation functions for all in-flight
 		// requests. Only tracked if cancellation is enabled.
-		cancelFns map[*kvpb.BatchRequest]func()
+		cancelFns map[*kvpb.BatchRequest]context.CancelCauseFunc
 	}
 }
 
@@ -425,7 +426,7 @@ func newReplicaCircuitBreaker(
 		Name:       r.id(),
 		AsyncProbe: r.launchProbe,
 	})
-	r.mu.cancelFns = map[*kvpb.BatchRequest]func(){}
+	r.mu.cancelFns = map[*kvpb.BatchRequest]context.CancelCauseFunc{}
 	return r
 }
 
@@ -435,7 +436,7 @@ type replicaCircuitBreakerToken struct {
 	r      *ReplicaCircuitBreaker // nil if circuit breakers were disabled
 	ctx    context.Context
 	ba     *kvpb.BatchRequest
-	cancel func()
+	cancel context.CancelCauseFunc
 }
 
 // Done records the result of the request and untracks it.
@@ -528,7 +529,7 @@ func (r *ReplicaCircuitBreaker) Track(
 			CircuitBreakerProbeTimeout.Get(&r.d.settings.SV).Nanoseconds()
 
 		if !hasTimeout {
-			sendCtx, token.cancel = context.WithCancel(ctx)
+			sendCtx, token.cancel = context.WithCancelCause(ctx)
 			r.mu.Lock()
 			r.mu.cancelFns[ba] = token.cancel
 			r.mu.Unlock()
@@ -546,7 +547,7 @@ func (r *ReplicaCircuitBreaker) done(
 	br *kvpb.BatchResponse,
 	err error,
 	nowNanos int64,
-	cancel func(),
+	cancel context.CancelCauseFunc,
 ) {
 	if r == nil {
 		return // circuit breakers disabled when we began tracking the request
@@ -561,7 +562,7 @@ func (r *ReplicaCircuitBreaker) done(
 		r.mu.Lock()
 		delete(r.mu.cancelFns, ba) // nolint:deferunlockcheck
 		r.mu.Unlock()
-		cancel()
+		cancel(nil)
 	}
 
 	// If this was a local send error, i.e. err != nil, we rely on RPC circuit
@@ -713,7 +714,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 				defer r.mu.Unlock()
 				for ba, cancel := range r.mu.cancelFns {
 					delete(r.mu.cancelFns, ba)
-					cancel()
+					cancel(errors.Wrapf(err, "%s is unavailable (circuit breaker tripped)", r.id()))
 				}
 			}()
 
