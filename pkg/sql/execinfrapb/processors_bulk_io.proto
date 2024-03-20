@@ -458,7 +458,8 @@ message GenerativeSplitAndScatterSpec {
   // ExclusiveFileSpanComparison is true if the backup can safely use
   // exclusive file span comparison.
   optional bool exclusive_file_span_comparison = 22 [(gogoproto.nullable) = false];
-
+  // MaxFileCount is the max number of files in an extending restore span entry.
+  optional int64 max_file_count = 23[(gogoproto.nullable) = false];
   reserved 19;
 }
 
