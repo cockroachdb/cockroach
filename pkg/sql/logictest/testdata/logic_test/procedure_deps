@@ -6,13 +6,13 @@ CREATE TABLE t (
   b INT,
   def INT DEFAULT 10,
   c INT,
-  drop_sel INT,
+  drop_sel INT,  cascade_sel INT,
   drop_ins INT,
-  drop_ins2 INT,
+  drop_ins2 INT, cascade_ins2 INT,
   drop_ups INT,
-  drop_ups2 INT,
-  drop_up INT,
-  drop_del INT
+  drop_ups2 INT, cascade_ups2 INT,
+  drop_up INT,   cascade_up INT,
+  drop_del INT,  cascade_del INT
 )
 
 # --------------------------------------------------
@@ -21,7 +21,7 @@ CREATE TABLE t (
 
 statement ok
 CREATE PROCEDURE sel() LANGUAGE SQL AS $$
-  SELECT a, b FROM t;
+  SELECT a, b, cascade_sel FROM t;
 $$
 
 skipif config local-legacy-schema-changer
@@ -39,7 +39,13 @@ statement ok
 ALTER TABLE t DROP COLUMN drop_sel
 
 statement ok
-DROP PROCEDURE sel
+CALL sel()
+
+statement ok
+ALTER TABLE t DROP COLUMN cascade_sel CASCADE
+
+statement error pgcode 42883 procedure sel does not exist
+CALL sel()
 
 # --------------------------------------------------
 # INSERT
@@ -88,7 +94,7 @@ DROP PROCEDURE ins
 
 statement ok
 CREATE PROCEDURE ins2() LANGUAGE SQL AS $$
-  INSERT INTO t (a, b, def) VALUES (2, 20, DEFAULT);
+  INSERT INTO t (a, b, cascade_ins2, def) VALUES (2, 20, 200, DEFAULT);
 $$
 
 skipif config local-legacy-schema-changer
@@ -126,7 +132,10 @@ SELECT a, b, def FROM t
 2  20  10
 
 statement ok
-DROP PROCEDURE ins2
+ALTER TABLE t DROP COLUMN cascade_ins2 CASCADE
+
+statement error pgcode 42883 procedure ins2 does not exist
+CALL ins2()
 
 # --------------------------------------------------
 # UPSERT
@@ -177,7 +186,7 @@ DROP PROCEDURE ups
 
 statement ok
 CREATE PROCEDURE ups2() LANGUAGE SQL AS $$
-  UPSERT INTO t (a, b, def) VALUES (4, 40, DEFAULT);
+  UPSERT INTO t (a, b, cascade_ups2, def) VALUES (4, 40, 400, DEFAULT);
 $$
 
 skipif config local-legacy-schema-changer
@@ -217,7 +226,10 @@ SELECT a, b, def FROM t
 4  40  10
 
 statement ok
-DROP PROCEDURE ups2
+ALTER TABLE t DROP COLUMN cascade_ups2 CASCADE
+
+statement error pgcode 42883 procedure ups2 does not exist
+CALL ups2()
 
 # --------------------------------------------------
 # UPDATE
@@ -225,7 +237,7 @@ DROP PROCEDURE ups2
 
 statement ok
 CREATE PROCEDURE up() LANGUAGE SQL AS $$
-  UPDATE t SET b = 11 WHERE a = 1;
+  UPDATE t SET b = 11 WHERE a = 1 AND cascade_up IS NULL
 $$
 
 skipif config local-legacy-schema-changer
@@ -238,6 +250,10 @@ DROP TABLE t
 
 statement error pgcode 2BP01 cannot rename column \"a\" because function \"up\" depends on it
 ALTER TABLE t RENAME COLUMN a TO a2
+
+# TODO(mgartner): Track dependencies of SET columns.
+# statement error pgcode 2BP01 cannot rename column \"b\" because function \"up\" depends on it
+# ALTER TABLE t RENAME COLUMN b TO b2
 
 statement ok
 ALTER TABLE t RENAME COLUMN c6 TO c7
@@ -257,7 +273,10 @@ SELECT a, b, def FROM t
 4  40  10
 
 statement ok
-DROP PROCEDURE up
+ALTER TABLE t DROP COLUMN cascade_up CASCADE
+
+statement error pgcode 42883 procedure up does not exist
+CALL up()
 
 # --------------------------------------------------
 # DELETE
@@ -265,7 +284,7 @@ DROP PROCEDURE up
 
 statement ok
 CREATE PROCEDURE del() LANGUAGE SQL AS $$
-  DELETE FROM t WHERE a = 1;
+  DELETE FROM t WHERE a = 1 AND cascade_del = 1
 $$
 
 skipif config local-legacy-schema-changer
@@ -291,12 +310,16 @@ CALL del()
 query III rowsort
 SELECT a, b, def FROM t
 ----
+1  11  10
 2  20  10
 3  30  10
 4  40  10
 
 statement ok
-DROP PROCEDURE del
+ALTER TABLE t DROP COLUMN cascade_del CASCADE
+
+statement error pgcode 42883 procedure del does not exist
+CALL del()
 
 statement ok
 DROP TABLE t
