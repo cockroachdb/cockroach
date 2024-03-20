@@ -228,6 +228,9 @@ func (e *Env) IsReadOnly() bool {
 	return e.rw == ReadOnly
 }
 
+// RWMode returns the read-write mode of the environment.
+func (e *Env) RWMode() RWMode { return e.rw }
+
 // RegisterOnDiskSlow configures the Env to call the provided function when a
 // disk operation is slow.
 func (e *Env) RegisterOnDiskSlow(fn func(vfs.DiskSlowInfo)) {
