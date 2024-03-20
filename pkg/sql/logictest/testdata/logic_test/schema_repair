@@ -183,8 +183,31 @@ select * from crdb_internal.force_delete_table_data($t_id)
 ----
 true
 
+# With session based leasing injecting a descriptor after dropping it with the
+# same version number is not safe. i.e. The lease manager has always instantly
+# cleaned up in memory copies when purging old versions and asynchronously
+# deletes leases on storage. This worked okay in the expiry model, but it also
+# would lead to two rows for the same version (which shouldn't happen). In the
+# session based model this leads to a failure. The correct approach in both
+# models is to bump the version before injecting.
 statement ok
-select * from crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_to_pb( 'cockroach.sql.sqlbase.Descriptor','$json'))
+SELECT
+	*
+FROM
+	ROWS FROM (
+		crdb_internal.unsafe_upsert_descriptor(
+			$t_id,
+			crdb_internal.json_to_pb(
+				'cockroach.sql.sqlbase.Descriptor',
+				json_set(
+					'$json',
+					ARRAY['table', 'version'],
+					'101'
+				)
+			),
+			true
+		)
+	);
 
 query I
 SELECT * FROM forcedeletemydata ORDER BY v ASC
