@@ -120,6 +120,7 @@ func (m *mockSubscription) Err() error {
 func (m *mockStreamClient) Subscribe(
 	ctx context.Context,
 	_ streampb.StreamID,
+	_ int32,
 	token streamclient.SubscriptionToken,
 	initialScanTime hlc.Timestamp,
 	_ hlc.Timestamp,
@@ -175,6 +176,7 @@ var _ streamclient.Client = &errorStreamClient{}
 func (m *errorStreamClient) Subscribe(
 	_ context.Context,
 	_ streampb.StreamID,
+	_ int32,
 	_ streamclient.SubscriptionToken,
 	_ hlc.Timestamp,
 	_ hlc.Timestamp,

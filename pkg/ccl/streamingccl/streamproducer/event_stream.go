@@ -40,9 +40,10 @@ import (
 )
 
 type eventStream struct {
-	streamID streampb.StreamID
-	execCfg  *sql.ExecutorConfig
-	spec     streampb.StreamPartitionSpec
+	streamID   streampb.StreamID
+	consumerID int32
+	execCfg    *sql.ExecutorConfig
+	spec       streampb.StreamPartitionSpec
 
 	// streamCh and data are used to pass rows back to be emitted to the caller.
 	streamCh chan tree.Datums
