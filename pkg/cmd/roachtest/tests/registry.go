@@ -155,4 +155,5 @@ func RegisterTests(r registry.Registry) {
 	registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r)
 	registerMultiRegionMixedVersion(r)
 	registerMultiRegionSystemDatabase(r)
+	registerSqlStatsMixedVersion(r)
 }
