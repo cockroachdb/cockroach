@@ -23,7 +23,7 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
 $$;
 ----
 - [[Function:{DescID: 110}, PUBLIC], ABSENT]
-  {functionId: 110, params: [{class: {class: IN}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}}}], returnType: {type: {family: IntFamily, oid: 20, width: 64}}}
+  {functionId: 110, params: [{class: {}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}}}], returnType: {type: {family: IntFamily, oid: 20, width: 64}}}
 - [[SchemaChild:{DescID: 110, ReferencedDescID: 101}, PUBLIC], ABSENT]
   {childObjectId: 110, schemaId: 101}
 - [[FunctionName:{DescID: 110}, PUBLIC], ABSENT]
@@ -54,7 +54,7 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE PLpgSQL AS $$
 $$;
 ----
 - [[Function:{DescID: 111}, PUBLIC], ABSENT]
-  {functionId: 111, params: [{class: {class: IN}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}}}], returnType: {type: {family: IntFamily, oid: 20, width: 64}}}
+  {functionId: 111, params: [{class: {}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}}}], returnType: {type: {family: IntFamily, oid: 20, width: 64}}}
 - [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], ABSENT]
   {childObjectId: 111, schemaId: 101}
 - [[FunctionName:{DescID: 111}, PUBLIC], ABSENT]

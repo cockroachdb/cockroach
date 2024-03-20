@@ -59,7 +59,7 @@ db1 sc2 p2 function false
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
+CREATE PROCEDURE sc1.p1(a db1.sc1.enum1)
 	LANGUAGE SQL
 	AS $$
 	SELECT a FROM db1.sc1.tbl1;
@@ -95,7 +95,7 @@ USE db1_new
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-CREATE PROCEDURE sc1.p1(IN a db1_new.sc1.enum1)
+CREATE PROCEDURE sc1.p1(a db1_new.sc1.enum1)
 	LANGUAGE SQL
 	AS $$
 	SELECT a FROM db1_new.sc1.tbl1;
@@ -224,7 +224,7 @@ db1 sc2 p2 function true
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
+CREATE PROCEDURE sc1.p1(a db1.sc1.enum1)
 	LANGUAGE SQL
 	AS $$
 	SELECT a FROM db1.sc1.tbl1;
@@ -261,7 +261,7 @@ USE db1
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
+CREATE PROCEDURE sc1.p1(a db1.sc1.enum1)
 	LANGUAGE SQL
 	AS $$
 	SELECT a FROM db1.sc1.tbl1;

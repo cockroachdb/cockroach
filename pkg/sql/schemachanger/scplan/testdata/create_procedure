@@ -39,7 +39,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
         Params:
         - name: a
           class:
-            class: 1
+            class: 0
           type:
             type: |
               family: EnumFamily
@@ -180,7 +180,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         Params:
         - name: a
           class:
-            class: 1
+            class: 0
           type:
             type: |
               family: EnumFamily
@@ -392,7 +392,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
         Params:
         - name: a
           class:
-            class: 1
+            class: 0
           type:
             type: |
               family: EnumFamily
@@ -535,7 +535,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         Params:
         - name: a
           class:
-            class: 1
+            class: 0
           type:
             type: |
               family: EnumFamily

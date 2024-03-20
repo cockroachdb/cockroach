@@ -29,7 +29,7 @@ ElementState:
     isProcedure: false
     params:
     - class:
-        class: IN
+        class: DEFAULT
       name: a
       type:
         closedTypeIds:

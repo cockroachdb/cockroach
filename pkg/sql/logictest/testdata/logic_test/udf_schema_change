@@ -10,7 +10,7 @@ CREATE FUNCTION f_test_alter_opt(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_opt];
 ----
-CREATE FUNCTION public.f_test_alter_opt(IN INT8)
+CREATE FUNCTION public.f_test_alter_opt(INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -32,7 +32,7 @@ ALTER FUNCTION f_test_alter_opt IMMUTABLE LEAKPROOF STRICT;
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_opt];
 ----
-CREATE FUNCTION public.f_test_alter_opt(IN INT8)
+CREATE FUNCTION public.f_test_alter_opt(INT8)
   RETURNS INT8
   IMMUTABLE
   LEAKPROOF
@@ -62,7 +62,7 @@ CREATE PROCEDURE p(INT) LANGUAGE SQL AS 'SELECT 1'
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name];
 ----
-CREATE FUNCTION public.f_test_alter_name(IN INT8)
+CREATE FUNCTION public.f_test_alter_name(INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -72,14 +72,14 @@ CREATE FUNCTION public.f_test_alter_name(IN INT8)
   SELECT 1;
 $$
 
-statement error pgcode 42723 pq: function f_test_alter_name\(IN INT8\) already exists in schema "public"
+statement error pgcode 42723 pq: function f_test_alter_name\(INT8\) already exists in schema "public"
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name
 
-statement error pgcode 42723 pq: function f_test_alter_name_same_in\(IN INT8\) already exists in schema "public"
+statement error pgcode 42723 pq: function f_test_alter_name_same_in\(INT8\) already exists in schema "public"
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_same_in
 
 skipif config local-mixed-23.1
-statement error pgcode 42723 pq: procedure p\(IN INT8\) already exists in schema "public"
+statement error pgcode 42723 pq: procedure p\(INT8\) already exists in schema "public"
 ALTER FUNCTION f_test_alter_name RENAME TO p
 
 statement error pgcode 42883 could not find a procedure named "f_test_alter_name"
@@ -94,7 +94,7 @@ SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name];
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
 ----
-CREATE FUNCTION public.f_test_alter_name_new(IN INT8)
+CREATE FUNCTION public.f_test_alter_name_new(INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -122,7 +122,7 @@ CREATE FUNCTION public.f_test_alter_name_diff_in()
   AS $$
   SELECT 1;
 $$
-CREATE FUNCTION public.f_test_alter_name_diff_in(IN INT8)
+CREATE FUNCTION public.f_test_alter_name_diff_in(INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -314,7 +314,7 @@ CREATE FUNCTION public.f_test_sc()
   AS $$
   SELECT 1;
 $$
-CREATE FUNCTION public.f_test_sc(IN INT8)
+CREATE FUNCTION public.f_test_sc(INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -404,7 +404,7 @@ CREATE FUNCTION test_alter_sc.f_test_sc()
   AS $$
   SELECT 3;
 $$
-CREATE FUNCTION test_alter_sc.f_test_sc(IN INT8)
+CREATE FUNCTION test_alter_sc.f_test_sc(INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
