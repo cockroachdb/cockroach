@@ -1344,7 +1344,7 @@ func TestSQLPodStorageDefaults(t *testing.T) {
 
 	defer initCLIDefaults()
 
-	expectedDefaultDir, err := base.GetAbsoluteStorePath("", "cockroach-data-tenant-9")
+	expectedDefaultDir, err := base.GetAbsoluteFSPath("", "cockroach-data-tenant-9")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/pebble/wal"
 )
 
@@ -210,20 +211,125 @@ func LBaseMaxBytes(v int64) ConfigOption {
 	}
 }
 
+func noopConfigOption(*engineConfig) error {
+	return nil
+}
+
+func errConfigOption(err error) func(*engineConfig) error {
+	return func(*engineConfig) error { return err }
+}
+
+func makeExternalWALDir(engineCfg *engineConfig, externalDir base.ExternalPath) (wal.Dir, error) {
+	// If the store is encrypted, we require that all the WAL failover dirs also
+	// be encrypted so that the user doesn't accidentally leak data unencrypted
+	// onto the filesystem.
+	if engineCfg.Env.Encryption != nil && len(externalDir.EncryptionOptions) == 0 {
+		return wal.Dir{}, errors.Newf("must provide --enterprise-encryption flag for %q, used as WAL failover path for encrypted store %q",
+			externalDir.Path, engineCfg.Env.Dir)
+	}
+	env, err := fs.InitEnv(context.Background(), vfs.Default, externalDir.Path, fs.EnvConfig{
+		RW:                engineCfg.Env.RWMode(),
+		EncryptionOptions: externalDir.EncryptionOptions,
+	})
+	if err != nil {
+		return wal.Dir{}, err
+	}
+	engineCfg.onClose = append(engineCfg.onClose, func(*Pebble) { env.Close() })
+	return wal.Dir{
+		FS:      env,
+		Dirname: externalDir.Path,
+	}, nil
+}
+
 // WALFailover configures automatic failover of the engine's write-ahead log to
 // another volume in the event the WAL becomes blocked on a write that does not
 // complete within a reasonable duration.
-func WALFailover(mode base.WALFailoverMode, storeEnvs fs.Envs) ConfigOption {
-	// If the user specified no WAL failover setting, we default to disabling WAL
-	// failover and assume that the previous process did not have WAL failover
-	// enabled (so there's no need to populate Options.WALRecoveryDirs). If an
-	// operator had WAL failover enabled and now wants to disable it, they must
-	// explicitly set --wal-failover=disabled for the next process.
-	if mode == base.WALFailoverDefault || len(storeEnvs) == 1 {
-		return func(cfg *engineConfig) error { return nil }
+func WALFailover(walCfg base.WALFailoverConfig, storeEnvs fs.Envs) ConfigOption {
+	// The set of options available in single-store versus multi-store
+	// configurations vary. This is in part due to the need to store the multiple
+	// stores' WALs separately. When WALFailoverExplicitPath is provided, we have
+	// no stable store identifier available to disambiguate the WALs of multiple
+	// stores. Note that the store ID is not known when a store is first opened.
+	if len(storeEnvs) == 1 {
+		switch walCfg.Mode {
+		case base.WALFailoverDefault, base.WALFailoverAmongStores:
+			return noopConfigOption
+		case base.WALFailoverDisabled:
+			// Check if the user provided an explicit previous path. If they did, they
+			// were previously using WALFailoverExplicitPath and are now disabling it.
+			// We need to add the explicilt path to WALRecoveryDirs.
+			if walCfg.PrevPath.IsSet() {
+				return func(cfg *engineConfig) error {
+					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath)
+					if err != nil {
+						return err
+					}
+					cfg.Opts.WALRecoveryDirs = append(cfg.Opts.WALRecoveryDirs, walDir)
+					return nil
+				}
+			}
+			// No PrevPath was provided. The user may be simply expressing their
+			// intent to not run with WAL failover, regardless of any future default
+			// values. If WAL failover was previously enabled, Open will error when it
+			// notices the OPTIONS file encodes a WAL failover secondary that was not
+			// provided to Options.WALRecoveryDirs.
+			return noopConfigOption
+		case base.WALFailoverExplicitPath:
+			// The user has provided an explicit path to which we should fail over WALs.
+			return func(cfg *engineConfig) error {
+				walDir, err := makeExternalWALDir(cfg, walCfg.Path)
+				if err != nil {
+					return err
+				}
+				cfg.Opts.WALFailover = makePebbleWALFailoverOptsForDir(cfg.Settings, walDir)
+				if walCfg.PrevPath.IsSet() {
+					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath)
+					if err != nil {
+						return err
+					}
+					cfg.Opts.WALRecoveryDirs = append(cfg.Opts.WALRecoveryDirs, walDir)
+				}
+				return nil
+			}
+		default:
+			panic("unreachable")
+		}
 	}
-	// mode == WALFailoverDisabled or WALFailoverAmongStores.
 
+	switch walCfg.Mode {
+	case base.WALFailoverDefault:
+		// If the user specified no WAL failover setting, we default to disabling WAL
+		// failover and assume that the previous process did not have WAL failover
+		// enabled (so there's no need to populate Options.WALRecoveryDirs). If an
+		// operator had WAL failover enabled and now wants to disable it, they must
+		// explicitly set --wal-failover=disabled for the next process.
+		return noopConfigOption
+	case base.WALFailoverDisabled:
+		// Check if the user provided an explicit previous path; that's unsupported
+		// in multi-store configurations.
+		if walCfg.PrevPath.IsSet() {
+			return errConfigOption(errors.Newf("storage: cannot use explicit prev_path --wal-failover option with multiple stores"))
+		}
+		// No PrevPath was provided, implying that the user previously was using
+		// WALFailoverAmongStores.
+
+		// Fallthrough
+	case base.WALFailoverExplicitPath:
+		// Not supported for multi-store configurations.
+		return errConfigOption(errors.Newf("storage: cannot use explicit path --wal-failover option with multiple stores"))
+	case base.WALFailoverAmongStores:
+		// Fallthrough
+	default:
+		panic("unreachable")
+	}
+
+	// Either
+	// 1. mode == WALFailoverAmongStores
+	//   or
+	// 2. mode == WALFailoverDisabled and the user previously was using
+	//    WALFailoverAmongStores, so we should build the deterministic store pairing
+	//    to determine which WALRecoveryDirs to pass to which engines.
+	//
 	// For each store, we need to determine which store is its secondary for the
 	// purpose of WALs. Even if failover is disabled, it's possible that it wasn't
 	// when the previous process ran, and the secondary's wal dir may have WALs
@@ -274,32 +380,37 @@ func WALFailover(mode base.WALFailoverMode, storeEnvs fs.Envs) ConfigOption {
 			// Use auxiliary/wals-among-stores within the other stores directory.
 			Dirname: secondaryEnv.PathJoin(secondaryEnv.Dir, base.AuxiliaryDir, "wals-among-stores"),
 		}
-
-		if mode == base.WALFailoverAmongStores {
-			cfg.Opts.WALFailover = &pebble.WALFailoverOptions{
-				Secondary: secondary,
-				FailoverOptions: wal.FailoverOptions{
-					// Leave most the options to their defaults, but
-					// UnhealthyOperationLatencyThreshold should be pulled from the
-					// cluster setting.
-					UnhealthyOperationLatencyThreshold: func() (time.Duration, bool) {
-						// WAL failover requires 24.1 to be finalized first. Otherwise, we might
-						// write WALs to a secondary, downgrade to a previous version's binary and
-						// blindly miss WALs. The second return value indicates whether the
-						// WAL manager is allowed to failover to the secondary.
-						//
-						// NB: We do not use settings.Version.IsActive because we do not have a
-						// guarantee that the cluster version has been initialized.
-						failoverOK := cfg.Settings.Version.ActiveVersionOrEmpty(context.TODO()).IsActive(clusterversion.V24_1Start)
-						return walFailoverUnhealthyOpThreshold.Get(&cfg.Settings.SV), failoverOK
-					},
-				},
-			}
+		if walCfg.Mode == base.WALFailoverAmongStores {
+			cfg.Opts.WALFailover = makePebbleWALFailoverOptsForDir(cfg.Settings, secondary)
 			return nil
 		}
 		// mode == WALFailoverDisabled
 		cfg.Opts.WALRecoveryDirs = append(cfg.Opts.WALRecoveryDirs, secondary)
 		return nil
+	}
+}
+
+func makePebbleWALFailoverOptsForDir(
+	settings *cluster.Settings, dir wal.Dir,
+) *pebble.WALFailoverOptions {
+	return &pebble.WALFailoverOptions{
+		Secondary: dir,
+		FailoverOptions: wal.FailoverOptions{
+			// Leave most the options to their defaults, but
+			// UnhealthyOperationLatencyThreshold should be pulled from the
+			// cluster setting.
+			UnhealthyOperationLatencyThreshold: func() (time.Duration, bool) {
+				// WAL failover requires 24.1 to be finalized first. Otherwise, we might
+				// write WALs to a secondary, downgrade to a previous version's binary and
+				// blindly miss WALs. The second return value indicates whether the
+				// WAL manager is allowed to failover to the secondary.
+				//
+				// NB: We do not use settings.Version.IsActive because we do not have a
+				// guarantee that the cluster version has been initialized.
+				failoverOK := settings.Version.ActiveVersionOrEmpty(context.TODO()).IsActive(clusterversion.V24_1Start)
+				return walFailoverUnhealthyOpThreshold.Get(&settings.SV), failoverOK
+			},
+		},
 	}
 }
 
