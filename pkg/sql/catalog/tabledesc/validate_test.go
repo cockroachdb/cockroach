@@ -139,6 +139,7 @@ var validationMap = []struct {
 			"HistogramSamples":              {status: thisFieldReferencesNoObjects},
 			"SchemaLocked":                  {status: thisFieldReferencesNoObjects},
 			"ImportEpoch":                   {status: thisFieldReferencesNoObjects},
+			"ImportType":                    {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{

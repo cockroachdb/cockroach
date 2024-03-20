@@ -830,7 +830,9 @@ func epochBasedInProgressImport(desc catalog.Descriptor) bool {
 		return false
 	}
 
-	return table.GetInProgressImportStartTime() > 0 && table.TableDesc().ImportEpoch > 0
+	return table.GetInProgressImportStartTime() > 0 &&
+		table.TableDesc().ImportEpoch > 0 &&
+		table.TableDesc().ImportType == descpb.ImportType_IMPORT_WITH_IMPORT_EPOCH
 }
 
 // createImportingDescriptors creates the tables that we will restore into and returns up to three
