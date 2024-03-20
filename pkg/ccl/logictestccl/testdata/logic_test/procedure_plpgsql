@@ -300,8 +300,8 @@ CREATE PROCEDURE p() AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-# CONTINUE cannot apply to a block, with or without a label.
-statement error pgcode 42601 pq: CONTINUE cannot be used outside a loop
+# CONTINUE cannot apply to a block.
+statement error pgcode 42601 pq: block label \"foo\" cannot be used in CONTINUE
 CREATE PROCEDURE p() AS $$
   BEGIN
     <<foo>>
@@ -313,8 +313,86 @@ CREATE PROCEDURE p() AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+# The nested block takes precedence over the loop with the same label.
+statement error pgcode 42601 pq: block label \"foo\" cannot be used in CONTINUE
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    <<foo>>
+    WHILE i < 5 LOOP
+      <<foo>>
+      BEGIN
+        RAISE NOTICE 'before EXIT';
+        CONTINUE foo;
+        RAISE NOTICE 'after EXIT';
+      END;
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# EXIT with a nonexistent label.
+statement error pgcode 42601 pq: there is no label \"foo\" attached to any block or loop enclosing this statement
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    <<bar>>
+    BEGIN
+      EXIT foo;
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# CONTINUE with a nonexistent label.
+statement error pgcode 42601 pq: there is no label \"foo\" attached to any block or loop enclosing this statement
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    <<bar>>
+    BEGIN
+      CONTINUE foo;
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# It is possible to EXIT the root block.
+statement ok
+CREATE PROCEDURE p() AS $$
+  <<foo>>
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 5 LOOP
+      RAISE NOTICE 'here';
+      EXIT foo;
+      RAISE NOTICE 'still here';
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: here
+
+# It is possible to EXIT the routine, but this always results in an
+# end-of-function error, even for a void-returning proc.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 5 LOOP
+      EXIT p;
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 2F005 control reached end of function without RETURN
+CALL p();
+
 # CONTINUE the inner loop.
 statement ok
+DROP PROCEDURE p;
 CREATE PROCEDURE p(x INT) AS $$
   <<b1>>
   DECLARE
@@ -349,12 +427,10 @@ CREATE PROCEDURE p(x INT) AS $$
           ELSIF x = 4 THEN
             IF j = 1 THEN RAISE NOTICE 'EXIT b2'; END IF;
             EXIT b2 WHEN j = 1;
-          -- TODO(drewk): uncomment these branches when it's possible to
-          -- reference the root block.
-          -- ELSIF x = 5 THEN
-          --   EXIT b1 WHEN j = 1;
-          -- ELSE
-          --   EXIT p WHEN j = 1;
+          ELSIF x = 5 THEN
+            EXIT b1 WHEN j = 1;
+          ELSE
+            EXIT p WHEN j = 1;
           END IF;
           RAISE NOTICE '<< l2 % %', i, j;
         END LOOP l2;
@@ -448,6 +524,19 @@ NOTICE: >> l2 2 1
 NOTICE: EXIT b2
 NOTICE: << l1 2
 NOTICE: << b1 2
+
+# EXIT outer block.
+query T noticetrace
+CALL p(5);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+
+# EXIT the routine.
+statement error pgcode 2F005 control reached end of function without RETURN
+CALL p(6);
 
 statement ok
 DROP PROCEDURE p;
