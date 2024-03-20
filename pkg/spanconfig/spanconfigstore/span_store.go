@@ -228,17 +228,20 @@ func (s *spanConfigStore) computeSplitKey(
 // key.
 func (s *spanConfigStore) getSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (conf roachpb.SpanConfig, found bool) {
+) (conf roachpb.SpanConfig, confSpan roachpb.Span, found bool) {
 	sp := roachpb.Span{Key: key.AsRawKey(), EndKey: key.Next().AsRawKey()}
 	iter, query := s.btree.MakeIter(), makeQueryEntry(sp)
 	for iter.FirstOverlap(query); iter.Valid(); {
-		conf, found = iter.Cur().conf(), true
+		cur := iter.Cur()
+		conf = cur.conf()
+		confSpan = cur.span
+		found = true
 		break
 	}
 	if !found && log.ExpensiveLogEnabled(ctx, 1) {
 		log.Warningf(ctx, "span config not found for %s", key.String())
 	}
-	return conf, found
+	return conf, confSpan, found
 }
 
 // apply takes an incremental set of updates and returns the spans/span<->config

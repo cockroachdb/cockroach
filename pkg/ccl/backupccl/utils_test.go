@@ -311,11 +311,23 @@ func getTableStartKey(t *testing.T, conn *gosql.DB, tableName, dbName string) ro
 	return startKey
 }
 
+func getTableSpan(t *testing.T, conn *gosql.DB, tableName, dbName string) roachpb.Span {
+	t.Helper()
+	row := conn.QueryRow(
+		fmt.Sprintf(`SELECT crdb_internal.table_span('%s.%s'::regclass::oid::int)[1],
+crdb_internal.table_span('%[1]s.%[2]s'::regclass::oid::int)[2]`,
+			tree.NameString(dbName), tree.NameString(tableName)))
+	var sp roachpb.Span
+	require.NoError(t, row.Scan(&sp.Key, &sp.EndKey))
+	return sp
+}
+
 func getFirstStoreReplica(
 	t *testing.T, s serverutils.TestServerInterface, key roachpb.Key,
 ) (*kvserver.Store, *kvserver.Replica) {
 	t.Helper()
-	store, err := s.StorageLayer().GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	storageLayer := s.StorageLayer()
+	store, err := storageLayer.GetStores().(*kvserver.Stores).GetStore(storageLayer.GetFirstStoreID())
 	require.NoError(t, err)
 	var repl *kvserver.Replica
 	testutils.SucceedsSoon(t, func() error {
