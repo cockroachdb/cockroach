@@ -1338,9 +1338,6 @@ func (dsp *DistSQLPlanner) partitionSpansEx(
 		return []SpanPartition{{SQLInstanceID: dsp.gatewaySQLInstanceID, Spans: spans}},
 			true /* ignoreMisplannedRanges */, nil
 	}
-	if dsp.useGossipPlanning(ctx, planCtx) {
-		return dsp.deprecatedPartitionSpansSystem(ctx, planCtx, spans)
-	}
 	return dsp.partitionSpans(ctx, planCtx, spans)
 }
 
@@ -1462,27 +1459,6 @@ func (dsp *DistSQLPlanner) partitionSpan(
 	return partitions, lastPartitionIdx, nil
 }
 
-// deprecatedPartitionSpansSystem finds node owners for ranges touching the given spans
-// for a system tenant.
-func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
-	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
-) (partitions []SpanPartition, ignoreMisplannedRanges bool, _ error) {
-	nodeMap := make(map[base.SQLInstanceID]int)
-	resolver := func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
-		return dsp.deprecatedHealthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, nodeID)
-	}
-	for _, span := range spans {
-		var err error
-		partitions, _, err = dsp.partitionSpan(
-			ctx, planCtx, span, partitions, nodeMap, resolver, &ignoreMisplannedRanges,
-		)
-		if err != nil {
-			return nil, false, err
-		}
-	}
-	return partitions, ignoreMisplannedRanges, nil
-}
-
 // partitionSpans assigns SQL instances to spans. In mixed sql and KV mode it
 // generally assigns each span to the instance hosted on the KV node chosen by
 // the configured replica oracle, while in clusters operating with standalone
@@ -1522,27 +1498,6 @@ func (dsp *DistSQLPlanner) partitionSpans(
 		}
 	}
 	return partitions, ignoreMisplannedRanges, nil
-}
-
-// deprecatedHealthySQLInstanceIDForKVNodeIDSystem returns the SQL instance that
-// should handle the range with the given node ID when planning is done on
-// behalf of the system tenant. It ensures that the chosen SQL instance is
-// healthy and of the compatible DistSQL version.
-func (dsp *DistSQLPlanner) deprecatedHealthySQLInstanceIDForKVNodeIDSystem(
-	ctx context.Context, planCtx *PlanningCtx, nodeID roachpb.NodeID,
-) (base.SQLInstanceID, SpanPartitionReason) {
-	sqlInstanceID := base.SQLInstanceID(nodeID)
-	status := dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, sqlInstanceID)
-	// If the node is unhealthy or its DistSQL version is incompatible, use the
-	// gateway to process this span instead of the unhealthy host. An empty
-	// address indicates an unhealthy host.
-	reason := SpanPartitionReason_GOSSIP_TARGET_HEALTHY
-	if status != NodeOK {
-		log.VEventf(ctx, 2, "not planning on node %d: %s", sqlInstanceID, status)
-		sqlInstanceID = dsp.gatewaySQLInstanceID
-		reason = SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY
-	}
-	return sqlInstanceID, reason
 }
 
 // healthySQLInstanceIDForKVNodeHostedInstanceResolver returns the SQL instance
@@ -1841,10 +1796,6 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 		return 0, err
 	}
 
-	if dsp.useGossipPlanning(ctx, planCtx) && planCtx.localityFilter.Empty() {
-		sqlInstanceID, _ := dsp.deprecatedHealthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, replDesc.NodeID)
-		return sqlInstanceID, nil
-	}
 	resolver, err := dsp.makeInstanceResolver(ctx, planCtx)
 	if err != nil {
 		return 0, err
