@@ -8912,18 +8912,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 		inc3Loc, fullBackup, inc1Loc, inc2Loc)
 	inc3Spans := getSpansFromManifest(ctx, t, locationToDir(inc3Loc))
 	require.Equal(t, 1, len(inc3Spans))
-	// NB: When running in a tenant, we don't add a split point
-	// for an index. As a result, we end up issuing a single
-	// export request for /Table/*/1-3 and while /Table/*/1-2 has
-	// no data in it, the start key is based on the start key of
-	// our request.
-	// TODO(ssd): figure out why enabling SCATTER setting in #109449 changed the
-	// span in the default test tenant case.
-	if tc.StartedDefaultTestTenant() {
-		require.Regexp(t, fmt.Sprintf(".*/Table/%d/{1/900-3}", dataBankTableID), inc3Spans[0].String())
-	} else {
-		require.Regexp(t, fmt.Sprintf(".*/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
-	}
+	require.Regexp(t, fmt.Sprintf(".*/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
 
 	// Drop the index.
 	sqlDB.Exec(t, `DROP INDEX new_balance_idx`)
