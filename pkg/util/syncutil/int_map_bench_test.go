@@ -163,6 +163,69 @@ func BenchmarkLoadOrStoreCollision(b *testing.B) {
 	})
 }
 
+func BenchmarkLoadAndDeleteBalanced(b *testing.B) {
+	const hits, misses = 128, 128
+	v := unsafe.Pointer(new(int))
+
+	benchMap(b, bench{
+		setup: func(b *testing.B, m mapInterface) {
+			if _, ok := m.(*DeepCopyMap); ok {
+				b.Skip("DeepCopyMap has quadratic running time.")
+			}
+			for i := 0; i < hits; i++ {
+				m.LoadOrStore(int64(i), v)
+			}
+			// Prime the map to get it into a steady state.
+			for i := 0; i < hits*2; i++ {
+				m.Load(int64(i % hits))
+			}
+		},
+
+		perG: func(b *testing.B, pb *testing.PB, i int, m mapInterface) {
+			for ; pb.Next(); i++ {
+				j := i % (hits + misses)
+				if j < hits {
+					m.LoadAndDelete(int64(j))
+				} else {
+					m.LoadAndDelete(int64(i))
+				}
+			}
+		},
+	})
+}
+
+func BenchmarkLoadAndDeleteUnique(b *testing.B) {
+	benchMap(b, bench{
+		setup: func(b *testing.B, m mapInterface) {
+			if _, ok := m.(*DeepCopyMap); ok {
+				b.Skip("DeepCopyMap has quadratic running time.")
+			}
+		},
+
+		perG: func(b *testing.B, pb *testing.PB, i int, m mapInterface) {
+			for ; pb.Next(); i++ {
+				m.LoadAndDelete(int64(i))
+			}
+		},
+	})
+}
+
+func BenchmarkLoadAndDeleteCollision(b *testing.B) {
+	v := unsafe.Pointer(new(int))
+
+	benchMap(b, bench{
+		setup: func(_ *testing.B, m mapInterface) {
+			m.LoadOrStore(0, v)
+		},
+
+		perG: func(b *testing.B, pb *testing.PB, i int, m mapInterface) {
+			for ; pb.Next(); i++ {
+				m.LoadAndDelete(0)
+			}
+		},
+	})
+}
+
 func BenchmarkRange(b *testing.B) {
 	const mapSize = 1 << 10
 	v := unsafe.Pointer(new(int))
@@ -232,6 +295,22 @@ func BenchmarkAdversarialDelete(b *testing.B) {
 					})
 					m.Store(int64(i), v)
 				}
+			}
+		},
+	})
+}
+
+func BenchmarkDeleteCollision(b *testing.B) {
+	v := unsafe.Pointer(new(int))
+
+	benchMap(b, bench{
+		setup: func(_ *testing.B, m mapInterface) {
+			m.LoadOrStore(0, v)
+		},
+
+		perG: func(b *testing.B, pb *testing.PB, i int, m mapInterface) {
+			for ; pb.Next(); i++ {
+				m.Delete(0)
 			}
 		},
 	})
