@@ -34,6 +34,7 @@ type executorConfig struct {
 	binaries        string
 	compareBinaries string
 	excludeList     []string
+	noProbePkgList  []string
 	outputDir       string
 	libDir          string
 	remoteDir       string
@@ -73,9 +74,23 @@ type benchmarkExtractionResult struct {
 
 func newExecutor(config executorConfig) (*executor, error) {
 	// Gather package info from the primary binary.
-	packages, err := readArchivePackages(config.binaries)
+	archivePackages, err := readArchivePackages(config.binaries)
 	if err != nil {
 		return nil, err
+	}
+
+	// Exclude packages that should not to be probed. This is useful for excluding
+	// packages that have known issues and unable to list its benchmarks, or are
+	// not relevant to the current benchmarking effort.
+	ignorePackages := make(map[string]struct{})
+	for _, pkg := range config.noProbePkgList {
+		ignorePackages[pkg] = struct{}{}
+	}
+	packages := make([]string, 0, len(archivePackages))
+	for _, pkg := range archivePackages {
+		if _, ok := ignorePackages[pkg]; !ok {
+			packages = append(packages, pkg)
+		}
 	}
 
 	config.outputDir = strings.TrimRight(config.outputDir, "/")
