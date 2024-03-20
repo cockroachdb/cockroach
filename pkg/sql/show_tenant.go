@@ -84,6 +84,8 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 	node.columns = colinfo.TenantColumns
 	if n.WithReplication {
 		node.columns = append(node.columns, colinfo.TenantColumnsWithReplication...)
+	} else {
+		node.columns = append(node.columns, colinfo.TenantColumnsNoReplication...)
 	}
 	if n.WithPriorReplication {
 		node.columns = append(node.columns, colinfo.TenantColumnsWithPriorReplication...)
@@ -220,15 +222,16 @@ func (n *showTenantNode) Values() tree.Datums {
 	result := tree.Datums{
 		tree.NewDInt(tree.DInt(tenantInfo.ID)),
 		tree.NewDString(string(tenantInfo.Name)),
-		tree.NewDString(v.dataState),
-		tree.NewDString(tenantInfo.ServiceMode.String()),
 	}
-
-	if n.withReplication {
+	if !n.withReplication {
+		result = append(result,
+			tree.NewDString(v.dataState),
+			tree.NewDString(tenantInfo.ServiceMode.String()),
+		)
+	} else {
 		// This is a 'SHOW VIRTUAL CLUSTER name WITH REPLICATION STATUS' command.
 		sourceTenantName := tree.DNull
 		sourceClusterUri := tree.DNull
-		replicationJobId := tree.DNull
 		replicatedTimestamp := tree.DNull
 		retainedTimestamp := tree.DNull
 		cutoverTimestamp := tree.DNull
@@ -236,7 +239,6 @@ func (n *showTenantNode) Values() tree.Datums {
 
 		replicationInfo := v.replicationInfo
 		if replicationInfo != nil {
-			replicationJobId = tree.NewDInt(tree.DInt(tenantInfo.PhysicalReplicationConsumerJobID))
 			sourceTenantName = tree.NewDString(string(replicationInfo.IngestionDetails.SourceTenantName))
 			sourceClusterUri = tree.NewDString(replicationInfo.IngestionDetails.StreamAddress)
 			if replicationInfo.ReplicationLagInfo != nil {
@@ -269,11 +271,11 @@ func (n *showTenantNode) Values() tree.Datums {
 		result = append(result,
 			sourceTenantName,
 			sourceClusterUri,
-			replicationJobId,
-			replicationLag,
-			replicatedTimestamp,
 			retainedTimestamp,
+			replicatedTimestamp,
+			replicationLag,
 			cutoverTimestamp,
+			tree.NewDString(v.dataState),
 		)
 	}
 	if n.withPriorReplication {
