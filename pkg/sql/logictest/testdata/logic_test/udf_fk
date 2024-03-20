@@ -436,7 +436,7 @@ statement ok
 DROP TABLE grandchild_cascade;
 
 statement ok
-DROP TABLE child_cascade;
+DROP TABLE child_cascade CASCADE;
 
 statement ok
 CREATE TABLE child_cascade (
