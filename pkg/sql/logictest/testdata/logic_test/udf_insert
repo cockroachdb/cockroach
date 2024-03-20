@@ -237,8 +237,7 @@ SELECT f_drop(5,100,101);
 ----
 (5,100,101)
 
-# TODO(#102771): Expected error due to f_drop's dependency on c.
-statement ok
+statement error pgcode 2BP01 cannot drop column \"c\" because function \"f_drop\" depends on it
 ALTER TABLE t_alter DROP COLUMN c;
 
 query T
