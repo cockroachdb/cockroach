@@ -159,7 +159,7 @@ const getDatabaseTablesQuery: DatabaseDetailsQuery<DatabaseTablesRow> = {
       sql: Format(
         `SELECT table_schema, table_name
          FROM %1.information_schema.tables
-         WHERE table_type != 'SYSTEM VIEW'
+         WHERE table_type NOT IN ('SYSTEM VIEW', 'VIEW')
          ORDER BY table_name`,
         [new Identifier(dbName)],
       ),
@@ -199,7 +199,7 @@ const getDatabaseTablesQuery: DatabaseDetailsQuery<DatabaseTablesRow> = {
         sql: Format(
           `SELECT table_schema, table_name
          FROM %1.information_schema.tables
-         WHERE table_type != 'SYSTEM VIEW'
+         WHERE table_type NOT IN ('SYSTEM VIEW', 'VIEW')
          ORDER BY table_name offset %2`,
           [new Identifier(dbName), dbDetail.tablesResp.tables.length],
         ),
