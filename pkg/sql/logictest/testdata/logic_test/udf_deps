@@ -4,11 +4,13 @@ CREATE TABLE t (
   b INT,
   def INT DEFAULT 10,
   c INT,
-  d INT,
-  e INT,
-  f INT,
-  g INT,
-  h INT
+  drop_sel INT,
+  drop_ins INT,
+  drop_ins2 INT,
+  drop_ups INT,
+  drop_ups2 INT,
+  drop_up INT,
+  drop_del INT
 )
 
 # --------------------------------------------------
@@ -32,7 +34,7 @@ statement ok
 ALTER TABLE t RENAME COLUMN c TO c2
 
 statement ok
-ALTER TABLE t DROP COLUMN d
+ALTER TABLE t DROP COLUMN drop_sel
 
 statement ok
 DROP FUNCTION sel
@@ -46,29 +48,30 @@ CREATE FUNCTION ins() RETURNS VOID LANGUAGE SQL AS $$
   INSERT INTO t VALUES (1, 10, DEFAULT);
 $$
 
-# statement error pgcode 2BP01 cannot drop table t because other objects depend on it
-# DROP TABLE t
-#
-# # NOTE: Postgres allows this. We cannot until we can rewrite the column names in
-# # the INSERT statement, or use column IDs instead.
-# statement error pgcode 2BP01 cannot rename column \"b\" because function \"ins\" depends on it
-# ALTER TABLE t RENAME COLUMN b TO b2
-#
-# statement error pgcode 2BP01 cannot drop column \"b\" because function \"ins\" depends on it
-# ALTER TABLE t DROP COLUMN b
-#
-# statement error pgcode 2BP01 cannot drop column \"def\" because function \"ins\" depends on it
-# ALTER TABLE t DROP COLUMN def
-#
-# # TODO(mgartner): This is allowed in Postgres (when using sql_body for
-# # dependency tracking) so we should probably allow it too.
-# statement error pgcode 2BP01 cannot rename column \"c2\" because function \"ins\" depends on it
-# ALTER TABLE t RENAME COLUMN c2 TO c3
-#
-# # TODO(mgartner): This is allowed in Postgres (when using sql_body for
-# # dependency tracking) so we should probably allow it too.
-# statement error pgcode 2BP01 cannot drop column \"e\" because function \"ins\" depends on it
-# ALTER TABLE t DROP COLUMN e
+skipif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop table t because other objects depend on it
+DROP TABLE t
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop relation \"t\" because function \"ins\" depends on it
+DROP TABLE t
+
+# NOTE: Postgres allows this. We cannot until we can rewrite the column names in
+# the INSERT statement, or use column IDs instead.
+statement error pgcode 2BP01 cannot rename column \"b\" because function \"ins\" depends on it
+ALTER TABLE t RENAME COLUMN b TO b2
+
+statement error pgcode 2BP01 cannot drop column \"b\" because function \"ins\" depends on it
+ALTER TABLE t DROP COLUMN b
+
+statement error pgcode 2BP01 cannot drop column \"def\" because function \"ins\" depends on it
+ALTER TABLE t DROP COLUMN def
+
+statement ok
+ALTER TABLE t RENAME COLUMN c2 TO c3
+
+statement ok
+ALTER TABLE t DROP COLUMN drop_ins
 
 statement ok
 SELECT ins()
@@ -86,29 +89,30 @@ CREATE FUNCTION ins2() RETURNS VOID LANGUAGE SQL AS $$
   INSERT INTO t (a, b, def) VALUES (2, 20, DEFAULT);
 $$
 
-# statement error pgcode 2BP01 cannot drop table t because other objects depend on it
-# DROP TABLE t
-#
-# # NOTE: Postgres allows this. We cannot until we can rewrite the column names in
-# # the INSERT statement, or use column IDs instead.
-# statement error pgcode 2BP01 cannot rename column \"b\" because function \"ins\" depends on it
-# ALTER TABLE t RENAME COLUMN b TO b2
-#
-# statement error pgcode 2BP01 cannot drop column \"b\" because function \"ins\" depends on it
-# ALTER TABLE t DROP COLUMN b
-#
-# statement error pgcode 2BP01 cannot drop column \"def\" because function \"ins\" depends on it
-# ALTER TABLE t DROP COLUMN def
-#
-# # TODO(mgartner): This is allowed in Postgres (when using sql_body for
-# # dependency tracking) so we should probably allow it too.
-# statement error pgcode 2BP01 cannot rename column \"c2\" because function \"ins\" depends on it
-# ALTER TABLE t RENAME COLUMN c2 TO c3
-#
-# # TODO(mgartner): This is allowed in Postgres (when using sql_body for
-# # dependency tracking) so we should probably allow it too.
-# statement error pgcode 2BP01 cannot drop column \"e\" because function \"ins\" depends on it
-# ALTER TABLE t DROP COLUMN e
+skipif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop table t because other objects depend on it
+DROP TABLE t
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop relation \"t\" because function \"ins2\" depends on it
+DROP TABLE t
+
+# NOTE: Postgres allows this. We cannot until we can rewrite the column names in
+# the INSERT statement, or use column IDs instead.
+statement error pgcode 2BP01 cannot rename column \"b\" because function \"ins2\" depends on it
+ALTER TABLE t RENAME COLUMN b TO b2
+
+statement error pgcode 2BP01 cannot drop column \"b\" because function \"ins2\" depends on it
+ALTER TABLE t DROP COLUMN b
+
+statement error pgcode 2BP01 cannot drop column \"def\" because function \"ins2\" depends on it
+ALTER TABLE t DROP COLUMN def
+
+statement ok
+ALTER TABLE t RENAME COLUMN c3 TO c4
+
+statement ok
+ALTER TABLE t DROP COLUMN drop_ins2
 
 statement ok
 SELECT ins2()
@@ -131,29 +135,30 @@ CREATE FUNCTION ups() RETURNS VOID LANGUAGE SQL AS $$
   UPSERT INTO t VALUES (3, 30, DEFAULT);
 $$
 
-# statement error pgcode 2BP01 cannot drop table t because other objects depend on it
-# DROP TABLE t
-#
-# # NOTE: Postgres allows this. We cannot until we can rewrite the column names in
-# # the INSERT statement, or use column IDs instead.
-# statement error pgcode 2BP01 cannot rename column \"b\" because function \"ups\" depends on it
-# ALTER TABLE t RENAME COLUMN b TO b2
-#
-# statement error pgcode 2BP01 cannot drop column \"b\" because function \"ups\" depends on it
-# ALTER TABLE t DROP COLUMN b
-#
-# statement error pgcode 2BP01 cannot drop column \"def\" because function \"ups\" depends on it
-# ALTER TABLE t DROP COLUMN def
-#
-# # TODO(mgartner): This is allowed in Postgres (when using sql_body for
-# # dependency tracking) so we should probably allow it too.
-# statement error pgcode 2BP01 cannot rename column \"c2\" because function \"ups\" depends on it
-# ALTER TABLE t RENAME COLUMN c2 TO c3
-#
-# # TODO(mgartner): This is allowed in Postgres (when using sql_body for
-# # dependency tracking) so we should probably allow it too.
-# statement error pgcode 2BP01 cannot drop column \"e\" because function \"ups\" depends on it
-# ALTER TABLE t DROP COLUMN f
+skipif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop table t because other objects depend on it
+DROP TABLE t
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop relation \"t\" because function \"ups\" depends on it
+DROP TABLE t
+
+# NOTE: Postgres allows this. We cannot until we can rewrite the column names in
+# the INSERT statement, or use column IDs instead.
+statement error pgcode 2BP01 cannot rename column \"b\" because function \"ups\" depends on it
+ALTER TABLE t RENAME COLUMN b TO b2
+
+statement error pgcode 2BP01 cannot drop column \"b\" because function \"ups\" depends on it
+ALTER TABLE t DROP COLUMN b
+
+statement error pgcode 2BP01 cannot drop column \"def\" because function \"ups\" depends on it
+ALTER TABLE t DROP COLUMN def
+
+statement ok
+ALTER TABLE t RENAME COLUMN c4 TO c5
+
+statement ok
+ALTER TABLE t DROP COLUMN drop_ups
 
 statement ok
 SELECT ups()
@@ -173,29 +178,30 @@ CREATE FUNCTION ups2() RETURNS VOID LANGUAGE SQL AS $$
   UPSERT INTO t (a, b, def) VALUES (4, 40, DEFAULT);
 $$
 
+skipif config local-legacy-schema-changer
 statement error pgcode 2BP01 cannot drop table t because other objects depend on it
 DROP TABLE t
 
-# # NOTE: Postgres allows this. We cannot until we can rewrite the column names in
-# # the INSERT statement, or use column IDs instead.
-# statement error pgcode 2BP01 cannot rename column \"b\" because function \"ups2\" depends on it
-# ALTER TABLE t RENAME COLUMN b TO b2
-#
-# statement error pgcode 2BP01 cannot drop column \"b\" because function \"ups2\" depends on it
-# ALTER TABLE t DROP COLUMN b
-#
-# statement error pgcode 2BP01 cannot drop column \"def\" because function \"ups2\" depends on it
-# ALTER TABLE t DROP COLUMN def
-#
-# # TODO(mgartner): This is allowed in Postgres (when using sql_body for
-# # dependency tracking) so we should probably allow it too.
-# statement error pgcode 2BP01 cannot rename column \"c2\" because function \"ups2\" depends on it
-# ALTER TABLE t RENAME COLUMN c2 TO c3
-#
-# # TODO(mgartner): This is allowed in Postgres (when using sql_body for
-# # dependency tracking) so we should probably allow it too.
-# statement error pgcode 2BP01 cannot drop column \"e\" because function \"ups2\" depends on it
-# ALTER TABLE t DROP COLUMN f
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop relation \"t\" because function \"ups2\" depends on it
+DROP TABLE t
+
+# NOTE: Postgres allows this. We cannot until we can rewrite the column names in
+# the INSERT statement, or use column IDs instead.
+statement error pgcode 2BP01 cannot rename column \"b\" because function \"ups2\" depends on it
+ALTER TABLE t RENAME COLUMN b TO b2
+
+statement error pgcode 2BP01 cannot drop column \"b\" because function \"ups2\" depends on it
+ALTER TABLE t DROP COLUMN b
+
+statement error pgcode 2BP01 cannot drop column \"def\" because function \"ups2\" depends on it
+ALTER TABLE t DROP COLUMN def
+
+statement ok
+ALTER TABLE t RENAME COLUMN c5 TO c6
+
+statement ok
+ALTER TABLE t DROP COLUMN drop_ups2
 
 statement ok
 SELECT ups2()
@@ -232,10 +238,10 @@ statement error pgcode 2BP01 cannot rename column \"a\" because function \"up\" 
 ALTER TABLE t RENAME COLUMN a TO a2
 
 statement ok
-ALTER TABLE t RENAME COLUMN c2 TO c3
+ALTER TABLE t RENAME COLUMN c6 TO c7
 
 statement ok
-ALTER TABLE t DROP COLUMN g
+ALTER TABLE t DROP COLUMN drop_up
 
 statement ok
 SELECT up()
@@ -272,10 +278,10 @@ statement error pgcode 2BP01 cannot rename column \"a\" because function \"del\"
 ALTER TABLE t RENAME COLUMN a TO a2
 
 statement ok
-ALTER TABLE t RENAME COLUMN c3 TO c4
+ALTER TABLE t RENAME COLUMN c7 TO c8
 
 statement ok
-ALTER TABLE t DROP COLUMN h
+ALTER TABLE t DROP COLUMN drop_del
 
 statement ok
 SELECT del()
