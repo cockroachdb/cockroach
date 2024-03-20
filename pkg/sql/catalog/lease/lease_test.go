@@ -2453,7 +2453,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	// versions.
 	alterErrCh := make(chan error, 1)
 	go func() {
-		_, err := db1.Exec("ALTER TABLE foo ADD COLUMN j INT DEFAULT 1")
+		_, err := db1.Exec("ALTER TABLE foo RENAME COLUMN i TO j")
 		alterErrCh <- err
 	}()
 
@@ -2482,8 +2482,8 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	<-alterErrCh
 
 	// Ensure that the new schema is in use on n2.
-	var i, j int
-	require.Equal(t, gosql.ErrNoRows, db2.QueryRow("SELECT i, j FROM foo").Scan(&i, &j))
+	var j int
+	require.Equal(t, gosql.ErrNoRows, db2.QueryRow("SELECT j FROM foo").Scan(&j))
 }
 
 // TestLeaseWithOfflineTables checks that leases on tables which had
