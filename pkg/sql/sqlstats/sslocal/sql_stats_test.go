@@ -1140,7 +1140,8 @@ func TestEnhancedFingerprintCreation(t *testing.T) {
 
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
 	testConn.Exec(t, "CREATE TABLE t ( a INT, b INT, c INT, d INT, e INT, f INT)")
-	testConn.Exec(t, `SET CLUSTER SETTING sql.stats.statement_fingerprint.format_mask = $1`, tree.FmtCollapseLists)
+	testConn.Exec(t, `SET CLUSTER SETTING sql.stats.statement_fingerprint.format_mask = $1`,
+		tree.FmtCollapseLists|tree.FmtConstantsAsUnderscores)
 
 	testCases := []struct {
 		stmts       []testQuery // Queries that should have the same fingerprint.
@@ -1202,6 +1203,14 @@ func TestEnhancedFingerprintCreation(t *testing.T) {
 					args: []interface{}{6, 9, 10}},
 			},
 			fingerprint: "SELECT * FROM t WHERE a IN (_, __more__)",
+		},
+		{
+			// Verify literals and placeholders are all replaced by the same special representation.
+			stmts: []testQuery{
+				{stmt: `UPDATE t SET a = 1, b = $1, c = '3', d = $2, e = 5 WHERE f = 2`, args: []interface{}{1, 2}},
+				{stmt: `UPDATE t SET a = '1', b = 1, c = $1, d = $2, e = 5 WHERE f = $3`, args: []interface{}{1, 2, 3}},
+			},
+			fingerprint: `UPDATE t SET a = _, b = _, c = _, d = _, e = _ WHERE f = _`,
 		},
 	}
 

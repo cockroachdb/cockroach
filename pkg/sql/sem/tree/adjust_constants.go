@@ -21,6 +21,17 @@ import (
 // FmtHideConstants or FmtShortenConstants is set in the flags and the node is
 // affected by that format.
 func (ctx *FmtCtx) formatNodeOrAdjustConstants(n NodeFormatter) {
+	if ctx.HasFlags(FmtConstantsAsUnderscores) {
+		switch n.(type) {
+		case *Placeholder, *StrVal, Datum, Constant:
+			// If we have a placeholder, a string literal, a datum or a constant,
+			// we want to print the same special character for all of them. This
+			// is to avoid creating different fingerprints for queries that are
+			// actually equivalent.
+			ctx.WriteByte(StmtFingerprintPlaceholder)
+			return
+		}
+	}
 	if ctx.flags.HasFlags(FmtCollapseLists) {
 		// This is a more aggressive form of collapsing lists than the cases
 		// provided by FmtHideConstants and FmtShortenConstants.
