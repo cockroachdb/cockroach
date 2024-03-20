@@ -826,7 +826,9 @@ type StreamManagerFactory interface {
 type ReplicationStreamManager interface {
 	// StartReplicationStream starts a stream replication job for the specified
 	// tenant on the producer side.
-	StartReplicationStream(ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest) (streampb.ReplicationProducerSpec, error)
+	StartReplicationStream(
+		ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest,
+	) (streampb.ReplicationProducerSpec, error)
 
 	// SetupSpanConfigsStream creates and plans a replication stream to stream the span config updates for a specific tenant.
 	SetupSpanConfigsStream(ctx context.Context, tenantName roachpb.TenantName) (ValueGenerator, error)
