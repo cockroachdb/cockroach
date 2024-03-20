@@ -1163,6 +1163,7 @@ GO_TARGETS = [
     "//pkg/cmd/roachtest/clusterstats:clusterstats_test",
     "//pkg/cmd/roachtest/grafana:grafana",
     "//pkg/cmd/roachtest/operation:operation",
+    "//pkg/cmd/roachtest/operations:operations",
     "//pkg/cmd/roachtest/option:option",
     "//pkg/cmd/roachtest/option:option_test",
     "//pkg/cmd/roachtest/registry:registry",
