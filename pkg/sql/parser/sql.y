@@ -4849,7 +4849,7 @@ routine_param:
     $$.val = tree.RoutineParam{
       Name: tree.Name($1),
       Type: $2.typeReference(),
-      Class: tree.RoutineParamIn,
+      Class: tree.RoutineParamDefault,
     }
   }
 | routine_param_class routine_param_type
@@ -4863,7 +4863,7 @@ routine_param:
   {
     $$.val = tree.RoutineParam{
       Type: $1.typeReference(),
-      Class: tree.RoutineParamIn,
+      Class: tree.RoutineParamDefault,
     }
   }
 

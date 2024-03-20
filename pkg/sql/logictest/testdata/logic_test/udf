@@ -68,7 +68,7 @@ CREATE FUNCTION f_no_ref(a int) RETURNS INT IMMUTABLE AS 'SELECT 1' LANGUAGE SQL
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_no_ref];
 ----
-CREATE FUNCTION public.f_no_ref(IN a INT8)
+CREATE FUNCTION public.f_no_ref(a INT8)
   RETURNS INT8
   IMMUTABLE
   NOT LEAKPROOF
@@ -101,7 +101,7 @@ $$
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f];
 ----
-CREATE FUNCTION public.f(IN a test.public.notmyworkday)
+CREATE FUNCTION public.f(a test.public.notmyworkday)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -249,7 +249,7 @@ CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LEAKPROOF LANGUA
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_cor];
 ----
-CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
+CREATE FUNCTION public.f_test_cor(a INT8, b INT8)
   RETURNS INT8
   IMMUTABLE
   LEAKPROOF
@@ -267,7 +267,7 @@ CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LANGUAGE SQL AS 
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_cor];
 ----
-CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
+CREATE FUNCTION public.f_test_cor(a INT8, b INT8)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -283,7 +283,7 @@ CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LEAKPR
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_cor];
 ----
-CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
+CREATE FUNCTION public.f_test_cor(a INT8, b INT8)
   RETURNS INT8
   IMMUTABLE
   LEAKPROOF
@@ -669,7 +669,7 @@ $func$
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION single_quote]
 ----
-CREATE FUNCTION public.single_quote(IN s STRING)
+CREATE FUNCTION public.single_quote(s STRING)
   RETURNS STRING
   VOLATILE
   NOT LEAKPROOF

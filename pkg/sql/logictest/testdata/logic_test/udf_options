@@ -61,14 +61,14 @@ $$;
 query T
 SELECT pg_get_functiondef('get_l'::regproc::oid)
 ----
-CREATE FUNCTION public.get_l(IN i INT8)
-    RETURNS INT8
-    STABLE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT v FROM test.public.kv WHERE k = i;
+CREATE FUNCTION public.get_l(i INT8)
+  RETURNS INT8
+  STABLE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT v FROM test.public.kv WHERE k = i;
 $$
 
 query T
