@@ -338,7 +338,9 @@ func (b *Builder) buildRoutine(
 		var expr memo.RelExpr
 		var physProps *physical.Required
 		isProc := o.Type == tree.ProcedureRoutine
-		plBuilder := newPLpgSQLBuilder(b, def.Name, colRefs, routineParams, rtyp, isProc)
+		plBuilder := newPLpgSQLBuilder(
+			b, def.Name, stmt.AST.Label, colRefs, routineParams, rtyp, isProc,
+		)
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		finishResolveType(stmtScope)
 		expr, physProps, isMultiColDataSource =
