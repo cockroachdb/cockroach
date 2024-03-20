@@ -374,7 +374,7 @@ statement ok
 CALL p(ALL 1);
 
 # Calling a built-in function with ALL should not cause an internal error.
-statement error pgcode 42809 family\(val: inet\) is not a procedure
+statement error pgcode 42809 family\(unknown\) is not a procedure
 CALL family(ALL NULL);
 
 subtest end

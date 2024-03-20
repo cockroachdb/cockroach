@@ -1573,6 +1573,7 @@ message SchemaDescriptor {
     //   (IN p1, INOUT p2, OUT p3, INOUT p4, OUT p5),
     // then OutParamOrdinals will contain [2, 4] (while ArgTypes will contain
     // types of [p1, p2, p4]).
+    // TODO: comment.
     repeated int32 out_param_ordinals = 6;
 
     repeated sql.sem.types.T out_param_types = 7;

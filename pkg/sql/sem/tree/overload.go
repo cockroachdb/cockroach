@@ -296,8 +296,8 @@ func (b Overload) returnType() ReturnTyper { return b.ReturnType }
 // preferred implements the overloadImpl interface.
 func (b Overload) preferred() bool { return b.PreferredOverload }
 
-func (b Overload) outParamInfo() (bool, []int32, TypeList) {
-	return b.Type == ProcedureRoutine, b.OutParamOrdinals, b.OutParamTypes
+func (b Overload) outParamInfo() (RoutineType, []int32, TypeList) {
+	return b.Type, b.OutParamOrdinals, b.OutParamTypes
 }
 
 // FixedReturnType returns a fixed type that the function returns, returning Any
@@ -370,7 +370,7 @@ type overloadImpl interface {
 	preferred() bool
 	// outParamInfo is only used for stored procedures. See comment on
 	// Overload.OutParamOrdinals and Overload.OutParamTypes for more details.
-	outParamInfo() (bool, []int32, TypeList)
+	outParamInfo() (RoutineType, []int32, TypeList)
 }
 
 var _ overloadImpl = &Overload{}
@@ -792,9 +792,9 @@ func toParamOrdinal(i int, outParamOrdinals []int32) (ordinal int, isOutParam bo
 
 //gcassert:inline
 func getOrdinalAndParams(
-	i int, params TypeList, outParamOrdinals []int32, outParams TypeList,
+	routineType RoutineType, i int, params TypeList, outParamOrdinals []int32, outParams TypeList,
 ) (int, TypeList) {
-	if len(outParamOrdinals) == 0 {
+	if routineType != ProcedureRoutine || len(outParamOrdinals) == 0 {
 		return i, params
 	}
 	ordinal, isOutParam := toParamOrdinal(i, outParamOrdinals)
@@ -890,10 +890,14 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		if !foundOutParamsOrdinals {
 			return params.MatchLen(exprsLen)
 		}
-		// Ignore all OUT parameters since they are included in exprs but not in
-		// params.
-		_, outParamOrdinals, _ := ov.outParamInfo()
-		return params.MatchLen(exprsLen - len(outParamOrdinals))
+		routineType, outParamOrdinals, _ := ov.outParamInfo()
+		var exprsNotInParams int
+		if routineType == ProcedureRoutine {
+			// Ignore all OUT parameters since they are included in exprs but
+			// not in params.
+			exprsNotInParams = len(outParamOrdinals)
+		}
+		return params.MatchLen(exprsLen - exprsNotInParams)
 	}
 	s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, matchLen)
 
@@ -904,8 +908,8 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			}
 		}
 		return func(ov overloadImpl, params TypeList) bool {
-			_, outParamOrdinals, outParams := ov.outParamInfo()
-			ordinal, p := getOrdinalAndParams(i, params, outParamOrdinals, outParams)
+			routineType, outParamOrdinals, outParams := ov.outParamInfo()
+			ordinal, p := getOrdinalAndParams(routineType, i, params, outParamOrdinals, outParams)
 			return fn(p, ordinal)
 		}
 	}
@@ -946,8 +950,8 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			ov := s.overloads[ovIdx]
 			params, ordinal := s.params[ovIdx], i
 			if foundOutParamsOrdinals {
-				_, outParamOrdinals, outParams := ov.outParamInfo()
-				ordinal, params = getOrdinalAndParams(i, params, outParamOrdinals, outParams)
+				routineType, outParamOrdinals, outParams := ov.outParamInfo()
+				ordinal, params = getOrdinalAndParams(routineType, i, params, outParamOrdinals, outParams)
 			}
 			typ := params.GetAt(ordinal)
 			if sameType == nil {
@@ -1117,9 +1121,9 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		if len(s.overloadIdxs) == 1 && allConstantsAreHomogenous {
 			overloadParamsAreHomogenous := true
 			ovIdx := s.overloadIdxs[0]
-			_, outParamOrdinals, outParams := s.overloads[ovIdx].outParamInfo()
+			routineType, outParamOrdinals, outParams := s.overloads[ovIdx].outParamInfo()
 			for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
-				ordinal, params := getOrdinalAndParams(i, s.params[ovIdx], outParamOrdinals, outParams)
+				ordinal, params := getOrdinalAndParams(routineType, i, s.params[ovIdx], outParamOrdinals, outParams)
 				if !params.GetAt(ordinal).Equivalent(homogeneousTyp) {
 					overloadParamsAreHomogenous = false
 					break
@@ -1225,8 +1229,8 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		params := s.params[ovIdx]
 		var knownEnum *types.T
 
-		// Do not apply this hack to procedures for simplicity.
-		if isProcedure, _, _ := s.overloads[ovIdx].outParamInfo(); !isProcedure {
+		// Do not apply this hack to routines for simplicity.
+		if routineType, _, _ := s.overloads[ovIdx].outParamInfo(); routineType == BuiltinRoutine {
 			// Check we have all "AnyEnum" (or "AnyEnum" array) arguments and that
 			// one argument is typed with an enum.
 			attemptAnyEnumCast := func() bool {
@@ -1478,10 +1482,10 @@ func checkReturn(
 
 	case 1:
 		idx := s.overloadIdxs[0]
-		_, outParamOrdinals, outParams := s.overloads[idx].outParamInfo()
+		routineType, outParamOrdinals, outParams := s.overloads[idx].outParamInfo()
 		params := s.params[idx]
 		for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
-			ordinal, p := getOrdinalAndParams(i, params, outParamOrdinals, outParams)
+			ordinal, p := getOrdinalAndParams(routineType, i, params, outParamOrdinals, outParams)
 			des := p.GetAt(ordinal)
 			typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, des)
 			if err != nil {
@@ -1513,9 +1517,9 @@ func checkReturnPlaceholdersAtIdx(
 	ctx context.Context, semaCtx *SemaContext, s *overloadTypeChecker, idx uint8,
 ) (ok bool, _ error) {
 	params := s.params[idx]
-	_, outParamOrdinals, outParams := s.overloads[idx].outParamInfo()
+	routineType, outParamOrdinals, outParams := s.overloads[idx].outParamInfo()
 	for i, ok := s.placeholderIdxs.Next(0); ok; i, ok = s.placeholderIdxs.Next(i + 1) {
-		ordinal, p := getOrdinalAndParams(i, params, outParamOrdinals, outParams)
+		ordinal, p := getOrdinalAndParams(routineType, i, params, outParamOrdinals, outParams)
 		des := p.GetAt(ordinal)
 		typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, des)
 		if err != nil {

@@ -496,7 +496,7 @@ func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor
 		if tree.IsInParamClass(class) {
 			ret.ArgTypes = append(ret.ArgTypes, param.Type)
 		}
-		if ret.IsProcedure && class == tree.RoutineParamOut {
+		if class == tree.RoutineParamOut {
 			ret.OutParamOrdinals = append(ret.OutParamOrdinals, int32(paramIdx))
 			ret.OutParamTypes = append(ret.OutParamTypes, param.Type)
 		}

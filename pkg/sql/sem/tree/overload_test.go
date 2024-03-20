@@ -113,8 +113,8 @@ func (to testOverload) preferred() bool {
 	return to.pref
 }
 
-func (to *testOverload) outParamInfo() (bool, []int32, TypeList) {
-	return false, nil, nil
+func (to *testOverload) outParamInfo() (RoutineType, []int32, TypeList) {
+	return BuiltinRoutine, nil, nil
 }
 
 func (to testOverload) withPreferred(pref bool) *testOverload {

@@ -99,7 +99,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 				Typ:  typ,
 			})
 		}
-		if c.IsProcedure && param.Class == tree.RoutineParamOut {
+		if param.Class == tree.RoutineParamOut {
 			outParamOrdinals = append(outParamOrdinals, int32(i))
 			outParams = append(outParams, tree.ParamType{Typ: typ})
 		}

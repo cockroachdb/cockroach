@@ -638,7 +638,7 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 			if tree.IsInParamClass(class) {
 				ol.ArgTypes = append(ol.ArgTypes, p.Type)
 			}
-			if ol.IsProcedure && class == tree.RoutineParamOut {
+			if class == tree.RoutineParamOut {
 				ol.OutParamOrdinals = append(ol.OutParamOrdinals, int32(pIdx))
 				ol.OutParamTypes = append(ol.OutParamTypes, p.Type)
 			}

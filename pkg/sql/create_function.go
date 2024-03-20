@@ -163,7 +163,7 @@ func (n *createFunctionNode) createNewFunction(
 		if tree.IsInParamClass(class) {
 			signatureTypes = append(signatureTypes, param.Type)
 		}
-		if udfDesc.IsProcedure() && class == tree.RoutineParamOut {
+		if class == tree.RoutineParamOut {
 			outParamOrdinals = append(outParamOrdinals, int32(paramIdx))
 			outParamTypes = append(outParamTypes, param.Type)
 		}
@@ -245,7 +245,7 @@ func (n *createFunctionNode) replaceFunction(
 		if err != nil {
 			return err
 		}
-		if n.cf.IsProcedure && p.Class == tree.RoutineParamOut {
+		if p.Class == tree.RoutineParamOut {
 			outParamOrdinals = append(outParamOrdinals, int32(i))
 			outParamTypes = append(outParamTypes, udfDesc.Params[i].Type)
 		}
