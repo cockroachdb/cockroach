@@ -103,7 +103,7 @@ type EvalContext interface {
 	GetMaxSplitCPU(context.Context) (float64, bool)
 
 	GetGCThreshold() hlc.Timestamp
-	ExcludeDataFromBackup(ctx context.Context) bool
+	ExcludeDataFromBackup(context.Context, roachpb.Span) (bool, error)
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
 	GetRangeInfo(context.Context) roachpb.RangeInfo
@@ -276,8 +276,8 @@ func (m *mockEvalCtxImpl) MinTxnCommitTS(
 func (m *mockEvalCtxImpl) GetGCThreshold() hlc.Timestamp {
 	return m.GCThreshold
 }
-func (m *mockEvalCtxImpl) ExcludeDataFromBackup(context.Context) bool {
-	return false
+func (m *mockEvalCtxImpl) ExcludeDataFromBackup(context.Context, roachpb.Span) (bool, error) {
+	return false, nil
 }
 func (m *mockEvalCtxImpl) GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error) {
 	panic("unimplemented")

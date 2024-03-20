@@ -288,7 +288,11 @@ type StoreWriter interface {
 type StoreReader interface {
 	NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, error)
 	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) (roachpb.RKey, error)
-	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
+	// GetSpanConfigForKey returns the span configuration for the
+	// given key and the span that the retruened configuration
+	// applies to. Callers can use the returned span to check if a
+	// request is completely contained by the returned config.
+	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, roachpb.Span, error)
 }
 
 // Limiter is used to limit the number of span configs installed by secondary

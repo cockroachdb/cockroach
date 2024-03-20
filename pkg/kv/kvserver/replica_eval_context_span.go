@@ -178,8 +178,10 @@ func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
 
 // ExcludeDataFromBackup returns whether the replica is to be excluded from a
 // backup.
-func (rec SpanSetReplicaEvalContext) ExcludeDataFromBackup(ctx context.Context) bool {
-	return rec.i.ExcludeDataFromBackup(ctx)
+func (rec SpanSetReplicaEvalContext) ExcludeDataFromBackup(
+	ctx context.Context, sp roachpb.Span,
+) (bool, error) {
+	return rec.i.ExcludeDataFromBackup(ctx, sp)
 }
 
 // String implements Stringer.

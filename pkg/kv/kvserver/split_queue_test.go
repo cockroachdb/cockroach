@@ -110,7 +110,11 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		repl.mu.Unlock()
 		conf := roachpb.TestingDefaultSpanConfig()
 		conf.RangeMaxBytes = test.maxBytes
-		repl.SetSpanConfig(conf)
+		sp := roachpb.Span{
+			Key:    cpy.StartKey.AsRawKey().Clone(),
+			EndKey: cpy.EndKey.AsRawKey().Clone(),
+		}
+		repl.SetSpanConfig(conf, sp)
 
 		// Testing using shouldSplitRange instead of shouldQueue to avoid using the splitFinder
 		// This tests the merge queue behavior too as a result. For splitFinder tests,

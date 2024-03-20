@@ -872,7 +872,7 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 		}
 		defer snap.Close()
 
-		conf, err := cfg.GetSpanConfigForKey(ctx, desc.StartKey)
+		conf, _, err := cfg.GetSpanConfigForKey(ctx, desc.StartKey)
 		if err != nil {
 			t.Fatalf("could not find zone config for range %s: %+v", tc.repl, err)
 		}
@@ -1468,7 +1468,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conf, err := confReader.GetSpanConfigForKey(ctx, roachpb.RKey("key"))
+	conf, _, err := confReader.GetSpanConfigForKey(ctx, roachpb.RKey("key"))
 	if err != nil {
 		t.Fatalf("could not find span config for range %s", err)
 	}
@@ -1522,7 +1522,11 @@ func TestMVCCGCQueueGroupsRangeDeletions(t *testing.T) {
 	require.NoError(t, store.AddReplica(r2))
 	r2.RaftStatus()
 	r2.handleGCHintResult(ctx, &roachpb.GCHint{LatestRangeDeleteTimestamp: hlc.Timestamp{WallTime: 1}})
-	r2.SetSpanConfig(roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{TTLSeconds: 100}})
+	r2.SetSpanConfig(roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{TTLSeconds: 100}},
+		roachpb.Span{
+			Key:    key("b").AsRawKey(),
+			EndKey: key("c").AsRawKey(),
+		})
 
 	gcQueue := newMVCCGCQueue(store)
 

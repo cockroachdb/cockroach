@@ -2540,12 +2540,12 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 				// adjacent table. This results in a single update, corresponding to the
 				// new table's span, which forms the right-hand side post split.
 
-				conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, startKey)
+				conf, sp, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, startKey)
 				if err != nil {
 					log.Errorf(replCtx, "skipped applying update, unexpected error reading from subscriber: %v", err)
 					return err
 				}
-				changed = repl.SetSpanConfig(conf)
+				changed = repl.SetSpanConfig(conf, sp)
 			}
 			if changed {
 				repl.MaybeQueue(ctx, now)
@@ -2565,13 +2565,13 @@ func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		replCtx := repl.AnnotateCtx(ctx)
 		key := repl.Desc().StartKey
-		conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, key)
+		conf, confSpan, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, key)
 		if err != nil {
 			log.Errorf(ctx, "skipped applying config update, unexpected error reading from subscriber: %v", err)
 			return true // more
 		}
 
-		changed := repl.SetSpanConfig(conf)
+		changed := repl.SetSpanConfig(conf, confSpan)
 		if changed {
 			repl.MaybeQueue(replCtx, now)
 		}
@@ -3576,7 +3576,7 @@ func (s *Store) AllocatorCheckRange(
 		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
-	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
+	conf, _, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
 		log.Eventf(ctx, "error retrieving span config for range %s: %s", desc, err)
 		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err

@@ -1237,12 +1237,15 @@ func (s *state) ComputeSplitKey(
 // SpanConfigConformanceReport.
 func (s *state) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, error) {
+) (roachpb.SpanConfig, roachpb.Span, error) {
 	rng := s.rangeFor(ToKey(key.AsRawKey()))
 	if rng == nil {
 		panic(fmt.Sprintf("programming error: range for key %s doesn't exist", key))
 	}
-	return *rng.config, nil
+	return *rng.config, roachpb.Span{
+		Key:    rng.startKey.ToRKey().AsRawKey(),
+		EndKey: rng.endKey.ToRKey().AsRawKey(),
+	}, nil
 }
 
 // Scan is added for the rangedesc.Scanner interface, required for

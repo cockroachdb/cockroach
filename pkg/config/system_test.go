@@ -616,7 +616,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 			objectID = id
 			return cfg.DefaultZoneConfig, nil, false, nil
 		}
-		_, err := cfg.GetSpanConfigForKey(ctx, tc.key)
+		_, _, err := cfg.GetSpanConfigForKey(ctx, tc.key)
 		if err != nil {
 			t.Errorf("#%d: GetSpanConfigForKey(%v) got error: %v", tcNum, tc.key, err)
 		}
