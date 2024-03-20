@@ -898,6 +898,8 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructMergeStatementStats(args[0])
 	case "merge_transaction_stats":
 		return b.factory.ConstructMergeTransactionStats(args[0])
+	case "merge_aggregated_stmt_metadata":
+		return b.factory.ConstructMergeAggregatedStmtMetadata(args[0])
 	}
 
 	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))

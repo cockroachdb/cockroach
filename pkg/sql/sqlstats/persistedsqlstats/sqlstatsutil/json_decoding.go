@@ -62,6 +62,15 @@ func DecodeAggregatedMetadataJSON(
 	return (*aggregatedMetadata)(result).jsonFields().decodeJSON(metadata)
 }
 
+// DecodeAggregatedMetadataAggregatedFieldsOnlyJSON decodes the 'aggregated metadata' represented by
+// appstatspb.AggregatedStatementMetadata. It only includes the fields that are
+// aggregated across multiple statements.
+func DecodeAggregatedMetadataAggregatedFieldsOnlyJSON(
+	metadata json.JSON, result *appstatspb.AggregatedStatementMetadata,
+) error {
+	return (*aggregatedMetadata)(result).jsonAggregatedFields().decodeJSON(metadata)
+}
+
 // DecodeStmtStatsStatisticsJSON decodes the 'statistics' field and the
 // 'execution_statistics' field in the given json into
 // appstatspb.StatementStatistics.
