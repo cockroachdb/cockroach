@@ -24,8 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -229,6 +232,7 @@ func (n *showTenantNode) Values() tree.Datums {
 		replicatedTimestamp := tree.DNull
 		retainedTimestamp := tree.DNull
 		cutoverTimestamp := tree.DNull
+		replicationLag := tree.DNull
 
 		replicationInfo := v.replicationInfo
 		if replicationInfo != nil {
@@ -242,7 +246,12 @@ func (n *showTenantNode) Values() tree.Datums {
 				// microsecond. In that case a user may want to cutover to a rounded-up
 				// time, which is a time that we may never replicate to. Instead, we show
 				// a time that we know we replicated to.
-				replicatedTimestamp, _ = tree.MakeDTimestampTZ(minIngested.GoTime().Truncate(time.Microsecond), time.Nanosecond)
+				minIngestedMicro := minIngested.GoTime().Truncate(time.Microsecond)
+				replicatedTimestamp, _ = tree.MakeDTimestampTZ(minIngestedMicro, time.Nanosecond)
+
+				nowMicro := timeutil.Now().Truncate(time.Microsecond)
+				replicationLagDuration := duration.MakeDuration(nowMicro.Sub(minIngestedMicro).Nanoseconds(), 0, 0)
+				replicationLag = tree.NewDInterval(replicationLagDuration, types.DefaultIntervalTypeMetadata)
 			}
 			// The protected timestamp on the destination cluster. Same as with the
 			// replicatedTimestamp, we want to show a retained time that is within the
@@ -261,6 +270,7 @@ func (n *showTenantNode) Values() tree.Datums {
 			sourceTenantName,
 			sourceClusterUri,
 			replicationJobId,
+			replicationLag,
 			replicatedTimestamp,
 			retainedTimestamp,
 			cutoverTimestamp,
