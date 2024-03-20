@@ -304,13 +304,12 @@ var TenantColumns = ResultColumns{
 var TenantColumnsWithReplication = ResultColumns{
 	{Name: "source_tenant_name", Typ: types.String},
 	{Name: "source_cluster_uri", Typ: types.String},
-	{Name: "replication_job_id", Typ: types.Int},
-	{Name: "replication_lag", Typ: types.Interval},
-	// The latest fully replicated time.
-	{Name: "replicated_time", Typ: types.TimestampTZ},
 	// The protected timestamp on the destination cluster, meaning we cannot
 	// cutover to before this time.
 	{Name: "retained_time", Typ: types.TimestampTZ},
+	// The latest fully replicated time.
+	{Name: "replicated_time", Typ: types.TimestampTZ},
+	{Name: "replication_lag", Typ: types.Interval},
 	{Name: "cutover_time", Typ: types.Decimal},
 }
 
