@@ -1055,6 +1055,19 @@ func (r *Replica) MaybeQueue(ctx context.Context, now hlc.ClockTimestamp) {
 	}
 }
 
+// HasExternalBytes returns true if the replica has a non-zero number
+// of external bytes in its underlying store. External bytes are bytes
+// in a pebble.ExternalFile. Such files can be added by AddSSTable.
+func (r *Replica) HasExternalBytes() (bool, error) {
+	desc := r.Desc()
+	sp := desc.KeySpan().AsRawSpanWithNoLocals()
+	_, _, externalBytes, err := r.store.StateEngine().ApproximateDiskBytes(sp.Key, sp.EndKey)
+	if err != nil {
+		return false, err
+	}
+	return externalBytes > 0, nil
+}
+
 // IsScratchRange returns true if this is range is a scratch range (i.e.
 // overlaps with the scratch span and has a start key <= keys.ScratchRangeMin).
 func (r *Replica) IsScratchRange() bool {
