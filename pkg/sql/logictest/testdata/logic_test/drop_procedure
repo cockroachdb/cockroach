@@ -23,7 +23,7 @@ CREATE PROCEDURE public.p_test_drop()
   AS $$
   SELECT 1;
 $$
-CREATE PROCEDURE public.p_test_drop(IN INT8)
+CREATE PROCEDURE public.p_test_drop(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 1;
@@ -32,7 +32,7 @@ $$
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
 ----
-CREATE PROCEDURE sc1.p_test_drop(IN INT8)
+CREATE PROCEDURE sc1.p_test_drop(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 1;
@@ -81,7 +81,7 @@ CALL p_test_drop()
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p_test_drop]
 ----
-CREATE PROCEDURE public.p_test_drop(IN INT8)
+CREATE PROCEDURE public.p_test_drop(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 1;
@@ -90,7 +90,7 @@ $$
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
 ----
-CREATE PROCEDURE sc1.p_test_drop(IN INT8)
+CREATE PROCEDURE sc1.p_test_drop(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 1;
@@ -110,7 +110,7 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p_test_drop]
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
 ----
-CREATE PROCEDURE sc1.p_test_drop(IN INT8)
+CREATE PROCEDURE sc1.p_test_drop(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 1;

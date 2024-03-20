@@ -81,7 +81,7 @@ r1  CREATE FUNCTION public.r1()
       AS $$
       SELECT 1;
     $$
-r1  CREATE FUNCTION public.r1(IN i INT8)
+r1  CREATE FUNCTION public.r1(i INT8)
       RETURNS INT8
       VOLATILE
       NOT LEAKPROOF
@@ -95,12 +95,12 @@ skipif config local-mixed-23.1
 query TT
 SELECT * FROM [SHOW CREATE PROCEDURE r1] ORDER BY 2
 ----
-r1  CREATE PROCEDURE public.r1(IN s STRING)
+r1  CREATE PROCEDURE public.r1(s STRING)
       LANGUAGE SQL
       AS $$
       SELECT 1;
     $$
-r1  CREATE PROCEDURE public.r1(IN s STRING, IN i INT8)
+r1  CREATE PROCEDURE public.r1(s STRING, i INT8)
       LANGUAGE SQL
       AS $$
       SELECT 1;
@@ -143,7 +143,7 @@ skipif config local-mixed-23.1
 query TT
 SHOW CREATE PROCEDURE r2
 ----
-r2  CREATE PROCEDURE sc.r2(IN s STRING)
+r2  CREATE PROCEDURE sc.r2(s STRING)
       LANGUAGE SQL
       AS $$
       SELECT 1;

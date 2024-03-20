@@ -121,6 +121,8 @@ func FunctionLangToProto(v tree.RoutineLanguage) (catpb.Function_Language, error
 // type.
 func ParamClassToProto(v tree.RoutineParamClass) (catpb.Function_Param_Class, error) {
 	switch v {
+	case tree.RoutineParamDefault:
+		return catpb.Function_Param_DEFAULT, nil
 	case tree.RoutineParamIn:
 		return catpb.Function_Param_IN, nil
 	case tree.RoutineParamOut:

@@ -33,18 +33,18 @@ DROP PROCEDURE _, _ -- identifiers removed
 parse
 DROP PROCEDURE f(int)
 ----
-DROP PROCEDURE f(IN INT8) -- normalized!
-DROP PROCEDURE f(IN INT8) -- fully parenthesized
-DROP PROCEDURE f(IN INT8) -- literals removed
-DROP PROCEDURE _(IN INT8) -- identifiers removed
+DROP PROCEDURE f(INT8) -- normalized!
+DROP PROCEDURE f(INT8) -- fully parenthesized
+DROP PROCEDURE f(INT8) -- literals removed
+DROP PROCEDURE _(INT8) -- identifiers removed
 
 parse
 DROP PROCEDURE f(a int)
 ----
-DROP PROCEDURE f(IN a INT8) -- normalized!
-DROP PROCEDURE f(IN a INT8) -- fully parenthesized
-DROP PROCEDURE f(IN a INT8) -- literals removed
-DROP PROCEDURE _(IN _ INT8) -- identifiers removed
+DROP PROCEDURE f(a INT8) -- normalized!
+DROP PROCEDURE f(a INT8) -- fully parenthesized
+DROP PROCEDURE f(a INT8) -- literals removed
+DROP PROCEDURE _(_ INT8) -- identifiers removed
 
 parse
 DROP PROCEDURE f(a IN int)
@@ -57,7 +57,7 @@ DROP PROCEDURE _(IN _ INT8) -- identifiers removed
 parse
 DROP PROCEDURE f(a int, b string)
 ----
-DROP PROCEDURE f(IN a INT8, IN b STRING) -- normalized!
-DROP PROCEDURE f(IN a INT8, IN b STRING) -- fully parenthesized
-DROP PROCEDURE f(IN a INT8, IN b STRING) -- literals removed
-DROP PROCEDURE _(IN _ INT8, IN _ STRING) -- identifiers removed
+DROP PROCEDURE f(a INT8, b STRING) -- normalized!
+DROP PROCEDURE f(a INT8, b STRING) -- fully parenthesized
+DROP PROCEDURE f(a INT8, b STRING) -- literals removed
+DROP PROCEDURE _(_ INT8, _ STRING) -- identifiers removed
