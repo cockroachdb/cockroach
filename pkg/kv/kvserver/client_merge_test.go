@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -53,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -3075,6 +3078,96 @@ func TestStoreRangeMergeDeadFollowerBeforeTxn(t *testing.T) {
 	expErr := "waiting for all left-hand replicas to initialize"
 	if !testutils.IsPError(pErr, expErr) {
 		t.Fatalf("expected %q error, but got %v", expErr, pErr)
+	}
+}
+
+// TestMergeQueueWithExternalFiles tests that we exclude replicas with
+// external bytes from the merge queue when requested.
+func TestMergeQueueWithExternalFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	for _, skipExternal := range []bool{true, false} {
+		t.Run(fmt.Sprintf("kv.range_merge.skip_external_bytes.enabled=%v", skipExternal), func(t *testing.T) {
+			ctx := context.Background()
+			st := cluster.MakeTestingClusterSettings()
+			kvserver.SkipMergeQueueForExternalBytes.Override(ctx, &st.SV, skipExternal)
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						DisableMergeQueue:         true,
+						DisableLoadBasedSplitting: true,
+					},
+				},
+				Settings: st,
+			})
+
+			const externURI = "nodelocal://1/external-files"
+
+			extStore, err := cloud.EarlyBootExternalStorageFromURI(ctx,
+				externURI,
+				base.ExternalIODirConfig{},
+				s.ClusterSettings(),
+				nil, /* limiters */
+				cloud.NilMetrics)
+			require.NoError(t, err)
+
+			defer s.Stopper().Stop(ctx)
+
+			scratchKey, err := s.ScratchRangeWithExpirationLease()
+			require.NoError(t, err)
+
+			lhsDesc, rhsDesc, err := s.SplitRangeWithExpiration(scratchKey.Next().Next(), hlc.Timestamp{})
+			require.NoError(t, err)
+
+			// Write an external SST the the LHS.
+			fileName := "external-1.sst"
+			writeKey := lhsDesc.StartKey.AsRawKey().Next()
+			mvccKV := storage.MVCCKeyValue{
+				Key: storage.MVCCKey{
+					Key:       writeKey,
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+				Value: []byte("hello"),
+			}
+			sst, _, _ := storageutils.MakeSST(t, s.ClusterSettings(), []interface{}{mvccKV})
+			w, err := extStore.Writer(ctx, fileName)
+			require.NoError(t, err)
+			_, err = w.Write(sst)
+			require.NoError(t, err)
+			require.NoError(t, w.Close())
+
+			size, err := extStore.Size(ctx, fileName)
+			require.NoError(t, err)
+
+			_, _, err = s.DB().AddRemoteSSTable(ctx, roachpb.Span{
+				Key:    writeKey,
+				EndKey: writeKey.Next(),
+			}, kvpb.AddSSTableRequest_RemoteFile{
+				Locator:                 externURI,
+				Path:                    fileName,
+				ApproximatePhysicalSize: uint64(size),
+				BackingFileSize:         uint64(size),
+			}, &enginepb.MVCCStats{
+				ContainsEstimates: 1,
+				KeyBytes:          2,
+				ValBytes:          10,
+				KeyCount:          2,
+				LiveCount:         2,
+			}, s.DB().Clock().Now())
+			require.NoError(t, err)
+
+			store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+			require.NoError(t, err)
+
+			store.SetMergeQueueActive(true)
+			if skipExternal {
+				verifyUnmergedSoon(t, store, lhsDesc.StartKey, rhsDesc.StartKey)
+			} else {
+				verifyMergedSoon(t, store, lhsDesc.StartKey, rhsDesc.StartKey)
+			}
+		})
 	}
 }
 
