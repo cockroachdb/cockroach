@@ -73,7 +73,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -4541,38 +4540,11 @@ value if you rely on the HLC for accuracy.`,
 				arr := tree.MustBeDArray(args[0])
 				metadata := &appstatspb.AggregatedStatementMetadata{}
 
-				var other appstatspb.AggregatedStatementMetadata
+				other := appstatspb.AggregatedStatementMetadata{}
 				for _, metadataDatum := range arr.Array {
-					if metadataDatum == tree.DNull {
+					if err := mergeAggregatedMetadataHelper(metadata, &other, metadataDatum); err != nil {
 						continue
 					}
-
-					metadataJSON := tree.MustBeDJSON(metadataDatum).JSON
-					// Ensure we start with a clear slate for the current iteration.
-					other = appstatspb.AggregatedStatementMetadata{}
-					err := sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &other)
-					//  Failure to decode should NOT return an error. Instead let's just ignore
-					// this JSON object that is not the correct format.
-					if err != nil {
-						continue
-					}
-
-					// Aggregate relevant stats.
-					metadata.Databases = util.CombineUnique(metadata.Databases, other.Databases)
-
-					metadata.DistSQLCount += other.DistSQLCount
-					metadata.FullScanCount += other.FullScanCount
-					metadata.VecCount += other.VecCount
-					metadata.TotalCount += other.TotalCount
-				}
-
-				// Set the constant info from the last decoded metadata object. If there were no
-				// elements then we can skip this as we are already at the zero values.
-				if len(arr.Array) > 0 {
-					metadata.ImplicitTxn = other.ImplicitTxn
-					metadata.Query = other.Query
-					metadata.QuerySummary = other.QuerySummary
-					metadata.StmtType = other.StmtType
 				}
 
 				aggregatedJSON, err := sqlstatsutil.BuildStmtDetailsMetadataJSON(metadata)
