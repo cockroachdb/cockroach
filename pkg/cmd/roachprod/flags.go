@@ -203,6 +203,8 @@ func initFlags() {
 		"init-target", startOpts.InitTarget, "node on which to run initialization")
 	startCmd.Flags().IntVar(&startOpts.StoreCount,
 		"store-count", startOpts.StoreCount, "number of stores to start each node with")
+	startCmd.Flags().IntVar(&startOpts.AdminUIPort,
+		"admin-ui-port", startOpts.AdminUIPort, "port to serve the admin UI on")
 
 	startInstanceCmd.Flags().StringVarP(&storageCluster, "storage-cluster", "S", "", "storage cluster")
 	_ = startInstanceCmd.MarkFlagRequired("storage-cluster")
@@ -342,8 +344,6 @@ func initFlags() {
 			"limit the number of files that can be created by the cockroach process")
 		cmd.Flags().IntVar(&startOpts.SQLPort,
 			"sql-port", startOpts.SQLPort, "port on which to listen for SQL clients")
-		cmd.Flags().IntVar(&startOpts.AdminUIPort,
-			"admin-ui-port", startOpts.AdminUIPort, "port to serve the admin UI on")
 	}
 
 	for _, cmd := range []*cobra.Command{
