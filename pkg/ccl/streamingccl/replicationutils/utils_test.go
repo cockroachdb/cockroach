@@ -69,6 +69,7 @@ func TestScanSST(t *testing.T) {
 		storageutils.RangeKV("ca", "da", 20, ""),
 		// Delete range for t3s - t3e, emitting nothing.
 		storageutils.RangeKV("e", "f", 25, ""),
+		storageutils.PointKVWithImportEpoch("g", 25, 1, "val"),
 	})
 
 	checkScan := func(scanWithin roachpb.Span,
@@ -99,6 +100,11 @@ func TestScanSST(t *testing.T) {
 		[]storage.MVCCRangeKey{
 			storageutils.RangeKey("a", "b", 10),
 		})
+	checkScan(roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")},
+		[]storage.MVCCKeyValue{
+			storageutils.PointKVWithImportEpoch("g", 25, 1, "val"),
+		},
+		[]storage.MVCCRangeKey{})
 
 	checkScan(roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
 		[]storage.MVCCKeyValue{

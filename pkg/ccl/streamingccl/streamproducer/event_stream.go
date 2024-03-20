@@ -417,10 +417,18 @@ func (s *eventStream) addSST(
 	// key value and each MVCCRangeKey value in the trimmed SSTable.
 	return replicationutils.ScanSST(sst, registeredSpan,
 		func(mvccKV storage.MVCCKeyValue) error {
+			// TODO(ssd): We technically get MVCCValueHeaders in our
+			// SSTs. But currently there are so many ways _not_ to
+			// get them that writing them here would just be
+			// confusing until we fix them all.
+			value, err := storage.DecodeValueFromMVCCValue(mvccKV.Value)
+			if err != nil {
+				return err
+			}
 			seb.addKV(&roachpb.KeyValue{
 				Key: mvccKV.Key.Key,
 				Value: roachpb.Value{
-					RawBytes:  mvccKV.Value,
+					RawBytes:  value.RawBytes,
 					Timestamp: mvccKV.Key.Timestamp}})
 			return nil
 		}, func(rangeKeyVal storage.MVCCRangeKeyValue) error {
