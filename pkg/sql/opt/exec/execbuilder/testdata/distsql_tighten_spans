@@ -121,7 +121,8 @@ start_key                  end_key       replicas  lease_holder
 <before:/Table/107/1/2/1>  …/1/0         {1}       1
 …/1/0                      …/1/2         {1}       1
 …/2                        …/2/2         {1}       1
-…/2/2                      <after:/Max>  {1}       1
+…/2/2                      …/3           {1}       1
+…/3                        <after:/Max>  {1}       1
 …/1/2                      …/2           {3}       3
 
 ###############

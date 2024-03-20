@@ -68,10 +68,10 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder
 FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX json_inv WITH DETAILS] ORDER BY lease_holder
 ----
-start_key     end_key               replicas  lease_holder
-…/<IndexMin>  …/10                  {1}       1
-…/10          …/20                  {2}       2
-…/20          <after:/Table/107/2>  {3}       3
+start_key     end_key       replicas  lease_holder
+…/<IndexMin>  …/10          {1}       1
+…/10          …/20          {2}       2
+…/20          …/<IndexMax>  {3}       3
 
 statement ok
 ALTER TABLE json_tab VALIDATE CONSTRAINT check_c
@@ -357,7 +357,7 @@ FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX arr_inv WITH DETAILS] ORDER BY lease_h
 start_key     end_key       replicas  lease_holder
 …/<IndexMin>  …/10          {1}       1
 …/10          …/20          {2}       2
-…/20          <after:/Max>  {3}       3
+…/20          …/<IndexMax>  {3}       3
 
 query T
 EXPLAIN (DISTSQL)
@@ -431,14 +431,14 @@ vectorized: true
           table: array_tab@array_tab_pkey
           spans: [/1 - /1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lV9v2jAUxd_3Kaz70lYzInb4G2kSW2EaU1s6QNqmDSFD3DYqxMw261DFd58SKASHeE3WjYcof5zfPT459_II6scMPOh8ub54271Cp-3uYDj4dHGGBp2LzvkQMfS-37tETEq2Gms2QZ8_dPoddDpBre9Lx3E5Onkk65Mz1OujU4beIBKdtjt99O4rYoAhFD6_YnOuwPsGBDBQwODCCMNCiilXSsjo0WO8sOv_As_BEISLpd7c1oGecfBASJ9L7gMGn2sWzGJei7yG0XqEYSokB2-_-kqUxKJM6OHy3lJ7qEVgtMYglnpbY4RBaXbLwasnRHXb4BG6xglhJCHsSM0hm8x4nzOfyzI5LLyzr8WkHAfhT8BwLmbLeai82KXBgkWnZeKUSSk60kyR1BSZR-NASM1l2T1m4_FyrlHOzVPuowjCrSNViyObs_Hinq8OjMFokqmrYuiq5tHVDpQOwqkuN0wjAENvk7QjSdkDJit0x9Rd6u04jFuFVUNhI1Nh0ZTvtkGcXPvYa6yZYXIORNLnJ94p-H0T2S87mTqJobOwTFqwMWncmDRPY9I8GreNWSnemJU85RKNWfvHjVnL1PV3w71-sDpLjWOoqedxaddfzf84Jpov7td-TJCXGhOHfzqO3cY-VwsRKl7og5VItCXu3_KNBUos5ZRfSzGN124uezEovuFzpTdPibu56oZPz5SWnM138yOJIlYUzUGiVpJFEzVJrpVUySbVTFLFJJEkqXpAIklSIx-J0GwUSTlVte7PsaBSVtXsSbCwqiaqbkU1sl0nJqlhJTWzSa5JahbeXiUV9D80DcmWVU-xUl3z3Fw1c6KswUoZT-w9aEuWG02bm5l4GAc-eOBsf6Ujh6cfRC-wWxWNvMGdeIi5w9UiGlg3bKY4hkt2z9tcczkPwmgYT8HTcsnX61e_AwAA__-kFF26
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lVFv2joUx9_vp7DOS1vdIOIECES6EvcWrsbUlg6QtmlDyBC3jRrizHbWIcR3n5K0QJzGJbQrD4iQ5Hf-Pvodew3iRwAu9L9cX_w7uEKnvcF4Mv50cYbG_Yv--QQR9P9oeIkI52Q1k2SOPn_oj_rodI6632PTtCk6WePNyRkajtApQf8gnPzs9Ufov6-IgAEh8-gVWVIB7jfAYIAFBtgwNSDibEGFYDy5tU4fHHi_wDUN8MMolsnfUwMWjFNw1yB9GVBwYULmAR1R4lFeN8EAj0riByl-m7K7_TWL7ukKDDhnQbwMhYuIgeZgwDgiyVUd102YbgxgsdyVFJLcUnDxXsZBD1xzYxwes-cL6YcLWe_kM3aTHgy5Rzn1XNTFSvUdYL5Cd0TcFd6ebnYJm0rCTmnCHZdltVXu3xm4dBnYqrSOXcaWkhFbbx7yitVYVMd2_vFhLLXBHDWYnQuGD9cQazSc-eHPnH_78pl1XEu-rdKQlhqySsYx45Lyuv1cG58vZyvlKrXkI_PDx440jxzMslwNJVezSq6tw847jqJTmvD1o2i-1SjmdzTrcOOtI423UuOtKsZbVTI-Gt843vhGlXJ7xrf-sPGtKrm2qrTf0fh2acLXG4_fynhc5QwfURGxUNBc8bJSplKqhpMlUe-WZi0QLOYLes3ZIn02uxymoPQPjwqZ3cXZxSB8uiUkp2S5tWCfhFUS3ie1cyS8T-pUI2G7HJWd6IezLA2qqaIsbat0qdoqytZ3vVHedlNFNbSoZgVSU0tqlZMKTW9pSU45qaGSnGOlcqqRtFIVOqVn6aSyVVT7aKkKA9jRS2WWtx0XpuaFbUGzLxRWiAsjmGdZ5azCCOLCDB7qQ2EEX0BphSj2Sw_TGVFQHus3B10uJ9nnbwL2MPM9cMF8_NSe-Xr6QPICuRXJYTO-Yw8pd7KKkqPihgSCGnBJ7mmPSsqXfpgcgwtwJY_pZvPX7wAAAP__pMkU_Q==
 
 # We cannot use the index for this query.
 query T
 EXPLAIN (DISTSQL)
 SELECT a FROM array_tab WHERE (b @> '{2}' AND a = 3) OR b[0] = a ORDER BY a
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • filter
@@ -449,4 +449,4 @@ vectorized: true
       table: array_tab@array_tab_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUlGL2kAQfu-vGOblIqy4iS9l4SD2zNGAp9cotIcVWc2cDRez6e6Gq0j-e0nipSrV9vYhZL6d-b6Z-XaP5meKAoNvj6NBOAZnGE5n0y-jDkyDUXA3Awn30eQBpNZyt7RyBV8_B1EAjrMC_3vBeZ_gZu-VNx0YjIfgSLiFfqcDkwic1Zwv4BZkFQ2DCD49gUSGmYppLLdkUMzRRYZ9XDDMtVqTMUpX8L5OCuNfKDjDJMsLW8ELhmulCcUebWJTQoFj1VV5z0OGMVmZpHVayVAV9k-RsXJDKPpHKuEQhVeyIyH3utBMrlKKSMake_xEDtvd-O3fMn-hHTK8U2mxzYwAyWCFDKe5rKIuXurRPeuRv6fH-yS1pEn33NMGG1yA4_he69ogigZPc08IEY5nHxcH_3y3MvAAHnysMd-b8zYXGU4KK8B3Lw7inQ3ingzyD1cjMrnKDP2XrfxMqeuWC4YUb6h5SkYVek2PWq3r3Cac1EQ1EJOxzW2_CcLs7cpYTXLb-nDM5F5l8t7B5F1l4peZ6jmfU_W6TGIUyA-n-5fP28GqQG5MtezpD_Va0852ebWqZ5kaYvggX2hIlvQ2yRJjkzUKqwsqyw-_AwAA__-eYkyd
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUWFrnEAQ_d5fMcyXeLBH1HwpCwGv0VDhcpeq0IarHKtOrhLPtbsr6XH434t6sUloQrsfxHk7--a9N0fUPyvkGHy7XS7CFVh-GCfxl-UM4mAZXCUg4Dpa34BQShy2RmTw9XMQBWBZGXjfW9u-IDg7ut3ZDBYrHywBl3Axm8E6Aivb2ClcgugrP4jg0x0IZFjLglZiTxr5Bh1MGTZK5qS1VD10HBrC4hdym2FZN63p4ZRhLhUhP6IpTUXIMRFZRRGJgtS5jQwLMqKsBtpJrjf9bZsHOiDDK1m1-1pzEAwyZBg3oq_mmHYMZWv-zNNG7Ai580xg6CO3O_bvGq_LypAide68FDjiHCzLc6cgF1G0uNu4nPNwlXxMT5F6Tp_pCTxFO2Ceu7GnXmS4bg0Hz3nTiPvKiPM_RiLSjaw1vbDx1iT71aS506UMqdjRuGEtW5XTrZL50DuW64FoAArSZrx1xiKsn660UST20x6eMznvMrnvMaUM7yv5uC0L5Gifzvwvn6eD_QOx031E8Q_5ONAmh6Y3eC8qTQxvxAP5ZEjty7rUpsyRG9VS1334HQAA__8XkRFS
