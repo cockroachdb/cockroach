@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
@@ -167,7 +168,8 @@ func getCombinedStatementStats(
 			args,
 			orderAndLimit,
 			testingKnobs,
-			activityHasAllData)
+			activityHasAllData,
+			settings)
 	}
 
 	if err != nil {
@@ -664,6 +666,7 @@ func collectCombinedStatements(
 	orderAndLimit string,
 	testingKnobs *sqlstats.TestingKnobs,
 	activityTableHasAllData bool,
+	settings *cluster.Settings,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 	aostClause := testingKnobs.GetAOSTClause()
 	const expectedNumDatums = 9
@@ -697,11 +700,15 @@ FROM (SELECT fingerprint_id,
 	}()
 
 	if activityTableHasAllData {
-		it, err = getIterator(
-			ctx,
-			ie,
-			// The statement activity table has aggregated metadata.
-			`
+		metadataAggFn := "crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata))"
+		if settings.Version.IsActive(ctx, clusterversion.V24_1) {
+			// Use the newly introduced aggregate function version of this builtin
+			// for 24.1 and above.
+			metadataAggFn = "merge_aggregated_stmt_metadata(metadata)"
+		}
+
+		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-combined-stmts-activity-by-interval", nil,
+			sessiondata.NodeUserSessionDataOverride, fmt.Sprintf(`
 SELECT 
     fingerprint_id,
     app_name,
@@ -715,20 +722,14 @@ SELECT
     statistics
 FROM (SELECT fingerprint_id,
              app_name,
-             max(aggregated_ts)                                                 AS aggregated_ts,
-             crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata))  AS metadata,
-             merge_statement_stats(statistics)                                  AS statistics
+             max(aggregated_ts)                                     AS aggregated_ts,
+             %s AS metadata,
+             merge_statement_stats(statistics)                      AS statistics
       FROM %s %s
       GROUP BY
           fingerprint_id,
-          app_name) %s
-%s`,
-			CrdbInternalStmtStatsCached,
-			"combined-stmts-activity-by-interval",
-			whereClause,
-			args,
-			aostClause,
-			orderAndLimit)
+          app_name) %s %s`, metadataAggFn, CrdbInternalStmtStatsCached, aostClause, whereClause, orderAndLimit), args...)
+
 		if err != nil {
 			return nil, srverrors.ServerError(ctx, err)
 		}
