@@ -86,7 +86,7 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idx WITH DETAILS]
 ----
 start_key     end_key       replicas  lease_holder
-…/<IndexMin>  <after:/Max>  {1}       1
+…/<IndexMin>  …/<IndexMax>  {1}       1
 
 statement ok
 ALTER INDEX t@idx SPLIT AT VALUES (100,1), (100,50)
@@ -97,7 +97,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t
 start_key     end_key       replicas  lease_holder
 …/<IndexMin>  …/100/1       {1}       1
 …/100/1       …/100/50      {1}       1
-…/100/50      <after:/Max>  {1}       1
+…/100/50      …/<IndexMax>  {1}       1
 
 statement ok
 ALTER INDEX t@idx SPLIT AT VALUES (8), (9)
@@ -110,7 +110,7 @@ start_key     end_key       replicas  lease_holder
 …/8           …/9           {1}       1
 …/9           …/100/1       {1}       1
 …/100/1       …/100/50      {1}       1
-…/100/50      <after:/Max>  {1}       1
+…/100/50      …/<IndexMax>  {1}       1
 
 statement ok
 ALTER INDEX t@idx EXPERIMENTAL_RELOCATE VALUES (ARRAY[5], 100, 10), (ARRAY[3], 100, 11)
@@ -123,7 +123,7 @@ start_key     end_key       replicas  lease_holder
 …/8           …/9           {1}       1
 …/9           …/100/1       {1}       1
 …/100/1       …/100/50      {3}       3
-…/100/50      <after:/Max>  {1}       1
+…/100/50      …/<IndexMax>  {1}       1
 
 # Create and drop things to produce interesting data for crdb_internal.ranges.
 
@@ -239,11 +239,13 @@ f28a                    /Table/106/2             f28a90                  /Table/
 f28a90                  /Table/106/2/8           f28a91                  /Table/106/2/9           {1}       1
 f28a91                  /Table/106/2/9           f28aec89                /Table/106/2/100/1       {1}       1
 f28aec89                /Table/106/2/100/1       f28aecba                /Table/106/2/100/50      {3}       3
-f28aecba                /Table/106/2/100/50      f6708988                /Table/112/1/0           {1}       1
+f28aecba                /Table/106/2/100/50      f28b                    /Table/106/3             {1}       1
+f28b                    /Table/106/3             f6708988                /Table/112/1/0           {1}       1
 f6708988                /Table/112/1/0           f67189f67b              /Table/113/1/123         {1}       1
 f67189f67b              /Table/113/1/123         f6718a                  /Table/113/2             {1}       1
 f6718a                  /Table/113/2             f6718a88                /Table/113/2/0           {1}       1
-f6718a88                /Table/113/2/0           ffff                    /Max                     {1}       1
+f6718a88                /Table/113/2/0           f6718b                  /Table/113/3             {1}       1
+f6718b                  /Table/113/3             ffff                    /Max                     {1}       1
 
 query TTTTTI colnames,rowsort
 SELECT encode(start_key, 'hex'), start_pretty, encode(end_key, 'hex'), end_pretty, replicas, lease_holder FROM crdb_internal.ranges
@@ -325,11 +327,13 @@ f28a                    /Table/106/2             f28a90                  /Table/
 f28a90                  /Table/106/2/8           f28a91                  /Table/106/2/9           {1}       1
 f28a91                  /Table/106/2/9           f28aec89                /Table/106/2/100/1       {1}       1
 f28aec89                /Table/106/2/100/1       f28aecba                /Table/106/2/100/50      {3}       3
-f28aecba                /Table/106/2/100/50      f6708988                /Table/112/1/0           {1}       1
+f28aecba                /Table/106/2/100/50      f28b                    /Table/106/3             {1}       1
+f28b                    /Table/106/3             f6708988                /Table/112/1/0           {1}       1
 f6708988                /Table/112/1/0           f67189f67b              /Table/113/1/123         {1}       1
 f67189f67b              /Table/113/1/123         f6718a                  /Table/113/2             {1}       1
 f6718a                  /Table/113/2             f6718a88                /Table/113/2/0           {1}       1
-f6718a88                /Table/113/2/0           ffff                    /Max                     {1}       1
+f6718a88                /Table/113/2/0           f6718b                  /Table/113/3             {1}       1
+f6718b                  /Table/113/3             ffff                    /Max                     {1}       1
 
 # Due to asynchronous splitting of ranges, we cannot guarantee the output
 # of the show ranges from database command. The test below just ensures that
@@ -348,12 +352,12 @@ SHOW RANGES FROM DATABASE "show ranges"
 query TT
 SELECT start_key, end_key FROM [SHOW RANGES FROM TABLE "show ranges".t]
 ----
-<before:/Table/113/2/0>  <after:/Max>
+<before:/Table/113/3>  <after:/Max>
 
 query TT
 SELECT start_key, end_key FROM [SHOW RANGES FROM INDEX "show ranges".t@t_pkey]
 ----
-<before:/Table/113/2/0>  <after:/Max>
+<before:/Table/113/3>  <after:/Max>
 
 statement ok
 CREATE DATABASE """"
@@ -367,12 +371,12 @@ SHOW RANGES FROM DATABASE """"
 query TT
 SELECT start_key, end_key FROM [SHOW RANGES FROM TABLE """".t]
 ----
-<before:/Table/113/2/0>  <after:/Max>
+<before:/Table/113/3>  <after:/Max>
 
 query TT
 SELECT start_key, end_key FROM [SHOW RANGES FROM INDEX """".t@t_pkey]
 ----
-<before:/Table/113/2/0>  <after:/Max>
+<before:/Table/113/3>  <after:/Max>
 
 query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.ranges' AND usage_count > 0
@@ -391,7 +395,7 @@ ALTER TABLE simple_range_for_row SPLIT AT VALUES (1), (2)
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE simple_range_for_row FOR ROW (0)]
 ----
-<before:/Table/113/2/0>  …/1
+<before:/Table/113/3>  …/1
 
 # Between splits
 query TT
