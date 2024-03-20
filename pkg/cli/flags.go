@@ -1249,19 +1249,34 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 	}
 	// Convert all the store paths to absolute paths. We want this to
 	// ensure canonical directories across invocations; and also to
-	// benefit from the check in GetAbsoluteStorePath() that the user
+	// benefit from the check in GetAbsoluteFSPath() that the user
 	// didn't mistakenly assume a heading '~' would get translated by
 	// CockroachDB. (The shell should be responsible for that.)
 	for i, ss := range serverCfg.Stores.Specs {
 		if ss.InMemory {
 			continue
 		}
-		absPath, err := base.GetAbsoluteStorePath("path", ss.Path)
+		absPath, err := base.GetAbsoluteFSPath("path", ss.Path)
 		if err != nil {
 			return err
 		}
 		ss.Path = absPath
 		serverCfg.Stores.Specs[i] = ss
+	}
+
+	if serverCfg.WALFailover.Path.IsSet() {
+		absPath, err := base.GetAbsoluteFSPath("wal-failover.path", serverCfg.WALFailover.Path.Path)
+		if err != nil {
+			return err
+		}
+		serverCfg.WALFailover.Path.Path = absPath
+	}
+	if serverCfg.WALFailover.PrevPath.IsSet() {
+		absPath, err := base.GetAbsoluteFSPath("wal-failover.prev_path", serverCfg.WALFailover.PrevPath.Path)
+		if err != nil {
+			return err
+		}
+		serverCfg.WALFailover.PrevPath.Path = absPath
 	}
 
 	// Configure the external I/O directory.
@@ -1278,7 +1293,7 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 	if startCtx.externalIODir != "" {
 		// Make the directory name absolute.
 		var err error
-		startCtx.externalIODir, err = base.GetAbsoluteStorePath(cliflags.ExternalIODir.Name, startCtx.externalIODir)
+		startCtx.externalIODir, err = base.GetAbsoluteFSPath(cliflags.ExternalIODir.Name, startCtx.externalIODir)
 		if err != nil {
 			return err
 		}
