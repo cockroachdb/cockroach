@@ -774,10 +774,19 @@ func (sip *streamIngestionProcessor) bufferSST(sst *kvpb.RangeFeedSSTable) error
 	defer sp.Finish()
 	return replicationutils.ScanSST(sst, sst.Span,
 		func(keyVal storage.MVCCKeyValue) error {
+			// TODO(ssd): We technically get MVCCValueHeaders in our
+			// SSTs. But currently there are so many ways _not_ to
+			// get them that writing them here would just be
+			// confusing until we fix them all.
+			mvccValue, err := storage.DecodeValueFromMVCCValue(keyVal.Value)
+			if err != nil {
+				return err
+			}
+
 			return sip.bufferKV(&roachpb.KeyValue{
 				Key: keyVal.Key.Key,
 				Value: roachpb.Value{
-					RawBytes:  keyVal.Value,
+					RawBytes:  mvccValue.RawBytes,
 					Timestamp: keyVal.Key.Timestamp,
 				},
 			})

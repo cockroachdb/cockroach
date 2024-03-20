@@ -11,6 +11,8 @@ package streamingest
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -519,6 +521,46 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 
 	// Ingestion job should succeed despite source failure due to the successful cutover
 	jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+}
+
+func TestTenantStreamingImport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, replicationtestutils.DefaultTenantStreamingClustersArgs)
+	defer cleanup()
+
+	dataSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			if _, err := w.Write([]byte("42,hello,goodbye\n")); err != nil {
+				t.Logf("failed to write: %s", err.Error())
+			}
+		}
+	}))
+	defer dataSrv.Close()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	srcTime := c.SrcSysServer.Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	c.SrcTenantSQL.Exec(t, `
+CREATE TABLE d.t_for_import(i int primary key, a string, b string);
+INSERT INTO d.t_for_import (i) VALUES (1);
+`)
+	c.SrcSysSQL.Exec(t, "SET CLUSTER SETTING kv.bulk_io_write.small_write_size = '1'")
+	c.SrcTenantSQL.Exec(t, "SET CLUSTER SETTING kv.bulk_io_write.small_write_size = '1'")
+	c.SrcTenantSQL.Exec(t, "IMPORT INTO d.t_for_import CSV DATA ($1)", dataSrv.URL)
+
+	srcTime = c.SrcSysServer.Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	cutoverTime := c.SrcSysServer.Clock().Now()
+	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
+	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
+
 }
 
 func TestTenantStreamingDeleteRange(t *testing.T) {
@@ -1342,11 +1384,11 @@ func checkLocalityRanges(
 ) {
 	targetPrefix := codec.TablePrefix(tableID)
 	distinctQuery := fmt.Sprintf(`
-SELECT 
+SELECT
   DISTINCT replica_localities
-FROM 
+FROM
   [SHOW CLUSTER RANGES]
-WHERE 
+WHERE
   start_key ~ '%s'
 `, targetPrefix)
 	var locality string
