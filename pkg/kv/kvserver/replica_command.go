@@ -3078,6 +3078,12 @@ var traceSnapshotThreshold = settings.RegisterDurationSetting(
 		"trace logged (set to 0 to disable);", 0,
 )
 
+var externalFileSnapshotting = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.snapshot.external_files.enabled",
+	"enables sending external files as metadata during a snapshot",
+	false)
+
 // followerSendSnapshot receives a delegate snapshot request and generates the
 // snapshot from this replica. The entire process of generating and transmitting
 // the snapshot is handled, and errors are propagated back to the leaseholder.
@@ -3157,7 +3163,28 @@ func (r *Replica) followerSendSnapshot(
 	// a snapshot for a non-system range. This allows us to send metadata of
 	// sstables in shared storage as opposed to streaming their contents. Keys
 	// in higher levels of the LSM are still streamed in the snapshot.
-	sharedReplicate := r.store.cfg.SharedStorageEnabled && snap.State.Desc.StartKey.AsRawKey().Compare(keys.TableDataMin) >= 0
+	nonSystemRange := snap.State.Desc.StartKey.AsRawKey().Compare(keys.TableDataMin) >= 0
+	sharedReplicate := r.store.cfg.SharedStorageEnabled && nonSystemRange
+
+	// Use external replication if we aren't using shared
+	// replication, are dealing with a non-system range, are on at
+	// least 24.1, and our store has external files.
+	externalReplicate := !sharedReplicate && nonSystemRange &&
+		r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1) &&
+		externalFileSnapshotting.Get(&r.store.ClusterSettings().SV)
+	if externalReplicate {
+		start := snap.State.Desc.StartKey.AsRawKey()
+		end := snap.State.Desc.EndKey.AsRawKey()
+		total, _, external, err := r.store.StateEngine().ApproximateDiskBytes(start, end)
+		if err != nil {
+			log.Warningf(ctx, "could not determine if store has external bytes: %v", err)
+			externalReplicate = false
+		}
+
+		// Enable ExternalReplicate only if we have more
+		// external bytes than local bytes.
+		externalReplicate = external > (total - external)
+	}
 
 	// Create new snapshot request header using the delegate snapshot request.
 	header := kvserverpb.SnapshotRequest_Header{
@@ -3178,6 +3205,7 @@ func (r *Replica) followerSendSnapshot(
 		SenderQueueName:     req.SenderQueueName,
 		SenderQueuePriority: req.SenderQueuePriority,
 		SharedReplicate:     sharedReplicate,
+		ExternalReplicate:   externalReplicate,
 	}
 	newBatchFn := func() storage.WriteBatch {
 		return r.store.TODOEngine().NewWriteBatch()

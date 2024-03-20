@@ -604,6 +604,7 @@ type Reader interface {
 		visitRangeDel func(start, end []byte, seqNum uint64) error,
 		visitRangeKey func(start, end []byte, keys []rangekey.Key) error,
 		visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+		visitExternalFile func(sst *pebble.ExternalFile) error,
 	) error
 	// ConsistentIterators returns true if the Reader implementation guarantees
 	// that the different iterators constructed by this Reader will see the same
@@ -1036,7 +1037,7 @@ type Engine interface {
 	// that excises an ExciseSpan, and ingests either local or shared sstables or
 	// both.
 	IngestAndExciseFiles(
-		ctx context.Context, paths []string, shared []pebble.SharedSSTMeta, exciseSpan roachpb.Span) (pebble.IngestOperationStats, error)
+		ctx context.Context, paths []string, shared []pebble.SharedSSTMeta, external []pebble.ExternalFile, exciseSpan roachpb.Span) (pebble.IngestOperationStats, error)
 	// IngestExternalFiles is a variant of IngestLocalFiles that takes external
 	// files. These files can be referred to by multiple stores, but are not
 	// modified or deleted by the Engine doing the ingestion.
