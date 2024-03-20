@@ -83,6 +83,12 @@ type mutationBuilder struct {
 	// is empty if this is not an Insert/Upsert operator.
 	insertColIDs opt.OptionalColList
 
+	// defaultInsertCols contains columns in insertColIDs which were not given
+	// explicit values in the insert statement, if b.trackSchemaDeps is true.
+	// It does not include columns that were explicitly given the value of
+	// DEFAULT, e.g., INSERT INTO t VALUES (1, DEFAULT).
+	defaultInsertCols opt.ColSet
+
 	// fetchColIDs lists the input column IDs storing values which are fetched
 	// from the target table in order to provide existing values that will form
 	// lookup and update values. Its length is always equal to the number of
@@ -693,6 +699,11 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 
 		// Remember id of newly synthesized column.
 		colIDs[i] = newCol
+
+		// Track columns that were not explicitly set in the insert statement.
+		if mb.b.trackSchemaDeps {
+			mb.defaultInsertCols.Add(newCol)
+		}
 
 		// Add corresponding target column.
 		mb.targetColList = append(mb.targetColList, tabColID)
