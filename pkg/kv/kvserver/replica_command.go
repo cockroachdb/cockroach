@@ -489,6 +489,8 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		return reply, nil
 	}
 
+	log.Infof(ctx, "initiating an unsplit of this range at key %v [r%d] (%s)",
+		desc.StartKey, desc.RangeID, reason)
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, dbDescValue, _, err := conditionalGetDescValueFromDB(
 			ctx, txn, desc.StartKey, false /* forUpdate */, checkDescsEqual(desc))

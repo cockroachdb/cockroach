@@ -120,9 +120,10 @@ ORDER BY lease_holder, start_key
 start_key                  end_key       replicas  lease_holder
 <before:/Table/107/1/2/1>  …/1/0         {1}       1
 …/1/0                      …/1/2         {1}       1
-…/2                        …/2/2         {1}       1
-…/2/2                      <after:/Max>  {1}       1
 …/1/2                      …/2           {3}       3
+…/3                        <after:/Max>  {3,4,5}   3
+…/2                        …/2/2         {1,4}     4
+…/2/2                      …/3           {1,4}     4
 
 ###############
 # Query tests #

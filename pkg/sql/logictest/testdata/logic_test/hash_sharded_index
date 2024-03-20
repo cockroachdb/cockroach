@@ -837,7 +837,7 @@ t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/3  /Table/133/2
 t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/4  /Table/133/2/5
 t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/5  /Table/133/2/6
 t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/6  /Table/133/2/7
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/7  /Table/133/3/0
+t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/7  /Table/133/3
 
 subtest test_default_bucket_count
 

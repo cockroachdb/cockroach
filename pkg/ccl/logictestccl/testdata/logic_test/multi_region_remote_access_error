@@ -463,7 +463,7 @@ skipif config multiregion-9node-3region-3azs-vec-off
 query I retry
 SELECT DISTINCT range_id FROM [SHOW RANGES FROM TABLE messages_rbr]
 ----
-70
+89
 
 # Update does not fail when accessing all rows in messages_rbr because lookup
 # join does not error out the lookup table in phase 1.
@@ -1343,9 +1343,9 @@ WHERE
 ORDER BY
     "ordinality" ASC
 ----
-sending batch to (n1,s1):1
+sending batch to (n3,s3):1
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
 output row: [2 1 1]
 
 # Run a locality-optimized join that dynamically detects the home region with
@@ -1370,22 +1370,22 @@ WHERE
 ORDER BY
     "ordinality" ASC
 ----
-sending batch to (n1,s1):1
+sending batch to (n3,s3):1
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
 output row: [2 1 1]
-sending batch to (n1,s1):1
+sending batch to (n3,s3):1
 output row: ['execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region']
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
 output row: ['output row: [2 1 1]']
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
+sending batch to (n3,s3):1
+sending batch to (n3,s3):1
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
+sending batch to (n1,s1):2
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
+sending batch to (n1,s1):2
 output row: ['Hola, Region!']
 
 # Run a locality-optimized antijoin that dynamically detects the home region
@@ -1410,48 +1410,48 @@ WHERE
 ORDER BY
     "ordinality" ASC
 ----
-sending batch to (n1,s1):1
+sending batch to (n3,s3):1
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
 output row: [2 1 1]
-sending batch to (n1,s1):1
+sending batch to (n3,s3):1
 output row: ['execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region']
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
 output row: ['output row: [2 1 1]']
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
+sending batch to (n3,s3):1
+sending batch to (n3,s3):1
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
+sending batch to (n1,s1):2
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
+sending batch to (n1,s1):2
 output row: ['Hola, Region!']
-sending batch to (n1,s1):1
+sending batch to (n3,s3):1
 output row: ['execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region']
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
 output row: ['output row: [2 1 1]']
-sending batch to (n1,s1):1
+sending batch to (n3,s3):1
 output row: [e'output row: [\'execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region\']']
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
 output row: [e'output row: [\'output row: [2 1 1]\']']
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
+sending batch to (n3,s3):1
+sending batch to (n3,s3):1
 output row: ['execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region']
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
+sending batch to (n1,s1):2
 output row: ['execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region']
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
+sending batch to (n1,s1):2
 output row: [e'output row: [\'Hola, Region!\']']
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
+sending batch to (n3,s3):1
+sending batch to (n3,s3):1
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
+sending batch to (n1,s1):2
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
+sending batch to (n1,s1):2
+sending batch to (n1,s1):2
 
 statement ok
 BEGIN

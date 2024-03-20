@@ -68,10 +68,10 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder
 FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX json_inv WITH DETAILS] ORDER BY lease_holder
 ----
-start_key     end_key               replicas  lease_holder
-…/<IndexMin>  …/10                  {1}       1
-…/10          …/20                  {2}       2
-…/20          <after:/Table/107/2>  {3}       3
+start_key     end_key       replicas  lease_holder
+…/<IndexMin>  …/10          {1}       1
+…/10          …/20          {2}       2
+…/20          …/<IndexMax>  {3}       3
 
 statement ok
 ALTER TABLE json_tab VALIDATE CONSTRAINT check_c
@@ -357,7 +357,7 @@ FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX arr_inv WITH DETAILS] ORDER BY lease_h
 start_key     end_key       replicas  lease_holder
 …/<IndexMin>  …/10          {1}       1
 …/10          …/20          {2}       2
-…/20          <after:/Max>  {3}       3
+…/20          …/<IndexMax>  {3}       3
 
 query T
 EXPLAIN (DISTSQL)
@@ -431,7 +431,7 @@ vectorized: true
           table: array_tab@array_tab_pkey
           spans: [/1 - /1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lV9v2jAUxd_3Kaz70lYzInb4G2kSW2EaU1s6QNqmDSFD3DYqxMw261DFd58SKASHeE3WjYcof5zfPT459_II6scMPOh8ub54271Cp-3uYDj4dHGGBp2LzvkQMfS-37tETEq2Gms2QZ8_dPoddDpBre9Lx3E5Onkk65Mz1OujU4beIBKdtjt99O4rYoAhFD6_YnOuwPsGBDBQwODCCMNCiilXSsjo0WO8sOv_As_BEISLpd7c1oGecfBASJ9L7gMGn2sWzGJei7yG0XqEYSokB2-_-kqUxKJM6OHy3lJ7qEVgtMYglnpbY4RBaXbLwasnRHXb4BG6xglhJCHsSM0hm8x4nzOfyzI5LLyzr8WkHAfhT8BwLmbLeai82KXBgkWnZeKUSSk60kyR1BSZR-NASM1l2T1m4_FyrlHOzVPuowjCrSNViyObs_Hinq8OjMFokqmrYuiq5tHVDpQOwqkuN0wjAENvk7QjSdkDJit0x9Rd6u04jFuFVUNhI1Nh0ZTvtkGcXPvYa6yZYXIORNLnJ94p-H0T2S87mTqJobOwTFqwMWncmDRPY9I8GreNWSnemJU85RKNWfvHjVnL1PV3w71-sDpLjWOoqedxaddfzf84Jpov7td-TJCXGhOHfzqO3cY-VwsRKl7og5VItCXu3_KNBUos5ZRfSzGN124uezEovuFzpTdPibu56oZPz5SWnM138yOJIlYUzUGiVpJFEzVJrpVUySbVTFLFJJEkqXpAIklSIx-J0GwUSTlVte7PsaBSVtXsSbCwqiaqbkU1sl0nJqlhJTWzSa5JahbeXiUV9D80DcmWVU-xUl3z3Fw1c6KswUoZT-w9aEuWG02bm5l4GAc-eOBsf6Ujh6cfRC-wWxWNvMGdeIi5w9UiGlg3bKY4hkt2z9tcczkPwmgYT8HTcsnX61e_AwAA__-kFF26
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lV1v2jwUgO_fX2Gdm7Z6jRInfEaaxFaYxtSWDpC2aUPIELeNGuLMdtahiv8-JVBIHJI1tBsXURI7z3l8fI55BPnDBwf6X64v3g6u0GlvMJ6MP12coXH_on8-QRS9Hw0vERWCrmaKztHnD_1RH53OUfd7ZJo2QyePZH1yhoYjdErRG0Ti215_hN59RRQwBNxlV3TJJDjfgAAGCzDYMMUQCr5gUnIRDz0mEwfuL3BMDF4QRmrzWnnKZ-AAFy4TzAUMLlPU8xNel_wP0_UUw4ILBs5-9hWv8dAgVnb6MFIO6hKYrjHwSG1jTDFIRW8ZOK2U1KAHDrHWOCVGUmIHYk7o3GcjRl0mDDMbeJe-7u5uFt6zFWA45360DKSDKEZzwDAOafxkEMMs9CSap3msJinRnHnBz4xfWs40SC2-WoWOlp7LKo5jLhQThn1otw-Hs7VwdpVwH7kXbDPSOHLjirzqmlej0Otlpd7KzC6yMTWbVpUs9TypvGChjLZuBhiGG-cD7bUHzFfojsq73NfJsraGDc2w_er52i2DmJXWsXds6qWd7T_r-f1nHdl_VtJ_VpX-s6o4bvuvfnz_1auES_Vf8y_3X7OK165UOv-w4juFhi-vePJaFZ89zc3yNI6YDHkg2VFHVI3ES2LuLdukQPJILNi14Itk7uZxmICSFy6TajNK7M3TIHgak0owutz9Y6ZRpBTVyJBImtTQSVYpqYqTXUqqF5MsnVQ_dnV1ndQoJTWLnZo6qamTSJrUKnZqVyMRqxhFcjlvla7PLEHlkt4uRXWKU0V0Uqe8zs1ilJ2r8z_0DClmtXKsXNM8dws7FVGle5hLFylvwbJNtOPD5sbnDzPPBQfM7a924PL0g_gDeivjE298xx8S7mQVxufVDfUlw3BJ71mPKSaWXhCfxQtwlIjYev3f7wAAAP__9H5dkw==
 
 # We cannot use the index for this query.
 query T
@@ -449,4 +449,4 @@ vectorized: true
       table: array_tab@array_tab_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUlGL2kAQfu-vGOblIqy4iS9l4SD2zNGAp9cotIcVWc2cDRez6e6Gq0j-e0nipSrV9vYhZL6d-b6Z-XaP5meKAoNvj6NBOAZnGE5n0y-jDkyDUXA3Awn30eQBpNZyt7RyBV8_B1EAjrMC_3vBeZ_gZu-VNx0YjIfgSLiFfqcDkwic1Zwv4BZkFQ2DCD49gUSGmYppLLdkUMzRRYZ9XDDMtVqTMUpX8L5OCuNfKDjDJMsLW8ELhmulCcUebWJTQoFj1VV5z0OGMVmZpHVayVAV9k-RsXJDKPpHKuEQhVeyIyH3utBMrlKKSMake_xEDtvd-O3fMn-hHTK8U2mxzYwAyWCFDKe5rKIuXurRPeuRv6fH-yS1pEn33NMGG1yA4_he69ogigZPc08IEY5nHxcH_3y3MvAAHnysMd-b8zYXGU4KK8B3Lw7inQ3ingzyD1cjMrnKDP2XrfxMqeuWC4YUb6h5SkYVek2PWq3r3Cac1EQ1EJOxzW2_CcLs7cpYTXLb-nDM5F5l8t7B5F1l4peZ6jmfU_W6TGIUyA-n-5fP28GqQG5MtezpD_Va0852ebWqZ5kaYvggX2hIlvQ2yRJjkzUKqwsqyw-_AwAA__-eYkyd
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUlGL2kAQfu-vGOblIqy4WV_KwkHsmaMBT69RaA8rspo5Gy5m090NV5H895LoWZVqe_sQMt_OfN_MfLtF-zNDieG3x0EvGoLXj8aT8ZdBC8bhILybgIL7ePQAyhi1mTu1gK-fwzgEz1tA8L3kvEtwsxXVTQt6wz54Cm6h22rBKAZvMeUzuAVVR_0whk9PoJBhrhMaqjVZlFP0kaHAGcPC6CVZq00Nb5ukKPmFkjNM86J0NTxjuNSGUG7RpS4jlDjUbV10BDJMyKk0a9Iqhrp0f4qsUytC2T1SifooRcWOhPzrQhO1yCgmlZDp8BM5POwmOPzNixfaIMM7nZXr3EpQDBbIcFyoOmrjpR79sx75e3q8TzNHhkzHP21wh0vwvEAcXOvFce9pKqSU0XDycbb3L_BrA_fg3scGC8SUH3KR4ah0EgL_4iDibBD_ZJB_uBqTLXRu6b9s5WdKbb-aMaRkRbunZHVplvRo9LLJ3YWjhqgBErJud9vdBVH-dmWdIbU--HDM5F9lEu9gEleZ-GWmZs7nTL_O0wQl8v1p_-XzdrAuUCtbL3v8Q782tJNNUa_qWWWWGD6oF-qTI7NO89S6dInSmZKq6sPvAAAA__-aukyc

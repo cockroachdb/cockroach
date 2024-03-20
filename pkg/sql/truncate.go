@@ -143,16 +143,20 @@ func (t *truncateNode) Values() tree.Datums          { return tree.Datums{} }
 func (t *truncateNode) Close(context.Context)        {}
 
 // PreservedSplitCountMultiple is the setting that configures the number of
-// split points that we re-create on a table after a truncate. It's scaled by
-// the number of nodes in the cluster.
+// split points that we re-create on a table after a truncate, or that we
+// create in an index backfill . It's scaled by the number of nodes in the cluster.
 var PreservedSplitCountMultiple = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
+	// Note: The internal name cannot change.
 	"sql.truncate.preserved_split_count_multiple",
-	"set to non-zero to cause TRUNCATE to preserve range splits from the "+
-		"table's indexes. The multiple given will be multiplied with the number of "+
-		"nodes in the cluster to produce the number of preserved range splits. This "+
-		"can improve performance when truncating a table with significant write traffic.",
-	4)
+	"set to non-zero to cause TRUNCATE and index backfills to preserve range splits "+
+		"from the table's indexes or copy them from the primary index. The multiple "+
+		"given will be multiplied with the number of nodes in the cluster to produce "+
+		"the number of preserved range splits. This can improve performance when "+
+		"truncating or backlling an index from a table with significant write traffic.",
+	4,
+	settings.WithName("sql.schema.preserved_split_count_multiple"),
+)
 
 // truncateTable truncates the data of a table in a single transaction. It does
 // so by dropping all existing indexes on the table and creating new ones without
