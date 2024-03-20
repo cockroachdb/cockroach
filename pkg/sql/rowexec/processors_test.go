@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -432,6 +433,9 @@ func populateRangeCacheAndDisableBuffering(t *testing.T, db *gosql.DB, tableName
 func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// This test can cause timeouts.
+	skip.UnderRace(t)
 
 	// We're going to test by running a query that selects rows 1..10 with limit
 	// 5. Out of these, rows 1..5 are on node 1, 6..10 on node 2. We're going to
