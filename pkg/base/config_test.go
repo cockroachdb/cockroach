@@ -11,8 +11,10 @@
 package base_test
 
 import (
+	"bytes"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/datadriven"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/require"
 )
@@ -153,4 +156,21 @@ func TestRaftMaxInflightBytes(t *testing.T) {
 			require.Equal(t, tc.want, cfg.RaftMaxInflightBytes)
 		})
 	}
+}
+
+func TestWALFailoverConfigRoundtrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "wal-failover-config"), func(t *testing.T, d *datadriven.TestData) string {
+		var buf bytes.Buffer
+		for _, l := range strings.Split(d.Input, "\n") {
+			var cfg base.WALFailoverConfig
+			if err := cfg.Set(l); err != nil {
+				fmt.Fprintf(&buf, "err: %s\n", err)
+				continue
+			}
+			fmt.Fprintln(&buf, cfg.String())
+		}
+		return buf.String()
+	})
 }
