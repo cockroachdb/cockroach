@@ -97,6 +97,7 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 												nil,
 												introducedSpanFrontier,
 												0,
+												defaultMaxFileCount,
 												false)
 											require.NoError(b, err)
 											defer filter.close()

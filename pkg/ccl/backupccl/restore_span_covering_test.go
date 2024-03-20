@@ -292,6 +292,7 @@ func makeImportSpans(
 		highWaterMark,
 		introducedSpanFrontier,
 		targetSize,
+		defaultMaxFileCount,
 		highWaterMark == nil)
 	if err != nil {
 		return nil, err
@@ -693,6 +694,7 @@ func TestCheckpointFilter(t *testing.T) {
 			nil,
 			nil,
 			0,
+			defaultMaxFileCount,
 			true)
 		require.NoError(t, err)
 		defer f.close()
