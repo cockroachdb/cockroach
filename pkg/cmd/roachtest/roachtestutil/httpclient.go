@@ -99,12 +99,12 @@ func (r *RoachtestHTTPClient) Get(ctx context.Context, url string) (*http.Respon
 }
 
 func (r *RoachtestHTTPClient) GetJSON(
-	ctx context.Context, path string, response protoutil.Message,
+	ctx context.Context, path string, response protoutil.Message, opts ...httputil.JSONOption,
 ) error {
 	if err := r.addCookie(ctx, path); err != nil {
 		return err
 	}
-	return httputil.GetJSON(*r.client.Client, path, response)
+	return httputil.GetJSONWithOptions(*r.client.Client, path, response, opts...)
 }
 
 func (r *RoachtestHTTPClient) PostProtobuf(
