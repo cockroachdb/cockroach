@@ -201,14 +201,54 @@ var followerReadOraclePolicy = replicaoracle.RegisterPolicy(newFollowerReadOracl
 type bulkOracle struct {
 	cfg       replicaoracle.Config
 	locFilter roachpb.Locality
+	streaks   StreakConfig
+}
+
+// StreakConfig controls the streak-preferring behavior of oracles that support
+// it, such as the bulk oracle, for minimizing distinct spans in large plans.
+// See the fields and ShouldExtend for details.
+type StreakConfig struct {
+	// Min is the streak lengths below which streaks are always extended, if able,
+	// unless overridden in a "small" plan by SmallPlanMin below.
+	Min int
+	// SmallPlanMin and SmallPlanThreshold are used to override the cap on streak
+	// lengths that are always extended to be lower when plans are still "small".
+	// Being "small" is defined as the node with the fewest assigned spans having
+	// fewer than SmallPlanThreshold assigned spans. If SmallPlanThreshold is >0,
+	// then when this condition is met SmallPlanMin is used instead of Min.
+	SmallPlanMin, SmallPlanThreshold int
+	// MaxSkew is the fraction (e.g. 0.95) of the number of spans assigned to a
+	// node that must be assigned to the node with the fewest assigned spans to
+	// extend a streak on that node beyond the Min streak length.
+	MaxSkew float64
+}
+
+// shouldExtend returns whether the current streak should be extended if able,
+// according to its length, the number of spans assigned to the node on which it
+// would be extended, and the number assigned to the candidate node with the
+// fewest span assigned. This would be the case if the streak that would be
+// extended is below the minimum streak length (which can be different
+// initially/in smaller plans) or the plan is balanced enough to tolerate
+// extending the streak. See the the fields of StreakConfig for details.
+func (s StreakConfig) shouldExtend(streak, fewestSpansAssigned, assigned int) bool {
+	if streak < s.SmallPlanMin {
+		return true
+	}
+	if streak < s.Min && s.SmallPlanThreshold < fewestSpansAssigned {
+		return true
+	}
+	return fewestSpansAssigned >= int(float64(assigned)*s.MaxSkew)
 }
 
 var _ replicaoracle.Oracle = bulkOracle{}
 
 // NewBulkOracle returns an oracle for planning bulk operations, which will plan
 // balancing randomly across all replicas (if follower reads are enabled).
-func NewBulkOracle(cfg replicaoracle.Config, locFilter roachpb.Locality) replicaoracle.Oracle {
-	return bulkOracle{cfg: cfg, locFilter: locFilter}
+// TODO(dt): respect streak preferences when using locality filtering. #120755.
+func NewBulkOracle(
+	cfg replicaoracle.Config, locFilter roachpb.Locality, streaks StreakConfig,
+) replicaoracle.Oracle {
+	return bulkOracle{cfg: cfg, locFilter: locFilter, streaks: streaks}
 }
 
 // ChoosePreferredReplica implements the replicaoracle.Oracle interface.
@@ -218,7 +258,7 @@ func (r bulkOracle) ChoosePreferredReplica(
 	desc *roachpb.RangeDescriptor,
 	leaseholder *roachpb.ReplicaDescriptor,
 	_ roachpb.RangeClosedTimestampPolicy,
-	_ replicaoracle.QueryState,
+	qs replicaoracle.QueryState,
 ) (_ roachpb.ReplicaDescriptor, ignoreMisplannedRanges bool, _ error) {
 	if leaseholder != nil && !checkFollowerReadsEnabled(r.cfg.Settings) {
 		return *leaseholder, false, nil
@@ -235,10 +275,36 @@ func (r bulkOracle) ChoosePreferredReplica(
 				matches = append(matches, i)
 			}
 		}
+		// TODO(dt): ideally we'd just filter `replicas`  here, then continue on to
+		// the code below to pick one as normal, just from the filtered slice.
 		if len(matches) > 0 {
 			return replicas[matches[randutil.FastUint32()%uint32(len(matches))]].ReplicaDescriptor, true, nil
 		}
 	}
+
+	if r.streaks.Min > 0 {
+		// Find the index of replica in replicas that is on the node that was last
+		// assigned a span in this plan if it exists. While doing so, find the
+		// number of spans assigned to that node and to the node with the fewest
+		// spans assigned to it.
+		prevIdx, prevAssigned, fewestAssigned := -1, -1, -1
+		for i := range replicas {
+			assigned := qs.RangesPerNode.GetDefault(int(replicas[i].NodeID))
+			if replicas[i].NodeID == qs.LastAssignment {
+				prevIdx = i
+				prevAssigned = assigned
+			}
+			if assigned < fewestAssigned || fewestAssigned == -1 {
+				fewestAssigned = assigned
+			}
+		}
+		// If the previously chosen node is a candidate in replicas, check if we want
+		// to pick it again to extend the node's streak instead of picking randomly.
+		if prevIdx != -1 && r.streaks.shouldExtend(qs.NodeStreak, fewestAssigned, prevAssigned) {
+			return replicas[prevIdx].ReplicaDescriptor, true, nil
+		}
+	}
+
 	return replicas[randutil.FastUint32()%uint32(len(replicas))].ReplicaDescriptor, true, nil
 }
 

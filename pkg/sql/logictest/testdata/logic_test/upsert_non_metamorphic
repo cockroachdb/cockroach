@@ -9,8 +9,10 @@ INSERT INTO src SELECT repeat('a', 100000) FROM generate_series(1, 60)
 
 user host-cluster-root
 
+# Set the memory limit a little higher than the minimum because the batch sizing
+# is inexact, tracked in #117070.
 statement ok
-SET CLUSTER SETTING kv.raft.command.max_size='4MiB';
+SET CLUSTER SETTING kv.raft.command.max_size='5MiB';
 
 user root
 
