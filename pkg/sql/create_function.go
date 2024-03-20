@@ -157,6 +157,7 @@ func (n *createFunctionNode) createNewFunction(
 	}
 	signatureTypes := make([]*types.T, 0, len(udfDesc.Params))
 	var outParamOrdinals []int32
+	var outParamTypes []*types.T
 	for paramIdx, param := range udfDesc.Params {
 		class := funcdesc.ToTreeRoutineParamClass(param.Class)
 		if tree.IsInParamClass(class) {
@@ -164,6 +165,7 @@ func (n *createFunctionNode) createNewFunction(
 		}
 		if udfDesc.IsProcedure() && class == tree.RoutineParamOut {
 			outParamOrdinals = append(outParamOrdinals, int32(paramIdx))
+			outParamTypes = append(outParamTypes, param.Type)
 		}
 	}
 	scDesc.AddFunction(
@@ -175,6 +177,7 @@ func (n *createFunctionNode) createNewFunction(
 			ReturnSet:        udfDesc.ReturnType.ReturnSet,
 			IsProcedure:      udfDesc.IsProcedure(),
 			OutParamOrdinals: outParamOrdinals,
+			OutParamTypes:    outParamTypes,
 		},
 	)
 	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {
@@ -236,6 +239,7 @@ func (n *createFunctionNode) replaceFunction(
 		udfDesc.Params = make([]descpb.FunctionDescriptor_Parameter, len(n.cf.Params))
 	}
 	var outParamOrdinals []int32
+	var outParamTypes []*types.T
 	for i, p := range n.cf.Params {
 		udfDesc.Params[i], err = makeFunctionParam(params.ctx, p, params.p)
 		if err != nil {
@@ -243,6 +247,7 @@ func (n *createFunctionNode) replaceFunction(
 		}
 		if n.cf.IsProcedure && p.Class == tree.RoutineParamOut {
 			outParamOrdinals = append(outParamOrdinals, int32(i))
+			outParamTypes = append(outParamTypes, udfDesc.Params[i].Type)
 		}
 	}
 
@@ -293,7 +298,8 @@ func (n *createFunctionNode) replaceFunction(
 	if n.cf.IsProcedure {
 		signatureChanged := len(existing.OutParamOrdinals) != len(outParamOrdinals)
 		for i := 0; !signatureChanged && i < len(outParamOrdinals); i++ {
-			signatureChanged = existing.OutParamOrdinals[i] != outParamOrdinals[i]
+			signatureChanged = existing.OutParamOrdinals[i] != outParamOrdinals[i] ||
+				!existing.OutParamTypes.GetAt(i).Equivalent(outParamTypes[i])
 		}
 		if signatureChanged {
 			if err = scDesc.ReplaceOverload(
@@ -306,6 +312,7 @@ func (n *createFunctionNode) replaceFunction(
 					ReturnSet:        udfDesc.ReturnType.ReturnSet,
 					IsProcedure:      true,
 					OutParamOrdinals: outParamOrdinals,
+					OutParamTypes:    outParamTypes,
 				},
 			); err != nil {
 				return err

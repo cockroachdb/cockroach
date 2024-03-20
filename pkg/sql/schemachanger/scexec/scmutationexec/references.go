@@ -640,6 +640,7 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 			}
 			if ol.IsProcedure && class == tree.RoutineParamOut {
 				ol.OutParamOrdinals = append(ol.OutParamOrdinals, int32(pIdx))
+				ol.OutParamTypes = append(ol.OutParamTypes, p.Type)
 			}
 		}
 		sc.AddFunction(obj.GetName(), ol)

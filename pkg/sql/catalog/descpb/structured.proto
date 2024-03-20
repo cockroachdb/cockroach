@@ -1574,6 +1574,8 @@ message SchemaDescriptor {
     // then OutParamOrdinals will contain [2, 4] (while ArgTypes will contain
     // types of [p1, p2, p4]).
     repeated int32 out_param_ordinals = 6;
+
+    repeated sql.sem.types.T out_param_types = 7;
   }
 
   // Function contains a group of UDFs with the same name.

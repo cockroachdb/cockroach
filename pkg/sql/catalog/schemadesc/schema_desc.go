@@ -504,7 +504,8 @@ func (desc *Mutable) ReplaceOverload(
 			match = existing.Types.GetAt(j).Equivalent(sig.ArgTypes[j])
 		}
 		for j := 0; match && j < len(sig.OutParamOrdinals); j++ {
-			match = existing.OutParamOrdinals[j] == sig.OutParamOrdinals[j]
+			match = existing.OutParamOrdinals[j] == sig.OutParamOrdinals[j] &&
+				existing.OutParamTypes.GetAt(j).Equivalent(sig.OutParamTypes[j])
 		}
 		if match {
 			fn.Signatures[i] = newSignature
@@ -568,6 +569,13 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			)
 		}
 		overload.Types = paramTypes
+		if len(sig.OutParamTypes) > 0 {
+			outParamTypes := make(tree.ParamTypes, len(sig.OutParamTypes))
+			for j := range outParamTypes {
+				outParamTypes[j] = tree.ParamType{Typ: sig.OutParamTypes[j]}
+			}
+			overload.OutParamTypes = outParamTypes
+		}
 		prefixedOverload := tree.MakeQualifiedOverload(desc.GetName(), overload)
 		funcDef.Overloads = append(funcDef.Overloads, prefixedOverload)
 	}

@@ -84,6 +84,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	// Resolve the parameter names and types.
 	signatureTypes := make(tree.ParamTypes, 0, len(c.Params))
 	var outParamOrdinals []int32
+	var outParams tree.ParamTypes
 	var outParamTypes []*types.T
 	var outParamNames []string
 	for i := range c.Params {
@@ -100,6 +101,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		}
 		if c.IsProcedure && param.Class == tree.RoutineParamOut {
 			outParamOrdinals = append(outParamOrdinals, int32(i))
+			outParams = append(outParams, tree.ParamType{Typ: typ})
 		}
 		if param.IsOutParam() {
 			outParamTypes = append(outParamTypes, typ)
@@ -176,6 +178,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		Type:              routineType,
 		RoutineParams:     c.Params,
 		OutParamOrdinals:  outParamOrdinals,
+		OutParamTypes:     outParams,
 	}
 	overload.ReturnsRecordType = types.IsRecordType(retType)
 	if c.ReturnType != nil && c.ReturnType.SetOf {
