@@ -966,7 +966,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	timingTag.stop("totalTime")
 	log.Eventf(ctx, "finished sending snapshot batches, sent a total of %d bytes", bytesSent)
 
-	kvSS.status = redact.Sprintf("kvs=%d rangeKVs=%d sharedSSTs=%d, externalSSTs", kvs, rangeKVs, sharedSSTCount, externalSSTCount)
+	kvSS.status = redact.Sprintf("kvs=%d rangeKVs=%d sharedSSTs=%d, externalSSTs=%d", kvs, rangeKVs, sharedSSTCount, externalSSTCount)
 	return bytesSent, nil
 }
 
