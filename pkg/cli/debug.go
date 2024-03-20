@@ -478,10 +478,22 @@ state like the raft HardState. With --replicated, only includes data covered by
 }
 
 func runDebugRangeData(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
-	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, storage.MustExist)
+	earlyBootAccessor := cloud.NewEarlyBootExternalStorageAccessor(serverCfg.Settings, serverCfg.ExternalIODirConfig)
+	opts := []storage.ConfigOption{storage.MustExist, storage.RemoteStorageFactory(earlyBootAccessor)}
+	if serverCfg.SharedStorage != "" {
+		es, err := cloud.ExternalStorageFromURI(ctx, serverCfg.SharedStorage,
+			base.ExternalIODirConfig{}, serverCfg.Settings, nil, username.RootUserName(), nil,
+			nil, cloud.NilMetrics)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, storage.SharedStorage(es))
+	}
+	db, err := OpenEngine(args[0], stopper, fs.ReadOnly, opts...)
 	if err != nil {
 		return err
 	}
