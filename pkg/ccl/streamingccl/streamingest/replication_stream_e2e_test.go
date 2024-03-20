@@ -805,6 +805,8 @@ func TestStreamingReplanOnLag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 120688)
+
 	skip.UnderDuressWithIssue(t, 115850, "time to scatter ranges takes too long under duress")
 
 	ctx := context.Background()
