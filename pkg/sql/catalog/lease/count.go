@@ -43,8 +43,15 @@ func CountLeases(
 	forAnyVersion bool,
 ) (int, error) {
 	// Indicates if the leasing descriptor has been upgraded for session based
-	// leasing.
-	leasingDescIsSessionBased := hasSessionBasedLeasingDesc(ctx, settings)
+	// leasing. Note: Unit tests will never provide this object, so assume
+	// the latest version.
+	leasingDescIsSessionBased := false
+	if cachedDatabaseRegions != nil {
+		leasingDescIsSessionBased = hasSessionBasedLeasingDesc(cachedDatabaseRegions.GetDatabaseVersion())
+	} else {
+		v := settings.Version.ActiveVersion(ctx).Version
+		leasingDescIsSessionBased = hasSessionBasedLeasingDesc(&v)
+	}
 	leasingMode := readSessionBasedLeasingMode(ctx, settings)
 	whereClauses := make([][]string, 2)
 	for _, t := range versions {
@@ -61,13 +68,12 @@ func CountLeases(
 				t.ID, versionClause),
 		)
 	}
-
 	whereClauseIdx := make([]int, 0, 2)
 	syntheticDescriptors := make(catalog.Descriptors, 0, 2)
 	if leasingMode != SessionBasedOnly {
 		// The leasing descriptor is not session based yet, so we need to inject
 		// in synthetically.
-		if !leasingDescIsSessionBased {
+		if leasingDescIsSessionBased {
 			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V23_2())
 		} else {
 			syntheticDescriptors = append(syntheticDescriptors, nil)
@@ -78,7 +84,7 @@ func CountLeases(
 	if leasingMode >= SessionBasedDrain {
 		// The leasing descriptor has been upgraded to be session based, so
 		// we need to use a synthetic descriptor for the old expiry based format.
-		if leasingDescIsSessionBased {
+		if !leasingDescIsSessionBased {
 			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable())
 		} else {
 			syntheticDescriptors = append(syntheticDescriptors, nil)

@@ -132,8 +132,11 @@ func (m *Manager) sessionBasedLeasingModeAtLeast(
 	return m.getSessionBasedLeasingMode(ctx) >= minimumMode
 }
 
-func hasSessionBasedLeasingDesc(ctx context.Context, settings *cluster.Settings) bool {
-	return !settings.Version.IsActive(ctx, clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor)
+func hasSessionBasedLeasingDesc(systemDBVersion *roachpb.Version) bool {
+	// If the system database version is nil we are running on a much older
+	// release.
+	return systemDBVersion != nil &&
+		systemDBVersion.AtLeast(clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version())
 }
 
 func readSessionBasedLeasingMode(

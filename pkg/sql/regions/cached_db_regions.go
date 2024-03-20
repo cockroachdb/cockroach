@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 )
@@ -65,6 +66,11 @@ func (c *CachedDatabaseRegions) IsMultiRegion() bool {
 // database.
 func (c *CachedDatabaseRegions) GetRegionEnumTypeDesc() catalog.RegionEnumTypeDescriptor {
 	return c.dbRegionEnumDesc.AsRegionEnumTypeDescriptor()
+}
+
+// GetDatabaseVersion helper to get the system database version.
+func (c *CachedDatabaseRegions) GetDatabaseVersion() *roachpb.Version {
+	return c.dbDesc.DatabaseDesc().GetSystemDatabaseSchemaVersion()
 }
 
 func TestingModifyRegionEnum(
