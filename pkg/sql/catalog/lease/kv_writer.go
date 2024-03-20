@@ -68,7 +68,7 @@ func leaseTableWithID(id descpb.ID, table systemschema.SystemTable) catalog.Tabl
 }
 
 func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
-	return w.do(ctx, txn, l, func(b *kv.Batch) error {
+	if err := w.do(ctx, txn, l, func(b *kv.Batch) error {
 		// We support writing both session based and expiry based leases within
 		// the KV writer. To be able to support a migration between the two types
 		// of writer will in some cases need to be able to write both types of leases.
@@ -91,11 +91,14 @@ func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) 
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return errors.Wrapf(err, "failed to insert lease %v", l)
+	}
+	return nil
 }
 
 func (w *kvWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
-	return w.do(ctx, txn, l, func(b *kv.Batch) error {
+	if err := w.do(ctx, txn, l, func(b *kv.Batch) error {
 		// We support deleting both session based and expiry based leases within
 		// the KV writer. To be able to support a migration between the two types
 		// of writer will in some cases need to be able to delete both types of leases.
@@ -118,7 +121,10 @@ func (w *kvWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) 
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return errors.Wrapf(err, "failed to delete lease: %v", l)
+	}
+	return nil
 }
 
 type addToBatchFunc = func(*kv.Batch) error
