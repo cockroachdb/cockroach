@@ -322,6 +322,13 @@ func restore(
 	if details.ExperimentalOnline {
 		targetSize = targetOnlineRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
 	}
+	maxFileCount := maxFileCount.Get(&execCtx.ExecCfg().Settings.SV)
+	if details.ExperimentalOnline {
+		// Online Restore does not need to limit the number of files per restore
+		// span entry as the files are never opened when processing the span. The
+		// span is only used to create split points.
+		maxFileCount = math.MaxInt
+	}
 
 	var filter spanCoveringFilter
 	if filter, err = func() (spanCoveringFilter, error) {
@@ -331,6 +338,7 @@ func restore(
 			job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
 			introducedSpanFrontier,
 			targetSize,
+			maxFileCount,
 			progressTracker.useFrontier)
 	}(); err != nil {
 		return roachpb.RowCount{}, err
