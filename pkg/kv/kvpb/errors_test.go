@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -420,4 +421,29 @@ func TestDescNotFoundError(t *testing.T) {
 		require.Equal(t, `node descriptor with node ID 42 was not found`, err.Error())
 		require.True(t, errors.HasType(err, &DescNotFoundError{}))
 	})
+}
+
+// TestProxyFailedError validates that ProxyFailedErrors can be cleanly encoded
+// and decoded with an internal error.
+func TestProxyFailedError(t *testing.T) {
+	ctx := context.Background()
+	fooErr := errors.New("foo")
+	err := NewProxyFailedError(fooErr)
+	require.Equal(t, `proxy failed with send error`, err.Error())
+	require.True(t, errors.HasType(err, &ProxyFailedError{}))
+	decodedErr := errors.DecodeError(ctx, errors.EncodeError(ctx, err))
+
+	require.Truef(t, errors.HasType(decodedErr, &ProxyFailedError{}), "wrong error %v %v", decodedErr, reflect.TypeOf(decodedErr))
+	require.True(t, errors.Is(decodedErr, fooErr))
+	require.Equal(t, `proxy failed with send error`, decodedErr.Error())
+
+	var rue *ProxyFailedError
+	require.True(t, errors.As(decodedErr, &rue))
+
+	internalErr := errors.DecodeError(context.Background(), rue.Cause)
+	require.True(t, rue.Cause.IsSet())
+	require.ErrorContains(t, internalErr, "foo")
+	require.True(t, errors.Is(internalErr, fooErr))
+
+	require.Equal(t, `foo`, string(redact.Sprint(internalErr).Redact()))
 }
