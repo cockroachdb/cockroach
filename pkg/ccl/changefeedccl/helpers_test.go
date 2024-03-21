@@ -682,7 +682,7 @@ func waitForCheckpoint(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Reg
 		t.Log("waiting for checkpoint")
 		progress := loadProgress(t, jf, jr)
 		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
-			t.Logf("read checkpoint %v", p.Checkpoint)
+			t.Logf("read checkpoint: %#v", p.Checkpoint)
 			return
 		}
 		if !r.Next() {
@@ -697,7 +697,7 @@ func waitForHighwater(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Regi
 		t.Log("waiting for highwater")
 		progress := loadProgress(t, jf, jr)
 		if hw := progress.GetHighWater(); hw != nil && !hw.IsEmpty() {
-			t.Logf("read highwater %s", hw)
+			t.Logf("read highwater: %s", hw)
 			return
 		}
 		if !r.Next() {
