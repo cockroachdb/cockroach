@@ -434,16 +434,29 @@ func (md *Metadata) CheckDependencies(
 				if err != nil {
 					return false, maybeSwallowMetadataResolveErr(err)
 				}
+				// TODO: think through this.
+				routineObj := tree.RoutineObj{
+					FuncName: name.ToRoutineName(),
+					Params:   make(tree.RoutineParams, overload.Types.Length()),
+				}
+				for i := 0; i < len(routineObj.Params); i++ {
+					routineObj.Params[i] = tree.RoutineParam{
+						Type:  overload.Types.GetAt(i),
+						Class: tree.RoutineParamIn,
+					}
+				}
 				// NOTE: We match for all types of routines here, including
 				// procedures so that if a function has been dropped and a
 				// procedure is created with the same signature, we do not get a
 				// "<func> is not a function" error here. Instead, we'll return
 				// false and attempt to rebuild the statement.
 				toCheck, err := definition.MatchOverload(
-					overload.Types.Types(),
-					name.Schema(),
+					ctx,
+					optCatalog,
+					&routineObj,
 					&evalCtx.SessionData().SearchPath,
 					tree.UDFRoutine|tree.BuiltinRoutine|tree.ProcedureRoutine,
+					false, /* inDropContext */
 				)
 				if err != nil || toCheck.Oid != overload.Oid || toCheck.Version != overload.Version {
 					return false, err

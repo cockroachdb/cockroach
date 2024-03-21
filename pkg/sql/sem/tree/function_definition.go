@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -259,15 +260,83 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 // ErrRoutineUndefined cause is returned if not matches found. Overloads that
 // don't match the types in routineType are ignored.
 func (fd *ResolvedFunctionDefinition) MatchOverload(
-	paramTypes []*types.T, explicitSchema string, searchPath SearchPath, routineType RoutineType,
+	ctx context.Context,
+	typeRes TypeReferenceResolver,
+	routineObj *RoutineObj,
+	searchPath SearchPath,
+	routineType RoutineType,
+	inDropContext bool,
 ) (QualifiedOverload, error) {
+	getSignatureTypes := func(includeAll bool) (_ []*types.T, onlyDefaultClass bool, _ error) {
+		if routineObj.Params == nil {
+			return nil, false, nil
+		}
+		typs := make([]*types.T, 0, len(routineObj.Params))
+		onlyDefaultClass = true
+		for _, param := range routineObj.Params {
+			if IsInParamClass(param.Class) || includeAll {
+				typ, err := ResolveType(ctx, param.Type, typeRes)
+				if err != nil {
+					return nil, false, err
+				}
+				typs = append(typs, typ)
+			}
+			onlyDefaultClass = onlyDefaultClass && param.Class == RoutineParamDefault
+		}
+		return typs, onlyDefaultClass, nil
+	}
+	paramTypes, onlyDefaultClass, err := getSignatureTypes(false /* includeAll */)
+	if err != nil {
+		return QualifiedOverload{}, err
+	}
+	var allParamTypes []*types.T
+	if onlyDefaultClass && inDropContext {
+		allParamTypes, _, err = getSignatureTypes(true /* includeAll */)
+		if err != nil {
+			return QualifiedOverload{}, err
+		}
+	}
 	matched := func(ol QualifiedOverload, schema string) bool {
-		if ol.Type == UDFRoutine || ol.Type == ProcedureRoutine {
+		if ol.Type == ProcedureRoutine {
+			if schema != ol.Schema || paramTypes == nil {
+				// Fast-path for the simple case when we have a schema mismatch
+				// or all signatures are accepted.
+				return schema == ol.Schema && paramTypes == nil
+			}
+			// First, apply regular postgres resolution approach of using only
+			// the input types.
+			if ol.params().MatchIdentical(paramTypes) {
+				return true
+			}
+			// Check whether SQL-compliant resolution matches this overload
+			// (only applicable in the DROP context when no parameters have the
+			// parameter class specified).
+			if !inDropContext || !onlyDefaultClass {
+				return false
+			}
+			_, outParamOrdinals, outParamTypes := ol.outParamInfo()
+			if ol.Types.Length()+len(outParamOrdinals) != len(allParamTypes) {
+				return false
+			}
+			allParams := make(ParamTypes, len(allParamTypes))
+			var outParamsSeen int
+			for i := 0; i < len(allParams); i++ {
+				if outParamsSeen < len(outParamOrdinals) && outParamOrdinals[outParamsSeen] == int32(i) {
+					allParams[i] = ParamType{Typ: outParamTypes.GetAt(outParamsSeen)}
+					outParamsSeen++
+				} else {
+					allParams[i] = ParamType{Typ: ol.Types.GetAt(i - outParamsSeen)}
+				}
+			}
+			return allParams.MatchIdentical(allParamTypes)
+		}
+		if ol.Type == UDFRoutine {
 			return schema == ol.Schema && (paramTypes == nil || ol.params().MatchIdentical(paramTypes))
 		}
 		return schema == ol.Schema && (paramTypes == nil || ol.params().Match(paramTypes))
 	}
 	typeNames := func() string {
+		// TODO: pass paramTypes that were used to match this overload.
 		ns := make([]string, len(paramTypes))
 		for i, t := range paramTypes {
 			ns[i] = t.Name()
@@ -287,8 +356,8 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 		}
 	}
 
-	if explicitSchema != "" {
-		findMatches(explicitSchema)
+	if routineObj.FuncName.Schema() != "" {
+		findMatches(routineObj.FuncName.Schema())
 	} else {
 		for i, n := 0, searchPath.NumElements(); i < n; i++ {
 			if findMatches(searchPath.GetSchema(i)); found {
