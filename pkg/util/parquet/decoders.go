@@ -244,6 +244,48 @@ func (oidDecoder) decode(v int32) (tree.Datum, error) {
 	return tree.NewDOid(oid.Oid(v)), nil
 }
 
+type regclassDecoder struct{}
+
+func (regclassDecoder) decode(v int32) (tree.Datum, error) {
+	dRegClass := tree.MakeDOid(oid.Oid(v), types.RegClass)
+	return &dRegClass, nil
+}
+
+type regnamespaceDecoder struct{}
+
+func (regnamespaceDecoder) decode(v int32) (tree.Datum, error) {
+	dRegClass := tree.MakeDOid(oid.Oid(v), types.RegNamespace)
+	return &dRegClass, nil
+}
+
+type regprocDecoder struct{}
+
+func (regprocDecoder) decode(v int32) (tree.Datum, error) {
+	dRegClass := tree.MakeDOid(oid.Oid(v), types.RegProc)
+	return &dRegClass, nil
+}
+
+type regprocedureDecoder struct{}
+
+func (regprocedureDecoder) decode(v int32) (tree.Datum, error) {
+	dRegClass := tree.MakeDOid(oid.Oid(v), types.RegProcedure)
+	return &dRegClass, nil
+}
+
+type regroleDecoder struct{}
+
+func (regroleDecoder) decode(v int32) (tree.Datum, error) {
+	dRegClass := tree.MakeDOid(oid.Oid(v), types.RegRole)
+	return &dRegClass, nil
+}
+
+type regtypeDecoder struct{}
+
+func (regtypeDecoder) decode(v int32) (tree.Datum, error) {
+	dRegClass := tree.MakeDOid(oid.Oid(v), types.RegType)
+	return &dRegClass, nil
+}
+
 type collatedStringDecoder struct{}
 
 func (collatedStringDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
@@ -316,7 +358,27 @@ func decoderFromFamilyAndType(typOid oid.Oid, family types.Family) (decoder, err
 		}
 		return float64Decoder{}, nil
 	case types.OidFamily:
-		return oidDecoder{}, nil
+		typ, ok := types.OidToType[typOid]
+		if !ok {
+			return nil, errors.AssertionFailedf("could not determine type from oid %d", typOid)
+		}
+		switch typ.Oid() {
+		case oid.T_regclass:
+			return regclassDecoder{}, nil
+		case oid.T_regnamespace:
+			return regnamespaceDecoder{}, nil
+		case oid.T_regproc:
+			return regprocDecoder{}, nil
+		case oid.T_regprocedure:
+			return regprocedureDecoder{}, nil
+		case oid.T_regrole:
+			return regroleDecoder{}, nil
+		case oid.T_regtype:
+			return regtypeDecoder{}, nil
+		case oid.T_oid:
+			return oidDecoder{}, nil
+		}
+		return nil, errors.AssertionFailedf("could not determine type from oid %d", typOid)
 	case types.CollatedStringFamily:
 		return collatedStringDecoder{}, nil
 	default:
@@ -351,5 +413,11 @@ func init() {
 	var _, _ = float64Decoder{}.decode(0.0)
 	var _, _ = float32Decoder{}.decode(0.0)
 	var _, _ = oidDecoder{}.decode(0)
+	var _, _ = regclassDecoder{}.decode(0)
+	var _, _ = regnamespaceDecoder{}.decode(0)
+	var _, _ = regprocDecoder{}.decode(0)
+	var _, _ = regprocedureDecoder{}.decode(0)
+	var _, _ = regroleDecoder{}.decode(0)
+	var _, _ = regtypeDecoder{}.decode(0)
 	var _, _ = collatedStringDecoder{}.decode(parquet.ByteArray{})
 }
