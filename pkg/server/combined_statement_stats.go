@@ -177,12 +177,11 @@ func getCombinedStatementStats(
 	if req.FetchMode != nil && req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
 		// If we're fetching for txns, the client still expects statement stats for
 		// stmts in the txns response.
-		statements, err = collectStmtsForTxns(
+		statements, err = runner.collectStmtsForTxns(
 			ctx,
-			ie,
 			req,
 			transactions,
-			testingKnobs)
+		)
 	} else {
 		statements, err = runner.collectCombinedStatements(
 			ctx,
@@ -740,7 +739,7 @@ FROM (SELECT fingerprint_id,
 			// The statement activity table has aggregated metadata.
 			activityQuery,
 			CrdbInternalStmtStatsCached,
-			"combined-stmts-activity-by-interval",
+			"activity-by-interval",
 			whereClause,
 			args,
 			aostClause,
@@ -751,7 +750,7 @@ FROM (SELECT fingerprint_id,
 			r.ie,
 			queryFormat,
 			r.stmtSourceTable,
-			"combined-stmts-by-interval",
+			"by-interval",
 			whereClause,
 			args,
 			aostClause,
@@ -949,15 +948,13 @@ FROM (SELECT app_name,
 // This does not use the activity tables because the statement information is
 // aggregated to remove the transaction fingerprint id to keep the size of the
 // statement_activity manageable when the transactions can have over 1k+ statement ids.
-func collectStmtsForTxns(
+func (r *statementStatsRunner) collectStmtsForTxns(
 	ctx context.Context,
-	ie *sql.InternalExecutor,
 	req *serverpb.CombinedStatementsStatsRequest,
 	transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
-	testingKnobs *sqlstats.TestingKnobs,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 
-	whereClause, args := buildWhereClauseForStmtsByTxn(req, transactions, testingKnobs)
+	whereClause, args := buildWhereClauseForStmtsByTxn(req, transactions, r.testingKnobs)
 
 	const queryFormat = `
 SELECT fingerprint_id,
@@ -976,34 +973,22 @@ GROUP BY
 	var it isql.Rows
 	var err error
 
-	query := fmt.Sprintf(
-		queryFormat,
-		CrdbInternalStmtStatsPersisted,
-		whereClause)
-	it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-persisted-for-txn", nil,
-		sessiondata.NodeUserSessionDataOverride, query, args...)
+	if r.stmtSourceTable == CrdbInternalStmtStatsCombined {
+		query := fmt.Sprintf(queryFormat, CrdbInternalStmtStatsCombined, whereClause)
 
+		it, err = r.ie.QueryIteratorEx(ctx, "console-combined-stmts-with-memory-for-txn", nil,
+			sessiondata.NodeUserSessionDataOverride, query, args...)
+	} else {
+		query := fmt.Sprintf(
+			queryFormat,
+			CrdbInternalStmtStatsPersisted,
+			whereClause)
+		it, err = r.ie.QueryIteratorEx(ctx, "console-combined-stmts-persisted-for-txn", nil,
+			sessiondata.NodeUserSessionDataOverride, query, args...)
+	}
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
-
-	// If there are no results from the persisted table, retrieve the data from the combined view
-	// with data in-memory.
-	if !it.HasResults() {
-		err = closeIterator(it, err)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-		query = fmt.Sprintf(queryFormat, CrdbInternalStmtStatsCombined, whereClause)
-
-		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-with-memory-for-txn", nil,
-			sessiondata.NodeUserSessionDataOverride, query, args...)
-
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
-
 	defer func() {
 		closeErr := it.Close()
 		if closeErr != nil {
