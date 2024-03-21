@@ -334,7 +334,7 @@ vectorized: true
 │
 └── • lookup join (semi)
     │ columns: (person, aisle)
-    │ estimated row count: 1 (missing stats)
+    │ estimated row count: 0 (missing stats)
     │ table: supermarket@supermarket_pkey
     │ equality: (person) = (person)
     │ equality cols are key
@@ -346,7 +346,7 @@ vectorized: true
         │
         └── • lookup join (inner)
             │ columns: (person, starts_with, ends_with, aisle)
-            │ estimated row count: 1 (missing stats)
+            │ estimated row count: 0 (missing stats)
             │ table: supermarket@supermarket_pkey
             │ equality: (person) = (person)
             │ equality cols are key
@@ -356,7 +356,7 @@ vectorized: true
                 │
                 └── • zigzag join
                       columns: (person, starts_with, person, ends_with)
-                      estimated row count: 1 (missing stats)
+                      estimated row count: 0 (missing stats)
                       pred: (starts_with = 'm') AND (ends_with = 'lda')
                       left table: supermarket@supermarket_starts_with_idx
                       left columns: (person, starts_with)
