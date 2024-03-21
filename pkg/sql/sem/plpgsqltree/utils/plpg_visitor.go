@@ -311,13 +311,13 @@ func (v *SQLStmtVisitor) Visit(
 			}
 		}
 	case *plpgsqltree.Call:
-		e, v.Err = simpleVisit(t.Expr, v.Fn)
+		e, v.Err = simpleVisit(t.Proc, v.Fn)
 		if v.Err != nil {
 			return stmt, false
 		}
-		if t.Expr != e {
+		if t.Proc != e {
 			cpy := t.CopyNode()
-			cpy.Expr = e
+			cpy.Proc = e.(*tree.FuncExpr)
 			newStmt = cpy
 		}
 
