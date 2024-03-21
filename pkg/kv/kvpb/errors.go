@@ -299,6 +299,7 @@ const (
 	MVCCHistoryMutationErrType              ErrorDetailType = 44
 	LockConflictErrType                     ErrorDetailType = 45
 	ReplicaUnavailableErrType               ErrorDetailType = 46
+	ProxyFailedErrType                      ErrorDetailType = 47
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -308,7 +309,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 47
+	NumErrors int = 48
 )
 
 // Register the migration of all errors that used to be in the roachpb package
@@ -1711,6 +1712,56 @@ func (e *ReplicaUnavailableError) Type() ErrorDetailType {
 
 var _ ErrorDetailInterface = &ReplicaUnavailableError{}
 
+// Type is part of the ErrorDetailInterface.
+func (e *ProxyFailedError) Type() ErrorDetailType {
+	return ProxyFailedErrType
+}
+
+// Error is part of the builtin err interface
+func (e *ProxyFailedError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+// Format implements fmt.Formatter.
+func (e *ProxyFailedError) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
+
+// SafeFormatError is part of the SafeFormatter
+func (e *ProxyFailedError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("proxy failed with send error")
+	return nil
+}
+
+// Unwrap implements errors.Wrapper.
+func (e *ProxyFailedError) Unwrap() error {
+	return errors.DecodeError(context.Background(), e.Cause)
+}
+
+// NewProxyFailedError returns an ProxyFailedError wrapping (via
+// errors.Wrapper) the supplied error.
+func NewProxyFailedError(err error) *ProxyFailedError {
+	return &ProxyFailedError{
+		Cause: errors.EncodeError(context.Background(), err),
+	}
+}
+
+var _ ErrorDetailInterface = &ProxyFailedError{}
+var _ errors.SafeFormatter = (*ProxyFailedError)(nil)
+var _ fmt.Formatter = (*ProxyFailedError)(nil)
+var _ errors.Wrapper = (*ProxyFailedError)(nil)
+
+func init() {
+	encode := func(ctx context.Context, err error) (msgPrefix string, safeDetails []string, payload proto.Message) {
+		errors.As(err, &payload) // payload = err.(proto.Message)
+		return "", nil, payload
+	}
+	decode := func(ctx context.Context, cause error, msgPrefix string, safeDetails []string, payload proto.Message) error {
+		return payload.(*ProxyFailedError)
+	}
+	typeName := errors.GetTypeKey((*ProxyFailedError)(nil))
+	errors.RegisterWrapperEncoder(typeName, encode)
+	errors.RegisterWrapperDecoder(typeName, decode)
+}
+
 func init() {
 	errors.RegisterLeafDecoder(errors.GetTypeKey((*MissingRecordError)(nil)), func(_ context.Context, _ string, _ []string, _ proto.Message) error {
 		return &MissingRecordError{}
@@ -1755,3 +1806,4 @@ var _ errors.SafeFormatter = &RefreshFailedError{}
 var _ errors.SafeFormatter = &MVCCHistoryMutationError{}
 var _ errors.SafeFormatter = &UnhandledRetryableError{}
 var _ errors.SafeFormatter = &ReplicaUnavailableError{}
+var _ errors.SafeFormatter = &ProxyFailedError{}
