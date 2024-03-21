@@ -705,7 +705,7 @@ vectorized: true
     │
     └── • scan
           columns: (x int, y int, z float)
-          estimated row count: 1 (missing stats)
+          estimated row count: 0 (missing stats)
           table: xyz@zyx
           spans: /3/2-/3/3
           limit: 1
@@ -737,7 +737,7 @@ vectorized: true
     │
     └── • revscan
           columns: (x int, y int, z float)
-          estimated row count: 1 (missing stats)
+          estimated row count: 0 (missing stats)
           table: xyz@zyx
           spans: /3/2-/3/3
           limit: 1
@@ -1427,7 +1427,7 @@ vectorized: true
         └── • filter
             │ columns: (k int, v int)
             │ ordering: +v
-            │ estimated row count: 333 (missing stats)
+            │ estimated row count: 330 (missing stats)
             │ filter: ((k)[int] != (4)[int])[bool]
             │
             └── • scan
