@@ -1345,11 +1345,14 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 
 		// Ensure Scan Requests are always small enough that we receive multiple
 		// resolvedFoo events during a backfill.
-		const maxBatchSize = numRowsPerTable / 10
+		const maxBatchSize = numRowsPerTable / 5
 		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
 			rndMu.Lock()
 			defer rndMu.Unlock()
-			b.Header.MaxSpanRequestKeys = 1 + rndMu.rnd.Int63n(maxBatchSize)
+			// We don't want batch sizes that are too small because they could cause
+			// the initial scan to take too long, leading to the waitForHighwater
+			// call below to time out.
+			b.Header.MaxSpanRequestKeys = maxBatchSize/2 + rndMu.rnd.Int63n(maxBatchSize/2)
 			t.Logf("set max span request keys: %d", b.Header.MaxSpanRequestKeys)
 			return nil
 		}
