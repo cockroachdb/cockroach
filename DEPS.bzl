@@ -345,16 +345,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_araddon_dateparse",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/araddon/dateparse",
-        sha256 = "8fe74d5b36a9aa66c1350657009296469f8aa5b6925acd178044cd248023fc5a",
-        strip_prefix = "github.com/araddon/dateparse@v0.0.0-20210429162001-6b43995a97de",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/araddon/dateparse/com_github_araddon_dateparse-v0.0.0-20210429162001-6b43995a97de.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_ardielle_ardielle_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/ardielle/ardielle-go",
@@ -2908,16 +2898,6 @@ def go_deps():
         strip_prefix = "github.com/frankban/quicktest@v1.11.3",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/frankban/quicktest/com_github_frankban_quicktest-v1.11.3.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_fraugster_parquet_go",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/fraugster/parquet-go",
-        sha256 = "a9d995d60a99dac8709c614f3d2795ef4d8d79c82991b40fa703006078babf75",
-        strip_prefix = "github.com/fraugster/parquet-go@v0.10.0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/fraugster/parquet-go/com_github_fraugster_parquet_go-v0.10.0.zip",
         ],
     )
     go_repository(
@@ -7952,16 +7932,6 @@ def go_deps():
         strip_prefix = "github.com/schollz/closestmatch@v2.1.0+incompatible",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/schollz/closestmatch/com_github_schollz_closestmatch-v2.1.0+incompatible.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_scylladb_termtables",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/scylladb/termtables",
-        sha256 = "0afd3a75417e6b708c62329cea7f2822162c8bf6ada0de094cdc032461b8f196",
-        strip_prefix = "github.com/scylladb/termtables@v0.0.0-20191203121021-c4c0b6d42ff4",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/scylladb/termtables/com_github_scylladb_termtables-v0.0.0-20191203121021-c4c0b6d42ff4.zip",
         ],
     )
     go_repository(
