@@ -484,6 +484,7 @@ func TestChangefeedWithNoDistributionStrategy(t *testing.T) {
 	defer tester.cleanup()
 
 	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'default'")
+	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.random_replica_selection.enabled = false")
 	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
 	partitions := tester.getPartitions()
 	counts := tester.countRangesPerNode(partitions)
