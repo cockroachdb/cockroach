@@ -68,6 +68,7 @@ const emptyDataFromServer: DataFromServer = {
   Version: "",
   LicenseType: "OSS",
   SecondsUntilLicenseExpiry: 0,
+  IsManaged: false,
 };
 
 export const featureFlagSelector = createSelector(
