@@ -83,7 +83,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   examples_orms:
-    runs-on: [self-hosted, basic_big_runner_group_fips]
+    runs-on: [self-hosted, basic_big_runner_group]
     steps:
       - uses: actions/checkout@v4
         with:
