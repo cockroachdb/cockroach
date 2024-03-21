@@ -5385,33 +5385,31 @@ project
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: ()-->(6,24,27), (1)-->(2,4,5,7,9-11), (18)-->(19), (4)==(18), (18)==(4), (6)==(24), (24)==(6)
  │    │    │    ├── ordering: +2 opt(6,24,27) [actual: +2]
- │    │    │    └── inner-join (hash)
+ │    │    │    └── inner-join (merge)
  │    │    │         ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_name:19!null s_symb:24!null s_name:27!null
- │    │    │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    │    │         ├── left ordering: +6
+ │    │    │         ├── right ordering: +24
  │    │    │         ├── key: (1)
  │    │    │         ├── fd: ()-->(6,24,27), (1)-->(2,4,5,7,9-11), (18)-->(19), (4)==(18), (18)==(4), (6)==(24), (24)==(6)
- │    │    │         ├── inner-join (lookup trade@trade_t_s_symb_t_dts_idx)
- │    │    │         │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 s_symb:24!null s_name:27!null
- │    │    │         │    ├── lookup expression
- │    │    │         │    │    └── filters
- │    │    │         │    │         ├── s_symb:24 = t_s_symb:6 [outer=(6,24), constraints=(/6: (/NULL - ]; /24: (/NULL - ]), fd=(6)==(24), (24)==(6)]
- │    │    │         │    │         └── (t_dts:2 >= '2020-06-15 22:27:42.148484') AND (t_dts:2 <= '2020-06-20 22:27:42.148484') [outer=(2), constraints=(/2: [/'2020-06-15 22:27:42.148484' - /'2020-06-20 22:27:42.148484']; tight)]
+ │    │    │         ├── inner-join (lookup trade_type)
+ │    │    │         │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_name:19!null
+ │    │    │         │    ├── key columns: [4] = [18]
+ │    │    │         │    ├── lookup columns are key
  │    │    │         │    ├── key: (1)
- │    │    │         │    ├── fd: ()-->(6,24,27), (1)-->(2,4,5,7,9-11), (6)==(24), (24)==(6)
- │    │    │         │    ├── scan security
- │    │    │         │    │    ├── columns: s_symb:24!null s_name:27!null
- │    │    │         │    │    ├── constraint: /24: [/'ROACH' - /'ROACH']
- │    │    │         │    │    ├── cardinality: [0 - 1]
- │    │    │         │    │    ├── key: ()
- │    │    │         │    │    └── fd: ()-->(24,27)
- │    │    │         │    └── filters
- │    │    │         │         └── t_s_symb:6 = 'ROACH' [outer=(6), constraints=(/6: [/'ROACH' - /'ROACH']; tight), fd=()-->(6)]
- │    │    │         ├── scan trade_type
- │    │    │         │    ├── columns: tt_id:18!null tt_name:19!null
- │    │    │         │    ├── key: (18)
- │    │    │         │    └── fd: (18)-->(19)
- │    │    │         └── filters
- │    │    │              └── tt_id:18 = t_tt_id:4 [outer=(4,18), constraints=(/4: (/NULL - ]; /18: (/NULL - ]), fd=(4)==(18), (18)==(4)]
+ │    │    │         │    ├── fd: ()-->(6), (1)-->(2,4,5,7,9-11), (18)-->(19), (4)==(18), (18)==(4)
+ │    │    │         │    ├── scan trade@trade_t_s_symb_t_dts_idx
+ │    │    │         │    │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11
+ │    │    │         │    │    ├── constraint: /6/2/1: [/'ROACH'/'2020-06-15 22:27:42.148484' - /'ROACH'/'2020-06-20 22:27:42.148484']
+ │    │    │         │    │    ├── key: (1)
+ │    │    │         │    │    └── fd: ()-->(6), (1)-->(2,4,5,7,9-11)
+ │    │    │         │    └── filters (true)
+ │    │    │         ├── scan security
+ │    │    │         │    ├── columns: s_symb:24!null s_name:27!null
+ │    │    │         │    ├── constraint: /24: [/'ROACH' - /'ROACH']
+ │    │    │         │    ├── cardinality: [0 - 1]
+ │    │    │         │    ├── key: ()
+ │    │    │         │    └── fd: ()-->(24,27)
+ │    │    │         └── filters (true)
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections
@@ -5473,47 +5471,40 @@ project
  │    │    ├── key: (1)
  │    │    ├── fd: ()-->(6,24,27), (1)-->(2,4,5,7,9-11,42-45), (18)-->(19), (4)==(18), (18)==(4), (6)==(24), (24)==(6), (42)-->(43-45)
  │    │    ├── ordering: +2 opt(6,24,27) [actual: +2]
- │    │    ├── limit
+ │    │    ├── top-k
  │    │    │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_name:19!null s_symb:24!null s_name:27!null
  │    │    │    ├── internal-ordering: +2 opt(6,24,27)
+ │    │    │    ├── k: 50
  │    │    │    ├── cardinality: [0 - 50]
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: ()-->(6,24,27), (1)-->(2,4,5,7,9-11), (18)-->(19), (4)==(18), (18)==(4), (6)==(24), (24)==(6)
  │    │    │    ├── ordering: +2 opt(6,24,27) [actual: +2]
- │    │    │    ├── inner-join (lookup security)
- │    │    │    │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_name:19!null s_symb:24!null s_name:27!null
- │    │    │    │    ├── flags: force lookup join (into right side)
- │    │    │    │    ├── key columns: [6] = [24]
- │    │    │    │    ├── lookup columns are key
- │    │    │    │    ├── key: (1)
- │    │    │    │    ├── fd: ()-->(6,24,27), (1)-->(2,4,5,7,9-11), (18)-->(19), (4)==(18), (18)==(4), (6)==(24), (24)==(6)
- │    │    │    │    ├── ordering: +2 opt(6,24,27) [actual: +2]
- │    │    │    │    ├── limit hint: 50.00
- │    │    │    │    ├── sort
- │    │    │    │    │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_name:19!null
- │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    ├── fd: ()-->(6), (1)-->(2,4,5,7,9-11), (18)-->(19), (4)==(18), (18)==(4)
- │    │    │    │    │    ├── ordering: +2 opt(6) [actual: +2]
- │    │    │    │    │    └── inner-join (hash)
- │    │    │    │    │         ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_name:19!null
- │    │    │    │    │         ├── flags: force hash join (store right side)
- │    │    │    │    │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- │    │    │    │    │         ├── key: (1)
- │    │    │    │    │         ├── fd: ()-->(6), (1)-->(2,4,5,7,9-11), (18)-->(19), (4)==(18), (18)==(4)
- │    │    │    │    │         ├── scan trade@trade_t_s_symb_t_dts_idx
- │    │    │    │    │         │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11
- │    │    │    │    │         │    ├── constraint: /6/2/1: [/'ROACH'/'2020-06-15 22:27:42.148484' - /'ROACH'/'2020-06-20 22:27:42.148484']
- │    │    │    │    │         │    ├── key: (1)
- │    │    │    │    │         │    └── fd: ()-->(6), (1)-->(2,4,5,7,9-11)
- │    │    │    │    │         ├── scan trade_type
- │    │    │    │    │         │    ├── columns: tt_id:18!null tt_name:19!null
- │    │    │    │    │         │    ├── key: (18)
- │    │    │    │    │         │    └── fd: (18)-->(19)
- │    │    │    │    │         └── filters
- │    │    │    │    │              └── tt_id:18 = t_tt_id:4 [outer=(4,18), constraints=(/4: (/NULL - ]; /18: (/NULL - ]), fd=(4)==(18), (18)==(4)]
- │    │    │    │    └── filters
- │    │    │    │         └── s_symb:24 = 'ROACH' [outer=(24), constraints=(/24: [/'ROACH' - /'ROACH']; tight), fd=()-->(24)]
- │    │    │    └── 50
+ │    │    │    └── inner-join (lookup security)
+ │    │    │         ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_name:19!null s_symb:24!null s_name:27!null
+ │    │    │         ├── flags: force lookup join (into right side)
+ │    │    │         ├── key columns: [6] = [24]
+ │    │    │         ├── lookup columns are key
+ │    │    │         ├── key: (1)
+ │    │    │         ├── fd: ()-->(6,24,27), (1)-->(2,4,5,7,9-11), (18)-->(19), (4)==(18), (18)==(4), (6)==(24), (24)==(6)
+ │    │    │         ├── inner-join (hash)
+ │    │    │         │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_name:19!null
+ │    │    │         │    ├── flags: force hash join (store right side)
+ │    │    │         │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    │    │         │    ├── key: (1)
+ │    │    │         │    ├── fd: ()-->(6), (1)-->(2,4,5,7,9-11), (18)-->(19), (4)==(18), (18)==(4)
+ │    │    │         │    ├── scan trade@trade_t_s_symb_t_dts_idx
+ │    │    │         │    │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11
+ │    │    │         │    │    ├── constraint: /6/2/1: [/'ROACH'/'2020-06-15 22:27:42.148484' - /'ROACH'/'2020-06-20 22:27:42.148484']
+ │    │    │         │    │    ├── key: (1)
+ │    │    │         │    │    └── fd: ()-->(6), (1)-->(2,4,5,7,9-11)
+ │    │    │         │    ├── scan trade_type
+ │    │    │         │    │    ├── columns: tt_id:18!null tt_name:19!null
+ │    │    │         │    │    ├── key: (18)
+ │    │    │         │    │    └── fd: (18)-->(19)
+ │    │    │         │    └── filters
+ │    │    │         │         └── tt_id:18 = t_tt_id:4 [outer=(4,18), constraints=(/4: (/NULL - ]; /18: (/NULL - ]), fd=(4)==(18), (18)==(4)]
+ │    │    │         └── filters
+ │    │    │              └── s_symb:24 = 'ROACH' [outer=(24), constraints=(/24: [/'ROACH' - /'ROACH']; tight), fd=()-->(24)]
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections
