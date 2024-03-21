@@ -732,26 +732,22 @@ FROM customer
 WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
 ORDER BY c_first ASC
 ----
-sort
+project
  ├── columns: c_id:1!null c_balance:17 c_first:4 c_middle:5
  ├── key: (1)
  ├── fd: (1)-->(4,5,17)
  ├── ordering: +4
- └── project
-      ├── columns: c_id:1!null c_first:4 c_middle:5 c_balance:17
+ └── index-join customer
+      ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6!null c_balance:17
       ├── key: (1)
-      ├── fd: (1)-->(4,5,17)
-      └── select
-           ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6!null c_balance:17
+      ├── fd: ()-->(2,3,6), (1)-->(4,5,17)
+      ├── ordering: +4 opt(2,3,6) [actual: +4]
+      └── scan customer@customer_idx
+           ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_last:6!null
+           ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
            ├── key: (1)
-           ├── fd: ()-->(2,3,6), (1)-->(4,5,17)
-           ├── scan customer
-           │    ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6 c_balance:17
-           │    ├── constraint: /3/2/1: [/10/100 - /10/100]
-           │    ├── key: (1)
-           │    └── fd: ()-->(2,3), (1)-->(4-6,17)
-           └── filters
-                └── c_last:6 = 'Smith' [outer=(6), constraints=(/6: [/'Smith' - /'Smith']; tight), fd=()-->(6)]
+           ├── fd: ()-->(2,3,6), (1)-->(4)
+           └── ordering: +4 opt(2,3,6) [actual: +4]
 
 opt format=hide-qual
 SELECT o_id, o_entry_d, o_carrier_id
@@ -947,22 +943,23 @@ update customer
       ├── immutable
       ├── key: (24,25)
       ├── fd: ()-->(26), (24,25)-->(27-44,49), (43)-->(47)
-      ├── scan customer
+      ├── index-join customer
       │    ├── columns: c_id:24!null c_d_id:25!null c_w_id:26!null c_first:27 c_middle:28 c_last:29 c_street_1:30 c_street_2:31 c_city:32 c_state:33 c_zip:34 c_phone:35 c_since:36 c_credit:37 c_credit_lim:38 c_discount:39 c_balance:40 c_ytd_payment:41 c_payment_cnt:42 c_delivery_cnt:43 c_data:44
-      │    ├── constraint: /26/25/24
-      │    │    ├── [/10/1/1405 - /10/1/1405]
-      │    │    ├── [/10/2/137 - /10/2/137]
-      │    │    ├── [/10/3/309 - /10/3/309]
-      │    │    ├── [/10/4/98 - /10/4/98]
-      │    │    ├── [/10/5/1683 - /10/5/1683]
-      │    │    ├── [/10/6/2807 - /10/6/2807]
-      │    │    ├── [/10/7/2377 - /10/7/2377]
-      │    │    ├── [/10/8/2106 - /10/8/2106]
-      │    │    ├── [/10/9/1412 - /10/9/1412]
-      │    │    └── [/10/10/417 - /10/10/417]
       │    ├── cardinality: [0 - 10]
       │    ├── key: (24,25)
-      │    └── fd: ()-->(26), (24,25)-->(27-44)
+      │    ├── fd: ()-->(26), (24,25)-->(27-44)
+      │    └── select
+      │         ├── columns: c_id:24!null c_d_id:25!null c_w_id:26!null c_first:27 c_last:29
+      │         ├── cardinality: [0 - 10]
+      │         ├── key: (24,25)
+      │         ├── fd: ()-->(26), (24,25)-->(27,29)
+      │         ├── scan customer@customer_idx
+      │         │    ├── columns: c_id:24!null c_d_id:25!null c_w_id:26!null c_first:27 c_last:29
+      │         │    ├── constraint: /26/25/29/27/24: [/10/1 - /10/10]
+      │         │    ├── key: (24,25)
+      │         │    └── fd: ()-->(26), (24,25)-->(27,29)
+      │         └── filters
+      │              └── (c_d_id:25, c_id:24) IN ((1, 1405), (2, 137), (3, 309), (7, 2377), (8, 2106), (10, 417), (4, 98), (5, 1683), (6, 2807), (9, 1412)) [outer=(24,25), constraints=(/24: [/98 - /98] [/137 - /137] [/309 - /309] [/417 - /417] [/1405 - /1405] [/1412 - /1412] [/1683 - /1683] [/2106 - /2106] [/2377 - /2377] [/2807 - /2807]; /25/24: [/1/1405 - /1/1405] [/2/137 - /2/137] [/3/309 - /3/309] [/4/98 - /4/98] [/5/1683 - /5/1683] [/6/2807 - /6/2807] [/7/2377 - /7/2377] [/8/2106 - /8/2106] [/9/1412 - /9/1412] [/10/417 - /10/417]; tight)]
       └── projections
            ├── assignment-cast: DECIMAL(12,2) [as=c_balance_cast:49, outer=(25,40), immutable]
            │    └── c_balance:40 + CASE c_d_id:25 WHEN 6 THEN 57214.780000 WHEN 8 THEN 67755.430000 WHEN 1 THEN 51177.840000 WHEN 2 THEN 73840.700000 WHEN 4 THEN 45906.990000 WHEN 9 THEN 32523.760000 WHEN 10 THEN 20240.200000 WHEN 3 THEN 75299.790000 WHEN 5 THEN 56543.340000 WHEN 7 THEN 67157.940000 ELSE CAST(NULL AS DECIMAL) END
