@@ -261,7 +261,8 @@ func RandDatumWithNullChance(
 		}
 		return d
 	case types.OidFamily:
-		return tree.NewDOid(oid.Oid(rng.Uint32()))
+		d := tree.MakeDOid(oid.Oid(rng.Uint32()), typ)
+		return &d
 	case types.UnknownFamily:
 		return tree.DNull
 	case types.ArrayFamily:
