@@ -100,6 +100,13 @@ func (s *statusServer) CombinedStatementStats(
 		s.sqlServer.execCfg.SQLStatsTestingKnobs)
 }
 
+type statementStatsRunner struct {
+	stmtSourceTable string
+	txnSourceTable  string
+	ie              *sql.InternalExecutor
+	testingKnobs    *sqlstats.TestingKnobs
+}
+
 func getCombinedStatementStats(
 	ctx context.Context,
 	req *serverpb.CombinedStatementsStatsRequest,
@@ -129,23 +136,39 @@ func getCombinedStatementStats(
 		req.Limit,
 		sort,
 	)
-
 	if err != nil {
 		log.Errorf(ctx, "Error on activityTablesHaveFullData: %s", err)
+	}
+
+	stmtsRunTime, txnsRunTime, oldestDate, stmtSourceTable, txnSourceTable, err := getSourceStatsInfo(
+		ctx,
+		req,
+		ie,
+		testingKnobs,
+		activityHasAllData,
+		showInternal,
+	)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
+	runner := &statementStatsRunner{
+		stmtSourceTable: stmtSourceTable,
+		txnSourceTable:  txnSourceTable,
+		ie:              ie,
+		testingKnobs:    testingKnobs,
 	}
 
 	var statements []serverpb.StatementsResponse_CollectedStatementStatistics
 	var transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
 
 	if req.FetchMode == nil || req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
-		transactions, err = collectCombinedTransactions(
+		transactions, err = runner.collectCombinedTransactions(
 			ctx,
-			ie,
 			whereClause,
 			args,
 			orderAndLimit,
-			testingKnobs,
-			activityHasAllData)
+		)
 		if err != nil {
 			return nil, srverrors.ServerError(ctx, err)
 		}
@@ -171,18 +194,6 @@ func getCombinedStatementStats(
 			activityHasAllData,
 			settings)
 	}
-
-	if err != nil {
-		return nil, srverrors.ServerError(ctx, err)
-	}
-
-	stmtsRunTime, txnsRunTime, oldestDate, stmtSourceTable, txnSourceTable, err := getSourceStatsInfo(
-		ctx,
-		req,
-		ie,
-		testingKnobs,
-		activityHasAllData,
-		showInternal)
 
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
@@ -865,16 +876,10 @@ func getIterator(
 	return it, nil
 }
 
-func collectCombinedTransactions(
-	ctx context.Context,
-	ie *sql.InternalExecutor,
-	whereClause string,
-	args []interface{},
-	orderAndLimit string,
-	testingKnobs *sqlstats.TestingKnobs,
-	activityTableHasAllData bool,
+func (r *statementStatsRunner) collectCombinedTransactions(
+	ctx context.Context, whereClause string, args []interface{}, orderAndLimit string,
 ) ([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, error) {
-	aostClause := testingKnobs.GetAOSTClause()
+	aostClause := r.testingKnobs.GetAOSTClause()
 	const expectedNumDatums = 5
 	const queryFormat = `
 SELECT *
@@ -891,64 +896,24 @@ FROM (SELECT app_name,
 
 	var it isql.Rows
 	var err error
-	if activityTableHasAllData {
-		it, err = getIterator(
-			ctx,
-			ie,
-			queryFormat,
-			CrdbInternalTxnStatsCached,
-			"combined-txns-activity-by-interval",
-			whereClause,
-			args,
-			aostClause,
-			orderAndLimit)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
 
+	it, err = getIterator(
+		ctx,
+		r.ie,
+		queryFormat,
+		r.txnSourceTable,
+		"collect-combined-transactions-by-interval",
+		whereClause,
+		args,
+		aostClause,
+		orderAndLimit)
+
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
 	defer func() {
 		err = closeIterator(it, err)
 	}()
-
-	// If there are no results from the activity table, retrieve the data from the persisted table.
-	if it == nil || !it.HasResults() {
-		if it != nil {
-			err = closeIterator(it, err)
-		}
-		it, err = getIterator(
-			ctx,
-			ie,
-			queryFormat,
-			CrdbInternalTxnStatsPersisted,
-			"combined-txns-persisted-by-interval",
-			whereClause,
-			args,
-			aostClause,
-			orderAndLimit)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
-
-	// If there are no results from the persisted table, retrieve the data from the combined view
-	// with data in-memory.
-	if !it.HasResults() {
-		err = closeIterator(it, err)
-		it, err = getIterator(
-			ctx,
-			ie,
-			queryFormat,
-			CrdbInternalTxnStatsCombined,
-			"combined-txns-with-memory-by-interval",
-			whereClause,
-			args,
-			aostClause,
-			orderAndLimit)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
 
 	var transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
 	var ok bool
