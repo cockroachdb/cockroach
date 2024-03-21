@@ -128,7 +128,7 @@ func upgradeSystemLeasesDescriptor(
 	ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
 	// Upgrade the descriptor in storage to have the new format.
-	return deps.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+	if err := deps.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		leaseTable, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, keys.LeaseTableID)
 		if err != nil {
 			return err
@@ -146,5 +146,8 @@ func upgradeSystemLeasesDescriptor(
 		leaseTable.NextColumnID = newLeaseTableFormat.TableDescriptor.GetNextColumnID()
 		leaseTable.NextIndexID = newLeaseTableFormat.TableDescriptor.GetNextIndexID()
 		return txn.Descriptors().WriteDesc(ctx, false, leaseTable, txn.KV())
-	})
+	}); err != nil {
+		return err
+	}
+	return bumpSystemDatabaseSchemaVersion(ctx, version, deps)
 }
