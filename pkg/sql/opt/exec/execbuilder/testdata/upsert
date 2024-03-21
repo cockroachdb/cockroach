@@ -836,23 +836,16 @@ vectorized: true
         │ render b: b
         │ render c: c
         │
-        └── • merge join (right outer)
-            │ columns: (a, b, c, x, y, z)
-            │ estimated row count: 311 (missing stats)
-            │ equality: (b, c) = (y, z)
-            │ merge ordering: +"(b=y)",+"(c=z)"
-            │
-            ├── • scan
-            │     columns: (a, b, c)
-            │     ordering: +b,+c
-            │     estimated row count: 1,000 (missing stats)
-            │     table: target@target_b_c_key
-            │     spans: FULL SCAN
+        └── • lookup join (left outer)
+            │ columns: (x, y, z, a, b, c)
+            │ estimated row count: 111 (missing stats)
+            │ table: target@target_b_c_key
+            │ equality: (y, z) = (b, c)
+            │ equality cols are key
             │
             └── • distinct
                 │ columns: (x, y, z)
-                │ ordering: +y,+z
-                │ estimated row count: 311 (missing stats)
+                │ estimated row count: 111 (missing stats)
                 │ distinct on: y, z
                 │ nulls are distinct
                 │ error on duplicate
@@ -861,7 +854,7 @@ vectorized: true
                 └── • filter
                     │ columns: (x, y, z)
                     │ ordering: +y,+z
-                    │ estimated row count: 311 (missing stats)
+                    │ estimated row count: 111 (missing stats)
                     │ filter: x != 1
                     │
                     └── • scan

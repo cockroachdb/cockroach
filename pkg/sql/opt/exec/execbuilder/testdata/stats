@@ -72,7 +72,7 @@ vectorized: true
 ·
 • filter
 │ columns: (u, v)
-│ estimated row count: 1
+│ estimated row count: 0
 │ filter: v = 1
 │
 └── • scan
@@ -144,7 +144,7 @@ vectorized: true
 ·
 • filter
 │ columns: (u, v)
-│ estimated row count: 1
+│ estimated row count: 0
 │ filter: u = 1
 │
 └── • scan
