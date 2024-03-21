@@ -184,14 +184,13 @@ func getCombinedStatementStats(
 			transactions,
 			testingKnobs)
 	} else {
-		statements, err = collectCombinedStatements(
+		statements, err = runner.collectCombinedStatements(
 			ctx,
-			ie,
 			whereClause,
 			args,
 			orderAndLimit,
-			testingKnobs,
-			activityHasAllData)
+			settings,
+		)
 	}
 
 	if err != nil {
@@ -663,16 +662,14 @@ func getCombinedStatementsQueryClausesAndArgs(
 	return buffer.String(), orderAndLimitClause, args
 }
 
-func collectCombinedStatements(
+func (r *statementStatsRunner) collectCombinedStatements(
 	ctx context.Context,
-	ie *sql.InternalExecutor,
 	whereClause string,
 	args []interface{},
 	orderAndLimit string,
-	testingKnobs *sqlstats.TestingKnobs,
-	activityTableHasAllData bool,
+	settings *cluster.Settings,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
-	aostClause := testingKnobs.GetAOSTClause()
+	aostClause := r.testingKnobs.GetAOSTClause()
 	const expectedNumDatums = 10
 	const queryFormat = `
 SELECT 
@@ -698,18 +695,7 @@ FROM (SELECT fingerprint_id,
           app_name) %s
 %s`
 
-	var it isql.Rows
-	var err error
-	defer func() {
-		err = closeIterator(it, err)
-	}()
-
-	if activityTableHasAllData {
-		it, err = getIterator(
-			ctx,
-			ie,
-			// The statement activity table has aggregated metadata.
-			`
+	activityQuery := `
 SELECT 
     fingerprint_id,
     app_name,
@@ -731,55 +717,44 @@ FROM (SELECT fingerprint_id,
       GROUP BY
           fingerprint_id,
           app_name) %s
-%s`,
+%s`
+
+	var it isql.Rows
+	var err error
+	defer func() {
+		err = closeIterator(it, err)
+	}()
+
+	switch r.stmtSourceTable {
+	case CrdbInternalStmtStatsCached:
+		it, err = getIterator(
+			ctx,
+			r.ie,
+			// The statement activity table has aggregated metadata.
+			activityQuery,
 			CrdbInternalStmtStatsCached,
 			"combined-stmts-activity-by-interval",
 			whereClause,
 			args,
 			aostClause,
 			orderAndLimit)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
-
-	// If there are no results from the activity table, retrieve the data from the persisted table.
-	if it == nil || !it.HasResults() {
-		if it != nil {
-			err = closeIterator(it, err)
-		}
+	case CrdbInternalStmtStatsPersisted, CrdbInternalStmtStatsCombined:
 		it, err = getIterator(
 			ctx,
-			ie,
+			r.ie,
 			queryFormat,
-			CrdbInternalStmtStatsPersisted,
-			"combined-stmts-persisted-by-interval",
+			r.stmtSourceTable,
+			"combined-stmts-by-interval",
 			whereClause,
 			args,
 			aostClause,
 			orderAndLimit)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
+	default:
+		return nil, errors.Newf("combined statements: unknown source table: %s", r.stmtSourceTable)
 
-	// If there are no results from the persisted table, retrieve the data from the combined view
-	// with data in-memory.
-	if !it.HasResults() {
-		err = closeIterator(it, err)
-		it, err = getIterator(
-			ctx,
-			ie,
-			queryFormat,
-			CrdbInternalStmtStatsCombined,
-			"combined-stmts-with-memory-by-interval",
-			whereClause,
-			args,
-			aostClause,
-			orderAndLimit)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
+	}
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	var statements []serverpb.StatementsResponse_CollectedStatementStatistics
