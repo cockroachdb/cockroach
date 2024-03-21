@@ -131,17 +131,17 @@ WHERE id = $1
 	if progress, err = UnmarshalProgress(row[2]); err != nil {
 		return err
 	}
-	if j.session != nil {
+	if !j.sessionID.IsEmpty() {
 		if row[3] == tree.DNull {
 			return errors.Errorf(
 				"with status %q: expected session %q but found NULL",
-				status, j.session.ID())
+				status, j.sessionID)
 		}
 		storedSession := []byte(*row[3].(*tree.DBytes))
-		if !bytes.Equal(storedSession, j.session.ID().UnsafeBytes()) {
+		if !bytes.Equal(storedSession, j.sessionID.UnsafeBytes()) {
 			return errors.Errorf(
 				"with status %q: expected session %q but found %q",
-				status, j.session.ID(), sqlliveness.SessionID(storedSession))
+				status, j.sessionID, sqlliveness.SessionID(storedSession))
 		}
 	} else {
 		log.VInfof(ctx, 1, "job %d: update called with no session ID", j.ID())

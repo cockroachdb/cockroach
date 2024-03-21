@@ -84,4 +84,11 @@ message ChangeFrontierSpec {
   // User who initiated the changefeed. This is used to check access privileges
   // when using FileTable ExternalStorage.
   optional string user_proto = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
+
+  // SessionID is the ID of the session that has claimed the active
+  // changefeed job identified by JobID.
+  optional bytes session_id = 5 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SessionID"
+  ];
 }

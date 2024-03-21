@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -1235,10 +1236,20 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	cf.js = newJobState(nil, cf.flowCtx.Cfg.Settings, cf.metrics, timeutil.DefaultTimeSource{})
 
 	if cf.spec.JobID != 0 {
-		job, err := cf.flowCtx.Cfg.JobRegistry.LoadClaimedJob(ctx, cf.spec.JobID)
-		if err != nil {
-			cf.MoveToDraining(err)
-			return
+		var job *jobs.Job
+		if len(cf.spec.SessionID) > 0 {
+			sessionID := sqlliveness.SessionID(cf.spec.SessionID)
+			job, err = cf.flowCtx.Cfg.JobRegistry.LoadClaimedJob(ctx, cf.spec.JobID, sessionID)
+			if err != nil {
+				cf.MoveToDraining(err)
+				return
+			}
+		} else {
+			job, err = cf.flowCtx.Cfg.JobRegistry.LoadAdoptedJob(ctx, cf.spec.JobID)
+			if err != nil {
+				cf.MoveToDraining(err)
+				return
+			}
 		}
 		cf.js.job = job
 		if changefeedbase.FrontierCheckpointFrequency.Get(&cf.flowCtx.Cfg.Settings.SV) == 0 {
