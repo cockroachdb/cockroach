@@ -132,10 +132,6 @@ func (m *Manager) sessionBasedLeasingModeAtLeast(
 	return m.getSessionBasedLeasingMode(ctx) >= minimumMode
 }
 
-func hasSessionBasedLeasingDesc(ctx context.Context, settings *cluster.Settings) bool {
-	return !settings.Version.IsActive(ctx, clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor)
-}
-
 func readSessionBasedLeasingMode(
 	ctx context.Context, settings *cluster.Settings,
 ) SessionBasedLeasingMode {

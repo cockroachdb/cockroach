@@ -15,7 +15,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -43,8 +45,17 @@ func CountLeases(
 	forAnyVersion bool,
 ) (int, error) {
 	// Indicates if the leasing descriptor has been upgraded for session based
-	// leasing.
-	leasingDescIsSessionBased := hasSessionBasedLeasingDesc(ctx, settings)
+	// leasing. Note: Unit tests will never provide cached database regions
+	// so resolve the version from the cluster settings.
+	var systemDBVersion *roachpb.Version
+	if cachedDatabaseRegions != nil {
+		systemDBVersion = cachedDatabaseRegions.GetSystemDatabaseVersion()
+	} else {
+		v := settings.Version.ActiveVersion(ctx).Version
+		systemDBVersion = &v
+	}
+	leasingDescIsSessionBased := systemDBVersion != nil &&
+		systemDBVersion.AtLeast(clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version())
 	leasingMode := readSessionBasedLeasingMode(ctx, settings)
 	whereClauses := make([][]string, 2)
 	for _, t := range versions {
@@ -61,13 +72,12 @@ func CountLeases(
 				t.ID, versionClause),
 		)
 	}
-
 	whereClauseIdx := make([]int, 0, 2)
 	syntheticDescriptors := make(catalog.Descriptors, 0, 2)
 	if leasingMode != SessionBasedOnly {
-		// The leasing descriptor is not session based yet, so we need to inject
-		// in synthetically.
-		if !leasingDescIsSessionBased {
+		// The leasing descriptor is session based, so we need to inject
+		// expiry based descriptor synthetically.
+		if leasingDescIsSessionBased {
 			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V23_2())
 		} else {
 			syntheticDescriptors = append(syntheticDescriptors, nil)
@@ -76,9 +86,9 @@ func CountLeases(
 
 	}
 	if leasingMode >= SessionBasedDrain {
-		// The leasing descriptor has been upgraded to be session based, so
-		// we need to use a synthetic descriptor for the old expiry based format.
-		if leasingDescIsSessionBased {
+		// The leasing descriptor is not yet session based, so inject the session
+		// based descriptor synthetically.
+		if !leasingDescIsSessionBased {
 			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable())
 		} else {
 			syntheticDescriptors = append(syntheticDescriptors, nil)
