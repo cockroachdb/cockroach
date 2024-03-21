@@ -184,15 +184,13 @@ func getCombinedStatementStats(
 			transactions,
 			testingKnobs)
 	} else {
-		statements, err = collectCombinedStatements(
+		statements, err = runner.collectCombinedStatements(
 			ctx,
-			ie,
 			whereClause,
 			args,
 			orderAndLimit,
-			testingKnobs,
-			activityHasAllData,
-			settings)
+			settings,
+		)
 	}
 
 	if err != nil {
@@ -669,17 +667,14 @@ func getCombinedStatementsQueryClausesAndArgs(
 	return buffer.String(), orderAndLimitClause, args
 }
 
-func collectCombinedStatements(
+func (r *statementStatsRunner) collectCombinedStatements(
 	ctx context.Context,
-	ie *sql.InternalExecutor,
 	whereClause string,
 	args []interface{},
 	orderAndLimit string,
-	testingKnobs *sqlstats.TestingKnobs,
-	activityTableHasAllData bool,
 	settings *cluster.Settings,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
-	aostClause := testingKnobs.GetAOSTClause()
+	aostClause := r.testingKnobs.GetAOSTClause()
 	const expectedNumDatums = 9
 	const queryFormat = `
 SELECT 
@@ -703,22 +698,12 @@ FROM (SELECT fingerprint_id,
           fingerprint_id,
           app_name) %s
 %s`
-
-	var it isql.Rows
-	var err error
-	defer func() {
-		err = closeIterator(it, err)
-	}()
-
-	if activityTableHasAllData {
-		metadataAggFn := mergeAggStmtMetadataColumnLatest
-		if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
-			// Use the older, less performant metadata aggregation function for versions below 24.1.
-			metadataAggFn = mergeAggStmtMetadata_V23_2
-		}
-
-		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-combined-stmts-activity-by-interval", nil,
-			sessiondata.NodeUserSessionDataOverride, fmt.Sprintf(`
+	metadataAggFn := mergeAggStmtMetadataColumnLatest
+	if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
+		// Use the older, less performant metadata aggregation function for versions below 24.1.
+		metadataAggFn = mergeAggStmtMetadata_V23_2
+	}
+	activityQuery := strings.Join([]string{`
 SELECT 
     fingerprint_id,
     app_name,
@@ -733,55 +718,50 @@ SELECT
 FROM (SELECT fingerprint_id,
              app_name,
              max(aggregated_ts)                                     AS aggregated_ts,
-             %s AS metadata,
+             `, metadataAggFn, ` AS metadata,
              merge_statement_stats(statistics)                      AS statistics
       FROM %s %s
       GROUP BY
           fingerprint_id,
-          app_name) %s %s`, metadataAggFn, CrdbInternalStmtStatsCached, aostClause, whereClause, orderAndLimit), args...)
+          app_name) %s
+%s`}, "")
 
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
-
-	// If there are no results from the activity table, retrieve the data from the persisted table.
-	if it == nil || !it.HasResults() {
-		if it != nil {
-			err = closeIterator(it, err)
-		}
-		it, err = getIterator(
-			ctx,
-			ie,
-			queryFormat,
-			CrdbInternalStmtStatsPersisted,
-			"combined-stmts-persisted-by-interval",
-			whereClause,
-			args,
-			aostClause,
-			orderAndLimit)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
-
-	// If there are no results from the persisted table, retrieve the data from the combined view
-	// with data in-memory.
-	if !it.HasResults() {
+	var it isql.Rows
+	var err error
+	defer func() {
 		err = closeIterator(it, err)
+	}()
+
+	switch r.stmtSourceTable {
+	case CrdbInternalStmtStatsCached:
 		it, err = getIterator(
 			ctx,
-			ie,
-			queryFormat,
-			CrdbInternalStmtStatsCombined,
-			"combined-stmts-with-memory-by-interval",
+			r.ie,
+			// The statement activity table has aggregated metadata.
+			activityQuery,
+			CrdbInternalStmtStatsCached,
+			"combined-stmts-activity-by-interval",
 			whereClause,
 			args,
 			aostClause,
 			orderAndLimit)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
+	case CrdbInternalStmtStatsPersisted, CrdbInternalStmtStatsCombined:
+		it, err = getIterator(
+			ctx,
+			r.ie,
+			queryFormat,
+			r.stmtSourceTable,
+			"combined-stmts-by-interval",
+			whereClause,
+			args,
+			aostClause,
+			orderAndLimit)
+	default:
+		return nil, errors.Newf("combined statements: unknown source table: %s", r.stmtSourceTable)
+
+	}
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	var statements []serverpb.StatementsResponse_CollectedStatementStatistics
