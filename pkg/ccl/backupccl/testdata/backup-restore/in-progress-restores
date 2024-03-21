@@ -155,7 +155,10 @@ SELECT * FROM b2.me.baz;
 
 
 query-sql
-SELECT table_name,index_name,non_unique,seq_in_index,column_name FROM [SHOW INDEX FROM b2.me.baz] WHERE index_name = 'greeting_idx';
+SELECT table_name,index_name,non_unique,seq_in_index,column_name
+FROM [SHOW INDEX FROM b2.me.baz]
+WHERE index_name = 'greeting_idx'
+ORDER BY seq_in_index;
 ----
 baz greeting_idx true 1 y
 baz greeting_idx true 2 rowid

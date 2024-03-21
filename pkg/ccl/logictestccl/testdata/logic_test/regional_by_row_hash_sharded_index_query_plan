@@ -411,13 +411,13 @@ vectorized: true
             │
             ├── • scan
             │     columns: (id)
-            │     estimated row count: 1 (missing stats)
+            │     estimated row count: 0 (missing stats)
             │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
             │     spans: /"@"/11/4321/0
             │
             └── • scan
                   columns: (id)
-                  estimated row count: 1 (missing stats)
+                  estimated row count: 0 (missing stats)
                   table: t_unique_hash_pk@t_unique_hash_pk_pkey
                   spans: /"\x80"/11/4321/0 /"\xc0"/11/4321/0
                   parallel
@@ -512,13 +512,13 @@ vectorized: true
             │
             ├── • scan
             │     columns: (id)
-            │     estimated row count: 1 (missing stats)
+            │     estimated row count: 0 (missing stats)
             │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
             │     spans: /"@"/11/4321/0
             │
             └── • scan
                   columns: (id)
-                  estimated row count: 1 (missing stats)
+                  estimated row count: 0 (missing stats)
                   table: t_unique_hash_pk@t_unique_hash_pk_pkey
                   spans: /"\x80"/11/4321/0 /"\xc0"/11/4321/0
                   parallel
@@ -636,13 +636,13 @@ vectorized: true
 │                           │
 │                           ├── • scan
 │                           │     columns: (crdb_internal_id_shard_16, id, crdb_region)
-│                           │     estimated row count: 1 (missing stats)
+│                           │     estimated row count: 0 (missing stats)
 │                           │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
 │                           │     spans: /"@"/11/4321/0
 │                           │
 │                           └── • scan
 │                                 columns: (crdb_internal_id_shard_16, id, crdb_region)
-│                                 estimated row count: 1 (missing stats)
+│                                 estimated row count: 0 (missing stats)
 │                                 table: t_unique_hash_pk@t_unique_hash_pk_pkey
 │                                 spans: /"\x80"/11/4321/0 /"\xc0"/11/4321/0
 │                                 parallel
@@ -822,13 +822,13 @@ vectorized: true
             │
             ├── • scan
             │     columns: (crdb_internal_id_shard_16, id, crdb_region)
-            │     estimated row count: 1 (missing stats)
+            │     estimated row count: 0 (missing stats)
             │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
             │     spans: /"@"/11/4321/0
             │
             └── • scan
                   columns: (crdb_internal_id_shard_16, id, crdb_region)
-                  estimated row count: 1 (missing stats)
+                  estimated row count: 0 (missing stats)
                   table: t_unique_hash_pk@t_unique_hash_pk_pkey
                   spans: /"\x80"/11/4321/0 /"\xc0"/11/4321/0
                   parallel
@@ -915,13 +915,13 @@ vectorized: true
 │               │
 │               ├── • scan
 │               │     columns: (crdb_internal_id_shard_16, id, crdb_region)
-│               │     estimated row count: 1 (missing stats)
+│               │     estimated row count: 0 (missing stats)
 │               │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
 │               │     spans: /"@"/11/4321/0
 │               │
 │               └── • scan
 │                     columns: (crdb_internal_id_shard_16, id, crdb_region)
-│                     estimated row count: 1 (missing stats)
+│                     estimated row count: 0 (missing stats)
 │                     table: t_unique_hash_pk@t_unique_hash_pk_pkey
 │                     spans: /"\x80"/11/4321/0 /"\xc0"/11/4321/0
 │                     parallel
@@ -1061,7 +1061,7 @@ vectorized: true
                                 │
                                 ├── • scan
                                 │     columns: (id)
-                                │     estimated row count: 1 (missing stats)
+                                │     estimated row count: 0 (missing stats)
                                 │     table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
                                 │     spans: /"@"/4321/0
                                 │
@@ -1194,13 +1194,13 @@ vectorized: true
 │                   │
 │                   ├── • scan
 │                   │     columns: (email)
-│                   │     estimated row count: 1 (missing stats)
+│                   │     estimated row count: 0 (missing stats)
 │                   │     table: t_unique_hash_sec_key@idx_uniq_hash_email
 │                   │     spans: /"@"/1/"some_email"/0
 │                   │
 │                   └── • scan
 │                         columns: (email)
-│                         estimated row count: 1 (missing stats)
+│                         estimated row count: 0 (missing stats)
 │                         table: t_unique_hash_sec_key@idx_uniq_hash_email
 │                         spans: /"\x80"/1/"some_email"/0 /"\xc0"/1/"some_email"/0
 │                         parallel
@@ -1393,13 +1393,13 @@ vectorized: true
 │                               │
 │                               ├── • scan
 │                               │     columns: (id, email, crdb_region)
-│                               │     estimated row count: 1 (missing stats)
+│                               │     estimated row count: 0 (missing stats)
 │                               │     table: t_unique_hash_sec_key@idx_uniq_hash_email
 │                               │     spans: /"@"/1/"some_email"/0
 │                               │
 │                               └── • scan
 │                                     columns: (id, email, crdb_region)
-│                                     estimated row count: 1 (missing stats)
+│                                     estimated row count: 0 (missing stats)
 │                                     table: t_unique_hash_sec_key@idx_uniq_hash_email
 │                                     spans: /"\x80"/1/"some_email"/0 /"\xc0"/1/"some_email"/0
 │                                     parallel
@@ -1674,7 +1674,7 @@ vectorized: true
 │                           │
 │                           ├── • scan
 │                           │     columns: (id, email, crdb_region)
-│                           │     estimated row count: 1 (missing stats)
+│                           │     estimated row count: 0 (missing stats)
 │                           │     table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
 │                           │     spans: /"@"/1/0
 │                           │
@@ -1858,7 +1858,7 @@ vectorized: true
 │               │
 │               ├── • scan
 │               │     columns: (id, email, crdb_region)
-│               │     estimated row count: 1 (missing stats)
+│               │     estimated row count: 0 (missing stats)
 │               │     table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
 │               │     spans: /"@"/2/0
 │               │

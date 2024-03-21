@@ -337,22 +337,22 @@ vectorized: true
 └── • union all
     │ columns: (a)
     │ ordering: +a
-    │ estimated row count: 112 (missing stats)
+    │ estimated row count: 40 (missing stats)
     │
     ├── • union all
     │   │ columns: (a)
     │   │ ordering: +a
-    │   │ estimated row count: 37 (missing stats)
+    │   │ estimated row count: 13 (missing stats)
     │   │
     │   ├── • union all
     │   │   │ columns: (a)
     │   │   │ ordering: +a
-    │   │   │ estimated row count: 19 (missing stats)
+    │   │   │ estimated row count: 7 (missing stats)
     │   │   │
     │   │   ├── • scan
     │   │   │     columns: (a)
     │   │   │     ordering: +a
-    │   │   │     estimated row count: 9 (missing stats)
+    │   │   │     estimated row count: 3 (missing stats)
     │   │   │     table: sharded_secondary@sharded_secondary_a_idx
     │   │   │     spans: /8/101-/9
     │   │   │     limit: 10
@@ -360,7 +360,7 @@ vectorized: true
     │   │   └── • scan
     │   │         columns: (a)
     │   │         ordering: +a
-    │   │         estimated row count: 9 (missing stats)
+    │   │         estimated row count: 3 (missing stats)
     │   │         table: sharded_secondary@sharded_secondary_a_idx
     │   │         spans: /9/101-/10
     │   │         limit: 10
@@ -368,12 +368,12 @@ vectorized: true
     │   └── • union all
     │       │ columns: (a)
     │       │ ordering: +a
-    │       │ estimated row count: 19 (missing stats)
+    │       │ estimated row count: 7 (missing stats)
     │       │
     │       ├── • scan
     │       │     columns: (a)
     │       │     ordering: +a
-    │       │     estimated row count: 9 (missing stats)
+    │       │     estimated row count: 3 (missing stats)
     │       │     table: sharded_secondary@sharded_secondary_a_idx
     │       │     spans: /10/101-/11
     │       │     limit: 10
@@ -381,7 +381,7 @@ vectorized: true
     │       └── • scan
     │             columns: (a)
     │             ordering: +a
-    │             estimated row count: 9 (missing stats)
+    │             estimated row count: 3 (missing stats)
     │             table: sharded_secondary@sharded_secondary_a_idx
     │             spans: /11/101-/12
     │             limit: 10
@@ -389,22 +389,22 @@ vectorized: true
     └── • union all
         │ columns: (a)
         │ ordering: +a
-        │ estimated row count: 75 (missing stats)
+        │ estimated row count: 27 (missing stats)
         │
         ├── • union all
         │   │ columns: (a)
         │   │ ordering: +a
-        │   │ estimated row count: 37 (missing stats)
+        │   │ estimated row count: 13 (missing stats)
         │   │
         │   ├── • union all
         │   │   │ columns: (a)
         │   │   │ ordering: +a
-        │   │   │ estimated row count: 19 (missing stats)
+        │   │   │ estimated row count: 7 (missing stats)
         │   │   │
         │   │   ├── • scan
         │   │   │     columns: (a)
         │   │   │     ordering: +a
-        │   │   │     estimated row count: 9 (missing stats)
+        │   │   │     estimated row count: 3 (missing stats)
         │   │   │     table: sharded_secondary@sharded_secondary_a_idx
         │   │   │     spans: /0/101-/1
         │   │   │     limit: 10
@@ -412,7 +412,7 @@ vectorized: true
         │   │   └── • scan
         │   │         columns: (a)
         │   │         ordering: +a
-        │   │         estimated row count: 9 (missing stats)
+        │   │         estimated row count: 3 (missing stats)
         │   │         table: sharded_secondary@sharded_secondary_a_idx
         │   │         spans: /1/101-/2
         │   │         limit: 10
@@ -420,12 +420,12 @@ vectorized: true
         │   └── • union all
         │       │ columns: (a)
         │       │ ordering: +a
-        │       │ estimated row count: 19 (missing stats)
+        │       │ estimated row count: 7 (missing stats)
         │       │
         │       ├── • scan
         │       │     columns: (a)
         │       │     ordering: +a
-        │       │     estimated row count: 9 (missing stats)
+        │       │     estimated row count: 3 (missing stats)
         │       │     table: sharded_secondary@sharded_secondary_a_idx
         │       │     spans: /2/101-/3
         │       │     limit: 10
@@ -433,7 +433,7 @@ vectorized: true
         │       └── • scan
         │             columns: (a)
         │             ordering: +a
-        │             estimated row count: 9 (missing stats)
+        │             estimated row count: 3 (missing stats)
         │             table: sharded_secondary@sharded_secondary_a_idx
         │             spans: /3/101-/4
         │             limit: 10
@@ -441,17 +441,17 @@ vectorized: true
         └── • union all
             │ columns: (a)
             │ ordering: +a
-            │ estimated row count: 37 (missing stats)
+            │ estimated row count: 13 (missing stats)
             │
             ├── • union all
             │   │ columns: (a)
             │   │ ordering: +a
-            │   │ estimated row count: 19 (missing stats)
+            │   │ estimated row count: 7 (missing stats)
             │   │
             │   ├── • scan
             │   │     columns: (a)
             │   │     ordering: +a
-            │   │     estimated row count: 9 (missing stats)
+            │   │     estimated row count: 3 (missing stats)
             │   │     table: sharded_secondary@sharded_secondary_a_idx
             │   │     spans: /4/101-/5
             │   │     limit: 10
@@ -459,7 +459,7 @@ vectorized: true
             │   └── • scan
             │         columns: (a)
             │         ordering: +a
-            │         estimated row count: 9 (missing stats)
+            │         estimated row count: 3 (missing stats)
             │         table: sharded_secondary@sharded_secondary_a_idx
             │         spans: /5/101-/6
             │         limit: 10
@@ -467,12 +467,12 @@ vectorized: true
             └── • union all
                 │ columns: (a)
                 │ ordering: +a
-                │ estimated row count: 19 (missing stats)
+                │ estimated row count: 7 (missing stats)
                 │
                 ├── • scan
                 │     columns: (a)
                 │     ordering: +a
-                │     estimated row count: 9 (missing stats)
+                │     estimated row count: 3 (missing stats)
                 │     table: sharded_secondary@sharded_secondary_a_idx
                 │     spans: /6/101-/7
                 │     limit: 10
@@ -480,7 +480,7 @@ vectorized: true
                 └── • scan
                       columns: (a)
                       ordering: +a
-                      estimated row count: 9 (missing stats)
+                      estimated row count: 3 (missing stats)
                       table: sharded_secondary@sharded_secondary_a_idx
                       spans: /7/101-/8
                       limit: 10
@@ -530,7 +530,7 @@ vectorized: true
 ·
 • scan
   columns: (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb)
-  estimated row count: 1 (missing stats)
+  estimated row count: 0 (missing stats)
   table: sharded_primary_with_many_column_types@sharded_primary_with_many_column_types_pkey
   spans: /3/1/1/1/1/1/"1"/"1"/"1"/1/00:00:01/1/1970-01-01T00:00:01Z/1970-01-01T00:00:01Z/1/"\x00 \x7f\x00\x00\x01"/B1/0
 

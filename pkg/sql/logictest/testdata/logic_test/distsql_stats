@@ -2814,7 +2814,7 @@ vectorized: true
 • render
 │
 └── • filter
-    │ estimated row count: 1
+    │ estimated row count: 0
     │ filter: n = 1
     │
     └── • scan
@@ -2831,7 +2831,7 @@ vectorized: true
 • render
 │
 └── • filter
-    │ estimated row count: 1
+    │ estimated row count: 0
     │ filter: sqrt(m::FLOAT8)::INT8 = 11
     │
     └── • scan
