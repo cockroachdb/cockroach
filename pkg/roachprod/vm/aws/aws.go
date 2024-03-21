@@ -285,30 +285,19 @@ var defaultConfig = func() (cfg *awsConfig) {
 	return cfg
 }()
 
-// defaultCreateZones is the list of availability zones used by default for
-// cluster creation. If the geo flag is specified, nodes are distributed between
-// zones.
-// NOTE: a number of AWS roachtests are dependent on us-east-2 for loading fixtures,
-// out of s3://cockroach-fixtures-us-east-2. AWS doesn't support multi-regional buckets, thus resulting in material
-// egress cost if the test loads from a different region. See https://github.com/cockroachdb/cockroach/issues/105968.
-var defaultCreateZones = []string{
-	// N.B. us-east-2a is the default zone for non-geo distributed clusters. It appears to have a higher on-demand
-	// capacity of c7g.8xlarge (graviton3) than us-east-2b.
+// defaultZones is the list of availability zones used by default for
+// cluster creation. If the geo flag is specified, nodes are
+// distributed between zones.
+//
+// NOTE: a number of AWS roachtests are dependent on us-east-2 for
+// loading fixtures, out of s3://cockroach-fixtures-us-east-2. AWS
+// doesn't support multi-regional buckets, thus resulting in material
+// egress cost if the test loads from a different region. See
+// https://github.com/cockroachdb/cockroach/issues/105968.
+var defaultZones = []string{
 	"us-east-2a",
 	"us-west-2b",
 	"eu-west-2b",
-}
-
-// Overrides defaultCreateZones for specific machine types.
-// This is a workaround for,
-// "We currently do not have sufficient c6id.4xlarge capacity in the Availability Zone you requested (us-east-2a).
-// Our system will be working on provisioning additional capacity. You can currently get c6id.4xlarge capacity by
-// not specifying an Availability Zone in your request or choosing us-east-2b, us-east-2c."
-// N.B. we implicitly specify AZ to select an AMI in that zone, hence we fall back to instance-specific overrides.
-var overrideDefaultCreateZones = map[string][]string{
-	"c6id.4xlarge":  {"us-east-2c", "us-west-2b", "eu-west-2b"},
-	"c6id.8xlarge":  {"us-east-2c", "us-west-2b", "eu-west-2b"},
-	"c6id.24xlarge": {"us-east-2b", "us-west-2b", "eu-west-2b"},
 }
 
 type Tag struct {
@@ -372,7 +361,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		fmt.Sprintf("aws availability zones to use for cluster creation. If zones are formatted\n"+
 			"as AZ:N where N is an integer, the zone will be repeated N times. If > 1\n"+
 			"zone specified, the cluster will be spread out evenly by zone regardless\n"+
-			"of geo (default [%s])", strings.Join(defaultCreateZones, ",")))
+			"of geo (default [%s])", strings.Join(defaultZones, ",")))
 	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
 		o.ImageAMI, "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
 	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
@@ -545,11 +534,7 @@ func (p *Provider) Create(
 
 	useDefaultZones := len(expandedZones) == 0
 	if useDefaultZones {
-		expandedZones = defaultCreateZones
-		if defaultAZOverride, ok := overrideDefaultCreateZones[machineType]; ok {
-			expandedZones = defaultAZOverride
-			l.Printf("WARNING: using default zones override %q for machine type %q", strings.Join(expandedZones, ","), machineType)
-		}
+		expandedZones = defaultZones
 	}
 
 	// We need to make sure that the SSH keys have been distributed to all regions.
@@ -566,7 +551,7 @@ func (p *Provider) Create(
 	}
 
 	var zones []string // contains an az corresponding to each entry in names
-	if !opts.GeoDistributed && (useDefaultZones || len(expandedZones) == 1) {
+	if !opts.GeoDistributed && useDefaultZones {
 		// Only use one zone in the region if we're not creating a geo cluster.
 		regionZones, err := p.regionZones(regions[0], expandedZones)
 		if err != nil {
