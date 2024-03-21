@@ -92,9 +92,15 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 			tdb := sqlutils.MakeSQLRunner(sqlDB)
 			schema := systemschema.LeaseTableSchema
 			if mode == SessionBasedOnly {
-				schema = systemschema.LeaseTableSchema_V24_1
+				schema = strings.Replace(systemschema.LeaseTableSchema_V24_1,
+					"exclude_data_from_backup = true",
+					"exclude_data_from_backup = false",
+					1)
+
 			}
 			makeTable := func(name string) (id descpb.ID) {
+				// Rewrite the schema and drop the exclude_data_from_backup from flag,
+				// since this will prevent export from working later on in the test.
 				tdb.Exec(t, strings.Replace(schema, "system.lease", name, 1))
 				tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = $1", name).Scan(&id)
 				// Modifies the primary index IDs to line up with the session based
@@ -108,8 +114,7 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 			}
 			lease1ID := makeTable("lease1")
 			lease2ID := makeTable("lease2")
-
-			ie := s.InternalExecutor().(isql.Executor)
+			ie := s.InternalDB().(isql.DB).Executor()
 			codec := s.Codec()
 			settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
 			modeReader := &dummySessionModeReader{mode: mode}
