@@ -351,7 +351,7 @@ var RangeDistributionStrategy = settings.RegisterEnumSetting(
 		"for the most balanced distribution, use `balanced_simple`. changing this setting "+
 		"will not override locality restrictions",
 	util.ConstantWithMetamorphicTestChoice("default_range_distribution_strategy",
-		"default", "balanced_simple").(string),
+		"default", "balanced_simple"),
 	map[int64]string{
 		int64(defaultDistribution):        "default",
 		int64(balancedSimpleDistribution): "balanced_simple",

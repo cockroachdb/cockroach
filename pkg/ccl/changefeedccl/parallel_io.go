@@ -165,9 +165,9 @@ var requestQuota = settings.RegisterIntSetting(
 	"changefeed.parallel_io.request_quota",
 	"the number of requests which can be admitted into the parallelio"+
 		" system before blocking the producer",
-	int64(util.ConstantWithMetamorphicTestChoice(
+	util.ConstantWithMetamorphicTestChoice[int64](
 		"changefeed.parallel_io.request_quota",
-		128, 16, 32, 64, 256).(int)),
+		128, 16, 32, 64, 256),
 	settings.IntInRange(1, 256),
 	settings.WithVisibility(settings.Reserved),
 )
