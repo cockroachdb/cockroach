@@ -82,6 +82,7 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 		format = sstable.TableFormatPebblev4
 	}
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
+	opts.Compression = getCompressionAlgorithm(ctx, cs)
 	opts.MergerName = "nullptr"
 	return opts
 }
@@ -117,6 +118,7 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	// block checksums and more index entries are just overhead and smaller blocks
 	// reduce compression ratio.
 	opts.BlockSize = 128 << 10
+	opts.Compression = getCompressionAlgorithm(ctx, cs)
 	opts.MergerName = "nullptr"
 	return SSTWriter{
 		fw:                sstable.NewWriter(&noopFinishAbort{f}, opts),
