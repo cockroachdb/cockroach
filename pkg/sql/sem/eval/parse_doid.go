@@ -125,15 +125,13 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 			}
 		}
 
-		signatureTypes, err := fn.SignatureTypes(ctx, evalCtx.Planner)
-		if err != nil {
-			return nil, err
-		}
 		ol, err := fd.MatchOverload(
-			signatureTypes,
-			fn.FuncName.Schema(),
+			ctx,
+			evalCtx.Planner,
+			&fn,
 			&evalCtx.SessionData().SearchPath,
 			tree.BuiltinRoutine|tree.UDFRoutine|tree.ProcedureRoutine,
+			false, /* inDropContext */
 		)
 		if err != nil {
 			return nil, err
