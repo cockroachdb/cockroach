@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDataDriven parses and executes the test cases in ./testdata/*. An entry
@@ -68,9 +69,7 @@ func TestDataDriven(t *testing.T) {
 					case "cfgj":
 						joint = true
 						if arg.Vals[i] == "zero" {
-							if len(arg.Vals) != 1 {
-								t.Fatalf("cannot mix 'zero' into configuration")
-							}
+							require.Len(t, arg.Vals, 1, "cannot mix 'zero' into configuration")
 						} else {
 							var n uint64
 							arg.Scan(t, i, &n)
@@ -81,11 +80,9 @@ func TestDataDriven(t *testing.T) {
 						// Register placeholders as zeroes.
 						if arg.Vals[i] != "_" {
 							arg.Scan(t, i, &n)
-							if n == 0 {
-								// This is a restriction caused by the above
-								// special-casing for _.
-								t.Fatalf("cannot use 0 as idx")
-							}
+							// This is a restriction caused by the above
+							// special-casing for _.
+							require.NotZero(t, n, "cannot use 0 as idx")
 						}
 						idxs = append(idxs, Index(n))
 					case "votes":
