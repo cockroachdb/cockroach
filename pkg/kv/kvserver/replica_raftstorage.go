@@ -673,8 +673,11 @@ func (r *Replica) applySnapshot(
 	// https://github.com/cockroachdb/cockroach/issues/93251
 	if inSnap.doExcise {
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
+		// Since these snapshot SSTs contain RANGEDELs, we can make use of storage
+		// engine optimizations for SSTs that have the RANGEDELs.
+		sstsContainExciseTombstone := true
 		if ingestStats, err =
-			r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan); err != nil {
+			r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan, sstsContainExciseTombstone); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s", inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
 	} else {
