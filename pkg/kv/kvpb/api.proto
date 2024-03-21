@@ -2944,9 +2944,29 @@ message Header {
   // in a mixed-version state after a new value got added), DEFAULT is assumed.
   cockroach.rpc.ConnectionClass connection_class = 33;
 
+  // ProxyRangeInfo, if set, indicates the RangeInfo information a client has
+  // when it sent this request. This information is passed to an intermediate
+  // proxy node which can then forward the request to the final destination.
+  // If this field is set, then the node which receives the BatchRequest should
+  // first try and evaluate the request locally. If local evaluation fails with
+  // a NotLeaseHolderError, it should act on behalf of the original client and
+  // forward the original request, with this field cleared, to the leaseholder
+  // as specified in the ProxyRangeInfo header.
+  //
+  // If the kv.dist_sender.proxy.enabled parameter is set to false, the client
+  // will never set this header and proxying will be disabled.
+  //
+  // NB: This field is only used in 24.1+ systems. A mixed mode system with at
+  // least one node not on 24.1 will exhibit the following behavior.
+  // * A client older than 24.1 will never set this field.
+  // * A proxy node older than 24.1 will ignore this field being set and return an
+  // error after local evaluation like it does in older systems.
+  // * A destination node older than 24.1 will not see this field.
+  RangeInfo proxy_range_info = 34;
+
   reserved 7, 10, 12, 14, 20;
 
-  // Next ID: 34
+  // Next ID: 35
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded
