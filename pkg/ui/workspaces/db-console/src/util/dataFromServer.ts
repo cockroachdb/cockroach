@@ -24,6 +24,7 @@ export interface DataFromServer {
   FeatureFlags: FeatureFlags;
   LicenseType: string;
   SecondsUntilLicenseExpiry: number;
+  IsManaged: boolean;
 }
 // Tell TypeScript about `window.dataFromServer`, which is set in a script
 // tag in index.html, the contents of which are generated in a Go template

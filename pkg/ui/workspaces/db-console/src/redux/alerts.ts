@@ -709,51 +709,9 @@ export const daysUntilLicenseExpiresSelector = createSelector(
   },
 );
 
-export const showLicenseTTLLocalSetting = new LocalSetting(
-  "show_license_ttl",
-  localSettingsSelector,
-  { show: true },
-);
-
-export const showLicenseTTLAlertSelector = createSelector(
-  showLicenseTTLLocalSetting.selector,
-  daysUntilLicenseExpiresSelector,
-  licenseTypeSelector,
-  (showLicenseTTL, daysUntilLicenseExpired, licenseType): Alert => {
-    if (!showLicenseTTL.show) {
-      return;
-    }
-    if (licenseType === "None") {
-      return;
-    }
-    const daysToShowAlert = 14;
-    let title: string;
-    let level: AlertLevel;
-
-    if (daysUntilLicenseExpired > daysToShowAlert) {
-      return;
-    } else if (daysUntilLicenseExpired < 0) {
-      title = `License expired ${Math.abs(daysUntilLicenseExpired)} days ago`;
-      level = AlertLevel.CRITICAL;
-    } else if (daysUntilLicenseExpired === 0) {
-      title = `License expired`;
-      level = AlertLevel.CRITICAL;
-    } else if (daysUntilLicenseExpired <= daysToShowAlert) {
-      title = `License expires in ${daysUntilLicenseExpired} days`;
-      level = AlertLevel.WARNING;
-    }
-    return {
-      level: level,
-      title: title,
-      showAsAlert: true,
-      autoClose: false,
-      closable: true,
-      dismiss: (dispatch: Dispatch<Action>) => {
-        dispatch(showLicenseTTLLocalSetting.set({ show: false }));
-        return Promise.resolve();
-      },
-    };
-  },
+export const isManagedClusterSelector = createSelector(
+  getDataFromServer,
+  data => data.IsManaged,
 );
 
 /**
@@ -770,7 +728,6 @@ export const bannerAlertsSelector = createSelector(
   terminateSessionAlertSelector,
   terminateQueryAlertSelector,
   dataFromServerAlertSelector,
-  showLicenseTTLAlertSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
   },
