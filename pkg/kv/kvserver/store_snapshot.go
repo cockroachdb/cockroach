@@ -513,6 +513,11 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			return noSnap, errors.AssertionFailedf("last span in multiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
 		}
 	}
+	// TODO(aaditya): Remove once we support flushableIngests for shared and
+	// external files in the engine.
+	// TODO(aaditya): uncomment the line blow once
+	// bugs in 	https://github.com/cockroachdb/pebble/pull/3398 are addressed.
+	// skipRangeDelForLastSpan := doExcise && (header.SharedReplicate || header.ExternalReplicate)
 	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, keyRanges, kvSS.sstChunkSize, doExcise)
 	if err != nil {
 		return noSnap, err
@@ -703,7 +708,10 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				sharedSSTs:        sharedSSTs,
 				externalSSTs:      externalSSTs,
 				doExcise:          doExcise,
-				clearedSpans:      keyRanges,
+				// TODO(aaditya) Uncomment the line below once the bug in
+				// https://github.com/cockroachdb/pebble/pull/3398 is fixed.
+				//includesRangeDelForLastSpan: !skipRangeDelForLastSpan,
+				clearedSpans: keyRanges,
 			}
 
 			timingTag.stop("totalTime")

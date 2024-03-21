@@ -1033,11 +1033,22 @@ type Engine interface {
 	// additionally returns ingestion stats.
 	IngestLocalFilesWithStats(
 		ctx context.Context, paths []string) (pebble.IngestOperationStats, error)
-	// IngestAndExciseFiles is a variant of IngestLocalFilesWithStats
-	// that excises an ExciseSpan, and ingests either local or shared sstables or
-	// both.
+	// IngestAndExciseFiles is a variant of IngestLocalFilesWithStats that excises
+	// an ExciseSpan, and ingests either local or shared sstables or both. It also
+	// takes the flag sstsContainExciseTombstone to signal that the exciseSpan
+	// contains RANGEDELs and RANGEKEYDELs.
+	//
+	// NB: It is the callers responsibility to ensure if
+	// sstsContainExciseTombstone is set to true, the snapshot must contain a
+	// tombstone for the exciseSpan.
 	IngestAndExciseFiles(
-		ctx context.Context, paths []string, shared []pebble.SharedSSTMeta, external []pebble.ExternalFile, exciseSpan roachpb.Span) (pebble.IngestOperationStats, error)
+		ctx context.Context,
+		paths []string,
+		shared []pebble.SharedSSTMeta,
+		external []pebble.ExternalFile,
+		exciseSpan roachpb.Span,
+		sstsContainExciseTombstone bool,
+	) (pebble.IngestOperationStats, error)
 	// IngestExternalFiles is a variant of IngestLocalFiles that takes external
 	// files. These files can be referred to by multiple stores, but are not
 	// modified or deleted by the Engine doing the ingestion.

@@ -380,14 +380,15 @@ type IncomingSnapshot struct {
 	// Size of the key-value pairs.
 	DataSize int64
 	// Size of the ssts containing these key-value pairs.
-	SSTSize          int64
-	SharedSize       int64
-	placeholder      *ReplicaPlaceholder
-	raftAppliedIndex kvpb.RaftIndex      // logging only
-	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
-	sharedSSTs       []pebble.SharedSSTMeta
-	externalSSTs     []pebble.ExternalFile
-	doExcise         bool
+	SSTSize                     int64
+	SharedSize                  int64
+	placeholder                 *ReplicaPlaceholder
+	raftAppliedIndex            kvpb.RaftIndex      // logging only
+	msgAppRespCh                chan raftpb.Message // receives MsgAppResp if/when snap is applied
+	sharedSSTs                  []pebble.SharedSSTMeta
+	externalSSTs                []pebble.ExternalFile
+	doExcise                    bool
+	includesRangeDelForLastSpan bool
 	// clearedSpans represents the key spans in the existing store that will be
 	// cleared by doing the Ingest*. This is tracked so that we can convert the
 	// ssts into a WriteBatch if the total size of the ssts is small.
@@ -673,9 +674,19 @@ func (r *Replica) applySnapshot(
 	// https://github.com/cockroachdb/cockroach/issues/93251
 	if inSnap.doExcise {
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
+		// TODO(aaditya) Pass down inSnap.includesRangeDelForLastSpan for
+		// sstContainsExciseTombstone once we resolve the bugs introduced in
+		// https://github.com/cockroachdb/pebble/pull/3398.
 		if ingestStats, err =
-			r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan); err != nil {
-			return errors.Wrapf(err, "while ingesting %s and excising %s-%s", inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
+			r.store.TODOEngine().IngestAndExciseFiles(
+				ctx,
+				inSnap.SSTStorageScratch.SSTs(),
+				inSnap.sharedSSTs,
+				inSnap.externalSSTs,
+				exciseSpan,
+				false /* sstContainsExciseTombstone */); err != nil {
+			return errors.Wrapf(
+				err, "while ingesting %s and excising %s-%s", inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
 	} else {
 		if inSnap.SSTSize > snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) {

@@ -2138,12 +2138,13 @@ func (p *Pebble) IngestAndExciseFiles(
 	shared []pebble.SharedSSTMeta,
 	external []pebble.ExternalFile,
 	exciseSpan roachpb.Span,
+	sstsContainExciseTombstone bool,
 ) (pebble.IngestOperationStats, error) {
 	rawSpan := pebble.KeyRange{
 		Start: EngineKey{Key: exciseSpan.Key}.Encode(),
 		End:   EngineKey{Key: exciseSpan.EndKey}.Encode(),
 	}
-	return p.db.IngestAndExcise(paths, shared, external, rawSpan)
+	return p.db.IngestAndExcise(paths, shared, external, rawSpan, sstsContainExciseTombstone)
 }
 
 // IngestExternalFiles implements the Engine interface.
