@@ -11,12 +11,10 @@
 package tree
 
 import (
-	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -492,27 +490,6 @@ func (node *RoutineObj) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Params)
 		ctx.WriteString(")")
 	}
-}
-
-// SignatureTypes returns a slice of types that define a signature of the
-// function overload.
-func (node RoutineObj) SignatureTypes(
-	ctx context.Context, res TypeReferenceResolver,
-) ([]*types.T, error) {
-	var typs []*types.T
-	if node.Params != nil {
-		typs = make([]*types.T, 0, len(node.Params))
-		for _, arg := range node.Params {
-			if IsInParamClass(arg.Class) {
-				typ, err := ResolveType(ctx, arg.Type, res)
-				if err != nil {
-					return nil, err
-				}
-				typs = append(typs, typ)
-			}
-		}
-	}
-	return typs, nil
 }
 
 // AlterFunctionOptions represents a ALTER FUNCTION...action statement.

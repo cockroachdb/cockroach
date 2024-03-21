@@ -352,6 +352,10 @@ type ResolveParams struct {
 	// ResolveTypes if set, instructs the catalog reader to resolve types
 	// and not just tables, sequences, and views.
 	ResolveTypes bool
+
+	// InDropContext, if set, indicates that overload resolution is being
+	// performed in the DROP routine context.
+	InDropContext bool
 }
 
 // NameResolver looks up elements in the catalog by name, and vice-versa.
