@@ -108,8 +108,8 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 			}
 			lease1ID := makeTable("lease1")
 			lease2ID := makeTable("lease2")
-
-			ie := s.InternalExecutor().(isql.Executor)
+			idb := s.InternalDB().(isql.DB)
+			ie := idb.Executor()
 			codec := s.Codec()
 			settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
 			modeReader := &dummySessionModeReader{mode: mode}
