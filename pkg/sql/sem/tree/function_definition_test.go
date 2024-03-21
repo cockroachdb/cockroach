@@ -11,6 +11,7 @@
 package tree_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -243,14 +244,29 @@ func TestMatchOverload(t *testing.T) {
 
 	for _, tc := range testCase {
 		t.Run(tc.testName, func(t *testing.T) {
+			routineObj := tree.RoutineObj{
+				FuncName: tree.MakeQualifiedRoutineName("", tc.explicitSchema, "f"),
+			}
+			if tc.argTypes != nil {
+				routineObj.Params = make(tree.RoutineParams, 0, len(tc.argTypes))
+				for _, typ := range tc.argTypes {
+					routineObj.Params = append(routineObj.Params, tree.RoutineParam{
+						Type:  typ,
+						Class: tree.RoutineParamIn,
+					})
+				}
+			}
 			path := sessiondata.MakeSearchPath(tc.path)
 			ol, err := fd.MatchOverload(
-				tc.argTypes,
-				tc.explicitSchema,
+				context.Background(),
+				nil, /* typeRes */
+				&routineObj,
 				&path,
 				tc.routineType,
+				false, /* inDropContext */
 			)
 			if tc.expectedErr != "" {
+				require.Error(t, err)
 				require.Regexp(t, tc.expectedErr, err.Error())
 				return
 			}
