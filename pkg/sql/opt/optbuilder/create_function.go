@@ -241,35 +241,31 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 	var funcReturnType *types.T
 	var err error
-	if cf.IsProcedure {
-		if cf.ReturnType != nil {
-			panic(errors.AssertionFailedf("CreateRoutine.ReturnType is expected to be empty for procedures"))
+	if cf.ReturnType != nil {
+		funcReturnType, err = tree.ResolveType(b.ctx, cf.ReturnType.Type, b.semaCtx.TypeResolver)
+		if err != nil {
+			panic(err)
 		}
-		funcReturnType = types.Void
-		if outParamType != nil {
-			funcReturnType = outParamType
+	}
+	if outParamType != nil {
+		if funcReturnType != nil && !funcReturnType.Equivalent(outParamType) {
+			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "function result type must be %s because of OUT parameters", outParamType.Name()))
 		}
+		// Override the return types so that we do return type validation and SHOW
+		// CREATE correctly.
+		funcReturnType = outParamType
 		cf.ReturnType = &tree.RoutineReturnType{
-			Type: funcReturnType,
+			Type: outParamType,
 		}
-	} else {
-		if cf.ReturnType != nil {
-			funcReturnType, err = tree.ResolveType(b.ctx, cf.ReturnType.Type, b.semaCtx.TypeResolver)
-			if err != nil {
-				panic(err)
-			}
-		}
-		if outParamType != nil {
-			if funcReturnType != nil && !funcReturnType.Equivalent(outParamType) {
-				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "function result type must be %s because of OUT parameters", outParamType.Name()))
-			}
-			// Override the return types so that we do return type validation
-			// and SHOW CREATE correctly.
-			funcReturnType = outParamType
+	} else if funcReturnType == nil {
+		if cf.IsProcedure {
+			// A procedure doesn't need a return type. Use a VOID return type to avoid
+			// errors in shared logic later.
+			funcReturnType = types.Void
 			cf.ReturnType = &tree.RoutineReturnType{
-				Type: outParamType,
+				Type: types.Void,
 			}
-		} else if funcReturnType == nil {
+		} else {
 			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "function result type must be specified"))
 		}
 	}
