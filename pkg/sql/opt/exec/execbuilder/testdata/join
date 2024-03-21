@@ -733,12 +733,12 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b, n, sq)
-│ estimated row count: 116 (missing stats)
+│ estimated row count: 42 (missing stats)
 │ filter: ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
 │
 └── • hash join (left outer)
     │ columns: (a, b, n, sq)
-    │ estimated row count: 1,037 (missing stats)
+    │ estimated row count: 370 (missing stats)
     │ equality: (b) = (sq)
     │ pred: a > 1
     │
@@ -755,7 +755,7 @@ vectorized: true
     │
     └── • filter
         │ columns: (n, sq)
-        │ estimated row count: 311 (missing stats)
+        │ estimated row count: 111 (missing stats)
         │ filter: sq > 1
         │
         └── • scan
@@ -1286,21 +1286,21 @@ vectorized: true
 ·
 • merge join (inner)
 │ columns: (x, y, u, x, y, v)
-│ estimated row count: 9 (missing stats)
+│ estimated row count: 3 (missing stats)
 │ equality: (y, x) = (y, x)
 │ merge ordering: +"(y=y)",+"(x=x)"
 │
 ├── • scan
 │     columns: (x, y, u)
 │     ordering: +y
-│     estimated row count: 9 (missing stats)
+│     estimated row count: 3 (missing stats)
 │     table: xyu@xyu_pkey
 │     spans: /1-/1/10
 │
 └── • scan
       columns: (x, y, v)
       ordering: +y
-      estimated row count: 9 (missing stats)
+      estimated row count: 3 (missing stats)
       table: xyv@xyv_pkey
       spans: /1-/1/10
 
@@ -1312,21 +1312,21 @@ vectorized: true
 ·
 • merge join (inner)
 │ columns: (x, y, u, x, y, v)
-│ estimated row count: 9 (missing stats)
+│ estimated row count: 3 (missing stats)
 │ equality: (y, x) = (y, x)
 │ merge ordering: +"(y=y)",+"(x=x)"
 │
 ├── • scan
 │     columns: (x, y, u)
 │     ordering: +y
-│     estimated row count: 9 (missing stats)
+│     estimated row count: 3 (missing stats)
 │     table: xyu@xyu_pkey
 │     spans: /1-/1/10
 │
 └── • scan
       columns: (x, y, v)
       ordering: +y
-      estimated row count: 9 (missing stats)
+      estimated row count: 3 (missing stats)
       table: xyv@xyv_pkey
       spans: /1-/1/10
 
@@ -1352,7 +1352,7 @@ vectorized: true
 └── • scan
       columns: (x, y, v)
       ordering: +y
-      estimated row count: 9 (missing stats)
+      estimated row count: 3 (missing stats)
       table: xyv@xyv_pkey
       spans: /1-/1/10
 
@@ -1378,7 +1378,7 @@ vectorized: true
 └── • scan
       columns: (x, y, u)
       ordering: +y
-      estimated row count: 9 (missing stats)
+      estimated row count: 3 (missing stats)
       table: xyu@xyu_pkey
       spans: /1-/1/10
 
@@ -1503,7 +1503,7 @@ vectorized: true
 └── • scan
       columns: (x, y, v)
       ordering: +y
-      estimated row count: 9 (missing stats)
+      estimated row count: 3 (missing stats)
       table: xyv@xyv_pkey
       spans: /1-/1/10
 
@@ -1529,7 +1529,7 @@ vectorized: true
 └── • scan
       columns: (x, y, u)
       ordering: +y
-      estimated row count: 9 (missing stats)
+      estimated row count: 3 (missing stats)
       table: xyu@xyu_pkey
       spans: /1-/1/10
 

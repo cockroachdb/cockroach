@@ -316,7 +316,7 @@ project
       ├── fd: ()-->(4), (1)-->(2,3)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string) i:4(int)
-      │    ├── stats: [rows=5.512417]
+      │    ├── stats: [rows=2.503931]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4)
       │    └── inverted-filter
@@ -329,7 +329,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=5.512417]
+      │         ├── stats: [rows=2.503931]
       │         ├── key: (1)
       │         └── scan t@mp,partial
       │              ├── columns: k:1(int!null) g_inverted_key:10(encodedkey!null)
@@ -340,12 +340,12 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=mp
-      │              ├── stats: [rows=5.512417, distinct(1)=1.57498, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=1, null(4)=0, distinct(10)=1.18757, null(10)=0, distinct(3,4,10)=2.36876, null(3,4,10)=0]
-      │              │   histogram(3)=  0   2.7562   0   2.7562
+      │              ├── stats: [rows=2.503931, distinct(1)=0.715409, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=1, null(4)=0, distinct(10)=1.18757, null(10)=0, distinct(3,4,10)=2.36876, null(3,4,10)=0]
+      │              │   histogram(3)=  0   1.252    0   1.252
       │              │                <--- 'banana' --- 'cherry'
-      │              │   histogram(4)=  0 5.5124
+      │              │   histogram(4)=  0 2.5039
       │              │                <--- 400 -
-      │              │   histogram(10)=  0             0              8.4596e-12           4.6418           0.87065             0              0             0
+      │              │   histogram(10)=  0             0              3.8427e-12           2.1085           0.39548             0              0             0
       │              │                 <--- '\x42fd1000000000000001' ------------ '\x42fd1000000100000000' --------- '\x42fd1200000000000000' --- '\x42fd1400000000000001'
       │              ├── key: (1)
       │              └── fd: (1)-->(10)
@@ -372,7 +372,7 @@ project
       ├── fd: (1)-->(2-4)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string) i:4(int)
-      │    ├── stats: [rows=14.82863]
+      │    ├── stats: [rows=10.11106]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4)
       │    └── inverted-filter
@@ -385,7 +385,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=14.82863]
+      │         ├── stats: [rows=10.11106]
       │         ├── key: (1)
       │         └── scan t@mp,partial
       │              ├── columns: k:1(int!null) g_inverted_key:10(encodedkey!null)
@@ -399,13 +399,13 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=mp
-      │              ├── stats: [rows=14.82863, distinct(1)=4.23675, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=3, null(4)=0, distinct(10)=1.18757, null(10)=0, distinct(3,4,10)=7.05532, null(3,4,10)=0]
-      │              │   histogram(3)=  0   7.4143   0   7.4143
+      │              ├── stats: [rows=10.11106, distinct(1)=2.88887, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=3, null(4)=0, distinct(10)=1.18757, null(10)=0, distinct(3,4,10)=7.05532, null(3,4,10)=0]
+      │              │   histogram(3)=  0   5.0555   0   5.0555
       │              │                <--- 'banana' --- 'cherry'
-      │              │   histogram(4)=  0 2.4714 0 4.9429 0 7.4143
+      │              │   histogram(4)=  0 1.6852 0 3.3704 0 5.0555
       │              │                <--- 200 ---- 300 ---- 400 -
-      │              │   histogram(10)=  0             0              2.2757e-11           12.487           2.3421             0              0             0
-      │              │                 <--- '\x42fd1000000000000001' ------------ '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000001'
+      │              │   histogram(10)=  0             0              1.5517e-11           8.5141           1.597             0              0             0
+      │              │                 <--- '\x42fd1000000000000001' ------------ '\x42fd1000000100000000' ------- '\x42fd1200000000000000' --- '\x42fd1400000000000001'
       │              ├── key: (1)
       │              └── fd: (1)-->(10)
       └── filters

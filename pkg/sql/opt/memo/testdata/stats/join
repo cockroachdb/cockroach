@@ -1655,17 +1655,17 @@ project
  └── distinct-on
       ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
       ├── grouping columns: x:1(int!null) rowid:9(int!null)
-      ├── stats: [rows=16383.64, distinct(1,9)=16383.6, null(1,9)=0]
+      ├── stats: [rows=16247.17, distinct(1,9)=16247.2, null(1,9)=0]
       ├── key: (1,9)
       ├── fd: (1,9)-->(2-4,7,8)
       ├── union-all
       │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
       │    ├── left columns: x:12(int) y:13(int) s:14(string) d:15(decimal) u:18(int) v:19(int) rowid:20(int)
       │    ├── right columns: x:23(int) y:24(int) s:25(string) d:26(decimal) u:29(int) v:30(int) rowid:31(int)
-      │    ├── stats: [rows=16383.64, distinct(1,9)=16383.6, null(1,9)=0]
+      │    ├── stats: [rows=16247.17, distinct(1,9)=16247.2, null(1,9)=0]
       │    ├── inner-join (cross)
       │    │    ├── columns: x:12(int!null) y:13(int) s:14(string!null) d:15(decimal!null) u:18(int!null) v:19(int!null) rowid:20(int!null)
-      │    │    ├── stats: [rows=8191.818, distinct(12,20)=8191.82, null(12,20)=0]
+      │    │    ├── stats: [rows=8123.585, distinct(12,20)=8123.58, null(12,20)=0]
       │    │    ├── key: (12,20)
       │    │    ├── fd: ()-->(14,18,19), (12)-->(13,15), (15)-->(12,13)
       │    │    ├── index-join xysd
@@ -1681,7 +1681,7 @@ project
       │    │    │         └── fd: ()-->(14), (12)-->(15), (15)-->(12)
       │    │    ├── select
       │    │    │    ├── columns: u:18(int!null) v:19(int!null) rowid:20(int!null)
-      │    │    │    ├── stats: [rows=16.38364, distinct(18)=1, null(18)=0, distinct(19)=1, null(19)=0, distinct(20)=16.3836, null(20)=0, distinct(18,19)=1, null(18,19)=0]
+      │    │    │    ├── stats: [rows=16.24717, distinct(18)=1, null(18)=0, distinct(19)=1, null(19)=0, distinct(20)=16.2472, null(20)=0, distinct(18,19)=1, null(18,19)=0]
       │    │    │    ├── key: (20)
       │    │    │    ├── fd: ()-->(18,19)
       │    │    │    ├── scan uv
@@ -1695,7 +1695,7 @@ project
       │    │    └── filters (true)
       │    └── inner-join (cross)
       │         ├── columns: x:23(int!null) y:24(int) s:25(string!null) d:26(decimal!null) u:29(int!null) v:30(int!null) rowid:31(int!null)
-      │         ├── stats: [rows=8191.818, distinct(23,31)=8191.82, null(23,31)=0]
+      │         ├── stats: [rows=8123.585, distinct(23,31)=8123.58, null(23,31)=0]
       │         ├── key: (23,31)
       │         ├── fd: ()-->(25,29,30), (23)-->(24,26), (26)-->(23,24)
       │         ├── index-join xysd
@@ -1711,7 +1711,7 @@ project
       │         │         └── fd: ()-->(25), (23)-->(26), (26)-->(23)
       │         ├── select
       │         │    ├── columns: u:29(int!null) v:30(int!null) rowid:31(int!null)
-      │         │    ├── stats: [rows=16.38364, distinct(29)=1, null(29)=0, distinct(30)=1, null(30)=0, distinct(31)=16.3836, null(31)=0, distinct(29,30)=1, null(29,30)=0]
+      │         │    ├── stats: [rows=16.24717, distinct(29)=1, null(29)=0, distinct(30)=1, null(30)=0, distinct(31)=16.2472, null(31)=0, distinct(29,30)=1, null(29,30)=0]
       │         │    ├── key: (31)
       │         │    ├── fd: ()-->(29,30)
       │         │    ├── scan uv

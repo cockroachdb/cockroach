@@ -1940,7 +1940,7 @@ vectorized: true
 │
 └── • zigzag join
       columns: (a, b, a, c)
-      estimated row count: 1 (missing stats)
+      estimated row count: 0 (missing stats)
       pred: (b = 5) AND (c = 6.0)
       left table: zigzag@b_idx
       left columns: (a, b)

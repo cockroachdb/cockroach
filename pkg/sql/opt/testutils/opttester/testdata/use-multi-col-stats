@@ -13,8 +13,8 @@ CREATE TABLE rides (
     CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
     INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC),
     INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC),
-    FAMILY "primary" (id, city, vehicle_city, rider_id, vehicle_id, start_address, end_address, start_time, end_time, revenue),
-    CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city)
+    INDEX rides_city_vehicle_city (city ASC, vehicle_city ASC),
+    FAMILY "primary" (id, city, vehicle_city, rider_id, vehicle_id, start_address, end_address, start_time, end_time, revenue)
 )
 ----
 
@@ -22,27 +22,49 @@ inject-stats file=inject-stats.json table=rides
 ----
 
 opt format=show-stats set=optimizer_use_multicol_stats=true
-SELECT * FROM rides WHERE city = 'rome' and id = '17198184-b24f-4aa8-9933-64a72ff6665f'
+SELECT * FROM rides WHERE city = 'rome' and vehicle_city = 'rome'
 ----
-scan rides
- ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
- ├── constraint: /2/1: [/'rome'/'17198184-b24f-4aa8-9933-64a72ff6665f' - /'rome'/'17198184-b24f-4aa8-9933-64a72ff6665f']
- ├── cardinality: [0 - 1]
- ├── stats: [rows=0.911, distinct(1)=0.911, null(1)=0, distinct(2)=0.911, null(2)=0, distinct(1,2)=0.911, null(1,2)=0]
- │   histogram(2)=  0  0.911
+select
+ ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar!null) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
+ ├── stats: [rows=50.105, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ │   histogram(2)=  0  50.105
  │                <--- 'rome'
- ├── key: ()
- └── fd: ()-->(1-10)
+ │   histogram(3)=  0  50.105
+ │                <--- 'rome'
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4-10)
+ ├── scan rides
+ │    ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
+ │    ├── constraint: /2/1: [/'rome' - /'rome']
+ │    ├── stats: [rows=55, distinct(2)=1, null(2)=0]
+ │    │   histogram(2)=  0    55
+ │    │                <--- 'rome'
+ │    ├── key: (1)
+ │    └── fd: ()-->(2), (1)-->(3-10)
+ └── filters
+      └── eq [type=bool, outer=(3), constraints=(/3: [/'rome' - /'rome']; tight), fd=()-->(3)]
+           ├── variable: vehicle_city:3 [type=varchar]
+           └── const: 'rome' [type=string]
 
 opt format=show-stats set=optimizer_use_multicol_stats=false
-SELECT * FROM rides WHERE city = 'rome' and id = '17198184-b24f-4aa8-9933-64a72ff6665f'
+SELECT * FROM rides WHERE city = 'rome' and vehicle_city = 'rome'
 ----
-scan rides
- ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
- ├── constraint: /2/1: [/'rome'/'17198184-b24f-4aa8-9933-64a72ff6665f' - /'rome'/'17198184-b24f-4aa8-9933-64a72ff6665f']
- ├── cardinality: [0 - 1]
- ├── stats: [rows=0.1100001, distinct(1)=0.11, null(1)=0, distinct(2)=0.11, null(2)=0]
- │   histogram(2)=  0   0.11
+index-join rides
+ ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar!null) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
+ ├── stats: [rows=6.05, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+ │   histogram(2)=  0   6.05
  │                <--- 'rome'
- ├── key: ()
- └── fd: ()-->(1-10)
+ │   histogram(3)=  0   6.05
+ │                <--- 'rome'
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4-10)
+ └── scan rides@rides_city_vehicle_city
+      ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar!null)
+      ├── constraint: /2/3/1: [/'rome'/'rome' - /'rome'/'rome']
+      ├── stats: [rows=6.05, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+      │   histogram(2)=  0   6.05
+      │                <--- 'rome'
+      │   histogram(3)=  0   6.05
+      │                <--- 'rome'
+      ├── key: (1)
+      └── fd: ()-->(2,3)

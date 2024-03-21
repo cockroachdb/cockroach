@@ -17,7 +17,7 @@ vectorized: true
 └── • filter
     │ columns: (k, v, w)
     │ ordering: +v
-    │ estimated row count: 28 (missing stats)
+    │ estimated row count: 10 (missing stats)
     │ filter: w > 30
     │
     └── • index join
