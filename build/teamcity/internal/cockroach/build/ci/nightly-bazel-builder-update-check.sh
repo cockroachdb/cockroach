@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -xeuo pipefail
 
-BASE_IMAGE="ubuntu:focal"
+# We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
+# See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
+BASE_IMAGE="us-east1-docker.pkg.dev/crl-docker-sync/docker-mirror/docker.io/library/ubuntu:focal"
 BAZEL_IMAGE="us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel:latest-do-not-use"
 
 docker pull $BASE_IMAGE && docker pull $BAZEL_IMAGE
