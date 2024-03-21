@@ -1047,9 +1047,7 @@ func (s *Perform) WalkStmt(visitor StatementVisitor) Statement {
 // stmt_call
 type Call struct {
 	StatementImpl
-	Expr   Expr
-	IsCall bool
-	Target Variable
+	Proc *tree.FuncExpr
 }
 
 func (s *Call) CopyNode() *Call {
@@ -1058,12 +1056,9 @@ func (s *Call) CopyNode() *Call {
 }
 
 func (s *Call) Format(ctx *tree.FmtCtx) {
-	// TODO(drewk): Correct the Call field and print the Expr and Target.
-	if s.IsCall {
-		ctx.WriteString("CALL a function/procedure\n")
-	} else {
-		ctx.WriteString("DO a code block\n")
-	}
+	ctx.WriteString("CALL ")
+	ctx.FormatNode(s.Proc)
+	ctx.WriteString(";\n")
 }
 
 func (s *Call) PlpgSQLStatementTag() string {
