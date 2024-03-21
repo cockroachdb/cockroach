@@ -139,4 +139,13 @@ listeners, if the headers are allowed.`,
 		Name:        "base-dir",
 		Description: "If set, the tenant processes will use it as a store location.",
 	}
+
+	Virtualized = FlagInfo{
+		Name:        "virtualized",
+		Description: "If set, the cluster will be initialized as a virtualized cluster.",
+	}
+	VirtualizedEmpty = FlagInfo{
+		Name:        "virtualized-empty",
+		Description: "If set, the cluster will be initialized as a virtualized cluster without an application cluster.",
+	}
 )
