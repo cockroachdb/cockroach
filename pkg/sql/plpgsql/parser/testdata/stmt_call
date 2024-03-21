@@ -1,9 +1,80 @@
-feature-count
-DECLARE
+parse
 BEGIN
-  CALL fn(1);
-  DO $$ this is a code block $$;
+  CALL p();
 END
 ----
-stmt_block: 1
-stmt_call: 2
+BEGIN
+CALL p();
+END;
+ -- normalized!
+BEGIN
+CALL (p());
+END;
+ -- fully parenthesized
+BEGIN
+CALL p();
+END;
+ -- literals removed
+BEGIN
+CALL _();
+END;
+ -- identifiers removed
+
+parse
+BEGIN
+  CALL p(1, 2);
+END
+----
+BEGIN
+CALL p(1, 2);
+END;
+ -- normalized!
+BEGIN
+CALL (p((1), (2)));
+END;
+ -- fully parenthesized
+BEGIN
+CALL p(_, _);
+END;
+ -- literals removed
+BEGIN
+CALL _(1, 2);
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+  x INT;
+  y TEXT;
+BEGIN
+  CALL p(x, y);
+END
+----
+DECLARE
+x INT8;
+y STRING;
+BEGIN
+CALL p(x, y);
+END;
+ -- normalized!
+DECLARE
+x INT8;
+y STRING;
+BEGIN
+CALL (p((x), (y)));
+END;
+ -- fully parenthesized
+DECLARE
+x INT8;
+y STRING;
+BEGIN
+CALL p(x, y);
+END;
+ -- literals removed
+DECLARE
+_ INT8;
+_ STRING;
+BEGIN
+CALL _(_, _);
+END;
+ -- identifiers removed
