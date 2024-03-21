@@ -101,13 +101,13 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 177.545714
+ ├── cost: 464.259997
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
- │    ├── stats: [rows=4666.667, distinct(1)=4666.67, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=4666.67, null(1,2)=0]
- │    ├── cost: 177.335714
+ │    ├── stats: [rows=1666.667, distinct(1)=1666.67, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=1666.67, null(1,2)=0]
+ │    ├── cost: 464.049997
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -115,10 +115,10 @@ limit
  │    │    ├── columns: k:1!null i:2 s:3 d:4!null
  │    │    ├── constraint: /1: [/6 - ]
  │    │    ├── stats: [rows=33333.33, distinct(1)=33333.3, null(1)=0]
- │    │    ├── cost: 173.02
+ │    │    ├── cost: 452.019998
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
- │    │    └── limit hint: 142.86
+ │    │    └── limit hint: 400.00
  │    └── filters
  │         └── i:2 IN (1, 3, 5, 7, 9) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3] [/5 - /5] [/7 - /7] [/9 - /9]; tight)]
  └── 20
@@ -132,14 +132,14 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 36.7179006
+ ├── cost: 446.739807
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── cardinality: [0 - 450]
- │    ├── stats: [rows=407.25, distinct(1)=407.25, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=407.25, null(1,2)=0]
- │    ├── cost: 36.5079006
+ │    ├── stats: [rows=22.50001, distinct(1)=22.5, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=22.5, null(1,2)=0]
+ │    ├── cost: 446.529807
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -148,10 +148,10 @@ limit
  │    │    ├── constraint: /1: [/1 - /450]
  │    │    ├── cardinality: [0 - 450]
  │    │    ├── stats: [rows=450, distinct(1)=450, null(1)=0]
- │    │    ├── cost: 31.9879006
+ │    │    ├── cost: 442.009807
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
- │    │    └── limit hint: 22.10
+ │    │    └── limit hint: 400.00
  │    └── filters
  │         └── i:2 IN (1, 3, 5, 7, 9) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3] [/5 - /5] [/7 - /7] [/9 - /9]; tight)]
  └── 20
