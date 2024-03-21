@@ -301,6 +301,10 @@ const (
 	// used for allocator decisions before then.
 	V24_1_GossipMaximumIOOverload
 
+	// V24_1_EstimatedMVCCStatsInSplit introduces MVCC stats estimates during range
+	// splits.
+	V24_1_EstimatedMVCCStatsInSplit
+
 	numKeys
 )
 
@@ -367,6 +371,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1_PebbleFormatSyntheticPrefixSuffix:    {Major: 23, Minor: 2, Internal: 16},
 	V24_1_SystemDatabaseSurvivability:          {Major: 23, Minor: 2, Internal: 18},
 	V24_1_GossipMaximumIOOverload:              {Major: 23, Minor: 2, Internal: 20},
+	V24_1_EstimatedMVCCStatsInSplit:            {Major: 23, Minor: 2, Internal: 22},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster

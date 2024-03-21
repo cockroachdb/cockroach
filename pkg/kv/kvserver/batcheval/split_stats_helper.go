@@ -10,7 +10,11 @@
 
 package batcheval
 
-import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+import (
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+)
 
 // splitStatsHelper codifies and explains the stats computations related to a
 // split. The quantities known during a split (i.e. while the split trigger
@@ -109,8 +113,10 @@ import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 type splitStatsHelper struct {
 	in splitStatsHelperInput
 
-	absPostSplitLeft  *enginepb.MVCCStats
-	absPostSplitRight *enginepb.MVCCStats
+	absPostSplitLeft        *enginepb.MVCCStats
+	absPostSplitRight       *enginepb.MVCCStats
+	splitsWithEstimates     int
+	estimatedTotalBytesDiff int
 }
 
 // splitStatsScanFn scans a post-split keyspace to compute its stats. The
@@ -119,20 +125,59 @@ type splitStatsScanFn func() (enginepb.MVCCStats, error)
 
 // splitStatsHelperInput is passed to makeSplitStatsHelper.
 type splitStatsHelperInput struct {
+	// AbsPreSplitBothStored contains the on-disk MVCC stats for the entire range,
+	// retrieved in splitTrigger while holding latches.
 	AbsPreSplitBothStored enginepb.MVCCStats
-	DeltaBatchEstimated   enginepb.MVCCStats
-	DeltaRangeKey         enginepb.MVCCStats
+	// DeltaBatchEstimated contains MVCC stats corresponding to writes in the
+	// split EndTxn (e.g. to the range descriptors). These are all writes to the
+	// local key space.
+	DeltaBatchEstimated enginepb.MVCCStats
+	// DeltaRangeKey contains MVCC stats corresponding to any range keys
+	// straddling both the left and right hand sides.
+	DeltaRangeKey enginepb.MVCCStats
+	// PreSplitLeftUser contains the pre-split user-only stats of the left hand
+	// side. Those are expensive to compute, so we compute them in AdminSplit,
+	// before holding latches, and pass them to splitTrigger.
+	PreSplitLeftUser enginepb.MVCCStats
+	// PreSplitStats are the total on-disk stats before the split (in AdminSplit).
+	PreSplitStats enginepb.MVCCStats
 	// PostSplitScanLeftFn returns the stats for the left hand side of the
 	// split computed by scanning relevant part of the range.
 	PostSplitScanLeftFn splitStatsScanFn
 	// PostSplitScanRightFn returns the stats for the right hand side of the
 	// split computed by scanning relevant part of the range.
 	PostSplitScanRightFn splitStatsScanFn
+	// PostSplitScanLocalLeftFn returns the stats for the non-user spans of the
+	// left hand side. Adding these to PreSplitLeftUser results in an estimate of
+	// the left hand side stats. It's only an estimate because any writes to the
+	// user spans of the left hand side, concurrent with the split, may not be
+	// accounted for.
+	PostSplitScanLocalLeftFn splitStatsScanFn
 	// ScanRightFirst controls whether the left hand side or the right hand
 	// side of the split is scanned first. In cases where neither of the
 	// input stats contain estimates, this is the only side that needs to
 	// be scanned.
 	ScanRightFirst bool
+	// LeftUserIsEmpty denotes that the left hand side does not contain any user
+	// data (it may still have non-zero MVCC stats). If this is the case, the
+	// entire left hand side will be scanned to compute stats accurately. This is
+	// cheap because the range is empty.
+	LeftUserIsEmpty bool
+	// RightUserIsEmpty denotes that the right hand side does not contain any user
+	// data (it may still have non-zero MVCC stats). If this is the case, the
+	// entire right hand side will be scanned to compute stats accurately. This is
+	// cheap because the range is empty.
+	RightUserIsEmpty bool
+	// Max number of entities (keys, values, etc.) corresponding to a single MVCC
+	// stat (e.g. KeyCount) that is acceptable as the absolute difference between
+	// PreSplitStats and AbsPreSplitBothStored.
+	// Tuned by kv.split.max_mvcc_stat_count_diff.
+	MaxCountDiff int64
+	// Max number of bytes corresponding to a single MVCC stat (e.g. KeyBytes)
+	// that is acceptable as the absolute difference between PreSplitStats and
+	// AbsPreSplitBothStored.
+	// Tuned by kv.split.max_mvcc_stat_bytes_diff.
+	MaxBytesDiff int64
 }
 
 // makeSplitStatsHelper initializes a splitStatsHelper. The values in the input
@@ -191,6 +236,56 @@ func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error)
 	if err != nil {
 		return splitStatsHelper{}, err
 	}
+	return h, nil
+}
+
+// makeEstimatedSplitStatsHelper is like makeSplitStatsHelper except it does
+// not scan the entire LHS or RHS by calling PostSplitScan(Left|Right)Fn().
+// Instead, this function derives the post-split LHS stats by adding
+// the pre-split user LHS stats to the non-user LHS stats computed here by
+// calling PostSplitScanLocalLeftFn(). The resulting stats are not guaranteed
+// to be 100% accurate, so they are marked with ContainsEstimates. However,
+// if there are no writes concurrent with the split (i.e. the pre-computed
+// PreSplitLeftUser still correspond to the correct LHS user stats), then the
+// stats are guaranteed to be correct.
+// INVARIANT 1: Non-user stats (SysBytes, SysCount, etc.) are always correct.
+// This is because we scan those spans while holding latches in this function.
+// INVARIANT 2: If there are no writes concurrent with the split, the stats are
+// always correct.
+func makeEstimatedSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error) {
+	h := splitStatsHelper{
+		in: input,
+	}
+
+	// Compute the LHS stats by adding the user-only LHS stats passed into
+	// the split trigger and the non-user LHS stats computed by calling
+	// PostSplitScanLocalLeftFn(). The local key space is very small, so this is
+	// not expensive. Scanning the local key space ensures that any writes to
+	// local keys during the split (e.g. to range descriptors and transaction
+	// records) are accounted for.
+	leftStats, err := input.PostSplitScanLocalLeftFn()
+	leftStats.Add(input.PreSplitLeftUser)
+	h.absPostSplitLeft = &leftStats
+	if err != nil {
+		return splitStatsHelper{}, err
+	}
+
+	// For the right side of the split, the computation is identical to that in
+	// makeSplitStatsHelper: subtract the first side's stats from the total, and
+	// adjust DeltaBatchEstimated and DeltaRangeKey.
+	ms := h.in.AbsPreSplitBothStored
+	ms.Subtract(leftStats)
+	ms.Add(h.in.DeltaBatchEstimated)
+	ms.Add(h.in.DeltaRangeKey)
+	h.absPostSplitRight = &ms
+
+	// Mark the new stats with ContainsEstimates. We know both sides are non-empty.
+	h.absPostSplitLeft.ContainsEstimates++
+	h.absPostSplitRight.ContainsEstimates++
+
+	h.splitsWithEstimates = 1
+	h.estimatedTotalBytesDiff = int(math.Abs(
+		float64(h.in.AbsPreSplitBothStored.Total()) - float64(h.in.PreSplitStats.Total())))
 	return h, nil
 }
 
