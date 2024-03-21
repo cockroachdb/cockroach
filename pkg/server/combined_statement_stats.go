@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
@@ -100,6 +99,13 @@ func (s *statusServer) CombinedStatementStats(
 		s.sqlServer.execCfg.SQLStatsTestingKnobs)
 }
 
+type statementStatsRunner struct {
+	stmtSourceTable string
+	txnSourceTable  string
+	ie              *sql.InternalExecutor
+	testingKnobs    *sqlstats.TestingKnobs
+}
+
 func getCombinedStatementStats(
 	ctx context.Context,
 	req *serverpb.CombinedStatementsStatsRequest,
@@ -114,46 +120,55 @@ func getCombinedStatementStats(
 		req, testingKnobs, showInternal, settings)
 
 	// Used for mixed cluster version, where we need to use the persisted view with _v22_2.
-	tableSuffix := ""
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddSQLStatsComputedIndexes) {
-		tableSuffix = "_v22_2"
-	}
 	// Check if the activity tables contains all the data required for the selected period from the request.
 	activityHasAllData := false
 	reqStartTime := getTimeFromSeconds(req.Start)
-	if settings.Version.IsActive(ctx, clusterversion.V23_1AddSystemActivityTables) {
-		sort := serverpb.StatsSortOptions_SERVICE_LAT
-		if req.FetchMode != nil {
-			sort = req.FetchMode.Sort
-		}
-		activityHasAllData, err = activityTablesHaveFullData(
-			ctx,
-			ie,
-			settings,
-			testingKnobs,
-			reqStartTime,
-			req.Limit,
-			sort,
-		)
+	sort := serverpb.StatsSortOptions_SERVICE_LAT
+	if req.FetchMode != nil {
+		sort = req.FetchMode.Sort
+	}
+	activityHasAllData, err = activityTablesHaveFullData(
+		ctx,
+		ie,
+		settings,
+		testingKnobs,
+		reqStartTime,
+		req.Limit,
+		sort,
+	)
+	if err != nil {
+		log.Errorf(ctx, "Error on activityTablesHaveFullData: %s", err)
+	}
 
-		if err != nil {
-			log.Errorf(ctx, "Error on activityTablesHaveFullData: %s", err)
-		}
+	stmtsRunTime, txnsRunTime, oldestDate, stmtSourceTable, txnSourceTable, err := getSourceStatsInfo(
+		ctx,
+		req,
+		ie,
+		testingKnobs,
+		activityHasAllData,
+		showInternal,
+	)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
+	runner := &statementStatsRunner{
+		stmtSourceTable: stmtSourceTable,
+		txnSourceTable:  txnSourceTable,
+		ie:              ie,
+		testingKnobs:    testingKnobs,
 	}
 
 	var statements []serverpb.StatementsResponse_CollectedStatementStatistics
 	var transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
 
 	if req.FetchMode == nil || req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
-		transactions, err = collectCombinedTransactions(
+		transactions, err = runner.collectCombinedTransactions(
 			ctx,
-			ie,
 			whereClause,
 			args,
 			orderAndLimit,
-			testingKnobs,
-			activityHasAllData,
-			tableSuffix)
+		)
 		if err != nil {
 			return nil, srverrors.ServerError(ctx, err)
 		}
@@ -167,8 +182,7 @@ func getCombinedStatementStats(
 			ie,
 			req,
 			transactions,
-			testingKnobs,
-			tableSuffix)
+			testingKnobs)
 	} else {
 		statements, err = collectCombinedStatements(
 			ctx,
@@ -177,22 +191,8 @@ func getCombinedStatementStats(
 			args,
 			orderAndLimit,
 			testingKnobs,
-			activityHasAllData,
-			tableSuffix)
+			activityHasAllData)
 	}
-
-	if err != nil {
-		return nil, srverrors.ServerError(ctx, err)
-	}
-
-	stmtsRunTime, txnsRunTime, oldestDate, stmtSourceTable, txnSourceTable, err := getSourceStatsInfo(
-		ctx,
-		req,
-		ie,
-		testingKnobs,
-		activityHasAllData,
-		tableSuffix,
-		showInternal)
 
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
@@ -296,7 +296,6 @@ func getSourceStatsInfo(
 	ie *sql.InternalExecutor,
 	testingKnobs *sqlstats.TestingKnobs,
 	activityTableHasAllData bool,
-	tableSuffix string,
 	showInternal bool,
 ) (
 	stmtsRuntime float32,
@@ -440,7 +439,7 @@ FROM %s %s`, table, whereClause)
 	}
 	// If there are no results from the activity table, retrieve the data from the persisted table.
 	if stmtsRuntime == 0 {
-		stmtSourceTable = CrdbInternalStmtStatsPersisted + tableSuffix
+		stmtSourceTable = CrdbInternalStmtStatsPersisted
 		stmtsRuntime, err = getRuntime(stmtSourceTable, createStatsTableQuery)
 		if err != nil {
 			return 0, 0, nil, stmtSourceTable, "", err
@@ -475,7 +474,7 @@ FROM %s %s`, table, whereClause)
 		}
 		// If there are no results from the activity table, retrieve the data from the persisted table.
 		if txnsRuntime == 0 {
-			txnSourceTable = CrdbInternalTxnStatsPersisted + tableSuffix
+			txnSourceTable = CrdbInternalTxnStatsPersisted
 			txnsRuntime, err = getRuntime(txnSourceTable, createStatsTableQuery)
 			if err != nil {
 				return 0, 0, nil, stmtSourceTable, txnSourceTable, err
@@ -672,7 +671,6 @@ func collectCombinedStatements(
 	orderAndLimit string,
 	testingKnobs *sqlstats.TestingKnobs,
 	activityTableHasAllData bool,
-	tableSuffix string,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 	aostClause := testingKnobs.GetAOSTClause()
 	const expectedNumDatums = 10
@@ -754,7 +752,7 @@ FROM (SELECT fingerprint_id,
 			ctx,
 			ie,
 			queryFormat,
-			CrdbInternalStmtStatsPersisted+tableSuffix,
+			CrdbInternalStmtStatsPersisted,
 			"combined-stmts-persisted-by-interval",
 			whereClause,
 			args,
@@ -878,17 +876,10 @@ func getIterator(
 	return it, nil
 }
 
-func collectCombinedTransactions(
-	ctx context.Context,
-	ie *sql.InternalExecutor,
-	whereClause string,
-	args []interface{},
-	orderAndLimit string,
-	testingKnobs *sqlstats.TestingKnobs,
-	activityTableHasAllData bool,
-	tableSuffix string,
+func (r *statementStatsRunner) collectCombinedTransactions(
+	ctx context.Context, whereClause string, args []interface{}, orderAndLimit string,
 ) ([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, error) {
-	aostClause := testingKnobs.GetAOSTClause()
+	aostClause := r.testingKnobs.GetAOSTClause()
 	const expectedNumDatums = 5
 	const queryFormat = `
 SELECT *
@@ -905,64 +896,24 @@ FROM (SELECT app_name,
 
 	var it isql.Rows
 	var err error
-	if activityTableHasAllData {
-		it, err = getIterator(
-			ctx,
-			ie,
-			queryFormat,
-			CrdbInternalTxnStatsCached,
-			"combined-txns-activity-by-interval",
-			whereClause,
-			args,
-			aostClause,
-			orderAndLimit)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
 
+	it, err = getIterator(
+		ctx,
+		r.ie,
+		queryFormat,
+		r.txnSourceTable,
+		"collect-combined-transactions-by-interval",
+		whereClause,
+		args,
+		aostClause,
+		orderAndLimit)
+
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
 	defer func() {
 		err = closeIterator(it, err)
 	}()
-
-	// If there are no results from the activity table, retrieve the data from the persisted table.
-	if it == nil || !it.HasResults() {
-		if it != nil {
-			err = closeIterator(it, err)
-		}
-		it, err = getIterator(
-			ctx,
-			ie,
-			queryFormat,
-			CrdbInternalTxnStatsPersisted+tableSuffix,
-			"combined-txns-persisted-by-interval",
-			whereClause,
-			args,
-			aostClause,
-			orderAndLimit)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
-
-	// If there are no results from the persisted table, retrieve the data from the combined view
-	// with data in-memory.
-	if !it.HasResults() {
-		err = closeIterator(it, err)
-		it, err = getIterator(
-			ctx,
-			ie,
-			queryFormat,
-			CrdbInternalTxnStatsCombined,
-			"combined-txns-with-memory-by-interval",
-			whereClause,
-			args,
-			aostClause,
-			orderAndLimit)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
 
 	var transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
 	var ok bool
@@ -1024,7 +975,6 @@ func collectStmtsForTxns(
 	req *serverpb.CombinedStatementsStatsRequest,
 	transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
 	testingKnobs *sqlstats.TestingKnobs,
-	tableSuffix string,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 
 	whereClause, args := buildWhereClauseForStmtsByTxn(req, transactions, testingKnobs)
@@ -1048,7 +998,7 @@ GROUP BY
 
 	query := fmt.Sprintf(
 		queryFormat,
-		CrdbInternalStmtStatsPersisted+tableSuffix,
+		CrdbInternalStmtStatsPersisted,
 		whereClause)
 	it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-persisted-for-txn", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
