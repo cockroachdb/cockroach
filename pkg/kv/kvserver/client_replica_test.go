@@ -4076,6 +4076,13 @@ func TestStrictGCEnforcement(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// We don't strictly enforce the GC TTL if the protected timestamp
+					// state cached on the replica is older than the lease's start time.
+					// We disable the lease queue to prevent flakes right around lease
+					// transfers. See getImpliedGCThresholdRLocked for more details.
+					DisableLeaseQueue: true,
+				},
 				SpanConfig: &spanconfig.TestingKnobs{
 					KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{
 						OnTimestampAdvance: func(timestamp hlc.Timestamp) {
