@@ -549,28 +549,37 @@ project
       │         ├── distinct-on
       │         │    ├── columns: b1:43!null b2:44!null b3:45 b4:46 b.rowid:47!null
       │         │    ├── grouping columns: b.rowid:47!null
+      │         │    ├── internal-ordering: +47
       │         │    ├── key: (47)
       │         │    ├── fd: (47)-->(43-46)
       │         │    ├── union-all
       │         │    │    ├── columns: b1:43!null b2:44!null b3:45 b4:46 b.rowid:47!null
       │         │    │    ├── left columns: b1:115 b2:116 b3:117 b4:118 b.rowid:119
       │         │    │    ├── right columns: b1:122 b2:123 b3:124 b4:125 b.rowid:126
-      │         │    │    ├── scan b@b_b1_b2_idx
+      │         │    │    ├── ordering: +47
+      │         │    │    ├── sort
       │         │    │    │    ├── columns: b1:115!null b2:116!null b3:117 b4:118 b.rowid:119!null
-      │         │    │    │    ├── constraint: /115/116/119
-      │         │    │    │    │    ├── [/0/0 - /0/0]
-      │         │    │    │    │    └── [/0/5 - /0/5]
       │         │    │    │    ├── key: (119)
-      │         │    │    │    └── fd: ()-->(115), (119)-->(116-118)
+      │         │    │    │    ├── fd: ()-->(115), (119)-->(116-118)
+      │         │    │    │    ├── ordering: +119 opt(115) [actual: +119]
+      │         │    │    │    └── scan b@b_b1_b2_idx
+      │         │    │    │         ├── columns: b1:115!null b2:116!null b3:117 b4:118 b.rowid:119!null
+      │         │    │    │         ├── constraint: /115/116/119
+      │         │    │    │         │    ├── [/0/0 - /0/0]
+      │         │    │    │         │    └── [/0/5 - /0/5]
+      │         │    │    │         ├── key: (119)
+      │         │    │    │         └── fd: ()-->(115), (119)-->(116-118)
       │         │    │    └── select
       │         │    │         ├── columns: b1:122!null b2:123!null b3:124 b4:125 b.rowid:126!null
       │         │    │         ├── key: (126)
       │         │    │         ├── fd: ()-->(123), (126)-->(122,124,125)
+      │         │    │         ├── ordering: +126 opt(123) [actual: +126]
       │         │    │         ├── scan b@b_b2_idx
       │         │    │         │    ├── columns: b1:122 b2:123!null b3:124 b4:125 b.rowid:126!null
       │         │    │         │    ├── constraint: /123/126: [/5 - /5]
       │         │    │         │    ├── key: (126)
-      │         │    │         │    └── fd: ()-->(123), (126)-->(122,124,125)
+      │         │    │         │    ├── fd: ()-->(123), (126)-->(122,124,125)
+      │         │    │         │    └── ordering: +126 opt(123) [actual: +126]
       │         │    │         └── filters
       │         │    │              └── (b1:122 = 5) OR ((b1:122 IS DISTINCT FROM CAST(NULL AS INT8)) OR CAST(NULL AS BOOL)) [outer=(122), constraints=(/122: (/NULL - ]; tight)]
       │         │    └── aggregations
