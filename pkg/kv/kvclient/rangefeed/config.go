@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 )
 
 // Option configures a RangeFeed.
@@ -41,6 +42,7 @@ type config struct {
 	onUnrecoverableError OnUnrecoverableError
 	onCheckpoint         OnCheckpoint
 	onFrontierAdvance    OnFrontierAdvance
+	frontierVisitor      FrontierSpanVisitor
 	onSSTable            OnSSTable
 	onDeleteRange        OnDeleteRange
 	extraPProfLabels     []string
@@ -219,6 +221,24 @@ type OnFrontierAdvance func(ctx context.Context, timestamp hlc.Timestamp)
 func WithOnFrontierAdvance(f OnFrontierAdvance) Option {
 	return optionFunc(func(c *config) {
 		c.onFrontierAdvance = f
+	})
+}
+
+// VisitableFrontier is the subset of the span.Frontier interface required to
+// inspect the content of the frontier.
+type VisitableFrontier interface {
+	Entries(span.Operation)
+}
+
+// FrontierSpanVisitor is called when the FrontierSpanVisitTrigger requests the
+// frontier be visited after a checkpoint.
+type FrontierSpanVisitor func(ctx context.Context, advanced bool, frontier VisitableFrontier)
+
+// WithFrontierSpanVisitor sets up a callback to optionally inspect the frontier
+// after a checkpoint is processed.
+func WithFrontierSpanVisitor(fn FrontierSpanVisitor) Option {
+	return optionFunc(func(c *config) {
+		c.frontierVisitor = fn
 	})
 }
 
