@@ -302,8 +302,287 @@ project
  └── projections
       └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
 
-# TODO(michae2): We need special handling for InlineSelectVirtualColumns, so
-# skip filtering on b until we have that.
+# Push a select on the virtual column below the project.
+norm colstat=1 colstat=2 set=optimizer_use_virtual_computed_column_stats=true
+SELECT * FROM abc WHERE b > 3
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── immutable
+ ├── stats: [rows=12, distinct(1)=12, null(1)=0, distinct(2)=6, null(2)=0]
+ │   virtcolstats: (2)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── select
+ │    ├── columns: a:1(int!null) c:3(int)
+ │    ├── immutable
+ │    ├── stats: [rows=12, distinct(1)=12, null(1)=0, distinct(2)=6, null(2)=0]
+ │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │                <--- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │   virtcolstats: (2)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3)
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) c:3(int)
+ │    │    ├── computed column expressions
+ │    │    │    └── b:2
+ │    │    │         └── a:1 % 10 [type=int]
+ │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
+ │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
+ │    │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │    │   virtcolstats: (2)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(3)
+ │    └── filters
+ │         └── (a:1 % 10) > 3 [type=bool, outer=(1), immutable]
+ └── projections
+      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+
+# Again, with placeholders.
+assign-placeholders-norm query-args=(3) set=optimizer_use_virtual_computed_column_stats=true
+SELECT * FROM abc WHERE b > $1
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── immutable
+ ├── stats: [rows=12]
+ │   virtcolstats: (2)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── select
+ │    ├── columns: a:1(int!null) c:3(int)
+ │    ├── immutable
+ │    ├── stats: [rows=12, distinct(2)=6, null(2)=0]
+ │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │                <--- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │   virtcolstats: (2)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3)
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) c:3(int)
+ │    │    ├── computed column expressions
+ │    │    │    └── b:2
+ │    │    │         └── a:1 % 10 [type=int]
+ │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
+ │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
+ │    │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │    │   virtcolstats: (2)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(3)
+ │    └── filters
+ │         └── (a:1 % 10) > 3 [type=bool, outer=(1), immutable]
+ └── projections
+      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+
+# Push a select on the virtual column expression below the project.
+norm colstat=1 colstat=2 set=optimizer_use_virtual_computed_column_stats=true
+SELECT * FROM abc WHERE a % 10 > 3
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── immutable
+ ├── stats: [rows=12, distinct(1)=12, null(1)=0, distinct(2)=6, null(2)=0]
+ │   virtcolstats: (2)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── select
+ │    ├── columns: a:1(int!null) c:3(int)
+ │    ├── immutable
+ │    ├── stats: [rows=12, distinct(1)=12, null(1)=0, distinct(2)=6, null(2)=0]
+ │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │                <--- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │   virtcolstats: (2)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3)
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) c:3(int)
+ │    │    ├── computed column expressions
+ │    │    │    └── b:2
+ │    │    │         └── a:1 % 10 [type=int]
+ │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
+ │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
+ │    │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │    │   virtcolstats: (2)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(3)
+ │    └── filters
+ │         └── (a:1 % 10) > 3 [type=bool, outer=(1), immutable]
+ └── projections
+      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+
+# Again, with placeholders.
+assign-placeholders-norm query-args=(3) set=optimizer_use_virtual_computed_column_stats=true
+SELECT * FROM abc WHERE a % 10 > $1
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── immutable
+ ├── stats: [rows=12]
+ │   virtcolstats: (2)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── select
+ │    ├── columns: a:1(int!null) c:3(int)
+ │    ├── immutable
+ │    ├── stats: [rows=12, distinct(2)=6, null(2)=0]
+ │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │                <--- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │   virtcolstats: (2)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3)
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) c:3(int)
+ │    │    ├── computed column expressions
+ │    │    │    └── b:2
+ │    │    │         └── a:1 % 10 [type=int]
+ │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
+ │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
+ │    │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │    │   virtcolstats: (2)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(3)
+ │    └── filters
+ │         └── (a:1 % 10) > 3 [type=bool, outer=(1), immutable]
+ └── projections
+      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+
+# Push a select on the virtual column expression below the project.
+norm colstat=1 colstat=2 set=optimizer_use_virtual_computed_column_stats=true
+SELECT * FROM (SELECT a FROM abc) WHERE a % 10 > 3
+----
+select
+ ├── columns: a:1(int!null)
+ ├── immutable
+ ├── stats: [rows=12, distinct(1)=12, null(1)=0, distinct(2)=6, null(2)=0]
+ │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2
+ │                <--- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │   virtcolstats: (2)
+ ├── key: (1)
+ ├── scan abc
+ │    ├── columns: a:1(int!null)
+ │    ├── computed column expressions
+ │    │    └── b:2
+ │    │         └── a:1 % 10 [type=int]
+ │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
+ │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+ │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
+ │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │   virtcolstats: (2)
+ │    └── key: (1)
+ └── filters
+      └── (a:1 % 10) > 3 [type=bool, outer=(1), immutable]
+
+# Again, with placeholders.
+assign-placeholders-norm query-args=(3) set=optimizer_use_virtual_computed_column_stats=true
+SELECT * FROM (SELECT a FROM abc) WHERE a % 10 > $1
+----
+select
+ ├── columns: a:1(int!null)
+ ├── immutable
+ ├── stats: [rows=12, distinct(2)=6, null(2)=0]
+ │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2
+ │                <--- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │   virtcolstats: (2)
+ ├── key: (1)
+ ├── scan abc
+ │    ├── columns: a:1(int!null)
+ │    ├── computed column expressions
+ │    │    └── b:2
+ │    │         └── a:1 % 10 [type=int]
+ │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
+ │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+ │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
+ │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │   virtcolstats: (2)
+ │    └── key: (1)
+ └── filters
+      └── (a:1 % 10) > 3 [type=bool, outer=(1), immutable]
+
+# Select using an IN set.
+norm colstat=1 colstat=2 set=optimizer_use_virtual_computed_column_stats=true
+SELECT * FROM abc WHERE a % 10 IN (2, 4, 6)
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── immutable
+ ├── stats: [rows=6, distinct(1)=6, null(1)=0, distinct(2)=3, null(2)=0]
+ │   virtcolstats: (2)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── select
+ │    ├── columns: a:1(int!null) c:3(int)
+ │    ├── immutable
+ │    ├── stats: [rows=6, distinct(1)=6, null(1)=0, distinct(2)=3, null(2)=0]
+ │    │   histogram(2)=  0  2  0  2  0  2
+ │    │                <--- 2 --- 4 --- 6
+ │    │   virtcolstats: (2)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3)
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) c:3(int)
+ │    │    ├── computed column expressions
+ │    │    │    └── b:2
+ │    │    │         └── a:1 % 10 [type=int]
+ │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
+ │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
+ │    │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │    │   virtcolstats: (2)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(3)
+ │    └── filters
+ │         └── (a:1 % 10) IN (2, 4, 6) [type=bool, outer=(1), immutable]
+ └── projections
+      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+
+# Again, with placeholders.
+assign-placeholders-norm query-args=(2, 4, 6) set=optimizer_use_virtual_computed_column_stats=true
+SELECT * FROM abc WHERE a % 10 IN ($1, $2, $3)
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── immutable
+ ├── stats: [rows=6]
+ │   virtcolstats: (2)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── select
+ │    ├── columns: a:1(int!null) c:3(int)
+ │    ├── immutable
+ │    ├── stats: [rows=6, distinct(2)=3, null(2)=0]
+ │    │   histogram(2)=  0  2  0  2  0  2
+ │    │                <--- 2 --- 4 --- 6
+ │    │   virtcolstats: (2)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(3)
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) c:3(int)
+ │    │    ├── computed column expressions
+ │    │    │    └── b:2
+ │    │    │         └── a:1 % 10 [type=int]
+ │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
+ │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
+ │    │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │    │   virtcolstats: (2)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(3)
+ │    └── filters
+ │         └── (a:1 % 10) IN (2, 4, 6) [type=bool, outer=(1), immutable]
+ └── projections
+      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
 
 # Distinct on top of the project.
 norm set=optimizer_use_virtual_computed_column_stats=true
@@ -333,6 +612,76 @@ distinct-on
       │    └── key: (1)
       └── projections
            └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+
+# Distinct on top of the project using just the virtual column expression.
+norm set=optimizer_use_virtual_computed_column_stats=true
+SELECT DISTINCT a % 10 FROM abc
+----
+distinct-on
+ ├── columns: "?column?":6(int!null)
+ ├── grouping columns: "?column?":6(int!null)
+ ├── immutable
+ ├── stats: [rows=10, distinct(6)=10, null(6)=0]
+ │   virtcolstats: (2)
+ ├── key: (6)
+ └── project
+      ├── columns: "?column?":6(int!null)
+      ├── immutable
+      ├── stats: [rows=20, distinct(6)=10, null(6)=0]
+      │   virtcolstats: (2)
+      ├── scan abc
+      │    ├── columns: a:1(int!null)
+      │    ├── computed column expressions
+      │    │    └── b:2
+      │    │         └── a:1 % 10 [type=int]
+      │    ├── stats: [rows=20, distinct(2)=10, null(2)=0]
+      │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+      │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+      │    │   virtcolstats: (2)
+      │    └── key: (1)
+      └── projections
+           └── a:1 % 10 [as="?column?":6, type=int, outer=(1), immutable]
+
+# Distinct on top of the project using just the virtual column expression.
+norm set=optimizer_use_virtual_computed_column_stats=true
+SELECT DISTINCT a % 10 FROM abc WHERE a % 10 > 3
+----
+distinct-on
+ ├── columns: "?column?":6(int!null)
+ ├── grouping columns: "?column?":6(int!null)
+ ├── immutable
+ ├── stats: [rows=6, distinct(6)=6, null(6)=0]
+ │   virtcolstats: (2)
+ ├── key: (6)
+ └── project
+      ├── columns: "?column?":6(int!null)
+      ├── immutable
+      ├── stats: [rows=12, distinct(6)=6, null(6)=0]
+      │   virtcolstats: (2)
+      ├── select
+      │    ├── columns: a:1(int!null)
+      │    ├── immutable
+      │    ├── stats: [rows=12, distinct(2)=6, null(2)=0]
+      │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2
+      │    │                <--- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+      │    │   virtcolstats: (2)
+      │    ├── key: (1)
+      │    ├── scan abc
+      │    │    ├── columns: a:1(int!null)
+      │    │    ├── computed column expressions
+      │    │    │    └── b:2
+      │    │    │         └── a:1 % 10 [type=int]
+      │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
+      │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+      │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
+      │    │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
+      │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+      │    │    │   virtcolstats: (2)
+      │    │    └── key: (1)
+      │    └── filters
+      │         └── (a:1 % 10) > 3 [type=bool, outer=(1), immutable]
+      └── projections
+           └── a:1 % 10 [as="?column?":6, type=int, outer=(1), immutable]
 
 # Push a join below the project.
 opt colstat=1 colstat=2 colstat=6 colstat=7 set=optimizer_use_virtual_computed_column_stats=true
