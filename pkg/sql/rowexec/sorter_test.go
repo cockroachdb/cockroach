@@ -372,6 +372,8 @@ func TestSortInvalidLimit(t *testing.T) {
 		if _, sortAll := proc.(*sortAllProcessor); !sortAll {
 			t.Fatalf("expected *sortAllProcessor, got %T", proc)
 		}
+		// Allow for the processor cleanup.
+		proc.Run(ctx, &distsqlutils.RowBuffer{})
 	})
 
 	t.Run("KZero", func(t *testing.T) {

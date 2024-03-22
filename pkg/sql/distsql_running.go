@@ -466,7 +466,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 		batchReceiver = recv
 	}
 	origCtx := ctx
-	ctx, flow, opChains, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Planner.Mon(), &setupReq, recv, batchReceiver, localState)
+	ctx, flow, opChains, err := dsp.distSQLSrv.SetupLocalSyncFlow(
+		ctx, evalCtx.Planner.Mon(), &setupReq, recv, batchReceiver, localState, planCtx.DisableFlowMonitorCheck,
+	)
 	if err == nil && planCtx.saveFlows != nil {
 		err = planCtx.saveFlows(flows, opChains, planCtx.infra.LocalProcessors, isVectorized)
 	}

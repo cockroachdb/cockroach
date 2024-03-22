@@ -513,6 +513,7 @@ func makePlan(
 		p.PlanToStreamColMap = []int{1, 2, 3}
 		sql.FinalizePlan(ctx, planCtx, p)
 
+		planCtx.DisableFlowMonitorCheck = true
 		return p, planCtx, nil
 	}
 }

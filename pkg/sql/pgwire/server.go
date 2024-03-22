@@ -327,6 +327,7 @@ func MakeServer(
 		MaxHist:  nil,
 		Settings: st,
 	})
+	server.sqlMemoryPool.MarkLongLiving()
 	server.sqlMemoryPool.StartNoReserved(ctx, parentMemoryMonitor)
 	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
 
@@ -337,6 +338,7 @@ func MakeServer(
 		Increment: int64(connReservationBatchSize) * baseSQLMemoryBudget,
 		Settings:  st,
 	})
+	server.tenantSpecificConnMonitor.MarkLongLiving()
 	server.tenantSpecificConnMonitor.StartNoReserved(ctx, server.sqlMemoryPool)
 
 	server.mu.Lock()

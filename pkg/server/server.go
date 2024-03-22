@@ -687,6 +687,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	})
 	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"kv-mem", 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
+	kvMemoryMonitor.MarkLongLiving()
 	kvMemoryMonitor.StartNoReserved(ctx, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
 	rangeFeedBudgetFactory := serverrangefeed.NewBudgetFactory(
 		ctx,
@@ -707,12 +708,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if rangeFeedBudgetFactory != nil {
 		nodeRegistry.AddMetricStruct(rangeFeedBudgetFactory.Metrics())
 	}
-	// Closer order is important with BytesMonitor.
 	stopper.AddCloser(stop.CloserFn(func() {
-		rangeFeedBudgetFactory.Stop(ctx)
-	}))
-	stopper.AddCloser(stop.CloserFn(func() {
-		kvMemoryMonitor.Stop(ctx)
+		sqlMonitorAndMetrics.rootSQLMemoryMonitor.EmergencyStop(ctx)
 	}))
 
 	tsDB := ts.NewDB(db, cfg.Settings)

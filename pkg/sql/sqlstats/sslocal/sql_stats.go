@@ -72,6 +72,7 @@ func newSQLStats(
 		MaxHist:  maxMemBytesHist,
 		Settings: st,
 	})
+	monitor.MarkLongLiving()
 	s := &SQLStats{
 		st:                 st,
 		flushTarget:        flushTarget,

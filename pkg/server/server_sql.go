@@ -691,17 +691,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// operations (IMPORT, index backfill). It is itself a child of the
 	// ParentMemoryMonitor.
 	bulkMemoryMonitor := mon.NewMonitorInheritWithLimit("bulk-mon", 0 /* limit */, rootSQLMemoryMonitor)
+	bulkMemoryMonitor.MarkLongLiving()
 	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(bulkMetrics)
 	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
 	bulkMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
 
 	backfillMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backfill-mon")
+	backfillMemoryMonitor.MarkLongLiving()
 	backupMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backup-mon")
+	backupMemoryMonitor.MarkLongLiving()
 
 	serverCacheMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"server-cache-mon", 0 /* limit */, rootSQLMemoryMonitor,
 	)
+	serverCacheMemoryMonitor.MarkLongLiving()
 	serverCacheMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
 
 	// Set up the DistSQL temp engine.
@@ -1151,6 +1155,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		MaxHist:  internalMemMetrics.MaxBytesHist,
 		Settings: cfg.Settings,
 	})
+	internalDBMonitor.MarkLongLiving()
 	internalDBMonitor.StartNoReserved(ctx, pgServer.SQLServer.GetBytesMonitor())
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
