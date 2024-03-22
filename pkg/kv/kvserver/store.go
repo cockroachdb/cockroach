@@ -1233,6 +1233,7 @@ type StoreConfig struct {
 	// tests.
 	KVMemoryMonitor        *mon.BytesMonitor
 	RangefeedBudgetFactory *rangefeed.BudgetFactory
+	RaftEntriesMonitor     *logstore.SoftLimit // tracks memory used by raft entries
 
 	// SpanConfigsDisabled determines whether we're able to use the span configs
 	// infrastructure or not.

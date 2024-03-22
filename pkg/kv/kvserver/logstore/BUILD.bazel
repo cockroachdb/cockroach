@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "logstore",
     srcs = [
+        "bytes_tracker.go",
         "logstore.go",
         "sideload.go",
         "sideload_disk.go",
@@ -47,6 +48,7 @@ go_library(
 go_test(
     name = "logstore_test",
     srcs = [
+        "bytes_tracker_test.go",
         "logstore_bench_test.go",
         "sideload_test.go",
         "sync_waiter_test.go",
