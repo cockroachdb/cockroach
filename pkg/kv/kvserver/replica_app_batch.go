@@ -288,6 +288,12 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		}
 		res.AddSSTable = nil
 	}
+	if res.LinkExternalSSTable != nil {
+		// All watching rangefeeds should error until we teach clients how to
+		// process linked external ssts.
+		b.r.disconnectRangefeedSpanWithErr(res.LinkExternalSSTable.Span, kvpb.NewError(errors.New("LinkExternalSSTable not supported in rangefeeds")))
+		res.LinkExternalSSTable = nil
+	}
 
 	if res.Split != nil {
 		// Splits require a new HardState to be written to the new RHS

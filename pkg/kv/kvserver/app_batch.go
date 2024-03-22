@@ -195,6 +195,13 @@ func (b *appBatch) runPostAddTriggers(
 			b.numMutations += int(added)
 		}
 	}
-
+	if res.LinkExternalSSTable != nil {
+		linkExternalSStablePreApply(
+			ctx,
+			env,
+			kvpb.RaftTerm(cmd.Term),
+			cmd.Index(),
+			*res.LinkExternalSSTable)
+	}
 	return nil
 }
