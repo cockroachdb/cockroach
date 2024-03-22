@@ -1353,12 +1353,11 @@ func TestDistSenderRetryOnTransportErrors(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	for _, spec := range []struct {
-		errorCode   codes.Code
-		shouldRetry bool
+		errorCode codes.Code
 	}{
-		{codes.FailedPrecondition, true},
-		{codes.PermissionDenied, false},
-		{codes.Unauthenticated, false},
+		{codes.FailedPrecondition},
+		{codes.PermissionDenied},
+		{codes.Unauthenticated},
 	} {
 		t.Run(fmt.Sprintf("retry_after_%v", spec.errorCode), func(t *testing.T) {
 			clock := hlc.NewClockForTesting(nil)
@@ -1424,13 +1423,8 @@ func TestDistSenderRetryOnTransportErrors(t *testing.T) {
 
 			get := kvpb.NewGet(roachpb.Key("a"))
 			_, pErr := kv.SendWrapped(ctx, ds, get)
-			if spec.shouldRetry {
-				require.True(t, secondReplicaTried, "Second replica was not retried")
-				require.Nil(t, pErr, "Call should not fail")
-			} else {
-				require.False(t, secondReplicaTried, "DistSender did not abort retry loop")
-				require.NotNil(t, pErr, "Call should fail")
-			}
+			require.True(t, secondReplicaTried, "Second replica was not retried")
+			require.Nil(t, pErr, "Call should not fail")
 		})
 	}
 }
