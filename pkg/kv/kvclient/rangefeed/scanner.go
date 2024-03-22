@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -55,12 +56,19 @@ func (f *RangeFeed) runInitialScan(
 		f.onValue(ctx, &v)
 	}
 
+	var onValues func(kvs []kv.KeyValue)
+	if f.onValues != nil {
+		onValues = func(kvs []kv.KeyValue) {
+			f.onValues(ctx, kvs)
+		}
+	}
+
 	getSpansToScan, cleanup := f.getSpansToScan(ctx)
 	defer cleanup()
 
 	r.Reset()
 	for r.Next() {
-		if err := f.client.Scan(ctx, getSpansToScan(), f.initialTimestamp, onValue, f.scanConfig); err != nil {
+		if err := f.client.Scan(ctx, getSpansToScan(), f.initialTimestamp, onValue, onValues, f.scanConfig); err != nil {
 			if f.onInitialScanError != nil {
 				if shouldStop := f.onInitialScanError(ctx, err); shouldStop {
 					log.VEventf(ctx, 1, "stopping due to error: %v", err)
