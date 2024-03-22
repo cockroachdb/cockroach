@@ -964,8 +964,8 @@ func (l *internalLookupCtx) getTableByID(id descpb.ID) (catalog.TableDescriptor,
 func (l *internalLookupCtx) getTypeByID(id descpb.ID) (catalog.TypeDescriptor, error) {
 	typ, ok := l.typDescs[id]
 	if !ok {
-		return nil, sqlerrors.NewUndefinedRelationError(
-			tree.NewUnqualifiedTableName(tree.Name(fmt.Sprintf("[%d]", id))))
+		return nil, sqlerrors.NewUndefinedTypeError(
+			tree.NewUnqualifiedTypeName(fmt.Sprintf("[%d]", id)))
 	}
 	return typ, nil
 }

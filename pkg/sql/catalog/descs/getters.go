@@ -331,7 +331,7 @@ func (g ByNameGetter) Type(
 		tn := tree.MakeTableNameWithSchema(
 			tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(name),
 		)
-		return nil, sqlerrors.NewUndefinedRelationError(&tn)
+		return nil, sqlerrors.NewUndefinedTypeError(&tn)
 	}
 	if tbl, ok := desc.(catalog.TableDescriptor); ok {
 		// A given table name can resolve to either a type descriptor or a table
