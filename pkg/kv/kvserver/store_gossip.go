@@ -20,7 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -223,6 +226,7 @@ type StoreGossip struct {
 	// descriptorGetter is used for getting an up to date or cached store
 	// descriptor to gossip.
 	descriptorGetter StoreDescriptorProvider
+	sv               *settings.Values
 }
 
 // StoreGossipTestingKnobs defines the testing knobs specific to StoreGossip.
@@ -249,13 +253,17 @@ type StoreGossipTestingKnobs struct {
 // store descriptor: both proactively, calling Gossip() and reacively on
 // capacity/load changes.
 func NewStoreGossip(
-	gossiper InfoGossiper, descGetter StoreDescriptorProvider, testingKnobs StoreGossipTestingKnobs,
+	gossiper InfoGossiper,
+	descGetter StoreDescriptorProvider,
+	testingKnobs StoreGossipTestingKnobs,
+	sv *settings.Values,
 ) *StoreGossip {
 	return &StoreGossip{
 		cachedCapacity:   &cachedCapacity{},
 		gossiper:         gossiper,
 		descriptorGetter: descGetter,
 		knobs:            testingKnobs,
+		sv:               sv,
 	}
 }
 
@@ -414,6 +422,20 @@ func (s *StoreGossip) RecordNewPerSecondStats(newQPS, newWPS float64) {
 	}
 }
 
+// RecordNewIOThreshold takes new values for the IO threshold and recent
+// maximum IO threshold and decides whether the score has changed enough to
+// justify re-gossiping the store's capacity.
+func (s *StoreGossip) RecordNewIOThreshold(threshold, thresholdMax admissionpb.IOThreshold) {
+	s.cachedCapacity.Lock()
+	s.cachedCapacity.cached.IOThreshold = threshold
+	s.cachedCapacity.cached.IOThresholdMax = thresholdMax
+	s.cachedCapacity.Unlock()
+
+	if shouldGossip, reason := s.shouldGossipOnCapacityDelta(); shouldGossip {
+		s.asyncGossipStore(context.TODO(), reason, true /* useCached */)
+	}
+}
+
 // shouldGossipOnCapacityDelta determines whether the difference between the
 // last gossiped store capacity and the currently cached capacity is large
 // enough that gossiping immediately is required to avoid poor allocation
@@ -431,6 +453,8 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 		gossipWhenCapacityDeltaExceedsFraction = overrideCapacityDeltaFraction
 	}
 
+	gossipMinMaxIOOverloadScore := allocatorimpl.LeaseIOOverloadThreshold.Get(s.sv)
+
 	s.cachedCapacity.Lock()
 	updateForQPS, deltaQPS := deltaExceedsThreshold(
 		s.cachedCapacity.lastGossiped.QueriesPerSecond, s.cachedCapacity.cached.QueriesPerSecond,
@@ -444,6 +468,10 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	updateForLeaseCount, deltaLeaseCount := deltaExceedsThreshold(
 		float64(s.cachedCapacity.lastGossiped.LeaseCount), float64(s.cachedCapacity.cached.LeaseCount),
 		gossipWhenLeaseCountDeltaExceeds, gossipWhenCapacityDeltaExceedsFraction)
+	cachedMaxIOScore, _ := s.cachedCapacity.cached.IOThresholdMax.Score()
+	lastGossipMaxIOScore, _ := s.cachedCapacity.lastGossiped.IOThresholdMax.Score()
+	updateForMaxIOOverloadScore := cachedMaxIOScore >= gossipMinMaxIOOverloadScore &&
+		cachedMaxIOScore > lastGossipMaxIOScore
 	s.cachedCapacity.Unlock()
 
 	if s.knobs.DisableLeaseCapacityGossip {
@@ -461,6 +489,9 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	}
 	if updateForLeaseCount {
 		reason += fmt.Sprintf("lease-count(%.1f) ", deltaLeaseCount)
+	}
+	if updateForMaxIOOverloadScore {
+		reason += fmt.Sprintf("io-overload(%.1f) ", cachedMaxIOScore)
 	}
 	if reason != "" {
 		should = true

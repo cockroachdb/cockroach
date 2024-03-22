@@ -54,6 +54,17 @@ var MinLeaseTransferInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// MinIOOverloadLeaseShedInterval controls how frequently a store may decide to
+// shed all leases due to becoming IO overloaded.
+var MinIOOverloadLeaseShedInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.allocator.min_io_overload_lease_shed_interval",
+	"controls how frequently all leases can be shed from a node "+
+		"due to the node becoming IO overloaded",
+	30*time.Second,
+	settings.NonNegativeDuration,
+)
+
 type leaseQueue struct {
 	planner           plan.ReplicationPlanner
 	allocator         allocatorimpl.Allocator
@@ -169,6 +180,11 @@ func (lq *leaseQueue) canTransferLeaseFrom(
 	// lease preferences (if any), if it does not we want to encourage more
 	// aggressive lease movement and not delay it.
 	if repl.LeaseViolatesPreferences(ctx, conf) {
+		return true
+	}
+	// If the local store is IO overloaded, then always allow transferring the
+	// lease away from the replica.
+	if !lq.store.existingLeaseCheckIOOverload(ctx) {
 		return true
 	}
 	if lastLeaseTransfer := lq.lastLeaseTransfer.Load(); lastLeaseTransfer != nil {
