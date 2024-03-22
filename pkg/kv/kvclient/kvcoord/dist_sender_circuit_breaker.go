@@ -236,15 +236,13 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 		// past probe threshold.
 		cbs = d.snapshot(cbs[:0])
 		nowNanos := timeutil.Now().UnixNano()
-		probeThreshold := CircuitBreakerProbeThreshold.Get(&d.settings.SV).Nanoseconds()
+		probeThreshold := CircuitBreakerProbeThreshold.Get(&d.settings.SV)
 
 		for _, cb := range cbs {
-			if cb.inflightReqs.Load() > 0 && nowNanos-cb.stallSince.Load() >= probeThreshold {
-				// Don't probe if the breaker is already tripped. It will be probed in
-				// response to user traffic, to reduce the number of concurrent probes.
-				if !cb.isTripped() {
-					cb.breaker.Probe()
-				}
+			// Don't probe if the breaker is already tripped. It will be probed in
+			// response to user traffic, to reduce the number of concurrent probes.
+			if cb.stallDuration(nowNanos) >= probeThreshold && !cb.isTripped() {
+				cb.breaker.Probe()
 			}
 		}
 	}
@@ -280,12 +278,10 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 		gc = gc[:0]
 
 		nowNanos := timeutil.Now().UnixNano()
-		gcBelow := nowNanos - cbGCThreshold.Nanoseconds()
-		gcBelowTripped := nowNanos - cbGCThresholdTripped.Nanoseconds()
 
 		for _, cb := range cbs {
-			if lastRequest := cb.lastRequest.Load(); lastRequest > 0 && lastRequest < gcBelow {
-				if !cb.isTripped() || lastRequest < gcBelowTripped {
+			if idleDuration := cb.lastRequestDuration(nowNanos); idleDuration >= cbGCThreshold {
+				if !cb.isTripped() || idleDuration >= cbGCThresholdTripped {
 					gc = append(gc, cbKey{rangeID: cb.rangeID, replicaID: cb.desc.ReplicaID})
 				}
 			}
@@ -489,6 +485,7 @@ func (r *ReplicaCircuitBreaker) errorDuration(nowNanos int64) time.Duration {
 // stallDuration returns the stall duration relative to nowNanos.
 func (r *ReplicaCircuitBreaker) stallDuration(nowNanos int64) time.Duration {
 	stallSince := r.stallSince.Load()
+	// The replica is only stalled if there are in-flight requests.
 	if r.inflightReqs.Load() == 0 || stallSince > nowNanos {
 		return 0
 	}
@@ -681,11 +678,11 @@ func (r *ReplicaCircuitBreaker) done(
 	if err == nil {
 		// On success, reset the error tracking.
 		r.errorSince.Store(0)
-	} else if errorSince := r.errorSince.Load(); errorSince == 0 {
+	} else if errorDuration := r.errorDuration(nowNanos); errorDuration == 0 {
 		// If this is the first error we've seen, record it. We'll launch a probe on
 		// a later error if necessary.
 		r.errorSince.Store(nowNanos)
-	} else if nowNanos-errorSince >= CircuitBreakerProbeThreshold.Get(&r.d.settings.SV).Nanoseconds() {
+	} else if errorDuration >= CircuitBreakerProbeThreshold.Get(&r.d.settings.SV) {
 		// The replica has been failing for the past probe threshold, probe it.
 		r.breaker.Probe()
 	}
@@ -791,7 +788,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 			// frequently spawning new probe goroutines, instead waiting to see if any
 			// requests come in.
 			idleThreshold := cbProbeIdleIntervals * probeInterval
-			if r.lastRequest.Load() < timeutil.Now().UnixNano()-idleThreshold.Nanoseconds() {
+			if r.lastRequestDuration(timeutil.Now().UnixNano()) >= idleThreshold {
 				return
 			}
 		}
