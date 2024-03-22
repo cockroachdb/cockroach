@@ -2300,6 +2300,12 @@ func noMoreReplicasErr(ambiguousErr, replicaUnavailableErr, lastAttemptErr error
 		return replicaUnavailableErr
 	}
 
+	// Authentication and authorization errors should be propagated up rather than
+	// wrapped in a SendError and retried as they are likely to be fatal if they
+	// are returned from multiple servers.
+	if grpcutil.IsAuthError(lastAttemptErr) {
+		return lastAttemptErr
+	}
 	// TODO(bdarnell): The error from the last attempt is not necessarily the best
 	// one to return; we may want to remember the "best" error we've seen (for
 	// example, a NotLeaseHolderError conveys more information than a
@@ -2574,14 +2580,6 @@ func (ds *DistSender) sendToReplicas(
 
 		} else if err != nil {
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
-			if grpcutil.IsAuthError(err) {
-				// Authentication or authorization error. Propagate.
-				if ambiguousError != nil {
-					return nil, kvpb.NewAmbiguousResultErrorf("error=%v [propagate] (last error: %v)",
-						ambiguousError, err)
-				}
-				return nil, err
-			}
 
 			// For most connection errors, we cannot tell whether or not the request
 			// may have succeeded on the remote server (exceptions are captured in the
