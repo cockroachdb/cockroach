@@ -314,7 +314,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 				if p.sharedProcessMT() {
 					tenantName = appTenantName
 				}
-				tempConn, err := c.ConnE(ctx, t.L(), 1, option.TenantName(tenantName))
+				tempConn, err := c.ConnE(ctx, t.L(), 1, option.VirtualClusterName(tenantName))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -527,7 +527,7 @@ func getTPCHVecWorkloadCmd(numRunsPerQuery, queryNum int, sharedProcessMT bool) 
 func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tpchVecTestCase) {
 	firstNode := c.Node(1)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", firstNode)
-	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings())
 
 	var conn *gosql.DB
 	var disableMergeQueue bool
@@ -537,9 +537,8 @@ func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tp
 		if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
 			t.Fatal(err)
 		}
-
-		startOpts := option.DefaultStartSharedVirtualClusterOpts(appTenantName)
-		c.StartServiceForVirtualCluster(ctx, t.L(), c.All(), startOpts, install.MakeClusterSettings(), c.All())
+		startOpts := option.StartSharedVirtualClusterOpts(appTenantName)
+		c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, install.MakeClusterSettings())
 
 		// Allow the tenant to be able to scatter tables. We need to run a dummy
 		// scatter in order to make sure the capability is propagated before
@@ -555,7 +554,7 @@ func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tp
 			t.Fatal(err)
 		}
 
-		conn = c.Conn(ctx, t.L(), c.All().RandNode()[0], option.TenantName(appTenantName))
+		conn = c.Conn(ctx, t.L(), c.All().RandNode()[0], option.VirtualClusterName(appTenantName))
 		testutils.SucceedsSoon(t, func() error {
 			if _, err := conn.Exec(`CREATE TABLE IF NOT EXISTS dummyscatter (a INT)`); err != nil {
 				return err

@@ -46,7 +46,7 @@ func registerActiveRecord(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		startOpts := option.DefaultStartOptsInMemory()
+		startOpts := option.NewStartOpts(sqlClientsInMemoryDB)
 		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
 		// Activerecord uses root user with ssl disabled.
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.All())

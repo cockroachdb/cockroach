@@ -125,7 +125,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Phew, after having setup all that, let's actually run the test.
 
 	t.Status("setting up cockroach")
-	c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
+	c.Start(ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB), install.MakeClusterSettings(), c.All())
 
 	version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 	if err != nil {

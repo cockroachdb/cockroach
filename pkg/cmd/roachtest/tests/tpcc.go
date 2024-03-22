@@ -1358,9 +1358,9 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 
 	var db *gosql.DB
 	if b.SharedProcessMT {
-		startOpts = option.DefaultStartSharedVirtualClusterOpts(appTenantName)
-		c.StartServiceForVirtualCluster(ctx, t.L(), roachNodes, startOpts, settings, roachNodes)
-		db = c.Conn(ctx, t.L(), 1, option.TenantName(appTenantName))
+		startOpts = option.StartSharedVirtualClusterOpts(appTenantName)
+		c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, settings)
+		db = c.Conn(ctx, t.L(), 1, option.VirtualClusterName(appTenantName))
 	} else {
 		db = c.Conn(ctx, t.L(), 1)
 	}

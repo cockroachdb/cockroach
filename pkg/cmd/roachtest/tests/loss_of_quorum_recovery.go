@@ -265,7 +265,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		// rely on query and workload failures to expose that.
 		m.ExpectDeaths(int32(len(remaining)))
 		settings.Env = append(settings.Env, "COCKROACH_SCAN_INTERVAL=10s")
-		c.Start(ctx, t.L(), option.DefaultStartSingleNodeOpts(), settings, c.Nodes(remaining...))
+		c.Start(ctx, t.L(), option.NewStartOpts(option.SkipInit), settings, c.Nodes(remaining...))
 
 		t.L().Printf("waiting for nodes to restart")
 		if err = timeutil.RunWithTimeout(ctx, "wait-for-restart", time.Minute,
@@ -473,7 +473,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 		t.L().Printf("performing rolling restart of surviving nodes")
 		for _, id := range remaining {
 			c.Stop(ctx, t.L(), stopOpts, c.Node(id))
-			c.Start(ctx, t.L(), option.DefaultStartSingleNodeOpts(), settings, c.Node(id))
+			c.Start(ctx, t.L(), option.NewStartOpts(option.SkipInit), settings, c.Node(id))
 		}
 
 		t.L().Printf("waiting for nodes to process recovery")

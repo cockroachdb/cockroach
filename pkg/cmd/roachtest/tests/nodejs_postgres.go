@@ -43,7 +43,7 @@ func registerNodeJSPostgres(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		settings := install.MakeClusterSettings()
-		err := c.StartE(ctx, t.L(), option.DefaultStartOptsInMemory(), settings)
+		err := c.StartE(ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB), settings)
 		require.NoError(t, err)
 
 		err = repeatRunE(ctx, t, c, node, "create test database",

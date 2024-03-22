@@ -12,8 +12,6 @@ package roachprod
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -27,7 +25,6 @@ import (
 func StartServiceForVirtualCluster(
 	ctx context.Context,
 	l *logger.Logger,
-	externalCluster string,
 	storageCluster string,
 	startOpts install.StartOpts,
 	clusterSettingsOpts ...install.ClusterSettingOption,
@@ -38,36 +35,23 @@ func StartServiceForVirtualCluster(
 		return err
 	}
 
-	var kvAddrs []string
-	for _, node := range sc.Nodes {
-		port, err := sc.NodePort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
-		if err != nil {
-			return err
-		}
-		kvAddrs = append(kvAddrs, fmt.Sprintf("%s:%d", sc.Host(node), port))
-	}
-	startOpts.KVAddrs = strings.Join(kvAddrs, ",")
-	startOpts.KVCluster = sc
+	startOpts.StorageCluster = sc
 
-	var startCluster *install.SyncedCluster
-	if externalCluster == "" {
-		// If we are starting a service in shared process mode, `Start` is
-		// called on the storage cluster itself.
-		startCluster = sc
-	} else {
+	// If we are starting a service in shared process mode, `Start` is
+	// called on the storage cluster itself.
+	startCluster := sc
+
+	if startOpts.Target == install.StartServiceForVirtualCluster {
+		l.Printf("Starting SQL/HTTP instances for the virtual cluster")
 		// If we are starting a service in external process mode, `Start`
 		// is called on the nodes where the SQL server procesed should be
 		// created.
-		ec, err := newCluster(l, externalCluster, clusterSettingsOpts...)
+		ec, err := newCluster(l, startOpts.VirtualClusterLocation, clusterSettingsOpts...)
 		if err != nil {
 			return err
 		}
 
 		startCluster = ec
-	}
-
-	if startOpts.Target == install.StartServiceForVirtualCluster {
-		l.Printf("Starting SQL/HTTP instances for the virtual cluster")
 	}
 	return startCluster.Start(ctx, l, startOpts)
 }

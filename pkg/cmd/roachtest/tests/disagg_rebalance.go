@@ -38,7 +38,7 @@ func registerDisaggRebalance(r registry.Registry) {
 		Timeout:           1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			s3dir := fmt.Sprintf("s3://%s/disagg-rebalance/%s?AUTH=implicit", testutils.BackupTestingBucketLongTTL(), c.Name())
-			startOpts := option.DefaultStartOptsNoBackups()
+			startOpts := option.NewStartOpts(option.NoBackupSchedule)
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--experimental-shared-storage=%s", s3dir))
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, 3))
 

@@ -2076,32 +2076,35 @@ func (c *clusterImpl) StartE(
 	return nil
 }
 
-// StartServiceForVirtualClusterE can start either external or shared process
-// virtual clusters. This can be specified in startOpts.RoachprodOpts. Set the
-// `Target` to the required virtual cluster type. Refer to the virtual cluster
-// section in the struct for more information on what fields are available for
-// virtual clusters.
-//
-// With external process virtual clusters an external process will be started on
-// each node specified in the externalNodes parameter.
-//
-// With shared process virtual clusters the required queries will be run on a
-// storage node of the cluster specified in the opts parameter.
+// StartServiceForVirtualClusterE can start either external or shared
+// process virtual clusters. This can be specified by the `startOpts`
+// passed. See the `option.Start*VirtualClusterOpts` functions.
 func (c *clusterImpl) StartServiceForVirtualClusterE(
 	ctx context.Context,
 	l *logger.Logger,
-	externalNodes option.NodeListOption,
 	startOpts option.StartOpts,
 	settings install.ClusterSettings,
-	opts ...option.Option,
 ) error {
-
-	c.setStatusForClusterOpt("starting virtual cluster", startOpts.RoachtestOpts.Worker, opts...)
-	defer c.clearStatusForClusterOpt(startOpts.RoachtestOpts.Worker)
-
+	l.Printf("starting virtual cluster")
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.virtualClusterSettings, settings)
 
-	if err := roachprod.StartServiceForVirtualCluster(ctx, l, c.MakeNodes(externalNodes), c.MakeNodes(opts...), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
+	// By default, we assume every node in the cluster is part of the
+	// storage cluster the virtual cluster needs to connect to. If the
+	// user customized the storage cluster in the `StartOpts`, we use
+	// that.
+	storageCluster := c.All()
+	if len(startOpts.SeparateProcessStorageNodes) > 0 {
+		storageCluster = startOpts.SeparateProcessStorageNodes
+	}
+
+	// If the user indicated nodes where the virtual cluster should be
+	// started, we indicate that in the roachprod opts.
+	if len(startOpts.SeparateProcessNodes) > 0 {
+		startOpts.RoachprodOpts.VirtualClusterLocation = c.MakeNodes(startOpts.SeparateProcessNodes)
+	}
+	if err := roachprod.StartServiceForVirtualCluster(
+		ctx, l, c.MakeNodes(storageCluster), startOpts.RoachprodOpts, clusterSettingsOpts...,
+	); err != nil {
 		return err
 	}
 
@@ -2116,12 +2119,10 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 func (c *clusterImpl) StartServiceForVirtualCluster(
 	ctx context.Context,
 	l *logger.Logger,
-	externalNodes option.NodeListOption,
 	startOpts option.StartOpts,
 	settings install.ClusterSettings,
-	opts ...option.Option,
 ) {
-	if err := c.StartServiceForVirtualClusterE(ctx, l, externalNodes, startOpts, settings, opts...); err != nil {
+	if err := c.StartServiceForVirtualClusterE(ctx, l, startOpts, settings); err != nil {
 		c.t.Fatal(err)
 	}
 }
@@ -2131,18 +2132,22 @@ func (c *clusterImpl) StartServiceForVirtualCluster(
 // process virtual clusters, the corresponding service is stopped. For
 // separate process, the OS process is killed.
 func (c *clusterImpl) StopServiceForVirtualClusterE(
-	ctx context.Context, l *logger.Logger, stopOpts option.StopOpts, opts ...option.Option,
+	ctx context.Context, l *logger.Logger, stopOpts option.StopOpts,
 ) error {
-	c.setStatusForClusterOpt("stopping virtual cluster", stopOpts.RoachtestOpts.Worker, opts...)
-	defer c.clearStatusForClusterOpt(stopOpts.RoachtestOpts.Worker)
+	l.Printf("stoping virtual cluster")
+
+	nodes := c.All()
+	if len(stopOpts.SeparateProcessNodes) > 0 {
+		nodes = stopOpts.SeparateProcessNodes
+	}
 
 	return roachprod.StopServiceForVirtualCluster(
-		ctx, l, c.Name(), c.IsSecure(), stopOpts.RoachprodOpts,
+		ctx, l, c.MakeNodes(nodes), c.IsSecure(), stopOpts.RoachprodOpts,
 	)
 }
 
 func (c *clusterImpl) StopServiceForVirtualCluster(
-	ctx context.Context, l *logger.Logger, stopOpts option.StopOpts, opts ...option.Option,
+	ctx context.Context, l *logger.Logger, stopOpts option.StopOpts,
 ) {
 	if err := c.StopServiceForVirtualClusterE(ctx, l, stopOpts); err != nil {
 		c.t.Fatal(err)
@@ -2732,7 +2737,7 @@ func (c *clusterImpl) ConnE(
 		opt(connOptions)
 	}
 	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), roachprod.PGURLOptions{
-		VirtualClusterName: connOptions.TenantName,
+		VirtualClusterName: connOptions.VirtualClusterName,
 		SQLInstance:        connOptions.SQLInstance,
 		Auth:               connOptions.AuthMode,
 	})
