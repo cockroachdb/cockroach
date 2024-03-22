@@ -12,6 +12,7 @@ package rangefeed
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -41,6 +42,7 @@ type config struct {
 	withDiff             bool
 	onUnrecoverableError OnUnrecoverableError
 	onCheckpoint         OnCheckpoint
+	frontierQuantize     time.Duration
 	onFrontierAdvance    OnFrontierAdvance
 	frontierVisitor      FrontierSpanVisitor
 	onSSTable            OnSSTable
@@ -321,5 +323,15 @@ func WithPProfLabel(key, value string) Option {
 func WithSystemTablePriority() Option {
 	return optionFunc(func(c *config) {
 		c.overSystemTable = true
+	})
+}
+
+// WithFrontierQuantized enables quantization of timestamps down to the nearest
+// multiple of d to potentially reduce overhead in the frontier thanks to more
+// sub-spans having equal timestamps and thus being able to be merged, resulting
+// in fewer distinct spans in the frontier.
+func WithFrontierQuantized(d time.Duration) Option {
+	return optionFunc(func(c *config) {
+		c.frontierQuantize = d
 	})
 }

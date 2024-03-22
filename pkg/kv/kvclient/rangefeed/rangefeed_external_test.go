@@ -214,99 +214,108 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 			Key:    scratchKey,
 			EndKey: scratchKey.PrefixEnd(),
 		}
-
-		for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
-			// Enable rangefeeds, otherwise the thing will retry until they are enabled.
-			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-			// Lower the closed timestamp target duration to speed up the test.
-			closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
-		}
-
-		// Split the range into two so we know the frontier has more than one span to
-		// track for certain. We later write to both these ranges.
-		_, _, err = srv.SplitRange(mkKey("b"))
-		require.NoError(t, err)
-
-		f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
-		require.NoError(t, err)
-
-		// mu protects secondWriteTS.
-		var mu syncutil.Mutex
-		secondWriteFinished := false
-		frontierAdvancedAfterSecondWrite := false
-
-		// Track the checkpoint TS for spans belonging to both the ranges we split
-		// above. This can then be used to compute the minimum timestamp for both
-		// these spans. We use the key we write to for the ranges below as keys for
-		// this map.
-		spanCheckpointTimestamps := make(map[string]hlc.Timestamp)
-		forwardCheckpointForKey := func(key string, checkpoint *kvpb.RangeFeedCheckpoint) {
-			ts := hlc.MinTimestamp
-			if prevTS, found := spanCheckpointTimestamps[key]; found {
-				ts = prevTS
+		testutils.RunTrueAndFalse(t, "quantized", func(t *testing.T, q bool) {
+			var quant time.Duration
+			if q {
+				quant = time.Millisecond
 			}
-			ts.Forward(checkpoint.ResolvedTS)
-			spanCheckpointTimestamps[key] = ts
-		}
-		rows := make(chan *kvpb.RangeFeedValue)
-		r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, db.Clock().Now(),
-			func(ctx context.Context, value *kvpb.RangeFeedValue) {
-				select {
-				case rows <- value:
-				case <-ctx.Done():
+			for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
+				// Enable rangefeeds, otherwise the thing will retry until they are enabled.
+				kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+				// Lower the closed timestamp target duration to speed up the test.
+				closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
+			}
+
+			// Split the range into two so we know the frontier has more than one span to
+			// track for certain. We later write to both these ranges.
+			_, _, err = srv.SplitRange(mkKey("b"))
+			require.NoError(t, err)
+
+			f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
+			require.NoError(t, err)
+
+			// mu protects secondWriteTS.
+			var mu syncutil.Mutex
+			secondWriteFinished := false
+			frontierAdvancedAfterSecondWrite := false
+
+			// Track the checkpoint TS for spans belonging to both the ranges we split
+			// above. This can then be used to compute the minimum timestamp for both
+			// these spans. We use the key we write to for the ranges below as keys for
+			// this map.
+			spanCheckpointTimestamps := make(map[string]hlc.Timestamp)
+			forwardCheckpointForKey := func(key string, checkpoint *kvpb.RangeFeedCheckpoint) {
+				ts := hlc.MinTimestamp
+				if prevTS, found := spanCheckpointTimestamps[key]; found {
+					ts = prevTS
 				}
-			},
-			rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
-				if checkpoint.Span.ContainsKey(mkKey("a")) {
-					forwardCheckpointForKey("a", checkpoint)
-				}
-				if checkpoint.Span.ContainsKey(mkKey("c")) {
-					forwardCheckpointForKey("c", checkpoint)
-				}
-			}),
-			rangefeed.WithOnFrontierAdvance(func(ctx context.Context, frontierTS hlc.Timestamp) {
-				minTS := hlc.MaxTimestamp
-				for _, ts := range spanCheckpointTimestamps {
-					minTS.Backward(ts)
-				}
-				assert.Truef(
-					t,
-					frontierTS.Equal(minTS),
-					"expected frontier timestamp to be equal to minimum timestamp across spans %s, found %s",
-					minTS,
-					frontierTS,
-				)
+				ts.Forward(checkpoint.ResolvedTS)
+				spanCheckpointTimestamps[key] = ts
+			}
+			rows := make(chan *kvpb.RangeFeedValue)
+			r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, db.Clock().Now(),
+				func(ctx context.Context, value *kvpb.RangeFeedValue) {
+					select {
+					case rows <- value:
+					case <-ctx.Done():
+					}
+				},
+				rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
+					if checkpoint.Span.ContainsKey(mkKey("a")) {
+						forwardCheckpointForKey("a", checkpoint)
+					}
+					if checkpoint.Span.ContainsKey(mkKey("c")) {
+						forwardCheckpointForKey("c", checkpoint)
+					}
+				}),
+				rangefeed.WithOnFrontierAdvance(func(ctx context.Context, frontierTS hlc.Timestamp) {
+					minTS := hlc.MaxTimestamp
+					for _, ts := range spanCheckpointTimestamps {
+						minTS.Backward(ts)
+					}
+					if q {
+						minTS.Backward(hlc.Timestamp{WallTime: minTS.WallTime - (minTS.WallTime % int64(quant))})
+					}
+					assert.Truef(
+						t,
+						frontierTS.Equal(minTS),
+						"expected frontier timestamp to be equal to minimum timestamp across spans %s, found %s",
+						minTS,
+						frontierTS,
+					)
+					mu.Lock()
+					defer mu.Unlock()
+					if secondWriteFinished {
+						frontierAdvancedAfterSecondWrite = true
+					}
+				}),
+				rangefeed.WithFrontierQuantized(quant),
+			)
+			require.NoError(t, err)
+			defer r.Close()
+
+			// Write to a key on both the ranges.
+			require.NoError(t, db.Put(ctx, mkKey("a"), 1))
+
+			v := <-rows
+			require.Equal(t, mkKey("a"), v.Key)
+
+			require.NoError(t, db.Put(ctx, mkKey("c"), 1))
+			mu.Lock()
+			secondWriteFinished = true
+			mu.Unlock()
+
+			v = <-rows
+			require.Equal(t, mkKey("c"), v.Key)
+
+			testutils.SucceedsSoon(t, func() error {
 				mu.Lock()
 				defer mu.Unlock()
-				if secondWriteFinished {
-					frontierAdvancedAfterSecondWrite = true
+				if frontierAdvancedAfterSecondWrite {
+					return nil
 				}
-			}),
-		)
-		require.NoError(t, err)
-		defer r.Close()
-
-		// Write to a key on both the ranges.
-		require.NoError(t, db.Put(ctx, mkKey("a"), 1))
-
-		v := <-rows
-		require.Equal(t, mkKey("a"), v.Key)
-
-		require.NoError(t, db.Put(ctx, mkKey("c"), 1))
-		mu.Lock()
-		secondWriteFinished = true
-		mu.Unlock()
-
-		v = <-rows
-		require.Equal(t, mkKey("c"), v.Key)
-
-		testutils.SucceedsSoon(t, func() error {
-			mu.Lock()
-			defer mu.Unlock()
-			if frontierAdvancedAfterSecondWrite {
-				return nil
-			}
-			return errors.New("expected frontier to advance after second write")
+				return errors.New("expected frontier to advance after second write")
+			})
 		})
 	})
 }

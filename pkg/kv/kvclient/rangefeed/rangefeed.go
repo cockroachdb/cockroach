@@ -362,7 +362,12 @@ func (f *RangeFeed) processEvents(
 			case ev.Val != nil:
 				f.onValue(ctx, ev.Val)
 			case ev.Checkpoint != nil:
-				advanced, err := frontier.Forward(ev.Checkpoint.Span, ev.Checkpoint.ResolvedTS)
+				ts := ev.Checkpoint.ResolvedTS
+				if f.frontierQuantize != 0 {
+					ts.Logical = 0
+					ts.WallTime -= ts.WallTime % int64(f.frontierQuantize)
+				}
+				advanced, err := frontier.Forward(ev.Checkpoint.Span, ts)
 				if err != nil {
 					return err
 				}
