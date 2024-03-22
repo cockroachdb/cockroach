@@ -51,8 +51,7 @@ func EncodeCommand(
 			entryEncoding = EntryEncodingSideloadedWithAC
 		}
 
-		if command.ReplicatedEvalResult.AddSSTable.Data == nil &&
-			command.ReplicatedEvalResult.AddSSTable.RemoteFileLoc == "" {
+		if command.ReplicatedEvalResult.AddSSTable.Data == nil {
 			return nil, errors.Errorf("cannot sideload empty SSTable")
 		}
 	}

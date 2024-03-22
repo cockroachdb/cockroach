@@ -22,6 +22,7 @@ go_library(
         "cmd_lease_info.go",
         "cmd_lease_request.go",
         "cmd_lease_transfer.go",
+        "cmd_link_external_sstable.go",
         "cmd_merge.go",
         "cmd_migrate.go",
         "cmd_probe.go",

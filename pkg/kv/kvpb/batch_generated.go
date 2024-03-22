@@ -108,6 +108,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.Probe
 	case *RequestUnion_IsSpanEmpty:
 		return t.IsSpanEmpty
+	case *RequestUnion_LinkExternalSstable:
+		return t.LinkExternalSstable
 	default:
 		return nil
 	}
@@ -210,6 +212,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.Probe
 	case *ResponseUnion_IsSpanEmpty:
 		return t.IsSpanEmpty
+	case *ResponseUnion_LinkExternalSstable:
+		return t.LinkExternalSstable
 	default:
 		return nil
 	}
@@ -316,6 +320,8 @@ func (ru *RequestUnion) MustSetInner(r Request) {
 		union = &RequestUnion_Probe{t}
 	case *IsSpanEmptyRequest:
 		union = &RequestUnion_IsSpanEmpty{t}
+	case *LinkExternalSSTableRequest:
+		union = &RequestUnion_LinkExternalSstable{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
@@ -421,13 +427,15 @@ func (ru *ResponseUnion) MustSetInner(r Response) {
 		union = &ResponseUnion_Probe{t}
 	case *IsSpanEmptyResponse:
 		union = &ResponseUnion_IsSpanEmpty{t}
+	case *LinkExternalSSTableResponse:
+		union = &ResponseUnion_LinkExternalSstable{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
 }
 
-type reqCounts [48]int32
+type reqCounts [49]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -531,6 +539,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[46]++
 		case *RequestUnion_IsSpanEmpty:
 			counts[47]++
+		case *RequestUnion_LinkExternalSstable:
+			counts[48]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", ru))
 		}
@@ -587,6 +597,7 @@ var requestNames = []string{
 	"Barrier",
 	"Probe",
 	"IsSpanEmpty",
+	"LinkExternalSstable",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -814,6 +825,10 @@ type isSpanEmptyResponseAlloc struct {
 	union ResponseUnion_IsSpanEmpty
 	resp  IsSpanEmptyResponse
 }
+type linkExternalSSTableResponseAlloc struct {
+	union ResponseUnion_LinkExternalSstable
+	resp  LinkExternalSSTableResponse
+}
 
 // CreateReply creates replies for each of the contained requests, wrapped in a
 // BatchResponse. The response objects are batch allocated to minimize
@@ -872,6 +887,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf45 []barrierResponseAlloc
 	var buf46 []probeResponseAlloc
 	var buf47 []isSpanEmptyResponseAlloc
+	var buf48 []linkExternalSSTableResponseAlloc
 
 	for i, r := range ba.Requests {
 		switch r.GetValue().(type) {
@@ -1211,6 +1227,13 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf47[0].union.IsSpanEmpty = &buf47[0].resp
 			br.Responses[i].Value = &buf47[0].union
 			buf47 = buf47[1:]
+		case *RequestUnion_LinkExternalSstable:
+			if buf48 == nil {
+				buf48 = make([]linkExternalSSTableResponseAlloc, counts[48])
+			}
+			buf48[0].union.LinkExternalSstable = &buf48[0].resp
+			br.Responses[i].Value = &buf48[0].union
+			buf48 = buf48[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -1317,6 +1340,8 @@ func CreateRequest(method Method) Request {
 		return &ProbeRequest{}
 	case IsSpanEmpty:
 		return &IsSpanEmptyRequest{}
+	case LinkExternalSSTable:
+		return &LinkExternalSSTableRequest{}
 	default:
 		panic(fmt.Sprintf("unsupported method: %+v", method))
 	}
