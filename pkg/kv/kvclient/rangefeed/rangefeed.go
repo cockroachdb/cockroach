@@ -372,6 +372,9 @@ func (f *RangeFeed) processEvents(
 				if advanced && f.onFrontierAdvance != nil {
 					f.onFrontierAdvance(ctx, frontier.Frontier())
 				}
+				if f.frontierVisitor != nil {
+					f.frontierVisitor(ctx, advanced, frontier)
+				}
 			case ev.SST != nil:
 				if f.onSSTable == nil {
 					return errors.AssertionFailedf(
