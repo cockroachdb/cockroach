@@ -75,7 +75,7 @@ func QueryIntent(
 	}
 
 	// Read from the lock table to see if an intent exists.
-	intent, err := storage.GetIntent(ctx, reader, args.Key, storage.BatchEvalReadCategory)
+	intent, err := storage.GetIntent(ctx, reader, args.Key)
 	if err != nil {
 		return result.Result{}, err
 	}

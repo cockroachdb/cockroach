@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 func init() {
@@ -2583,6 +2584,7 @@ type StoreMetrics struct {
 	BatchCommitWALRotWaitDuration     *metric.Gauge
 	BatchCommitCommitWaitDuration     *metric.Gauge
 	categoryIterMetrics               pebbleCategoryIterMetricsContainer
+	categoryDiskWriteMetrics          pebbleCategoryDiskWriteMetricsContainer
 	WALBytesWritten                   *metric.Gauge
 	WALBytesIn                        *metric.Gauge
 	WALFailoverSwitchCount            *metric.Gauge
@@ -3286,6 +3288,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		categoryIterMetrics: pebbleCategoryIterMetricsContainer{
 			registry: storeRegistry,
 		},
+		categoryDiskWriteMetrics: pebbleCategoryDiskWriteMetricsContainer{
+			registry: storeRegistry,
+		},
 		WALBytesWritten:              metric.NewGauge(metaWALBytesWritten),
 		WALBytesIn:                   metric.NewGauge(metaWALBytesIn),
 		WALFailoverSwitchCount:       metric.NewGauge(metaStorageWALFailoverSwitchCount),
@@ -3710,6 +3715,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
 	sm.categoryIterMetrics.update(m.CategoryStats)
+	sm.categoryDiskWriteMetrics.update(m.DiskWriteStats)
 
 	for level, stats := range m.Levels {
 		sm.RdbBytesIngested[level].Update(int64(stats.BytesIngested))
@@ -3937,5 +3943,48 @@ func (m *pebbleCategoryIterMetricsContainer) update(stats []sstable.CategoryStat
 		}
 		cm := val.(*pebbleCategoryIterMetrics)
 		cm.update(s.CategoryStats)
+	}
+}
+
+type pebbleCategoryDiskWriteMetrics struct {
+	BytesWritten *metric.Gauge
+}
+
+func makePebbleCategorizedWriteMetrics(
+	category vfs.DiskWriteCategory,
+) *pebbleCategoryDiskWriteMetrics {
+	metaDiskBytesWritten := metric.Metadata{
+		Name:        fmt.Sprintf("storage.category-%s.bytes-written", category),
+		Help:        "Bytes written to disk",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	return &pebbleCategoryDiskWriteMetrics{BytesWritten: metric.NewGauge(metaDiskBytesWritten)}
+}
+
+// MetricStruct implements the metric.Struct interface.
+func (m *pebbleCategoryDiskWriteMetrics) MetricStruct() {}
+
+func (m *pebbleCategoryDiskWriteMetrics) update(stats vfs.DiskWriteStatsAggregate) {
+	m.BytesWritten.Update(int64(stats.BytesWritten))
+}
+
+type pebbleCategoryDiskWriteMetricsContainer struct {
+	registry *metric.Registry
+	// vfs.DiskWriteCategory => *pebbleCategoryDiskWriteMetrics
+	metricsMap sync.Map
+}
+
+func (m *pebbleCategoryDiskWriteMetricsContainer) update(stats []vfs.DiskWriteStatsAggregate) {
+	for _, s := range stats {
+		val, ok := m.metricsMap.Load(s.Category)
+		if !ok {
+			val, ok = m.metricsMap.LoadOrStore(s.Category, makePebbleCategorizedWriteMetrics(s.Category))
+			if !ok {
+				m.registry.AddMetricStruct(val)
+			}
+		}
+		cm := val.(*pebbleCategoryDiskWriteMetrics)
+		cm.update(s)
 	}
 }

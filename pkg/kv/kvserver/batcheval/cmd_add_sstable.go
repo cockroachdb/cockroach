@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -282,8 +283,7 @@ func EvalAddSSTable(
 		// and thus no or few locks, so this is cheap in the common case.
 		log.VEventf(ctx, 2, "checking conflicting locks for SSTable [%s,%s)", start.Key, end.Key)
 		locks, err := storage.ScanLocks(
-			ctx, readWriter, start.Key, end.Key, maxLockConflicts, 0,
-			storage.BatchEvalReadCategory)
+			ctx, readWriter, start.Key, end.Key, maxLockConflicts, 0)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "scanning locks")
 		} else if len(locks) > 0 {
@@ -424,7 +424,7 @@ func EvalAddSSTable(
 			storage.IterOptions{
 				KeyTypes:     storage.IterKeyTypePointsAndRanges,
 				UpperBound:   reply.RangeSpan.EndKey,
-				ReadCategory: storage.BatchEvalReadCategory,
+				ReadCategory: fs.BatchEvalReadCategory,
 			})
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "error when creating iterator for non-empty span")

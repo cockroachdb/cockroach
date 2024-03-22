@@ -151,7 +151,7 @@ func runSyncer(
 
 	fmt.Fprintf(stderr, "verifying existing sequence numbers...")
 	err = db.MVCCIterate(ctx, roachpb.KeyMin, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsOnly, storage.UnknownReadCategory, check)
+		storage.IterKeyTypePointsOnly, fs.UnknownReadCategory, check)
 	if err != nil {
 		return 0, err
 	}

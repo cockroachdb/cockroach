@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -2619,7 +2620,7 @@ func handleTruncatedStateBelowRaftPreApply(
 		prefixBuf.RaftTruncatedStateKey(),
 		hlc.Timestamp{},
 		suggestedTruncatedState,
-		storage.MVCCWriteOptions{Category: storage.ReplicationReadCategory},
+		storage.MVCCWriteOptions{Category: fs.ReplicationReadCategory},
 	); err != nil {
 		return false, errors.Wrap(err, "unable to write RaftTruncatedState")
 	}

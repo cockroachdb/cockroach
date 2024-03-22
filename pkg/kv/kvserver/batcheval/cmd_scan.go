@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 )
 
@@ -135,10 +136,10 @@ func Scan(
 	return res, nil
 }
 
-func ScanReadCategory(ah kvpb.AdmissionHeader) storage.ReadCategory {
-	readCategory := storage.ScanRegularBatchEvalReadCategory
+func ScanReadCategory(ah kvpb.AdmissionHeader) fs.ReadCategory {
+	readCategory := fs.ScanRegularBatchEvalReadCategory
 	if admissionpb.WorkPriority(ah.Priority) < admissionpb.NormalPri {
-		readCategory = storage.ScanBackgroundBatchEvalReadCategory
+		readCategory = fs.ScanBackgroundBatchEvalReadCategory
 	}
 	return readCategory
 }

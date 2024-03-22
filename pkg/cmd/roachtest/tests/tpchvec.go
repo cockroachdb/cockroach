@@ -93,7 +93,7 @@ func (b tpchVecTestCaseBase) getRunConfig() tpchVecTestRunConfig {
 		numRunsPerQuery: 1,
 		clusterSetups: [][]string{{
 			"RESET CLUSTER SETTING sql.distsql.temp_storage.workmem",
-			"SET CLUSTER SETTING sql.defaults.vectorize=on",
+			"SET CLUSTER SETTING sql.defaults.vectorize=off",
 		}},
 		setupNames: []string{"default"},
 	}

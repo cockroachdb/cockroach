@@ -390,7 +390,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		// VFS to verify its contents.
 		ctx := context.Background()
 		memFS := stickyVFSRegistry.Get(strconv.FormatInt(int64(i), 10))
-		env, err := fs.InitEnv(ctx, memFS, cps[0], fs.EnvConfig{RW: fs.ReadOnly})
+		env, err := fs.InitEnv(ctx, memFS, cps[0], fs.EnvConfig{RW: fs.ReadOnly}, nil)
 		require.NoError(t, err)
 		cpEng, err := storage.Open(ctx, env, cluster.MakeClusterSettings(),
 			storage.ForTesting, storage.MustExist, storage.CacheSize(1<<20))

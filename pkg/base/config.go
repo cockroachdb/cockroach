@@ -783,7 +783,7 @@ func maxInflightBytesFrom(maxInflightMsgs int, maxSizePerMsg uint64) uint64 {
 	return math.MaxUint64
 }
 
-// StorageConfig contains storage configs for all storage engine.
+// StorageConfig contains storage configs for all storage engines.
 type StorageConfig struct {
 	Attrs roachpb.Attributes
 	// Dir is the data directory for the Pebble instance.

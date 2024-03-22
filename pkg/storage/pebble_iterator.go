@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -236,7 +237,7 @@ func (p *pebbleIterator) setOptions(
 		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
 		KeyTypes:                  opts.KeyTypes,
 		UseL6Filters:              opts.useL6Filters,
-		CategoryAndQoS:            getCategoryAndQoS(opts.ReadCategory),
+		CategoryAndQoS:            fs.GetCategoryAndQoS(opts.ReadCategory),
 	}
 	p.prefix = opts.Prefix
 

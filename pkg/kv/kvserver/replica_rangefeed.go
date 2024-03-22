@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -650,7 +651,7 @@ func populatePrevValsInLogicalOpLog(
 		// (see handleLogicalOpLogRaftMuLocked), this one may be missing.
 		prevValRes, err := storage.MVCCGet(
 			ctx, prevReader, key, ts, storage.MVCCGetOptions{
-				Tombstones: true, Inconsistent: true, ReadCategory: storage.RangefeedReadCategory},
+				Tombstones: true, Inconsistent: true, ReadCategory: fs.RangefeedReadCategory},
 		)
 		if err != nil {
 			return errors.Wrapf(err, "consuming %T for key %v @ ts %v", op, key, ts)

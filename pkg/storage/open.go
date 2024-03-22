@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/pebble/wal"
 )
 
@@ -311,6 +312,13 @@ func WALFailover(mode base.WALFailoverMode, storeEnvs fs.Envs) ConfigOption {
 func PebbleOptions(pebbleOptions string, parseHooks *pebble.ParseHooks) ConfigOption {
 	return func(cfg *engineConfig) error {
 		return cfg.Opts.Parse(pebbleOptions, parseHooks)
+	}
+}
+
+func DiskWriteStatsCollector(dsc *vfs.DiskWriteStatsCollector) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.DiskWriteStatsCollector = dsc
+		return nil
 	}
 }
 

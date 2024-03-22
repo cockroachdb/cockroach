@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,7 +85,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// Pin engine state eagerly so that all iterators created over this Reader are
 	// based off the state of the engine as of this point and are mutually
 	// consistent.
-	readCategory := storage.BatchEvalReadCategory
+	readCategory := fs.BatchEvalReadCategory
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		switch inner.(type) {

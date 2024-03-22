@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -148,7 +149,7 @@ func PushTxn(
 	// Fetch existing transaction; if missing, we're allowed to abort.
 	var existTxn roachpb.Transaction
 	ok, err := storage.MVCCGetProto(ctx, readWriter, key, hlc.Timestamp{}, &existTxn,
-		storage.MVCCGetOptions{ReadCategory: storage.BatchEvalReadCategory})
+		storage.MVCCGetOptions{ReadCategory: fs.BatchEvalReadCategory})
 	if err != nil {
 		return result.Result{}, err
 	} else if !ok {
@@ -327,7 +328,7 @@ func PushTxn(
 		if ok {
 			txnRecord := reply.PusheeTxn.AsRecord()
 			if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
-				storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: storage.BatchEvalReadCategory}); err != nil {
+				storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: fs.BatchEvalReadCategory}); err != nil {
 				return result.Result{}, err
 			}
 		}
@@ -349,7 +350,7 @@ func PushTxn(
 		if ok && !cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1) {
 			txnRecord := reply.PusheeTxn.AsRecord()
 			if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
-				storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: storage.BatchEvalReadCategory}); err != nil {
+				storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: fs.BatchEvalReadCategory}); err != nil {
 				return result.Result{}, err
 			}
 		}

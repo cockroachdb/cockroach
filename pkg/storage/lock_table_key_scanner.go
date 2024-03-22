@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -132,7 +133,7 @@ func newLockTableKeyScanner(
 	str lock.Strength,
 	maxConflicts int64,
 	targetBytesPerConflict int64,
-	readCategory ReadCategory,
+	readCategory fs.ReadCategory,
 ) (*lockTableKeyScanner, error) {
 	var txnID uuid.UUID
 	if txn != nil {

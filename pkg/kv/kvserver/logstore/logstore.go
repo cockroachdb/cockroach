@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -404,7 +405,7 @@ func logAppend(
 	value.RawBytes = value.RawBytes[:0]
 	diff.Reset()
 
-	opts := storage.MVCCWriteOptions{Stats: diff, Category: storage.ReplicationReadCategory}
+	opts := storage.MVCCWriteOptions{Stats: diff, Category: fs.ReplicationReadCategory}
 	for i := range entries {
 		ent := &entries[i]
 		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, kvpb.RaftIndex(ent.Index))

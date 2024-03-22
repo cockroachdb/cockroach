@@ -494,7 +494,7 @@ func (d *diskQueue) Close(ctx context.Context) error {
 // to write to.
 func (d *diskQueue) rotateFile(ctx context.Context) error {
 	fName := filepath.Join(d.cfg.GetPather.GetPath(ctx), d.dirName, strconv.Itoa(d.seqNo))
-	f, err := fs.CreateWithSync(d.cfg.FS, fName, bytesPerSync)
+	f, err := fs.CreateWithSync(d.cfg.FS, fName, bytesPerSync, fs.SQLColumnSpillWriteCategory)
 	if err != nil {
 		return err
 	}

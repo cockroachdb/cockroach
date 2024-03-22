@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -552,7 +553,7 @@ func (p *pebbleBatch) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
-	readCategory ReadCategory,
+	readCategory fs.ReadCategory,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
@@ -689,11 +690,11 @@ func (p *pebbleBatch) ConsistentIterators() bool {
 }
 
 // PinEngineStateForIterators implements the Batch interface.
-func (p *pebbleBatch) PinEngineStateForIterators(readCategory ReadCategory) error {
+func (p *pebbleBatch) PinEngineStateForIterators(readCategory fs.ReadCategory) error {
 	var err error
 	if p.iter == nil {
 		var iter *pebble.Iterator
-		o := &pebble.IterOptions{CategoryAndQoS: getCategoryAndQoS(readCategory)}
+		o := &pebble.IterOptions{CategoryAndQoS: fs.GetCategoryAndQoS(readCategory)}
 		if p.batch.Indexed() {
 			iter, err = p.batch.NewIter(o)
 		} else {

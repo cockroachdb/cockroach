@@ -79,6 +79,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",

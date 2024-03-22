@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -264,7 +265,7 @@ func DeleteRange(
 		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
 		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-		Category:                       storage.BatchEvalReadCategory,
+		Category:                       fs.BatchEvalReadCategory,
 	}
 
 	// NB: Even if args.ReturnKeys is false, we want to know which intents were

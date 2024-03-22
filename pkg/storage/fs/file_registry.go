@@ -533,7 +533,7 @@ func (r *FileRegistry) createNewRegistryFile() error {
 	// is moved to the new filename.
 	filename := makeRegistryFilename(r.mu.marker.NextIter())
 	filepath := r.FS.PathJoin(r.DBDir, filename)
-	f, err := r.FS.Create(filepath)
+	f, err := r.FS.Create(filepath, EncryptionRegistryWriteCategory)
 	if err != nil {
 		return err
 	}

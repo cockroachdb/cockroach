@@ -183,7 +183,7 @@ type benchOptions struct {
 type engineMaker func(testing.TB, string, int64, fs.RWMode) storage.Engine
 
 func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, rw fs.RWMode) storage.Engine {
-	env, err := fs.InitEnv(context.Background(), vfs.Default, dir, fs.EnvConfig{RW: rw})
+	env, err := fs.InitEnv(context.Background(), vfs.Default, dir, fs.EnvConfig{RW: rw}, nil)
 	if err != nil {
 		b.Fatalf("could not initialize fs env at %s: %+v", dir, err)
 	}

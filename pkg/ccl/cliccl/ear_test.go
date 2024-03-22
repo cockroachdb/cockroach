@@ -56,7 +56,7 @@ func TestDecrypt(t *testing.T) {
 	encOpts, err := encSpec.ToEncryptionOptions()
 	require.NoError(t, err)
 
-	env, err := fs.InitEnv(ctx, vfs.Default, dir, fs.EnvConfig{EncryptionOptions: encOpts})
+	env, err := fs.InitEnv(ctx, vfs.Default, dir, fs.EnvConfig{EncryptionOptions: encOpts}, nil)
 	require.NoError(t, err)
 	p, err := storage.Open(ctx, env, cluster.MakeClusterSettings())
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestList(t *testing.T) {
 	require.NoError(t, err)
 	encOpts, err := encSpec.ToEncryptionOptions()
 	require.NoError(t, err)
-	env, err := fs.InitEnv(ctx, vfs.Default, dir, fs.EnvConfig{EncryptionOptions: encOpts})
+	env, err := fs.InitEnv(ctx, vfs.Default, dir, fs.EnvConfig{EncryptionOptions: encOpts}, nil)
 	require.NoError(t, err)
 	p, err := storage.Open(ctx, env, cluster.MakeClusterSettings())
 	require.NoError(t, err)

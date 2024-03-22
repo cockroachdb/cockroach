@@ -43,7 +43,7 @@ func TestStickyVFS(t *testing.T) {
 		Size:        base.SizeSpec{InBytes: storeSize},
 	}
 	fs1 := registry.Get(spec1.StickyVFSID)
-	env, err := fs.InitEnvFromStoreSpec(ctx, spec1, fs.ReadWrite, registry)
+	env, err := fs.InitEnvFromStoreSpec(ctx, spec1, fs.ReadWrite, registry, nil)
 	require.NoError(t, err)
 	engine1, err := storage.Open(ctx, env, settings)
 	require.NoError(t, err)
@@ -55,7 +55,7 @@ func TestStickyVFS(t *testing.T) {
 	// Refetching the engine should give back a different engine with the same
 	// underlying fs.
 	fs3 := registry.Get(spec1.StickyVFSID)
-	env, err = fs.InitEnvFromStoreSpec(ctx, spec1, fs.ReadWrite, registry)
+	env, err = fs.InitEnvFromStoreSpec(ctx, spec1, fs.ReadWrite, registry, nil)
 	require.NoError(t, err)
 	engine2, err := storage.Open(ctx, env, settings)
 	require.NoError(t, err)

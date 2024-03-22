@@ -184,7 +184,7 @@ func OpenFilesystemEnv(dir string, rw fs.RWMode) (*fs.Env, error) {
 			return nil, err
 		}
 	}
-	return fs.InitEnv(context.Background(), vfs.Default, dir, envConfig)
+	return fs.InitEnv(context.Background(), vfs.Default, dir, envConfig, nil)
 }
 
 // OpenEngine opens the engine at 'dir'. Depending on the supplied options,
@@ -386,13 +386,13 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 	if err := db.MVCCIterate(
 		cmd.Context(), debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsAndRanges, storage.UnknownReadCategory, iterFunc); err != nil {
+		storage.IterKeyTypePointsAndRanges, fs.UnknownReadCategory, iterFunc); err != nil {
 		return err
 	}
 	if splitScan {
 		if err := db.MVCCIterate(cmd.Context(), keys.LocalMax, debugCtx.endKey.Key,
 			storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsAndRanges,
-			storage.UnknownReadCategory, iterFunc); err != nil {
+			fs.UnknownReadCategory, iterFunc); err != nil {
 			return err
 		}
 	}
@@ -600,7 +600,7 @@ func loadRangeDescriptor(
 	// NB: Range descriptor keys can have intents.
 	if err := db.MVCCIterate(
 		ctx, start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
-		storage.UnknownReadCategory, handleKV); err != nil {
+		fs.UnknownReadCategory, handleKV); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 	if desc.RangeID == rangeID {
@@ -623,7 +623,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 
 	// NB: Range descriptor keys can have intents.
 	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsOnly, storage.UnknownReadCategory,
+		storage.IterKeyTypePointsOnly, fs.UnknownReadCategory,
 		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 			if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
 				return nil
@@ -801,7 +801,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 
 	// NB: raft log does not have intents.
 	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyIterKind,
-		storage.IterKeyTypePointsOnly, storage.UnknownReadCategory,
+		storage.IterKeyTypePointsOnly, fs.UnknownReadCategory,
 		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 			kvserver.PrintMVCCKeyValue(kv)
 			return nil
@@ -1643,7 +1643,7 @@ func pebbleCryptoInitializer(ctx context.Context) {
 			if err := PopulateEnvConfigHook(dir, &envConfig); err != nil {
 				return nil, err
 			}
-			env, err := fs.InitEnv(ctx, vfs.Default, dir, envConfig)
+			env, err := fs.InitEnv(ctx, vfs.Default, dir, envConfig, nil)
 			if err != nil {
 				return nil, err
 			}

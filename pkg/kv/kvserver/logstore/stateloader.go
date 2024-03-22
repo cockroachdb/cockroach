@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -59,7 +60,7 @@ func (sl StateLoader) LoadLastIndex(
 	// NB: raft log has no intents.
 	iter, err := reader.NewMVCCIterator(
 		ctx, storage.MVCCKeyIterKind, storage.IterOptions{
-			LowerBound: prefix, ReadCategory: storage.ReplicationReadCategory})
+			LowerBound: prefix, ReadCategory: fs.ReplicationReadCategory})
 	if err != nil {
 		return 0, err
 	}
@@ -99,7 +100,7 @@ func (sl StateLoader) LoadRaftTruncatedState(
 	var truncState kvserverpb.RaftTruncatedState
 	if _, err := storage.MVCCGetProto(
 		ctx, reader, sl.RaftTruncatedStateKey(), hlc.Timestamp{}, &truncState,
-		storage.MVCCGetOptions{ReadCategory: storage.ReplicationReadCategory},
+		storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory},
 	); err != nil {
 		return kvserverpb.RaftTruncatedState{}, err
 	}
@@ -130,7 +131,7 @@ func (sl StateLoader) LoadHardState(
 ) (raftpb.HardState, error) {
 	var hs raftpb.HardState
 	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftHardStateKey(),
-		hlc.Timestamp{}, &hs, storage.MVCCGetOptions{ReadCategory: storage.ReplicationReadCategory})
+		hlc.Timestamp{}, &hs, storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory})
 
 	if !found || err != nil {
 		return raftpb.HardState{}, err
@@ -210,7 +211,7 @@ func (sl StateLoader) LoadRaftReplicaID(
 ) (*kvserverpb.RaftReplicaID, error) {
 	var replicaID kvserverpb.RaftReplicaID
 	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftReplicaIDKey(),
-		hlc.Timestamp{}, &replicaID, storage.MVCCGetOptions{ReadCategory: storage.ReplicationReadCategory})
+		hlc.Timestamp{}, &replicaID, storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory})
 	if err != nil {
 		return nil, err
 	}

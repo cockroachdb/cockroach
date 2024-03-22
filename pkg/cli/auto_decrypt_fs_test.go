@@ -48,7 +48,7 @@ func TestAutoDecryptFS(t *testing.T) {
 		memFS := vfs.WithLogging(vfs.NewMem(), func(format string, args ...interface{}) {
 			fmt.Fprintf(&buf, dir+": "+format+"\n", args...)
 		})
-		env, err := fs.InitEnv(context.Background(), memFS, "" /* dir */, fs.EnvConfig{})
+		env, err := fs.InitEnv(context.Background(), memFS, "" /* dir */, fs.EnvConfig{}, nil)
 		require.NoError(t, err)
 		require.NoError(t, env.MkdirAll(dir, 0755))
 		return env, nil
@@ -61,7 +61,7 @@ func TestAutoDecryptFS(t *testing.T) {
 	}()
 
 	create := func(pathElems ...string) {
-		file, err := fs.Create(filepath.Join(pathElems...))
+		file, err := fs.Create(filepath.Join(pathElems...), fs.UnspecifiedWriteCategory)
 		require.NoError(t, err)
 		file.Close()
 	}

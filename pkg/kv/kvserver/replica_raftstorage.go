@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -419,7 +420,7 @@ func snapshot(
 	// descriptors resolve their own intents when they commit.
 	ok, err := storage.MVCCGetProto(ctx, snap, keys.RangeDescriptorKey(startKey),
 		hlc.MaxTimestamp, &desc, storage.MVCCGetOptions{
-			Inconsistent: true, ReadCategory: storage.RangeSnapshotReadCategory})
+			Inconsistent: true, ReadCategory: fs.RangeSnapshotReadCategory})
 	if err != nil {
 		return OutgoingSnapshot{}, errors.Wrap(err, "failed to get desc")
 	}
