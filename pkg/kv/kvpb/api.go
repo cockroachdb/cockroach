@@ -956,6 +956,9 @@ func (*AdminScatterRequest) Method() Method { return AdminScatter }
 func (*AddSSTableRequest) Method() Method { return AddSSTable }
 
 // Method implements the Request interface.
+func (*LinkExternalSSTableRequest) Method() Method { return LinkExternalSSTable }
+
+// Method implements the Request interface.
 func (*MigrateRequest) Method() Method { return Migrate }
 
 // Method implements the Request interface.
@@ -1211,6 +1214,12 @@ func (r *AdminScatterRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *AddSSTableRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *LinkExternalSSTableRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1751,6 +1760,13 @@ func (*ExportRequest) flags() flag {
 func (*AdminScatterRequest) flags() flag                  { return isAdmin | isRange | isAlone }
 func (*AdminVerifyProtectedTimestampRequest) flags() flag { return isAdmin | isRange | isAlone }
 func (r *AddSSTableRequest) flags() flag {
+	flags := isWrite | isRange | isAlone | isUnsplittable | canBackpressure | bypassesReplicaCircuitBreaker
+	if r.SSTTimestampToRequestTimestamp.IsSet() {
+		flags |= appliesTSCache
+	}
+	return flags
+}
+func (r *LinkExternalSSTableRequest) flags() flag {
 	flags := isWrite | isRange | isAlone | isUnsplittable | canBackpressure | bypassesReplicaCircuitBreaker
 	if r.SSTTimestampToRequestTimestamp.IsSet() {
 		flags |= appliesTSCache

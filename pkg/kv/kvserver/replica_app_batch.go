@@ -288,6 +288,12 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		}
 		res.AddSSTable = nil
 	}
+	if res.LinkExternalSSTable != nil {
+		// We currently do not notify any tracking rangefeeds of linked external
+		// sst's because we have not verified that clients can handle an empty sst
+		// yet.
+		res.LinkExternalSSTable = nil
+	}
 
 	if res.Split != nil {
 		// Splits require a new HardState to be written to the new RHS
