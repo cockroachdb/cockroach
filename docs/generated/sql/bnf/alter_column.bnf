@@ -23,6 +23,10 @@ alter_onetable_stmt ::=
 	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name set_generated_default
 	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name identity_option_list
 	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name identity_option_list
+	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'IDENTITY'
+	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name 'DROP' 'IDENTITY'
+	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'IDENTITY' 'IF' 'EXISTS'
+	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name 'DROP' 'IDENTITY' 'IF' 'EXISTS'
 	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'STORED'
 	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name 'DROP' 'STORED'
 	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'SET' 'NOT' 'NULL'
@@ -67,6 +71,10 @@ alter_onetable_stmt ::=
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name set_generated_default
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name identity_option_list
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name identity_option_list
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'IDENTITY'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'DROP' 'IDENTITY'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'IDENTITY' 'IF' 'EXISTS'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'DROP' 'IDENTITY' 'IF' 'EXISTS'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'STORED'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'DROP' 'STORED'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'SET' 'NOT' 'NULL'

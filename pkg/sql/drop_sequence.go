@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -190,7 +189,7 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 		var firstDep *descpb.TableDescriptor_Reference
 		multipleIterationErr := seqDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
 			if firstDep != nil {
-				return iterutil.StopIteration()
+				return errors.Newf("multiple iterations")
 			}
 			firstDep = dep
 			return nil

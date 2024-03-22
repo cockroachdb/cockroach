@@ -198,6 +198,13 @@ CREATE TABLE t.test(a INT PRIMARY KEY, b INT)`); err != nil {
 	}
 	assertColumnOwnsSequences(t, kvDB, "t", "test2", 0 /* colIdx */, []string{"test2_a_seq"})
 	assertColumnOwnsSequences(t, kvDB, "t", "test2", 1 /* colIdx */, []string{"test2_b_seq"})
+
+	// Ensure dropping identity column owns no sequence
+	if _, err := sqlConn.Exec("ALTER TABLE t.test2 ALTER COLUMN b DROP IDENTITY"); err != nil {
+		t.Fatal(err)
+	}
+	assertColumnOwnsSequences(t, kvDB, "t", "test2", 0 /* colIdx */, []string{"test2_a_seq"})
+	assertColumnOwnsSequences(t, kvDB, "t", "test2", 1 /* colIdx */, nil /* seqNames */)
 }
 
 // assertColumnOwnsSequences ensures that the column at (DbName, tbName, colIdx)
