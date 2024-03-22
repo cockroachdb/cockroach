@@ -28,7 +28,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   EXPERIMENTAL_acceptance:
-    runs-on: [self-hosted, basic_big_runner_group]
+    runs-on: [self-hosted, basic_runner_group]
     steps:
       - uses: actions/checkout@v4
         with:
