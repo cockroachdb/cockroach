@@ -3744,6 +3744,10 @@ func (m *sessionDataMutator) SetPLpgSQLUseStrictInto(val bool) {
 	m.data.PLpgSQLUseStrictInto = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseVirtualComputedColumnStats(val bool) {
+	m.data.OptimizerUseVirtualComputedColumnStats = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

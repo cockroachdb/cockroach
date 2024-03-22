@@ -490,6 +490,10 @@ message LocalOnlySessionData {
   // which throws a runtime error when the SQL statement doesn't return exactly
   // one row. This is useful for oracle compatibility.
   bool plpgsql_use_strict_into = 123 [(gogoproto.customname) = "PLpgSQLUseStrictInto"];
+  // OptimizerUseVirtualComputedColumnStats indicates whether we should use
+  // statistics on virtual computed columns for cardinality estimation in the
+  // optimizer.
+  bool optimizer_use_virtual_computed_column_stats = 124;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
