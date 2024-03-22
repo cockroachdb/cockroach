@@ -2192,7 +2192,9 @@ func (p *Pebble) IngestAndExciseFiles(
 		Start: EngineKey{Key: exciseSpan.Key}.Encode(),
 		End:   EngineKey{Key: exciseSpan.EndKey}.Encode(),
 	}
-	return p.db.IngestAndExcise(paths, shared, external, rawSpan)
+	// TODO(aaditya): Enable sstsContainExciseTombstone once bugs introduced in
+	// https://github.com/cockroachdb/pebble/pull/3398 are sorted out.
+	return p.db.IngestAndExcise(paths, shared, external, rawSpan, false /* sstsContainExciseTombstone */)
 }
 
 // IngestExternalFiles implements the Engine interface.
