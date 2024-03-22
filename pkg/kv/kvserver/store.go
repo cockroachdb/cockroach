@@ -83,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
@@ -1077,6 +1078,10 @@ type Store struct {
 		maxL0Size         *slidingwindow.Swag
 	}
 
+	// lastIOOverloadLeaseShed tracks the last time the store attempted to shed
+	// all range leases it held due to becoming IO overloaded.
+	lastIOOverloadLeaseShed atomic.Value
+
 	counts struct {
 		// Number of placeholders removed due to error. Not a good fit for meaningful
 		// metrics, as snapshots to initialized ranges don't get a placeholder.
@@ -1445,6 +1450,7 @@ func NewStore(
 		// store pool in those cases.
 		allocatorStorePool = cfg.StorePool
 		storePoolIsDeterministic = allocatorStorePool.IsDeterministic()
+		allocatorStorePool.SetOnCapacityChange(s.makeIOOverloadCapacityChangeFn())
 
 		s.rebalanceObjManager = newRebalanceObjectiveManager(
 			ctx,
@@ -1639,7 +1645,7 @@ func NewStore(
 		updateSystemConfigUpdateQueueLimits)
 
 	if s.cfg.Gossip != nil {
-		s.storeGossip = NewStoreGossip(cfg.Gossip, s, cfg.TestingKnobs.GossipTestingKnobs)
+		s.storeGossip = NewStoreGossip(cfg.Gossip, s, cfg.TestingKnobs.GossipTestingKnobs, &cfg.Settings.SV)
 
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
@@ -2599,12 +2605,100 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 // StoreDescriptor.
 func (s *Store) UpdateIOThreshold(ioThreshold *admissionpb.IOThreshold) {
 	now := s.Clock().Now().GoTime()
+
 	s.ioThreshold.Lock()
-	defer s.ioThreshold.Unlock()
 	s.ioThreshold.t = ioThreshold
 	s.ioThreshold.maxL0NumSubLevels.Record(now, float64(ioThreshold.L0NumSubLevels))
 	s.ioThreshold.maxL0NumFiles.Record(now, float64(ioThreshold.L0NumFiles))
 	s.ioThreshold.maxL0Size.Record(now, float64(ioThreshold.L0Size))
+	maxL0NumSubLevels, _ := s.ioThreshold.maxL0NumSubLevels.Query(now)
+	maxL0NumFiles, _ := s.ioThreshold.maxL0NumFiles.Query(now)
+	maxL0Size, _ := s.ioThreshold.maxL0Size.Query(now)
+	s.ioThreshold.Unlock()
+
+	ioThresholdMax := protoutil.Clone(ioThreshold).(*admissionpb.IOThreshold)
+	ioThresholdMax.L0NumSubLevels = int64(maxL0NumSubLevels)
+	ioThresholdMax.L0NumFiles = int64(maxL0NumFiles)
+	ioThresholdMax.L0Size = int64(maxL0Size)
+
+	// Update the store's cached capacity and potentially gossip the updated
+	// capacity async if the IO threshold has increased.
+	s.storeGossip.RecordNewIOThreshold(*ioThreshold, *ioThresholdMax)
+}
+
+// existingLeaseCheckIOOverload checks whether the store is IO overloaded
+// enough that it would fail the allocator checks for holding leases, returning
+// true when okay and false otherwise. When false is returned, it indicates
+// that a replicas' lease will be transferred away when encountered by the
+// lease queue.
+func (s *Store) existingLeaseCheckIOOverload(ctx context.Context) bool {
+	storeList, _, _ := s.cfg.StorePool.GetStoreList(storepool.StoreFilterNone)
+	storeDescriptor, ok := s.cfg.StorePool.GetStoreDescriptor(s.StoreID())
+	if !ok {
+		return false
+	}
+	return s.allocator.IOOverloadOptions().ExistingLeaseCheck(
+		ctx, storeDescriptor, storeList)
+}
+
+// makeIOOverloadCapacityChangeFn returns a capacity change callback which will
+// enqueue all leaseholder replicas into the lease queue when: (1) the capacity
+// change is for the local store and (2) the store's IO is considered too
+// overloaded to hold onto its existing leases. The leases will be processed
+// via the lease queue and shed to another replica, if available.
+func (s *Store) makeIOOverloadCapacityChangeFn() storepool.CapacityChangeFn {
+	return func(storeID roachpb.StoreID, old, cur roachpb.StoreCapacity) {
+		// There's nothing to do when there are no leases on the store.
+		if cur.LeaseCount == 0 {
+			return
+		}
+
+		// Don't react to other stores capacity changes, only IO overload change on
+		// the local store descriptor is relevant.
+		if !s.IsStarted() || s.StoreID() != storeID {
+			return
+		}
+
+		// Avoid shedding leases too frequently by checking the last time a shed
+		// was attempted.
+		if lastShed := s.lastIOOverloadLeaseShed.Load(); lastShed != nil {
+			minInterval := MinIOOverloadLeaseShedInterval.Get(&s.cfg.Settings.SV)
+			if timeutil.Since(lastShed.(time.Time)) < minInterval {
+				return
+			}
+		}
+
+		// Lastly, check whether the store is considered IO overloaded relative to
+		// the configured threshold and the cluster average.
+		ctx := context.Background()
+		s.AnnotateCtx(ctx)
+		if s.existingLeaseCheckIOOverload(ctx) {
+			return
+		}
+
+		// NB: Update the last shed time prior to trying to shed leases, this
+		// should limit the window of concurrent shedding activity (in the case
+		// where multiple capacity changes are called within a short window). This
+		// could be removed entirely with a mutex but hardly seems necessary.
+		s.lastIOOverloadLeaseShed.Store(s.Clock().Now().GoTime())
+		log.KvDistribution.Infof(
+			ctx, "IO overload detected, will shed leases %v", cur.LeaseCount)
+
+		// This callback is on the gossip goroutine, once we know we wish to shed
+		// leases, split off the actual enqueuing work to a separate async task
+		// goroutine.
+		if err := s.stopper.RunTask(ctx, "io-overload: shed leases", func(ctx context.Context) {
+			newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+				s.leaseQueue.maybeAdd(ctx, repl, repl.Clock().NowAsClockTimestamp())
+				return true /* wantMore */
+			})
+		}); err != nil {
+			log.KvDistribution.Infof(ctx,
+				"unable to shed leases due to IO overload: %v", err)
+			// An error should only be encountered when the server is quiescing, as
+			// such we don't reset the timer on a failed attempt.
+		}
+	}
 }
 
 // VisitReplicasOption optionally modifies store.VisitReplicas.
