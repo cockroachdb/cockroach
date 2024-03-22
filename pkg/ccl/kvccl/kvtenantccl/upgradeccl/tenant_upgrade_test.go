@@ -171,6 +171,7 @@ func TestTenantAutoUpgrade(t *testing.T) {
 
 	expectedInitialTenantVersion := v0.Version()
 	expectedFinalTenantVersion := clusterversion.Latest.Version()
+	expectedFinalTenantVersion.Internal = 0 // tenants only upgrade to non-internal versions
 
 	tenantSettings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.Latest.Version(),
@@ -189,9 +190,8 @@ func TestTenantAutoUpgrade(t *testing.T) {
 			TenantName: roachpb.TenantName(name),
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					TenantAutoUpgradeInfo:                          upgradeInfoCh,
-					AllowTenantAutoUpgradeOnInternalVersionChanges: true,
-					BinaryVersionOverride:                          v0.Version(),
+					TenantAutoUpgradeInfo: upgradeInfoCh,
+					BinaryVersionOverride: v0.Version(),
 				},
 			},
 		}
