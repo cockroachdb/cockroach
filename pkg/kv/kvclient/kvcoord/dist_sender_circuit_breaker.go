@@ -466,11 +466,8 @@ func (t replicaCircuitBreakerToken) Done(br *kvpb.BatchResponse, err error, nowN
 
 // id returns a string identifier for the replica.
 func (r *ReplicaCircuitBreaker) id() redact.RedactableString {
-	// Clear out the replica type, since we never update the descriptor and it can
-	// be stale. This will omit the type from the string representation.
-	desc := r.desc
-	desc.Type = 0
-	return redact.Sprintf("r%d/%s", r.rangeID, desc)
+	return redact.Sprintf("r%d/%d:(n%d,s%d)",
+		r.rangeID, r.desc.ReplicaID, r.desc.NodeID, r.desc.StoreID)
 }
 
 // errorDuration returns the error duration relative to nowNanos.
