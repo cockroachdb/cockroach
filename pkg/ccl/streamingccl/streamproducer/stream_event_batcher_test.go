@@ -33,19 +33,19 @@ func TestStreamEventBatcher(t *testing.T) {
 	var runningSize int
 	kv := roachpb.KeyValue{Key: roachpb.Key{'1'}}
 	runningSize += kv.Size()
-	seb.addKV(&kv)
+	seb.addKV(kv)
 	require.Equal(t, 1, len(seb.batch.KeyValues))
 	require.Equal(t, runningSize, seb.getSize())
 
 	delRange := kvpb.RangeFeedDeleteRange{Span: roachpb.Span{Key: roachpb.KeyMin}, Timestamp: hlc.Timestamp{}}
 	runningSize += delRange.Size()
-	seb.addDelRange(&delRange)
+	seb.addDelRange(delRange)
 	require.Equal(t, 1, len(seb.batch.DelRanges))
 	require.Equal(t, runningSize, seb.getSize())
 
 	sst := replicationtestutils.SSTMaker(t, []roachpb.KeyValue{kv})
 	runningSize += sst.Size()
-	seb.addSST(&sst)
+	seb.addSST(sst)
 	require.Equal(t, 1, len(seb.batch.Ssts))
 	require.Equal(t, runningSize, seb.getSize())
 
