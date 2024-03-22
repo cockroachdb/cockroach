@@ -1261,7 +1261,7 @@ var importEpochs = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"bulkio.import.write_import_epoch.enabled",
 	"controls whether IMPORT will write ImportEpoch's to descriptors",
-	false,
+	true,
 )
 
 func getFractionCompleted(job *jobs.Job) float64 {
@@ -1599,7 +1599,7 @@ func (r *importResumer) dropTables(
 			execCfg.Codec,
 			&execCfg.Settings.SV,
 			execCfg.DistSender,
-			intoTable,
+			intoTable.GetID(),
 			predicates, sql.RevertTableDefaultBatchSize); err != nil {
 			return errors.Wrap(err, "rolling back IMPORT INTO in non empty table via DeleteRange")
 		}
