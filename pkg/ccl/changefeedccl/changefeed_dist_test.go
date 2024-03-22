@@ -496,8 +496,6 @@ func TestChangefeedWithSimpleDistributionStrategy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 120870)
-
 	// The test is slow and will time out under deadlock/race/stress.
 	skip.UnderShort(t)
 	skip.UnderDuress(t)
@@ -512,6 +510,8 @@ func TestChangefeedWithSimpleDistributionStrategy(t *testing.T) {
 	tester := newRangeDistributionTester(t, noLocality)
 	defer tester.cleanup()
 	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_simple'")
+	// We need to disable the bulk oracle in order to ensure the leaseholder is selected.
+	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.random_replica_selection.enabled = false")
 	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
 	partitions := tester.getPartitions()
 	counts := tester.countRangesPerNode(partitions)
