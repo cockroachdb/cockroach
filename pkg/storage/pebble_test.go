@@ -525,7 +525,7 @@ func TestPebbleKeyValidationFunc(t *testing.T) {
 	// Fatalf.
 	l := &nonFatalLogger{t: t}
 	opt := func(cfg *engineConfig) error {
-		cfg.Opts.LoggerAndTracer = l
+		cfg.opts.LoggerAndTracer = l
 		return nil
 	}
 	engine := createTestPebbleEngine(opt).(*Pebble)
@@ -639,10 +639,10 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 	// Set up an engine with tiny blocks, so each point key gets its own block,
 	// and disable compactions to keep SSTs separate.
 	overrideOptions := func(cfg *engineConfig) error {
-		cfg.Opts.DisableAutomaticCompactions = true
-		for i := range cfg.Opts.Levels {
-			cfg.Opts.Levels[i].BlockSize = 1
-			cfg.Opts.Levels[i].IndexBlockSize = 1
+		cfg.opts.DisableAutomaticCompactions = true
+		for i := range cfg.opts.Levels {
+			cfg.opts.Levels[i].BlockSize = 1
+			cfg.opts.Levels[i].IndexBlockSize = 1
 		}
 		return nil
 	}
@@ -780,10 +780,10 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 	// separate SSTs when the clearing SST does not satisfy the filter. We
 	// disable compactions to keep SSTs separate.
 	overrideOptions := func(cfg *engineConfig) error {
-		cfg.Opts.DisableAutomaticCompactions = true
-		for i := range cfg.Opts.Levels {
-			cfg.Opts.Levels[i].BlockSize = 65536
-			cfg.Opts.Levels[i].IndexBlockSize = 65536
+		cfg.opts.DisableAutomaticCompactions = true
+		for i := range cfg.opts.Levels {
+			cfg.opts.Levels[i].BlockSize = 65536
+			cfg.opts.Levels[i].IndexBlockSize = 65536
 		}
 		return nil
 	}
@@ -893,10 +893,10 @@ func TestPebbleMVCCTimeIntervalWithRangeClears(t *testing.T) {
 	// Set up an engine with tiny blocks, so each point key gets its own block,
 	// and disable compactions to keep SSTs separate.
 	overrideOptions := func(cfg *engineConfig) error {
-		cfg.Opts.DisableAutomaticCompactions = true
-		for i := range cfg.Opts.Levels {
-			cfg.Opts.Levels[i].BlockSize = 1
-			cfg.Opts.Levels[i].IndexBlockSize = 1
+		cfg.opts.DisableAutomaticCompactions = true
+		for i := range cfg.opts.Levels {
+			cfg.opts.Levels[i].BlockSize = 1
+			cfg.opts.Levels[i].IndexBlockSize = 1
 		}
 		return nil
 	}

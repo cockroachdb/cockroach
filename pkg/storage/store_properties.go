@@ -19,23 +19,23 @@ import (
 	"github.com/elastic/gosigar"
 )
 
-func computeStoreProperties(ctx context.Context, cfg PebbleConfig) roachpb.StoreProperties {
+func computeStoreProperties(ctx context.Context, cfg engineConfig) roachpb.StoreProperties {
 	props := roachpb.StoreProperties{
-		Dir:       cfg.Dir,
-		ReadOnly:  cfg.Env.IsReadOnly(),
-		Encrypted: cfg.Env.Encryption != nil,
+		Dir:       cfg.env.Dir,
+		ReadOnly:  cfg.env.IsReadOnly(),
+		Encrypted: cfg.env.Encryption != nil,
 	}
-	if cfg.Opts.WALFailover != nil {
+	if cfg.opts.WALFailover != nil {
 		props.WalFailoverPath = new(string)
-		*props.WalFailoverPath = cfg.Opts.WALFailover.Secondary.Dirname
+		*props.WalFailoverPath = cfg.opts.WALFailover.Secondary.Dirname
 	}
 
 	// In-memory store?
-	if cfg.Dir == "" {
+	if cfg.env.Dir == "" {
 		return props
 	}
 
-	fsprops := getFileSystemProperties(ctx, cfg.Dir)
+	fsprops := getFileSystemProperties(ctx, cfg.env.Dir)
 	props.FileStoreProperties = &fsprops
 	return props
 }

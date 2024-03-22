@@ -91,10 +91,10 @@ func newPebbleTempEngine(
 			// caller-provided key is used as-is (with the prefix prepended). See
 			// pebbleMap.makeKey and pebbleMap.makeKeyWithSequence on how this works.
 			// Use the default bytes.Compare-like comparer.
-			cfg.Opts.Comparer = pebble.DefaultComparer
-			cfg.Opts.DisableWAL = true
-			cfg.Opts.Experimental.KeyValidationFunc = nil
-			cfg.Opts.BlockPropertyCollectors = nil
+			cfg.opts.Comparer = pebble.DefaultComparer
+			cfg.opts.DisableWAL = true
+			cfg.opts.Experimental.KeyValidationFunc = nil
+			cfg.opts.BlockPropertyCollectors = nil
 			return nil
 		},
 	)

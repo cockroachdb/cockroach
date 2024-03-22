@@ -59,7 +59,7 @@ type initialState interface {
 var previousReleaseFormatMajorVersion = pebbleFormatVersion(clusterversion.PreviousRelease.Version())
 
 var previousReleaseFormatMajorVersionOpt ConfigOption = func(cfg *engineConfig) error {
-	cfg.PebbleConfig.Opts.FormatMajorVersion = previousReleaseFormatMajorVersion
+	cfg.opts.FormatMajorVersion = previousReleaseFormatMajorVersion
 	return nil
 }
 
