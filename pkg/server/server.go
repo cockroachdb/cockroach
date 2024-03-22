@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -502,6 +503,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 
 	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
+	kvserver.WatchRaftMemoryBudgetingSetting(stores, &st.SV)
 
 	decomNodeMap := &decommissioningNodeMap{
 		nodes: make(map[roachpb.NodeID]interface{}),
@@ -707,13 +709,26 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if rangeFeedBudgetFactory != nil {
 		nodeRegistry.AddMetricStruct(rangeFeedBudgetFactory.Metrics())
 	}
+
+	// Create an unlimited (for now) monitor for bytes used by raft entries. Use a
+	// 512 KiB allocation size, so that 96 raft scheduler workers would typically
+	// account as a 48 MiB baseline.
+	raftEntriesMetric := metric.NewGauge(metric.Metadata{
+		Name:        "raft.loaded_entries.bytes",
+		Help:        "Bytes allocated by raft Storage.Entries calls that are still kept in memory.",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	})
+	nodeRegistry.AddMetric(raftEntriesMetric)
+	raftEntriesMonitor := mon.NewMonitorWithLimit("raft-entries", mon.MemoryResource,
+		kvserver.RaftEntriesMemLimit, raftEntriesMetric, nil, /* maxHist */
+		512<<10 /* increment */, math.MaxInt64 /* noteworthy */, st)
+	raftEntriesMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
+
 	// Closer order is important with BytesMonitor.
-	stopper.AddCloser(stop.CloserFn(func() {
-		rangeFeedBudgetFactory.Stop(ctx)
-	}))
-	stopper.AddCloser(stop.CloserFn(func() {
-		kvMemoryMonitor.Stop(ctx)
-	}))
+	stopper.AddCloser(stop.CloserFn(func() { raftEntriesMonitor.Stop(ctx) }))
+	stopper.AddCloser(stop.CloserFn(func() { rangeFeedBudgetFactory.Stop(ctx) }))
+	stopper.AddCloser(stop.CloserFn(func() { kvMemoryMonitor.Stop(ctx) }))
 
 	tsDB := ts.NewDB(db, cfg.Settings)
 	nodeRegistry.AddMetricStruct(tsDB.Metrics())
@@ -855,6 +870,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		EagerLeaseAcquisitionLimiter: eagerLeaseAcquisitionLimiter,
 		KVMemoryMonitor:              kvMemoryMonitor,
 		RangefeedBudgetFactory:       rangeFeedBudgetFactory,
+		RaftEntriesMonitor:           raftEntriesMonitor,
 		SharedStorageEnabled:         cfg.SharedStorage != "",
 		SystemConfigProvider:         systemConfigWatcher,
 		SpanConfigSubscriber:         spanConfig.subscriber,

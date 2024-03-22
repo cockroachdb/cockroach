@@ -799,7 +799,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return false, err
 		}
 		if hasReady = raftGroup.HasReady(); hasReady {
+			// Since we are holding raftMu, only this Ready() call will use
+			// raftMu.bytesAccount. It tracks memory usage that this Ready incurs.
+			r.raftMu.bytesAccountUse = RaftEntriesMemLimit > 0
 			syncRd := raftGroup.Ready()
+			r.raftMu.bytesAccountUse = false
+
 			logRaftReady(ctx, syncRd)
 			asyncRd := makeAsyncReady(syncRd)
 			softState = asyncRd.SoftState
@@ -1099,6 +1104,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 		// Send MsgStorageApply's responses.
 		r.sendRaftMessages(ctx, msgStorageApply.Responses, nil /* blocked */, true /* willDeliverLocal */)
+		r.tracker.free(msgStorageApply.Entries)
 	}
 	stats.tApplicationEnd = timeutil.Now()
 	applicationElapsed := stats.tApplicationEnd.Sub(stats.tApplicationBegin).Nanoseconds()
@@ -1848,7 +1854,8 @@ func (r *Replica) sendRaftMessageRequest(
 	if log.V(4) {
 		log.Infof(ctx, "sending raft request %+v", req)
 	}
-	return r.store.cfg.Transport.SendAsync(req, r.connectionClass.get())
+	return r.store.cfg.Transport.SendAsync(
+		RaftMessage{Req: req, trk: r.tracker}, r.connectionClass.get())
 }
 
 func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID, snapErr error) {

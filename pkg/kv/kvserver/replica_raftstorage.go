@@ -30,9 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -53,6 +55,9 @@ var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 			0,       /* 0B causes everything to be an ingest */
 		).(int))
 	}())
+
+// RaftEntriesMemLimit is the limit for raft entries pulled into memory.
+var RaftEntriesMemLimit = envutil.EnvOrDefaultBytes("COCKROACH_RAFT_ENTRIES_MEMORY_LIMIT", 0)
 
 // replicaRaftStorage implements the raft.Storage interface.
 type replicaRaftStorage Replica
@@ -114,9 +119,16 @@ func (r *replicaRaftStorage) TypedEntries(
 	if r.raftMu.sideloaded == nil {
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
+	var account *mon.BoundAccount
+	if r.raftMu.bytesAccountUse {
+		account = &r.raftMu.bytesAccount
+	}
 	ents, _, loadedSize, err := logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
+		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes, account)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
+	if r.raftMu.bytesAccountUse {
+		r.tracker.add(ents, loadedSize)
+	}
 	return ents, err
 }
 

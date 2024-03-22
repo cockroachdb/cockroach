@@ -2485,7 +2485,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	) {
 		// Try several times, as the message may be dropped (see #18355).
 		for i := 0; i < 5; i++ {
-			if sent := transport.SendAsync(&kvserverpb.RaftMessageRequest{
+			if sent := transport.SendAsync(kvserver.RaftMessage{Req: &kvserverpb.RaftMessageRequest{
 				FromReplica: fromReplDesc,
 				ToReplica:   toReplDesc,
 				Heartbeats: []kvserverpb.RaftHeartbeat{
@@ -2496,7 +2496,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 						Commit:        42,
 					},
 				},
-			}, rpc.DefaultClass); !sent {
+			}}, rpc.DefaultClass); !sent {
 				t.Fatal("failed to send heartbeat")
 			}
 			select {

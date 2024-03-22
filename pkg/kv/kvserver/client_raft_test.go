@@ -3137,17 +3137,18 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		StoreID:   target2.StoreID,
 	}
 
-	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).SendAsync(&kvserverpb.RaftMessageRequest{
-		ToReplica:   replica1,
-		FromReplica: replica2,
-		Heartbeats: []kvserverpb.RaftHeartbeat{
-			{
-				RangeID:       desc.RangeID,
-				FromReplicaID: replica2.ReplicaID,
-				ToReplicaID:   replica1.ReplicaID,
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).SendAsync(
+		kvserver.RaftMessage{Req: &kvserverpb.RaftMessageRequest{
+			ToReplica:   replica1,
+			FromReplica: replica2,
+			Heartbeats: []kvserverpb.RaftHeartbeat{
+				{
+					RangeID:       desc.RangeID,
+					FromReplicaID: replica2.ReplicaID,
+					ToReplicaID:   replica1.ReplicaID,
+				},
 			},
-		},
-	}, rpc.DefaultClass)
+		}}, rpc.DefaultClass)
 	// Execute another replica change to ensure that raft has processed
 	// the heartbeat just sent.
 	tc.AddVotersOrFatal(t, key, tc.Target(1))
@@ -3420,7 +3421,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// dropped messages (see #18355).
 	sendHeartbeat := func() (sent bool) {
 		r := hbReq
-		return fromTransport.SendAsync(&r, rpc.DefaultClass)
+		return fromTransport.SendAsync(kvserver.RaftMessage{Req: &r}, rpc.DefaultClass)
 	}
 	if sent := sendHeartbeat(); !sent {
 		t.Fatal("failed to send heartbeat")
@@ -3599,7 +3600,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	replicaDesc, ok := rep.Desc().GetReplicaDescriptor(tc.Target(2).StoreID)
 	require.True(t, ok)
 
-	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "send-req", func(ctx context.Context) {
+	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "send-Req", func(ctx context.Context) {
 		incArgs := incrementArgs(key, 23)
 		startWG.Done()
 		defer finishWG.Done()
@@ -3810,7 +3811,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 
 	// Simulate the removed node asking to trigger an election. Try and try again
 	// until we're reasonably sure the message was sent.
-	for !transport0.SendAsync(&kvserverpb.RaftMessageRequest{
+	for !transport0.SendAsync(kvserver.RaftMessage{Req: &kvserverpb.RaftMessageRequest{
 		RangeID:     desc.RangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,
@@ -3820,7 +3821,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 			Type: raftpb.MsgVote,
 			Term: term + 1,
 		},
-	}, rpc.DefaultClass) {
+	}}, rpc.DefaultClass) {
 	}
 
 	// The receiver of this message (i.e. replica1) should return an error telling
@@ -4694,13 +4695,14 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 		var repl *kvserver.Replica
 		testutils.SucceedsSoon(t, func() (err error) {
 			// Try several times, as the message may be dropped (see #18355).
-			tc.Servers[0].RaftTransport().(*kvserver.RaftTransport).SendAsync(&kvserverpb.RaftMessageRequest{
-				ToReplica: roachpb.ReplicaDescriptor{
-					NodeID:  store.Ident.NodeID,
-					StoreID: store.Ident.StoreID,
-				},
-				Heartbeats: []kvserverpb.RaftHeartbeat{{RangeID: unusedRangeID, ToReplicaID: 1}},
-			}, rpc.DefaultClass)
+			tc.Servers[0].RaftTransport().(*kvserver.RaftTransport).SendAsync(
+				kvserver.RaftMessage{Req: &kvserverpb.RaftMessageRequest{
+					ToReplica: roachpb.ReplicaDescriptor{
+						NodeID:  store.Ident.NodeID,
+						StoreID: store.Ident.StoreID,
+					},
+					Heartbeats: []kvserverpb.RaftHeartbeat{{RangeID: unusedRangeID, ToReplicaID: 1}},
+				}}, rpc.DefaultClass)
 			repl, err = store.GetReplica(unusedRangeID)
 			return err
 		})

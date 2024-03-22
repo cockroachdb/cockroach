@@ -202,6 +202,8 @@ func newUninitializedReplicaWithoutRaftGroup(
 		store.limiters.BulkIOWriteRate,
 		store.TODOEngine(),
 	)
+	r.raftMu.bytesAccount.Init(context.Background(), store.cfg.RaftEntriesMonitor)
+	r.tracker = newRaftStorageTracker()
 
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
 	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)

@@ -2346,7 +2346,8 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			// side in the split trigger was racing with the uninitialized
 			// version for the same group, resulting in clobbered HardState).
 			for term := uint64(1); ; term++ {
-				if sent := tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).SendAsync(&kvserverpb.RaftMessageRequest{
+				tr := tc.Servers[1].RaftTransport().(*kvserver.RaftTransport)
+				if sent := tr.SendAsync(kvserver.RaftMessage{Req: &kvserverpb.RaftMessageRequest{
 					RangeID:     trigger.RightDesc.RangeID,
 					ToReplica:   replicas[0],
 					FromReplica: replicas[1],
@@ -2356,7 +2357,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 						From: uint64(replicas[1].ReplicaID),
 						Term: term,
 					},
-				}, rpc.DefaultClass); !sent {
+				}}, rpc.DefaultClass); !sent {
 					// SendAsync can return false, indicating the message didn't send.
 					// The most likely reason this test encounters a message failing to
 					// send is the outgoing message queue being full. The queue filling

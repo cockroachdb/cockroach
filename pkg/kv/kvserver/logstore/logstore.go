@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -530,6 +531,7 @@ func LoadEntries(
 	sideloaded SideloadStorage,
 	lo, hi kvpb.RaftIndex,
 	maxBytes uint64,
+	account *mon.BoundAccount,
 ) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
 	if lo > hi {
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -542,6 +544,16 @@ func LoadEntries(
 	ents := make([]raftpb.Entry, 0, n)
 
 	ents, cachedSize, hitIndex, exceededMaxBytes := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
+
+	budgetFor := func(size uint64) bool {
+		return account == nil || account.Grow(ctx, int64(size)) == nil
+	}
+	// If we can't get quota for the cached entries, do not return them, even
+	// though they are already in memory. Returning them now increases their
+	// lifetime, and risks getting the server out of memory.
+	if !budgetFor(cachedSize) {
+		return nil, 0, 0, nil
+	}
 
 	// Return results if the correct number of results came back or if
 	// we ran into the max bytes limit.
@@ -578,16 +590,22 @@ func LoadEntries(
 			}
 		}
 
+		size := uint64(ent.Size())
 		// Note that we track the size of proposals with payloads inlined.
-		combinedSize += uint64(ent.Size())
+		combinedSize += size
+		// NB: in all return paths below, all entries in the slice, and only, are
+		// accounted by budgetFor().
 		if combinedSize > maxBytes {
-			exceededMaxBytes = true
-			if len(ents) == 0 { // make sure to return at least one entry
-				ents = append(ents, ent)
+			if len(ents) == 0 && budgetFor(size) {
+				ents = append(ents, ent) // make sure to return at least one entry
 			}
+			exceededMaxBytes = true
 			return iterutil.StopIteration()
 		}
-
+		if !budgetFor(size) {
+			exceededMaxBytes = true
+			return iterutil.StopIteration()
+		}
 		ents = append(ents, ent)
 		return nil
 	}
