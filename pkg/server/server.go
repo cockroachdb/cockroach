@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
@@ -707,13 +708,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if rangeFeedBudgetFactory != nil {
 		nodeRegistry.AddMetricStruct(rangeFeedBudgetFactory.Metrics())
 	}
+
+	raftEntriesMonitor := logstore.NewRaftEntriesSoftLimit()
+	nodeRegistry.AddMetric(raftEntriesMonitor.Metric)
+
 	// Closer order is important with BytesMonitor.
-	stopper.AddCloser(stop.CloserFn(func() {
-		rangeFeedBudgetFactory.Stop(ctx)
-	}))
-	stopper.AddCloser(stop.CloserFn(func() {
-		kvMemoryMonitor.Stop(ctx)
-	}))
+	stopper.AddCloser(stop.CloserFn(func() { rangeFeedBudgetFactory.Stop(ctx) }))
+	stopper.AddCloser(stop.CloserFn(func() { kvMemoryMonitor.Stop(ctx) }))
 
 	tsDB := ts.NewDB(db, cfg.Settings)
 	nodeRegistry.AddMetricStruct(tsDB.Metrics())
@@ -855,6 +856,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		EagerLeaseAcquisitionLimiter: eagerLeaseAcquisitionLimiter,
 		KVMemoryMonitor:              kvMemoryMonitor,
 		RangefeedBudgetFactory:       rangeFeedBudgetFactory,
+		RaftEntriesMonitor:           raftEntriesMonitor,
 		SharedStorageEnabled:         cfg.SharedStorage != "",
 		SystemConfigProvider:         systemConfigWatcher,
 		SpanConfigSubscriber:         spanConfig.subscriber,
