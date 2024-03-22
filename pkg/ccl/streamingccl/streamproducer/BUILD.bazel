@@ -22,7 +22,6 @@ go_library(
         "//pkg/jobs/jobsprotectedts",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedcache",
         "//pkg/kv/kvpb",
@@ -58,11 +57,11 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/span",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
 
