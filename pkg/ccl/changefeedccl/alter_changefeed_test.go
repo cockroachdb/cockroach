@@ -1353,7 +1353,6 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 			// the initial scan to take too long, leading to the waitForHighwater
 			// call below to time out.
 			b.Header.MaxSpanRequestKeys = maxBatchSize/2 + rndMu.rnd.Int63n(maxBatchSize/2)
-			t.Logf("set max span request keys: %d", b.Header.MaxSpanRequestKeys)
 			return nil
 		}
 
@@ -1421,7 +1420,6 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 
 		jobCheckpoint := progress.GetChangefeed().Checkpoint
 		require.Less(t, 0, len(jobCheckpoint.Spans))
-		t.Logf("checkpoint after paused: %#v", jobCheckpoint)
 		var checkpoint roachpb.SpanGroup
 		checkpoint.Add(jobCheckpoint.Spans...)
 
@@ -1430,7 +1428,6 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		// Collect spans we attempt to resolve after when we resume.
 		var resolvedFoo []roachpb.Span
 		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
-			t.Logf("resolved span: %#v", r)
 			if !r.Span.Equal(fooTableSpan) {
 				resolvedFoo = append(resolvedFoo, r.Span)
 			}
