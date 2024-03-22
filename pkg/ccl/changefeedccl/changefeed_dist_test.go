@@ -496,6 +496,8 @@ func TestChangefeedWithSimpleDistributionStrategy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 120870)
+
 	// The test is slow and will time out under deadlock/race/stress.
 	skip.UnderShort(t)
 	skip.UnderDuress(t)
