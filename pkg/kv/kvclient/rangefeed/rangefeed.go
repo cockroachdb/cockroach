@@ -68,6 +68,7 @@ type DB interface {
 		spans []roachpb.Span,
 		asOf hlc.Timestamp,
 		rowFn func(value roachpb.KeyValue),
+		rowsFn func([]kv.KeyValue),
 		cfg scanConfig,
 	) error
 }
@@ -164,6 +165,9 @@ func (f *Factory) New(
 
 // OnValue is called for each rangefeed value.
 type OnValue func(ctx context.Context, value *kvpb.RangeFeedValue)
+
+// OnValue is called for a batch of rangefeed values.
+type OnValues func(ctx context.Context, values []kv.KeyValue)
 
 // RangeFeed represents a running RangeFeed.
 type RangeFeed struct {

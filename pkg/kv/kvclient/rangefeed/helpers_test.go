@@ -40,5 +40,5 @@ func (dbc *dbAdapter) ScanWithOptions(
 ) error {
 	var c config
 	initConfig(&c, opts)
-	return dbc.Scan(ctx, spans, asOf, rowFn, c.scanConfig)
+	return dbc.Scan(ctx, spans, asOf, rowFn, nil, c.scanConfig)
 }
