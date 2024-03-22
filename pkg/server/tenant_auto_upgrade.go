@@ -34,10 +34,6 @@ func (s *SQLServer) startTenantAutoUpgradeLoop(ctx context.Context) error {
 	storageClusterVersion := s.settingsWatcher.GetStorageClusterActiveVersion().Version
 	return s.stopper.RunAsyncTask(ctx, "tenant-auto-upgrade-checker", func(ctx context.Context) {
 		firstAttempt := true
-		var allowUpgradeOnInternalVersionChanges bool
-		if k := s.cfg.TestingKnobs.Server; k != nil {
-			allowUpgradeOnInternalVersionChanges = k.(*TestingKnobs).AllowTenantAutoUpgradeOnInternalVersionChanges
-		}
 		for {
 			select {
 			case <-s.stopper.ShouldQuiesce():
@@ -53,14 +49,12 @@ func (s *SQLServer) startTenantAutoUpgradeLoop(ctx context.Context) error {
 				// possible due to a change in a sql instance binary version, it happens. Second
 				// cases ensures that if an upgrade is possible due to a change in the storage
 				// cluster version, it happens.
-				// We may run an attempt when the change is only to the Internal version if a testing knob
-				// is passed.
 				storageClusterVersionChanged := storageClusterVersion != latestStorageClusterVersion
 				if firstAttempt ||
-					(storageClusterVersionChanged && (storageClusterVersion.Internal == 0 || allowUpgradeOnInternalVersionChanges)) {
+					(storageClusterVersionChanged && storageClusterVersion.Internal == 0) {
 					firstAttempt = false
 					storageClusterVersion = latestStorageClusterVersion
-					if err := s.startAttemptTenantUpgrade(ctx, allowUpgradeOnInternalVersionChanges); err != nil {
+					if err := s.startAttemptTenantUpgrade(ctx); err != nil {
 						log.Errorf(ctx, "failed to start an upgrade attempt: %v", err)
 					}
 				}
@@ -70,9 +64,7 @@ func (s *SQLServer) startTenantAutoUpgradeLoop(ctx context.Context) error {
 }
 
 // startAttemptTenantUpgrade attempts to upgrade cluster version.
-func (s *SQLServer) startAttemptTenantUpgrade(
-	ctx context.Context, allowUpgradeOnInternalVersionChanges bool,
-) error {
+func (s *SQLServer) startAttemptTenantUpgrade(ctx context.Context) error {
 	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
 
@@ -109,7 +101,7 @@ func (s *SQLServer) startAttemptTenantUpgrade(
 	}
 
 	// Check if we should upgrade cluster version.
-	status, upgradeToVersion, err := s.tenantUpgradeStatus(ctx, tenantClusterVersion.Version, allowUpgradeOnInternalVersionChanges)
+	status, upgradeToVersion, err := s.tenantUpgradeStatus(ctx, tenantClusterVersion.Version)
 
 	// Let test code know the status of an upgrade if needed.
 	if tenantAutoUpgradeInfoCh != nil {
@@ -163,9 +155,7 @@ func (s *SQLServer) startAttemptTenantUpgrade(
 
 // tenantUpgradeStatus lets the main checking loop know if we should upgrade.
 func (s *SQLServer) tenantUpgradeStatus(
-	ctx context.Context,
-	currentClusterVersion roachpb.Version,
-	allowUpgradeOnInternalVersionChanges bool,
+	ctx context.Context, currentClusterVersion roachpb.Version,
 ) (st upgradeStatus, upgradeToVersion roachpb.Version, err error) {
 	storageClusterVersion := s.settingsWatcher.GetStorageClusterActiveVersion().Version
 
@@ -190,10 +180,8 @@ func (s *SQLServer) tenantUpgradeStatus(
 				minVersion = instance.BinaryVersion
 			}
 		}
-		if !allowUpgradeOnInternalVersionChanges {
-			// Unless a testing knob was passed, we are only interested in major and minor versions, not Internal ones.
-			minVersion.Internal = 0
-		}
+		// We are only interested in major and minor versions, not internal ones.
+		minVersion.Internal = 0
 		return minVersion
 	}
 
