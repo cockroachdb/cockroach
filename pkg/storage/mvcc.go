@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -2108,7 +2109,7 @@ func replayTransactionalWrite(
 			txn.ID, meta.Txn.Sequence, txn.Sequence)
 		errWithIssue := errors.WithIssueLink(err,
 			errors.IssueLink{
-				IssueURL: "https://github.com/cockroachdb/cockroach/issues/71236",
+				IssueURL: build.MakeIssueURL(71236),
 				Detail: "This error may be caused by `DelRange` operation in a batch that also contains a " +
 					"write on an intersecting key, as in the case the other write hits a `WriteTooOld` " +
 					"error, it is possible for the `DelRange` operation to pick up a new key to delete on " +

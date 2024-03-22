@@ -12,6 +12,7 @@ import (
 	"context"
 	"net/url"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -481,7 +482,7 @@ func generateAndValidateNewTargets(
 		return errors.WithIssueLink(
 			errors.New("cannot modify targets when using CDC query changefeed; consider recreating changefeed"),
 			errors.IssueLink{
-				IssueURL: "https://github.com/cockroachdb/cockroach/issues/83033",
+				IssueURL: build.MakeIssueURL(83033),
 				Detail: "you have encountered a known bug in CockroachDB, please consider " +
 					"reporting on the Github issue or reach out via Support.",
 			})

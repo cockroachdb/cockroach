@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -2166,7 +2167,7 @@ func makeCheckConsistencyGenerator(
 	if evalCtx.ConsistencyChecker == nil {
 		return nil, errors.WithIssueLink(
 			errors.AssertionFailedf("no consistency checker configured"),
-			errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/88222"},
+			errors.IssueLink{IssueURL: build.MakeIssueURL(88222)},
 		)
 	}
 
