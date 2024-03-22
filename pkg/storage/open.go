@@ -45,28 +45,28 @@ func CombineOptions(opts ...ConfigOption) ConfigOption {
 // MustExist configures an engine to error on Open if the target directory
 // does not contain an initialized store.
 var MustExist ConfigOption = func(cfg *engineConfig) error {
-	cfg.MustExist = true
+	cfg.mustExist = true
 	return nil
 }
 
 // DisableAutomaticCompactions configures an engine to be opened with disabled
 // automatic compactions. Used primarily for debugCompactCmd.
 var DisableAutomaticCompactions ConfigOption = func(cfg *engineConfig) error {
-	cfg.Opts.DisableAutomaticCompactions = true
+	cfg.opts.DisableAutomaticCompactions = true
 	return nil
 }
 
 // ForceWriterParallelism configures an engine to be opened with disabled
 // automatic compactions. Used primarily for debugCompactCmd.
 var ForceWriterParallelism ConfigOption = func(cfg *engineConfig) error {
-	cfg.Opts.Experimental.ForceWriterParallelism = true
+	cfg.opts.Experimental.ForceWriterParallelism = true
 	return nil
 }
 
 // ForTesting configures the engine for use in testing. It may randomize some
 // config options to improve test coverage.
 var ForTesting ConfigOption = func(cfg *engineConfig) error {
-	cfg.onClose = append(cfg.onClose, func(p *Pebble) {
+	cfg.beforeClose = append(cfg.beforeClose, func(p *Pebble) {
 		m := p.db.Metrics()
 		if m.Keys.MissizedTombstonesCount > 0 {
 			// A missized tombstone is a Pebble DELSIZED tombstone that encodes
@@ -83,7 +83,7 @@ var ForTesting ConfigOption = func(cfg *engineConfig) error {
 // Attributes configures the engine's attributes.
 func Attributes(attrs roachpb.Attributes) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.Attrs = attrs
+		cfg.attrs = attrs
 		return nil
 	}
 }
@@ -92,7 +92,7 @@ func Attributes(attrs roachpb.Attributes) ConfigOption {
 // calculating free space and making rebalancing decisions.
 func MaxSize(size int64) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.MaxSize = size
+		cfg.maxSize = size
 		return nil
 	}
 }
@@ -100,9 +100,9 @@ func MaxSize(size int64) ConfigOption {
 // BlockSize sets the engine block size, primarily for testing purposes.
 func BlockSize(size int) ConfigOption {
 	return func(cfg *engineConfig) error {
-		for i := range cfg.Opts.Levels {
-			cfg.Opts.Levels[i].BlockSize = size
-			cfg.Opts.Levels[i].IndexBlockSize = size
+		for i := range cfg.opts.Levels {
+			cfg.opts.Levels[i].BlockSize = size
+			cfg.opts.Levels[i].IndexBlockSize = size
 		}
 		return nil
 	}
@@ -112,8 +112,8 @@ func BlockSize(size int) ConfigOption {
 // primarily for testing purposes.
 func TargetFileSize(size int64) ConfigOption {
 	return func(cfg *engineConfig) error {
-		for i := range cfg.Opts.Levels {
-			cfg.Opts.Levels[i].TargetFileSize = size
+		for i := range cfg.opts.Levels {
+			cfg.opts.Levels[i].TargetFileSize = size
 		}
 		return nil
 	}
@@ -125,7 +125,7 @@ func TargetFileSize(size int64) ConfigOption {
 // of 1 or more.
 func MaxWriterConcurrency(concurrency int) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.Opts.Experimental.MaxWriterConcurrency = concurrency
+		cfg.opts.Experimental.MaxWriterConcurrency = concurrency
 		return nil
 	}
 }
@@ -133,7 +133,7 @@ func MaxWriterConcurrency(concurrency int) ConfigOption {
 // MaxOpenFiles sets the maximum number of files an engine should open.
 func MaxOpenFiles(count int) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.Opts.MaxOpenFiles = count
+		cfg.opts.MaxOpenFiles = count
 		return nil
 	}
 
@@ -151,8 +151,8 @@ func CacheSize(size int64) ConfigOption {
 // the same caches.
 func Caches(cache *pebble.Cache, tableCache *pebble.TableCache) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.Opts.Cache = cache
-		cfg.Opts.TableCache = tableCache
+		cfg.opts.Cache = cache
+		cfg.opts.TableCache = tableCache
 		return nil
 	}
 }
@@ -161,7 +161,7 @@ func Caches(cache *pebble.Cache, tableCache *pebble.TableCache) ConfigOption {
 // out-of-disk recovery.
 func BallastSize(size int64) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.BallastSize = size
+		cfg.ballastSize = size
 		return nil
 	}
 }
@@ -169,9 +169,9 @@ func BallastSize(size int64) ConfigOption {
 // SharedStorage enables use of shared storage (experimental).
 func SharedStorage(sharedStorage cloud.ExternalStorage) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.SharedStorage = sharedStorage
-		if cfg.SharedStorage != nil && cfg.Opts.FormatMajorVersion < pebble.FormatMinForSharedObjects {
-			cfg.Opts.FormatMajorVersion = pebble.FormatMinForSharedObjects
+		cfg.sharedStorage = sharedStorage
+		if cfg.sharedStorage != nil && cfg.opts.FormatMajorVersion < pebble.FormatMinForSharedObjects {
+			cfg.opts.FormatMajorVersion = pebble.FormatMinForSharedObjects
 		}
 		return nil
 	}
@@ -180,7 +180,7 @@ func SharedStorage(sharedStorage cloud.ExternalStorage) ConfigOption {
 // SecondaryCache enables use of a secondary cache to store shared objects.
 func SecondaryCache(size int64) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.Opts.Experimental.SecondaryCacheSizeBytes = size
+		cfg.opts.Experimental.SecondaryCacheSizeBytes = size
 		return nil
 	}
 }
@@ -188,7 +188,7 @@ func SecondaryCache(size int64) ConfigOption {
 // RemoteStorageFactory enables use of remote storage (experimental).
 func RemoteStorageFactory(accessor *cloud.EarlyBootExternalStorageAccessor) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.RemoteStorageFactory = accessor
+		cfg.remoteStorageFactory = accessor
 		return nil
 	}
 }
@@ -197,7 +197,7 @@ func RemoteStorageFactory(accessor *cloud.EarlyBootExternalStorageAccessor) Conf
 // compactions an Engine will execute.
 func MaxConcurrentCompactions(n int) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.Opts.MaxConcurrentCompactions = func() int { return n }
+		cfg.opts.MaxConcurrentCompactions = func() int { return n }
 		return nil
 	}
 }
@@ -205,7 +205,7 @@ func MaxConcurrentCompactions(n int) ConfigOption {
 // LBaseMaxBytes configures the maximum number of bytes for LBase.
 func LBaseMaxBytes(v int64) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.Opts.LBaseMaxBytes = v
+		cfg.opts.LBaseMaxBytes = v
 		return nil
 	}
 }
@@ -255,19 +255,16 @@ func WALFailover(mode base.WALFailoverMode, storeEnvs fs.Envs) ConfigOption {
 	}
 	return func(cfg *engineConfig) error {
 		// Find the Env being opened in the slice of sorted envs.
-		idx, ok := indexOfEnv(cfg.Env)
+		idx, ok := indexOfEnv(cfg.env)
 		if !ok {
-			panic(errors.AssertionFailedf("storage: opening a store with an unrecognized filesystem Env (dir=%s)", cfg.Env.Dir))
+			panic(errors.AssertionFailedf("storage: opening a store with an unrecognized filesystem Env (dir=%s)", cfg.env.Dir))
 		}
 		failoverIdx := (idx + 1) % len(sortedEnvs)
 		secondaryEnv := sortedEnvs[failoverIdx]
 		// Ref once to ensure the secondary Env isn't closed before this Engine has
 		// been closed if the secondary's corresponding Engine is closed first.
 		secondaryEnv.Ref()
-		cfg.onClose = append(cfg.onClose, func(p *Pebble) {
-			// Release the reference.
-			secondaryEnv.Close()
-		})
+		cfg.afterClose = append(cfg.afterClose, secondaryEnv.Close)
 
 		secondary := wal.Dir{
 			FS: secondaryEnv,
@@ -276,7 +273,7 @@ func WALFailover(mode base.WALFailoverMode, storeEnvs fs.Envs) ConfigOption {
 		}
 
 		if mode == base.WALFailoverAmongStores {
-			cfg.Opts.WALFailover = &pebble.WALFailoverOptions{
+			cfg.opts.WALFailover = &pebble.WALFailoverOptions{
 				Secondary: secondary,
 				FailoverOptions: wal.FailoverOptions{
 					// Leave most the options to their defaults, but
@@ -290,15 +287,15 @@ func WALFailover(mode base.WALFailoverMode, storeEnvs fs.Envs) ConfigOption {
 						//
 						// NB: We do not use settings.Version.IsActive because we do not have a
 						// guarantee that the cluster version has been initialized.
-						failoverOK := cfg.Settings.Version.ActiveVersionOrEmpty(context.TODO()).IsActive(clusterversion.V24_1Start)
-						return walFailoverUnhealthyOpThreshold.Get(&cfg.Settings.SV), failoverOK
+						failoverOK := cfg.settings.Version.ActiveVersionOrEmpty(context.TODO()).IsActive(clusterversion.V24_1Start)
+						return walFailoverUnhealthyOpThreshold.Get(&cfg.settings.SV), failoverOK
 					},
 				},
 			}
 			return nil
 		}
 		// mode == WALFailoverDisabled
-		cfg.Opts.WALRecoveryDirs = append(cfg.Opts.WALRecoveryDirs, secondary)
+		cfg.opts.WALRecoveryDirs = append(cfg.opts.WALRecoveryDirs, secondary)
 		return nil
 	}
 }
@@ -310,7 +307,7 @@ func WALFailover(mode base.WALFailoverMode, storeEnvs fs.Envs) ConfigOption {
 // flush_split_bytes=4096
 func PebbleOptions(pebbleOptions string, parseHooks *pebble.ParseHooks) ConfigOption {
 	return func(cfg *engineConfig) error {
-		return cfg.Opts.Parse(pebbleOptions, parseHooks)
+		return cfg.opts.Parse(pebbleOptions, parseHooks)
 	}
 }
 
@@ -327,15 +324,6 @@ func If(enable bool, opt ConfigOption) ConfigOption {
 // TODO(jackson): Update callers to use fs.InMemory directly.
 var InMemory = fs.InMemory
 
-type engineConfig struct {
-	PebbleConfig
-	// cacheSize is stored separately so that we can avoid constructing the
-	// PebbleConfig.Opts.Cache until the call to Open. A Cache is created with
-	// a ref count of 1, so creating the Cache during execution of
-	// ConfigOption makes it too easy to leak a cache.
-	cacheSize *int64
-}
-
 // Open opens a new Pebble storage engine, reading and writing data to the
 // provided fs.Env, configured with the provided options.
 //
@@ -346,23 +334,25 @@ type engineConfig struct {
 func Open(
 	ctx context.Context, env *fs.Env, settings *cluster.Settings, opts ...ConfigOption,
 ) (*Pebble, error) {
+	if settings == nil {
+		return nil, errors.AssertionFailedf("Open requires non-nil *cluster.Settings")
+	}
 	var cfg engineConfig
-	cfg.Dir = env.Dir
-	cfg.Env = env
-	cfg.Settings = settings
-	cfg.Opts = DefaultPebbleOptions()
-	cfg.Opts.FS = env
-	cfg.Opts.ReadOnly = env.IsReadOnly()
+	cfg.env = env
+	cfg.settings = settings
+	cfg.opts = DefaultPebbleOptions()
+	cfg.opts.FS = env
+	cfg.opts.ReadOnly = env.IsReadOnly()
 	for _, opt := range opts {
 		if err := opt(&cfg); err != nil {
 			return nil, err
 		}
 	}
-	if cfg.cacheSize != nil && cfg.Opts.Cache == nil {
-		cfg.Opts.Cache = pebble.NewCache(*cfg.cacheSize)
-		defer cfg.Opts.Cache.Unref()
+	if cfg.cacheSize != nil && cfg.opts.Cache == nil {
+		cfg.opts.Cache = pebble.NewCache(*cfg.cacheSize)
+		defer cfg.opts.Cache.Unref()
 	}
-	p, err := newPebble(ctx, cfg.PebbleConfig)
+	p, err := newPebble(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}

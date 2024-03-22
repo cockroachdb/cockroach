@@ -783,30 +783,6 @@ func maxInflightBytesFrom(maxInflightMsgs int, maxSizePerMsg uint64) uint64 {
 	return math.MaxUint64
 }
 
-// StorageConfig contains storage configs for all storage engine.
-type StorageConfig struct {
-	Attrs roachpb.Attributes
-	// Dir is the data directory for the Pebble instance.
-	Dir string
-	// If true, creating the instance fails if the target directory does not hold
-	// an initialized instance.
-	//
-	// Makes no sense for in-memory instances.
-	MustExist bool
-	// MaxSize is used for calculating free space and making rebalancing
-	// decisions. Zero indicates that there is no maximum size.
-	MaxSize int64
-	// BallastSize is the amount reserved by a ballast file for manual
-	// out-of-disk recovery.
-	BallastSize int64
-	// Settings instance for cluster-wide knobs. Must not be nil.
-	Settings *cluster.Settings
-	// EncryptionOptions is a serialized protobuf set by Go CCL code describing
-	// the encryption-at-rest configuration. If encryption-at-rest has ever been
-	// enabled on the store, this field must be set.
-	EncryptionOptions []byte
-}
-
 const (
 	// DefaultTempStorageMaxSizeBytes is the default maximum budget
 	// for temp storage.

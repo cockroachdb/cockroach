@@ -846,28 +846,42 @@ func (l pebbleLogger) Errorf(format string, args ...interface{}) {
 	log.Storage.ErrorfDepth(l.ctx, l.depth, format, args...)
 }
 
-// PebbleConfig holds all configuration parameters and knobs used in setting up
-// a new Pebble instance.
-//
-// TODO(jackson): Unexport and delete base.StorageConfig.
-type PebbleConfig struct {
-	// StorageConfig contains storage configs for all storage engines.
-	// A non-nil cluster.Settings must be provided in the StorageConfig for a
-	// Pebble instance that will be used to write intents.
-	base.StorageConfig
-	// Env holds the initialized virtual filesystem that the Engine should use.
-	Env *fs.Env
-	// Pebble specific options.
-	Opts *pebble.Options
-	// SharedStorage is a cloud.ExternalStorage that can be used by all Pebble
+// engineConfig holds all configuration parameters and knobs used in setting up
+// a new storage engine.
+type engineConfig struct {
+	attrs roachpb.Attributes
+	// ballastSize is the amount reserved by a ballast file for manual
+	// out-of-disk recovery.
+	ballastSize int64
+	// cacheSize is stored separately so that we can avoid constructing the
+	// PebbleConfig.Opts.Cache until the call to Open. A Cache is created with
+	// a ref count of 1, so creating the Cache during execution of
+	// ConfigOption makes it too easy to leak a cache.
+	cacheSize *int64
+	// env holds the initialized virtual filesystem that the Engine should use.
+	env *fs.Env
+	// maxSize is used for calculating free space and making rebalancing
+	// decisions. Zero indicates that there is no maximum size.
+	maxSize int64
+	// If true, creating the instance fails if the target directory does not hold
+	// an initialized instance.
+	//
+	// Makes no sense for in-memory instances.
+	mustExist bool
+	// pebble specific options.
+	opts *pebble.Options
+	// remoteStorageFactory is used to pass the ExternalStorage factory.
+	remoteStorageFactory *cloud.EarlyBootExternalStorageAccessor
+	// settings instance for cluster-wide knobs. Must not be nil.
+	settings *cluster.Settings
+	// sharedStorage is a cloud.ExternalStorage that can be used by all Pebble
 	// stores on this node and on other nodes to store sstables.
-	SharedStorage cloud.ExternalStorage
+	sharedStorage cloud.ExternalStorage
 
-	// RemoteStorageFactory is used to pass the ExternalStorage factory.
-	RemoteStorageFactory *cloud.EarlyBootExternalStorageAccessor
-
-	// onClose is a slice of functions to be invoked before the engine is closed.
-	onClose []func(*Pebble)
+	// beforeClose is a slice of functions to be invoked before the engine is closed.
+	beforeClose []func(*Pebble)
+	// afterClose is a slice of functions to be invoked after the engine is closed.
+	afterClose []func()
 }
 
 // Pebble is a wrapper around a Pebble database instance.
@@ -883,19 +897,12 @@ type Pebble struct {
 		compactionConcurrency uint64
 	}
 
-	db *pebble.DB
-
+	engineConfig
+	db          *pebble.DB
 	closed      bool
-	readOnly    bool
-	path        string
 	auxDir      string
 	ballastPath string
-	ballastSize int64
-	maxSize     int64
-	attrs       roachpb.Attributes
 	properties  roachpb.StoreProperties
-	settings    *cluster.Settings
-	env         *fs.Env
 
 	// Stats updated by pebble.EventListener invocations, and returned in
 	// GetMetrics. Updated and retrieved atomically.
@@ -929,9 +936,6 @@ type Pebble struct {
 
 	// minVersion is the minimum CockroachDB version that can open this store.
 	minVersion roachpb.Version
-
-	// onClose is a slice of functions to be invoked before the engine closes.
-	onClose []func(*Pebble)
 
 	storeIDPebbleLog *base.StoreIDContainer
 	replayer         *replay.WorkloadCollector
@@ -1044,37 +1048,33 @@ var ConfigureForSharedStorage func(opts *pebble.Options, storage remote.Storage)
 //
 // Direct users of NewPebble: cfs.opts.{Logger,LoggerAndTracer} must not be
 // set.
-func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
-	if cfg.Settings == nil {
-		return nil, errors.AssertionFailedf("NewPebble requires cfg.Settings to be set")
-	}
-
-	var opts *pebble.Options
-	if cfg.Opts == nil {
-		opts = DefaultPebbleOptions()
+func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
+	if cfg.opts == nil {
+		cfg.opts = DefaultPebbleOptions()
 	} else {
 		// Open also causes DefaultPebbleOptions before calling NewPebble, so we
 		// are tolerant of Logger being set to pebble.DefaultLogger.
-		if cfg.Opts.Logger != nil && cfg.Opts.Logger != pebble.DefaultLogger {
+		if cfg.opts.Logger != nil && cfg.opts.Logger != pebble.DefaultLogger {
 			return nil, errors.AssertionFailedf("Options.Logger is set to unexpected value")
 		}
 		// Clone the given options so that we are free to modify them.
-		opts = cfg.Opts.Clone()
+		cfg.opts = cfg.opts.Clone()
 	}
-	if opts.FormatMajorVersion < MinimumSupportedFormatVersion {
+	if cfg.opts.FormatMajorVersion < MinimumSupportedFormatVersion {
 		return nil, errors.AssertionFailedf(
 			"FormatMajorVersion is %d, should be at least %d",
-			opts.FormatMajorVersion, MinimumSupportedFormatVersion,
+			cfg.opts.FormatMajorVersion, MinimumSupportedFormatVersion,
 		)
 	}
-	opts.FS = cfg.Env
-	opts.Lock = cfg.Env.DirectoryLock
-	for _, l := range opts.Levels {
+	cfg.opts.FS = cfg.env
+	cfg.opts.Lock = cfg.env.DirectoryLock
+	cfg.opts.ErrorIfNotExists = cfg.mustExist
+	for _, l := range cfg.opts.Levels {
 		l.Compression = func() sstable.Compression {
-			return getCompressionAlgorithm(ctx, cfg.Settings)
+			return getCompressionAlgorithm(ctx, cfg.settings)
 		}
 	}
-	opts.EnsureDefaults()
+	cfg.opts.EnsureDefaults()
 
 	// The context dance here is done so that we have a clean context without
 	// timeouts that has a copy of the log tags.
@@ -1085,43 +1085,42 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
 	logCtx = logtags.AddTag(logCtx, "pebble", nil)
 
-	opts.ErrorIfNotExists = cfg.MustExist
-	opts.WALMinSyncInterval = func() time.Duration {
-		return minWALSyncInterval.Get(&cfg.Settings.SV)
+	cfg.opts.WALMinSyncInterval = func() time.Duration {
+		return minWALSyncInterval.Get(&cfg.settings.SV)
 	}
-	opts.Experimental.EnableValueBlocks = func() bool {
-		return ValueBlocksEnabled.Get(&cfg.Settings.SV)
+	cfg.opts.Experimental.EnableValueBlocks = func() bool {
+		return ValueBlocksEnabled.Get(&cfg.settings.SV)
 	}
-	opts.Experimental.DisableIngestAsFlushable = func() bool {
+	cfg.opts.Experimental.DisableIngestAsFlushable = func() bool {
 		// Disable flushable ingests if shared storage is enabled. This is because
 		// flushable ingests currently do not support Excise operations.
 		//
 		// TODO(bilal): Remove the first part of this || statement when
 		// https://github.com/cockroachdb/pebble/issues/2676 is completed, or when
 		// Pebble has better guards against this.
-		return cfg.SharedStorage != nil || !IngestAsFlushable.Get(&cfg.Settings.SV)
+		return cfg.sharedStorage != nil || !IngestAsFlushable.Get(&cfg.settings.SV)
 	}
 	// Multi-level compactions were discovered to cause excessively large
 	// compactions that can have adverse affects. We disable these types of
 	// compactions for now.
 	// See https://github.com/cockroachdb/pebble/issues/3120
 	// TODO(travers): Re-enable, once the issues are resolved.
-	opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
-	opts.Experimental.IngestSplit = func() bool {
-		return IngestSplitEnabled.Get(&cfg.Settings.SV)
+	cfg.opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
+	cfg.opts.Experimental.IngestSplit = func() bool {
+		return IngestSplitEnabled.Get(&cfg.settings.SV)
 	}
 
-	auxDir := opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
-	if !cfg.Env.IsReadOnly() {
-		if err := opts.FS.MkdirAll(auxDir, 0755); err != nil {
+	auxDir := cfg.opts.FS.PathJoin(cfg.env.Dir, base.AuxiliaryDir)
+	if !cfg.env.IsReadOnly() {
+		if err := cfg.opts.FS.MkdirAll(auxDir, 0755); err != nil {
 			return nil, err
 		}
 	}
-	ballastPath := base.EmergencyBallastFile(opts.FS.PathJoin, cfg.Dir)
+	ballastPath := base.EmergencyBallastFile(cfg.env.PathJoin, cfg.env.Dir)
 
-	opts.Logger = nil // Defensive, since LoggerAndTracer will be used.
-	if opts.LoggerAndTracer == nil {
-		opts.LoggerAndTracer = pebbleLogger{
+	cfg.opts.Logger = nil // Defensive, since LoggerAndTracer will be used.
+	if cfg.opts.LoggerAndTracer == nil {
+		cfg.opts.LoggerAndTracer = pebbleLogger{
 			ctx:   logCtx,
 			depth: 1,
 		}
@@ -1131,46 +1130,39 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// Establish the emergency ballast if we can. If there's not sufficient
 	// disk space, the ballast will be reestablished from Capacity when the
 	// store's capacity is queried periodically.
-	if !opts.ReadOnly {
-		du, err := cfg.Env.UnencryptedFS.GetDiskUsage(cfg.Dir)
+	if !cfg.opts.ReadOnly {
+		du, err := cfg.env.UnencryptedFS.GetDiskUsage(cfg.env.Dir)
 		// If the FS is an in-memory FS, GetDiskUsage returns
 		// vfs.ErrUnsupported and we skip ballast creation.
 		if err != nil && !errors.Is(err, vfs.ErrUnsupported) {
 			return nil, errors.Wrap(err, "retrieving disk usage")
 		} else if err == nil {
-			resized, err := maybeEstablishBallast(cfg.Env.UnencryptedFS, ballastPath, cfg.BallastSize, du)
+			resized, err := maybeEstablishBallast(cfg.env.UnencryptedFS, ballastPath, cfg.ballastSize, du)
 			if err != nil {
 				return nil, errors.Wrap(err, "resizing ballast")
 			}
 			if resized {
-				opts.LoggerAndTracer.Infof("resized ballast %s to size %s",
-					ballastPath, humanizeutil.IBytes(cfg.BallastSize))
+				cfg.opts.LoggerAndTracer.Infof("resized ballast %s to size %s",
+					ballastPath, humanizeutil.IBytes(cfg.ballastSize))
 			}
 		}
 	}
 
 	p = &Pebble{
-		readOnly:          opts.ReadOnly,
-		path:              cfg.Dir,
+		engineConfig:      cfg,
 		auxDir:            auxDir,
 		ballastPath:       ballastPath,
-		ballastSize:       cfg.BallastSize,
-		maxSize:           cfg.MaxSize,
-		attrs:             cfg.Attrs,
 		properties:        computeStoreProperties(ctx, cfg),
-		settings:          cfg.Settings,
-		env:               cfg.Env,
-		logger:            opts.LoggerAndTracer,
+		logger:            cfg.opts.LoggerAndTracer,
 		logCtx:            logCtx,
 		storeIDPebbleLog:  storeIDContainer,
-		onClose:           cfg.onClose,
-		replayer:          replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
+		replayer:          replay.NewWorkloadCollector(cfg.env.Dir),
 		singleDelLogEvery: log.Every(5 * time.Minute),
 	}
 
-	opts.Experimental.SingleDeleteInvariantViolationCallback = func(userKey []byte) {
+	cfg.opts.Experimental.SingleDeleteInvariantViolationCallback = func(userKey []byte) {
 		logFunc := func(ctx context.Context, format string, args ...interface{}) {}
-		if SingleDeleteCrashOnInvariantViolation.Get(&cfg.Settings.SV) {
+		if SingleDeleteCrashOnInvariantViolation.Get(&cfg.settings.SV) {
 			logFunc = log.Fatalf
 		} else if p.singleDelLogEvery.ShouldLog() {
 			logFunc = log.Infof
@@ -1178,9 +1170,9 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		logFunc(logCtx, "SingleDel invariant violation callback (can be false positive) on key %s", roachpb.Key(userKey))
 		atomic.AddInt64(&p.singleDelInvariantViolationCount, 1)
 	}
-	opts.Experimental.IneffectualSingleDeleteCallback = func(userKey []byte) {
+	cfg.opts.Experimental.IneffectualSingleDeleteCallback = func(userKey []byte) {
 		logFunc := func(ctx context.Context, format string, args ...interface{}) {}
-		if SingleDeleteCrashOnInvariantViolation.Get(&cfg.Settings.SV) {
+		if SingleDeleteCrashOnInvariantViolation.Get(&cfg.settings.SV) {
 			logFunc = log.Fatalf
 		} else if p.singleDelLogEvery.ShouldLog() {
 			logFunc = log.Infof
@@ -1191,13 +1183,13 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 
 	// MaxConcurrentCompactions can be set by multiple sources, but all the
 	// sources will eventually call NewPebble. So, we override
-	// Opts.MaxConcurrentCompactions to a closure which will return
+	// cfg.opts.MaxConcurrentCompactions to a closure which will return
 	// Pebble.atomic.compactionConcurrency. This will allow us to both honor
 	// the compactions concurrency which has already been set and allow us
 	// to update the compactionConcurrency on the fly by changing the
 	// Pebble.atomic.compactionConcurrency variable.
-	p.atomic.compactionConcurrency = uint64(opts.MaxConcurrentCompactions())
-	opts.MaxConcurrentCompactions = func() int {
+	p.atomic.compactionConcurrency = uint64(cfg.opts.MaxConcurrentCompactions())
+	cfg.opts.MaxConcurrentCompactions = func() int {
 		return int(atomic.LoadUint64(&p.atomic.compactionConcurrency))
 	}
 
@@ -1221,8 +1213,8 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// TODO(jackson): Refactor this indirection; there's no need the DiskSlow
 	// callback needs to go through the EventListener and this structure is
 	// confusing.
-	cfg.Env.RegisterOnDiskSlow(func(info pebble.DiskSlowInfo) {
-		el := opts.EventListener
+	cfg.env.RegisterOnDiskSlow(func(info pebble.DiskSlowInfo) {
+		el := cfg.opts.EventListener
 		p.async(func() { el.DiskSlow(info) })
 	})
 	el := pebble.TeeEventListener(
@@ -1234,31 +1226,31 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	)
 
 	p.eventListener = &el
-	opts.EventListener = &el
+	cfg.opts.EventListener = &el
 
-	// If both cfg.SharedStorage and cfg.RemoteStorageFactory are set, CRDB uses
-	// cfg.SharedStorage. Note that eventually we will enable using both at the
+	// If both cfg.sharedStorage and cfg.remoteStorageFactory are set, CRDB uses
+	// cfg.sharedStorage. Note that eventually we will enable using both at the
 	// same time, but we don't have the right abstractions in place to do that
 	// today.
 	//
-	// We prefer cfg.SharedStorage, since the Locator -> Storage mapping contained
+	// We prefer cfg.sharedStorage, since the Locator -> Storage mapping contained
 	// in it is needed for CRDB to function properly.
-	if cfg.SharedStorage != nil {
-		esWrapper := &externalStorageWrapper{p: p, es: cfg.SharedStorage, ctx: ctx}
+	if cfg.sharedStorage != nil {
+		esWrapper := &externalStorageWrapper{p: p, es: cfg.sharedStorage, ctx: ctx}
 		if ConfigureForSharedStorage == nil {
 			return nil, errors.New("shared storage requires CCL features")
 		}
-		if err := ConfigureForSharedStorage(opts, esWrapper); err != nil {
+		if err := ConfigureForSharedStorage(cfg.opts, esWrapper); err != nil {
 			return nil, errors.Wrap(err, "error when configuring shared storage")
 		}
 	} else {
-		if cfg.RemoteStorageFactory != nil {
-			opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: ctx, factory: cfg.RemoteStorageFactory}
+		if cfg.remoteStorageFactory != nil {
+			cfg.opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: ctx, factory: cfg.remoteStorageFactory}
 		}
 	}
 
 	// Read the current store cluster version.
-	storeClusterVersion, minVerFileExists, err := getMinVersion(p.env.UnencryptedFS, cfg.Dir)
+	storeClusterVersion, minVerFileExists, err := getMinVersion(p.env.UnencryptedFS, cfg.env.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -1272,7 +1264,7 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		// sequence (so now some stores have v21.2, but others v22.1) you are
 		// expected to run v22.1 again (hopefully without the crash this time) which
 		// would then rewrite all the stores.
-		if v := cfg.Settings.Version; storeClusterVersion.Less(v.MinSupportedVersion()) {
+		if v := cfg.settings.Version; storeClusterVersion.Less(v.MinSupportedVersion()) {
 			if storeClusterVersion.Major < clusterversion.DevOffset && v.LatestVersion().Major >= clusterversion.DevOffset {
 				return nil, errors.Errorf(
 					"store last used with cockroach non-development version v%s "+
@@ -1286,15 +1278,15 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 				storeClusterVersion, v.LatestVersion(), v.MinSupportedVersion(),
 			)
 		}
-		opts.ErrorIfNotExists = true
+		cfg.opts.ErrorIfNotExists = true
 	} else {
-		if opts.ErrorIfNotExists || opts.ReadOnly {
+		if cfg.opts.ErrorIfNotExists || cfg.opts.ReadOnly {
 			// Make sure the message is not confusing if the store does exist but
 			// there is no min version file.
-			filename := p.env.UnencryptedFS.PathJoin(cfg.Dir, MinVersionFilename)
+			filename := p.env.UnencryptedFS.PathJoin(cfg.env.Dir, MinVersionFilename)
 			return nil, errors.Errorf(
 				"pebble: database %q does not exist (missing required file %q)",
-				cfg.StorageConfig.Dir, filename,
+				cfg.env.Dir, filename,
 			)
 		}
 		// If there is no min version file, there should be no store. If there is
@@ -1302,14 +1294,14 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		// to open) or 2) an empty store that was created from a previous bootstrap
 		// attempt that failed right before writing out the min version file. We set
 		// a flag to disallow the open in case 1.
-		opts.ErrorIfNotPristine = true
+		cfg.opts.ErrorIfNotPristine = true
 	}
 
 	if WorkloadCollectorEnabled {
-		p.replayer.Attach(opts)
+		p.replayer.Attach(cfg.opts)
 	}
 
-	db, err := pebble.Open(cfg.StorageConfig.Dir, opts)
+	db, err := pebble.Open(cfg.env.Dir, cfg.opts)
 	if err != nil {
 		// Decorate the errors caused by the flags we set above.
 		if minVerFileExists && errors.Is(err, pebble.ErrDBDoesNotExist) {
@@ -1325,10 +1317,10 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	p.db = db
 
 	if !minVerFileExists {
-		storeClusterVersion = cfg.Settings.Version.ActiveVersionOrEmpty(ctx).Version
+		storeClusterVersion = cfg.settings.Version.ActiveVersionOrEmpty(ctx).Version
 		if storeClusterVersion == (roachpb.Version{}) {
 			// If there is no active version, use the minimum supported version.
-			storeClusterVersion = cfg.Settings.Version.MinSupportedVersion()
+			storeClusterVersion = cfg.settings.Version.MinSupportedVersion()
 		}
 	}
 
@@ -1462,7 +1454,7 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 func (p *Pebble) Env() *fs.Env { return p.env }
 
 func (p *Pebble) String() string {
-	dir := p.path
+	dir := p.env.Dir
 	if dir == "" {
 		dir = "<in-mem>"
 	}
@@ -1479,7 +1471,7 @@ func (p *Pebble) Close() {
 		p.logger.Infof("closing unopened pebble instance")
 		return
 	}
-	for _, closeFunc := range p.onClose {
+	for _, closeFunc := range p.beforeClose {
 		closeFunc(p)
 	}
 
@@ -1511,6 +1503,9 @@ func (p *Pebble) Close() {
 	if p.env != nil {
 		p.env.Close()
 		p.env = nil
+	}
+	for _, closeFunc := range p.afterClose {
+		closeFunc()
 	}
 }
 
@@ -1871,7 +1866,7 @@ func (p *Pebble) Properties() roachpb.StoreProperties {
 
 // Capacity implements the Engine interface.
 func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
-	dir := p.path
+	dir := p.env.Dir
 	if dir != "" {
 		var err error
 		// Eval directory if it is a symbolic links.
@@ -1908,7 +1903,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	// This is a no-op if the ballast is already sized or if there's not
 	// enough available capacity to resize it. Capacity is called periodically
 	// by the kvserver, and that drives the automatic resizing of the ballast.
-	if !p.readOnly {
+	if !p.env.IsReadOnly() {
 		resized, err := maybeEstablishBallast(p.env.UnencryptedFS, p.ballastPath, p.ballastSize, du)
 		if err != nil {
 			return roachpb.StoreCapacity{}, errors.Wrap(err, "resizing ballast")
@@ -1963,7 +1958,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	// If no size limitation have been placed on the store size or if the
 	// limitation is greater than what's available, just return the actual
 	// totals.
-	if p.maxSize == 0 || p.maxSize >= fsuTotal || p.path == "" {
+	if p.maxSize == 0 || p.maxSize >= fsuTotal || p.env.Dir == "" {
 		return roachpb.StoreCapacity{
 			Capacity:  fsuTotal,
 			Available: fsuAvail,
@@ -2414,7 +2409,7 @@ func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersi
 func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	p.minVersion = version
 
-	if p.readOnly {
+	if p.env.IsReadOnly() {
 		// Don't make any on-disk changes.
 		return nil
 	}
@@ -2424,7 +2419,7 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 
 	// Writing the min version file commits this storage engine to the
 	// provided cluster version.
-	if err := writeMinVersionFile(p.env.UnencryptedFS, p.path, version); err != nil {
+	if err := writeMinVersionFile(p.env.UnencryptedFS, p.env.Dir, version); err != nil {
 		return err
 	}
 

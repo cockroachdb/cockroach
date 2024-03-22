@@ -4097,8 +4097,8 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	eng, err := Open(
 		context.Background(), InMemory(), cluster.MakeTestingClusterSettings(),
 		func(cfg *engineConfig) error {
-			cfg.Opts.LBaseMaxBytes = int64(100 + rng.Intn(16384))
-			log.Infof(ctx, "lbase: %d", cfg.Opts.LBaseMaxBytes)
+			cfg.opts.LBaseMaxBytes = int64(100 + rng.Intn(16384))
+			log.Infof(ctx, "lbase: %d", cfg.opts.LBaseMaxBytes)
 			return nil
 		})
 	require.NoError(t, err)
