@@ -534,7 +534,7 @@ func (rd *replicationDriver) setupC2C(
 	deprecatedCreateTenantAdminRole(t, "src-system", srcSQL)
 	deprecatedCreateTenantAdminRole(t, "dst-system", destSQL)
 
-	srcTenantID, destTenantID := 2, 2
+	srcTenantID, destTenantID := 3, 3
 	srcTenantName := "src-tenant"
 	destTenantName := "destination-tenant"
 
