@@ -1182,7 +1182,7 @@ func applyColumnMutation(
 				col.GetName(), tableDesc.GetName())
 		}
 
-		// It is assummed that an identiy column owns only one sequence.
+		// It is assumed that an identify column owns only one sequence.
 		if col.NumUsesSequences() != 1 {
 			return errors.AssertionFailedf(
 				"identity column %q of relation %q has %d sequences instead of 1",
@@ -1214,6 +1214,42 @@ func applyColumnMutation(
 		}
 		s := tree.Serialize(&optsNode)
 		col.ColumnDesc().GeneratedAsIdentitySequenceOption = &s
+
+	case *tree.AlterTableDropIdentity:
+		if !col.IsGeneratedAsIdentity() {
+			if t.IfExists {
+				params.p.BufferClientNotice(
+					params.ctx,
+					pgnotice.Newf("column %q of relation %q is not an identity column, skipping", col.GetName(), tableDesc.GetName()),
+				)
+				return nil
+			}
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q is not an identity column",
+				col.GetName(), tableDesc.GetName())
+		}
+
+		// It is assumed that an identify column owns only one sequence.
+		if col.NumUsesSequences() != 1 {
+			return errors.AssertionFailedf(
+				"identity column %q of relation %q has %d sequences instead of 1",
+				col.GetName(), tableDesc.GetName(), col.NumUsesSequences())
+		}
+
+		// Verify sequence is not depended on by another column.
+		// Use tree.DropDefault behavior to verify without the need to alter other dependencies via tree.DropCascade.
+		if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, tableDesc, col, tree.DropDefault); err != nil {
+			return err
+		}
+		// Drop the identity sequence and remove it from the column OwnsSequenceIds and DefaultExpr.
+		// Use tree.DropCascade behavior to remove dependencies on the column.
+		if err := params.p.dropSequencesOwnedByCol(params.ctx, col, true /* queueJob */, tree.DropCascade); err != nil {
+			return err
+		}
+
+		// Remove column identity descriptors
+		col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
+		col.ColumnDesc().GeneratedAsIdentitySequenceOption = nil
 
 	}
 	return nil
