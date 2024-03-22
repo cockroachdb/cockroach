@@ -152,6 +152,11 @@ func getCombinedStatementStats(
 		return nil, srverrors.ServerError(ctx, err)
 	}
 
+	err = validateSizeOfResult(ctx, ie, stmtSourceTable, txnSourceTable, whereClause, orderAndLimit, args, testingKnobs)
+	if err != nil {
+		return nil, err
+	}
+
 	runner := &statementStatsRunner{
 		stmtSourceTable: stmtSourceTable,
 		txnSourceTable:  txnSourceTable,
@@ -175,6 +180,8 @@ func getCombinedStatementStats(
 	}
 
 	if req.FetchMode != nil && req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
+		// TODO(davidh,xinhaoz): add lookahead for cardinality of statements lookup for transactions.
+
 		// If we're fetching for txns, the client still expects statement stats for
 		// stmts in the txns response.
 		statements, err = runner.collectStmtsForTxns(
@@ -209,6 +216,44 @@ func getCombinedStatementStats(
 	}
 
 	return response, nil
+}
+
+// validateSizeOfResult
+func validateSizeOfResult(
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	stmtSourceTable string,
+	txnSourceTable string,
+	whereClause string,
+	limit string,
+	args []interface{},
+	knobs *sqlstats.TestingKnobs,
+) error {
+	queryFormat := `
+SELECT COUNT(*) FROM %s %s
+`
+	query := fmt.Sprintf(
+		queryFormat,
+		stmtSourceTable,
+		whereClause,
+	)
+	opName := `console-combined-stmts-size-check`
+
+	row, err := ie.QueryRow(ctx, opName, nil, query, args...)
+	if err != nil {
+		return err
+	}
+
+	if row.Len() != 1 {
+		return errors.Newf("expected %d columns on collectCombinedStatements, received %d", 1, row.Len())
+	}
+
+	count := int64(*row[0].(*tree.DInt))
+	if count > 50 {
+		return errors.Newf("Your query is too big!!! %d rows would be queried", count)
+	}
+
+	return nil
 }
 
 func activityTablesHaveFullData(
