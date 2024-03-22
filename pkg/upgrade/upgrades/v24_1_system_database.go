@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
@@ -49,16 +48,14 @@ ALTER DATABASE system SURVIVE REGION FAILURE;
 	}); err != nil {
 		return err
 	}
+	// A subset of tables are missing zone config inheritance, so repair their
+	// zone config values.
 	if deps.Codec.ForSystemTenant() {
-		// A subset of tables are missing zone config inheritance, so repair their
-		// zone config values.
 		if err := deps.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 			ba := txn.KV().NewBatch()
-			for _, descID := range []descpb.ID{
-				systemschema.ReplicationConstraintStatsTable.GetID(),
+			for _, descID := range []descpb.ID{systemschema.ReplicationConstraintStatsTable.GetID(),
 				systemschema.ReplicationStatsTable.GetID(),
-				systemschema.TenantUsageTable.GetID(),
-			} {
+				systemschema.TenantUsageTable.GetID()} {
 				zoneCfg, err := txn.Descriptors().GetZoneConfig(ctx, txn.KV(), descID)
 				if err != nil {
 					return err
@@ -90,44 +87,20 @@ ALTER DATABASE system SURVIVE REGION FAILURE;
 			if err != nil {
 				return err
 			}
-			if zoneCfg == nil || zoneCfg.ZoneConfigProto().GC == nil {
-				if _, err := txn.ExecEx(ctx,
+			if zoneCfg == nil ||
+				zoneCfg.ZoneConfigProto().GC == nil {
+				_, err := txn.ExecEx(ctx,
 					"setup-lease-table-ttl",
 					txn.KV(), /* txn */
 					sessiondata.NodeUserSessionDataOverride,
-					"ALTER TABLE system.lease  CONFIGURE ZONE USING gc.ttlseconds=600",
-				); err != nil {
-					return err
-				}
+					"ALTER TABLE system.lease  CONFIGURE ZONE USING gc.ttlseconds=600")
+				return err
 			}
 			return nil
 		}); err != nil {
 			return err
 		}
-
-		// Mark the tables with low gc.ttl as excluded from backup.
-		if err := deps.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-			for _, tabName := range []catconstants.SystemTableName{
-				catconstants.ReplicationConstraintStatsTableName,
-				catconstants.ReplicationStatsTableName,
-				catconstants.TenantUsageTableName,
-				catconstants.LeaseTableName,
-				catconstants.SpanConfigurationsTableName,
-			} {
-				if _, err := txn.ExecEx(ctx,
-					"mark-table-excluded-from-backup",
-					txn.KV(),
-					sessiondata.NodeUserSessionDataOverride,
-					"ALTER TABLE system.public."+string(tabName)+" SET (exclude_data_from_backup = true)",
-				); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
+		return nil
 	}
-
 	return bumpSystemDatabaseSchemaVersion(ctx, cv, deps)
 }

@@ -14,7 +14,7 @@ state offset=47
 ----
 ...
 /Table/4{6-7}                              database system (host)
-/Table/4{7-8}                              ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
+/Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
@@ -52,7 +52,7 @@ state offset=47
 ----
 ...
 /Table/4{6-7}                              database system (host)
-/Table/4{7-8}                              ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
+/Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
@@ -87,7 +87,7 @@ state offset=47
 ----
 ...
 /Table/4{6-7}                              database system (host)
-/Table/4{7-8}                              ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
+/Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
@@ -127,7 +127,7 @@ state offset=47
 ----
 ...
 /Table/4{6-7}                              database system (host)
-/Table/4{7-8}                              ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
+/Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
@@ -167,7 +167,7 @@ state offset=47
 ----
 ...
 /Table/4{6-7}                              database system (host)
-/Table/4{7-8}                              ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
+/Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
@@ -221,7 +221,7 @@ state offset=47
 ----
 ...
 /Table/4{6-7}                              database system (host)
-/Table/4{7-8}                              ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
+/Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
@@ -273,7 +273,7 @@ state offset=47
 ----
 ...
 /Table/4{6-7}                              database system (host)
-/Table/4{7-8}                              ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
+/Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
@@ -319,7 +319,7 @@ state offset=47
 ----
 ...
 /Table/4{6-7}                              database system (host)
-/Table/4{7-8}                              ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
+/Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
