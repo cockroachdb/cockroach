@@ -321,6 +321,13 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.AddSSTable = nil
 
+	if p.Replicated.LinkExternalSSTable == nil {
+		p.Replicated.LinkExternalSSTable = q.Replicated.LinkExternalSSTable
+	} else if q.Replicated.LinkExternalSSTable != nil {
+		return errors.AssertionFailedf("conflicting LinkExternalSSTable")
+	}
+	q.Replicated.LinkExternalSSTable = nil
+
 	if p.Replicated.MVCCHistoryMutation == nil {
 		p.Replicated.MVCCHistoryMutation = q.Replicated.MVCCHistoryMutation
 	} else if q.Replicated.MVCCHistoryMutation != nil {

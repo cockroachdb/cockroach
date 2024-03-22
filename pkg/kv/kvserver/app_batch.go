@@ -182,19 +182,32 @@ func (b *appBatch) runPostAddTriggers(
 			cmd.Index(),
 			*res.AddSSTable,
 		)
-		b.numAddSST++
-		if copied {
-			b.numAddSSTCopies++
-		}
-		if added := res.Delta.KeyCount; added > 0 {
-			// So far numMutations only tracks the number of keys in
-			// WriteBatches but here we have a trivial WriteBatch.
-			// Also account for keys added via AddSST. We do this
-			// indirectly by relying on the stats, since there isn't
-			// a cheap way to get the number of keys in the SST.
-			b.numMutations += int(added)
-		}
+		b.updateSSTStats(res, copied)
 	}
-
+	if res.LinkExternalSSTable != nil {
+		linkExternalSStablePreApply(
+			ctx,
+			env,
+			kvpb.RaftTerm(cmd.Term),
+			cmd.Index(),
+			*res.LinkExternalSSTable)
+		b.updateSSTStats(res, false)
+	}
 	return nil
+}
+
+func (b *appBatch) updateSSTStats(res *kvserverpb.ReplicatedEvalResult, copied bool) {
+	if copied {
+		b.numAddSSTCopies++
+	}
+	b.numAddSST++
+
+	if added := res.Delta.KeyCount; added > 0 {
+		// So far numMutations only tracks the number of keys in
+		// WriteBatches but here we have a trivial WriteBatch.
+		// Also account for keys added via AddSST. We do this
+		// indirectly by relying on the stats, since there isn't
+		// a cheap way to get the number of keys in the SST.
+		b.numMutations += int(added)
+	}
 }
