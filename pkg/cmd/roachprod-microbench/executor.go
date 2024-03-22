@@ -340,7 +340,7 @@ func (e *executor) executeBenchmarks() error {
 		runCommand := fmt.Sprintf("./run.sh %s -test.benchmem -test.bench=^%s$ -test.run=^$ -test.v",
 			strings.Join(e.testArgs, " "), bench.name)
 		if e.timeout != "" {
-			runCommand = fmt.Sprintf("timeout %s %s", e.timeout, runCommand)
+			runCommand = fmt.Sprintf("timeout -k 30s %s %s", e.timeout, runCommand)
 		}
 		if e.shellCommand != "" {
 			runCommand = fmt.Sprintf("%s && %s", e.shellCommand, runCommand)
@@ -395,7 +395,7 @@ func (e *executor) executeBenchmarks() error {
 				fmt.Println()
 			}
 			tag := fmt.Sprintf("%d", logIndex)
-			if response.ExitStatus == 124 {
+			if response.ExitStatus == 124 || response.ExitStatus == 137 {
 				tag = fmt.Sprintf("%d-timeout", logIndex)
 			}
 			err = report.writeBenchmarkErrorLogs(response, tag)
