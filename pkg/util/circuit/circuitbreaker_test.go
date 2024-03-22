@@ -54,9 +54,9 @@ func (tb *testBridge) OnProbeDone(breaker *Breaker) {
 	tb.EventLogger.OnProbeDone(breaker)
 }
 
-func (tb *testBridge) OnReset(breaker *Breaker) {
+func (tb *testBridge) OnReset(breaker *Breaker, prev error) {
 	tb.reset++
-	tb.EventLogger.OnReset(breaker)
+	tb.EventLogger.OnReset(breaker, prev)
 }
 
 // RequireNumTrippedEqualsNumResets verifies that the number of trip events

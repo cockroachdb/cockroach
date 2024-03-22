@@ -145,7 +145,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 	// Verify that EXECUTE triggers diagnostics collection (#66048).
 	t.Run("execute", func(t *testing.T) {
 		id, err := registry.InsertRequestInternal(
-			ctx, "SELECT x + $1 FROM test", anyPlan, noAntiMatch,
+			ctx, "SELECT x + _ FROM test", anyPlan, noAntiMatch,
 			sampleAll, noLatencyThreshold, noExpiration,
 		)
 		require.NoError(t, err)
@@ -219,7 +219,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 	t.Run("conditional with concurrency", func(t *testing.T) {
 		minExecutionLatency := 100 * time.Millisecond
 		reqID, err := registry.InsertRequestInternal(
-			ctx, "SELECT pg_sleep($1)", anyPlan, noAntiMatch,
+			ctx, "SELECT pg_sleep(_)", anyPlan, noAntiMatch,
 			sampleAll, minExecutionLatency, noExpiration,
 		)
 		require.NoError(t, err)

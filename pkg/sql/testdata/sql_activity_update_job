@@ -115,7 +115,7 @@ system.statement_statistics WHERE app_name = $1 ORDER BY aggregated_ts, metadata
 ----
 2024-01-01 01:00:00 +0000 UTC,"SELECT _",3
 2024-01-01 01:00:00 +0000 UTC,"SELECT _ WHERE _ = _",1
-2024-01-01 01:00:00 +0000 UTC,"SET application_name = $1",1
+2024-01-01 01:00:00 +0000 UTC,"SET application_name = _",1
 2024-01-01 02:00:00 +0000 UTC,"SELECT _",1
 2024-01-01 02:00:00 +0000 UTC,"SELECT _ WHERE (_ = _) AND (_ = _)",1
 
@@ -123,7 +123,7 @@ run-sql useApp=true
 SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
 system.transaction_statistics WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
 ----
-2024-01-01 01:00:00 +0000 UTC,["905a8c5efc1a5827"],1
+2024-01-01 01:00:00 +0000 UTC,["e4e9b6317139aad1"],1
 2024-01-01 01:00:00 +0000 UTC,["1d2a16425a50b884"],3
 2024-01-01 01:00:00 +0000 UTC,["78da04360628cf28"],1
 2024-01-01 02:00:00 +0000 UTC,["2e9ed501bad29d2a"],1
@@ -136,7 +136,7 @@ system.statement_activity WHERE app_name = $1 ORDER BY aggregated_ts, metadata -
 ----
 2024-01-01 01:00:00 +0000 UTC,"SELECT _",3
 2024-01-01 01:00:00 +0000 UTC,"SELECT _ WHERE _ = _",1
-2024-01-01 01:00:00 +0000 UTC,"SET application_name = $1",1
+2024-01-01 01:00:00 +0000 UTC,"SET application_name = _",1
 2024-01-01 02:00:00 +0000 UTC,"SELECT _",1
 2024-01-01 02:00:00 +0000 UTC,"SELECT _ WHERE (_ = _) AND (_ = _)",1
 
@@ -144,7 +144,7 @@ run-sql useApp=true
 SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
 system.transaction_activity WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
 ----
-2024-01-01 01:00:00 +0000 UTC,["905a8c5efc1a5827"],1
+2024-01-01 01:00:00 +0000 UTC,["e4e9b6317139aad1"],1
 2024-01-01 01:00:00 +0000 UTC,["1d2a16425a50b884"],3
 2024-01-01 01:00:00 +0000 UTC,["78da04360628cf28"],1
 2024-01-01 02:00:00 +0000 UTC,["2e9ed501bad29d2a"],1

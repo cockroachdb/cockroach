@@ -18,7 +18,7 @@ for {set i 0} {$i < 10} {incr i} {
   set timeout 1
   send "select key from crdb_internal.node_statement_statistics order by count desc limit 1;\r"
   expect {
-    "SELECT city, id FROM vehicles WHERE city = \$1" {
+    "SELECT city, id FROM vehicles WHERE city = _" {
       set workloadRunning 1
       break
     }
