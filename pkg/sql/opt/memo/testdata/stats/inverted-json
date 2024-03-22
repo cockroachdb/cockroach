@@ -97,7 +97,7 @@ index-join t
       │    └── union spans
       │         ├── ["7\x00\x019", "7\x00\x019"]
       │         └── ["7\x00\xff", "8")
-      ├── stats: [rows=1110]
+      ├── stats: [rows=1000]
       ├── key: (1)
       └── scan t@j_idx
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -169,7 +169,7 @@ index-join t
       │    └── union spans
       │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       │         └── ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
-      ├── stats: [rows=110]
+      ├── stats: [rows=99.0991]
       ├── key: (1)
       └── scan t@j_idx
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -200,7 +200,7 @@ index-join t
       │    └── union spans
       │         ├── ["7\x00\x018", "7\x00\x018"]
       │         └── ["7\x00\x03", "7\x00\x03"]
-      ├── stats: [rows=1110]
+      ├── stats: [rows=1000]
       ├── key: (1)
       └── scan t@j_idx
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -252,7 +252,7 @@ index-join t
       │    └── union spans
       │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
       │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
-      ├── stats: [rows=110]
+      ├── stats: [rows=99.0991]
       ├── key: (1)
       └── scan t@j_idx
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -333,7 +333,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=110]
+ │    ├── stats: [rows=99.0991]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -343,7 +343,7 @@ select
  │         │    └── union spans
  │         │         ├── ["7\x00\x019", "7\x00\x019"]
  │         │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
- │         ├── stats: [rows=110]
+ │         ├── stats: [rows=99.0991]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -372,7 +372,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=120]
+ │    ├── stats: [rows=108.1081]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -383,7 +383,7 @@ select
  │         │         ├── ["7\x00\x019", "7\x00\x019"]
  │         │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
  │         │         └── ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
- │         ├── stats: [rows=120]
+ │         ├── stats: [rows=108.1081]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -413,7 +413,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=120]
+ │    ├── stats: [rows=108.1081]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -428,7 +428,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
- │         ├── stats: [rows=120]
+ │         ├── stats: [rows=108.1081]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -459,7 +459,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=110]
+ │    ├── stats: [rows=99.0991]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -470,7 +470,7 @@ select
  │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
  │         │         ├── ["7\x00\x018", "7\x00\x018"]
  │         │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
- │         ├── stats: [rows=110]
+ │         ├── stats: [rows=99.0991]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -500,7 +500,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=120]
+ │    ├── stats: [rows=108.1081]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -513,7 +513,7 @@ select
  │         │         ├── ["7\x00\x018", "7\x00\x018"]
  │         │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
  │         │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
- │         ├── stats: [rows=120]
+ │         ├── stats: [rows=108.1081]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
@@ -545,7 +545,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=120]
+ │    ├── stats: [rows=108.1081]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -564,7 +564,7 @@ select
  │         │              └── union spans
  │         │                   ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
  │         │                   └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
- │         ├── stats: [rows=120]
+ │         ├── stats: [rows=108.1081]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)

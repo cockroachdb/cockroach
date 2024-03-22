@@ -1476,7 +1476,7 @@ project
       ├── fd: (1)-->(2,3)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=118.7568]
+      │    ├── stats: [rows=33.93053]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1489,7 +1489,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=118.7568]
+      │         ├── stats: [rows=33.93053]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
@@ -1528,7 +1528,7 @@ project
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=118.7568]
+      │    ├── stats: [rows=33.93053]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1541,7 +1541,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=118.7568]
+      │         ├── stats: [rows=33.93053]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
@@ -1616,7 +1616,7 @@ project
       ├── fd: (1)-->(2,3)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=121.5695]
+      │    ├── stats: [rows=34.73414]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1629,7 +1629,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=121.5695]
+      │         ├── stats: [rows=34.73414]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
@@ -1666,7 +1666,7 @@ project
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=121.5695]
+      │    ├── stats: [rows=34.73414]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1679,7 +1679,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=121.5695]
+      │         ├── stats: [rows=34.73414]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
