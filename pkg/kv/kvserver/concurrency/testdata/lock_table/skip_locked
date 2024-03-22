@@ -355,11 +355,11 @@ locked: true, holder: 00000000-0000-0000-0000-000000000001
 
 is-key-locked-by-conflicting-txn r=req8 k=h strength=exclusive
 ----
-lock promotion from Shared to Exclusive is not allowed
+locked: false
 
 is-key-locked-by-conflicting-txn r=req8 k=i strength=exclusive
 ----
-lock promotion from Shared to Exclusive is not allowed
+locked: false
 
 dequeue r=req8
 ----
@@ -474,3 +474,51 @@ false
 is-key-locked-by-conflicting-txn r=req10 k=f strength=exclusive
 ----
 SKIP LOCKED request should not find another waiting request from the same transaction
+
+# ------------------------------------------------------------------------------
+# Ensure SKIP LOCKED works correctly when a transaction holds one of multiple
+# shared locks on a key, and it tries to use SKIP LOCKED in on the key with a
+# stronger lock strength (i.e. it's trying to promote its lock).
+# ---------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req11 txn=txn1 ts=10,1 spans=shared@a
+----
+
+scan r=req11
+----
+start-waiting: false
+
+acquire r=req11 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req12 txn=txn2 ts=10,1 spans=shared@a
+----
+
+scan r=req12
+----
+start-waiting: false
+
+acquire r=req12 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req13 txn=txn2 ts=10,1 spans=exclusive@a skip-locked
+----
+
+scan r=req13
+----
+start-waiting: false
+
+is-key-locked-by-conflicting-txn r=req13 k=a strength=exclusive
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001

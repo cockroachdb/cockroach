@@ -90,3 +90,29 @@ statement ok
 DROP PROCEDURE ins3;
 DROP PROCEDURE ins_ab;
 DROP TABLE ab;
+
+statement ok
+CREATE TABLE i (i INT);
+
+statement ok
+CREATE PROCEDURE insert1(n INT) LANGUAGE SQL AS $$
+  INSERT INTO i VALUES (n);
+$$
+
+statement ok
+CREATE PROCEDURE insert2(n INT) LANGUAGE SQL AS $$
+  CALL insert1(n);
+$$
+
+statement ok
+CALL insert2(11)
+
+query I
+SELECT * FROM i
+----
+11
+
+statement ok
+DROP PROCEDURE insert2;
+DROP PROCEDURE insert1;
+DROP TABLE i;
