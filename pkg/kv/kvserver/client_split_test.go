@@ -17,6 +17,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"sync/atomic"
@@ -66,10 +67,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
@@ -1060,6 +1063,123 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 			})
 		})
 	})
+}
+
+// TestStoreRangeSplitWithTracing tests that the split queue logs traces for
+// slow splits.
+func TestStoreRangeSplitWithTracing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	l := log.ScopeWithoutShowLogs(t)
+	_ = log.SetVModule("split_queue=1")
+	defer l.Close(t)
+
+	splitKey := roachpb.Key("b")
+	var targetRange atomic.Int32
+	manualClock := hlc.NewHybridManualClock()
+	filter := func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+		if req, ok := request.GetArg(kvpb.EndTxn); ok {
+			et := req.(*kvpb.EndTxnRequest)
+			if tr := et.InternalCommitTrigger.GetSplitTrigger(); tr != nil {
+				if tr.RightDesc.StartKey.Equal(splitKey) {
+					// Manually increment the replica's clock to simulate a slow split.
+					manualClock.Increment(kvserver.SlowSplitTracingThreshold.Default().Nanoseconds())
+				}
+			}
+		}
+		return nil
+	}
+
+	// Override the load-based split key funciton to force the range to be
+	// processed by the split queue.
+	overrideLBSplitFn := func(rangeID roachpb.RangeID) (roachpb.Key, bool) {
+		if rangeID == roachpb.RangeID(targetRange.Load()) {
+			return splitKey, true
+		}
+		return nil, false
+	}
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				WallClock: manualClock,
+			},
+			Store: &kvserver.StoreTestingKnobs{
+				DisableMergeQueue:             true,
+				DisableSplitQueue:             true,
+				TestingRequestFilter:          filter,
+				LoadBasedSplittingOverrideKey: overrideLBSplitFn,
+			},
+		},
+	})
+
+	defer s.Stopper().Stop(ctx)
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	// Write some data on both sides of the split key.
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("a"), []byte("foo")))
+	require.NoError(t, pErr.GoError())
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs(splitKey, []byte("bar")))
+	require.NoError(t, pErr.GoError())
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("c"), []byte("foo")))
+	require.NoError(t, pErr.GoError())
+
+	splitKeyAddr, err := keys.Addr(splitKey)
+	require.NoError(t, err)
+	repl := store.LookupReplica(splitKeyAddr)
+	targetRange.Store(int32(repl.RangeID))
+
+	recording, processErr, enqueueErr := store.Enqueue(
+		ctx, "split", repl, true /* skipShouldQueue */, false, /* async */
+	)
+	require.NoError(t, enqueueErr)
+	require.NoError(t, processErr)
+
+	// Flush logs and get log messages from split_queue.go
+	log.FlushFiles()
+	entries, err := log.FetchEntriesFromFiles(math.MinInt64, math.MaxInt64, 100,
+		regexp.MustCompile(`split_queue\.go`), log.WithMarkedSensitiveData)
+	require.NoError(t, err)
+
+	opName := "split"
+	traceRegexp, err := regexp.Compile(`trace:.*`)
+	require.NoError(t, err)
+	opRegexp, err := regexp.Compile(fmt.Sprintf(`operation:%s`, opName))
+	require.NoError(t, err)
+
+	// Find the log entry to validate the trace output.
+	foundEntry := false
+	var entry logpb.Entry
+	for _, entry = range entries {
+		if opRegexp.MatchString(entry.Message) {
+			foundEntry = true
+			break
+		}
+	}
+	require.True(t, foundEntry)
+
+	// Validate that the trace is included in the log message.
+	require.Regexp(t, traceRegexp, entry.Message)
+
+	// Validate that the returned tracing span includes the operation, but also
+	// that the stringified trace was not logged to the span or its parent.
+	processRecSpan, foundSpan := recording.FindSpan(opName)
+	require.True(t, foundSpan)
+
+	foundParent := false
+	var parentRecSpan tracingpb.RecordedSpan
+	for _, parentRecSpan = range recording {
+		if parentRecSpan.SpanID == processRecSpan.ParentSpanID {
+			foundParent = true
+			break
+		}
+	}
+	require.True(t, foundParent)
+	spans := tracingpb.Recording{parentRecSpan, processRecSpan}
+	stringifiedSpans := spans.String()
+	require.NotRegexp(t, traceRegexp, stringifiedSpans)
 }
 
 // RaftMessageHandlerInterceptor wraps a storage.IncomingRaftMessageHandler. It
