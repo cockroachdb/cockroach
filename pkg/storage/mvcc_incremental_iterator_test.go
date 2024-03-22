@@ -1386,7 +1386,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 
 	ingest := func(it EngineIterator, valid bool, err error, count int) {
 		memFile := &MemObject{}
-		sst := MakeIngestionSSTWriter(ctx, db2.settings, memFile)
+		sst := MakeIngestionSSTWriter(ctx, db2.cfg.settings, memFile)
 		defer sst.Close()
 
 		for i := 0; i < count; i++ {
