@@ -1953,6 +1953,11 @@ func TestSchemaChangeComparator_udf_privileges_mutations(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_privileges_mutations"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_udf_procedure_mix(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_procedure_mix"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_udf_record(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_record"

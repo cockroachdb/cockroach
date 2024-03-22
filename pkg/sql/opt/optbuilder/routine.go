@@ -113,14 +113,14 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	b.DisableMemoReuse = true
 	outScope := inScope.push()
 
-	// Type-check the procedure.
-	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+	// Type-check the procedure and its arguments. Subqueries are disallowed in
+	// arguments. Note that we don't use defer to reset semaCtx.Properties
+	// because it must be reset before the call to buildRoutine below, or else
+	// subqueries would be disallowed in the body of procedures.
+	originalProps := b.semaCtx.Properties
 	b.semaCtx.Properties.Require("CALL argument", tree.RejectSubqueries)
-	b.semaCtx.Properties.Ancestors.Push(tree.CallAncestor)
-	typedExpr, err := tree.TypeCheck(b.ctx, c.Proc, b.semaCtx, types.Any)
-	if err != nil {
-		panic(err)
-	}
+	typedExpr := inScope.resolveType(c.Proc, types.Any)
+	b.semaCtx.Properties = originalProps
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
 		panic(errors.AssertionFailedf("expected FuncExpr"))
@@ -149,7 +149,7 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	}
 
 	// Build the routine.
-	routine, _ := b.buildRoutine(c.Proc, def, inScope, nil /* colRefs */)
+	routine, _ := b.buildRoutine(f, def, inScope, nil /* colRefs */)
 	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
 		nil /* outScope */, nil /* outCol */)
 
