@@ -128,7 +128,7 @@ func (p *ScheduledProcessor) Start(
 			return err
 		}
 	} else {
-		p.initResolvedTS(p.taskCtx)
+		p.initResolvedTS(p.taskCtx, nil)
 	}
 
 	p.Metrics.RangeFeedProcessorsScheduler.Inc(1)
@@ -181,6 +181,9 @@ func (p *ScheduledProcessor) processEvents(ctx context.Context) {
 				p.consumeEvent(ctx, e)
 			}
 			e.alloc.Release(ctx)
+			// Release base struct memory for event since e is no longer used.
+			// Underlying data is moved to rangefeed events.
+			e.alloc.ReleaseAmount(ctx, e.EventBaseOverhead())
 			putPooledEvent(e)
 		default:
 			return
@@ -448,7 +451,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 	// inserting value into channel.
 	var alloc *SharedBudgetAllocation
 	if p.MemBudget != nil {
-		size := calculateDateEventSize(e)
+		size := e.MemoryToAllocate(p.reg.Len())
 		if size > 0 {
 			var err error
 			// First we will try non-blocking fast path to allocate memory budget.
@@ -480,6 +483,8 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 			// ensures that unused allocation is released.
 			defer func() {
 				alloc.Release(ctx)
+				// No alloc.ReleaseAmount is called here because Release should return
+				// all alloc memory already if event is not sent.
 			}()
 		}
 	}
@@ -638,9 +643,9 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 	case e.ops != nil:
 		p.consumeLogicalOps(ctx, e.ops, e.alloc)
 	case !e.ct.IsEmpty():
-		p.forwardClosedTS(ctx, e.ct.Timestamp)
+		p.forwardClosedTS(ctx, e.ct.Timestamp, e.alloc)
 	case bool(e.initRTS):
-		p.initResolvedTS(ctx)
+		p.initResolvedTS(ctx, e.alloc)
 	case e.sst != nil:
 		p.consumeSSTable(ctx, e.sst.data, e.sst.span, e.sst.ts, e.alloc)
 	case e.sync != nil:
@@ -678,9 +683,11 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 
 		case *enginepb.MVCCWriteIntentOp:
 			// No updates to publish.
+			alloc.ReleaseAmount(ctx, UnderlyingDataSize(op))
 
 		case *enginepb.MVCCUpdateIntentOp:
 			// No updates to publish.
+			alloc.ReleaseAmount(ctx, UnderlyingDataSize(op))
 
 		case *enginepb.MVCCCommitIntentOp:
 			// Publish the newly committed value.
@@ -688,9 +695,11 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 
 		case *enginepb.MVCCAbortIntentOp:
 			// No updates to publish.
+			alloc.ReleaseAmount(ctx, UnderlyingDataSize(op))
 
 		case *enginepb.MVCCAbortTxnOp:
 			// No updates to publish.
+			alloc.ReleaseAmount(ctx, UnderlyingDataSize(op))
 
 		default:
 			log.Fatalf(ctx, "unknown logical op %T", t)
@@ -699,7 +708,9 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 		// Determine whether the operation caused the resolved timestamp to
 		// move forward. If so, publish a RangeFeedCheckpoint notification.
 		if p.rts.ConsumeLogicalOp(ctx, op) {
-			p.publishCheckpoint(ctx)
+			p.publishCheckpoint(ctx, alloc)
+		} else {
+			alloc.ReleaseAmount(ctx, TotalCheckpointEventOverhead(p.reg.Len()))
 		}
 	}
 }
@@ -714,16 +725,22 @@ func (p *ScheduledProcessor) consumeSSTable(
 	p.publishSSTable(ctx, sst, sstSpan, sstWTS, alloc)
 }
 
-func (p *ScheduledProcessor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
+func (p *ScheduledProcessor) forwardClosedTS(
+	ctx context.Context, newClosedTS hlc.Timestamp, alloc *SharedBudgetAllocation,
+) {
 	if p.rts.ForwardClosedTS(ctx, newClosedTS) {
-		p.publishCheckpoint(ctx)
+		p.publishCheckpoint(ctx, alloc)
 	}
+	// No memory release if no checkpoints published since it will be soonly
+	// released if no registrations references alloc.
 }
 
-func (p *ScheduledProcessor) initResolvedTS(ctx context.Context) {
+func (p *ScheduledProcessor) initResolvedTS(ctx context.Context, alloc *SharedBudgetAllocation) {
 	if p.rts.Init(ctx) {
-		p.publishCheckpoint(ctx)
+		p.publishCheckpoint(ctx, alloc)
 	}
+	// No memory release if no checkpoints published since it will be soonly
+	// released if no registrations references alloc.
 }
 
 func (p *ScheduledProcessor) publishValue(
@@ -795,12 +812,12 @@ func (p *ScheduledProcessor) publishSSTable(
 	}, false /* omitInRangefeeds */, alloc)
 }
 
-func (p *ScheduledProcessor) publishCheckpoint(ctx context.Context) {
+func (p *ScheduledProcessor) publishCheckpoint(ctx context.Context, alloc *SharedBudgetAllocation) {
 	// TODO(nvanbenschoten): persist resolvedTimestamp. Give Processor a client.DB.
 	// TODO(nvanbenschoten): rate limit these? send them periodically?
 
 	event := p.newCheckpointEvent()
-	p.reg.PublishToOverlapping(ctx, all, event, false /* omitInRangefeeds */, nil)
+	p.reg.PublishToOverlapping(ctx, all, event, false /* omitInRangefeeds */, alloc)
 }
 
 func (p *ScheduledProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {

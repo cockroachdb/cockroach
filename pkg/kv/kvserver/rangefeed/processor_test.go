@@ -122,6 +122,14 @@ func abortTxnOp(txnID uuid.UUID) enginepb.MVCCLogicalOp {
 	})
 }
 
+func deleteRangeOp(startKey, endKey roachpb.Key, timestamp hlc.Timestamp) enginepb.MVCCLogicalOp {
+	return makeLogicalOp(&enginepb.MVCCDeleteRangeOp{
+		StartKey:  startKey,
+		EndKey:    endKey,
+		Timestamp: timestamp,
+	})
+}
+
 func makeRangeFeedEvent(val interface{}) *kvpb.RangeFeedEvent {
 	var event kvpb.RangeFeedEvent
 	event.MustSetValue(val)
