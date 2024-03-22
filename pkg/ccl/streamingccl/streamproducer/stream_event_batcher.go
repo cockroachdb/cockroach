@@ -35,20 +35,20 @@ func (seb *streamEventBatcher) reset() {
 	seb.batch.SpanConfigs = seb.batch.SpanConfigs[:0]
 }
 
-func (seb *streamEventBatcher) addSST(sst *kvpb.RangeFeedSSTable) {
-	seb.batch.Ssts = append(seb.batch.Ssts, *sst)
+func (seb *streamEventBatcher) addSST(sst kvpb.RangeFeedSSTable) {
+	seb.batch.Ssts = append(seb.batch.Ssts, sst)
 	seb.size += sst.Size()
 }
 
-func (seb *streamEventBatcher) addKV(kv *roachpb.KeyValue) {
-	seb.batch.KeyValues = append(seb.batch.KeyValues, *kv)
+func (seb *streamEventBatcher) addKV(kv roachpb.KeyValue) {
+	seb.batch.KeyValues = append(seb.batch.KeyValues, kv)
 	seb.size += kv.Size()
 }
 
-func (seb *streamEventBatcher) addDelRange(d *kvpb.RangeFeedDeleteRange) {
+func (seb *streamEventBatcher) addDelRange(d kvpb.RangeFeedDeleteRange) {
 	// DelRange's span is already trimmed to enclosed within
 	// the subscribed span, just emit it.
-	seb.batch.DelRanges = append(seb.batch.DelRanges, *d)
+	seb.batch.DelRanges = append(seb.batch.DelRanges, d)
 	seb.size += d.Size()
 }
 
