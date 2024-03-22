@@ -26,6 +26,14 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// replaceFunc is the callback function passed to norm.Factory.Replace. It is
+// copied here from norm.ReplaceFunc to avoid a circular dependency.
+type ReplaceFunc func(e opt.Expr) opt.Expr
+
+// replacer is a wrapper around norm.Factory.Replace, so that we can call it
+// without creating a circular dependency.
+type replacer func(e opt.Expr, replace ReplaceFunc) opt.Expr
+
 // Memo is a data structure for efficiently storing a forest of query plans.
 // Conceptually, the memo is composed of a numbered set of equivalency classes
 // called groups where each group contains a set of logically equivalent
@@ -116,6 +124,10 @@ type Memo struct {
 	// interner interns all expressions in the memo, ensuring that there is at
 	// most one instance of each expression in the memo.
 	interner interner
+
+	// replacer is a wrapper around norm.Factory.Replace, used by statistics
+	// builder to rewrite some expressions when calculating stats.
+	replacer replacer
 
 	// logPropsBuilder is inlined in the memo so that it can be reused each time
 	// scalar or relational properties need to be built.
@@ -252,6 +264,10 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)
+}
+
+func (m *Memo) SetReplacer(replacer replacer) {
+	m.replacer = replacer
 }
 
 // AllowUnconstrainedNonCoveringIndexScan indicates whether unconstrained

@@ -1120,7 +1120,19 @@ func (sb *statisticsBuilder) colStatProject(
 		for i := range prj.Projections {
 			item := &prj.Projections[i]
 			if reqSynthCols.Contains(item.Col) {
-				// TODO(michae2): Check for matching virtual column expressions here.
+				// Before checking OuterCols, try to replace any virtual computed column
+				// expressions with the corresponding virtual column.
+				if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
+					!s.VirtualCols.Empty() {
+					element := sb.factorOutVirtualCols(
+						item.Element, &item.scalar.Shared, s.VirtualCols, prj.Memo(),
+					).(opt.ScalarExpr)
+					if element != item.Element {
+						newItem := constructProjectionsItem(element, item.Col, prj.Memo())
+						item = &newItem
+					}
+				}
+
 				reqInputCols.UnionWith(item.scalar.OuterCols)
 
 				// If the element is not a null constant, account for that
@@ -3274,7 +3286,19 @@ func (sb *statisticsBuilder) applyFilters(
 func (sb *statisticsBuilder) applyFiltersItem(
 	filter *FiltersItem, e RelExpr, relProps *props.Relational,
 ) (numUnappliedConjuncts float64, constrainedCols, histCols opt.ColSet) {
-	// TODO(michae2): Check for matching virtual column expressions here.
+	// Before checking anything, try to replace any virtual computed column
+	// expressions with the corresponding virtual column.
+	if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
+		!relProps.Statistics().VirtualCols.Empty() {
+		cond := sb.factorOutVirtualCols(
+			filter.Condition, &filter.scalar.Shared, relProps.Statistics().VirtualCols, e.Memo(),
+		).(opt.ScalarExpr)
+		if cond != filter.Condition {
+			newFilter := constructFiltersItem(cond, e.Memo())
+			filter = &newFilter
+		}
+	}
+
 	if isEqualityWithTwoVars(filter.Condition) {
 		// Equalities are handled by applyEquivalencies.
 		return 0, opt.ColSet{}, opt.ColSet{}
@@ -4392,7 +4416,6 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 			// is able to build column equivalencies.
 			switch disjuncts[i].(type) {
 			case *EqExpr, *AndExpr:
-				// TODO(michae2): Check for matching virtual column expressions here.
 				if andFilters, ok = addEqExprConjuncts(disjuncts[i], andFilters, e.Memo()); !ok {
 					numUnappliedConjuncts++
 					continue
@@ -4491,6 +4514,15 @@ func combineOredSelectivities(selectivities []props.Selectivity) props.Selectivi
 // in cases where the Factory is not accessible.
 func constructFiltersItem(condition opt.ScalarExpr, m *Memo) FiltersItem {
 	item := FiltersItem{Condition: condition}
+	item.PopulateProps(m)
+	return item
+}
+
+// constructProjectionsItem constructs an expression for the ProjectionsItem
+// operator, with identical behavior to the Factor method of the same name, but
+// for use in cases where the Factory is not accessible.
+func constructProjectionsItem(element opt.ScalarExpr, col opt.ColumnID, m *Memo) ProjectionsItem {
+	item := ProjectionsItem{Element: element, Col: col}
 	item.PopulateProps(m)
 	return item
 }
@@ -4922,4 +4954,55 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 		}
 	}
 	return false
+}
+
+// factorOutVirtualCols replaces any subexpressions matching any virtual
+// computed column expressions with a reference to the virtual computed
+// column. This allows us to directly use statistics collected on the virtual
+// computed column instead of estimating from the expression.
+func (sb *statisticsBuilder) factorOutVirtualCols(
+	e opt.Expr, shared *props.Shared, virtualCols opt.ColSet, m *Memo,
+) opt.Expr {
+	if m.replacer == nil {
+		panic(errors.AssertionFailedf("Memo.replacer unset"))
+	}
+
+	// Optimization: build a slice of virtual computed column expressions to find,
+	// and also prune any virtual cols whose outer columns are not contained in
+	// the expression's outer columns.
+	type virtExpr struct {
+		colID opt.ColumnID
+		expr  opt.Expr
+	}
+	virtExprs := make([]virtExpr, virtualCols.Len())
+	virtualCols.ForEach(func(colID opt.ColumnID) {
+		col := sb.md.ColumnMeta(colID)
+		tab := sb.md.TableMeta(col.Table)
+		if !tab.ColsInComputedColsExpressions.Intersects(shared.OuterCols) {
+			return
+		}
+		expr, ok := tab.ComputedCols[colID]
+		if !ok {
+			panic(errors.AssertionFailedf(
+				"could not find computed column expression for column %v in table %v", colID, tab.Alias,
+			))
+		}
+		virtExprs = append(virtExprs, virtExpr{colID: colID, expr: expr})
+	})
+
+	if len(virtExprs) == 0 {
+		return e
+	}
+
+	// Replace all virtual col expressions with the corresponding virtual col.
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		for _, ve := range virtExprs {
+			if e == ve.expr {
+				return m.MemoizeVariable(ve.colID)
+			}
+		}
+		return m.replacer(e, replace)
+	}
+	return replace(e)
 }
