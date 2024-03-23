@@ -12,6 +12,7 @@ package builtins
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -393,12 +394,15 @@ var replicationBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "timestamp", Typ: types.Decimal},
+				{Name: "expiration_window", Typ: types.Interval},
 				{Name: "description", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tsDec := tree.MustBeDDecimal(args[0])
-				desc := string(tree.MustBeDString(args[1]))
+				expiration := tree.MustBeDInterval(args[1])
+				desc := string(tree.MustBeDString(args[2]))
+
 				timestamp, err := hlc.DecimalToHLC(&tsDec.Decimal)
 				if err != nil {
 					return nil, err
@@ -407,7 +411,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				jobID, err := mgr.StartHistoryProtectionJob(ctx, desc, timestamp)
+				jobID, err := mgr.StartHistoryProtectionJob(ctx, desc, timestamp,
+					time.Duration(expiration.Duration.Nanos()))
 				if err != nil {
 					return nil, err
 				}
