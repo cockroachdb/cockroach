@@ -184,8 +184,10 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 
 	maybeExistingFuncObj := fnDesc.ToRoutineObj()
 	maybeExistingFuncObj.FuncName.ObjectName = n.n.NewName
-	existing, err := params.p.matchRoutine(params.ctx, maybeExistingFuncObj,
-		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
+	existing, err := params.p.matchRoutine(
+		params.ctx, maybeExistingFuncObj, false, /* required */
+		tree.UDFRoutine|tree.ProcedureRoutine, false, /* inDropContext */
+	)
 	if err != nil {
 		return err
 	}
@@ -407,8 +409,10 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	maybeExistingFuncObj := fnDesc.ToRoutineObj()
 	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(targetSc.GetName())
 	maybeExistingFuncObj.FuncName.ExplicitSchema = true
-	existing, err := params.p.matchRoutine(params.ctx, maybeExistingFuncObj,
-		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
+	existing, err := params.p.matchRoutine(
+		params.ctx, maybeExistingFuncObj, false, /* required */
+		tree.UDFRoutine|tree.ProcedureRoutine, false, /* inDropContext */
+	)
 	if err != nil {
 		return err
 	}
@@ -471,7 +475,10 @@ func (n *alterFunctionDepExtensionNode) Close(ctx context.Context)           {}
 func (p *planner) mustGetMutableFunctionForAlter(
 	ctx context.Context, routineObj *tree.RoutineObj,
 ) (*funcdesc.Mutable, error) {
-	ol, err := p.matchRoutine(ctx, routineObj, true /*required*/, tree.UDFRoutine|tree.ProcedureRoutine)
+	ol, err := p.matchRoutine(
+		ctx, routineObj, true, /* required */
+		tree.UDFRoutine|tree.ProcedureRoutine, false, /* inDropContext */
+	)
 	if err != nil {
 		return nil, err
 	}

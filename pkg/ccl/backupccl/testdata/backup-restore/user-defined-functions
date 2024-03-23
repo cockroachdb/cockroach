@@ -58,7 +58,7 @@ db1 sc2 f2 function false
 query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
-CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
+CREATE FUNCTION sc1.f1(a db1.sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -94,7 +94,7 @@ USE db1_new
 query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
-CREATE FUNCTION sc1.f1(IN a db1_new.sc1.enum1)
+CREATE FUNCTION sc1.f1(a db1_new.sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -215,7 +215,7 @@ db1 sc2 f2 function true
 query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
-CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
+CREATE FUNCTION sc1.f1(a db1.sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -252,7 +252,7 @@ USE db1
 query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
-CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
+CREATE FUNCTION sc1.f1(a db1.sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF

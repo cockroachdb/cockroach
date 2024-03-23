@@ -23,7 +23,7 @@ CREATE PROCEDURE p(a notmyworkday) LANGUAGE SQL AS $$
 $$;
 ----
 - [[Function:{DescID: 110}, PUBLIC], ABSENT]
-  {functionId: 110, isProcedure: true, params: [{class: {class: IN}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}}}], returnType: {type: {family: VoidFamily, oid: 2278}}}
+  {functionId: 110, isProcedure: true, params: [{class: {}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}}}], returnType: {type: {family: VoidFamily, oid: 2278}}}
 - [[SchemaChild:{DescID: 110, ReferencedDescID: 101}, PUBLIC], ABSENT]
   {childObjectId: 110, schemaId: 101}
 - [[FunctionName:{DescID: 110}, PUBLIC], ABSENT]
@@ -52,7 +52,7 @@ CREATE PROCEDURE p(a notmyworkday) LANGUAGE PLpgSQL AS $$
 $$;
 ----
 - [[Function:{DescID: 111}, PUBLIC], ABSENT]
-  {functionId: 111, isProcedure: true, params: [{class: {class: IN}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}}}], returnType: {type: {family: VoidFamily, oid: 2278}}}
+  {functionId: 111, isProcedure: true, params: [{class: {}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}}}], returnType: {type: {family: VoidFamily, oid: 2278}}}
 - [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], ABSENT]
   {childObjectId: 111, schemaId: 101}
 - [[FunctionName:{DescID: 111}, PUBLIC], ABSENT]

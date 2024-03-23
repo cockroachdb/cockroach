@@ -42,7 +42,7 @@ write *eventpb.CreateFunction to event log:
   functionName: defaultdb.public.f3
   sql:
     descriptorId: 112
-    statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹f3›(IN ‹a› ‹notmyworkday›)\n\tRETURNS INT8\n\tVOLATILE\n\tLANGUAGE SQL\n\tAS $$SELECT public.f2(‹a›) + public.f(‹a›);$$"
+    statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹f3›(‹a› ‹notmyworkday›)\n\tRETURNS INT8\n\tVOLATILE\n\tLANGUAGE SQL\n\tAS $$SELECT public.f2(‹a›) + public.f(‹a›);$$"
     tag: CREATE FUNCTION
     user: root
 ## StatementPhase stage 1 of 1 with 12 MutationType ops
@@ -62,8 +62,7 @@ upsert descriptor #112
   +  name: f3
   +  nullInputBehavior: CALLED_ON_NULL_INPUT
   +  params:
-  +  - class: IN
-  +    name: a
+  +  - name: a
   +    type:
   +      family: EnumFamily
   +      oid: 100107
@@ -174,8 +173,7 @@ upsert descriptor #112
   +  name: f3
   +  nullInputBehavior: CALLED_ON_NULL_INPUT
   +  params:
-  +  - class: IN
-  +    name: a
+  +  - name: a
   +    type:
   +      family: EnumFamily
   +      oid: 100107

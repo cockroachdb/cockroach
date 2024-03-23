@@ -1464,7 +1464,7 @@ FROM crdb_internal.create_function_statements
 WHERE function_name IN ('f', 'f2')
 ORDER BY function_id;
 ----
-test  public  f   CREATE FUNCTION public.f(IN INT8)
+test  public  f   CREATE FUNCTION public.f(INT8)
                     RETURNS INT8
                     VOLATILE
                     NOT LEAKPROOF
@@ -1473,7 +1473,7 @@ test  public  f   CREATE FUNCTION public.f(IN INT8)
                     AS $$
                     SELECT 1;
                   $$
-test  public  f   CREATE FUNCTION public.f(IN STRING, IN b INT8)
+test  public  f   CREATE FUNCTION public.f(STRING, b INT8)
                     RETURNS STRING
                     IMMUTABLE
                     LEAKPROOF
@@ -1482,7 +1482,7 @@ test  public  f   CREATE FUNCTION public.f(IN STRING, IN b INT8)
                     AS $$
                     SELECT 'hello';
                   $$
-test  sc      f2  CREATE FUNCTION sc.f2(IN STRING)
+test  sc      f2  CREATE FUNCTION sc.f2(STRING)
                     RETURNS STRING
                     VOLATILE
                     NOT LEAKPROOF
@@ -1504,7 +1504,7 @@ FROM "".crdb_internal.create_function_statements
 WHERE function_name IN ('f', 'f2', 'f_cross_db')
 ORDER BY function_id;
 ----
-test           public  f           CREATE FUNCTION public.f(IN INT8)
+test           public  f           CREATE FUNCTION public.f(INT8)
                                      RETURNS INT8
                                      VOLATILE
                                      NOT LEAKPROOF
@@ -1513,7 +1513,7 @@ test           public  f           CREATE FUNCTION public.f(IN INT8)
                                      AS $$
                                      SELECT 1;
                                    $$
-test           public  f           CREATE FUNCTION public.f(IN STRING, IN b INT8)
+test           public  f           CREATE FUNCTION public.f(STRING, b INT8)
                                      RETURNS STRING
                                      IMMUTABLE
                                      LEAKPROOF
@@ -1522,7 +1522,7 @@ test           public  f           CREATE FUNCTION public.f(IN STRING, IN b INT8
                                      AS $$
                                      SELECT 'hello';
                                    $$
-test           sc      f2          CREATE FUNCTION sc.f2(IN STRING)
+test           sc      f2          CREATE FUNCTION sc.f2(STRING)
                                      RETURNS STRING
                                      VOLATILE
                                      NOT LEAKPROOF
@@ -1589,17 +1589,17 @@ FROM crdb_internal.create_procedure_statements
 WHERE procedure_name IN ('p', 'p2')
 ORDER BY procedure_id;
 ----
-104  test  105  public  137  p   CREATE PROCEDURE public.p(IN INT8)
+104  test  105  public  137  p   CREATE PROCEDURE public.p(INT8)
                                    LANGUAGE SQL
                                    AS $$
                                    SELECT 1;
                                  $$
-104  test  105  public  138  p   CREATE PROCEDURE public.p(IN STRING, IN b INT8)
+104  test  105  public  138  p   CREATE PROCEDURE public.p(STRING, b INT8)
                                    LANGUAGE SQL
                                    AS $$
                                    SELECT 'hello';
                                  $$
-104  test  140  sc      141  p2  CREATE PROCEDURE sc.p2(IN STRING)
+104  test  140  sc      141  p2  CREATE PROCEDURE sc.p2(STRING)
                                    LANGUAGE SQL
                                    AS $$
                                    SELECT 'hello';
@@ -1619,17 +1619,17 @@ FROM "".crdb_internal.create_procedure_statements
 WHERE procedure_name IN ('p', 'p2', 'p_cross_db')
 ORDER BY procedure_id;
 ----
-104  test           105  public  137  p           CREATE PROCEDURE public.p(IN INT8)
+104  test           105  public  137  p           CREATE PROCEDURE public.p(INT8)
                                                     LANGUAGE SQL
                                                     AS $$
                                                     SELECT 1;
                                                   $$
-104  test           105  public  138  p           CREATE PROCEDURE public.p(IN STRING, IN b INT8)
+104  test           105  public  138  p           CREATE PROCEDURE public.p(STRING, b INT8)
                                                     LANGUAGE SQL
                                                     AS $$
                                                     SELECT 'hello';
                                                   $$
-104  test           140  sc      141  p2          CREATE PROCEDURE sc.p2(IN STRING)
+104  test           140  sc      141  p2          CREATE PROCEDURE sc.p2(STRING)
                                                     LANGUAGE SQL
                                                     AS $$
                                                     SELECT 'hello';

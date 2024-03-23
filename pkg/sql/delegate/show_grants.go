@@ -265,12 +265,9 @@ SELECT database_name,
 			if err != nil {
 				return nil, err
 			}
-			signatureTypes, err := fn.SignatureTypes(d.ctx, d.catalog)
-			if err != nil {
-				return nil, err
-			}
 			ol, err := fd.MatchOverload(
-				signatureTypes, fn.FuncName.Schema(), &d.evalCtx.SessionData().SearchPath, routineType,
+				d.ctx, d.catalog, &fn, &d.evalCtx.SessionData().SearchPath,
+				routineType, false, /* inDropContext */
 			)
 			if err != nil {
 				return nil, err
