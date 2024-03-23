@@ -418,6 +418,17 @@ message AmbiguousResultError {
   reserved 2;
 }
 
+// A ProxyFailedError is used to transmit a send error over the wire between a
+// proxy node and its final destination. The originator needs to handle
+// different types of SendErrors differently depending on both the type of the
+// error (specifically whether the error happened after the request started but
+// before we received a response) and the type of request (specifically whether
+// the request included a commit).
+message ProxyFailedError {
+  // The error that caused the proxy failure.
+  optional errorspb.EncodedError cause = 1 [(gogoproto.nullable) = false];
+}
+
 message ReplicaUnavailableError {
 
   optional roachpb.RangeDescriptor desc = 2 [(gogoproto.nullable) = false];
