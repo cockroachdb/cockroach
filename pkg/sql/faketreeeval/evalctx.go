@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -151,7 +152,7 @@ type DummyStreamManagerFactory struct{}
 
 // GetReplicationStreamManager implements the eval.StreamManagerFactory interface.
 func (smf *DummyStreamManagerFactory) GetReplicationStreamManager(
-	ctx context.Context, requireLicense bool,
+	ctx context.Context,
 ) (eval.ReplicationStreamManager, error) {
 	return nil, errors.WithStack(errors.New("Stream manager factory not implemented"))
 }
@@ -349,6 +350,16 @@ func (*DummyEvalPlanner) PLpgSQLFetchCursor(
 	context.Context, *tree.CursorStmt,
 ) (tree.Datums, error) {
 	return nil, errors.WithStack(errEvalPlanner)
+}
+
+func (p *DummyEvalPlanner) StartHistoryRetentionJob(
+	ctx context.Context, desc string, protectTS hlc.Timestamp, expiration time.Duration,
+) (jobspb.JobID, error) {
+	return 0, errors.WithStack(errEvalPlanner)
+}
+
+func (p *DummyEvalPlanner) ExtendHistoryRetention(ctx context.Context, id jobspb.JobID) error {
+	return errors.WithStack(errEvalPlanner)
 }
 
 var _ eval.Planner = &DummyEvalPlanner{}

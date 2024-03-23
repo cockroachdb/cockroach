@@ -8593,6 +8593,68 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			CalledOnNullInput: true,
 		},
 	),
+	"crdb_internal.protect_cluster": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategoryMigrations,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "timestamp", Typ: types.Decimal},
+				{Name: "expiration_window", Typ: types.Interval},
+				{Name: "description", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				tsDec := tree.MustBeDDecimal(args[0])
+				expiration := tree.MustBeDInterval(args[1])
+				desc := string(tree.MustBeDString(args[2]))
+
+				if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
+					syntheticprivilege.GlobalPrivilegeObject,
+					privilege.REPLICATION); err != nil {
+					return nil, err
+				}
+
+				timestamp, err := hlc.DecimalToHLC(&tsDec.Decimal)
+				if err != nil {
+					return nil, err
+				}
+				jobID, err := evalCtx.Planner.StartHistoryRetentionJob(ctx, desc, timestamp,
+					time.Duration(expiration.Duration.Nanos()))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(jobID)), nil
+			},
+			Info:       `This function is used to create a cluster-wide PTS record and related job`,
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.extend_cluster_protection": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategoryMigrations,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "job_id", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
+					syntheticprivilege.GlobalPrivilegeObject,
+					privilege.REPLICATION); err != nil {
+					return nil, err
+				}
+
+				jobID := jobspb.JobID(tree.MustBeDInt(args[0]))
+				return tree.DVoidDatum, evalCtx.Planner.ExtendHistoryRetention(ctx, jobID)
+			},
+			Info:       `This function is used to extend the life of a cluster-wide PTS record`,
+			Volatility: volatility.Volatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
