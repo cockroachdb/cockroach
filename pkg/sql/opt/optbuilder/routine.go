@@ -125,7 +125,9 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	b.semaCtx.Properties = originalProps
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
-		panic(errors.AssertionFailedf("expected FuncExpr"))
+		panic(pgerror.Newf(pgcode.WrongObjectType,
+			"%s is not a procedure", c.Proc.Func.ReferenceByName.String(),
+		))
 	}
 
 	// Resolve the procedure reference.
@@ -147,6 +149,15 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 			),
 			"To call a function, use SELECT.",
 		))
+	}
+	if b.insideSQLRoutine {
+		for _, p := range o.RoutineParams {
+			if tree.IsOutParamClass(p.Class) {
+				panic(pgerror.New(pgcode.FeatureNotSupported,
+					"calling procedures with output arguments is not supported in SQL functions",
+				))
+			}
+		}
 	}
 
 	// Check for execution privileges.
@@ -312,19 +323,21 @@ func (b *Builder) buildRoutine(
 		body = make([]memo.RelExpr, len(stmts))
 		bodyProps = make([]*physical.Required, len(stmts))
 
-		for i := range stmts {
-			stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
-			expr, physProps := stmtScope.expr, stmtScope.makePhysicalProps()
+		b.withinSQLRoutine(func() {
+			for i := range stmts {
+				stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+				expr, physProps := stmtScope.expr, stmtScope.makePhysicalProps()
 
-			// The last statement produces the output of the UDF.
-			if i == len(stmts)-1 {
-				finishResolveType(stmtScope)
-				expr, physProps, isMultiColDataSource =
-					b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
+				// The last statement produces the output of the UDF.
+				if i == len(stmts)-1 {
+					finishResolveType(stmtScope)
+					expr, physProps, isMultiColDataSource =
+						b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
+				}
+				body[i] = expr
+				bodyProps[i] = physProps
 			}
-			body[i] = expr
-			bodyProps[i] = physProps
-		}
+		})
 
 		if b.verboseTracing {
 			bodyStmts = make([]string, len(stmts))
@@ -481,4 +494,12 @@ func (b *Builder) finishBuildLastStmt(
 		}
 	}
 	return expr, physProps, isMultiColDataSource
+}
+
+func (b *Builder) withinSQLRoutine(fn func()) {
+	defer func(origValue bool) {
+		b.insideSQLRoutine = origValue
+	}(b.insideSQLRoutine)
+	b.insideSQLRoutine = true
+	fn()
 }

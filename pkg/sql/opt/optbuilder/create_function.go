@@ -294,29 +294,31 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if err != nil {
 			panic(err)
 		}
-		for i, stmt := range stmts {
-			// Add statement ast into CreateRoutine node for logging purpose, and set
-			// the annotations for this statement so names can be resolved.
-			cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
-			ann := tree.MakeAnnotations(stmt.NumAnnotations)
-			cf.BodyAnnotations = append(cf.BodyAnnotations, &ann)
+		b.withinSQLRoutine(func() {
+			for i, stmt := range stmts {
+				// Add statement ast into CreateRoutine node for logging purpose, and set
+				// the annotations for this statement so names can be resolved.
+				cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
+				ann := tree.MakeAnnotations(stmt.NumAnnotations)
+				cf.BodyAnnotations = append(cf.BodyAnnotations, &ann)
 
-			// The defer logic will reset the annotations to the old value.
-			b.semaCtx.Annotations = ann
-			b.evalCtx.Annotations = &ann
+				// The defer logic will reset the annotations to the old value.
+				b.semaCtx.Annotations = ann
+				b.evalCtx.Annotations = &ann
 
-			// We need to disable stable function folding because we want to catch the
-			// volatility of stable functions. If folded, we only get a scalar and
-			// lose the volatility.
-			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
-				stmtScope = b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
-			})
-			checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
+				// We need to disable stable function folding because we want to catch the
+				// volatility of stable functions. If folded, we only get a scalar and
+				// lose the volatility.
+				b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+					stmtScope = b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+				})
+				checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
 
-			// Format the statements with qualified datasource names.
-			formatFuncBodyStmt(fmtCtx, stmt.AST, language, i > 0 /* newLine */)
-			afterBuildStmt()
-		}
+				// Format the statements with qualified datasource names.
+				formatFuncBodyStmt(fmtCtx, stmt.AST, language, i > 0 /* newLine */)
+				afterBuildStmt()
+			}
+		})
 	case tree.RoutineLangPLpgSQL:
 		if cf.ReturnType != nil && cf.ReturnType.SetOf {
 			panic(unimplemented.NewWithIssueDetail(105240,
