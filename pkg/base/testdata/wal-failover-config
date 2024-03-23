@@ -1,0 +1,29 @@
+parse
+among-stores
+----
+among-stores
+
+parse
+disabled
+disabled,prev_path=foo
+----
+disabled
+disabled,prev_path=foo
+
+parse
+path=/foo
+path=/foo,prev_path=/bar
+----
+path=/foo
+path=/foo,prev_path=/bar
+
+parse
+disabled,path=foo
+among-stores,path=foo
+among-stores,prev_path=foo
+garbage
+----
+err: invalid disabled --wal-failover setting: disabled,path=foo expect disabled[,prev_path=<prev_path>]
+err: invalid --wal-failover setting: among-stores,path=foo (possible values: disabled, among-stores, path=<path>)
+err: invalid --wal-failover setting: among-stores,prev_path=foo (possible values: disabled, among-stores, path=<path>)
+err: invalid --wal-failover setting: garbage (possible values: disabled, among-stores, path=<path>)

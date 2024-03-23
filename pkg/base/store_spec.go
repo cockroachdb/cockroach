@@ -43,10 +43,10 @@ import (
 // hard coded to 640MiB.
 const MinimumStoreSize = 10 * 64 << 20
 
-// GetAbsoluteStorePath takes a (possibly relative) and returns the absolute path.
+// GetAbsoluteFSPath takes a (possibly relative) and returns the absolute path.
 // Returns an error if the path begins with '~' or Abs fails.
 // 'fieldName' is used in error strings.
-func GetAbsoluteStorePath(fieldName string, p string) (string, error) {
+func GetAbsoluteFSPath(fieldName string, p string) (string, error) {
 	if p[0] == '~' {
 		return "", fmt.Errorf("%s cannot start with '~': %s", fieldName, p)
 	}
