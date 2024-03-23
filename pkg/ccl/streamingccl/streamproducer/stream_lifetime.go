@@ -151,14 +151,19 @@ func StartReplicationProducerJob(
 // StartHistoryProtectionJob replication stream producer job
 // responsible for managing a cluster-level protected timestamp.
 func StartHistoryProtectionJob(
-	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, desc string, protectTime hlc.Timestamp,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	txn isql.Txn,
+	desc string,
+	protectTime hlc.Timestamp,
+	expiration time.Duration,
 ) (jobspb.JobID, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	registry := execConfig.JobRegistry
 	ptsID := uuid.MakeV4()
 
 	jr := makeJobRecordForClusterPTSRetention(registry,
-		defaultExpirationWindow,
+		expiration,
 		evalCtx.SessionData().User(),
 		desc,
 		ptsID)

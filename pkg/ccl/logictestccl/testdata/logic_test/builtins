@@ -11,12 +11,15 @@ statement ok
 SET CLUSTER SETTING jobs.registry.interval.cancel = '10ms'
 
 statement ok
+SET CLUSTER SETTING physical_replication.producer.stream_liveness_track_frequency = '10ms'
+
+statement ok
 GRANT admin TO testuser
 
 user testuser
 
 statement ok
-select crdb_internal.protect_cluster(1709131929793796000.0000000000, 'molt fetch');
+select crdb_internal.protect_cluster(1709131929793796000.0000000000, '24 hours'::interval, 'molt fetch');
 
 query TTT colnames
 select ts as timestamp, meta_type, crdb_internal.pb_to_json( 'cockroach.protectedts.Target', target ) from system.protected_ts_records
@@ -32,6 +35,15 @@ History Retention for molt fetch
 # Cancel the session to force the cleanup the PTS.
 statement ok
 CANCEL JOB (SELECT id FROM system.jobs WHERE job_type = 'REPLICATION STREAM PRODUCER');
+
+# Confirm that the PTS is gone.
+query TTT retry
+select ts as timestamp, meta_type, crdb_internal.pb_to_json( 'cockroach.protectedts.Target', target ) from system.protected_ts_records
+----
+
+# Confirm PTS expires after the given expiration without cancellation.
+statement ok
+select crdb_internal.protect_cluster(1709131929793796000.0000000000, '10ms'::interval, 'molt fetch');
 
 # Confirm that the PTS is gone.
 query TTT retry

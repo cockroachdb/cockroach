@@ -831,7 +831,7 @@ type ReplicationStreamManager interface {
 	// StartHistoryProtectionJob starts a stream replication job
 	// configured to protect the entire cluster at the given
 	// timestamp rather than a particular tenant.
-	StartHistoryProtectionJob(ctx context.Context, desc string, protectTime hlc.Timestamp) (jobspb.JobID, error)
+	StartHistoryProtectionJob(ctx context.Context, desc string, protectTime hlc.Timestamp, expiration time.Duration) (jobspb.JobID, error)
 
 	// SetupSpanConfigsStream creates and plans a replication stream to stream the span config updates for a specific tenant.
 	SetupSpanConfigsStream(ctx context.Context, tenantName roachpb.TenantName) (ValueGenerator, error)
