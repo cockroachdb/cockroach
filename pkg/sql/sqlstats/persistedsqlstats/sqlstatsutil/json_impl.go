@@ -132,6 +132,18 @@ func (s *aggregatedMetadata) jsonFields() jsonFields {
 	}
 }
 
+func (s *aggregatedMetadata) jsonAggregatedFields() jsonFields {
+	return jsonFields{
+		{"db", (*stringArray)(&s.Databases)},
+		{"appNames", (*stringArray)(&s.AppNames)},
+		{"distSQLCount", (*jsonInt)(&s.DistSQLCount)},
+		{"fullScanCount", (*jsonInt)(&s.FullScanCount)},
+		{"implicitTxn", (*jsonBool)(&s.ImplicitTxn)},
+		{"vecCount", (*jsonInt)(&s.VecCount)},
+		{"totalCount", (*jsonInt)(&s.TotalCount)},
+	}
+}
+
 type int64Array []int64
 
 func (a *int64Array) decodeJSON(js json.JSON) error {
