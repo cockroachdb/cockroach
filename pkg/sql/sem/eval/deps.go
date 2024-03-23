@@ -435,6 +435,14 @@ type Planner interface {
 	// AutoCommit indicates whether the Planner has flagged the current statement
 	// as eligible for transaction auto-commit.
 	AutoCommit() bool
+
+	// StartHistoryRetentionJob creates a cluster-level protected timestamp
+	// and a job that owns it.
+	StartHistoryRetentionJob(ctx context.Context, desc string, protectTS hlc.Timestamp, expiration time.Duration) (jobspb.JobID, error)
+
+	// ExtendHistoryRetentionJob extends the lifetime of a a cluster-level
+	// protected timestamp.
+	ExtendHistoryRetention(ctx context.Context, id jobspb.JobID) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
