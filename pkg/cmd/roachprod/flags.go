@@ -199,6 +199,8 @@ func initFlags() {
 		"encrypt", startOpts.EncryptedStores, "start nodes with encryption at rest turned on")
 	startCmd.Flags().BoolVar(&startOpts.SkipInit,
 		"skip-init", startOpts.SkipInit, "skip initializing the cluster")
+	startCmd.Flags().BoolVar(&startOpts.IsRestart,
+		"restart", startOpts.IsRestart, "restart an existing cluster (skips serial start and init)")
 	startCmd.Flags().IntVar(&startOpts.InitTarget,
 		"init-target", startOpts.InitTarget, "node on which to run initialization")
 	startCmd.Flags().IntVar(&startOpts.StoreCount,

@@ -141,6 +141,10 @@ type StartOpts struct {
 	VirtualClusterLocation string // where separate process virtual clusters will be started
 	SQLInstance            int
 	StorageCluster         *SyncedCluster
+
+	// IsRestart allows skipping steps that are used during initial start like
+	// initialization and sequential node starts.
+	IsRestart bool
 }
 
 func (s *StartOpts) IsVirtualCluster() bool {
@@ -427,6 +431,13 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 
 	// Start cockroach processes and `init` cluster, if necessary.
 	if startOpts.Target != StartSharedProcessForVirtualCluster {
+		if startOpts.IsRestart {
+			l.Printf("%s (%s): starting cockroach processes", c.Name, startOpts.VirtualClusterName)
+			return c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay("starting nodes"), func(ctx context.Context, node Node) (*RunResultDetails, error) {
+				return c.startNodeWithResult(ctx, l, node, startOpts)
+			})
+		}
+
 		l.Printf("%s (%s): starting cockroach processes", c.Name, startOpts.VirtualClusterName)
 		// For single node non-virtual clusters, `init` can be skipped
 		// because during the c.StartNode call above, the
@@ -684,12 +695,12 @@ func (c *SyncedCluster) ExecSQL(
 	return results, err
 }
 
-func (c *SyncedCluster) startNode(
+func (c *SyncedCluster) startNodeWithResult(
 	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
-) error {
+) (*RunResultDetails, error) {
 	startCmd, err := c.generateStartCmd(ctx, l, node, startOpts)
 	if err != nil {
-		return err
+		return newRunResultDetails(node, err), err
 	}
 	var uploadCmd string
 	if c.IsLocal() {
@@ -702,7 +713,7 @@ func (c *SyncedCluster) startNode(
 	uploadOpts.stdin = strings.NewReader(startCmd)
 	res, err = c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
 	if err != nil || res.Err != nil {
-		return errors.CombineErrors(err, res.Err)
+		return res, err
 	}
 
 	var runScriptCmd string
@@ -710,7 +721,13 @@ func (c *SyncedCluster) startNode(
 		runScriptCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 	runScriptCmd += "./cockroach.sh"
-	res, err = c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-start-script"))
+	return c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-start-script"))
+}
+
+func (c *SyncedCluster) startNode(
+	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
+) error {
+	res, err := c.startNodeWithResult(ctx, l, node, startOpts)
 	return errors.CombineErrors(err, res.Err)
 }
 
