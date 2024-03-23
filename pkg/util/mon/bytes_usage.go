@@ -206,10 +206,6 @@ type BytesMonitor struct {
 		// current monitor's lock.
 		head *BytesMonitor
 
-		// numChildren is the number of children of this BytesMonitor (i.e. the
-		// number of nodes in the linked list).
-		numChildren int
-
 		// stopped indicates whether this monitor has been stopped.
 		stopped bool
 	}
@@ -341,7 +337,10 @@ func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState
 	// Note that we cannot call traverseTree on the children while holding mm's
 	// lock since it could lead to deadlocks. Instead, we store all children as
 	// of right now, and then export them after unlocking ourselves.
-	children := make([]*BytesMonitor, 0, mm.mu.numChildren)
+	//
+	//gcassert:noescape
+	var childrenAlloc [8]*BytesMonitor
+	children := childrenAlloc[:0]
 	for c := mm.mu.head; c != nil; c = c.parentMu.nextSibling {
 		children = append(children, c)
 	}
@@ -511,7 +510,6 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 					mm.parentMu.nextSibling = s
 				}
 				pool.mu.head = mm
-				pool.mu.numChildren++
 			}()
 		}
 		effectiveLimit = pool.limit
@@ -631,7 +629,6 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 			if next != nil {
 				next.parentMu.prevSibling = prev
 			}
-			parent.mu.numChildren--
 			// Lose the references to siblings to aid GC.
 			mm.parentMu.prevSibling, mm.parentMu.nextSibling = nil, nil
 		}()
