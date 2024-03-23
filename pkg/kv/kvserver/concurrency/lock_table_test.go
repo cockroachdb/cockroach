@@ -2026,6 +2026,44 @@ func TestLockStateSafeFormatMultipleLockHolders(t *testing.T) {
 		redact.Sprint(kl).Redact())
 }
 
+// TestLockStateSafeFormatWaitQueue ensures requests waiting in a lock's wait
+// queue are formatted correctly.
+func TestKeyLocksSafeFormatWaitQueue(t *testing.T) {
+	kl := &keyLocks{
+		id:     1,
+		key:    []byte("KEY"),
+		endKey: []byte("END"),
+	}
+	holder := &txnLock{}
+	kl.holders.PushBack(holder)
+	holder.txn = &enginepb.TxnMeta{ID: uuid.NamespaceDNS}
+	holder.unreplicatedInfo.init()
+	holder.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 123, Logical: 7}
+	require.NoError(t, holder.unreplicatedInfo.acquire(lock.Shared, 3))
+	waiter := queuedGuard{
+		guard:  newLockTableGuardImpl(),
+		active: true,
+		order:  queueOrder{isPromoting: true, reqSeqNum: 11},
+		mode:   lock.MakeModeIntent(hlc.Timestamp{WallTime: 123, Logical: 7}),
+	}
+	waiter.guard.txn = &roachpb.Transaction{
+		TxnMeta: enginepb.TxnMeta{ID: uuid.NamespaceDNS},
+	}
+	kl.queuedLockingRequests.PushBack(&waiter)
+	require.EqualValues(t,
+		" lock: ‹\"KEY\"›\n"+
+			"  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 3)]\n"+
+			"   queued locking requests:\n"+
+			"    active: true req: 11 promoting: true, strength: Intent, txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\n",
+		redact.Sprint(kl))
+	require.EqualValues(t,
+		" lock: ‹×›\n"+
+			"  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 3)]\n"+
+			"   queued locking requests:\n"+
+			"    active: true req: 11 promoting: true, strength: Intent, txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\n",
+		redact.Sprint(kl).Redact())
+}
+
 // TestElideWaitingStateUpdatesConsidersAllFields ensures all fields in the
 // waitingState struct have been considered for inclusion/non-inclusion in the
 // logic of canElideWaitingStateUpdate. The test doesn't check if the
