@@ -11,6 +11,11 @@ export ROACHPROD_DNS="drt.crdb.io"
 
 case $1 in
   "start")
+    if [[ "$*" != *"--restart"* ]]; then
+      # implied for long-lived DRT clusters; avoid on init w/ --restart=false.
+      shift
+      set -- start "--restart" "$@"
+    fi
     if [[ "$*" != *"--secure"* ]]; then
       echo "--secure is implied when starting DRT clusters, adding it"
       set -- "$@" "--secure"
