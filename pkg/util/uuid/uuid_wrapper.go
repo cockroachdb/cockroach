@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Short returns the first eight characters of the output of String().
@@ -33,6 +34,9 @@ func (s ShortStringer) String() string {
 	return UUID(s).Short()
 }
 
+func (s ShortStringer) SafeValue() {}
+
+var _ redact.SafeValue = ShortStringer{}
 var _ fmt.Stringer = ShortStringer{}
 
 // Equal returns true iff the receiver equals the argument.

@@ -100,6 +100,11 @@ var (
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
 	// package circle import.
 	PrettyPrintRange func(start, end Key, maxChars int) string
+
+	// SafeFormatRange redacts a pretty printed key key range. It's
+	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
+	// package circle import.
+	SafeFormatRange func(w redact.SafeWriter, start, end Key, maxChars int)
 )
 
 // RKey denotes a Key whose local addressing has been accounted for.
@@ -2319,6 +2324,11 @@ func (s Span) AsRange() interval.Range {
 func (s Span) String() string {
 	const maxChars = math.MaxInt32
 	return PrettyPrintRange(s.Key, s.EndKey, maxChars)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s Span) SafeFormat(w redact.SafePrinter, _ rune) {
+	SafeFormatRange(w, s.Key, s.EndKey, math.MaxInt32)
 }
 
 // SplitOnKey returns two spans where the left span has EndKey and right span

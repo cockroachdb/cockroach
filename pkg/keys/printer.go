@@ -786,6 +786,7 @@ func init() {
 	roachpb.PrettyPrintKey = PrettyPrint
 	roachpb.SafeFormatKey = SafeFormat
 	roachpb.PrettyPrintRange = PrettyPrintRange
+	roachpb.SafeFormatRange = SafeFormatRange
 	lockTablePrintLockedKey = safeFormatInternal
 
 	// KeyDict drives the pretty-printing and pretty-scanning of the key space.
@@ -877,20 +878,29 @@ func init() {
 // It prints at most maxChars, truncating components as needed. See
 // TestPrettyPrintRange for some examples.
 func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
-	var b bytes.Buffer
+	return safeFormatRangeInternal(start, end, maxChars).StripMarkers()
+}
+
+// SafeFormatRange is the redaction-safe version of PrettyPrintRange.
+func SafeFormatRange(w redact.SafeWriter, start, end roachpb.Key, maxChars int) {
+	w.Print(safeFormatRangeInternal(start, end, maxChars))
+}
+
+func safeFormatRangeInternal(start, end roachpb.Key, maxChars int) redact.RedactableString {
+	var b redact.StringBuilder
 	if maxChars < 8 {
 		maxChars = 8
 	}
-	prettyStart := safeFormatInternal(nil /* valDirs */, start, DontQuoteRaw).StripMarkers()
+	prettyStart := safeFormatInternal(nil /* valDirs */, start, DontQuoteRaw)
 	if len(end) == 0 {
 		if len(prettyStart) <= maxChars {
 			return prettyStart
 		}
 		copyEscape(&b, prettyStart[:maxChars-1])
 		b.WriteRune('…')
-		return b.String()
+		return b.RedactableString()
 	}
-	prettyEnd := safeFormatInternal(nil /* valDirs */, end, DontQuoteRaw).StripMarkers()
+	prettyEnd := safeFormatInternal(nil /* valDirs */, end, DontQuoteRaw)
 	i := 0
 	// Find the common prefix.
 	for ; i < len(prettyStart) && i < len(prettyEnd) && prettyStart[i] == prettyEnd[i]; i++ {
@@ -903,12 +913,12 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 		}
 		copyEscape(&b, prettyStart[:i])
 		b.WriteRune('…')
-		return b.String()
+		return b.RedactableString()
 	}
-	b.WriteString(prettyStart[:i])
+	b.Print(prettyStart[:i])
 	remaining := (maxChars - i - 3) / 2
 
-	printTrunc := func(b *bytes.Buffer, what string, maxChars int) {
+	printTrunc := func(b *redact.StringBuilder, what redact.RedactableString, maxChars int) {
 		if len(what) <= maxChars {
 			copyEscape(b, what)
 		} else {
@@ -923,12 +933,12 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 	printTrunc(&b, prettyEnd[i:], remaining)
 	b.WriteByte('}')
 
-	return b.String()
+	return b.RedactableString()
 }
 
 // copyEscape copies the string to the buffer, and avoids writing
 // invalid UTF-8 sequences and control characters.
-func copyEscape(buf *bytes.Buffer, s string) {
+func copyEscape(buf *redact.StringBuilder, s redact.RedactableString) {
 	buf.Grow(len(s))
 	// k is the index in s before which characters have already
 	// been copied into buf.
@@ -938,8 +948,8 @@ func copyEscape(buf *bytes.Buffer, s string) {
 		if c < utf8.RuneSelf && strconv.IsPrint(rune(c)) {
 			continue
 		}
-		buf.WriteString(s[k:i])
-		l, width := utf8.DecodeRuneInString(s[i:])
+		buf.Print(s[k:i])
+		l, width := utf8.DecodeRuneInString(string(s[i:]))
 		if l == utf8.RuneError || l < 0x20 {
 			const hex = "0123456789abcdef"
 			buf.WriteByte('\\')
@@ -952,5 +962,5 @@ func copyEscape(buf *bytes.Buffer, s string) {
 		k = i + width
 		i += width - 1
 	}
-	buf.WriteString(s[k:])
+	buf.Print(s[k:])
 }

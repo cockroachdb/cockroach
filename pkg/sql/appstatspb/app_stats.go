@@ -14,10 +14,15 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/redact"
 )
 
 // StmtFingerprintID is the type of a Statement's fingerprint ID.
 type StmtFingerprintID uint64
+
+func (StmtFingerprintID) SafeValue() {}
+
+var _ redact.SafeValue = StmtFingerprintID(0)
 
 // ConstructStatementFingerprintID constructs an ID by hashing query with
 // constants redacted, its database, and if it was part of an

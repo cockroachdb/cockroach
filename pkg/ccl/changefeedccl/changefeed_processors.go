@@ -1719,14 +1719,15 @@ func maybeLogBehindSpan(
 	now := timeutil.Now()
 	resolvedBehind := now.Sub(frontierTS.GoTime())
 
+	descStr := log.SafeOperational(description)
 	if frontierChanged && slowLogEveryN.ShouldProcess(now) {
 		log.Infof(ctx, "%s new resolved timestamp %s is behind by %s",
-			description, frontierTS, resolvedBehind)
+			descStr, frontierTS, resolvedBehind)
 	}
 
 	if slowLogEveryN.ShouldProcess(now) {
 		s := frontier.PeekFrontierSpan()
-		log.Infof(ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
+		log.Infof(ctx, "%s span %s is behind by %s", descStr, s, resolvedBehind)
 	}
 }
 

@@ -735,7 +735,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			// If the client is trying to do anything other than rollback, it is
 			// unexpected for it to find the transaction already in a txnFinalized
 			// state. This may be a bug, so log a stack trace.
-			stack := string(debug.Stack())
+			stack := redact.Sprint(string(debug.Stack()))
 			log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
 		}
 		reason := kvpb.TransactionStatusError_REASON_UNKNOWN

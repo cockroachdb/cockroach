@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -60,7 +61,7 @@ func (t *TimeoutError) SafeFormatError(p errors.Printer) (next error) {
 	// timeout set by RunWithTimeout. It is also possible for the operation to run
 	// for much longer than the timeout, e.g. if the callee does not check the
 	// context in a timely manner. The error message must make this clear.
-	p.Printf("operation %q timed out", t.operation)
+	p.Printf("operation %q timed out", redact.SafeString(t.operation))
 	if t.took != 0 {
 		p.Printf(" after %s", t.took.Round(time.Millisecond))
 	}
