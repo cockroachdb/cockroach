@@ -1005,15 +1005,34 @@ which use 'cockroach-data-tenant-X' for tenant 'X')
 		Name:   "wal-failover",
 		EnvVar: "COCKROACH_WAL_FAILOVER",
 		Description: `
-Configures the use and behavior of WAL failover. Defaults to "disabled".
-The value "among-stores" enables automatic failover to another store's
-data directory if a WAL write does not complete within the configured
-threshold. For example:
+Configures the use and behavior of WAL failover. WAL failover enables
+automatic failover to another directory if a WAL write does not complete
+within the configured threshold. Defaults to "disabled". Possible values
+depend on the number of stores a node is configured to use.
+
+If a node has multiple stores, the value "among-stores" enables automatic
+failover to another store's data directory. CockroachDB will automatically
+assign each store a secondary to serve as its WAL failover destination.
+For example:
 <PRE>
 
   --wal-failover=among-stores
 
 </PRE>
+
+If a node has a single store, the value "path=<path>" enables automatic
+failover to the provided path. After this setting is used, changing the
+configuration to a new path or disabling requires providing the previous
+path as ",prev_path=<path>". For example:
+
+<PRE>
+
+    --wal-failover=path=/mnt/data2
+    --wal-failover=path=/mnt/data3,prev_path=/mnt/data2
+    --wal-failover=disabled,prev_path=/mnt/data3
+
+</PRE>
+
 See the storage.wal_failover.unhealthy_op_threshold cluster setting.
 `,
 	}
