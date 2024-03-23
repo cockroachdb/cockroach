@@ -51,6 +51,10 @@ func (d *callNode) startExec(params runParams) error {
 		}
 		return nil
 	}
+	if res == tree.DNull {
+		// No rows were produced by the last statement.
+		return nil
+	}
 	tuple, ok := tree.AsDTuple(res)
 	if !ok {
 		return errors.AssertionFailedf("expected a tuple, got %T", res)
