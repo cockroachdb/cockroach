@@ -3141,20 +3141,21 @@ func TestMergeQueueWithExternalFiles(t *testing.T) {
 			size, err := extStore.Size(ctx, fileName)
 			require.NoError(t, err)
 
-			_, _, err = s.DB().AddRemoteSSTable(ctx, roachpb.Span{
+			err = s.DB().LinkExternalSSTable(ctx, roachpb.Span{
 				Key:    writeKey,
 				EndKey: writeKey.Next(),
-			}, kvpb.AddSSTableRequest_RemoteFile{
+			}, kvpb.LinkExternalSSTableRequest_ExternalFile{
 				Locator:                 externURI,
 				Path:                    fileName,
 				ApproximatePhysicalSize: uint64(size),
 				BackingFileSize:         uint64(size),
-			}, &enginepb.MVCCStats{
-				ContainsEstimates: 1,
-				KeyBytes:          2,
-				ValBytes:          10,
-				KeyCount:          2,
-				LiveCount:         2,
+				MVCCStats: &enginepb.MVCCStats{
+					ContainsEstimates: 1,
+					KeyBytes:          2,
+					ValBytes:          10,
+					KeyCount:          2,
+					LiveCount:         2,
+				},
 			}, s.DB().Clock().Now())
 			require.NoError(t, err)
 

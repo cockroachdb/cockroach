@@ -647,71 +647,6 @@ func addSSTablePreApply(
 	index kvpb.RaftIndex,
 	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
 ) bool {
-	if sst.RemoteFilePath != "" {
-		log.Infof(ctx,
-			"EXPERIMENTAL AddSSTABLE EXTERNAL %s (size %d, span %s) from %s (size %d) at rewrite ts %s, synth prefix %s",
-			sst.RemoteFilePath,
-			sst.ApproximatePhysicalSize,
-			sst.Span,
-			sst.RemoteFileLoc,
-			sst.BackingFileSize,
-			sst.RemoteRewriteTimestamp,
-			sst.RemoteSyntheticPrefix,
-		)
-
-		start := storage.EngineKey{Key: sst.Span.Key}
-		// NB: sst.Span.EndKey may be nil if the span represents a single key. In
-		// that case, we produce an inclusive end bound equal to the start.
-		// Otherwise we produce an exclusive end bound.
-		end := start
-		endInclusive := true
-		if sst.Span.EndKey != nil {
-			end = storage.EngineKey{Key: sst.Span.EndKey}
-			endInclusive = false
-		}
-		var syntheticSuffix []byte
-		if sst.RemoteRewriteTimestamp.IsSet() {
-			syntheticSuffix = storage.EncodeMVCCTimestampSuffix(sst.RemoteRewriteTimestamp)
-		}
-		var syntheticPrefix []byte
-		if len(sst.RemoteSyntheticPrefix) > 0 {
-			syntheticPrefix = sst.RemoteSyntheticPrefix
-		}
-
-		externalFile := pebble.ExternalFile{
-			Locator:           remote.Locator(sst.RemoteFileLoc),
-			ObjName:           sst.RemoteFilePath,
-			Size:              sst.ApproximatePhysicalSize,
-			StartKey:          start.Encode(),
-			EndKey:            end.Encode(),
-			EndKeyIsInclusive: endInclusive,
-
-			SyntheticSuffix: syntheticSuffix,
-			SyntheticPrefix: syntheticPrefix,
-			// TODO(dt): pass pebble the backing file size to avoid a stat call.
-
-			// TODO(msbutler): I guess we need to figure out if the backing external
-			// file has point or range keys in the target span.
-			HasPointKey: true,
-		}
-		tBegin := timeutil.Now()
-		defer func() {
-			if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
-				log.Infof(ctx,
-					"ingesting SST of size %s at index %d took %.2fs",
-					humanizeutil.IBytes(int64(len(sst.Data))), index, dur.Seconds(),
-				)
-			}
-		}()
-
-		_, ingestErr := env.eng.IngestExternalFiles(ctx, []pebble.ExternalFile{externalFile})
-		if ingestErr != nil {
-			log.Fatalf(ctx, "while ingesting %s: %v", sst.RemoteFilePath, ingestErr)
-		}
-		// Adding without modification succeeded, no copy necessary.
-		log.Eventf(ctx, "ingested SSTable at index %d, term %d: external %s", index, term, sst.RemoteFilePath)
-		return false
-	}
 	checksum := util.CRC32(sst.Data)
 
 	if checksum != sst.CRC32 {
@@ -763,6 +698,70 @@ func addSSTablePreApply(
 	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
 
 	return false /* copied */
+}
+
+func linkExternalSStablePreApply(
+	ctx context.Context,
+	env postAddEnv,
+	term kvpb.RaftTerm,
+	index kvpb.RaftIndex,
+	sst kvserverpb.ReplicatedEvalResult_LinkExternalSSTable,
+) {
+	log.Infof(ctx,
+		"EXPERIMENTAL AddSSTABLE EXTERNAL %s (size %d, span %s) from %s (size %d) at rewrite ts %s, synth prefix %s",
+		sst.RemoteFilePath,
+		sst.ApproximatePhysicalSize,
+		sst.Span,
+		sst.RemoteFileLoc,
+		sst.BackingFileSize,
+		sst.RemoteRewriteTimestamp,
+		sst.RemoteSyntheticPrefix,
+	)
+
+	start := storage.EngineKey{Key: sst.Span.Key}
+	// NB: sst.Span.EndKey may be nil if the span represents a single key. In
+	// that case, we produce an inclusive end bound equal to the start.
+	// Otherwise we produce an exclusive end bound.
+	end := start
+	endInclusive := true
+	if sst.Span.EndKey != nil {
+		end = storage.EngineKey{Key: sst.Span.EndKey}
+		endInclusive = false
+	}
+	var syntheticSuffix []byte
+	if sst.RemoteRewriteTimestamp.IsSet() {
+		syntheticSuffix = storage.EncodeMVCCTimestampSuffix(sst.RemoteRewriteTimestamp)
+	}
+	var syntheticPrefix []byte
+	if len(sst.RemoteSyntheticPrefix) > 0 {
+		syntheticPrefix = sst.RemoteSyntheticPrefix
+	}
+
+	externalFile := pebble.ExternalFile{
+		Locator:           remote.Locator(sst.RemoteFileLoc),
+		ObjName:           sst.RemoteFilePath,
+		Size:              sst.ApproximatePhysicalSize,
+		StartKey:          start.Encode(),
+		EndKey:            end.Encode(),
+		EndKeyIsInclusive: endInclusive,
+		SyntheticSuffix:   syntheticSuffix,
+		SyntheticPrefix:   syntheticPrefix,
+		HasPointKey:       true,
+	}
+	tBegin := timeutil.Now()
+	defer func() {
+		if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
+			log.Infof(ctx,
+				"ingesting External SST at index %d took %.2fs", index, dur.Seconds(),
+			)
+		}
+	}()
+
+	_, ingestErr := env.eng.IngestExternalFiles(ctx, []pebble.ExternalFile{externalFile})
+	if ingestErr != nil {
+		log.Fatalf(ctx, "while ingesting %s: %v", sst.RemoteFilePath, ingestErr)
+	}
+	log.Eventf(ctx, "ingested SSTable at index %d, term %d: external %s", index, term, sst.RemoteFilePath)
 }
 
 // ingestViaCopy writes the SST to ingestPath (with rate limiting) and then ingests it

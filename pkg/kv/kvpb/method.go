@@ -139,8 +139,10 @@ const (
 	// AdminScatter moves replicas and leaseholders for a selection of ranges.
 	// Best-effort.
 	AdminScatter
-	// AddSSTable links a file into the RocksDB log-structured merge-tree.
+	// AddSSTable links a file into pebble.
 	AddSSTable
+	// LinkExternallSSTable links an external sst into pebble.
+	LinkExternalSSTable
 	// Migrate updates the range state to conform to a specified cluster
 	// version. It is our main mechanism for phasing out legacy code below Raft.
 	Migrate
