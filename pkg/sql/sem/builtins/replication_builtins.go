@@ -12,7 +12,6 @@ package builtins
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -118,7 +117,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx, true)
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -146,7 +145,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx, true)
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -193,7 +192,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull || args[1] == tree.DNull {
 					return tree.DNull, errors.New("stream_id or frontier_ts cannot be specified with null argument")
 				}
-				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx, true)
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -235,7 +234,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				[]string{"stream_event"},
 			),
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
-				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx, true)
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -261,7 +260,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx, true)
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -297,7 +296,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx, true)
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -332,7 +331,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				[]string{"stream_event"},
 			),
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
-				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx, true)
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -383,42 +382,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 				return &tsDec, err
 			},
 			Info:       "This function reverts the given tenant to a particular timestamp.",
-			Volatility: volatility.Volatile,
-		},
-	),
-	"crdb_internal.protect_cluster": makeBuiltin(
-		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryMigrations,
-			Undocumented: true,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "timestamp", Typ: types.Decimal},
-				{Name: "expiration_window", Typ: types.Interval},
-				{Name: "description", Typ: types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				tsDec := tree.MustBeDDecimal(args[0])
-				expiration := tree.MustBeDInterval(args[1])
-				desc := string(tree.MustBeDString(args[2]))
-
-				timestamp, err := hlc.DecimalToHLC(&tsDec.Decimal)
-				if err != nil {
-					return nil, err
-				}
-				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx, false)
-				if err != nil {
-					return nil, err
-				}
-				jobID, err := mgr.StartHistoryProtectionJob(ctx, desc, timestamp,
-					time.Duration(expiration.Duration.Nanos()))
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDInt(tree.DInt(jobID)), nil
-			},
-			Info:       `This function is used to create a cluster-wide PTS record and related job`,
 			Volatility: volatility.Volatile,
 		},
 	),

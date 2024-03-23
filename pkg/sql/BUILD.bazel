@@ -127,6 +127,7 @@ go_library(
         "grant_revoke_system.go",
         "grant_role.go",
         "group.go",
+        "history_retention_job.go",
         "identify_system.go",
         "index_backfiller.go",
         "index_join.go",

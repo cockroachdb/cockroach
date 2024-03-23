@@ -10,10 +10,8 @@ package streamproducer
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,13 +37,6 @@ func (r *replicationStreamManagerImpl) StartReplicationStream(
 	ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
 	return StartReplicationProducerJob(ctx, r.evalCtx, r.txn, tenantName, req)
-}
-
-// StartHistoryProtectionJob implements streaming.ReplicationStreamManager interface.
-func (r *replicationStreamManagerImpl) StartHistoryProtectionJob(
-	ctx context.Context, desc string, protectTime hlc.Timestamp, expiration time.Duration,
-) (jobspb.JobID, error) {
-	return StartHistoryProtectionJob(ctx, r.evalCtx, r.txn, desc, protectTime, expiration)
 }
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.
@@ -83,11 +74,7 @@ func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	txn isql.Txn,
-	sessionID clusterunique.ID,
-	requireLicense bool,
+	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, sessionID clusterunique.ID,
 ) (eval.ReplicationStreamManager, error) {
 	if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
 		syntheticprivilege.GlobalPrivilegeObject,
@@ -96,13 +83,11 @@ func newReplicationStreamManagerWithPrivilegesCheck(
 	}
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
-	if requireLicense {
-		enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-			execCfg.Settings, "REPLICATION")
-		if enterpriseCheckErr != nil {
-			return nil, pgerror.Wrap(enterpriseCheckErr,
-				pgcode.CCLValidLicenseRequired, "physical replication requires an enterprise license on the primary (and secondary) cluster")
-		}
+	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
+		execCfg.Settings, "REPLICATION")
+	if enterpriseCheckErr != nil {
+		return nil, pgerror.Wrap(enterpriseCheckErr,
+			pgcode.CCLValidLicenseRequired, "physical replication requires an enterprise license on the primary (and secondary) cluster")
 	}
 
 	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn, sessionID: sessionID}, nil

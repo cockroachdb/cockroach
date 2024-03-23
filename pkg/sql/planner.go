@@ -919,9 +919,9 @@ func (p *planner) resetPlanner(
 
 // GetReplicationStreamManager returns a ReplicationStreamManager.
 func (p *planner) GetReplicationStreamManager(
-	ctx context.Context, requireLicense bool,
+	ctx context.Context,
 ) (eval.ReplicationStreamManager, error) {
-	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID, requireLicense)
+	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID)
 }
 
 // GetStreamIngestManager returns a StreamIngestManager.
@@ -993,4 +993,14 @@ func (p *planner) AutoCommit() bool {
 // mustUseLeafTxn returns true if inner plans must use a leaf transaction.
 func (p *planner) mustUseLeafTxn() bool {
 	return atomic.LoadInt32(&p.atomic.innerPlansMustUseLeafTxn) >= 1
+}
+
+func (p *planner) StartHistoryRetentionJob(
+	ctx context.Context, desc string, protectTS hlc.Timestamp, expiration time.Duration,
+) (jobspb.JobID, error) {
+	return StartHistoryRetentionJob(ctx, p.EvalContext(), p.InternalSQLTxn(), desc, protectTS, expiration)
+}
+
+func (p *planner) ExtendHistoryRetention(ctx context.Context, jobID jobspb.JobID) error {
+	return ExtendHistoryRetention(ctx, p.EvalContext(), p.InternalSQLTxn(), jobID)
 }

@@ -17,7 +17,7 @@ import (
 // StreamReplicationStreamLivenessTrackFrequency controls frequency to check
 // the liveness of a streaming replication producer job.
 var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"stream_replication.stream_liveness_track_frequency",
 	"controls how frequent we check for the liveness of a replication stream producer job",
 	time.Minute,
