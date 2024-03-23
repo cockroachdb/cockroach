@@ -57,7 +57,7 @@ CREATE PROCEDURE public.p_int()
   AS $$
   SELECT 1;
 $$
-CREATE PROCEDURE public.p_int(IN INT8)
+CREATE PROCEDURE public.p_int(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 1;
@@ -80,7 +80,7 @@ $$
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE p_func]
 ----
-CREATE PROCEDURE public.p_func(IN INT8)
+CREATE PROCEDURE public.p_func(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 1;
@@ -181,7 +181,7 @@ CREATE PROCEDURE public.p()
   AS $$
   SELECT 1;
 $$
-CREATE PROCEDURE public.p(IN INT8)
+CREATE PROCEDURE public.p(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 2;
@@ -221,7 +221,7 @@ CREATE PROCEDURE sc.p()
   AS $$
   SELECT 3;
 $$
-CREATE PROCEDURE sc.p(IN INT8)
+CREATE PROCEDURE sc.p(INT8)
   LANGUAGE SQL
   AS $$
   SELECT 2;

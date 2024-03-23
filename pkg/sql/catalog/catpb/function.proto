@@ -39,7 +39,7 @@ message Function {
 
   message Param {
     enum Class {
-      UNKNOWN_ARG_CLASS = 0;
+      DEFAULT = 0;
       IN = 1;
       OUT = 2;
       IN_OUT = 3;

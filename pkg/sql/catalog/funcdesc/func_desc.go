@@ -928,6 +928,8 @@ func (desc *immutable) getCreateExprNullInputBehavior() tree.RoutineNullInputBeh
 // tree.RoutineParamClass.
 func ToTreeRoutineParamClass(class catpb.Function_Param_Class) tree.RoutineParamClass {
 	switch class {
+	case catpb.Function_Param_DEFAULT:
+		return tree.RoutineParamDefault
 	case catpb.Function_Param_IN:
 		return tree.RoutineParamIn
 	case catpb.Function_Param_OUT:

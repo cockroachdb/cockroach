@@ -71,20 +71,21 @@ CALL p(1, 2, 3);
 statement error pgcode 42725 procedure name "p" is not unique
 DROP PROCEDURE p;
 
-# Postgres seems to special-case the DROP behavior when none of the parameter
-# classes are specified for the argument types - it permissively treats them as
-# IN or OUT in order to match the maximum number overloads. As a result, PG
-# often returns 'procedure name "p" is not unique' error. Replicating that
-# behavior is tricky and seems not worth it, so we, instead, treat all argument
-# types with unspecified parameter class as having the IN class.
+# For DROP PROCEDURE (and DROP ROUTINE if/when we implement it), if all
+# parameters have unspecified ("default") parameter class, then Postgres applies
+# two resolution approaches: Postgres-specific (the main) way of matching based
+# on input parameters and SQL-compliant way of matching based on all parameters.
+# See https://github.com/postgres/postgres/commit/e56bce5d43789cce95d099554ae9593ada92b3b7
+# for more context.
 
-# Postgres returns 'procedure name "p" is not unique' error here.
-statement error pgcode 42883 procedure p\(int,int,int\) does not exist
+statement error pgcode 42725 procedure name "p" is not unique
 DROP PROCEDURE p(INT, INT, INT);
 
-# Postgres returns 'procedure name "p" is not unique' error here.
-statement ok
+statement error pgcode 42725 procedure name "p" is not unique
 DROP PROCEDURE p(INT, INT);
+
+statement ok
+DROP PROCEDURE p(OUT INT, INT, INT);
 
 statement ok
 CREATE PROCEDURE p(OUT param1 INT, IN param2 INT, IN param3 INT) AS $$ SELECT param2 + param3; $$ LANGUAGE SQL;
@@ -102,14 +103,17 @@ statement error pgcode 42725 procedure name "p" is not unique
 DROP PROCEDURE p;
 
 # Postgres here drops the overload with 3 OUT parameters.
-statement error pgcode 42883 procedure p\(int,int,int\) does not exist
+statement ok
 DROP PROCEDURE p(INT, INT, INT);
 
-statement ok
+statement error pgcode 42883 procedure p\(\) does not exist
 DROP PROCEDURE p(OUT INT, OUT INT, OUT INT);
 
 statement ok
 DROP PROCEDURE p(OUT INT, INT);
+
+statement error pgcode 42883 procedure p\(\) does not exist
+DROP PROCEDURE p();
 
 statement ok
 DROP PROCEDURE p;
