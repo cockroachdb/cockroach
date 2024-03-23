@@ -11,6 +11,7 @@
 package fs
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -20,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/pebble/vfs/vfstest"
 )
 
 // RWMode is an enum for whether a filesystem is read-write or read-only.
@@ -128,6 +131,21 @@ func InitEnv(ctx context.Context, fs vfs.FS, dir string, cfg EnvConfig) (*Env, e
 	// error out early without adding an additional ref just before returning.
 	defer e.Close()
 
+	// In CrdbTestBuilds, check during Close that all files are closed. Leaked
+	// files can leak goroutines. If there are any, we'll panic and include the
+	// stack traces taken when the files were opened.
+	if buildutil.CrdbTestBuild {
+		var dumpOpenFileStacks func(io.Writer)
+		e.UnencryptedFS, dumpOpenFileStacks = vfstest.WithOpenFileTracking(e.UnencryptedFS)
+		e.onClose = append(e.onClose, func() {
+			var buf bytes.Buffer
+			dumpOpenFileStacks(&buf)
+			if buf.Len() > 0 {
+				panic(errors.AssertionFailedf("during (fs.Env).Close there remain open files; all files must be closed before closing the Env\n\n%s", buf.String()))
+			}
+		})
+	}
+
 	// Set disk-health check interval to min(5s, maxSyncDurationDefault). This
 	// is mostly to ease testing; the default of 5s is too infrequent to test
 	// conveniently. See the disk-stalled roachtest for an example of how this
@@ -210,6 +228,7 @@ type Env struct {
 	defaultFS              vfs.FS
 	rw                     RWMode
 	diskHealthChecksCloser io.Closer
+	onClose                []func()
 	onDiskSlowFunc         atomic.Pointer[func(vfs.DiskSlowInfo)]
 	refs                   atomic.Int32
 }
@@ -261,6 +280,9 @@ func (e *Env) Close() {
 	}
 	if err != nil {
 		panic(err)
+	}
+	for _, closeFn := range e.onClose {
+		closeFn()
 	}
 }
 
