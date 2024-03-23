@@ -66,9 +66,12 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	setof := false
 	if n.IsProcedure {
 		if n.ReturnType != nil {
-			panic(errors.AssertionFailedf(
-				"CreateRoutine.ReturnType is expected to be empty for procedures",
-			))
+			returnType := b.ResolveTypeRef(n.ReturnType.Type)
+			if returnType.Type.Family() != types.VoidFamily && !types.IsRecordType(returnType.Type) {
+				panic(errors.AssertionFailedf(
+					"CreateRoutine.ReturnType is expected to be empty, VOID, or RECORD for procedures",
+				))
+			}
 		}
 		// For procedures, if specified, output parameters form the return type.
 		outParamTypes, outParamNames := getOutputParameters(b, n.Params)

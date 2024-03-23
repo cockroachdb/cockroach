@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -134,10 +136,14 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 
 	o := f.ResolvedOverload()
 	if o.Type != tree.ProcedureRoutine {
+		typeNames := make([]string, len(f.Exprs))
+		for i, expr := range f.Exprs {
+			typeNames[i] = expr.(tree.TypedExpr).ResolvedType().String()
+		}
 		panic(errors.WithHint(
 			pgerror.Newf(
 				pgcode.WrongObjectType,
-				"%s(%s) is not a procedure", def.Name, o.Types.String(),
+				"%s(%s) is not a procedure", def.Name, strings.Join(typeNames, ", "),
 			),
 			"To call a function, use SELECT.",
 		))
@@ -165,6 +171,7 @@ func (b *Builder) buildRoutine(
 	f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition, inScope *scope, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr, isMultiColDataSource bool) {
 	o := f.ResolvedOverload()
+	isProc := o.Type == tree.ProcedureRoutine
 	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
 
 	// Validate that the return types match the original return types defined in
@@ -212,15 +219,23 @@ func (b *Builder) buildRoutine(
 	// Build the argument expressions.
 	var args memo.ScalarListExpr
 	if len(f.Exprs) > 0 {
-		args = make(memo.ScalarListExpr, len(f.Exprs))
+		args = make(memo.ScalarListExpr, 0, len(f.Exprs))
 		for i, pexpr := range f.Exprs {
-			args[i] = b.buildScalar(
+			if isProc && o.RoutineParams[i].Class == tree.RoutineParamOut {
+				// For procedures, OUT parameters need to be specified in the
+				// CALL statement, but they are not evaluated and shouldn't be
+				// passed down to the UDF Call (since the body can only
+				// reference the input parameters which we refer to by their
+				// ordinals).
+				continue
+			}
+			args = append(args, b.buildScalar(
 				pexpr.(tree.TypedExpr),
 				inScope,
 				nil, /* outScope */
 				nil, /* outCol */
 				colRefs,
-			)
+			))
 		}
 	}
 	// Create a new scope for building the statements in the function body. We
@@ -234,6 +249,7 @@ func (b *Builder) buildRoutine(
 	bodyScope := b.allocScope()
 	var params opt.ColList
 	if o.Types.Length() > 0 {
+		// Add all input parameters to the scope.
 		paramTypes, ok := o.Types.(tree.ParamTypes)
 		if !ok {
 			panic(unimplemented.NewWithIssue(88947,
@@ -337,7 +353,6 @@ func (b *Builder) buildRoutine(
 		}
 		var expr memo.RelExpr
 		var physProps *physical.Required
-		isProc := o.Type == tree.ProcedureRoutine
 		plBuilder := newPLpgSQLBuilder(b, def.Name, colRefs, routineParams, rtyp, isProc)
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		finishResolveType(stmtScope)

@@ -1558,8 +1558,7 @@ message SchemaDescriptor {
     optional uint32 id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
 
-    // ArgTypes contains only IN / INOUT parameters when IsProcedure is false,
-    // and all parameters when IsProcedure is true.
+    // ArgTypes contains only input parameters.
     repeated sql.sem.types.T arg_types = 2;
 
     optional sql.sem.types.T return_type = 3;
@@ -1567,6 +1566,17 @@ message SchemaDescriptor {
     optional bool return_set = 4 [(gogoproto.nullable) = false];
 
     optional bool is_procedure = 5 [(gogoproto.nullable) = false];
+
+    // OutParamOrdinals contains all ordinals of OUT parameters among all
+    // parameters in the function definition. For example, if the function /
+    // procedure has a definition like
+    //   (IN p0, INOUT p1, OUT p2, INOUT p3, OUT p4),
+    // then OutParamOrdinals will contain [2, 4] (while ArgTypes will contain
+    // types of [p0, p1, p3]).
+    repeated int32 out_param_ordinals = 6;
+    // OutParamTypes contains types of all OUT parameters (it has 1-to-1 match
+    // with OutParamOrdinals).
+    repeated sql.sem.types.T out_param_types = 7;
   }
 
   // Function contains a group of UDFs with the same name.

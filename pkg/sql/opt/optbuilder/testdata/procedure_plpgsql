@@ -638,82 +638,78 @@ CALL p_out(NULL, NULL);
 ----
 call
  └── procedure: p_out
-      ├── args
-      │    ├── null
-      │    └── null
-      ├── params: x:1 y:2
       └── body
            └── limit
-                ├── columns: stmt_if_2:12
+                ├── columns: stmt_if_2:10
                 ├── project
-                │    ├── columns: stmt_if_2:12
+                │    ├── columns: stmt_if_2:10
                 │    ├── project
-                │    │    ├── columns: x:5!null y:4
+                │    │    ├── columns: x:3!null y:2
                 │    │    ├── project
-                │    │    │    ├── columns: y:4 x:3
+                │    │    │    ├── columns: y:2 x:1
                 │    │    │    ├── project
-                │    │    │    │    ├── columns: x:3
+                │    │    │    │    ├── columns: x:1
                 │    │    │    │    ├── values
                 │    │    │    │    │    └── tuple
                 │    │    │    │    └── projections
-                │    │    │    │         └── cast: INT8 [as=x:3]
+                │    │    │    │         └── cast: INT8 [as=x:1]
                 │    │    │    │              └── null
                 │    │    │    └── projections
-                │    │    │         └── cast: INT8 [as=y:4]
+                │    │    │         └── cast: INT8 [as=y:2]
                 │    │    │              └── null
                 │    │    └── projections
-                │    │         └── const: 1 [as=x:5]
+                │    │         └── const: 1 [as=x:3]
                 │    └── projections
-                │         └── case [as=stmt_if_2:12]
+                │         └── case [as=stmt_if_2:10]
                 │              ├── true
                 │              ├── when
                 │              │    ├── gt
-                │              │    │    ├── variable: x:5
+                │              │    │    ├── variable: x:3
                 │              │    │    └── const: 0
                 │              │    └── subquery
                 │              │         └── project
-                │              │              ├── columns: stmt_if_1:10
+                │              │              ├── columns: stmt_if_1:8
                 │              │              ├── project
-                │              │              │    ├── columns: y:9!null
+                │              │              │    ├── columns: y:7!null
                 │              │              │    ├── values
                 │              │              │    │    └── tuple
                 │              │              │    └── projections
-                │              │              │         └── const: 2 [as=y:9]
+                │              │              │         └── const: 2 [as=y:7]
                 │              │              └── projections
-                │              │                   └── udf: stmt_if_1 [as=stmt_if_1:10]
+                │              │                   └── udf: stmt_if_1 [as=stmt_if_1:8]
                 │              │                        ├── args
-                │              │                        │    ├── variable: x:5
-                │              │                        │    └── variable: y:9
-                │              │                        ├── params: x:6 y:7
+                │              │                        │    ├── variable: x:3
+                │              │                        │    └── variable: y:7
+                │              │                        ├── params: x:4 y:5
                 │              │                        └── body
                 │              │                             └── project
-                │              │                                  ├── columns: "_implicit_return":8
+                │              │                                  ├── columns: "_implicit_return":6
                 │              │                                  ├── values
                 │              │                                  │    └── tuple
                 │              │                                  └── projections
-                │              │                                       └── cast: RECORD [as="_implicit_return":8]
+                │              │                                       └── cast: RECORD [as="_implicit_return":6]
                 │              │                                            └── tuple
-                │              │                                                 ├── variable: x:6
-                │              │                                                 └── variable: y:7
+                │              │                                                 ├── variable: x:4
+                │              │                                                 └── variable: y:5
                 │              └── subquery
                 │                   └── project
-                │                        ├── columns: stmt_if_1:11
+                │                        ├── columns: stmt_if_1:9
                 │                        ├── values
                 │                        │    └── tuple
                 │                        └── projections
-                │                             └── udf: stmt_if_1 [as=stmt_if_1:11]
+                │                             └── udf: stmt_if_1 [as=stmt_if_1:9]
                 │                                  ├── args
-                │                                  │    ├── variable: x:5
-                │                                  │    └── variable: y:4
-                │                                  ├── params: x:6 y:7
+                │                                  │    ├── variable: x:3
+                │                                  │    └── variable: y:2
+                │                                  ├── params: x:4 y:5
                 │                                  └── body
                 │                                       └── project
-                │                                            ├── columns: "_implicit_return":8
+                │                                            ├── columns: "_implicit_return":6
                 │                                            ├── values
                 │                                            │    └── tuple
                 │                                            └── projections
-                │                                                 └── cast: RECORD [as="_implicit_return":8]
+                │                                                 └── cast: RECORD [as="_implicit_return":6]
                 │                                                      └── tuple
-                │                                                           ├── variable: x:6
-                │                                                           └── variable: y:7
+                │                                                           ├── variable: x:4
+                │                                                           └── variable: y:5
                 └── const: 1

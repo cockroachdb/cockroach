@@ -1181,14 +1181,63 @@ func (expr *FuncExpr) TypeCheck(
 			"%s()", def.Name)
 	}
 
+	typeNames := func(typedExprs []TypedExpr) string {
+		var sb strings.Builder
+		sb.WriteByte('(')
+		for i := range typedExprs {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(typedExprs[i].ResolvedType().Name())
+		}
+		sb.WriteByte(')')
+		return sb.String()
+	}
+
 	s := getOverloadTypeChecker(
 		(*qualifiedOverloads)(&def.Overloads), expr.Exprs...,
 	)
 	defer s.release()
 
 	if err = expr.typeCheckWithFuncAncestor(semaCtx, func() error {
-		if err := s.typeCheckOverloadedExprs(ctx, semaCtx, desired, false); err != nil {
+		if err := s.typeCheckOverloadedExprs(ctx, semaCtx, desired, false /* inBinOp */); err != nil {
 			return pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
+		}
+		if expr.InCall && len(s.overloadIdxs) == 0 {
+			// Since we didn't find the overload, let's see whether the user
+			// made a mistake and attempted to call a UDF. We attempt this by
+			// temporarily adjusting the RoutineType of each UDF to be
+			// Procedure, then running type-checking on adjusted overloads, and
+			// resetting the UDF overloads to their original state.
+			var functionIdxs []int
+			var functionOverloads []QualifiedOverload
+			for idx, o := range def.Overloads {
+				if o.Type == UDFRoutine {
+					o.Type = ProcedureRoutine
+					functionIdxs = append(functionIdxs, idx)
+					functionOverloads = append(functionOverloads, o)
+				}
+			}
+			if len(functionIdxs) > 0 {
+				defer func() {
+					for _, idx := range functionIdxs {
+						def.Overloads[idx].Type = UDFRoutine
+					}
+				}()
+				s2 := getOverloadTypeChecker((*qualifiedOverloads)(&functionOverloads), expr.Exprs...)
+				defer s2.release()
+				err2 := s2.typeCheckOverloadedExprs(ctx, semaCtx, desired, false /* inBinOp */)
+				if err2 == nil && len(s2.overloadIdxs) > 0 {
+					// This time we found a match, so return the proper error.
+					return errors.WithHint(
+						pgerror.Newf(
+							pgcode.WrongObjectType,
+							"%s%s is not a procedure", def.Name, typeNames(s2.typedExprs),
+						),
+						"To call a function, use SELECT.",
+					)
+				}
+			}
 		}
 		return nil
 	}); err != nil {
@@ -1251,18 +1300,9 @@ func (expr *FuncExpr) TypeCheck(
 
 	if len(s.overloadIdxs) == 0 {
 		if expr.InCall {
-			var sb strings.Builder
-			sb.WriteByte('(')
-			for i := range s.typedExprs {
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(s.typedExprs[i].ResolvedType().Name())
-			}
-			sb.WriteByte(')')
 			return nil, errors.WithHint(
 				pgerror.Newf(pgcode.UndefinedFunction, "procedure %s%s does not exist",
-					def.Name, sb.String()),
+					def.Name, typeNames(s.typedExprs)),
 				"No procedure matches the given name and argument types. "+
 					"You might need to add explicit type casts.",
 			)
@@ -3407,6 +3447,9 @@ func getMostSignificantOverload(
 	getFuncSig func() string,
 ) (QualifiedOverload, error) {
 	ambiguousError := func() error {
+		if expr.InCall {
+			return pgerror.Newf(pgcode.AmbiguousFunction, "procedure %s is not unique", getFuncSig())
+		}
 		return pgerror.Newf(
 			pgcode.AmbiguousFunction,
 			"ambiguous call: %s, candidates are:\n%s",

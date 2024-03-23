@@ -710,6 +710,11 @@ func SchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites jobspb.DescRe
 				if err := rewriteIDsInTypesT(sig.ReturnType, descriptorRewrites); err != nil {
 					return err
 				}
+				for _, typ := range sig.OutParamTypes {
+					if err := rewriteIDsInTypesT(typ, descriptorRewrites); err != nil {
+						return err
+					}
+				}
 				newSigs = append(newSigs, *sig)
 			}
 			if len(newSigs) > 0 {
