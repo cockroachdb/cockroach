@@ -950,8 +950,6 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 	if s.types == nil || len(s.types.scalarTypes) == 0 {
 		paramCnt = 0
 	}
-	// TODO(100405): Add support for non-default param classes. Currently, only IN
-	// parameters are supported.
 	// TODO(100962): Set a param default value sometimes.
 	params := make(tree.RoutineParams, paramCnt)
 	paramTypes := make(tree.ParamTypes, paramCnt)
@@ -966,9 +964,12 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 			ptyp = s.randType()
 		}
 		pname := fmt.Sprintf("p%d", i)
+		// TODO(88947): choose VARIADIC once supported too.
+		const numSupportedParamClasses = 4
 		params[i] = tree.RoutineParam{
-			Name: tree.Name(pname),
-			Type: ptyp,
+			Name:  tree.Name(pname),
+			Type:  ptyp,
+			Class: tree.RoutineParamClass(s.rnd.Intn(numSupportedParamClasses)),
 		}
 		paramTypes[i] = tree.ParamType{
 			Name: pname,
