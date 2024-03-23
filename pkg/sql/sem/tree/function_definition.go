@@ -256,7 +256,7 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 // types. The overload from the most significant schema is returned. If
 // paramTypes==nil, an error is returned if the function name is not unique in
 // the most significant schema. If paramTypes is not nil, an error with
-// ErrRoutineUndefined cause is returned if not matched found. Overloads that
+// ErrRoutineUndefined cause is returned if not matches found. Overloads that
 // don't match the types in routineType are ignored.
 func (fd *ResolvedFunctionDefinition) MatchOverload(
 	paramTypes []*types.T, explicitSchema string, searchPath SearchPath, routineType RoutineType,
@@ -322,26 +322,18 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	// Truncate the slice.
 	ret = ret[:i]
 
-	if len(ret) == 0 {
-		if routineType == ProcedureRoutine {
-			return QualifiedOverload{}, errors.Mark(
-				pgerror.Newf(pgcode.UndefinedFunction, "procedure %s(%s) does not exist", fd.Name, typeNames()),
-				ErrRoutineUndefined,
-			)
-		} else {
-			return QualifiedOverload{}, errors.Mark(
-				pgerror.Newf(pgcode.UndefinedFunction, "function %s(%s) does not exist", fd.Name, typeNames()),
-				ErrRoutineUndefined,
-			)
-		}
+	kind := "function"
+	if routineType == ProcedureRoutine {
+		kind = "procedure"
 	}
-
+	if len(ret) == 0 {
+		return QualifiedOverload{}, errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "%s %s(%s) does not exist", kind, fd.Name, typeNames()),
+			ErrRoutineUndefined,
+		)
+	}
 	if len(ret) > 1 {
-		if routineType == ProcedureRoutine {
-			return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "procedure name %q is not unique", fd.Name)
-		} else {
-			return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "function name %q is not unique", fd.Name)
-		}
+		return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "%s name %q is not unique", kind, fd.Name)
 	}
 	return ret[0], nil
 }

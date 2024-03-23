@@ -83,6 +83,8 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 
 	// Resolve the parameter names and types.
 	signatureTypes := make(tree.ParamTypes, 0, len(c.Params))
+	var outParamOrdinals []int32
+	var outParams tree.ParamTypes
 	var outParamTypes []*types.T
 	var outParamNames []string
 	for i := range c.Params {
@@ -91,11 +93,15 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		if err != nil {
 			panic(err)
 		}
-		if tree.IsParamIncludedIntoSignature(param.Class, c.IsProcedure) {
+		if tree.IsInParamClass(param.Class) {
 			signatureTypes = append(signatureTypes, tree.ParamType{
 				Name: string(param.Name),
 				Typ:  typ,
 			})
+		}
+		if param.Class == tree.RoutineParamOut {
+			outParamOrdinals = append(outParamOrdinals, int32(i))
+			outParams = append(outParams, tree.ParamType{Typ: typ})
 		}
 		if param.IsOutParam() {
 			outParamTypes = append(outParamTypes, typ)
@@ -109,10 +115,10 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 
 	// Determine OUT parameter based return type.
 	var outParamType *types.T
-	if len(outParamTypes) == 1 {
-		outParamType = outParamTypes[0]
-	} else if len(outParamTypes) > 1 {
+	if (c.IsProcedure && len(outParamTypes) > 0) || len(outParamTypes) > 1 {
 		outParamType = types.MakeLabeledTuple(outParamTypes, outParamNames)
+	} else if len(outParamTypes) == 1 {
+		outParamType = outParamTypes[0]
 	}
 	// Resolve the return type.
 	var retType *types.T
@@ -167,6 +173,8 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		Language:          language,
 		Type:              routineType,
 		RoutineParams:     c.Params,
+		OutParamOrdinals:  outParamOrdinals,
+		OutParamTypes:     outParams,
 	}
 	overload.ReturnsRecordType = types.IsRecordType(retType)
 	if c.ReturnType != nil && c.ReturnType.SetOf {

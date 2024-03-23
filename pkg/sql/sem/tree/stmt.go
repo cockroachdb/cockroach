@@ -664,7 +664,7 @@ func (*BeginTransaction) StatementType() StatementType { return TypeTCL }
 func (*BeginTransaction) StatementTag() string { return "BEGIN" }
 
 // StatementReturnType implements the Statement interface.
-func (*Call) StatementReturnType() StatementReturnType { return Ack }
+func (*Call) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
 func (*Call) StatementType() StatementType { return TypeTCL }

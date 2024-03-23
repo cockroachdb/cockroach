@@ -20,6 +20,15 @@ CREATE FUNCTION f(OUT param INT) RETURNS RECORD AS $$ SELECT 1; $$ LANGUAGE SQL;
 statement ok
 CREATE FUNCTION f(OUT param INT) RETURNS INT AS $$ SELECT 1; $$ LANGUAGE SQL;
 
+statement error pgcode 42809 f\(unknown\) is not a procedure
+CALL f(NULL);
+
+statement error pgcode 42809 f\(int\) is not a procedure
+CALL f(NULL::INT);
+
+statement error pgcode 42809 f\(int\) is not a procedure
+CALL f(1);
+
 statement ok
 DROP FUNCTION f;
 
