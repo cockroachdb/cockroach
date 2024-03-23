@@ -10,6 +10,7 @@ package streamproducer
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -42,9 +43,9 @@ func (r *replicationStreamManagerImpl) StartReplicationStream(
 
 // StartHistoryProtectionJob implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) StartHistoryProtectionJob(
-	ctx context.Context, desc string, protectTime hlc.Timestamp,
+	ctx context.Context, desc string, protectTime hlc.Timestamp, expiration time.Duration,
 ) (jobspb.JobID, error) {
-	return StartHistoryProtectionJob(ctx, r.evalCtx, r.txn, desc, protectTime)
+	return StartHistoryProtectionJob(ctx, r.evalCtx, r.txn, desc, protectTime, expiration)
 }
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.
