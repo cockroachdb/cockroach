@@ -77,7 +77,7 @@ func (mp *metricsPoller) Resume(ctx context.Context, execCtx interface{}) error 
 			t.Read = true
 			for name, task := range metricPollerTasks {
 				if err := runTask(name, task); err != nil {
-					log.Errorf(ctx, "Periodic stats collector task %s completed with error %s", name, err)
+					log.Errorf(ctx, "Periodic stats collector task %s completed with error %s", log.SafeOperational(name), err)
 					metrics.NumErrors.Inc(1)
 				}
 			}

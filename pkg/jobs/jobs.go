@@ -612,6 +612,8 @@ func (e *JobNotFoundError) Error() string {
 	return fmt.Sprintf("job with ID %d does not exist", e.jobID)
 }
 
+func (e *JobNotFoundError) SafeValue() {}
+
 // HasJobNotFoundError returns true if the error contains a JobNotFoundError.
 func HasJobNotFoundError(err error) bool {
 	return errors.HasType(err, (*JobNotFoundError)(nil))

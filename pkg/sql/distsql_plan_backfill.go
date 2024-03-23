@@ -81,6 +81,13 @@ func initIndexBackfillMergerSpec(
 func (dsp *DistSQLPlanner) createBackfillerPhysicalPlan(
 	ctx context.Context, planCtx *PlanningCtx, spec execinfrapb.BackfillerSpec, spans []roachpb.Span,
 ) (*PhysicalPlan, error) {
+	// If we're creating a vector index backfiller, we need to create a different
+	// plan. To create a vector index, we need to pull a sample of the data in
+	// the index to create the index's centroids. To do this, we reuse the
+	// statistics collection infrastructure's sampling ability, send the sample
+	// to a specialized processor that creates the centroids, and then send the
+	// centroids as a parameter to the backfiller processor.
+
 	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
 	if err != nil {
 		return nil, err
