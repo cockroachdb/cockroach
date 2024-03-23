@@ -17,6 +17,7 @@ go_library(
         "//pkg/cli/exit",
         "//pkg/settings",
         "//pkg/storage/enginepb",
+        "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
@@ -28,6 +29,7 @@ go_library(
         "@com_github_cockroachdb_pebble//record",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_pebble//vfs/atomicfs",
+        "@com_github_cockroachdb_pebble//vfs/vfstest",
         "@com_github_cockroachdb_redact//:redact",
     ],
 )
