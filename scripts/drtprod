@@ -17,17 +17,18 @@ case $1 in
       set -- start "--restart" "$@"
     fi
     if [[ "$*" != *"--secure"* ]]; then
-      echo "--secure is implied when starting DRT clusters, adding it"
-      set -- "$@" "--secure"
+      shift
+      set -- start "--secure" "$@"
     fi
     if [[ "$*" != *"--sql-port 26257"* ]]; then
-     echo "--sql-port 26257 is implied when starting DRT clusters, adding it"
-      set -- "$@" "--sql-port" "26257"
+      shift
+      set -- start "--sql-port" "26257" "$@"
     fi
     ;;
   "sql")
     if [[ "$*" != *"--secure"* ]]; then
-      set -- "$@" "--secure"
+      shift
+      set -- sql --secure "$@"
     fi
     ;;
   "dns")
