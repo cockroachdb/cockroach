@@ -75,13 +75,8 @@ var (
 
 const (
 	// cbGCThreshold is the threshold after which an idle replica's circuit
-	// breaker will be garbage collected.
-	cbGCThreshold = 10 * time.Minute
-
-	// cbGCThresholdTripped is the threshold after which an idle replica's circuit
-	// breaker will be garbage collected when tripped. This is greater than
-	// cbGCThreshold to avoid frequent (un)tripping of rarely accessed replicas.
-	cbGCThresholdTripped = time.Hour
+	// breaker will be garbage collected, even when tripped.
+	cbGCThreshold = 20 * time.Minute
 
 	// cbGCInterval is the interval between garbage collection scans.
 	cbGCInterval = time.Minute
@@ -268,18 +263,16 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 			cbs++
 
 			if idleDuration := cb.lastRequestDuration(nowNanos); idleDuration >= cbGCThreshold {
-				if !cb.isTripped() || idleDuration >= cbGCThresholdTripped {
-					// Check if we raced with a concurrent delete. We don't expect to,
-					// since only this loop removes circuit breakers.
-					if _, ok := d.replicas.LoadAndDelete(key); ok {
-						// TODO(erikgrinaker): this needs to remove tripped circuit breakers
-						// from the metrics, otherwise they'll appear as tripped forever.
-						// However, there are race conditions with concurrent probes that
-						// can lead to metrics gauge leaks (both positive and negative), so
-						// we'll have to make sure we reap the probes here first.
-						d.metrics.CircuitBreaker.Replicas.Dec(1)
-						gced++
-					}
+				// Check if we raced with a concurrent delete. We don't expect to, since
+				// only this loop removes circuit breakers.
+				if _, ok := d.replicas.LoadAndDelete(key); ok {
+					// TODO(erikgrinaker): this needs to remove tripped circuit breakers
+					// from the metrics, otherwise they'll appear as tripped forever.
+					// However, there are race conditions with concurrent probes that can
+					// lead to metrics gauge leaks (both positive and negative), so we'll
+					// have to make sure we reap the probes here first.
+					d.metrics.CircuitBreaker.Replicas.Dec(1)
+					gced++
 				}
 			}
 			return true
