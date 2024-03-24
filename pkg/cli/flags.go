@@ -531,6 +531,12 @@ func init() {
 		_ = f.MarkHidden(cliflags.ApplicationInternalRPCPortRange.Name)
 	}
 
+	{
+		f := initCmd.Flags()
+		cliflagcfg.BoolFlag(f, &initCmdOptions.virtualized, cliflags.Virtualized)
+		cliflagcfg.BoolFlag(f, &initCmdOptions.virtualizedEmpty, cliflags.VirtualizedEmpty)
+	}
+
 	// Multi-tenancy start-sql command flags.
 	{
 		f := mtStartSQLCmd.Flags()
