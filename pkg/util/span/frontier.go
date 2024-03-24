@@ -119,8 +119,8 @@ func enableBtreeFrontier(enabled bool) func() {
 	}
 }
 
-func newFrontier() Frontier {
-	if useBtreeFrontier {
+func newFrontier(useBtree bool) Frontier {
+	if useBtree {
 		return &btreeFrontier{}
 	}
 	return &llrbFrontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
@@ -135,7 +135,7 @@ func MakeFrontier(spans ...roachpb.Span) (Frontier, error) {
 // MakeFrontierAt returns a Frontier that tracks the given set of spans.
 // Each span timestamp initialized at specified start time.
 func MakeFrontierAt(startAt hlc.Timestamp, spans ...roachpb.Span) (Frontier, error) {
-	f := newFrontier()
+	f := newFrontier(useBtreeFrontier)
 	if err := f.AddSpansAt(startAt, spans...); err != nil {
 		f.Release() // release whatever was allocated.
 		return nil, err

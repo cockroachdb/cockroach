@@ -20,12 +20,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -832,5 +835,152 @@ func BenchmarkFrontier(b *testing.B) {
 				benchForward(b, f, rnd)
 			})
 		}
+	}
+}
+
+func TestBrokenFrontier(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO(dt): fix the underlying bug.
+	skip.WithIssue(t, 120987)
+	compareFrontiers(t, []intSpanAndTime{
+		{Key: 142, End: 143, Ts: 9},
+		{Key: 143, End: 144, Ts: 0},
+		{Key: 144, End: 145, Ts: 9},
+		{Key: 145, End: 146, Ts: 0},
+		{Key: 146, End: 147, Ts: 9},
+		{Key: 148, End: 149, Ts: 0},
+		{Key: 149, End: 150, Ts: 3},
+		{Key: 150, End: 151, Ts: 11},
+		{Key: 151, End: 152, Ts: 0},
+		{Key: 152, End: 153, Ts: 11},
+		{Key: 153, End: 154, Ts: 0},
+		{Key: 155, End: 156, Ts: 0},
+		{Key: 156, End: 157, Ts: 9},
+		{Key: 157, End: 159, Ts: 0},
+		{Key: 159, End: 160, Ts: 12},
+		{Key: 160, End: 161, Ts: 9},
+		{Key: 161, End: 162, Ts: 0},
+		{Key: 163, End: 164, Ts: 0},
+		{Key: 165, End: 166, Ts: 2},
+		{Key: 166, End: 167, Ts: 11},
+		{Key: 167, End: 168, Ts: 0},
+		{Key: 168, End: 169, Ts: 11},
+		{Key: 169, End: 170, Ts: 0},
+		{Key: 170, End: 171, Ts: 11},
+		{Key: 171, End: 172, Ts: 0},
+		{Key: 172, End: 173, Ts: 8},
+		{Key: 173, End: 174, Ts: 0},
+		{Key: 174, End: 175, Ts: 11},
+		{Key: 175, End: 176, Ts: 0},
+		{Key: 176, End: 177, Ts: 6},
+		{Key: 177, End: 178, Ts: 0},
+	}, []intSpanAndTime{
+		{Key: 158, End: 159, Ts: 12},
+		{Key: 159, End: 160, Ts: 13},
+	}, true)
+}
+
+type intSpanAndTime struct {
+	Key, End, Ts int
+}
+
+func (s intSpanAndTime) String() string {
+	return fmt.Sprintf("[%3d, %3d) -> T%-2d", s.Key, s.End, s.Ts)
+}
+
+func (s intSpanAndTime) sp() roachpb.Span {
+	return roachpb.Span{
+		Key:    encoding.EncodeVarintAscending(nil, int64(s.Key)),
+		EndKey: encoding.EncodeVarintAscending(nil, int64(s.End)),
+	}
+}
+
+func (s intSpanAndTime) timestamp() hlc.Timestamp {
+	return hlc.Timestamp{WallTime: int64(s.Ts)}
+}
+
+// mkIntSpanAndTime turns "simplified" roachpb.Spans, i.e. those with keys that
+// are a single encoded varint, into
+func mkIntSpanAndTime(t *testing.T, sp roachpb.Span, ts hlc.Timestamp) intSpanAndTime {
+	parse := func(k roachpb.Key) int {
+		rest, i, err := encoding.DecodeVarintAscending(k)
+		require.NoError(t, err)
+		require.Len(t, rest, 0, "does not appear to be a simple single varint key")
+		return int(i)
+	}
+	return intSpanAndTime{Key: parse(sp.Key), End: parse(sp.EndKey), Ts: int(ts.WallTime)}
+}
+
+func dumpFronter(t *testing.T, f Frontier) []intSpanAndTime {
+	spans := make([]intSpanAndTime, 0, f.Len())
+	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) OpResult {
+		spans = append(spans, mkIntSpanAndTime(t, sp, ts))
+		return ContinueMatch
+	})
+	return spans
+}
+
+func compareFrontiers(t *testing.T, initSpans, checkpoints []intSpanAndTime, verifySubspans bool) {
+	llbr, btree := newFrontier(false), newFrontier(true)
+
+	for _, f := range initSpans {
+		require.NoError(t, llbr.AddSpansAt(f.timestamp(), f.sp()))
+		require.NoError(t, btree.AddSpansAt(f.timestamp(), f.sp()))
+	}
+	require.Equal(t, llbr.Frontier(), btree.Frontier())
+	require.Equal(t, llbr.Len(), btree.Len())
+
+	for fwd, ck := range checkpoints {
+		// First verify the frontiers' Forward and Frontier methods agree.
+		before := llbr.Frontier()
+		t.Logf("forward %d: %s", fwd, ck)
+		lAdvanced, err := llbr.Forward(ck.sp(), ck.timestamp())
+		if err != nil {
+			t.Fatal(err)
+		}
+		bAdvanced, err := btree.Forward(ck.sp(), ck.timestamp())
+		if err != nil {
+			t.Fatal(err)
+		}
+		bAfter, lAfter := btree.Frontier(), llbr.Frontier()
+		assert.Equal(t, lAfter.WallTime, bAfter.WallTime,
+			"%d %s: before %d llbbr -> %d vs btree -> %d",
+			fwd, ck, before.WallTime, lAfter.WallTime, bAfter.WallTime,
+		)
+		assert.Equal(t, lAdvanced, bAdvanced,
+			"%d %s: frontier %d -> %d llbr %t vs btree %t",
+			fwd, ck, before.WallTime, lAfter.WallTime, lAdvanced, bAdvanced,
+		)
+		assert.Equal(t, llbr.Len(), llbr.Len(),
+			"%d %s: frontier %d -> %d llbr %d vs btree %d",
+			fwd, ck, before.WallTime, lAfter.WallTime, llbr.Len(), llbr.Len(),
+		)
+		if verifySubspans {
+			lSpans, bSpans := dumpFronter(t, llbr), dumpFronter(t, btree)
+			for i := range lSpans {
+				if i < len(bSpans) {
+					t.Logf("\t%2d: %s\t%s\t matches=%t", i, lSpans[i], bSpans[i], lSpans[i] == bSpans[i])
+				} else {
+					t.Logf("\t%2d: %s", i, lSpans[i])
+				}
+			}
+			// For every sub-span of the llbr, verify that asking that subspan of the
+			// btree yields the same timestamp.
+			for _, lSpan := range lSpans {
+				var bSpan intSpanAndTime
+				btree.SpanEntries(lSpan.sp(), func(sp roachpb.Span, ts hlc.Timestamp) OpResult {
+					bSpan = mkIntSpanAndTime(t, sp, ts)
+					return ContinueMatch
+				})
+				require.Equal(t, lSpan.Ts, bSpan.Ts,
+					"%s did not find correct ts in btree subspan; found btree subspan %s", lSpan, bSpan)
+			}
+			require.Equal(t, len(lSpans), len(bSpans))
+		}
+		if t.Failed() {
+			t.FailNow()
+		}
+		t.Log()
 	}
 }

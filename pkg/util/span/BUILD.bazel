@@ -36,6 +36,8 @@ go_test(
     deps = [
         "//pkg/roachpb",
         "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/interval",
         "//pkg/util/leaktest",
@@ -43,6 +45,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/timeutil",  #keep
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
