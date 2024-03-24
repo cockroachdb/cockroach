@@ -267,11 +267,6 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 				// replace. We don't expect this, since only this loop removes them.
 				if v, ok := d.replicas.LoadAndDelete(key); ok {
 					cb = v.(*ReplicaCircuitBreaker)
-					// TODO(erikgrinaker): this needs to remove tripped circuit breakers
-					// from the metrics, otherwise they'll appear as tripped forever.
-					// However, there are race conditions with concurrent probes that can
-					// lead to metrics gauge leaks (both positive and negative), so we'll
-					// have to make sure we reap the probes here first.
 					d.metrics.CircuitBreaker.Replicas.Dec(1)
 					gced++
 
@@ -282,6 +277,11 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 					// prevent new probes being launched for this ReplicaCircuitBreaker
 					// (checked by launchProbe).
 					cb.maybeReapProbe()
+
+					// Remove the GCed breaker from tripped metrics.
+					if cb.isTripped() {
+						d.metrics.CircuitBreaker.ReplicasTripped.Dec(1)
+					}
 				}
 			}
 			return true
