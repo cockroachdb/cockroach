@@ -263,9 +263,10 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 			cbs++
 
 			if idleDuration := cb.lastRequestDuration(nowNanos); idleDuration >= cbGCThreshold {
-				// Check if we raced with a concurrent delete. We don't expect to, since
-				// only this loop removes circuit breakers.
-				if _, ok := d.replicas.LoadAndDelete(key); ok {
+				// Reload the circuit breaker, in case we raced with a concurrent
+				// replace. We don't expect this, since only this loop removes them.
+				if v, ok := d.replicas.LoadAndDelete(key); ok {
+					cb = v.(*ReplicaCircuitBreaker)
 					// TODO(erikgrinaker): this needs to remove tripped circuit breakers
 					// from the metrics, otherwise they'll appear as tripped forever.
 					// However, there are race conditions with concurrent probes that can
@@ -273,6 +274,14 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 					// have to make sure we reap the probes here first.
 					d.metrics.CircuitBreaker.Replicas.Dec(1)
 					gced++
+
+					// Reap a currently running probe, if any. This shouldn't commonly
+					// happen, since probes shut down when idle, and we only GC idle
+					// replicas. But it can happen if we race with a probe launch, or if
+					// probes run longer than the GC threshold. The map removal above will
+					// prevent new probes being launched for this ReplicaCircuitBreaker
+					// (checked by launchProbe).
+					cb.maybeReapProbe()
 				}
 			}
 			return true
@@ -341,6 +350,10 @@ type ReplicaCircuitBreaker struct {
 		// cancelFns contains context cancellation functions for all in-flight
 		// requests. Only tracked if cancellation is enabled.
 		cancelFns map[*kvpb.BatchRequest]context.CancelCauseFunc
+
+		// reapProbe, if non-nil, can be called to synchronously cancel a running
+		// probe and wait for it to exit.
+		reapProbe func()
 	}
 }
 
@@ -435,6 +448,18 @@ func (r *ReplicaCircuitBreaker) isTripped() bool {
 		return false // circuit breakers disabled
 	}
 	return r.breaker.Signal().IsTripped()
+}
+
+// isGCed returns true if this circuit breaker has been GCed, i.e. it is no
+// longer present in the replica circuit breaker map. It will return false if it
+// has since been replaced by a different circuit breaker for the same replica.
+func (r *ReplicaCircuitBreaker) isGCed() bool {
+	if r == nil {
+		return true // circuit breakers disabled
+	}
+	key := cbKey{rangeID: r.rangeID, replicaID: r.desc.ReplicaID}
+	v, ok := r.d.replicas.Load(key)
+	return !ok || v.(*ReplicaCircuitBreaker) != r
 }
 
 // Track attempts to start tracking a request with the circuit breaker. If the
@@ -605,7 +630,45 @@ func (r *ReplicaCircuitBreaker) done(
 // launchProbe spawns an async replica probe that sends LeaseInfo requests to
 // the replica and trips/untrips the breaker as appropriate.
 func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
-	ctx := r.d.ambientCtx.AnnotateCtx(context.Background())
+	// Install reapProbe to allow GC to synchronously cancel this probe, and
+	// extend done() to clean it up. This won't commonly happen, since the probe
+	// shuts down when the replica is inactive and we only GC after a period of
+	// inactivity. But it can happen if GC races with a probe launch, or if the
+	// probe interval or timeout has been increased beyond the GC threshold.
+	ctx, cancel := r.d.stopper.WithCancelOnQuiesce(r.d.ambientCtx.AnnotateCtx(context.Background()))
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	reapProbe := func() {
+		cancel()
+		wg.Wait()
+	}
+	r.mu.Lock()
+	r.mu.reapProbe = reapProbe
+	r.mu.Unlock()
+
+	prevDone := done
+	done = func() {
+		cancel()
+		wg.Done()
+		prevDone()
+		r.mu.Lock()
+		r.mu.reapProbe = nil
+		r.mu.Unlock()
+	}
+
+	// If the replica has been GCed, prevent launching new probes. This acts as a
+	// synchronization point with garbage collection.
+	//
+	// NB: this check must happen after reapProbe has been installed above, to
+	// avoid GC racing with us and not finding a reapProbe we install later.
+	if r.isGCed() {
+		done()
+		return
+	}
+
+	// Spawn the probe goroutine.
 	err := r.d.stopper.RunAsyncTask(ctx, fmt.Sprintf("distsender-replica-probe-%s", r.id()),
 		func(ctx context.Context) {
 			r.probeLoop(ctx, report, done)
@@ -771,9 +834,10 @@ func (r *ReplicaCircuitBreaker) sendProbe(ctx context.Context, transport Transpo
 		}
 
 		// Any other local error is likely a networking/gRPC issue. This includes if
-		// either the remote node or the local node has been decommissioned. We
-		// rely on RPC circuit breakers to fail fast for these, so there's no point
-		// in us probing individual replicas. Stop probing.
+		// either the remote node or the local node has been decommissioned. We rely
+		// on RPC circuit breakers to fail fast for these, so there's no point in us
+		// probing individual replicas. Stop probing and untrip the breaker if it
+		// was tripped.
 		return nil // nolint:returnerrcheck
 	}
 
@@ -801,6 +865,16 @@ func (r *ReplicaCircuitBreaker) sendProbe(ctx context.Context, transport Transpo
 	}
 
 	return errors.Wrapf(err, "probe failed")
+}
+
+// maybeReapProbe synchronously reaps the currently running probe, if any.
+func (r *ReplicaCircuitBreaker) maybeReapProbe() {
+	r.mu.Lock()
+	reapProbe := r.mu.reapProbe
+	r.mu.Unlock()
+	if reapProbe != nil {
+		reapProbe()
+	}
 }
 
 // OnTrip implements circuit.EventHandler.
