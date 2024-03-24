@@ -604,6 +604,19 @@ func (r *ReplicaCircuitBreaker) done(
 
 // launchProbe spawns an async replica probe that sends LeaseInfo requests to
 // the replica and trips/untrips the breaker as appropriate.
+func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
+	ctx := r.d.ambientCtx.AnnotateCtx(context.Background())
+	err := r.d.stopper.RunAsyncTask(ctx, fmt.Sprintf("distsender-replica-probe-%s", r.id()),
+		func(ctx context.Context) {
+			r.probeLoop(ctx, report, done)
+		})
+	if err != nil {
+		done()
+	}
+}
+
+// probeLoop sends LeaseInfo requests to the replica and trips/untrips the
+// breaker as appropriate.
 //
 // While the breaker is tripped, the probe keeps running as long as there have
 // been requests to the replica in the past few probe intervals. Otherwise, the
@@ -617,106 +630,95 @@ func (r *ReplicaCircuitBreaker) done(
 // replicas on the same node/store. However, this needs server-side timeout
 // handling such that if 1 out of 1000 replicas are stalled we won't fail the
 // entire batch.
-func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
-	ctx := r.d.ambientCtx.AnnotateCtx(context.Background())
+func (r *ReplicaCircuitBreaker) probeLoop(ctx context.Context, report func(error), done func()) {
+	defer done()
 
-	name := fmt.Sprintf("distsender-replica-probe-%s", r.id())
-	err := r.d.stopper.RunAsyncTask(ctx, name, func(ctx context.Context) {
-		defer done()
+	// Prepare the probe transport, using SystemClass to avoid RPC latency.
+	//
+	// We construct a bare replica slice without any locality information, since
+	// we're only going to contact this replica.
+	replicas := ReplicaSlice{{ReplicaDescriptor: r.desc}}
+	opts := SendOptions{
+		class:                  rpc.SystemClass,
+		metrics:                &r.d.metrics,
+		dontConsiderConnHealth: true,
+	}
+	transport, err := r.d.transportFactory(opts, replicas)
+	if err != nil {
+		log.Errorf(ctx, "failed to launch probe: %s", err)
+		return
+	}
+	defer transport.Release()
 
-		ctx, cancel := r.d.stopper.WithCancelOnQuiesce(ctx)
-		defer cancel()
+	// Continually probe the replica until it succeeds or the replica stops
+	// seeing traffic. We probe immediately since we only trip the breaker on
+	// probe failure.
+	var timer timeutil.Timer
+	defer timer.Stop()
+	timer.Reset(CircuitBreakerProbeInterval.Get(&r.d.settings.SV))
 
-		// Prepare the probe transport, using SystemClass to avoid RPC latency.
-		//
-		// We construct a bare replica slice without any locality information, since
-		// we're only going to contact this replica.
-		replicas := ReplicaSlice{{ReplicaDescriptor: r.desc}}
-		opts := SendOptions{
-			class:                  rpc.SystemClass,
-			metrics:                &r.d.metrics,
-			dontConsiderConnHealth: true,
-		}
-		transport, err := r.d.transportFactory(opts, replicas)
-		if err != nil {
-			log.Errorf(ctx, "failed to launch probe: %s", err)
+	for {
+		// Untrip the breaker and stop probing if circuit breakers are disabled.
+		if !CircuitBreakerEnabled.Get(&r.d.settings.SV) {
+			report(nil)
 			return
 		}
-		defer transport.Release()
 
-		// Continually probe the replica until it succeeds or the replica stops
-		// seeing traffic. We probe immediately since we only trip the breaker on
-		// probe failure.
-		var timer timeutil.Timer
-		defer timer.Stop()
-		timer.Reset(CircuitBreakerProbeInterval.Get(&r.d.settings.SV))
+		// Probe the replica.
+		err := r.sendProbe(ctx, transport)
 
-		for {
-			// Untrip the breaker and stop probing if circuit breakers are disabled.
-			if !CircuitBreakerEnabled.Get(&r.d.settings.SV) {
-				report(nil)
-				return
-			}
-
-			// Probe the replica.
-			err := r.sendProbe(ctx, transport)
-
-			// If the context failed, we're shutting down. Just exit the probe without
-			// reporting the result (which could trip the breaker).
-			if ctx.Err() != nil {
-				return
-			}
-
-			// Report the probe result.
-			report(err)
-			if err == nil {
-				// On a successful probe, record the success and stop probing.
-				r.stallSince.Store(timeutil.Now().UnixNano())
-				r.errorSince.Store(0)
-				return
-			}
-
-			// Cancel in-flight requests on failure. We do this on every failure, and
-			// also remove the cancel functions from the map (even though done() will
-			// also clean them up), in case another request makes it in after the
-			// breaker trips. There should typically never be any contention here.
-			func() {
-				r.mu.Lock()
-				defer r.mu.Unlock()
-				for ba, cancel := range r.mu.cancelFns {
-					delete(r.mu.cancelFns, ba)
-					cancel(errors.Wrapf(err, "%s is unavailable (circuit breaker tripped)", r.id()))
-					r.d.metrics.CircuitBreaker.ReplicasRequestsCancelled.Inc(1)
-				}
-			}()
-
-			select {
-			case <-timer.C:
-				timer.Read = true
-			case <-r.d.stopper.ShouldQuiesce():
-				return
-			case <-ctx.Done():
-				return
-			}
-
-			probeInterval := CircuitBreakerProbeInterval.Get(&r.d.settings.SV)
-			timer.Reset(probeInterval)
-
-			// If there haven't been any requests in the past few probe intervals,
-			// stop probing but keep the breaker tripped. A new probe will be launched
-			// on the next request.
-			//
-			// NB: we check this after waiting out the probe interval above, to avoid
-			// frequently spawning new probe goroutines, instead waiting to see if any
-			// requests come in.
-			idleThreshold := cbProbeIdleIntervals * probeInterval
-			if r.lastRequestDuration(timeutil.Now().UnixNano()) >= idleThreshold {
-				return
-			}
+		// If the context failed, we're shutting down. Just exit the probe without
+		// reporting the result (which could trip the breaker).
+		if ctx.Err() != nil {
+			return
 		}
-	})
-	if err != nil {
-		done()
+
+		// Report the probe result.
+		report(err)
+		if err == nil {
+			// On a successful probe, record the success and stop probing.
+			r.stallSince.Store(timeutil.Now().UnixNano())
+			r.errorSince.Store(0)
+			return
+		}
+
+		// Cancel in-flight requests on failure. We do this on every failure, and
+		// also remove the cancel functions from the map (even though done() will
+		// also clean them up), in case another request makes it in after the
+		// breaker trips. There should typically never be any contention here.
+		func() {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			for ba, cancel := range r.mu.cancelFns {
+				delete(r.mu.cancelFns, ba)
+				cancel(errors.Wrapf(err, "%s is unavailable (circuit breaker tripped)", r.id()))
+				r.d.metrics.CircuitBreaker.ReplicasRequestsCancelled.Inc(1)
+			}
+		}()
+
+		select {
+		case <-timer.C:
+			timer.Read = true
+		case <-r.d.stopper.ShouldQuiesce():
+			return
+		case <-ctx.Done():
+			return
+		}
+
+		probeInterval := CircuitBreakerProbeInterval.Get(&r.d.settings.SV)
+		timer.Reset(probeInterval)
+
+		// If there haven't been any requests in the past few probe intervals,
+		// stop probing but keep the breaker tripped. A new probe will be launched
+		// on the next request.
+		//
+		// NB: we check this after waiting out the probe interval above, to avoid
+		// frequently spawning new probe goroutines, instead waiting to see if any
+		// requests come in.
+		idleThreshold := cbProbeIdleIntervals * probeInterval
+		if r.lastRequestDuration(timeutil.Now().UnixNano()) >= idleThreshold {
+			return
+		}
 	}
 }
 
