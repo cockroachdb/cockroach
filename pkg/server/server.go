@@ -2086,6 +2086,10 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.appRegistry,
 	)
 
+	if err := s.runIdempontentSQLForInitType(ctx, state.initType); err != nil {
+		return err
+	}
+
 	// Start the job scheduler now that the SQL Server and
 	// external storage is initialized.
 	if err := s.initJobScheduler(ctx); err != nil {
@@ -2229,6 +2233,58 @@ func (s *topLevelServer) initJobScheduler(ctx context.Context) error {
 	}
 	s.sqlServer.startJobScheduler(ctx, s.cfg.TestingKnobs)
 	return nil
+}
+
+// runIdempontentSQLForInitType runs one-time initialization steps via
+// SQL based on the given InitType.
+func (s *topLevelServer) runIdempontentSQLForInitType(
+	ctx context.Context, typ serverpb.InitType,
+) error {
+	if typ == serverpb.InitType_NONE || typ == serverpb.InitType_DEFAULT {
+		return nil
+	}
+
+	initAttempt := func() error {
+		const defaultApplicationClusterName = "application"
+		switch typ {
+		case serverpb.InitType_VIRTUALIZED:
+			ie := s.sqlServer.execCfg.InternalDB.Executor()
+			_, err := ie.Exec(ctx, "init-create-app-tenant", nil, /* txn */
+				"CREATE VIRTUAL CLUSTER IF NOT EXISTS $1", defaultApplicationClusterName)
+			if err != nil {
+				return err
+			}
+			_, err = ie.Exec(ctx, "init-default-app-tenant", nil, /* txn */
+				"ALTER VIRTUAL CLUSTER $1 START SERVICE SHARED", defaultApplicationClusterName)
+			if err != nil {
+				return err
+			}
+			fallthrough
+		case serverpb.InitType_VIRTUALIZED_EMPTY:
+			ie := s.sqlServer.execCfg.InternalDB.Executor()
+			_, err := ie.Exec(ctx, "init-default-target-cluster-setting", nil, /* txn */
+				"SET CLUSTER SETTING server.controller.default_target_cluster = $1", defaultApplicationClusterName)
+			if err != nil {
+				return err
+			}
+		default:
+			return errors.Errorf("unknown bootstrap init type: %d", typ)
+		}
+		return nil
+	}
+
+	rOpts := retry.Options{
+		MaxBackoff:     10 * time.Second,
+		InitialBackoff: time.Second,
+	}
+	for r := retry.StartWithCtx(ctx, rOpts); r.Next(); {
+		if err := initAttempt(); err != nil {
+			log.Errorf(ctx, "cluster initialization attempt failed: %s", err.Error())
+			continue
+		}
+		return nil
+	}
+	return errors.Errorf("cluster initialization failed; cluster may need to be manually configured")
 }
 
 // AcceptClients starts listening for incoming SQL clients over the network.

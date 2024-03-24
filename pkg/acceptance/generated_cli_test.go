@@ -263,6 +263,13 @@ func TestDockerCLI_test_init_command(t *testing.T) {
 	runTestDockerCLI(t, "test_init_command", "../cli/interactive_tests/test_init_command.tcl")
 }
 
+func TestDockerCLI_test_init_virtualized_command(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_init_virtualized_command", "../cli/interactive_tests/test_init_virtualized_command.tcl")
+}
+
 func TestDockerCLI_test_interrupt(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
