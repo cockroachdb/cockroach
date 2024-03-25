@@ -31,31 +31,30 @@ import (
 // starts. This is to cover cases where upgrade becomes possible due to
 // an upgrade to the tenant binary version.
 func (s *SQLServer) startTenantAutoUpgradeLoop(ctx context.Context) error {
-	storageClusterVersion := s.settingsWatcher.GetStorageClusterActiveVersion().Version
 	return s.stopper.RunAsyncTask(ctx, "tenant-auto-upgrade-checker", func(ctx context.Context) {
-		firstAttempt := true
+		loopFrequency := 30 * time.Second
+		if k := s.cfg.TestingKnobs.Server; k != nil {
+			loopFrequency = k.(*TestingKnobs).TenantAutoUpgradeLoopFrequency
+		}
+
 		for {
 			select {
 			case <-s.stopper.ShouldQuiesce():
 				return
-			// Check for changes every 10 seconds to avoid triggering an upgrade
-			// on every change to the internal version of storage cluster version
-			// within a short time period.
-			case <-time.After(time.Second * 10):
-				latestStorageClusterVersion := s.settingsWatcher.GetStorageClusterActiveVersion().Version
-				// Only run upgrade if this is the first attempt (i.e. on server startup) or if the
-				// the storage cluster version changed and is at an Internal version of 0 which implies that
-				// that storage is at the "final" version for some release. First case ensures that if an upgrade is
-				// possible due to a change in a sql instance binary version, it happens. Second
-				// cases ensures that if an upgrade is possible due to a change in the storage
-				// cluster version, it happens.
-				storageClusterVersionChanged := storageClusterVersion != latestStorageClusterVersion
-				if firstAttempt ||
-					(storageClusterVersionChanged && storageClusterVersion.Internal == 0) {
-					firstAttempt = false
-					storageClusterVersion = latestStorageClusterVersion
-					if err := s.startAttemptTenantUpgrade(ctx); err != nil {
+			case <-time.After(loopFrequency):
+				storageClusterVersion := s.settingsWatcher.GetStorageClusterActiveVersion().Version
+
+				// Only attempt to upgrade if the storage cluster is at an Internal version of 0,
+				// which implies that storage is at the "final" version for some release.
+				if storageClusterVersion.Internal == 0 {
+					log.Infof(ctx, "starting auto upgrade attempt")
+					upgradeCompleted, err := s.startAttemptTenantUpgrade(ctx)
+					if err != nil {
 						log.Errorf(ctx, "failed to start an upgrade attempt: %v", err)
+					}
+
+					if upgradeCompleted {
+						return
 					}
 				}
 			}
@@ -63,8 +62,10 @@ func (s *SQLServer) startTenantAutoUpgradeLoop(ctx context.Context) error {
 	})
 }
 
-// startAttemptTenantUpgrade attempts to upgrade cluster version.
-func (s *SQLServer) startAttemptTenantUpgrade(ctx context.Context) error {
+// startAttemptTenantUpgrade attempts to upgrade cluster
+// version. Returns whether the upgrade was completed, and any errors
+// found during the process.
+func (s *SQLServer) startAttemptTenantUpgrade(ctx context.Context) (bool, error) {
 	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
 
@@ -77,7 +78,7 @@ func (s *SQLServer) startAttemptTenantUpgrade(ctx context.Context) error {
 			case <-disableCh:
 				log.Infof(ctx, "auto upgrade no longer disabled by testing")
 			case <-s.stopper.ShouldQuiesce():
-				return nil
+				return false, nil
 			}
 		}
 	}
@@ -97,11 +98,12 @@ func (s *SQLServer) startAttemptTenantUpgrade(ctx context.Context) error {
 		tenantClusterVersion, err = s.settingsWatcher.GetClusterVersionFromStorage(ctx, txn)
 		return err
 	}); err != nil {
-		return errors.Wrap(err, "unable to retrieve tenant cluster version")
+		return false, errors.Wrap(err, "unable to retrieve tenant cluster version")
 	}
 
 	// Check if we should upgrade cluster version.
 	status, upgradeToVersion, err := s.tenantUpgradeStatus(ctx, tenantClusterVersion.Version)
+	log.Infof(ctx, "tenant upgrade status: %v, %v, %v", status, upgradeToVersion, err)
 
 	// Let test code know the status of an upgrade if needed.
 	if tenantAutoUpgradeInfoCh != nil {
@@ -113,20 +115,23 @@ func (s *SQLServer) startAttemptTenantUpgrade(ctx context.Context) error {
 
 	switch status {
 	case UpgradeBlockedDueToError:
-		return err
+		return false, err
 	case UpgradeDisabledByConfiguration:
-		log.Infof(ctx, "auto upgrade is disabled for current version (preserve_downgrade_option): %s", redact.Safe(tenantClusterVersion.Version))
-		return nil
+		log.Infof(ctx, "auto upgrade is disabled for current version (cluster.auto_upgrade.enabled): %s", redact.Safe(tenantClusterVersion.Version))
+		return false, nil
+	case UpgradeDisabledByConfigurationToPreserveDowngrade:
+		log.Infof(ctx, "auto upgrade is disabled for current version (cluster.preserve_downgrade_option): %s", redact.Safe(tenantClusterVersion.Version))
+		return false, nil
 	case UpgradeAlreadyCompleted:
 		log.Info(ctx, "no need to upgrade, instance already at the newest version")
-		return nil
+		return true, nil
 	case UpgradeBlockedDueToLowStorageClusterVersion:
 		log.Info(ctx, "upgrade blocked because storage binary version doesn't support upgrading to minimum tenant binary version")
-		return nil
+		return false, nil
 	case UpgradeAllowed:
 		// Fall out of the select below.
 	default:
-		return errors.AssertionFailedf("unhandled case: %d", status)
+		return false, errors.AssertionFailedf("unhandled case: %d", status)
 	}
 
 	upgradeRetryOpts := retry.Options{
@@ -144,13 +149,32 @@ func (s *SQLServer) startAttemptTenantUpgrade(ctx context.Context) error {
 			sessiondata.NodeUserSessionDataOverride,
 			"SET CLUSTER SETTING version = $1;", upgradeToVersion.String(),
 		); err != nil {
-			return errors.Wrap(err, "error when finalizing tenant cluster version upgrade")
+			return false, errors.Wrap(err, "error when finalizing tenant cluster version upgrade")
 		} else {
 			log.Infof(ctx, "successfully upgraded tenant cluster version to %v", upgradeToVersion)
-			return nil
+			return false, nil
 		}
 	}
-	return nil
+	return false, nil
+}
+
+func (s *SQLServer) isAutoUpgradeEnabled(
+	currentClusterVersion roachpb.Version,
+) (bool, upgradeStatus) {
+	if autoUpgradeEnabled := s.settingsWatcher.GetAutoUpgradeEnabledSettingValue(); !autoUpgradeEnabled {
+		// Automatic upgrade is not enabled.
+		return false, UpgradeDisabledByConfiguration
+	}
+
+	if downgradeVersion := s.settingsWatcher.GetPreserveDowngradeVersionSettingValue(); downgradeVersion != "" {
+		if currentClusterVersion.String() == downgradeVersion {
+			// Automatic upgrade is blocked by the preserve downgrade
+			// setting.
+			return false, UpgradeDisabledByConfigurationToPreserveDowngrade
+		}
+	}
+
+	return true, -1
 }
 
 // tenantUpgradeStatus lets the main checking loop know if we should upgrade.
@@ -159,9 +183,8 @@ func (s *SQLServer) tenantUpgradeStatus(
 ) (st upgradeStatus, upgradeToVersion roachpb.Version, err error) {
 	storageClusterVersion := s.settingsWatcher.GetStorageClusterActiveVersion().Version
 
-	if autoUpgradeEnabled := s.settingsWatcher.GetAutoUpgradeEnabledSettingValue(); !autoUpgradeEnabled {
-		// Automatic upgrade is not enabled.
-		return UpgradeDisabledByConfiguration, roachpb.Version{}, nil
+	if enabled, status := s.isAutoUpgradeEnabled(currentClusterVersion); !enabled {
+		return status, roachpb.Version{}, nil
 	}
 
 	instances, err := s.sqlInstanceReader.GetAllInstances(ctx)
@@ -171,7 +194,6 @@ func (s *SQLServer) tenantUpgradeStatus(
 	if len(instances) == 0 {
 		return UpgradeBlockedDueToError, roachpb.Version{}, errors.Errorf("no live instances found")
 	}
-	log.Infof(ctx, "found %d instances", len(instances))
 
 	findMinBinaryVersion := func(instances []sqlinstance.InstanceInfo) roachpb.Version {
 		minVersion := instances[0].BinaryVersion

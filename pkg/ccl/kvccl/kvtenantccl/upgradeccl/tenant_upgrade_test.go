@@ -37,106 +37,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTenantAutoUpgradeRespectsAutoUpgradeEnabledSetting(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t)
-
-	v0 := clusterversion.MinSupported
-	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.Latest.Version(),
-		v0.Version(),
-		false, // initializeVersion
-	)
-	// Initialize the version to v0.
-	require.NoError(t, clusterversion.Initialize(ctx,
-		v0.Version(), &settings.SV))
-
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		Settings:          settings,
-		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          v0.Version(),
-			},
-			SQLEvalContext: &eval.TestingKnobs{
-				// When the host binary version is not equal to its cluster version, tenant logical version is set
-				// to the host's minimum supported binary version. We need this override to ensure that the tenant is
-				// created at v0.
-				TenantLogicalVersionKeyOverride: v0,
-			},
-		},
-	})
-	defer ts.Stopper().Stop(ctx)
-	sysDB := sqlutils.MakeSQLRunner(ts.SQLConn(t, serverutils.DBName("")))
-
-	expectedInitialTenantVersion := v0.Version()
-
-	tenantSettings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.Latest.Version(),
-		v0.Version(),
-		false, // initializeVersion
-	)
-	require.NoError(t, clusterversion.Initialize(ctx,
-		expectedInitialTenantVersion, &tenantSettings.SV))
-
-	upgradeInfoCh := make(chan struct {
-		Status    int
-		UpgradeTo roachpb.Version
-	}, 1)
-	mkTenant := func(t *testing.T, name string) (tenantDB *gosql.DB) {
-		tenantArgs := base.TestSharedProcessTenantArgs{
-			TenantName: roachpb.TenantName(name),
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					TenantAutoUpgradeInfo: upgradeInfoCh,
-					BinaryVersionOverride: v0.Version(),
-				},
-			},
-		}
-		_, tenantDB, err := ts.TenantController().StartSharedProcessTenant(ctx, tenantArgs)
-		require.NoError(t, err)
-		return tenantDB
-	}
-
-	// Create a shared process tenant and its SQL server.
-	const tenantName = "marhaba-crdb"
-	tenantDB := mkTenant(t, tenantName)
-	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
-
-	// Ensure that the tenant works.
-	tenantRunner.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY)")
-	tenantRunner.Exec(t, "INSERT INTO t VALUES (1), (2)")
-
-	// Disable cluster.auto_upgrade.enabled setting for the tenant to prevent auto upgrade.
-	tenantRunner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = false", clusterversion.AutoUpgradeEnabled.Name()))
-
-	// Upgrade the host cluster.
-	sysDB.Exec(t,
-		"SET CLUSTER SETTING version = $1",
-		clusterversion.Latest.String())
-
-	// Ensure that the tenant still works.
-	tenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
-
-	// Wait for auto upgrade status to be received by the testing knob.
-	succeedsSoon := 20 * time.Second
-	for {
-		select {
-		case upgradeInfo := <-upgradeInfoCh:
-			if int(server.UpgradeDisabledByConfiguration) == upgradeInfo.Status {
-				return
-			}
-		case <-time.After(succeedsSoon):
-			t.Fatalf("failed to receive the right auto upgrade status after %d seconds", int(succeedsSoon.Seconds()))
-		}
-	}
+// autoUpgradeClusterSetting wraps data about an auto-upgrade related
+// cluster setting that should lead to the auto upgrade process not
+// being able to run while the setting is active, due to the given
+// upgrade status.
+type autoUpgradeClusterSetting struct {
+	name          string
+	value         any
+	upgradeStatus int
 }
 
-func TestTenantAutoUpgrade(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+// testTenantAutoUpgrades exercises the auto upgrade logic for
+// tenants. If a `clusterSetting` is passed, they are set on the
+// tenant before any upgrade takes place, and reset prior to the point
+// where the tenant auto upgrade should kick in.
+func testTenantAutoUpgrade(t *testing.T, clusterSetting *autoUpgradeClusterSetting) {
 	defer log.Scope(t).Close(t)
 	skip.UnderStressRace(t)
 
@@ -190,8 +105,9 @@ func TestTenantAutoUpgrade(t *testing.T) {
 			TenantName: roachpb.TenantName(name),
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					TenantAutoUpgradeInfo: upgradeInfoCh,
-					BinaryVersionOverride: v0.Version(),
+					TenantAutoUpgradeInfo:          upgradeInfoCh,
+					TenantAutoUpgradeLoopFrequency: time.Second,
+					BinaryVersionOverride:          v0.Version(),
 				},
 			},
 		}
@@ -201,13 +117,18 @@ func TestTenantAutoUpgrade(t *testing.T) {
 	}
 
 	// Create a shared process tenant and its SQL server.
-	const tenantName = "hola-crdb"
+	const tenantName = "app"
 	tenantDB := mkTenant(t, tenantName)
 	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
 
 	// Ensure that the tenant works.
 	tenantRunner.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY)")
 	tenantRunner.Exec(t, "INSERT INTO t VALUES (1), (2)")
+
+	// Apply the cluster setting, if any.
+	if clusterSetting != nil {
+		tenantRunner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = $1", clusterSetting.name), clusterSetting.value)
+	}
 
 	// Upgrade the host cluster.
 	sysDB.Exec(t,
@@ -217,25 +138,62 @@ func TestTenantAutoUpgrade(t *testing.T) {
 	// Ensure that the tenant still works.
 	tenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
 
-	var upgradeInfo struct {
-		Status    int
-		UpgradeTo roachpb.Version
-	}
-	succeedsSoon := 20 * time.Second
-	if util.RaceEnabled || skip.Stress() {
-		succeedsSoon = 60 * time.Second
-	}
-	// Wait for auto upgrade status to be received by the testing knob.
-	for {
-		select {
-		case upgradeInfo = <-upgradeInfoCh:
-			if upgradeInfo.UpgradeTo == expectedFinalTenantVersion && upgradeInfo.Status == int(server.UpgradeAllowed) {
-				return
+	waitForUpgradeInfo := func(expectedVersion roachpb.Version, expectedStatus int) {
+		succeedsSoon := 20 * time.Second
+		if util.RaceEnabled || skip.Stress() {
+			succeedsSoon = 60 * time.Second
+		}
+
+		for {
+			select {
+			case upgradeInfo := <-upgradeInfoCh:
+				if upgradeInfo.UpgradeTo == expectedVersion && upgradeInfo.Status == expectedStatus {
+					return
+				}
+			case <-time.After(succeedsSoon):
+				t.Fatalf(
+					"failed to receive the auto upgrade status for version %s and status %d after %d seconds",
+					expectedVersion, expectedStatus, int(succeedsSoon.Seconds()),
+				)
 			}
-		case <-time.After(succeedsSoon):
-			t.Fatalf("failed to receive the right auto upgrade status after %d seconds", int(succeedsSoon.Seconds()))
 		}
 	}
+
+	// Reset cluster setting, if any.
+	if clusterSetting != nil {
+		// Wait for us to receive an upgrade event indicating that we are
+		// not upgrading immediately after the storage cluster due to a
+		// cluster setting configuration.
+		waitForUpgradeInfo(roachpb.Version{}, clusterSetting.upgradeStatus)
+
+		tenantRunner.Exec(t, fmt.Sprintf("RESET CLUSTER SETTING %s", clusterSetting.name))
+	}
+
+	// Wait for auto upgrade status to be received by the testing knob.
+	waitForUpgradeInfo(expectedFinalTenantVersion, int(server.UpgradeAllowed))
+}
+
+func TestTenantAutoUpgradeNoClusterSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testTenantAutoUpgrade(t, nil)
+}
+
+func TestTenantAutoUpgradeWithAutoUpgradeClusterSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testTenantAutoUpgrade(t, &autoUpgradeClusterSetting{
+		name:          "cluster.auto_upgrade.enabled",
+		value:         false,
+		upgradeStatus: int(server.UpgradeDisabledByConfiguration),
+	})
+}
+
+func TestTenantAutoUpgradeWithPreserveDowngradeOptionClusterSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testTenantAutoUpgrade(t, &autoUpgradeClusterSetting{
+		name:          "cluster.preserve_downgrade_option",
+		value:         clusterversion.MinSupported.Version().String(),
+		upgradeStatus: int(server.UpgradeDisabledByConfigurationToPreserveDowngrade),
+	})
 }
 
 // TestTenantUpgrade exercises the case where a system tenant is in a
