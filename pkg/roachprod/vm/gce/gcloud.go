@@ -25,6 +25,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
 	cloudbilling "google.golang.org/api/cloudbilling/v1beta"
 )
@@ -45,6 +47,7 @@ const (
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
 	FIPSImageProject    = "ubuntu-os-pro-cloud"
+	ManagedLabel        = "managed"
 )
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
@@ -126,6 +129,12 @@ type jsonVM struct {
 		OnHostMaintenance         string
 		InstanceTerminationAction string
 		ProvisioningModel         string
+	}
+	Metadata struct {
+		Items []struct {
+			Key   string
+			Value string
+		}
 	}
 	MachineType string
 	// CPU platform corresponding to machine type; see https://cloud.google.com/compute/docs/cpu-platforms
@@ -294,6 +303,10 @@ type ProviderOpts struct {
 	PDVolumeType     string
 	PDVolumeSize     int
 	UseMultipleDisks bool
+	// Use an instance template and a managed instance group to create VMs. This
+	// enables cluster resizing, load balancing, and health monitoring.
+	Managed bool
+
 	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
 	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
 	TerminateOnMigration bool
@@ -848,6 +861,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"use spot GCE instances (like preemptible but lifetime can exceed 24h)")
 	flags.BoolVar(&o.TerminateOnMigration, ProviderName+"-terminateOnMigration", false,
 		"use 'TERMINATE' maintenance policy (for GCE live migrations)")
+	flags.BoolVar(&o.Managed, ProviderName+"-managed", false,
+		"use a managed instance group (enables resizing, load balancing, and health monitoring)")
 }
 
 // ConfigureClusterFlags implements vm.ProviderFlags.
@@ -870,6 +885,11 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 		ProviderName+"-use-shared-user", true,
 		fmt.Sprintf("use the shared user %q for ssh rather than your user %q",
 			config.SharedUser, config.OSUser.Username))
+}
+
+// useArmAMI returns true if the machine type is an arm64 machine type.
+func (o *ProviderOpts) useArmAMI() bool {
+	return strings.HasPrefix(strings.ToLower(o.MachineType), "t2a-")
 }
 
 // CleanSSH TODO(peter): document
@@ -942,27 +962,50 @@ func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) 
 	return p.editLabels(l, vms, labelsMap, true /* remove */)
 }
 
-// Create TODO(peter): document
-func (p *Provider) Create(
-	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
-) error {
-	providerOpts := vmProviderOpts.(*ProviderOpts)
-	project := p.GetProject()
-	var gcJob bool
-	for _, prj := range projectsWithGC {
-		if prj == p.GetProject() {
-			gcJob = true
-			break
-		}
-	}
-	if !gcJob {
-		l.Printf("WARNING: --lifetime functionality requires "+
-			"`roachprod gc --gce-project=%s` cronjob", project)
+// computeLabelsArg computes the labels arg to be passed to the gcloud command
+// during cluster creation.
+func computeLabelsArg(opts vm.CreateOpts, providerOpts *ProviderOpts) (string, error) {
+	m := vm.GetDefaultLabelMap(opts)
+	// Format according to gce label naming convention requirement.
+	time := timeutil.Now().Format(time.RFC3339)
+	time = strings.ToLower(strings.ReplaceAll(time, ":", "_"))
+	m[vm.TagCreated] = time
+
+	var labelPairs []string
+	addLabel := func(key, value string) {
+		labelPairs = append(labelPairs, fmt.Sprintf("%s=%s", key, value))
 	}
 
+	if providerOpts.Managed {
+		addLabel(ManagedLabel, "true")
+	}
+
+	if providerOpts.useSpot {
+		m[vm.TagSpotInstance] = "true"
+	}
+
+	for key, value := range opts.CustomLabels {
+		_, ok := m[strings.ToLower(key)]
+		if ok {
+			return "", fmt.Errorf("duplicate label name defined: %s", key)
+		}
+		addLabel(key, value)
+	}
+
+	for key, value := range m {
+		addLabel(key, value)
+	}
+
+	return strings.Join(labelPairs, ","), nil
+}
+
+// computeZones computes the zones to be passed to the gcloud commands during
+// cluster creation. It's possible that only a subset of the zones get used
+// depending on how many nodes are requested.
+func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, error) {
 	zones, err := vm.ExpandZonesFlag(providerOpts.Zones)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(zones) == 0 {
 		if opts.GeoDistributed {
@@ -971,18 +1014,7 @@ func (p *Provider) Create(
 			zones = []string{defaultZones()[0]}
 		}
 	}
-
-	// Fixed args.
-	image := providerOpts.Image
-	imageProject := defaultImageProject
-	useArmAMI := strings.HasPrefix(strings.ToLower(providerOpts.MachineType), "t2a-")
-	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
-		return errors.Errorf("machine type %s is arm64, but requested arch is %s", providerOpts.MachineType, opts.Arch)
-	}
-	if useArmAMI && opts.SSDOpts.UseLocalSSD {
-		return errors.New("local SSDs are not supported with T2A instances, use --local-ssd=false")
-	}
-	if useArmAMI {
+	if providerOpts.useArmAMI() {
 		if len(providerOpts.Zones) == 0 {
 			zones = []string{"us-central1-a"}
 		} else {
@@ -990,18 +1022,41 @@ func (p *Provider) Create(
 			for _, zone := range providerOpts.Zones {
 				for _, region := range supportedT2ARegions {
 					if !strings.HasPrefix(zone, region) {
-						return errors.Newf("T2A instances are not supported outside of [%s]", strings.Join(supportedT2ARegions, ","))
+						return nil, errors.Newf("T2A instances are not supported outside of [%s]", strings.Join(supportedT2ARegions, ","))
 					}
 				}
 			}
 		}
+	}
+	return zones, nil
+}
+
+// computeInstanceArgs computes the arguments to be passed to the gcloud command
+// to create a VM or create an instance template for a VM. This function must
+// ensure that it returns arguments compatible with both the `gcloud compute
+// instances create` and `gcloud compute instance-templates create` commands.
+func (p *Provider) computeInstanceArgs(
+	l *logger.Logger, opts vm.CreateOpts, providerOpts *ProviderOpts,
+) (args []string, cleanUpFn func(), err error) {
+	cleanUpFn = func() {}
+	project := p.GetProject()
+
+	// Fixed args.
+	image := providerOpts.Image
+	imageProject := defaultImageProject
+
+	if providerOpts.useArmAMI() && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
+		return nil, cleanUpFn, errors.Errorf("machine type %s is arm64, but requested arch is %s", providerOpts.MachineType, opts.Arch)
+	}
+	if providerOpts.useArmAMI() && opts.SSDOpts.UseLocalSSD {
+		return nil, cleanUpFn, errors.New("local SSDs are not supported with T2A instances, use --local-ssd=false")
+	}
+	if providerOpts.useArmAMI() {
 		if providerOpts.MinCPUPlatform != "" {
 			l.Printf("WARNING: --gce-min-cpu-platform is ignored for T2A instances")
 			providerOpts.MinCPUPlatform = ""
 		}
-	}
-	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
-	if useArmAMI {
+		//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 		image = ARM64Image
 		l.Printf("Using ARM64 AMI: %s for machine type: %s", image, providerOpts.MachineType)
 	}
@@ -1015,13 +1070,11 @@ func (p *Provider) Create(
 	if opts.UbuntuVersion.IsOverridden() {
 		image, err = getUbuntuImage(opts.UbuntuVersion, opts.Arch)
 		if err != nil {
-			return err
+			return nil, cleanUpFn, err
 		}
 		l.Printf("Overriding default Ubuntu image with %s", image)
 	}
-	args := []string{
-		"compute", "instances", "create",
-		"--subnet", "default",
+	args = []string{
 		"--scopes", "cloud-platform",
 		"--image", image,
 		"--image-project", imageProject,
@@ -1039,10 +1092,10 @@ func (p *Provider) Create(
 	if providerOpts.preemptible {
 		// Make sure the lifetime is no longer than 24h
 		if opts.Lifetime > time.Hour*24 {
-			return errors.New("lifetime cannot be longer than 24 hours for preemptible instances")
+			return nil, cleanUpFn, errors.New("lifetime cannot be longer than 24 hours for preemptible instances")
 		}
 		if !providerOpts.TerminateOnMigration {
-			return errors.New("preemptible instances require 'TERMINATE' maintenance policy; use --gce-terminateOnMigration")
+			return nil, cleanUpFn, errors.New("preemptible instances require 'TERMINATE' maintenance policy; use --gce-terminateOnMigration")
 		}
 		args = append(args, "--preemptible")
 		// Preemptible instances require the following arguments set explicitly
@@ -1062,7 +1115,7 @@ func (p *Provider) Create(
 	// Dynamic args.
 	if opts.SSDOpts.UseLocalSSD {
 		if counts, err := AllowedLocalSSDCount(providerOpts.MachineType); err != nil {
-			return err
+			return nil, cleanUpFn, err
 		} else {
 			// Make sure the minimum number of local SSDs is met.
 			minCount := counts[0]
@@ -1095,11 +1148,11 @@ func (p *Provider) Create(
 	// Create GCE startup script file.
 	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS), !shouldEnableRSAForSSH(opts.UbuntuVersion, opts.Arch))
 	if err != nil {
-		return errors.Wrapf(err, "could not write GCE startup script to temp file")
+		return nil, cleanUpFn, errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
-	defer func() {
+	cleanUpFn = func() {
 		_ = os.Remove(filename)
-	}()
+	}
 
 	args = append(args, "--machine-type", providerOpts.MachineType)
 	if providerOpts.MinCPUPlatform != "" {
@@ -1110,38 +1163,147 @@ func (p *Provider) Create(
 		args = append(args, "--min-cpu-platform", providerOpts.MinCPUPlatform)
 	}
 
-	m := vm.GetDefaultLabelMap(opts)
-	// Format according to gce label naming convention requirement.
-	time := timeutil.Now().Format(time.RFC3339)
-	time = strings.ToLower(strings.ReplaceAll(time, ":", "_"))
-	m[vm.TagCreated] = time
-	if providerOpts.useSpot {
-		m[vm.TagSpotInstance] = "true"
-	}
-
-	var labelPairs []string
-	addLabel := func(key, value string) {
-		labelPairs = append(labelPairs, fmt.Sprintf("%s=%s", key, value))
-	}
-
-	for key, value := range opts.CustomLabels {
-		_, ok := m[strings.ToLower(key)]
-		if ok {
-			return fmt.Errorf("duplicate label name defined: %s", key)
-		}
-		addLabel(key, value)
-	}
-	for key, value := range m {
-		addLabel(key, value)
-	}
-	labels := strings.Join(labelPairs, ",")
-
-	args = append(args, "--labels", labels)
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
 	args = append(args, "--project", project)
 	args = append(args, fmt.Sprintf("--boot-disk-size=%dGB", opts.OsVolumeSize))
-	var g errgroup.Group
+	return args, cleanUpFn, nil
+}
 
+func instanceTemplateName(clusterName string) string {
+	return fmt.Sprintf("%s-template", clusterName)
+}
+
+func instanceGroupName(clusterName string) string {
+	return fmt.Sprintf("%s-group", clusterName)
+}
+
+// createInstanceTemplate creates an instance template for the cluster. This is
+// currently only used for managed instance group clusters.
+func createInstanceTemplate(clusterName string, instanceArgs []string, labelsArg string) error {
+	templateName := instanceTemplateName(clusterName)
+	createTemplateArgs := []string{"compute", "instance-templates", "create"}
+	createTemplateArgs = append(createTemplateArgs, instanceArgs...)
+	createTemplateArgs = append(createTemplateArgs, "--labels", labelsArg)
+	createTemplateArgs = append(createTemplateArgs, templateName)
+
+	cmd := exec.Command("gcloud", createTemplateArgs...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", createTemplateArgs, output)
+	}
+	return nil
+}
+
+// createInstanceGroups creates an instance group in each zone, for the cluster
+func createInstanceGroups(project, clusterName string, zones []string, opts vm.CreateOpts) error {
+	groupName := instanceGroupName(clusterName)
+	templateName := instanceTemplateName(clusterName)
+	// Note that we set the IP addresses to be stateful, so that they remain the
+	// same when instances are auto-healed, updated, or recreated.
+	createGroupArgs := []string{"compute", "instance-groups", "managed", "create",
+		"--template", templateName,
+		"--size", "0",
+		"--stateful-external-ip", "enabled,auto-delete=on-permanent-instance-deletion",
+		"--stateful-internal-ip", "enabled,auto-delete=on-permanent-instance-deletion",
+		"--project", project,
+		groupName}
+
+	// Determine the number of stateful disks the instance group should retain. If
+	// we don't use a local SSD, we use 2 stateful disks, a boot disk and a
+	// persistent disk. If we use a local SSD, we use 1 stateful disk, the boot
+	// disk.
+	numStatefulDisks := 1
+	if !opts.SSDOpts.UseLocalSSD {
+		numStatefulDisks = 2
+	}
+	statefulDiskArgs := make([]string, 0)
+	for i := 0; i < numStatefulDisks; i++ {
+		statefulDiskArgs = append(
+			statefulDiskArgs,
+			"--stateful-disk",
+			fmt.Sprintf("device-name=persistent-disk-%d,auto-delete=on-permanent-instance-deletion", i),
+		)
+	}
+	createGroupArgs = append(createGroupArgs, statefulDiskArgs...)
+
+	var g errgroup.Group
+	for _, zone := range zones {
+		argsWithZone := append(createGroupArgs[:len(createGroupArgs):len(createGroupArgs)], "--zone", zone)
+		g.Go(func() error {
+			cmd := exec.Command("gcloud", argsWithZone...)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithZone, output)
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
+// waitForGroupStability waits for the instance groups, in the given zones, to become stable.
+func waitForGroupStability(project, groupName string, zones []string) error {
+	// Wait for group to become stable // zone TBD
+	var g errgroup.Group
+	for _, zone := range zones {
+		groupStableArgs := []string{"compute", "instance-groups", "managed", "wait-until", "--stable",
+			"--zone", zone,
+			"--project", project,
+			groupName}
+		g.Go(func() error {
+			cmd := exec.Command("gcloud", groupStableArgs...)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", groupStableArgs, output)
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
+// Create instantiates the requested VMs on GCE. If the cluster is managed, it
+// will create an instance template and instance group, otherwise it will create
+// individual instances.
+func (p *Provider) Create(
+	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
+) error {
+	providerOpts := vmProviderOpts.(*ProviderOpts)
+	project := p.GetProject()
+	var gcJob bool
+	for _, prj := range projectsWithGC {
+		if prj == p.GetProject() {
+			gcJob = true
+			break
+		}
+	}
+	if !gcJob {
+		l.Printf("WARNING: --lifetime functionality requires "+
+			"`roachprod gc --gce-project=%s` cronjob", project)
+	}
+	if providerOpts.Managed {
+		if err := checkSDKVersion("450.0.0" /* minVersion */, "required by managed instance groups"); err != nil {
+			return err
+		}
+	}
+
+	instanceArgs, cleanUpFn, err := p.computeInstanceArgs(l, opts, providerOpts)
+	if cleanUpFn != nil {
+		defer cleanUpFn()
+	}
+	if err != nil {
+		return err
+	}
+	zones, err := computeZones(opts, providerOpts)
+	if err != nil {
+		return err
+	}
+	labels, err := computeLabelsArg(opts, providerOpts)
+	if err != nil {
+		return err
+	}
+
+	// Work out in which zones VMs should be created.
 	nodeZones := vm.ZonePlacement(len(zones), len(names))
 	// N.B. when len(zones) > len(names), we don't need to map unused zones
 	zoneToHostNames := make(map[string][]string, min(len(zones), len(names)))
@@ -1149,27 +1311,73 @@ func (p *Provider) Create(
 		zone := zones[nodeZones[i]]
 		zoneToHostNames[zone] = append(zoneToHostNames[zone], name)
 	}
-	l.Printf("Creating %d instances, distributed across [%s]", len(names), strings.Join(zones, ", "))
+	usedZones := maps.Keys(zoneToHostNames)
 
-	for zone, zoneHosts := range zoneToHostNames {
-		argsWithZone := append(args[:len(args):len(args)], "--zone", zone)
-		argsWithZone = append(argsWithZone, zoneHosts...)
-		g.Go(func() error {
-			cmd := exec.Command("gcloud", argsWithZone...)
+	switch {
+	case providerOpts.Managed:
+		var g errgroup.Group
+		err = createInstanceTemplate(opts.ClusterName, instanceArgs, labels)
+		if err != nil {
+			return err
+		}
+		err = createInstanceGroups(project, opts.ClusterName, usedZones, opts)
+		if err != nil {
+			return err
+		}
 
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithZone, output)
+		groupName := instanceGroupName(opts.ClusterName)
+		createArgs := []string{"compute", "instance-groups", "managed", "create-instance",
+			"--project", project,
+			groupName}
+
+		l.Printf("Creating %d managed instances, distributed across [%s]", len(names), strings.Join(usedZones, ", "))
+		for zone, zoneHosts := range zoneToHostNames {
+			argsWithZone := append(createArgs[:len(createArgs):len(createArgs)], "--zone", zone)
+			for _, host := range zoneHosts {
+				argsWithHost := append(argsWithZone[:len(argsWithZone):len(argsWithZone)], []string{"--instance", host}...)
+				g.Go(func() error {
+					cmd := exec.Command("gcloud", argsWithHost...)
+					output, err := cmd.CombinedOutput()
+					if err != nil {
+						return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithHost, output)
+					}
+					return nil
+				})
 			}
-			return nil
-		})
+		}
+		err = g.Wait()
+		if err != nil {
+			return err
+		}
+		err = waitForGroupStability(project, groupName, usedZones)
+		if err != nil {
+			return err
+		}
+	default:
+		var g errgroup.Group
+		createArgs := []string{"compute", "instances", "create", "--subnet", "default"}
+		createArgs = append(createArgs, "--labels", labels)
+		createArgs = append(createArgs, instanceArgs...)
 
-	}
-	err = g.Wait()
-	if err != nil {
-		return err
-	}
+		l.Printf("Creating %d instances, distributed across [%s]", len(names), strings.Join(usedZones, ", "))
+		for zone, zoneHosts := range zoneToHostNames {
+			argsWithZone := append(createArgs[:len(createArgs):len(createArgs)], "--zone", zone)
+			argsWithZone = append(argsWithZone, zoneHosts...)
+			g.Go(func() error {
+				cmd := exec.Command("gcloud", argsWithZone...)
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithZone, output)
+				}
+				return nil
+			})
 
+		}
+		err = g.Wait()
+		if err != nil {
+			return err
+		}
+	}
 	return propagateDiskLabels(l, project, labels, zoneToHostNames, &opts)
 }
 
@@ -1281,6 +1489,123 @@ func propagateDiskLabels(
 	return g.Wait()
 }
 
+type jsonInstanceTemplate struct {
+	Name       string `json:"name"`
+	Properties struct {
+		Labels map[string]string `json:"labels"`
+	} `json:"properties"`
+}
+
+// listInstanceTemplates returns a list of instance templates for a given
+// project.
+func listInstanceTemplates(project string) ([]jsonInstanceTemplate, error) {
+	args := []string{"compute", "instance-templates", "list", "--project", project, "--format", "json"}
+	var templates []jsonInstanceTemplate
+	if err := runJSONCommand(args, &templates); err != nil {
+		return nil, err
+	}
+	return templates, nil
+}
+
+type jsonManagedInstanceGroup struct {
+	Name string `json:"name"`
+	Zone string `json:"zone"`
+}
+
+// listManagedInstanceGroups returns a list of managed instance groups for a
+// given group name. Groups may exist in multiple zones with the same name. This
+// function returns a list of all groups with the given name.
+func listManagedInstanceGroups(project, groupName string) ([]jsonManagedInstanceGroup, error) {
+	args := []string{"compute", "instance-groups", "list", "--only-managed",
+		"--project", project, "--format", "json", "--filter", fmt.Sprintf("name=%s", groupName)}
+	var groups []jsonManagedInstanceGroup
+	if err := runJSONCommand(args, &groups); err != nil {
+		return nil, err
+	}
+	return groups, nil
+}
+
+// deleteInstanceTemplate deletes the instance template for the cluster.
+func deleteInstanceTemplate(project, clusterName string) error {
+	templateName := instanceTemplateName(clusterName)
+	args := []string{"compute", "instance-templates", "delete", "--project", project, "--quiet", templateName}
+	cmd := exec.Command("gcloud", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+	}
+	return nil
+}
+
+// isManaged returns true if the cluster is part of a managed instance group.
+// This function makes the assumption that a cluster is either completely
+// managed or not at all.
+func isManaged(vms vm.List) bool {
+	return vms[0].Labels[ManagedLabel] == "true"
+}
+
+// Delete is part of the vm.Provider interface.
+func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
+	switch {
+	case isManaged(vms):
+		return p.deleteManaged(l, vms)
+	default:
+		return p.deleteUnmanaged(l, vms)
+	}
+}
+
+// deleteManaged deletes the managed instance group for the given VMs. It also
+// deletes any instance templates that were used to create the managed instance
+// group.
+func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
+	clusterProjectMap := make(map[string]string)
+	for _, v := range vms {
+		clusterName, err := v.ClusterName()
+		if err != nil {
+			return err
+		}
+		clusterProjectMap[clusterName] = v.Project
+	}
+
+	var g errgroup.Group
+	for cluster, project := range clusterProjectMap {
+		// Multiple instance groups can exist for a single cluster, one for each zone.
+		projectGroups, err := listManagedInstanceGroups(project, instanceGroupName(cluster))
+		if err != nil {
+			return err
+		}
+		for _, group := range projectGroups {
+			argsWithZone := []string{"compute", "instance-groups", "managed", "delete", "--quiet",
+				"--project", project,
+				"--zone", group.Zone,
+				group.Name}
+			g.Go(func() error {
+				cmd := exec.Command("gcloud", argsWithZone...)
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithZone, output)
+				}
+				return nil
+			})
+		}
+	}
+	err := g.Wait()
+	if err != nil {
+		return err
+	}
+
+	// All instance groups have to be deleted before the instance templates can be
+	// deleted.
+	g = errgroup.Group{}
+	for cluster, project := range clusterProjectMap {
+		cluster, project := cluster, project
+		g.Go(func() error {
+			return deleteInstanceTemplate(project /* project */, cluster /* cluster */)
+		})
+	}
+	return g.Wait()
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -1288,14 +1613,11 @@ func min(a, b int) int {
 	return b
 }
 
-// Delete TODO(peter): document
-func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
+// deleteUnmanaged deletes the given VMs that are not part of a managed instance group.
+func (p *Provider) deleteUnmanaged(l *logger.Logger, vms vm.List) error {
 	// Map from project to map of zone to list of machines in that project/zone.
 	projectZoneMap := make(map[string]map[string][]string)
 	for _, v := range vms {
-		if v.Provider != ProviderName {
-			return errors.Errorf("%s received VM instance from %s", ProviderName, v.Provider)
-		}
 		if projectZoneMap[v.Project] == nil {
 			projectZoneMap[v.Project] = make(map[string][]string)
 		}
@@ -1411,6 +1733,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 		l.Printf("WARN: --include-volumes is disabled; attached disks info will be partial")
 	}
 
+	templatesInUse := make(map[string]map[string]struct{})
 	var vms vm.List
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "instances", "list", "--project", prj, "--format", "json"}
@@ -1448,6 +1771,21 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 				}
 			}
 		}
+
+		// Find all instance templates that are currently in use.
+		for _, jsonVM := range jsonVMS {
+			for _, entry := range jsonVM.Metadata.Items {
+				if entry.Key == "instance-template" {
+					if templatesInUse[prj] == nil {
+						templatesInUse[prj] = make(map[string]struct{})
+					}
+					templateName := entry.Value[strings.LastIndex(entry.Value, "/")+1:]
+					templatesInUse[prj][templateName] = struct{}{}
+					break
+				}
+			}
+		}
+
 		// Now, convert the json payload into our common VM type
 		for _, jsonVM := range jsonVMS {
 			defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
@@ -1459,6 +1797,39 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 				disks = toDescribeVolumeCommandResponse(jsonVM.Disks, jsonVM.Zone)
 			}
 			vms = append(vms, *jsonVM.toVM(prj, disks, defaultOpts))
+		}
+	}
+
+	if opts.IncludeEmptyClusters {
+		// Find any instance templates that are not in use and add an Empty
+		// Cluster (VM marked as empty) for it. This allows `Delete` to clean up
+		// any MIG or instance template resources when there are no VMs to
+		// derive it from.
+		for _, prj := range p.GetProjects() {
+			projTemplatesInUse := templatesInUse[prj]
+			if projTemplatesInUse == nil {
+				projTemplatesInUse = make(map[string]struct{})
+			}
+			templates, err := listInstanceTemplates(prj)
+			if err != nil {
+				return nil, err
+			}
+			for _, template := range templates {
+				// Skip templates that are not marked as managed.
+				if managed, ok := template.Properties.Labels[ManagedLabel]; !(ok && managed == "true") {
+					continue
+				}
+				// Create an `EmptyCluster` VM for templates that are not in use.
+				if _, ok := projTemplatesInUse[template.Name]; !ok {
+					vms = append(vms, vm.VM{
+						Name:         template.Name,
+						Provider:     ProviderName,
+						Project:      prj,
+						Labels:       template.Properties.Labels,
+						EmptyCluster: true,
+					})
+				}
+			}
 		}
 	}
 
@@ -1727,4 +2098,28 @@ func getUbuntuImage(version vm.UbuntuVersion, arch string) (string, error) {
 func shouldEnableRSAForSSH(version vm.UbuntuVersion, arch string) bool {
 	// FIPS is not yet available on 22.04, it's still using Ubuntu 20.04.
 	return version.IsOverridden() || arch == string(vm.ArchFIPS)
+}
+
+// checkSDKVersion checks that the gcloud SDK version is at least minVersion.
+// If it is not, it returns an error with the given message.
+func checkSDKVersion(minVersion, message string) error {
+	var jsonVersion struct {
+		GoogleCloudSDK string `json:"Google Cloud SDK"`
+	}
+	err := runJSONCommand([]string{"version", "--format", "json"}, &jsonVersion)
+	if err != nil {
+		return err
+	}
+	v, err := semver.NewVersion(jsonVersion.GoogleCloudSDK)
+	if err != nil {
+		return errors.Wrapf(err, "invalid gcloud version %q", jsonVersion.GoogleCloudSDK)
+	}
+	minConstraint, err := semver.NewConstraint(">= " + minVersion)
+	if err != nil {
+		return err
+	}
+	if !minConstraint.Check(v) {
+		return errors.Errorf("gcloud version %s is below minimum required version %s: %s", v, minVersion, message)
+	}
+	return nil
 }
