@@ -407,7 +407,7 @@ type DistSenderRangeFeedMetrics struct {
 	Errors                 rangeFeedErrorCounters
 }
 
-func makeDistSenderMetrics() DistSenderMetrics {
+func MakeDistSenderMetrics() DistSenderMetrics {
 	m := DistSenderMetrics{
 		BatchCount:                         metric.NewCounter(metaDistSenderBatchCount),
 		PartialBatchCount:                  metric.NewCounter(metaDistSenderPartialBatchCount),
@@ -746,7 +746,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		clock:         cfg.Clock,
 		nodeDescs:     cfg.NodeDescs,
 		nodeIDGetter:  nodeIDGetter,
-		metrics:       makeDistSenderMetrics(),
+		metrics:       MakeDistSenderMetrics(),
 		kvInterceptor: cfg.KVInterceptor,
 		locality:      cfg.Locality,
 		healthFunc:    cfg.HealthFunc,

@@ -156,7 +156,7 @@ func TestSpanImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	metrics := makeDistSenderMetrics()
+	metrics := MakeDistSenderMetrics()
 	gt := grpcTransport{
 		opts: SendOptions{
 			metrics: &metrics,
@@ -190,7 +190,7 @@ func TestResponseVerifyFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	metrics := makeDistSenderMetrics()
+	metrics := MakeDistSenderMetrics()
 	gt := grpcTransport{
 		opts: SendOptions{
 			metrics: &metrics,

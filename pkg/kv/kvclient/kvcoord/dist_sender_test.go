@@ -5881,7 +5881,7 @@ func TestDistSenderCrossLocalityMetrics(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("%-v", tc.crossLocalityType), func(t *testing.T) {
-			metrics := makeDistSenderMetrics()
+			metrics := MakeDistSenderMetrics()
 			beforeMetrics, err := metrics.getDistSenderCounterMetrics(metricsNames)
 			if err != nil {
 				t.Error(err)
