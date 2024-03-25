@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -647,4 +648,95 @@ func SSTMaker(t *testing.T, keyValues []roachpb.KeyValue) kvpb.RangeFeedSSTable 
 		},
 		WriteTS: batchTS,
 	}
+}
+
+// SimplifyInput can be shown keys, spans of keys and timestamps and will keep
+// track of the set of unique keys and times it has seen until build() is called
+// to turn that into a simplifier, which can in turn be used to make some set
+// of arbitrary test data easier to read/comprehend for humans.
+// Zero-value is ready for use.
+type SimplifyInput struct {
+	keys  map[string]roachpb.Key
+	times map[hlc.Timestamp]hlc.Timestamp
+}
+
+// AddKey observes a key that will need to be simplified later.
+func (s *SimplifyInput) AddKey(k []byte) {
+	if s.keys == nil {
+		s.keys = make(map[string]roachpb.Key)
+	}
+	s.keys[string(k)] = nil
+}
+
+// AddSpan observes a span that will need to be simplified later.
+func (s *SimplifyInput) AddSpan(sp roachpb.Span) {
+	s.AddKey(sp.Key)
+	s.AddKey(sp.EndKey)
+}
+
+// AddTS observes a timestamp that will need to be simplified later.
+func (s *SimplifyInput) AddTS(t hlc.Timestamp) {
+	if s.times == nil {
+		s.times = make(map[hlc.Timestamp]hlc.Timestamp)
+	}
+	s.times[t] = hlc.Timestamp{}
+}
+
+// Build constructs a Simplifier for the keys and times observed by this input.
+func (s *SimplifyInput) Build() Simplifier {
+	uniqueKeys := make([]roachpb.Key, 0, len(s.keys))
+	for k := range s.keys {
+		uniqueKeys = append(uniqueKeys, roachpb.Key(k))
+	}
+	sort.Slice(uniqueKeys, func(i, j int) bool { return uniqueKeys[i].Compare(uniqueKeys[j]) < 0 })
+	for i, k := range uniqueKeys {
+		s.keys[string(k)] = encoding.EncodeVarintAscending(nil, int64(100+i))
+	}
+
+	uniqueTimes := make([]hlc.Timestamp, 0, len(s.times))
+	for ts := range s.times {
+		uniqueTimes = append(uniqueTimes, ts)
+	}
+	sort.Slice(uniqueTimes, func(i, j int) bool { return uniqueTimes[i].Compare(uniqueTimes[j]) < 0 })
+	for i, ts := range uniqueTimes {
+		s.times[ts] = hlc.Timestamp{WallTime: int64(i + 1)}
+	}
+	return Simplifier(*s)
+}
+
+// Simplifier remaps arbitrary keys or timestamps seen by a SimplifyInput to
+// "simpler" numeric keys, while preserving the ordering of the replaced keys,
+// i.e. if one input key sorts after another, its replacement will also sort as
+// such. Timestamps are similarly reduced to 1-indexed small integer wall-times.
+type Simplifier SimplifyInput
+
+// Key remaps the key to simpler keys.
+func (s *Simplifier) Key(k *roachpb.Key) {
+	x, ok := s.keys[string(*k)]
+	if !ok {
+		panic("simplifer was not shown this key")
+	}
+	*k = x
+}
+
+// Span remaps the span to simpler keys.
+func (s *Simplifier) Span(sp *roachpb.Span) {
+	a, ok := s.keys[string(sp.Key)]
+	if !ok {
+		panic("simplifer was not shown this key")
+	}
+	b, ok := s.keys[string(sp.EndKey)]
+	if !ok {
+		panic("simplifer was not shown this key")
+	}
+	*sp = roachpb.Span{Key: a, EndKey: b}
+}
+
+// Ts remaps the timestamp to simpler times.
+func (s *Simplifier) Ts(t *hlc.Timestamp) {
+	x, ok := s.times[*t]
+	if !ok {
+		panic("simplifer was not shown this ts")
+	}
+	*t = x
 }
