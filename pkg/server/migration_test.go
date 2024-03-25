@@ -117,16 +117,10 @@ func TestSyncAllEngines(t *testing.T) {
 	storeSpec := base.DefaultTestStoreSpec
 	storeSpec.StickyVFSID = "sync-all-engines"
 	testServerArgs := base.TestServerArgs{
-		Settings: cluster.MakeTestingClusterSettingsWithVersions(
-			roachpb.Version{Major: 24, Minor: 1},
-			roachpb.Version{Major: 23, Minor: 1},
-			false, /* initializeVersion */
-		),
 		StoreSpecs: []base.StoreSpec{storeSpec},
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
-				BinaryVersionOverride: roachpb.Version{Major: 24, Minor: 1},
-				StickyVFSRegistry:     vfsRegistry,
+				StickyVFSRegistry: vfsRegistry,
 			},
 		},
 	}
