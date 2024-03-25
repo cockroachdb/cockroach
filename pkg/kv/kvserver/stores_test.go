@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -359,18 +360,18 @@ func TestRegisterDiskMonitors(t *testing.T) {
 	ls.AddStore(stores[0])
 	ls.AddStore(stores[1])
 
-	fs := vfs.Default
+	defaultFS := vfs.Default
 	pathToStore := make(map[string]roachpb.StoreID, len(stores))
 	for i, store := range stores {
 		storePath := path.Join(dir, strconv.Itoa(i))
 		pathToStore[storePath] = store.StoreID()
 
-		_, err := fs.Create(storePath)
+		_, err := defaultFS.Create(storePath, fs.UnspecifiedWriteCategory)
 		require.NoError(t, err)
 		require.Nil(t, store.diskMonitor)
 	}
 
-	diskManager := disk.NewMonitorManager(fs)
+	diskManager := disk.NewMonitorManager(defaultFS)
 	err := ls.RegisterDiskMonitors(diskManager, pathToStore)
 	require.NoError(t, err)
 	for _, store := range stores {

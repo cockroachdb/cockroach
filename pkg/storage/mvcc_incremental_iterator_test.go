@@ -1407,7 +1407,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		if err := sst.Finish(); err != nil {
 			t.Fatal(err)
 		}
-		if err := fs.WriteFile(db2.Env(), `ingest`, memFile.Data()); err != nil {
+		if err := fs.WriteFile(db2.Env(), `ingest`, memFile.Data(), fs.UnspecifiedWriteCategory); err != nil {
 			t.Fatal(err)
 		}
 		if err := db2.IngestLocalFiles(ctx, []string{`ingest`}); err != nil {
