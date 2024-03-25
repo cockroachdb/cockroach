@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"go.etcd.io/raft/v3/raftpb"
 )
 
@@ -45,9 +47,8 @@ func TestNetworkDrop(t *testing.T) {
 	}
 
 	drop := sent - received
-	if drop > int((droprate+0.1)*float64(sent)) || drop < int((droprate-0.1)*float64(sent)) {
-		t.Errorf("drop = %d, want around %.2f", drop, droprate*float64(sent))
-	}
+	assert.LessOrEqual(t, drop, int((droprate+0.1)*float64(sent)))
+	assert.GreaterOrEqual(t, drop, int((droprate-0.1)*float64(sent)))
 }
 
 func TestNetworkDelay(t *testing.T) {
@@ -66,7 +67,5 @@ func TestNetworkDelay(t *testing.T) {
 
 	w := time.Duration(float64(sent)*delayrate/2) * delay
 	// there is some overhead in the send call since it generates random numbers.
-	if total < w {
-		t.Errorf("total = %v, want > %v", total, w)
-	}
+	assert.GreaterOrEqual(t, total, w)
 }
