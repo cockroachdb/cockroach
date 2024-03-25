@@ -33,12 +33,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1073,33 +1075,33 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	replicationDetails := details.Details().(jobspb.StreamIngestionDetails)
 
 	var (
-		id            int
-		dest          string
-		status        string
-		serviceMode   string
-		source        string
-		sourceUri     string
-		jobId         int
-		maxReplTime   time.Time
-		protectedTime time.Time
-		cutoverTime   []byte // should be nil
+		id             int
+		dest           string
+		status         string
+		source         string
+		sourceUri      string
+		replicationLag string
+		maxReplTime    time.Time
+		protectedTime  time.Time
+		cutoverTime    []byte // should be nil
 	)
 	row := c.DestSysSQL.QueryRow(t, fmt.Sprintf("SHOW TENANT %s WITH REPLICATION STATUS", args.DestTenantName))
-	row.Scan(&id, &dest, &status, &serviceMode, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime, &cutoverTime)
+	row.Scan(&id, &dest, &source, &sourceUri, &protectedTime, &maxReplTime, &replicationLag, &cutoverTime, &status)
 	require.Equal(t, 2, id)
 	require.Equal(t, "destination", dest)
 	require.Equal(t, "replicating", status)
-	require.Equal(t, "none", serviceMode)
-	require.Equal(t, "source", source)
 	expectedURI, err := streamclient.RedactSourceURI(c.SrcURL.String())
 	require.NoError(t, err)
 	require.Equal(t, expectedURI, sourceUri)
-	require.Equal(t, ingestionJobID, jobId)
 	require.Less(t, maxReplTime, timeutil.Now())
 	require.Less(t, protectedTime, timeutil.Now())
 	require.GreaterOrEqual(t, maxReplTime, targetReplicatedTime.GoTime())
 	require.GreaterOrEqual(t, protectedTime, replicationDetails.ReplicationStartTime.GoTime())
 	require.Nil(t, cutoverTime)
+	repLagDuration, err := duration.ParseInterval(duration.IntervalStyle_POSTGRES, replicationLag, types.DefaultIntervalTypeMetadata)
+	require.NoError(t, err)
+	require.Greater(t, repLagDuration.Nanos(), int64(0))
+	require.Less(t, repLagDuration.Nanos(), time.Second*30)
 
 	// Verify the SHOW command prints the right cutover timestamp. Adding some
 	// logical component to make sure we handle it correctly.
