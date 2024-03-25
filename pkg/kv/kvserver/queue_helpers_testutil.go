@@ -111,7 +111,10 @@ func (s *Store) ForceLeaseQueueProcess() error {
 func (s *Store) setGCQueueActive(active bool) {
 	s.mvccGCQueue.SetDisabled(!active)
 }
-func (s *Store) setLeaseQueueActive(active bool) {
+
+// SetLeaseQueueActive controls activating the lease queue. Only intended for
+// tests.
+func (s *Store) SetLeaseQueueActive(active bool) {
 	s.leaseQueue.SetDisabled(!active)
 }
 func (s *Store) setMergeQueueActive(active bool) {
