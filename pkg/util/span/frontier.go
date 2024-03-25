@@ -328,7 +328,7 @@ func (i *iterator) clone() iterator {
 // Updates btree to include single merged entry.
 // Any existing tree iterators and the passed in entry should be considered invalid after this call.
 // Returns btreeFrontierEntry that replaced passed in entry.
-func (f *btreeFrontier) mergeEntries(e *btreeFrontierEntry) (*btreeFrontierEntry, error) {
+func (f *btreeFrontier) mergeEntries(e *btreeFrontierEntry, n *node) (*btreeFrontierEntry, error) {
 	defer func() {
 		f.mergeAlloc = f.mergeAlloc[:0]
 	}()
@@ -349,6 +349,7 @@ func (f *btreeFrontier) mergeEntries(e *btreeFrontierEntry) (*btreeFrontierEntry
 		}
 		f.mergeAlloc = append(f.mergeAlloc, leftIter.Cur())
 		leftMost = leftIter.Cur()
+		n = leftIter.n
 	}
 
 	if leftMost != e {
@@ -382,6 +383,7 @@ func (f *btreeFrontier) mergeEntries(e *btreeFrontierEntry) (*btreeFrontierEntry
 	}
 
 	leftMost.End = end
+	n.adjustUpperBoundOnInsertion(leftMost, nil)
 	if expensiveChecksEnabled() {
 		leftMost.spanCopy.EndKey = append(roachpb.Key{}, end...)
 	}
@@ -422,10 +424,10 @@ func (f *btreeFrontier) deleteEntry(e *btreeFrontierEntry) error {
 // Any existing tree iterators are invalid after this call.
 func (f *btreeFrontier) splitEntryAt(
 	e *btreeFrontierEntry, split roachpb.Key,
-) (left, right *btreeFrontierEntry, err error) {
+) (left, right *btreeFrontierEntry, leftN *node, err error) {
 	if expensiveChecksEnabled() {
 		if !e.span().ContainsKey(split) {
-			return nil, nil, errors.AssertionFailedf(
+			return nil, nil, nil, errors.AssertionFailedf(
 				"split key %s is not contained by %s", split, e.span())
 		}
 	}
@@ -440,9 +442,9 @@ func (f *btreeFrontier) splitEntryAt(
 
 	if err := f.setEntry(right); err != nil {
 		putFrontierEntry(right)
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return e, right, nil
+	return e, right, nil, nil
 }
 
 // forward is the work horse of the btreeFrontier.  It forwards the timestamp
@@ -455,10 +457,10 @@ func (f *btreeFrontier) forward(span roachpb.Span, insertTS hlc.Timestamp) error
 	// tree to merge contiguous spans with the same timestamp (if possible).
 	// NB: passed in entry and any existing iterators should be considered invalid
 	// after this call.
-	forwardEntryTimestamp := func(e *btreeFrontierEntry) (*btreeFrontierEntry, error) {
+	forwardEntryTimestamp := func(e *btreeFrontierEntry, n *node) (*btreeFrontierEntry, error) {
 		e.ts = insertTS
 		heap.Fix(&f.minHeap, e.heapIdx)
-		return f.mergeEntries(e)
+		return f.mergeEntries(e, n)
 	}
 
 	for !todoEntry.isEmptyRange() { // Keep going as long as there is work to be done.
@@ -498,7 +500,7 @@ func (f *btreeFrontier) forward(span roachpb.Span, insertTS hlc.Timestamp) error
 		// As such, if the overlap range exactly matches todoEntry, we can simply
 		// update overlap timestamp and be done.
 		if overlap.span().Equal(todoEntry.span()) {
-			if _, err := forwardEntryTimestamp(overlap); err != nil {
+			if _, err := forwardEntryTimestamp(overlap, it.n); err != nil {
 				return err
 			}
 			break
@@ -515,7 +517,7 @@ func (f *btreeFrontier) forward(span roachpb.Span, insertTS hlc.Timestamp) error
 			// [overlap.Start, todoEntry.Start) and [todoEntry.Start, overlap.End)
 			// Invariant (b): after this step, overlap is split into 2 parts.  The right
 			// part starts at todoEntry.Start.
-			_, _, err := f.splitEntryAt(overlap, todoEntry.Start)
+			_, _, _, err := f.splitEntryAt(overlap, todoEntry.Start)
 			if err != nil {
 				return err
 			}
@@ -533,19 +535,19 @@ func (f *btreeFrontier) forward(span roachpb.Span, insertTS hlc.Timestamp) error
 			// Split overlap into 2 entries:
 			// [overlap.Start, todoEntry.End) and [todoEntry.End, overlap.End)
 			// Left entry can reuse overlap with insertTS.
-			left, right, err := f.splitEntryAt(overlap, todoEntry.End)
+			left, right, leftN, err := f.splitEntryAt(overlap, todoEntry.End)
 			if err != nil {
 				return err
 			}
 			todoEntry.Start = right.End
 			// The left part advances its timestamp.
-			if _, err := forwardEntryTimestamp(left); err != nil {
+			if _, err := forwardEntryTimestamp(left, leftN); err != nil {
 				return err
 			}
 		case cmp >= 0:
 			// todoEntry ends at or beyond overlap.  Regardless, we can simply update overlap
 			// and if needed, continue matching remaining todoEntry (if any).
-			fwd, err := forwardEntryTimestamp(overlap)
+			fwd, err := forwardEntryTimestamp(overlap, it.n)
 			if err != nil {
 				return err
 			}
@@ -669,7 +671,7 @@ func (e *btreeFrontierEntry) SetEndKey(k []byte) {
 }
 
 func (e *btreeFrontierEntry) String() string {
-	return fmt.Sprintf("[%s@%s]", e.span(), e.ts)
+	return fmt.Sprintf("[%s,%s,@%s]", e.Start, e.End, e.ts)
 }
 
 func (e *btreeFrontierEntry) span() roachpb.Span {

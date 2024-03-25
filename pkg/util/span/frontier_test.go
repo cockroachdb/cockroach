@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -838,11 +837,13 @@ func BenchmarkFrontier(b *testing.B) {
 	}
 }
 
-func TestBrokenFrontier(t *testing.T) {
+func TestMergeLeftLastItemAdjustsMaxKeyFrontier(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// TODO(dt): fix the underlying bug.
-	skip.WithIssue(t, 120987)
+	// These spans look weird since they are based on spans captured from a live
+	// reproduction, rather than derived from the minimum inputs required to
+	// exercise the behavior, which occurs when the merging of a leftMost item
+	// merges the top item in a node, increasing the node's upper-bound.
 	compareFrontiers(t, []intSpanAndTime{
 		{Key: 142, End: 143, Ts: 9},
 		{Key: 143, End: 144, Ts: 0},
