@@ -14,7 +14,7 @@ system "grep -q 'initial startup completed' logs/db/logs/cockroach.log"
 system "grep -q 'will now attempt to join a running cluster, or wait' logs/db/logs/cockroach.log"
 end_test
 
-start_test "Check that init --virtualized creates an application virtual cluster"
+start_test "Check that init --virtualized creates a main virtual cluster"
 
 system "$argv init --insecure --host=localhost --virtualized"
 
