@@ -73,7 +73,7 @@ func TestWALFailover(t *testing.T) {
 				if td.HasArg("read-only") {
 					envConfig.RW = fs.ReadOnly
 				}
-				e, err := fs.InitEnv(context.Background(), memfs, dir, envConfig)
+				e, err := fs.InitEnv(context.Background(), memfs, dir, envConfig, nil)
 				if err != nil {
 					return fmt.Sprintf("err = %q", err)
 				}

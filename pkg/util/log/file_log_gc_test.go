@@ -66,7 +66,7 @@ func TestSecondaryGC(t *testing.T) {
 	// Validate and apply the config.
 	require.NoError(t, config.Validate(&s.logDir))
 	TestingResetActive()
-	cleanupFn, err := ApplyConfig(config)
+	cleanupFn, err := ApplyConfig(config, FileSinkMetrics{})
 	require.NoError(t, err)
 	defer cleanupFn()
 

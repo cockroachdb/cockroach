@@ -47,7 +47,7 @@ func runDecrypt(cmd *cobra.Command, args []string) (returnErr error) {
 	// Copy the raw bytes into the destination file.
 	out := cmd.OutOrStdout()
 	if outPath != "" {
-		outFile, err := env.UnencryptedFS.Create(outPath)
+		outFile, err := env.UnencryptedFS.Create(outPath, fs.UnspecifiedWriteCategory)
 		if err != nil {
 			return errors.Wrapf(err, "could not open output file %s", outPath)
 		}

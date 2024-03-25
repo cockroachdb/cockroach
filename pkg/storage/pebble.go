@@ -894,6 +894,10 @@ type engineConfig struct {
 	beforeClose []func(*Pebble)
 	// afterClose is a slice of functions to be invoked after the engine is closed.
 	afterClose []func()
+
+	// DiskWriteStatsCollector is used to categorically track disk write metrics
+	// across all Pebble stores on this node.
+	DiskWriteStatsCollector *vfs.DiskWriteStatsCollector
 }
 
 // Pebble is a wrapper around a Pebble database instance.
@@ -935,6 +939,7 @@ type Pebble struct {
 		syncutil.Mutex
 		AggregatedBatchCommitStats
 	}
+	diskWriteStatsCollector *vfs.DiskWriteStatsCollector
 	// Relevant options copied over from pebble.Options.
 	logCtx        context.Context
 	logger        pebble.LoggerAndTracer
@@ -1168,15 +1173,16 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 
 	p = &Pebble{
-		cfg:               cfg,
-		auxDir:            auxDir,
-		ballastPath:       ballastPath,
-		properties:        computeStoreProperties(ctx, cfg),
-		logger:            cfg.opts.LoggerAndTracer,
-		logCtx:            logCtx,
-		storeIDPebbleLog:  storeIDContainer,
-		replayer:          replay.NewWorkloadCollector(cfg.env.Dir),
-		singleDelLogEvery: log.Every(5 * time.Minute),
+		cfg:                     cfg,
+		auxDir:                  auxDir,
+		ballastPath:             ballastPath,
+		properties:              computeStoreProperties(ctx, cfg),
+		logger:                  cfg.opts.LoggerAndTracer,
+		logCtx:                  logCtx,
+		storeIDPebbleLog:        storeIDContainer,
+		replayer:                replay.NewWorkloadCollector(cfg.env.Dir),
+		singleDelLogEvery:       log.Every(5 * time.Minute),
+		diskWriteStatsCollector: cfg.DiskWriteStatsCollector,
 	}
 
 	cfg.opts.Experimental.SingleDeleteInvariantViolationCallback = func(userKey []byte) {
@@ -1393,7 +1399,7 @@ func (p *Pebble) writePreventStartupFile(ctx context.Context, corruptionError er
   A file preventing this node from restarting was placed at:
   %s`, corruptionError.Error(), path)
 
-	if err := fs.WriteFile(p.cfg.env.UnencryptedFS, path, []byte(preventStartupMsg)); err != nil {
+	if err := fs.WriteFile(p.cfg.env.UnencryptedFS, path, []byte(preventStartupMsg), fs.UnspecifiedWriteCategory); err != nil {
 		log.Warningf(ctx, "%v", err)
 	}
 }
@@ -1567,7 +1573,7 @@ func (p *Pebble) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
-	readCategory ReadCategory,
+	readCategory fs.ReadCategory,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
@@ -1630,7 +1636,7 @@ func (p *Pebble) ConsistentIterators() bool {
 }
 
 // PinEngineStateForIterators implements the Engine interface.
-func (p *Pebble) PinEngineStateForIterators(ReadCategory) error {
+func (p *Pebble) PinEngineStateForIterators(fs.ReadCategory) error {
 	return errors.AssertionFailedf(
 		"PinEngineStateForIterators must not be called when ConsistentIterators returns false")
 }
@@ -2024,6 +2030,7 @@ func (p *Pebble) GetMetrics() Metrics {
 	p.batchCommitStats.Lock()
 	m.BatchCommitStats = p.batchCommitStats.AggregatedBatchCommitStats
 	p.batchCommitStats.Unlock()
+	m.DiskWriteStats = p.diskWriteStatsCollector.GetStats()
 	return m
 }
 
@@ -2360,6 +2367,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 		if err := fs.SafeWriteToFile(
 			p.cfg.env, dir, p.cfg.env.PathJoin(dir, "checkpoint.txt"),
 			checkpointSpansNote(spans),
+			fs.UnspecifiedWriteCategory,
 		); err != nil {
 			return err
 		}
@@ -2652,7 +2660,7 @@ func (p *pebbleReadOnly) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
-	readCategory ReadCategory,
+	readCategory fs.ReadCategory,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if p.closed {
@@ -2762,9 +2770,9 @@ func (p *pebbleReadOnly) ConsistentIterators() bool {
 }
 
 // PinEngineStateForIterators implements the Engine interface.
-func (p *pebbleReadOnly) PinEngineStateForIterators(readCategory ReadCategory) error {
+func (p *pebbleReadOnly) PinEngineStateForIterators(readCategory fs.ReadCategory) error {
 	if p.iter == nil {
-		o := &pebble.IterOptions{CategoryAndQoS: getCategoryAndQoS(readCategory)}
+		o := &pebble.IterOptions{CategoryAndQoS: fs.GetCategoryAndQoS(readCategory)}
 		if p.durability == GuaranteedDurability {
 			o.OnlyReadGuaranteedDurable = true
 		}
@@ -2917,7 +2925,7 @@ func (p *pebbleSnapshot) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
-	readCategory ReadCategory,
+	readCategory fs.ReadCategory,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
@@ -2965,7 +2973,7 @@ func (p pebbleSnapshot) ConsistentIterators() bool {
 }
 
 // PinEngineStateForIterators implements the Reader interface.
-func (p *pebbleSnapshot) PinEngineStateForIterators(ReadCategory) error {
+func (p *pebbleSnapshot) PinEngineStateForIterators(fs.ReadCategory) error {
 	// Snapshot already pins state, so nothing to do.
 	return nil
 }
@@ -3015,7 +3023,7 @@ func (p *pebbleEFOS) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
-	readCategory ReadCategory,
+	readCategory fs.ReadCategory,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
@@ -3089,7 +3097,7 @@ func (p *pebbleEFOS) ConsistentIterators() bool {
 }
 
 // PinEngineStateForIterators implements the Reader interface.
-func (p *pebbleEFOS) PinEngineStateForIterators(ReadCategory) error {
+func (p *pebbleEFOS) PinEngineStateForIterators(fs.ReadCategory) error {
 	// Snapshot already pins state, so nothing to do.
 	return nil
 }

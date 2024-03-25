@@ -230,7 +230,10 @@ func errConfigOption(err error) func(*engineConfig) error {
 }
 
 func makeExternalWALDir(
-	engineCfg *engineConfig, externalDir base.ExternalPath, defaultFS vfs.FS,
+	engineCfg *engineConfig,
+	externalDir base.ExternalPath,
+	defaultFS vfs.FS,
+	statsCollector *vfs.DiskWriteStatsCollector,
 ) (wal.Dir, error) {
 	// If the store is encrypted, we require that all the WAL failover dirs also
 	// be encrypted so that the user doesn't accidentally leak data unencrypted
@@ -246,7 +249,7 @@ func makeExternalWALDir(
 	env, err := fs.InitEnv(context.Background(), defaultFS, externalDir.Path, fs.EnvConfig{
 		RW:                engineCfg.env.RWMode(),
 		EncryptionOptions: externalDir.EncryptionOptions,
-	})
+	}, statsCollector)
 	if err != nil {
 		return wal.Dir{}, err
 	}
@@ -260,7 +263,12 @@ func makeExternalWALDir(
 // WALFailover configures automatic failover of the engine's write-ahead log to
 // another volume in the event the WAL becomes blocked on a write that does not
 // complete within a reasonable duration.
-func WALFailover(walCfg base.WALFailoverConfig, storeEnvs fs.Envs, defaultFS vfs.FS) ConfigOption {
+func WALFailover(
+	walCfg base.WALFailoverConfig,
+	storeEnvs fs.Envs,
+	defaultFS vfs.FS,
+	statsCollector *vfs.DiskWriteStatsCollector,
+) ConfigOption {
 	// The set of options available in single-store versus multi-store
 	// configurations vary. This is in part due to the need to store the multiple
 	// stores' WALs separately. When WALFailoverExplicitPath is provided, we have
@@ -276,7 +284,7 @@ func WALFailover(walCfg base.WALFailoverConfig, storeEnvs fs.Envs, defaultFS vfs
 			// We need to add the explicilt path to WALRecoveryDirs.
 			if walCfg.PrevPath.IsSet() {
 				return func(cfg *engineConfig) error {
-					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath, defaultFS)
+					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath, defaultFS, statsCollector)
 					if err != nil {
 						return err
 					}
@@ -293,13 +301,13 @@ func WALFailover(walCfg base.WALFailoverConfig, storeEnvs fs.Envs, defaultFS vfs
 		case base.WALFailoverExplicitPath:
 			// The user has provided an explicit path to which we should fail over WALs.
 			return func(cfg *engineConfig) error {
-				walDir, err := makeExternalWALDir(cfg, walCfg.Path, defaultFS)
+				walDir, err := makeExternalWALDir(cfg, walCfg.Path, defaultFS, statsCollector)
 				if err != nil {
 					return err
 				}
 				cfg.opts.WALFailover = makePebbleWALFailoverOptsForDir(cfg.settings, walDir)
 				if walCfg.PrevPath.IsSet() {
-					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath, defaultFS)
+					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath, defaultFS, statsCollector)
 					if err != nil {
 						return err
 					}
@@ -449,6 +457,14 @@ func makePebbleWALFailoverOptsForDir(
 func PebbleOptions(pebbleOptions string, parseHooks *pebble.ParseHooks) ConfigOption {
 	return func(cfg *engineConfig) error {
 		return cfg.opts.Parse(pebbleOptions, parseHooks)
+	}
+}
+
+// DiskWriteStatsCollector configures an engine to categorically track disk write stats.
+func DiskWriteStatsCollector(dsc *vfs.DiskWriteStatsCollector) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.DiskWriteStatsCollector = dsc
+		return nil
 	}
 }
 
