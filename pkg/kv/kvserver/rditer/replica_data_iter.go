@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/pebble"
@@ -35,7 +36,7 @@ type ReplicaDataIteratorOptions struct {
 	// ExcludeUserKeySpan removes UserKeySpace span portion.
 	ExcludeUserKeySpan bool
 	// ReadCategory is used for stats etc.
-	ReadCategory storage.ReadCategory
+	ReadCategory fs.ReadCategory
 }
 
 // ReplicaMVCCDataIterator provides a complete iteration over MVCC or unversioned
@@ -476,7 +477,7 @@ type IterateOptions struct {
 	CombineRangesAndPoints bool
 	Reverse                bool
 	ExcludeUserKeySpan     bool
-	ReadCategory           storage.ReadCategory
+	ReadCategory           fs.ReadCategory
 }
 
 // IterateMVCCReplicaKeySpans iterates over replica's key spans in the similar

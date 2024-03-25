@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -188,8 +189,9 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 		return errors.Wrap(err, "unable to create log directory")
 	}
 
+	logBytesWritten := serverCfg.DiskWriteStatsCollector.CreateStat(fs.CRDBLogWriteCategory)
 	// Configuration ready and directories exist; apply it.
-	logShutdownFn, err := log.ApplyConfig(h.Config)
+	logShutdownFn, err := log.ApplyConfig(h.Config, log.FileSinkMetrics{LogBytesWritten: logBytesWritten})
 	if err != nil {
 		return err
 	}

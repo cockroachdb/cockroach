@@ -132,7 +132,7 @@ func buildInitialState(
 		// or not, we build the conditions using an in-memory engine for
 		// performance.
 		buildFS = vfs.NewMem()
-		env, err := fs.InitEnv(ctx, buildFS, "", fs.EnvConfig{})
+		env, err := fs.InitEnv(ctx, buildFS, "", fs.EnvConfig{}, nil)
 		require.NoError(b, err)
 
 		e, err := Open(ctx, env, cluster.MakeClusterSettings(), opts...)

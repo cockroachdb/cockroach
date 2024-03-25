@@ -42,7 +42,7 @@ func TestSafeWriteToFile(t *testing.T) {
 
 	require.NoError(t, mem.MkdirAll("foo", os.ModePerm))
 	syncDir("")
-	f, err := mem.Create("foo/bar")
+	f, err := mem.Create("foo/bar", UnspecifiedWriteCategory)
 	require.NoError(t, err)
 	_, err = io.WriteString(f, "Hello world")
 	require.NoError(t, err)
@@ -57,7 +57,7 @@ func TestSafeWriteToFile(t *testing.T) {
 
 	// Use SafeWriteToFile to atomically, durably change the contents of the
 	// file.
-	require.NoError(t, SafeWriteToFile(mem, "foo", "foo/bar", []byte("Hello everyone")))
+	require.NoError(t, SafeWriteToFile(mem, "foo", "foo/bar", []byte("Hello everyone"), "test"))
 
 	// Discard any unsynced writes.
 	mem.ResetToSyncedState()

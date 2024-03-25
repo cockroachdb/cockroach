@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -103,7 +104,7 @@ func Subsume(
 	// regardless of what timestamp it is written at.
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 	intentRes, err := storage.MVCCGet(ctx, readWriter, descKey, hlc.MaxTimestamp,
-		storage.MVCCGetOptions{Inconsistent: true, ReadCategory: storage.BatchEvalReadCategory})
+		storage.MVCCGetOptions{Inconsistent: true, ReadCategory: fs.BatchEvalReadCategory})
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "fetching local range descriptor")
 	} else if intentRes.Intent == nil {

@@ -260,7 +260,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		// First add a file that shouldn't be in the sideloaded storage to ensure
 		// sane behavior when directory can't be removed after full truncate.
 		nonRemovableFile := filepath.Join(ss.Dir(), "cantremove.xx")
-		f, err := eng.Env().Create(nonRemovableFile)
+		f, err := eng.Env().Create(nonRemovableFile, fs.UnspecifiedWriteCategory)
 		if err != nil {
 			t.Fatalf("could not create non i*.t* file in sideloaded storage: %+v", err)
 		}
@@ -608,7 +608,7 @@ func TestSideloadStorageSync(t *testing.T) {
 		// able to emulate crash restart by rolling it back to last synced state.
 		ctx := context.Background()
 		memFS := vfs.NewStrictMem()
-		env, err := fs.InitEnv(ctx, memFS, "", fs.EnvConfig{})
+		env, err := fs.InitEnv(ctx, memFS, "", fs.EnvConfig{}, nil)
 		require.NoError(t, err)
 		eng, err := storage.Open(ctx, env, cluster.MakeTestingClusterSettings(), storage.ForTesting)
 		require.NoError(t, err)
@@ -630,7 +630,7 @@ func TestSideloadStorageSync(t *testing.T) {
 		memFS.SetIgnoreSyncs(false)
 
 		// Emulate process restart. Load from the last synced state.
-		env, err = fs.InitEnv(ctx, memFS, "", fs.EnvConfig{})
+		env, err = fs.InitEnv(ctx, memFS, "", fs.EnvConfig{}, nil)
 		require.NoError(t, err)
 		eng, err = storage.Open(ctx, env, cluster.MakeTestingClusterSettings(), storage.ForTesting)
 		require.NoError(t, err)
@@ -793,16 +793,16 @@ func TestMkdirAllAndSyncParentsErrors(t *testing.T) {
 	})
 
 	t.Run("not-a-directory", func(t *testing.T) {
-		fs := vfs.NewMem()
-		require.NoError(t, mkdirAllAndSyncParents(fs, "/a", os.ModePerm))
+		memFS := vfs.NewMem()
+		require.NoError(t, mkdirAllAndSyncParents(memFS, "/a", os.ModePerm))
 
 		// Write a file, and try to trick mkdir into thinking that it's a directory.
-		f, err := fs.Create("/a/file")
+		f, err := memFS.Create("/a/file", fs.UnspecifiedWriteCategory)
 		require.NoError(t, err)
 		require.NoError(t, f.Close())
 
 		for _, path := range []string{"/a/file", "/a/file/sub"} {
-			require.ErrorContains(t, mkdirAllAndSyncParents(fs, path, os.ModePerm), "not a directory")
+			require.ErrorContains(t, mkdirAllAndSyncParents(memFS, path, os.ModePerm), "not a directory")
 		}
 	})
 }

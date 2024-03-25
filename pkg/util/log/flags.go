@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"math"
 	"strings"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -43,6 +44,10 @@ type config struct {
 	flushWrites syncutil.AtomicBool
 }
 
+type FileSinkMetrics struct {
+	LogBytesWritten *atomic.Uint64
+}
+
 var debugLog *loggerT
 
 // redactionPolicyManaged is the env var used to indicate that the node is being
@@ -66,7 +71,7 @@ func init() {
 	// using TestLogScope.
 	cfg := getTestConfig(nil /* output to files disabled */, true /* mostly inline */)
 
-	if _, err := ApplyConfig(cfg); err != nil {
+	if _, err := ApplyConfig(cfg, FileSinkMetrics{}); err != nil {
 		panic(err)
 	}
 
@@ -90,7 +95,9 @@ func IsActive() (active bool, firstUse string) {
 // ApplyConfig applies the given configuration.
 //
 // The returned logShutdownFn can be used to gracefully shut down logging facilities.
-func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
+func ApplyConfig(
+	config logconfig.Config, metrics FileSinkMetrics,
+) (logShutdownFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
 		reportOrPanic(context.Background(), nil /* sv */, "logging already active; first use:\n%s", firstUse)
@@ -190,7 +197,7 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 		if err := fakeConfig.Channels.Validate(fakeConfig.CommonSinkConfig.Filter); err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "programming error: incorrect filter config")
 		}
-		fileSinkInfo, fileSink, err := newFileSinkInfo("stderr", fakeConfig)
+		fileSinkInfo, fileSink, err := newFileSinkInfo("stderr", fakeConfig, metrics)
 		if err != nil {
 			return nil, err
 		}
@@ -307,7 +314,7 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 		if fileGroupName == "default" {
 			fileGroupName = ""
 		}
-		fileSinkInfo, fileSink, err := newFileSinkInfo(fileGroupName, *fc)
+		fileSinkInfo, fileSink, err := newFileSinkInfo(fileGroupName, *fc, metrics)
 		if err != nil {
 			return nil, err
 		}
@@ -362,7 +369,7 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 // newFileSinkInfo creates a new fileSink and its accompanying sinkInfo
 // from the provided configuration.
 func newFileSinkInfo(
-	fileGroupName string, c logconfig.FileSinkConfig,
+	fileGroupName string, c logconfig.FileSinkConfig, metrics FileSinkMetrics,
 ) (*sinkInfo, *fileSink, error) {
 	info := &sinkInfo{}
 	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
@@ -377,6 +384,7 @@ func newFileSinkInfo(
 		int64(*c.MaxGroupSize),
 		info.getStartLines,
 		fs.FileMode(*c.FilePermissions),
+		metrics.LogBytesWritten,
 	)
 	info.sink = fileSink
 	return info, fileSink, nil

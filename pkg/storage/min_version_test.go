@@ -127,7 +127,7 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	baseFS := vfs.NewMem()
 	env, err := fs.InitEnv(ctx, baseFS, "", fs.EnvConfig{
 		EncryptionOptions: []byte("foo"),
-	})
+	}, nil)
 	require.NoError(t, err)
 
 	p, err := Open(ctx, env, st)
@@ -160,8 +160,8 @@ type fauxEncryptedFS struct {
 	vfs.FS
 }
 
-func (fs fauxEncryptedFS) Create(path string) (vfs.File, error) {
-	f, err := fs.FS.Create(path)
+func (fs fauxEncryptedFS) Create(path string, category vfs.DiskWriteCategory) (vfs.File, error) {
+	f, err := fs.FS.Create(path, category)
 	if err != nil {
 		return nil, err
 	}

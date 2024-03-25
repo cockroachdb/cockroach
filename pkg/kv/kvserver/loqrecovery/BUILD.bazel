@@ -37,6 +37,7 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
+        "//pkg/storage/fs",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",

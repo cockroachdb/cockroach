@@ -709,7 +709,7 @@ func TestFlushNumSSTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	engine := NewDefaultInMemForTesting()
+	engine := NewDefaultInMemForTesting(DiskWriteStatsCollector(vfs.NewDiskWriteStatsCollector()))
 	defer engine.Close()
 
 	batch := engine.NewBatch()
@@ -988,7 +988,7 @@ func TestSnapshotMethods(t *testing.T) {
 	index := 0
 	if err := snap.MVCCIterate(context.Background(), localMax, roachpb.KeyMax,
 		MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly,
-		UnknownReadCategory, func(kv MVCCKeyValue, _ MVCCRangeKeyStack) error {
+		fs.UnknownReadCategory, func(kv MVCCKeyValue, _ MVCCRangeKeyStack) error {
 			if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
 				t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
 					index, keys[index], vals[index], kv.Key, kv.Value)
@@ -1079,7 +1079,7 @@ func TestCreateCheckpoint(t *testing.T) {
 }
 
 func mustInitTestEnv(t testing.TB, baseFS vfs.FS, dir string) *fs.Env {
-	e, err := fs.InitEnv(context.Background(), baseFS, dir, fs.EnvConfig{})
+	e, err := fs.InitEnv(context.Background(), baseFS, dir, fs.EnvConfig{}, nil)
 	require.NoError(t, err)
 	return e
 }
@@ -1295,9 +1295,9 @@ func TestEngineFS(t *testing.T) {
 		)
 		switch s[0] {
 		case "create":
-			g, err = e.Create(s[1])
+			g, err = e.Create(s[1], fs.UnspecifiedWriteCategory)
 		case "create-with-sync":
-			g, err = fs.CreateWithSync(e, s[1], 1)
+			g, err = fs.CreateWithSync(e, s[1], 1, fs.UnspecifiedWriteCategory)
 		case "link":
 			err = e.Link(s[1], s[2])
 		case "open":
@@ -1403,7 +1403,7 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 
 	fname := filepath.Join(dir, "random.file")
 	data := "random data"
-	if f, err := env.Create(fname); err != nil {
+	if f, err := env.Create(fname, fs.UnspecifiedWriteCategory); err != nil {
 		t.Fatalf("unable to open file with filename %s, got err %v", fname, err)
 	} else {
 		// Write data to file so we can read it later.
@@ -1489,13 +1489,13 @@ func TestFS(t *testing.T) {
 			require.NoError(t, err)
 
 			// Create a file at a/b/c/foo.
-			f, err := e.Create(path("a/b/c/foo"))
+			f, err := e.Create(path("a/b/c/foo"), fs.UnspecifiedWriteCategory)
 			require.NoError(t, err)
 			require.NoError(t, f.Close())
 			expectLS(path("a/b/c"), []string{"foo"})
 
 			// Create a file at a/b/c/bar.
-			f, err = e.Create(path("a/b/c/bar"))
+			f, err = e.Create(path("a/b/c/bar"), fs.UnspecifiedWriteCategory)
 			require.NoError(t, err)
 			require.NoError(t, f.Close())
 			expectLS(path("a/b/c"), []string{"bar", "foo"})
@@ -1581,7 +1581,7 @@ func TestGetIntent(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(string(test.key), func(t *testing.T) {
-			intent, err := GetIntent(ctx, eng, test.key, UnknownReadCategory)
+			intent, err := GetIntent(ctx, eng, test.key)
 			if test.expErr {
 				require.Error(t, err)
 			} else {
@@ -1657,7 +1657,7 @@ func TestScanLocks(t *testing.T) {
 	for name, tc := range testcases {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
-			scannedLocks, err := ScanLocks(ctx, eng, tc.from, tc.to, tc.max, tc.targetBytes, UnknownReadCategory)
+			scannedLocks, err := ScanLocks(ctx, eng, tc.from, tc.to, tc.max, tc.targetBytes)
 			require.NoError(t, err)
 			require.Len(t, scannedLocks, len(tc.expectLocks), "unexpected number of locks")
 			for i, l := range scannedLocks {
@@ -2013,9 +2013,9 @@ func TestEngineIteratorVisibility(t *testing.T) {
 				// Pin the pinned reader, if it supports it. This should ensure later
 				// iterators see the current state.
 				if rPinned.ConsistentIterators() {
-					require.NoError(t, rPinned.PinEngineStateForIterators(UnknownReadCategory))
+					require.NoError(t, rPinned.PinEngineStateForIterators(fs.UnknownReadCategory))
 				} else {
-					require.Error(t, rPinned.PinEngineStateForIterators(UnknownReadCategory))
+					require.Error(t, rPinned.PinEngineStateForIterators(fs.UnknownReadCategory))
 				}
 
 				// Write a new key to the engine, and set up the expected results.
@@ -2761,7 +2761,7 @@ func scanLockKeys(t *testing.T, r Reader) []roachpb.Key {
 	t.Helper()
 
 	var lockKeys []roachpb.Key
-	locks, err := ScanLocks(context.Background(), r, keys.LocalMax, keys.MaxKey, 0, 0, UnknownReadCategory)
+	locks, err := ScanLocks(context.Background(), r, keys.LocalMax, keys.MaxKey, 0, 0)
 	require.NoError(t, err)
 	for _, l := range locks {
 		lockKeys = append(lockKeys, l.Key)

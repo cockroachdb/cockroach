@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -204,7 +205,7 @@ type MVCCIncrementalIterOptions struct {
 
 	// ReadCategory is used to map to a user-understandable category string, for
 	// stats aggregation and metrics, and a Pebble-understandable QoS.
-	ReadCategory ReadCategory
+	ReadCategory fs.ReadCategory
 
 	// MaxLockConflicts is a maximum number of conflicting locks collected before
 	// returning LockConflictError. This setting only work under

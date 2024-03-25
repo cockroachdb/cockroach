@@ -135,7 +135,7 @@ func TestSafeManaged(t *testing.T) {
 			if err := cfg.Validate(&s.logDir); err != nil {
 				t.Fatal(err)
 			}
-			cleanupFn, err := ApplyConfig(cfg)
+			cleanupFn, err := ApplyConfig(cfg, FileSinkMetrics{})
 			if err != nil {
 				t.Fatal(err)
 			}

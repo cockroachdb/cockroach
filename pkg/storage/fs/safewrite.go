@@ -20,15 +20,17 @@ import (
 const tempFileExtension = ".crdbtmp"
 
 // SafeWriteToFile writes the byte slice to the filename, contained in dir,
-// using the given fs.  It returns after both the file and the containing
+// using the given fs. It returns after both the file and the containing
 // directory are synced.
-func SafeWriteToFile(fs vfs.FS, dir string, filename string, b []byte) error {
+func SafeWriteToFile(
+	fs vfs.FS, dir string, filename string, b []byte, category vfs.DiskWriteCategory,
+) error {
 	// TODO(jackson): Assert that fs supports atomic renames once Pebble
 	// is bumped to the appropriate SHA and non-atomic use cases are
 	// updated to avoid this method.
 
 	tempName := filename + tempFileExtension
-	f, err := fs.Create(tempName)
+	f, err := fs.Create(tempName, category)
 	if err != nil {
 		return err
 	}

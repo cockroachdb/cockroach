@@ -210,7 +210,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		if err := cfg.Validate(&dir); err != nil {
 			t.Fatal(err)
 		}
-		cleanup, err := log.ApplyConfig(cfg)
+		cleanup, err := log.ApplyConfig(cfg, log.FileSinkMetrics{})
 		if err != nil {
 			t.Fatal(err)
 		}
