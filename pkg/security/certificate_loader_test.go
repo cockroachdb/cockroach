@@ -292,8 +292,8 @@ func TestNamingScheme(t *testing.T) {
 				{"client.root.key", 0700, []byte{}},
 			},
 			certs: []security.CertInfo{
-				{FileUsage: security.ClientPem, Filename: "client.root.crt", Name: "root",
-					Error: errors.New(`client certificate has principals \["notroot"\], expected "root"`)},
+				{FileUsage: security.ClientPem, Filename: "client.root.crt", KeyFilename: "client.root.key",
+					Name: "root", FileContents: notRootCert, KeyFileContents: []byte{}},
 				{FileUsage: security.NodePem, Filename: "node.crt", KeyFilename: "node.key",
 					FileContents: badUserNodeCert, KeyFileContents: []byte("node.key")},
 			},

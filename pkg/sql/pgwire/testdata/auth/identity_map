@@ -169,11 +169,11 @@ authlog 6
 
 subtest end
 
-# Connect with carl is dbuser and pass testuser as cert to be used, dont pass explicit system-identity, so that the
+# Connect with carl as dbuser and pass testuser as cert to be used, dont pass explicit system-identity, so that the
 # system-identity is picked from the cert by auth method.
 subtest certificate_with_user_mapping_no_explicit_system_identity
 
-connect user=carl database=mydb cert_name=testuser force_certs show_system_identity
+connect user=carl database=mydb cert_name=testuser_cn_only force_certs show_system_identity
 ----
 ok mydb testuser
 
@@ -186,6 +186,46 @@ authlog 6
 45 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
 46 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 47 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+
+subtest end
+
+# Connect with carl as dbuser and pass testuser as cert to be used, dont pass explicit system-identity, so that the
+# system-identity is picked from the cert by auth method.
+subtest cn_and_san_certificate_with_user_mapping
+
+connect user=carl database=mydb cert_name=testuser_cn_and_san force_certs show_system_identity
+----
+ok mydb testuser
+
+authlog 6
+.*client_connection_end
+----
+48 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+49 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+50 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+52 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"carl"}
+53 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+54 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+
+subtest end
+
+# Connect with carl as dbuser and pass testuser as cert to be used, dont pass explicit system-identity, so that the
+# system-identity is picked from the cert by auth method.
+subtest san_only_certificate_with_user_mapping
+
+connect user=carl database=mydb cert_name=testuser_san_only force_certs show_system_identity
+----
+ERROR: system identity "" did not map to a database role (SQLSTATE 28000)
+
+authlog 6
+.*client_connection_end
+----
+55 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+56 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+57 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"carl","Timestamp":"XXX","Transport":"hostssl"}
+58 {"Detail":"system identity \"\" did not map to a database role","EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":"USER_NOT_FOUND","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX","Transport":"hostssl"}
+59 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+60 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 

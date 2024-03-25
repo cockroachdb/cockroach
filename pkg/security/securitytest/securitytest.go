@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
@@ -112,6 +113,11 @@ func AssetReadDir(name string) ([]os.FileInfo, error) {
 		info, err := e.Info()
 		if err != nil {
 			return nil, err
+		}
+		if strings.HasSuffix(e.Name(), ".md") ||
+			strings.HasSuffix(e.Name(), ".sh") ||
+			strings.HasSuffix(e.Name(), ".cnf") {
+			continue
 		}
 		infos = append(infos, &fileInfo{inner: info})
 	}

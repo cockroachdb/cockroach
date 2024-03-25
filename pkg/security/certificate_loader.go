@@ -413,11 +413,6 @@ func parseCertificate(ci *CertInfo) error {
 		}
 
 		if i == 0 {
-			// Only check details of the first certificate.
-			if err := validateCockroachCertificate(ci, x509Cert); err != nil {
-				return makeErrorf(err, "failed to validate certificate %d in file %s", i, ci.Filename)
-			}
-
 			// Expiration from the first certificate.
 			expires = x509Cert.NotAfter
 		}
@@ -451,24 +446,5 @@ func validateDualPurposeNodeCert(ci *CertInfo) error {
 			principals, username.NodeUser)
 	}
 
-	return nil
-}
-
-// validateCockroachCertificate takes a CertInfo and a parsed certificate and checks the
-// values of certain fields.
-func validateCockroachCertificate(ci *CertInfo, cert *x509.Certificate) error {
-
-	switch ci.FileUsage {
-	case NodePem:
-		// Common Name is checked only if there is no client certificate for 'node'.
-		// This is done in validateDualPurposeNodeCert.
-	case ClientPem:
-		// Check that CommonName matches the username extracted from the filename.
-		principals := getCertificatePrincipals(cert)
-		if !Contains(principals, ci.Name) {
-			return errors.Errorf("client certificate has principals %q, expected %q",
-				principals, ci.Name)
-		}
-	}
 	return nil
 }
