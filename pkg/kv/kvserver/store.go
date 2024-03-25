@@ -1699,7 +1699,7 @@ func NewStore(
 		s.SetReplicateQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableSplitQueue {
-		s.setSplitQueueActive(false)
+		s.SetSplitQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableTimeSeriesMaintenanceQueue {
 		s.setTimeSeriesMaintenanceQueueActive(false)

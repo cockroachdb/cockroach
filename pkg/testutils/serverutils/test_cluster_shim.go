@@ -253,6 +253,10 @@ type TestClusterInterface interface {
 	// ToggleReplicateQueues activates or deactivates the replication queues on all
 	// the stores on all the nodes.
 	ToggleReplicateQueues(active bool)
+
+	// TogglesplitQueues activates or deactivates the split queues on all
+	// the stores on all the nodes.
+	ToggleSplitQueues(active bool)
 }
 
 // SplitPoint describes a split point that is passed to SplitTable.
