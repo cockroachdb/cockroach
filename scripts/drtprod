@@ -88,6 +88,17 @@ case $1 in
         # setup dns
         $0 dns drt-ua2 create
         ;;
+      "workload-main")
+        roachprod create workload-main \
+          --nodes 1 \
+          --clouds gce \
+          --gce-zones "us-east1-b" \
+          --gce-machine-type n2-standard-16 \
+          --local-ssd=false \
+          --os-volume-size 120 \
+          --username workload \
+          --lifetime 8760h
+        ;;
       *)
         echo
         echo "ATN: If $2 is intended to be long-lived, please define it by name in $0 instead."
