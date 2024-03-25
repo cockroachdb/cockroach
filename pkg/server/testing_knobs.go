@@ -163,6 +163,10 @@ type TestingKnobs struct {
 		UpgradeTo roachpb.Version
 	}
 
+	// TenantAutoUpgradeLoopFrequency indicates how often the tenant
+	// auto upgrade loop will check if the tenant can be auto-upgraded.
+	TenantAutoUpgradeLoopFrequency time.Duration
+
 	// EnvironmentSampleInterval overrides base.DefaultMetricsSampleInterval when used to construct sampleEnvironmentCfg.
 	EnvironmentSampleInterval time.Duration
 }
