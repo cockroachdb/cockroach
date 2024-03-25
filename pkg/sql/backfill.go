@@ -280,10 +280,10 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 				// that don't, so preserve the flag if its already been flipped.
 				needColumnBackfill = needColumnBackfill || catalog.ColumnNeedsBackfill(col)
 			} else if idx := m.AsIndex(); idx != nil {
+				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, idx.GetID()))
 				if idx.IsTemporaryIndexForBackfill() {
 					temporaryIndexes = append(temporaryIndexes, idx.GetID())
 				} else {
-					addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, idx.GetID()))
 					addedIndexes = append(addedIndexes, idx.GetID())
 				}
 			} else if c := m.AsConstraintWithoutIndex(); c != nil {
@@ -2238,15 +2238,11 @@ func (sc *SchemaChanger) backfillIndexes(
 	writeAtRequestTimestamp := len(temporaryIndexes) != 0
 	log.Infof(ctx, "backfilling %d indexes: %v (writeAtRequestTimestamp: %v)", len(addingSpans), addingSpans, writeAtRequestTimestamp)
 
-	// Split off a new range for each new index span. But only do so for the
-	// system tenant. Secondary tenants do not have mandatory split points
-	// between tables or indexes.
-	if sc.execCfg.Codec.ForSystemTenant() {
-		expirationTime := sc.db.KV().Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-		for _, span := range addingSpans {
-			if err := sc.db.KV().AdminSplit(ctx, span.Key, expirationTime); err != nil {
-				return err
-			}
+	// Split off a new range for each new index span.
+	expirationTime := sc.db.KV().Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+	for _, span := range addingSpans {
+		if err := sc.db.KV().AdminSplit(ctx, span.Key, expirationTime); err != nil {
+			return err
 		}
 	}
 
