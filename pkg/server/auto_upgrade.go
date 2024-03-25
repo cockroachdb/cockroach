@@ -69,14 +69,14 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 				log.Infof(ctx, "failed attempt to upgrade cluster version: %v", err)
 				continue
 			case UpgradeDisabledByConfigurationToPreserveDowngrade:
-				log.Infof(ctx, "auto upgrade is disabled for current version (preserve_downgrade_option): %s", redact.Safe(clusterVersion))
+				log.Infof(ctx, "auto upgrade is disabled by preserve_downgrade_option")
 				// Note: we do 'continue' here (and not 'return') so that the
 				// auto-upgrade gets a chance to continue/complete if the
 				// operator resets `preserve_downgrade_option` after the node
 				// has started up already.
 				continue
 			case UpgradeDisabledByConfiguration:
-				log.Infof(ctx, "auto upgrade is disabled by (cluster.auto_upgrade.enabled)")
+				log.Infof(ctx, "auto upgrade is disabled by cluster.auto_upgrade.enabled")
 				// Note: we do 'continue' here (and not 'return') so that the
 				// auto-upgrade gets a chance to continue/complete if the
 				// operator resets `auto_upgrade.enabled` after the node
