@@ -2245,17 +2245,17 @@ func (s *topLevelServer) runIdempontentSQLForInitType(
 	}
 
 	initAttempt := func() error {
-		const defaultApplicationClusterName = "application"
+		const defaulVirtuallusterName = "main"
 		switch typ {
 		case serverpb.InitType_VIRTUALIZED:
 			ie := s.sqlServer.execCfg.InternalDB.Executor()
 			_, err := ie.Exec(ctx, "init-create-app-tenant", nil, /* txn */
-				"CREATE VIRTUAL CLUSTER IF NOT EXISTS $1", defaultApplicationClusterName)
+				"CREATE VIRTUAL CLUSTER IF NOT EXISTS $1", defaulVirtuallusterName)
 			if err != nil {
 				return err
 			}
 			_, err = ie.Exec(ctx, "init-default-app-tenant", nil, /* txn */
-				"ALTER VIRTUAL CLUSTER $1 START SERVICE SHARED", defaultApplicationClusterName)
+				"ALTER VIRTUAL CLUSTER $1 START SERVICE SHARED", defaulVirtuallusterName)
 			if err != nil {
 				return err
 			}
@@ -2263,7 +2263,7 @@ func (s *topLevelServer) runIdempontentSQLForInitType(
 		case serverpb.InitType_VIRTUALIZED_EMPTY:
 			ie := s.sqlServer.execCfg.InternalDB.Executor()
 			_, err := ie.Exec(ctx, "init-default-target-cluster-setting", nil, /* txn */
-				"SET CLUSTER SETTING server.controller.default_target_cluster = $1", defaultApplicationClusterName)
+				"SET CLUSTER SETTING server.controller.default_target_cluster = $1", defaulVirtuallusterName)
 			if err != nil {
 				return err
 			}
