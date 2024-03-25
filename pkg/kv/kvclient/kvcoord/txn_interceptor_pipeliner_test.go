@@ -217,8 +217,8 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	incArgs := kvpb.IncrementRequest{RequestHeader: kvpb.RequestHeader{Key: keyC}}
 	incArgs.Sequence = 4
 	ba.Add(&incArgs)
-	// Write at the same key as another write in the same batch. Will only
-	// result in a single in-flight write, at the larger sequence number.
+	// Write at the same key as another write in the same batch. Will result in
+	// two separate in-flight writes.
 	delArgs := kvpb.DeleteRequest{RequestHeader: kvpb.RequestHeader{Key: keyC}}
 	delArgs.Sequence = 5
 	ba.Add(&delArgs)
@@ -256,7 +256,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	require.IsType(t, &kvpb.IncrementResponse{}, br.Responses[2].GetInner())
 	require.IsType(t, &kvpb.DeleteResponse{}, br.Responses[3].GetInner())
 	require.Nil(t, pErr)
-	require.Equal(t, 3, tp.ifWrites.len())
+	require.Equal(t, 4, tp.ifWrites.len())
 
 	wMin := tp.ifWrites.t.Min().(*inFlightWrite)
 	require.Equal(t, cputArgs.Key, wMin.Key)
@@ -277,29 +277,34 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	ba.Add(&etArgs)
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		require.Len(t, ba.Requests, 5)
+		require.Len(t, ba.Requests, 6)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
 		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[2].GetInner())
 		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[3].GetInner())
-		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[4].GetInner())
+		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[4].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[5].GetInner())
 
 		qiReq1 := ba.Requests[1].GetQueryIntent()
 		qiReq2 := ba.Requests[2].GetQueryIntent()
 		qiReq3 := ba.Requests[3].GetQueryIntent()
+		qiReq4 := ba.Requests[4].GetQueryIntent()
 		require.Equal(t, keyA, qiReq1.Key)
 		require.Equal(t, keyB, qiReq2.Key)
 		require.Equal(t, keyC, qiReq3.Key)
+		require.Equal(t, keyC, qiReq4.Key)
 		require.Equal(t, enginepb.TxnSeq(2), qiReq1.Txn.Sequence)
 		require.Equal(t, enginepb.TxnSeq(3), qiReq2.Txn.Sequence)
-		require.Equal(t, enginepb.TxnSeq(5), qiReq3.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(4), qiReq3.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(5), qiReq4.Txn.Sequence)
 
-		etReq := ba.Requests[4].GetEndTxn()
+		etReq := ba.Requests[5].GetEndTxn()
 		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.LockSpans)
 		expInFlight := []roachpb.SequencedWrite{
 			{Key: keyA, Sequence: 2},
 			{Key: keyB, Sequence: 3},
+			{Key: keyC, Sequence: 4},
 			{Key: keyC, Sequence: 5},
 			{Key: keyD, Sequence: 6},
 		}
@@ -311,13 +316,15 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		// NOTE: expected response from a v23.1 node.
 		// TODO(nvanbenschoten): update this case when v23.1 compatibility is no
 		// longer required.
-		br.Responses[2].GetQueryIntent().FoundIntent = false
+		br.Responses[1].GetQueryIntent().FoundIntent = false
 		br.Responses[1].GetQueryIntent().FoundUnpushedIntent = true
 		// NOTE: expected responses from a v23.2 node.
 		br.Responses[2].GetQueryIntent().FoundIntent = true
 		br.Responses[2].GetQueryIntent().FoundUnpushedIntent = true
 		br.Responses[3].GetQueryIntent().FoundIntent = true
-		br.Responses[2].GetQueryIntent().FoundUnpushedIntent = false
+		br.Responses[3].GetQueryIntent().FoundUnpushedIntent = false
+		br.Responses[4].GetQueryIntent().FoundIntent = true
+		br.Responses[4].GetQueryIntent().FoundUnpushedIntent = false
 		return br, nil
 	})
 
@@ -1647,11 +1654,10 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	s := savepoint{seqNum: enginepb.TxnSeq(12), active: true}
 	tp.createSavepointLocked(ctx, &s)
 
-	// Some more writes after the savepoint. One of them is on key "c" that is
-	// part of the savepoint too, so we'll check that, upon rollback, the savepoint is
-	// updated to remove the lower-seq-num write to "c" that it was tracking as in-flight.
+	// Some more writes after the savepoint.
 	tp.ifWrites.insert(roachpb.Key("c"), 13)
 	tp.ifWrites.insert(roachpb.Key("d"), 14)
+	require.Equal(t, 5, tp.ifWrites.len())
 	require.Empty(t, tp.lockFootprint.asSlice())
 
 	// Now verify one of the writes. When we'll rollback to the savepoint below,
@@ -1679,17 +1685,14 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 	require.Equal(t, []roachpb.Span{{Key: roachpb.Key("a")}}, tp.lockFootprint.asSlice())
-	require.Equal(t, 3, tp.ifWrites.len()) // We've verified one out of 4 writes.
+	require.Equal(t, 4, tp.ifWrites.len()) // We've verified one out of 5 writes.
 
 	// Now restore the savepoint and check that the in-flight write state has been restored
 	// and all rolled-back writes were moved to the lock footprint.
 	tp.rollbackToSavepointLocked(ctx, s)
 
 	// Check that the tracked inflight writes were updated correctly. The key that
-	// had been verified ("a") should have been taken out of the savepoint. Same
-	// for the "c", for which the pipeliner is now tracking a
-	// higher-sequence-number (which implies that it must have verified the lower
-	// sequence number write).
+	// had been verified ("a") should have been taken out of the savepoint.
 	var ifWrites []inFlightWrite
 	tp.ifWrites.ascend(func(w *inFlightWrite) {
 		ifWrites = append(ifWrites, *w)
@@ -1697,13 +1700,13 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	require.Equal(t,
 		[]inFlightWrite{
 			{SequencedWrite: roachpb.SequencedWrite{Key: roachpb.Key("b"), Sequence: 11}},
+			{SequencedWrite: roachpb.SequencedWrite{Key: roachpb.Key("c"), Sequence: 12}},
 		},
 		ifWrites)
 
 	// Check that the footprint was updated correctly. In addition to the "a"
 	// which it had before, it will also have "d" because it's not part of the
-	// savepoint. It will also have "c" since that's not an in-flight write any
-	// more (see above).
+	// savepoint. It will also have "c".
 	require.Equal(t,
 		[]roachpb.Span{
 			{Key: roachpb.Key("a")},
@@ -1905,7 +1908,6 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 		largeAs[i] = 'a'
 	}
 	largeWrite := putBatch(largeAs, nil)
-	mediumWrite := putBatch(largeAs[:5], nil)
 
 	lockingScanRequest := &kvpb.BatchRequest{}
 	lockingScanRequest.Header.MaxSpanRequestKeys = 1
@@ -2014,17 +2016,6 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 			resp:         []*kvpb.BatchResponse{delRangeResp},
 			expRejectIdx: -1,
 			maxSize:      10 + roachpb.SpanOverhead,
-		},
-		{
-			// Request keys overlap, so they don't count twice.
-			name:         "overlapping requests",
-			reqs:         []*kvpb.BatchRequest{mediumWrite, mediumWrite, mediumWrite},
-			expRejectIdx: -1,
-			// Our estimation logic for rejecting requests based on size
-			// consults both the in-flight write set (which doesn't account for
-			// the span overhead) as well as the lock footprint (which accounts
-			// for the span overhead).
-			maxSize: 16 + roachpb.SpanOverhead,
 		},
 	}
 	for _, tc := range testCases {
