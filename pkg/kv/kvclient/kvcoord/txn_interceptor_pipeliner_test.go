@@ -1696,7 +1696,7 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	})
 	require.Equal(t,
 		[]inFlightWrite{
-			{roachpb.SequencedWrite{Key: roachpb.Key("b"), Sequence: 11}},
+			{SequencedWrite: roachpb.SequencedWrite{Key: roachpb.Key("b"), Sequence: 11}},
 		},
 		ifWrites)
 
