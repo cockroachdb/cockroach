@@ -131,7 +131,7 @@ func BenchmarkDistSenderCircuitBreakersForReplica(b *testing.B) {
 	kvcoord.CircuitBreakerEnabled.Override(ctx, &st.SV, true)
 
 	cbs := kvcoord.NewDistSenderCircuitBreakers(
-		ambientCtx, stopper, st, nil, kvcoord.DistSenderMetrics{})
+		ambientCtx, stopper, st, nil, kvcoord.MakeDistSenderMetrics())
 
 	replDesc := &roachpb.ReplicaDescriptor{
 		NodeID:    1,
@@ -198,7 +198,7 @@ func benchmarkCircuitBreakersTrack(
 	kvcoord.CircuitBreakerCancellation.Override(ctx, &st.SV, cancel)
 
 	cbs := kvcoord.NewDistSenderCircuitBreakers(
-		ambientCtx, stopper, st, nil, kvcoord.DistSenderMetrics{})
+		ambientCtx, stopper, st, nil, kvcoord.MakeDistSenderMetrics())
 
 	replDesc := &roachpb.ReplicaDescriptor{
 		NodeID:    1,
