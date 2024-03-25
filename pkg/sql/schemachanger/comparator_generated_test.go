@@ -1278,6 +1278,11 @@ func TestSchemaChangeComparator_procedure(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/procedure"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_procedure_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/procedure_deps"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_procedure_params(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/procedure_params"
@@ -1896,6 +1901,11 @@ func TestSchemaChangeComparator_udf_calling_udf(t *testing.T) {
 func TestSchemaChangeComparator_udf_delete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_delete"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
+func TestSchemaChangeComparator_udf_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_deps"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_udf_fk(t *testing.T) {

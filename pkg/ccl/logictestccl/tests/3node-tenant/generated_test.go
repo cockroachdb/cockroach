@@ -1446,6 +1446,13 @@ func TestTenantLogic_procedure(
 	runLogicTest(t, "procedure")
 }
 
+func TestTenantLogic_procedure_deps(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_deps")
+}
+
 func TestTenantLogic_procedure_params(
 	t *testing.T,
 ) {
@@ -2214,6 +2221,13 @@ func TestTenantLogic_udf_delete(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_delete")
+}
+
+func TestTenantLogic_udf_deps(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_deps")
 }
 
 func TestTenantLogic_udf_fk(
