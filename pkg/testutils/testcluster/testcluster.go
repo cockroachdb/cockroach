@@ -581,6 +581,7 @@ func (tc *TestCluster) AddServer(
 		if stk := serverArgs.Knobs.Store; stk != nil {
 			stkCopy = *stk.(*kvserver.StoreTestingKnobs)
 		}
+		stkCopy.DisableLeaseQueue = true
 		stkCopy.DisableSplitQueue = true
 		stkCopy.DisableMergeQueue = true
 		stkCopy.DisableReplicateQueue = true
