@@ -174,11 +174,6 @@ func (s *Store) SetReplicaGCQueueActive(active bool) {
 	s.setReplicaGCQueueActive(active)
 }
 
-// SetSplitQueueActive enables or disables the split queue.
-func (s *Store) SetSplitQueueActive(active bool) {
-	s.setSplitQueueActive(active)
-}
-
 // SetMergeQueueActive enables or disables the merge queue.
 func (s *Store) SetMergeQueueActive(active bool) {
 	s.setMergeQueueActive(active)
