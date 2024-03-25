@@ -66,25 +66,28 @@ case $1 in
         ;;
       "drt-ua1")
         roachprod create drt-ua1 \
-          --clouds gce \
-          --gce-zones "us-east1-b" \
-          --nodes 9 \
-          --gce-machine-type n2-standard-8 \
-          --gce-pd-volume-size 5000 --local-ssd=false \
-          --username drt \
-          --lifetime 8760h
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="8" \
+          --gce-machine-type="n2-standard-8" \
+          --local-ssd="true"  \
+          --gce-local-ssd-count="16" \
+          --username="drt" \
+          --lifetime="8760h"
         # setup dns
         $0 dns drt-ua1 create
         ;;
       "drt-ua2")
+      set -x
         roachprod create drt-ua2 \
-          --clouds gce \
-          --gce-zones "us-east1-b" \
-          --nodes 9 \
-          --gce-machine-type n2-standard-8 \
-          --gce-pd-volume-size 5000 --local-ssd=false  \
-          --username drt \
-          --lifetime 8760h
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="8" \
+          --gce-machine-type="n2-standard-8" \
+          --local-ssd="true"  \
+          --gce-local-ssd-count="16" \
+          --username="drt" \
+          --lifetime="8760h"
         # setup dns
         $0 dns drt-ua2 create
         ;;
