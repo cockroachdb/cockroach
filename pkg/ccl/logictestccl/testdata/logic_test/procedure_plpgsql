@@ -261,4 +261,319 @@ NOTICE: iteration 3
 NOTICE: new value of i: 4
 NOTICE: returning
 
+subtest exit_continue_label
+
+# EXIT can apply to a block with a label.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    <<foo>>
+    BEGIN
+      RAISE NOTICE 'before EXIT';
+      EXIT foo;
+      RAISE NOTICE 'after EXIT';
+    END;
+    RAISE NOTICE 'after block';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: before EXIT
+NOTICE: after block
+
+statement ok
+DROP PROCEDURE p;
+
+# EXIT without a label cannot apply to a block.
+statement error pgcode 42601 pq: EXIT cannot be used outside a loop, unless it has a label
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    <<foo>>
+    BEGIN
+      RAISE NOTICE 'before EXIT';
+      EXIT;
+      RAISE NOTICE 'after EXIT';
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# CONTINUE cannot apply to a block.
+statement error pgcode 42601 pq: block label \"foo\" cannot be used in CONTINUE
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    <<foo>>
+    BEGIN
+      RAISE NOTICE 'before EXIT';
+      CONTINUE foo;
+      RAISE NOTICE 'after EXIT';
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# The nested block takes precedence over the loop with the same label.
+statement error pgcode 42601 pq: block label \"foo\" cannot be used in CONTINUE
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    <<foo>>
+    WHILE i < 5 LOOP
+      <<foo>>
+      BEGIN
+        RAISE NOTICE 'before EXIT';
+        CONTINUE foo;
+        RAISE NOTICE 'after EXIT';
+      END;
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# EXIT with a nonexistent label.
+statement error pgcode 42601 pq: there is no label \"foo\" attached to any block or loop enclosing this statement
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    <<bar>>
+    BEGIN
+      EXIT foo;
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# CONTINUE with a nonexistent label.
+statement error pgcode 42601 pq: there is no label \"foo\" attached to any block or loop enclosing this statement
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    <<bar>>
+    BEGIN
+      CONTINUE foo;
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# It is possible to EXIT the root block.
+statement ok
+CREATE PROCEDURE p() AS $$
+  <<foo>>
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 5 LOOP
+      RAISE NOTICE 'here';
+      EXIT foo;
+      RAISE NOTICE 'still here';
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: here
+
+# It is possible to EXIT the routine, but this always results in an
+# end-of-function error, even for a void-returning proc.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 5 LOOP
+      EXIT p;
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 2F005 control reached end of function without RETURN
+CALL p();
+
+# CONTINUE the inner loop.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x INT) AS $$
+  <<b1>>
+  DECLARE
+    i INT := 0;
+  BEGIN
+    RAISE NOTICE '>> b1 %', i;
+    <<l1>>
+    WHILE i < 2 LOOP
+      i := i + 1;
+      RAISE NOTICE '>> l1 %', i;
+      <<b2>>
+      DECLARE
+        j int := 0;
+      BEGIN
+        RAISE NOTICE '>> b2 % %', i, j;
+        <<l2>>
+        WHILE j < i LOOP
+          j := j + 1;
+          RAISE NOTICE '>> l2 % %', i, j;
+          IF x = 0 THEN
+            IF j = 1 THEN RAISE NOTICE 'CONTINUE l2'; END IF;
+            CONTINUE l2 WHEN j = 1;
+          ELSIF x = 1 THEN
+            IF j = 1 THEN RAISE NOTICE 'EXIT l2'; END IF;
+            EXIT l2 WHEN j = 1;
+          ELSIF x = 2 THEN
+            IF j = 1 THEN RAISE NOTICE 'CONTINUE l1'; END IF;
+            CONTINUE l1 WHEN j = 1;
+          ELSIF x = 3 THEN
+            IF j = 1 THEN RAISE NOTICE 'EXIT l1'; END IF;
+            EXIT l1 WHEN j = 1;
+          ELSIF x = 4 THEN
+            IF j = 1 THEN RAISE NOTICE 'EXIT b2'; END IF;
+            EXIT b2 WHEN j = 1;
+          ELSIF x = 5 THEN
+            EXIT b1 WHEN j = 1;
+          ELSE
+            EXIT p WHEN j = 1;
+          END IF;
+          RAISE NOTICE '<< l2 % %', i, j;
+        END LOOP l2;
+        RAISE NOTICE '<< b2 % %', i, j;
+      END;
+      RAISE NOTICE '<< l1 %', i;
+    END LOOP l1;
+    RAISE NOTICE '<< b1 %', i;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+# CONTINUE inner loop.
+query T noticetrace
+CALL p(0);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+NOTICE: CONTINUE l2
+NOTICE: << b2 1 1
+NOTICE: << l1 1
+NOTICE: >> l1 2
+NOTICE: >> b2 2 0
+NOTICE: >> l2 2 1
+NOTICE: CONTINUE l2
+NOTICE: >> l2 2 2
+NOTICE: << l2 2 2
+NOTICE: << b2 2 2
+NOTICE: << l1 2
+NOTICE: << b1 2
+
+# EXIT inner loop.
+query T noticetrace
+CALL p(1);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+NOTICE: EXIT l2
+NOTICE: << b2 1 1
+NOTICE: << l1 1
+NOTICE: >> l1 2
+NOTICE: >> b2 2 0
+NOTICE: >> l2 2 1
+NOTICE: EXIT l2
+NOTICE: << b2 2 1
+NOTICE: << l1 2
+NOTICE: << b1 2
+
+# CONTINUE outer loop.
+query T noticetrace
+CALL p(2);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+NOTICE: CONTINUE l1
+NOTICE: >> l1 2
+NOTICE: >> b2 2 0
+NOTICE: >> l2 2 1
+NOTICE: CONTINUE l1
+NOTICE: << b1 2
+
+# EXIT outer loop.
+query T noticetrace
+CALL p(3);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+NOTICE: EXIT l1
+NOTICE: << b1 1
+
+# EXIT inner block.
+query T noticetrace
+CALL p(4);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+NOTICE: EXIT b2
+NOTICE: << l1 1
+NOTICE: >> l1 2
+NOTICE: >> b2 2 0
+NOTICE: >> l2 2 1
+NOTICE: EXIT b2
+NOTICE: << l1 2
+NOTICE: << b1 2
+
+# EXIT outer block.
+query T noticetrace
+CALL p(5);
+----
+NOTICE: >> b1 0
+NOTICE: >> l1 1
+NOTICE: >> b2 1 0
+NOTICE: >> l2 1 1
+
+# EXIT the routine.
+statement error pgcode 2F005 control reached end of function without RETURN
+CALL p(6);
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    <<l1>>
+    LOOP
+      i := i + 1;
+      EXIT l1 WHEN i >= 5;
+      DECLARE
+        j int := 0;
+      BEGIN
+        <<l2>>
+        LOOP
+          j := j + 1;
+          RAISE NOTICE '% %', i, j;
+          CONTINUE l1 WHEN j >= i;
+        END LOOP l2;
+      END;
+    END LOOP l1;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: 1 1
+NOTICE: 2 1
+NOTICE: 2 2
+NOTICE: 3 1
+NOTICE: 3 2
+NOTICE: 3 3
+NOTICE: 4 1
+NOTICE: 4 2
+NOTICE: 4 3
+NOTICE: 4 4
+
 subtest end
