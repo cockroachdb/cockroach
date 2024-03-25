@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -927,9 +928,29 @@ type inFlightWrite struct {
 	chainIndex int64
 }
 
+// makeInFlightWrite constructs an inFlightWrite.
+func makeInFlightWrite(key roachpb.Key, seq enginepb.TxnSeq) inFlightWrite {
+	return inFlightWrite{SequencedWrite: roachpb.SequencedWrite{Key: key, Sequence: seq}}
+}
+
 // Less implements the btree.Item interface.
-func (a *inFlightWrite) Less(b btree.Item) bool {
-	return a.Key.Compare(b.(*inFlightWrite).Key) < 0
+//
+// inFlightWrites are ordered by Key and then by Sequence. Two inFlightWrites
+// with the same Key but different Sequences are not considered equal and are
+// maintained separately in the inFlightWritesSet.
+func (a *inFlightWrite) Less(bItem btree.Item) bool {
+	b := bItem.(*inFlightWrite)
+	kCmp := a.Key.Compare(b.Key)
+	if kCmp != 0 {
+		// Different Keys.
+		return kCmp < 0
+	}
+	if a.Sequence != b.Sequence {
+		// Different Sequence.
+		return a.Sequence < b.Sequence
+	}
+	// Equal.
+	return false
 }
 
 // inFlightWriteSet is an ordered set of in-flight point writes. Given a set
@@ -946,60 +967,40 @@ type inFlightWriteSet struct {
 }
 
 // insert attempts to insert an in-flight write that has not been proven to have
-// succeeded into the in-flight write set. If the write with an equal or larger
-// sequence number already exists in the set, the method is a no-op.
+// succeeded into the in-flight write set.
 func (s *inFlightWriteSet) insert(key roachpb.Key, seq enginepb.TxnSeq) {
 	if s.t == nil {
 		// Lazily initialize btree.
 		s.t = btree.New(txnPipelinerBtreeDegree)
 	}
 
-	s.tmp1.Key = key
-	item := s.t.Get(&s.tmp1)
-	if item != nil {
-		otherW := item.(*inFlightWrite)
-		if seq > otherW.Sequence {
-			// Existing in-flight write has old information.
-			otherW.Sequence = seq
-		}
-		return
-	}
-
 	w := s.alloc.alloc(key, seq)
-	s.t.ReplaceOrInsert(w)
-	s.bytes += keySize(key)
+	delItem := s.t.ReplaceOrInsert(w)
+	if delItem != nil {
+		// An in-flight write with the same key and sequence already existed in the
+		// set. This is unexpected, but we handle it.
+		*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
+	} else {
+		s.bytes += keySize(key)
+	}
 }
 
 // remove attempts to remove an in-flight write from the in-flight write set.
-// The method will be a no-op if the write was already proved. Care is taken
-// not to accidentally remove a write to the same key but at a later epoch or
-// sequence number.
+// The method will be a no-op if the write was already proved.
 func (s *inFlightWriteSet) remove(key roachpb.Key, seq enginepb.TxnSeq) {
 	if s.len() == 0 {
 		// Set is empty.
 		return
 	}
 
-	s.tmp1.Key = key
-	item := s.t.Get(&s.tmp1)
-	if item == nil {
+	// Delete the write from the in-flight writes set.
+	s.tmp1 = makeInFlightWrite(key, seq)
+	delItem := s.t.Delete(&s.tmp1)
+	if delItem == nil {
 		// The write was already proven or the txn epoch was incremented.
 		return
 	}
-
-	w := item.(*inFlightWrite)
-	if seq < w.Sequence {
-		// The sequence might have changed, which means that a new write was
-		// sent to the same key. This write would have been forced to prove
-		// the existence of current write already.
-		return
-	}
-
-	// Delete the write from the in-flight writes set.
-	delItem := s.t.Delete(item)
-	if delItem != nil {
-		*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
-	}
+	*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
 	s.bytes -= keySize(key)
 
 	// Assert that the byte accounting is believable.
@@ -1029,20 +1030,18 @@ func (s *inFlightWriteSet) ascendRange(start, end roachpb.Key, f func(w *inFligh
 		// Set is empty.
 		return
 	}
+	s.tmp1 = makeInFlightWrite(start, 0)
 	if end == nil {
 		// Point lookup.
-		s.tmp1.Key = start
-		if i := s.t.Get(&s.tmp1); i != nil {
-			f(i.(*inFlightWrite))
-		}
+		s.tmp2 = makeInFlightWrite(start, math.MaxInt32)
 	} else {
 		// Range lookup.
-		s.tmp1.Key, s.tmp2.Key = start, end
-		s.t.AscendRange(&s.tmp1, &s.tmp2, func(i btree.Item) bool {
-			f(i.(*inFlightWrite))
-			return true
-		})
+		s.tmp2 = makeInFlightWrite(end, 0)
 	}
+	s.t.AscendRange(&s.tmp1, &s.tmp2, func(i btree.Item) bool {
+		f(i.(*inFlightWrite))
+		return true
+	})
 }
 
 // len returns the number of the in-flight writes in the set.
@@ -1106,9 +1105,7 @@ func (a *inFlightWriteAlloc) alloc(key roachpb.Key, seq enginepb.TxnSeq) *inFlig
 
 	*a = (*a)[:len(*a)+1]
 	w := &(*a)[len(*a)-1]
-	*w = inFlightWrite{
-		SequencedWrite: roachpb.SequencedWrite{Key: key, Sequence: seq},
-	}
+	*w = makeInFlightWrite(key, seq)
 	return w
 }
 
