@@ -71,6 +71,23 @@ var (
 		true,
 		settings.WithPublic,
 	)
+
+	CircuitBreakerCancellationWriteGracePeriod = settings.RegisterDurationSetting(
+		settings.ApplicationLevel,
+		"kv.dist_sender.circuit_breaker.cancellation.write_grace_period",
+		"how long after the circuit breaker trips to cancel write requests "+
+			"(these can't retry internally, so should be long enough to allow quorum/lease recovery)",
+		10*time.Second,
+		settings.WithPublic,
+		settings.WithValidateDuration(func(t time.Duration) error {
+			// This prevents probes from exiting when idle, which can lead to buildup
+			// of probe goroutines, so cap it at 1 minute.
+			if t > time.Minute {
+				return errors.New("grace period can't be more than 1 minute")
+			}
+			return nil
+		}),
+	)
 )
 
 const (
@@ -85,6 +102,33 @@ const (
 	// failing probe should exit. It will be relaunched on the next request.
 	cbProbeIdleTimeout = 10 * time.Second
 )
+
+// cbRequestKind classifies a batch request.
+type cbRequestKind int
+
+const (
+	cbReadRequest cbRequestKind = iota
+	cbWriteRequest
+	cbNumRequestKinds // must be last in list
+)
+
+func (k cbRequestKind) String() string {
+	switch k {
+	case cbReadRequest:
+		return "read"
+	case cbWriteRequest:
+		return "write"
+	default:
+		panic(errors.AssertionFailedf("unknown request kind %d", k))
+	}
+}
+
+func cbRequestKindFromBatch(ba *kvpb.BatchRequest) cbRequestKind {
+	if ba.IsWrite() {
+		return cbWriteRequest
+	}
+	return cbReadRequest
+}
 
 // cbKey is a key in the DistSender replica circuit breakers map.
 type cbKey struct {
@@ -120,7 +164,9 @@ type cbKey struct {
 //   - Only if there are still in-flight requests.
 //
 // The breaker is only tripped once the probe fails (never in response to user
-// request failures alone).
+// request failures alone). If enabled, in-flight reads are cancelled
+// immediately when the breaker trips, and writes are cancelled after a grace
+// period (since they can't be automatically retried).
 //
 // The probe sends a LeaseInfo request and expects either a successful response
 // (if it is the leaseholder) or a NLHE (if it knows a leaseholder or leader
@@ -338,8 +384,13 @@ type ReplicaCircuitBreaker struct {
 		syncutil.Mutex
 
 		// cancelFns contains context cancellation functions for all in-flight
-		// requests. Only tracked if cancellation is enabled.
-		cancelFns map[*kvpb.BatchRequest]context.CancelCauseFunc
+		// requests, segmented by request type. Reads can be retried by the
+		// DistSender, so we cancel these immediately when the breaker trips.
+		// Writes can't automatically retry, and will return ambiguous result errors
+		// to clients, so we only cancel them after a grace period.
+		//
+		// Only tracked if cancellation is enabled.
+		cancelFns [cbNumRequestKinds]map[*kvpb.BatchRequest]context.CancelCauseFunc
 	}
 }
 
@@ -362,7 +413,9 @@ func newReplicaCircuitBreaker(
 		AsyncProbe:   r.launchProbe,
 		EventHandler: r,
 	})
-	r.mu.cancelFns = map[*kvpb.BatchRequest]context.CancelCauseFunc{}
+	for i := range r.mu.cancelFns {
+		r.mu.cancelFns[i] = map[*kvpb.BatchRequest]context.CancelCauseFunc{}
+	}
 	return r
 }
 
@@ -494,8 +547,9 @@ func (r *ReplicaCircuitBreaker) Track(
 
 		if !hasTimeout {
 			sendCtx, token.cancel = context.WithCancelCause(ctx)
+			reqKind := cbRequestKindFromBatch(ba)
 			r.mu.Lock()
-			r.mu.cancelFns[ba] = token.cancel
+			r.mu.cancelFns[reqKind][ba] = token.cancel
 			r.mu.Unlock()
 		}
 	}
@@ -523,8 +577,9 @@ func (r *ReplicaCircuitBreaker) done(
 	}
 
 	if cancel != nil {
+		reqKind := cbRequestKindFromBatch(ba)
 		r.mu.Lock()
-		delete(r.mu.cancelFns, ba) // nolint:deferunlockcheck
+		delete(r.mu.cancelFns[reqKind], ba) // nolint:deferunlockcheck
 		r.mu.Unlock()
 		cancel(nil)
 	}
@@ -643,12 +698,33 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 		}
 		defer transport.Release()
 
+		// Start the write grace timer. Unlike reads, writes can't automatically be
+		// retried by the DistSender, so we don't cancel them immediately when the
+		// breaker trips but only after it has remained tripped for a grace period.
+		// This should be long enough to wait out a Raft election timeout and lease
+		// interval and then repropose the write, in case the range is temporarily
+		// unavailable (e.g. following leaseholder loss).
+		//
+		// If the breaker is already tripped, the previous probe already waited out
+		// the grace period, so we don't have to. The grace timer channel is set to
+		// nil when there is no timer running.
+		//
+		// NB: lease requests aren't subject to the write grace period, despite
+		// being write requests, since they are submitted directly to the local
+		// replica instead of via the DistSender.
+		var writeGraceTimer timeutil.Timer
+		defer writeGraceTimer.Stop()
+		if period := CircuitBreakerCancellationWriteGracePeriod.Get(&r.d.settings.SV); period > 0 {
+			if !r.isTripped() {
+				writeGraceTimer.Reset(period)
+			}
+		}
+
 		// Continually probe the replica until it succeeds or the replica stops
 		// seeing traffic. We probe immediately since we only trip the breaker on
 		// probe failure.
 		var timer timeutil.Timer
 		defer timer.Stop()
-		timer.Reset(CircuitBreakerProbeInterval.Get(&r.d.settings.SV))
 
 		for {
 			// Untrip the breaker and stop probing if circuit breakers are disabled.
@@ -656,6 +732,10 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 				report(nil)
 				return
 			}
+
+			// Start the interval before sending the probe, to avoid skewing the
+			// interval, instead preferring frequent probes.
+			timer.Reset(CircuitBreakerProbeInterval.Get(&r.d.settings.SV))
 
 			// Probe the replica.
 			err := r.sendProbe(ctx, transport)
@@ -675,31 +755,44 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 				return
 			}
 
-			// Cancel in-flight requests on failure. We do this on every failure, and
-			// also remove the cancel functions from the map (even though done() will
-			// also clean them up), in case another request makes it in after the
-			// breaker trips. There should typically never be any contention here.
-			func() {
+			// Cancel in-flight read requests on failure, and write requests if the
+			// grace timer has expired. We do this on every failure, and also remove
+			// the cancel functions from the map (even though done() will also clean
+			// them up), in case another request makes it in after the breaker trips.
+			// There should typically never be any contention here.
+			cancelRequests := func(reqKind cbRequestKind) {
 				r.mu.Lock()
 				defer r.mu.Unlock()
-				for ba, cancel := range r.mu.cancelFns {
-					delete(r.mu.cancelFns, ba)
+
+				if l := len(r.mu.cancelFns[reqKind]); l > 0 {
+					log.VEventf(ctx, 2, "cancelling %d %s requests for %s", l, reqKind, r.id())
+				}
+				for ba, cancel := range r.mu.cancelFns[reqKind] {
+					delete(r.mu.cancelFns[reqKind], ba)
 					cancel(errors.Wrapf(err, "%s is unavailable (circuit breaker tripped)", r.id()))
 					r.d.metrics.CircuitBreaker.ReplicasRequestsCancelled.Inc(1)
 				}
-			}()
-
-			select {
-			case <-timer.C:
-				timer.Read = true
-			case <-r.d.stopper.ShouldQuiesce():
-				return
-			case <-ctx.Done():
-				return
 			}
 
-			probeInterval := CircuitBreakerProbeInterval.Get(&r.d.settings.SV)
-			timer.Reset(probeInterval)
+			cancelRequests(cbReadRequest)
+			if writeGraceTimer.C == nil {
+				cancelRequests(cbWriteRequest)
+			}
+
+			for !timer.Read { // select until probe interval timer fires
+				select {
+				case <-timer.C:
+					timer.Read = true
+				case <-writeGraceTimer.C:
+					cancelRequests(cbWriteRequest)
+					writeGraceTimer.Read = true
+					writeGraceTimer.Stop() // sets C = nil
+				case <-r.d.stopper.ShouldQuiesce():
+					return
+				case <-ctx.Done():
+					return
+				}
+			}
 
 			// If there haven't been any recent requests, stop probing but keep the
 			// breaker tripped. A new probe will be launched on the next request.
@@ -708,7 +801,11 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 			// frequently spawning new probe goroutines, instead waiting to see if any
 			// requests come in.
 			if r.lastRequestDuration(timeutil.Now().UnixNano()) >= cbProbeIdleTimeout {
-				return
+				// Keep probing if the write grace timer hasn't expired yet, since we
+				// need to cancel pending writes first.
+				if writeGraceTimer.C == nil {
+					return
+				}
 			}
 		}
 	})
