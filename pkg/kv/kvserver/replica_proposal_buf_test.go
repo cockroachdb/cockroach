@@ -235,7 +235,6 @@ func (t *testProposer) leaderStatus(ctx context.Context, raftGroup proposerRaft)
 	}
 	return rangeLeaderInfo{
 		iAmTheLeader:           iAmTheLeader,
-		leaderKnown:            leaderKnown,
 		leader:                 leaderRep,
 		leaderEligibleForLease: leaderEligibleForLease,
 	}
