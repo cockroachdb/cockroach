@@ -396,6 +396,7 @@ func makePlan(
 		evalCtx := execCtx.ExtendedEvalContext()
 		oracle := replicaoracle.NewOracle(replicaOracleChoice, dsp.ReplicaOracleConfig(locFilter))
 		if useBulkOracle.Get(&evalCtx.Settings.SV) {
+			log.Infof(ctx, "using bulk oracle for DistSQL planning")
 			oracle = kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), locFilter, kvfollowerreadsccl.StreakConfig{})
 		}
 		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil, /* planner */
@@ -410,9 +411,7 @@ func makePlan(
 		switch {
 		case distMode == sql.LocalDistribution || rangeDistribution == int64(defaultDistribution):
 		case rangeDistribution == int64(balancedSimpleDistribution):
-			if log.ExpensiveLogEnabled(ctx, 2) {
-				log.Infof(ctx, "rebalancing ranges using balanced simple distribution")
-			}
+			log.Infof(ctx, "rebalancing ranges using balanced simple distribution")
 			sender := execCtx.ExecCfg().DB.NonTransactionalSender()
 			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 			ri := kvcoord.MakeRangeIterator(distSender)
