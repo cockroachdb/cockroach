@@ -79,6 +79,18 @@ connect user=testuser
 ----
 ok defaultdb
 
+# User with client cert, but the cert contains dbuser only in SAN dns:
+# SAN dns value = dbuser name
+connect user=testuser database=defaultdb cert_name=testuser_san_only force_certs show_system_identity
+----
+ok defaultdb testuser
+
+# User with client cert, but the cert contains dbuser only in CN:
+# CN value = dbuser name
+connect user=testuser database=defaultdb cert_name=testuser_cn_only force_certs show_system_identity
+----
+ok defaultdb testuser
+
 # If we don't present the client certificate, the password is required.
 connect user=testuser password=invalid sslmode=verify-ca sslcert=
 ----

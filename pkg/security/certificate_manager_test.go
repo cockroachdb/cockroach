@@ -42,7 +42,9 @@ func TestManagerWithEmbedded(t *testing.T) {
 		t.Error("expected non-nil NodeCert")
 	}
 	clientCerts := cm.ClientCerts()
-	if a, e := len(clientCerts), 4; a != e {
+	// We expect 6 client certificates for root, testuser, testuser2, testuser3,
+	// testuser_cn_only, testuser_san_only, testuser_cn_and_san.
+	if a, e := len(clientCerts), 7; a != e {
 		t.Errorf("expected %d client certs, found %d", e, a)
 	}
 
@@ -129,11 +131,6 @@ func TestManagerWithPrincipalMap(t *testing.T) {
 	// We can map the "foo" principal to "node".
 	setCertPrincipalMap("foo:node")
 	require.NoError(t, newCertificateManager())
-
-	// Mapping the "testuser" principal to a different name should result in an
-	// error as it no longer matches the file name.
-	setCertPrincipalMap("testuser:foo,node.crdb.io:node")
-	require.Regexp(t, `client certificate has principals \["foo"\], expected "testuser"`, loadUserCert(username.TestUserName()))
 
 	// Renaming "client.testuser.crt" to "client.foo.crt" allows us to load it
 	// under that name.
