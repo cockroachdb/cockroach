@@ -75,13 +75,8 @@ var (
 
 const (
 	// cbGCThreshold is the threshold after which an idle replica's circuit
-	// breaker will be garbage collected.
-	cbGCThreshold = 10 * time.Minute
-
-	// cbGCThresholdTripped is the threshold after which an idle replica's circuit
-	// breaker will be garbage collected when tripped. This is greater than
-	// cbGCThreshold to avoid frequent (un)tripping of rarely accessed replicas.
-	cbGCThresholdTripped = time.Hour
+	// breaker will be garbage collected, even when tripped.
+	cbGCThreshold = 20 * time.Minute
 
 	// cbGCInterval is the interval between garbage collection scans.
 	cbGCInterval = time.Minute
@@ -268,18 +263,16 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 			cbs++
 
 			if idleDuration := cb.lastRequestDuration(nowNanos); idleDuration >= cbGCThreshold {
-				if !cb.isTripped() || idleDuration >= cbGCThresholdTripped {
-					// Check if we raced with a concurrent delete. We don't expect to,
-					// since only this loop removes circuit breakers.
-					if _, ok := d.replicas.LoadAndDelete(key); ok {
-						// TODO(erikgrinaker): this needs to remove tripped circuit breakers
-						// from the metrics, otherwise they'll appear as tripped forever.
-						// However, there are race conditions with concurrent probes that
-						// can lead to metrics gauge leaks (both positive and negative), so
-						// we'll have to make sure we reap the probes here first.
-						d.metrics.CircuitBreaker.Replicas.Dec(1)
-						gced++
-					}
+				// Check if we raced with a concurrent delete. We don't expect to, since
+				// only this loop removes circuit breakers.
+				if _, ok := d.replicas.LoadAndDelete(key); ok {
+					// TODO(erikgrinaker): this needs to remove tripped circuit breakers
+					// from the metrics, otherwise they'll appear as tripped forever.
+					// However, there are race conditions with concurrent probes that can
+					// lead to metrics gauge leaks (both positive and negative), so we'll
+					// have to make sure we reap the probes here first.
+					d.metrics.CircuitBreaker.Replicas.Dec(1)
+					gced++
 				}
 			}
 			return true
@@ -667,6 +660,14 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 
 			// Probe the replica.
 			err := r.sendProbe(ctx, transport)
+
+			// If the context (with no timeout) failed, we're shutting down. Just exit
+			// the probe without reporting the result (which could trip the breaker).
+			if ctx.Err() != nil {
+				return
+			}
+
+			// Report the probe result.
 			report(err)
 			if err == nil {
 				// On a successful probe, record the success and stop probing.
@@ -739,9 +740,9 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 //     these replicas.
 func (r *ReplicaCircuitBreaker) sendProbe(ctx context.Context, transport Transport) error {
 	// We don't use timeutil.RunWithTimeout() because we need to be able to
-	// differentiate which context failed.
+	// differentiate whether the context timed out.
 	timeout := CircuitBreakerProbeTimeout.Get(&r.d.settings.SV)
-	sendCtx, cancel := context.WithTimeout(ctx, timeout) // nolint:context
+	ctx, cancel := context.WithTimeout(ctx, timeout) // nolint:context
 	defer cancel()
 
 	transport.Reset()
@@ -756,19 +757,15 @@ func (r *ReplicaCircuitBreaker) sendProbe(ctx context.Context, transport Transpo
 	})
 
 	log.VEventf(ctx, 2, "sending probe to %s: %s", r.id(), ba)
-	br, err := transport.SendNext(sendCtx, ba)
+	br, err := transport.SendNext(ctx, ba)
 	log.VEventf(ctx, 2, "probe result from %s: br=%v err=%v", r.id(), br, err)
 
 	// Handle local send errors.
 	if err != nil {
-		// If the given context was cancelled, we're shutting down. Stop probing.
-		if ctx.Err() != nil {
-			return nil
-		}
-
-		// If the send context timed out, fail.
-		if ctxErr := sendCtx.Err(); ctxErr != nil {
-			return errors.Wrapf(ctxErr, "probe timed out")
+		// If the context timed out, fail. The caller will handle the case where
+		// we're shutting down.
+		if err := ctx.Err(); err != nil {
+			return errors.Wrapf(err, "probe timed out")
 		}
 
 		// Any other local error is likely a networking/gRPC issue. This includes if
