@@ -144,6 +144,7 @@ func getOldStmtDiagReqsDescriptor() *descpb.TableDescriptor {
 			KeyColumnNames:      []string{"id"},
 			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1},
+			ConstraintID:        1,
 		},
 		Indexes: []descpb.IndexDescriptor{
 			{
@@ -158,9 +159,10 @@ func getOldStmtDiagReqsDescriptor() *descpb.TableDescriptor {
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		},
-		NextIndexID:    4,
-		Privileges:     catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, username.NodeUserName()),
-		NextMutationID: 1,
-		FormatVersion:  3,
+		NextIndexID:      4,
+		Privileges:       catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, username.NodeUserName()),
+		NextMutationID:   1,
+		NextConstraintID: 2,
+		FormatVersion:    3,
 	}
 }
