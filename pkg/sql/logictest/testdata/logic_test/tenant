@@ -113,11 +113,11 @@ SELECT * FROM [SHOW TENANTS] WHERE id = 4
 id  name  data_state  service_mode
 4   two   ready       none
 
-query ITTTT colnames
-SELECT id, name, data_state, service_mode, source_tenant_name FROM [SHOW TENANTS WITH REPLICATION STATUS] WHERE id = 4
+query ITT colnames
+SELECT id, name, source_tenant_name FROM [SHOW TENANTS WITH REPLICATION STATUS] WHERE id = 4
 ----
-id  name  data_state  service_mode  source_tenant_name
-4   two   ready       none          NULL
+id  name  source_tenant_name
+4   two   NULL
 
 statement error tenant "seven" does not exist
 SHOW TENANT seven

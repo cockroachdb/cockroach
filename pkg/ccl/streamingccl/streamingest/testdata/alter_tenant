@@ -11,7 +11,7 @@ ALTER TENANT "destination" SET REPLICATION RETENTION = '42s'
 query-sql as=destination-system
 SELECT crdb_internal.pb_to_json('payload', payload)->'streamIngestion'->'replicationTtlSeconds' as retention_ttl_seconds
 FROM crdb_internal.system_jobs
-WHERE id = (SELECT replication_job_id FROM [SHOW TENANT "destination" WITH REPLICATION STATUS])
+WHERE id = (SELECT job_id FROM [SHOW JOBS] WHERE job_type='REPLICATION STREAM INGESTION')
 ----
 42
 
