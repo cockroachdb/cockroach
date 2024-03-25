@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -474,7 +475,7 @@ func (m *DataKeyManager) rotateDataKeyAndWrite(
 	// The new file's filename incorporates the marker's iteration
 	// number to ensure we're not overwriting the existing registry.
 	filename := fmt.Sprintf("%s_%06d_%s", keyRegistryFilename, m.mu.marker.NextIter(), registryFormatMonolith)
-	f, err := m.fs.Create(m.fs.PathJoin(m.dbDir, filename))
+	f, err := m.fs.Create(m.fs.PathJoin(m.dbDir, filename), fs.EncryptionRegistryWriteCategory)
 	if err != nil {
 		return err
 	}

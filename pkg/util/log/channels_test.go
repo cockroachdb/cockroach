@@ -92,6 +92,7 @@ func TestRepro81025(t *testing.T) {
 		10<<20, /* group max: 20 MB */
 		nil,    /* getStartLines */
 		0777,   /* file mode */
+		nil,    /* logBytesWritten */
 	)
 	defer func() { _ = s.closeFileLocked() }()
 

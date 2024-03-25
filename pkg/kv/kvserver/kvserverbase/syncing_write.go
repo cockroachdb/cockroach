@@ -86,6 +86,7 @@ func WriteFileSyncing(
 	perm os.FileMode,
 	settings *cluster.Settings,
 	limiter *rate.Limiter,
+	category vfs.DiskWriteCategory,
 ) error {
 	chunkSize := sstWriteSyncRate.Get(&settings.SV)
 	sync := true
@@ -94,7 +95,7 @@ func WriteFileSyncing(
 		sync = false
 	}
 
-	f, err := fs.Create(filename)
+	f, err := fs.Create(filename, category)
 	if err != nil {
 		if strings.Contains(err.Error(), "No such file or directory") {
 			return os.ErrNotExist

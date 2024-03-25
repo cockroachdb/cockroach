@@ -58,8 +58,8 @@ func (f *fdCountingFS) assertOpenFDs(
 	require.Equal(t, expectedReadFDs, f.readFDs)
 }
 
-func (f *fdCountingFS) Create(name string) (vfs.File, error) {
-	file, err := f.FS.Create(name)
+func (f *fdCountingFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File, error) {
+	file, err := f.FS.Create(name, category)
 	if err != nil {
 		return nil, err
 	}
