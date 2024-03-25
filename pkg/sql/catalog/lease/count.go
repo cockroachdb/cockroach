@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -74,65 +76,84 @@ func CountLeases(
 	}
 	whereClauseIdx := make([]int, 0, 2)
 	syntheticDescriptors := make(catalog.Descriptors, 0, 2)
-	if leasingMode != SessionBasedOnly {
-		// The leasing descriptor is session based, so we need to inject
-		// expiry based descriptor synthetically.
-		if leasingDescIsSessionBased {
-			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V23_2())
-		} else {
-			syntheticDescriptors = append(syntheticDescriptors, nil)
-		}
-		whereClauseIdx = append(whereClauseIdx, 0)
-
-	}
-	if leasingMode >= SessionBasedDrain {
-		// The leasing descriptor is not yet session based, so inject the session
-		// based descriptor synthetically.
-		if !leasingDescIsSessionBased {
-			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable())
-		} else {
-			syntheticDescriptors = append(syntheticDescriptors, nil)
-		}
-		whereClauseIdx = append(whereClauseIdx, 1)
-	}
-
 	var count int
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		txn.KV().SetDebugName("count-leases")
-		if err := txn.KV().SetFixedTimestamp(ctx, at); err != nil {
-			return err
-		}
-		prober := regionliveness.NewLivenessProber(db.KV(), codec, cachedDatabaseRegions, settings)
-		regionMap, err := prober.QueryLiveness(ctx, txn.KV())
-		if err != nil {
-			return err
-		}
-		// Depending on the database configuration query by region or the
-		// entire table.
-		for i := range syntheticDescriptors {
-			whereClause := whereClauses[whereClauseIdx[i]]
-			var descsToInject catalog.Descriptors
-			if syntheticDescriptors[i] != nil {
-				descsToInject = append(descsToInject, syntheticDescriptors[i])
+		retry := true
+		for retry {
+			retry = false
+			whereClauseIdx = whereClauseIdx[:0]
+			syntheticDescriptors = syntheticDescriptors[:0]
+			if leasingMode != SessionBasedOnly {
+				// The leasing descriptor is session based, so we need to inject
+				// expiry based descriptor synthetically.
+				if leasingDescIsSessionBased {
+					syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V23_2())
+				} else {
+					syntheticDescriptors = append(syntheticDescriptors, nil)
+				}
+				whereClauseIdx = append(whereClauseIdx, 0)
+
 			}
-			err := txn.WithSyntheticDescriptors(descsToInject,
-				func() error {
-					var err error
-					if cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion() {
-						// If we are injecting a raw leases descriptors, that will not have the enum
-						// type set, so convert the region to byte equivalent physical representation.
-						count, err = countLeasesByRegion(ctx, txn, prober, regionMap, cachedDatabaseRegions, len(descsToInject) > 0, at, whereClause)
-					} else {
-						count, err = countLeasesNonMultiRegion(ctx, txn, at, whereClause)
-					}
-					return err
-				})
+			if leasingMode >= SessionBasedDrain {
+				// The leasing descriptor is not yet session based, so inject the session
+				// based descriptor synthetically.
+				if !leasingDescIsSessionBased {
+					syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable())
+				} else {
+					syntheticDescriptors = append(syntheticDescriptors, nil)
+				}
+				whereClauseIdx = append(whereClauseIdx, 1)
+			}
+
+			txn.KV().SetDebugName("count-leases")
+			if err := txn.KV().SetFixedTimestamp(ctx, at); err != nil {
+				return err
+			}
+			prober := regionliveness.NewLivenessProber(db.KV(), codec, cachedDatabaseRegions, settings)
+			regionMap, err := prober.QueryLiveness(ctx, txn.KV())
 			if err != nil {
 				return err
 			}
-			// Exit if either the session or expiry based counts are zero.
-			if count > 0 {
-				return nil
+			// Depending on the database configuration query by region or the
+			// entire table.
+			for i := range syntheticDescriptors {
+				whereClause := whereClauses[whereClauseIdx[i]]
+				var descsToInject catalog.Descriptors
+				if syntheticDescriptors[i] != nil {
+					descsToInject = append(descsToInject, syntheticDescriptors[i])
+				}
+				err := txn.WithSyntheticDescriptors(descsToInject,
+					func() error {
+						var err error
+						if cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion() {
+							// If we are injecting a raw leases descriptors, that will not have the enum
+							// type set, so convert the region to byte equivalent physical representation.
+							count, err = countLeasesByRegion(ctx, txn, prober, regionMap, cachedDatabaseRegions, len(descsToInject) > 0, at, whereClause)
+						} else {
+							count, err = countLeasesNonMultiRegion(ctx, txn, at, whereClause)
+						}
+						return err
+					})
+				// If we are *not* injecting the session based leasing descriptor
+				// and have trouble with the desc-id column while counting, then
+				// it's possible that the lease manager view has not refreshed
+				// the lease table descriptor yet or our fixed timestamp is before
+				// the upgrade.
+				if err != nil &&
+					pgerror.GetPGCode(err) == pgcode.UndefinedColumn &&
+					systemDBVersion.Equal(clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version()) &&
+					leasingDescIsSessionBased {
+					leasingDescIsSessionBased = false
+					retry = true
+					continue
+				}
+				if err != nil {
+					return err
+				}
+				// Exit if either the session or expiry based counts are zero.
+				if count > 0 {
+					return nil
+				}
 			}
 		}
 		return nil
