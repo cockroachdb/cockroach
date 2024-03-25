@@ -366,5 +366,45 @@ export default function (props: GraphDashboardProps) {
         />
       </Axis>
     </LineGraph>,
+
+    <LineGraph
+      title="Disk Write Breakdown"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={
+        <div>
+          The number of bytes written to disk per second categorized according
+          to the source {tooltipSelection}.
+          <br />
+          See the "Hardware" dashboard to view an aggregate of all disk writes.
+        </div>
+      }
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {[
+          "pebble-wal",
+          "pebble-compaction",
+          "pebble-ingestion",
+          "pebble-memtable-flush",
+          "raft-snapshot",
+          "encryption-registry",
+          "crdb-log",
+          "sql-row-spill",
+          "sql-col-spill",
+        ].map(category =>
+          _.map(nodeIDs, nid => (
+            <Metric
+              key={category + "-" + nid}
+              name={`cr.store.storage.category-${category}.bytes-written`}
+              title={category + "-" + getNodeNameById(nid)}
+              sources={storeIDsForNode(storeIDsByNodeID, nid)}
+              nonNegativeRate
+            />
+          )),
+        )}
+      </Axis>
+    </LineGraph>,
   ];
 }
