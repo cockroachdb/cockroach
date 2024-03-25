@@ -109,7 +109,7 @@ func (r OpResult) asBool() bool {
 type Operation func(roachpb.Span, hlc.Timestamp) (done OpResult)
 
 var useBtreeFrontier = envutil.EnvOrDefaultBool("COCKROACH_BTREE_SPAN_FRONTIER_ENABLED",
-	util.ConstantWithMetamorphicTestBool("COCKROACH_BTREE_SPAN_FRONTIER_ENABLED", true))
+	util.ConstantWithMetamorphicTestBool("COCKROACH_BTREE_SPAN_FRONTIER_ENABLED", false))
 
 func enableBtreeFrontier(enabled bool) func() {
 	old := useBtreeFrontier
