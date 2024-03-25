@@ -81,10 +81,9 @@ const (
 	// cbGCInterval is the interval between garbage collection scans.
 	cbGCInterval = time.Minute
 
-	// cbProbeIdleIntervals is the number of probe intervals with no client
-	// requests after which a failing probe should exit. It will be relaunched on
-	// the next request, if any.
-	cbProbeIdleIntervals = 3
+	// cbProbeIdleTimeout is the interval with no client requests after which a
+	// failing probe should exit. It will be relaunched on the next request.
+	cbProbeIdleTimeout = 10 * time.Second
 )
 
 // cbKey is a key in the DistSender replica circuit breakers map.
@@ -702,15 +701,13 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 			probeInterval := CircuitBreakerProbeInterval.Get(&r.d.settings.SV)
 			timer.Reset(probeInterval)
 
-			// If there haven't been any requests in the past few probe intervals,
-			// stop probing but keep the breaker tripped. A new probe will be launched
-			// on the next request.
+			// If there haven't been any recent requests, stop probing but keep the
+			// breaker tripped. A new probe will be launched on the next request.
 			//
 			// NB: we check this after waiting out the probe interval above, to avoid
 			// frequently spawning new probe goroutines, instead waiting to see if any
 			// requests come in.
-			idleThreshold := cbProbeIdleIntervals * probeInterval
-			if r.lastRequestDuration(timeutil.Now().UnixNano()) >= idleThreshold {
+			if r.lastRequestDuration(timeutil.Now().UnixNano()) >= cbProbeIdleTimeout {
 				return
 			}
 		}
