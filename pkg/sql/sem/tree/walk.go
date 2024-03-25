@@ -1638,16 +1638,6 @@ func (stmt *Restore) walkStmt(v Visitor) Statement {
 		}
 	}
 
-	if stmt.Options.IncludeAllSecondaryTenants != nil {
-		include, changed := WalkExpr(v, stmt.Options.IncludeAllSecondaryTenants)
-		if changed {
-			if ret == stmt {
-				ret = stmt.copyNode()
-			}
-			ret.Options.IncludeAllSecondaryTenants = include
-		}
-	}
-
 	if stmt.Options.ExecutionLocality != nil {
 		include, changed := WalkExpr(v, stmt.Options.ExecutionLocality)
 		if changed {
