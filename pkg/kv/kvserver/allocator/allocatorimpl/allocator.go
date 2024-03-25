@@ -2163,10 +2163,10 @@ func (a *Allocator) leaseholderShouldMoveDueToIOOverload(
 	return false
 }
 
-// leaseholderShouldMoveDueToPreferences returns true if the current leaseholder
+// LeaseholderShouldMoveDueToPreferences returns true if the current leaseholder
 // is in violation of lease preferences _that can otherwise be satisfied_ by
 // some existing replica.
-func (a *Allocator) leaseholderShouldMoveDueToPreferences(
+func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	conf *roachpb.SpanConfig,
@@ -2176,6 +2176,7 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 		GetFirstIndex() kvpb.RaftIndex
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
+	exclReplsInNeedOfSnapshots bool,
 ) bool {
 	// Defensive check to ensure that this is never called with a replica set that
 	// does not contain the leaseholder.
@@ -2202,7 +2203,7 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	// If there are any replicas that do match lease preferences, then we check if
 	// the existing leaseholder is one of them.
 	preferred := a.PreferredLeaseholders(storePool, conf, candidates)
-	if a.knobs == nil || !a.knobs.AllowLeaseTransfersToReplicasNeedingSnapshots {
+	if exclReplsInNeedOfSnapshots {
 		preferred = excludeReplicasInNeedOfSnapshots(
 			ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), preferred)
 	}
@@ -2274,7 +2275,8 @@ func (a *Allocator) TransferLeaseTarget(
 		}
 	}
 	excludeLeaseRepl := opts.ExcludeLeaseRepl
-	if a.leaseholderShouldMoveDueToPreferences(ctx, storePool, conf, leaseRepl, existing) ||
+	excludeReplsInNeedOfSnap := a.knobs == nil || !a.knobs.AllowLeaseTransfersToReplicasNeedingSnapshots
+	if a.LeaseholderShouldMoveDueToPreferences(ctx, storePool, conf, leaseRepl, existing, excludeReplsInNeedOfSnap) ||
 		a.leaseholderShouldMoveDueToIOOverload(ctx, storePool, existing, leaseRepl.StoreID(), a.IOOverloadOptions()) {
 		// Explicitly exclude the current leaseholder from the result set if it is
 		// in violation of lease preferences that can be satisfied by some other
@@ -2633,7 +2635,8 @@ func (a *Allocator) ShouldTransferLease(
 	},
 	usageInfo allocator.RangeUsageInfo,
 ) TransferLeaseDecision {
-	if a.leaseholderShouldMoveDueToPreferences(ctx, storePool, conf, leaseRepl, existing) {
+	excludeReplsInNeedOfSnap := a.knobs == nil || !a.knobs.AllowLeaseTransfersToReplicasNeedingSnapshots
+	if a.LeaseholderShouldMoveDueToPreferences(ctx, storePool, conf, leaseRepl, existing, excludeReplsInNeedOfSnap) {
 		return TransferLeaseForPreferences
 	}
 

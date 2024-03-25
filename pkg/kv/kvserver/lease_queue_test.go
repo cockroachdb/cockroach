@@ -18,12 +18,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -146,7 +149,7 @@ func TestLeaseQueueLeasePreferencePurgatoryError(t *testing.T) {
 
 	// Lastly, unblock returning transfer targets. Expect that the leases from
 	// the test table all move to the new preference. Note we don't force a
-	// replication queue scan, as the purgatory retry should handle the
+	// lease queue scan, as the purgatory retry should handle the
 	// transfers.
 	blockTransferTarget.Store(false)
 	testutils.SucceedsSoon(t, func() error {
@@ -319,5 +322,85 @@ func TestLeaseQueueShedsOnIOOverload(t *testing.T) {
 				capacityAfter.LeaseCount)
 		}
 		return nil
+	})
+}
+
+// TestLeaseQueueProactiveEnqueueOnPreferences asserts that a lease quickly
+// transfers back to a store which satisfies the first applied lease
+// preference.
+func TestLeaseQueueProactiveEnqueueOnPreferences(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	const preferredNode = 1
+	zcfg := zonepb.DefaultZoneConfig()
+	zcfg.LeasePreferences = []zonepb.LeasePreference{
+		{
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "dc",
+					Value: "dc1",
+				},
+			},
+		},
+		{
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "dc",
+					Value: "dc2",
+				},
+			},
+		},
+	}
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ConfigureScratchRange: true,
+				},
+				Server: &server.TestingKnobs{
+					DefaultZoneConfigOverride: &zcfg,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	require.NoError(t, tc.WaitForFullReplication())
+	desc := tc.GetRaftLeader(t, roachpb.RKey(scratchKey)).Desc()
+
+	t.Run("violating", func(t *testing.T) {
+		tc.TransferRangeLeaseOrFatal(t, *desc, roachpb.ReplicationTarget{NodeID: 3, StoreID: 3})
+		testutils.SucceedsSoon(t, func() error {
+			target, err := tc.FindRangeLeaseHolder(*desc, nil)
+			if err != nil {
+				return err
+			}
+			if target.StoreID != preferredNode {
+				return errors.Errorf("lease not on preferred node %v, on %v",
+					preferredNode, target)
+			}
+			return nil
+		})
+	})
+
+	t.Run("less-preferred", func(t *testing.T) {
+		tc.TransferRangeLeaseOrFatal(t, *desc, roachpb.ReplicationTarget{NodeID: 2, StoreID: 2})
+		testutils.SucceedsSoon(t, func() error {
+			target, err := tc.FindRangeLeaseHolder(*desc, nil)
+			if err != nil {
+				return err
+			}
+			if target.StoreID != preferredNode {
+				return errors.Errorf("lease not on preferred node %v, on %v",
+					preferredNode, target)
+			}
+			return nil
+		})
 	})
 }

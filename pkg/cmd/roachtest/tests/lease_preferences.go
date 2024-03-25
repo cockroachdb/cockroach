@@ -112,13 +112,13 @@ func registerLeasePreferences(r registry.Registry) {
 				replFactor:            5,
 				checkNodes:            []int{1, 3, 4, 5},
 				eventFn:               makeStopNodesEventFn(2 /* targets */),
-				waitForLessPreferred:  false,
-				postEventWaitDuration: 10 * time.Minute,
+				waitForLessPreferred:  true,
+				postEventWaitDuration: 5 * time.Minute,
 			})
 		},
 	})
 	r.Add(registry.TestSpec{
-		// NB: This test takes down 2(/2) nodes in the most preferred locality. Th
+		// NB: This test takes down 2(/2) nodes in the most preferred locality. The
 		// leases on the stopped node will be acquired by node's which are not in
 		// the most preferred locality. This test waits until all the leases are on
 		// the secondary preference.
@@ -139,7 +139,7 @@ func registerLeasePreferences(r registry.Registry) {
 				eventFn:               makeStopNodesEventFn(1, 2 /* targets */),
 				checkNodes:            []int{3, 4, 5},
 				waitForLessPreferred:  false,
-				postEventWaitDuration: 10 * time.Minute,
+				postEventWaitDuration: 5 * time.Minute,
 			})
 		},
 	})
@@ -161,8 +161,8 @@ func registerLeasePreferences(r registry.Registry) {
 				eventFn: makeTransferLeasesEventFn(
 					5 /* gateway */, 5 /* target */),
 				checkNodes:            []int{1, 2, 3, 4, 5},
-				waitForLessPreferred:  false,
-				postEventWaitDuration: 10 * time.Minute,
+				waitForLessPreferred:  true,
+				postEventWaitDuration: 5 * time.Minute,
 			})
 		},
 	})
@@ -201,7 +201,7 @@ func runLeasePreferences(
 				// ...
 				// dc=N: n2N-1 n2N
 				fmt.Sprintf("--locality=region=fake-region,zone=fake-zone,dc=%d", (node-1)/2+1),
-				"--vmodule=replica_proposal=2,replicate_queue=3,replicate=3")
+				"--vmodule=replica_proposal=2,lease_queue=3,lease=3")
 			c.Start(ctx, t.L(), opts, settings, c.Node(node))
 
 		}
