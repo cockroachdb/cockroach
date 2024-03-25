@@ -53,7 +53,6 @@ func TestMVCCValueHeaderImportEpoch(t *testing.T) {
 
 	// Create a table where the first row ( in sort order) comes from an IMPORT
 	// while the second comes from an INSERT.
-	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.write_import_epoch.enabled=true`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (a INT8)`)
 	sqlDB.Exec(t, `INSERT INTO d.t VALUES ('2')`)
 	sqlDB.Exec(t, `IMPORT INTO d.t CSV DATA ($1)`, srv.URL)
