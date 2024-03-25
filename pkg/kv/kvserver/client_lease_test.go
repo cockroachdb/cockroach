@@ -801,7 +801,9 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 	})
 
 	tc.GetFirstStoreFromServer(t, 1).SetReplicateQueueActive(true)
+	tc.GetFirstStoreFromServer(t, 1).SetLeaseQueueActive(true)
 	require.NoError(t, tc.GetFirstStoreFromServer(t, 1).ForceReplicationScanAndProcess())
+	require.NoError(t, tc.GetFirstStoreFromServer(t, 1).ForceLeaseQueueProcess())
 
 	// The lease should be moved back by the rebalance queue to us-west.
 	testutils.SucceedsSoon(t, func() error {
@@ -1327,20 +1329,20 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 		return nil
 	})
 
-	runThroughTheReplicateQueue := func(key roachpb.Key) {
+	runThroughTheLeaseQueue := func(key roachpb.Key) {
 		for _, i := range []int{2, 3} {
 			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(key))
 			require.NotNil(t, repl)
 			// We don't know who the leaseholder might be, so ignore errors.
 			_, _, _ = tc.GetFirstStoreFromServer(t, i).Enqueue(
-				ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+				ctx, "lease", repl, true /* skipShouldQueue */, false, /* async */
 			)
 		}
 	}
 
 	for _, key := range startKeys {
 		testutils.SucceedsSoon(t, func() error {
-			runThroughTheReplicateQueue(key)
+			runThroughTheLeaseQueue(key)
 			return leaseOnNonSuspectStores(key)
 		})
 	}
@@ -1352,7 +1354,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	}
 	// Force all the replication queues, server 1 is still suspect so it should not pick up any leases.
 	for _, key := range startKeys {
-		runThroughTheReplicateQueue(key)
+		runThroughTheLeaseQueue(key)
 	}
 	testutils.SucceedsSoon(t, allLeasesOnNonSuspectStores)
 	// Wait out the suspect time.
@@ -1365,7 +1367,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		// Server 1 should get some leases back as it's no longer suspect.
 		for _, key := range startKeys {
-			runThroughTheReplicateQueue(key)
+			runThroughTheLeaseQueue(key)
 		}
 		for _, key := range startKeys {
 			repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key))

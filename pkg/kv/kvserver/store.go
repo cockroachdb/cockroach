@@ -1684,7 +1684,7 @@ func NewStore(
 		s.setGCQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableLeaseQueue {
-		s.setLeaseQueueActive(false)
+		s.SetLeaseQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableMergeQueue {
 		s.setMergeQueueActive(false)
