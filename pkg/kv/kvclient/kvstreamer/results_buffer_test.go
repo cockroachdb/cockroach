@@ -44,6 +44,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 		ctx,
 		base.DefaultTestTempStorageConfig(st),
 		base.DefaultTestStoreSpec,
+		nil, /* statsCollector */
 	)
 	require.NoError(t, err)
 	defer tempEngine.Close()

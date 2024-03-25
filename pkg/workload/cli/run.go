@@ -181,7 +181,7 @@ func CmdHelper(
 			if err := cfg.Validate(nil /* no default log directory */); err != nil {
 				return err
 			}
-			if _, err := log.ApplyConfig(cfg); err != nil {
+			if _, err := log.ApplyConfig(cfg, log.FileSinkMetrics{}); err != nil {
 				return err
 			}
 		}

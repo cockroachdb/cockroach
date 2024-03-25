@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -122,7 +123,7 @@ func NewSeparatedIntentScanner(
 			UpperBound: upperBound,
 			// Ignore Shared and Exclusive locks. We only care about intents.
 			MatchMinStr:  lock.Intent,
-			ReadCategory: storage.RangefeedReadCategory,
+			ReadCategory: fs.RangefeedReadCategory,
 		})
 	if err != nil {
 		return nil, err

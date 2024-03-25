@@ -162,7 +162,7 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 
 		// Switch to the new configuration.
 		TestingResetActive()
-		sc.cleanupFn, err = ApplyConfig(cfg)
+		sc.cleanupFn, err = ApplyConfig(cfg, FileSinkMetrics{})
 		if err != nil {
 			return err
 		}
@@ -355,7 +355,7 @@ func (l *TestLogScope) SetupSingleFileLogging() (cleanup func()) {
 
 	// Apply the configuration.
 	TestingResetActive()
-	cleanup, err := ApplyConfig(cfg)
+	cleanup, err := ApplyConfig(cfg, FileSinkMetrics{})
 	if err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error in predefined log config"))
 	}

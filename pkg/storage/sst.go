@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -150,7 +151,7 @@ func CheckSSTConflicts(
 		nonPrefixIter, err := reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:     IterKeyTypePointsAndRanges,
 			UpperBound:   end.Key,
-			ReadCategory: BatchEvalReadCategory,
+			ReadCategory: fs.BatchEvalReadCategory,
 		})
 		if err != nil {
 			return statsDiff, err
@@ -165,7 +166,7 @@ func CheckSSTConflicts(
 
 	// Check for any overlapping locks, and return them to be resolved.
 	if locks, err := ScanLocks(
-		ctx, reader, start.Key, end.Key, maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory); err != nil {
+		ctx, reader, start.Key, end.Key, maxLockConflicts, targetLockConflictBytes); err != nil {
 		return enginepb.MVCCStats{}, err
 	} else if len(locks) > 0 {
 		return enginepb.MVCCStats{}, &kvpb.LockConflictError{Locks: locks}
@@ -199,7 +200,7 @@ func CheckSSTConflicts(
 	rkIter, err = reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
 		UpperBound:   rightPeekBound,
 		KeyTypes:     IterKeyTypeRangesOnly,
-		ReadCategory: BatchEvalReadCategory,
+		ReadCategory: fs.BatchEvalReadCategory,
 	})
 	if err != nil {
 		return enginepb.MVCCStats{}, err
@@ -244,7 +245,7 @@ func CheckSSTConflicts(
 		RangeKeyMaskingBelow: sstTimestamp,
 		Prefix:               usePrefixSeek,
 		useL6Filters:         true,
-		ReadCategory:         BatchEvalReadCategory,
+		ReadCategory:         fs.BatchEvalReadCategory,
 	})
 	if err != nil {
 		return enginepb.MVCCStats{}, err

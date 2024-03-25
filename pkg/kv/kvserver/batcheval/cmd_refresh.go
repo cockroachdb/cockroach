@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -61,7 +62,7 @@ func Refresh(
 	res, err := storage.MVCCGet(ctx, reader, args.Key, refreshTo, storage.MVCCGetOptions{
 		Inconsistent: true,
 		Tombstones:   true,
-		ReadCategory: storage.BatchEvalReadCategory,
+		ReadCategory: fs.BatchEvalReadCategory,
 	})
 
 	if err != nil {

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -79,7 +80,7 @@ func RecoverTxn(
 	// Fetch transaction record; if missing, attempt to synthesize one.
 	if ok, err := storage.MVCCGetProto(
 		ctx, readWriter, key, hlc.Timestamp{}, &reply.RecoveredTxn,
-		storage.MVCCGetOptions{ReadCategory: storage.BatchEvalReadCategory},
+		storage.MVCCGetOptions{ReadCategory: fs.BatchEvalReadCategory},
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
@@ -222,7 +223,7 @@ func RecoverTxn(
 	}
 	txnRecord := reply.RecoveredTxn.AsRecord()
 	if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
-		storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: storage.BatchEvalReadCategory}); err != nil {
+		storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: fs.BatchEvalReadCategory}); err != nil {
 		return result.Result{}, err
 	}
 

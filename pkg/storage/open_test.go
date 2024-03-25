@@ -73,7 +73,7 @@ func TestWALFailover(t *testing.T) {
 				if td.HasArg("read-only") {
 					envConfig.RW = fs.ReadOnly
 				}
-				e, err := fs.InitEnv(context.Background(), memfs, dir, envConfig)
+				e, err := fs.InitEnv(context.Background(), memfs, dir, envConfig, nil)
 				if err != nil {
 					return fmt.Sprintf("err = %q", err)
 				}
@@ -133,7 +133,7 @@ func TestWALFailover(t *testing.T) {
 				base.CCLDistributionAndEnterpriseEnabled = func(st *cluster.Settings) bool { return !td.HasArg("disable-enterprise") }
 				defer func() { base.CCLDistributionAndEnterpriseEnabled = enterpriseEnabledFunc }()
 
-				engine, err := Open(context.Background(), openEnv, settings, WALFailover(cfg, envs, defaultFS))
+				engine, err := Open(context.Background(), openEnv, settings, WALFailover(cfg, envs, defaultFS, nil))
 				if err != nil {
 					openEnv.Close()
 					return fmt.Sprintf("open error: %s", err)

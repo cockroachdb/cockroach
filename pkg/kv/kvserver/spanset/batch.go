@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/pebble"
@@ -470,7 +471,7 @@ func (s spanSetReader) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind storage.MVCCIterKind,
 	keyTypes storage.IterKeyType,
-	readCategory storage.ReadCategory,
+	readCategory fs.ReadCategory,
 	f func(storage.MVCCKeyValue, storage.MVCCRangeKeyStack) error,
 ) error {
 	if s.spansOnly {
@@ -519,7 +520,7 @@ func (s spanSetReader) ConsistentIterators() bool {
 }
 
 // PinEngineStateForIterators implements the storage.Reader interface.
-func (s spanSetReader) PinEngineStateForIterators(readCategory storage.ReadCategory) error {
+func (s spanSetReader) PinEngineStateForIterators(readCategory fs.ReadCategory) error {
 	return s.r.PinEngineStateForIterators(readCategory)
 }
 

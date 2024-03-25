@@ -826,7 +826,7 @@ creation. These directories should be deleted, or inspected with caution.
 `
 		attentionArgs := []any{r, desc.Replicas(), redact.Safe(auxDir), redact.Safe(path)}
 		preventStartupMsg := fmt.Sprintf(attentionFmt, attentionArgs...)
-		if err := fs.WriteFile(r.store.TODOEngine().Env(), path, []byte(preventStartupMsg)); err != nil {
+		if err := fs.WriteFile(r.store.TODOEngine().Env(), path, []byte(preventStartupMsg), fs.UnspecifiedWriteCategory); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
 

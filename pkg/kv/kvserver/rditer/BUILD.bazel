@@ -16,6 +16,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
         "//pkg/util/iterutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_pebble//:pebble",

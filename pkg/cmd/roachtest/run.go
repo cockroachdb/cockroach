@@ -196,7 +196,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	return err
 }
 
-// This diverts all the default non fatal logging to a file in `baseDir`. This is particularly
+// This diverts all the default non-fatal logging to a file in `baseDir`. This is particularly
 // useful in CI, where without this, stderr/stdout are cluttered with logs from various
 // packages used in roachtest like sarama and testutils.
 func setLogConfig(baseDir string) {
@@ -205,7 +205,7 @@ func setLogConfig(baseDir string) {
 	if err := logConf.Validate(&baseDir); err != nil {
 		panic(err)
 	}
-	if _, err := log.ApplyConfig(logConf); err != nil {
+	if _, err := log.ApplyConfig(logConf, log.FileSinkMetrics{}); err != nil {
 		panic(err)
 	}
 }

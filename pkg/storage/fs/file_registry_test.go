@@ -95,7 +95,7 @@ func TestFileRegistryOps(t *testing.T) {
 		for path := range expected {
 			path = mem.PathJoin("/mydb", path)
 			require.NoError(t, mem.MkdirAll(mem.PathDir(path), 0655))
-			f, err := mem.Create(path)
+			f, err := mem.Create(path, UnspecifiedWriteCategory)
 			require.NoError(t, err)
 			require.NoError(t, f.Close())
 		}
@@ -216,7 +216,7 @@ func TestFileRegistryElideUnencrypted(t *testing.T) {
 	mem := vfs.NewMem()
 
 	for _, name := range []string{"test1", "test2"} {
-		f, err := mem.Create(name)
+		f, err := mem.Create(name, UnspecifiedWriteCategory)
 		require.NoError(t, err)
 		require.NoError(t, f.Close())
 	}
@@ -246,7 +246,7 @@ func TestFileRegistryElideNonexistent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	mem := vfs.NewMem()
-	f, err := mem.Create("bar")
+	f, err := mem.Create("bar", UnspecifiedWriteCategory)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 	{
@@ -288,7 +288,7 @@ func TestFileRegistryRecordsReadAndWrite(t *testing.T) {
 	// Ensure all the expected paths exist, otherwise Load will elide
 	// them and this test is not designed to test elision.
 	for name := range files {
-		f, err := mem.Create(name)
+		f, err := mem.Create(name, UnspecifiedWriteCategory)
 		require.NoError(t, err)
 		require.NoError(t, f.Close())
 	}
@@ -379,7 +379,7 @@ func TestFileRegistry(t *testing.T) {
 			return buf.String()
 		case "touch":
 			for _, filename := range strings.Split(d.Input, "\n") {
-				f, err := fs.Create(filename)
+				f, err := fs.Create(filename, UnspecifiedWriteCategory)
 				require.NoError(t, err)
 				require.NoError(t, f.Close())
 			}
@@ -418,9 +418,9 @@ type loggingFS struct {
 	w io.Writer
 }
 
-func (fs loggingFS) Create(name string) (vfs.File, error) {
+func (fs loggingFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File, error) {
 	fmt.Fprintf(fs.w, "create(%q)\n", name)
-	f, err := fs.FS.Create(name)
+	f, err := fs.FS.Create(name, category)
 	if err != nil {
 		return nil, err
 	}
@@ -460,9 +460,11 @@ func (fs loggingFS) Rename(oldname, newname string) error {
 	return fs.FS.Rename(oldname, newname)
 }
 
-func (fs loggingFS) ReuseForWrite(oldname, newname string) (vfs.File, error) {
+func (fs loggingFS) ReuseForWrite(
+	oldname, newname string, category vfs.DiskWriteCategory,
+) (vfs.File, error) {
 	fmt.Fprintf(fs.w, "reuseForWrite(%q, %q)\n", oldname, newname)
-	f, err := fs.FS.ReuseForWrite(oldname, newname)
+	f, err := fs.FS.ReuseForWrite(oldname, newname, category)
 	if err == nil {
 		f = loggingFile{f, newname, fs.w}
 	}
@@ -534,7 +536,7 @@ func (c *fileRegistryEntryChecker) addEntry(r *FileRegistry) {
 	filename := fmt.Sprintf("%04d", c.numAddedEntries)
 	// Create a file for this added entry so that it doesn't get cleaned up
 	// when we reopen the file registry.
-	f, err := c.fs.Create(c.fs.PathJoin(c.dir, filename))
+	f, err := c.fs.Create(c.fs.PathJoin(c.dir, filename), UnspecifiedWriteCategory)
 	require.NoError(c.t, err)
 	require.NoError(c.t, f.Sync())
 	require.NoError(c.t, f.Close())

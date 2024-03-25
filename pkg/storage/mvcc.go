@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -1244,7 +1245,7 @@ type MVCCGetOptions struct {
 	AllowEmpty bool
 	// ReadCategory is used to map to a user-understandable category string, for
 	// stats aggregation and metrics, and a Pebble-understandable QoS.
-	ReadCategory ReadCategory
+	ReadCategory fs.ReadCategory
 }
 
 // MVCCGetResult bundles return values for the MVCCGet family of functions.
@@ -1412,7 +1413,7 @@ func MVCCGetForKnownTimestampWithNoIntent(
 		// to assert that the value was indeed found in the batch).
 		iter, err = batch.NewMVCCIterator(ctx, MVCCKeyIterKind,
 			IterOptions{
-				KeyTypes: IterKeyTypePointsAndRanges, Prefix: true, ReadCategory: RangefeedReadCategory})
+				KeyTypes: IterKeyTypePointsAndRanges, Prefix: true, ReadCategory: fs.RangefeedReadCategory})
 	}
 	if err != nil {
 		return nil, enginepb.MVCCValueHeader{}, err
@@ -3201,7 +3202,7 @@ func MVCCClearTimeRange(
 	// intended for non-live key spans, but there could be an intent or lock
 	// leftover from before the keyspace become non-live.
 	if locks, err := ScanLocks(
-		ctx, rw, key, endKey, maxLockConflicts, 0, BatchEvalReadCategory); err != nil {
+		ctx, rw, key, endKey, maxLockConflicts, 0); err != nil {
 		return nil, err
 	} else if len(locks) > 0 {
 		return nil, &kvpb.LockConflictError{Locks: locks}
@@ -3319,7 +3320,7 @@ func MVCCClearTimeRange(
 			KeyTypes:     IterKeyTypeRangesOnly,
 			LowerBound:   leftPeekBound,
 			UpperBound:   rightPeekBound,
-			ReadCategory: BatchEvalReadCategory,
+			ReadCategory: fs.BatchEvalReadCategory,
 		})
 		if err != nil {
 			return err
@@ -3401,7 +3402,7 @@ func MVCCClearTimeRange(
 		EndKey:       endKey,
 		StartTime:    startTime,
 		EndTime:      endTime,
-		ReadCategory: BatchEvalReadCategory,
+		ReadCategory: fs.BatchEvalReadCategory,
 	})
 	if err != nil {
 		return nil, err
@@ -3782,7 +3783,7 @@ func MVCCPredicateDeleteRange(
 
 	// Check for any overlapping locks, and return them to be resolved.
 	if locks, err := ScanLocks(
-		ctx, rw, startKey, endKey, maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory); err != nil {
+		ctx, rw, startKey, endKey, maxLockConflicts, targetLockConflictBytes); err != nil {
 		return nil, err
 	} else if len(locks) > 0 {
 		return nil, &kvpb.LockConflictError{Locks: locks}
@@ -3878,7 +3879,7 @@ func MVCCPredicateDeleteRange(
 		IterOptions{
 			KeyTypes:     IterKeyTypePointsAndRanges,
 			Prefix:       true,
-			ReadCategory: BatchEvalReadCategory,
+			ReadCategory: fs.BatchEvalReadCategory,
 		},
 	)
 	if err != nil {
@@ -3888,7 +3889,7 @@ func MVCCPredicateDeleteRange(
 
 	ltScanner, err := newLockTableKeyScanner(
 		ctx, rw, uuid.UUID{} /* txnID */, lock.Intent,
-		maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory,
+		maxLockConflicts, targetLockConflictBytes, fs.BatchEvalReadCategory,
 	)
 	if err != nil {
 		return nil, err
@@ -3921,7 +3922,7 @@ func MVCCPredicateDeleteRange(
 				_, acq, err := mvccPutInternal(
 					ctx, rw, pointTombstoneIter, ltScanner, buf[i], endTime, noValue, pointTombstoneBuf,
 					nil, MVCCWriteOptions{
-						LocalTimestamp: localTimestamp, Stats: ms, Category: BatchEvalReadCategory},
+						LocalTimestamp: localTimestamp, Stats: ms, Category: fs.BatchEvalReadCategory},
 				)
 				if err != nil {
 					return err
@@ -3964,7 +3965,7 @@ func MVCCPredicateDeleteRange(
 		EndTime:              hlc.MaxTimestamp,
 		RangeKeyMaskingBelow: endTime,
 		KeyTypes:             IterKeyTypePointsAndRanges,
-		ReadCategory:         BatchEvalReadCategory,
+		ReadCategory:         fs.BatchEvalReadCategory,
 	})
 	if err != nil {
 		return nil, err
@@ -4130,7 +4131,7 @@ func MVCCDeleteRangeUsingTombstone(
 
 	// Check for any overlapping locks, and return them to be resolved.
 	if locks, err := ScanLocks(
-		ctx, rw, startKey, endKey, maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory); err != nil {
+		ctx, rw, startKey, endKey, maxLockConflicts, targetLockConflictBytes); err != nil {
 		return err
 	} else if len(locks) > 0 {
 		return &kvpb.LockConflictError{Locks: locks}
@@ -4146,7 +4147,7 @@ func MVCCDeleteRangeUsingTombstone(
 				LowerBound:           startKey,
 				UpperBound:           endKey,
 				RangeKeyMaskingBelow: timestamp,
-				ReadCategory:         BatchEvalReadCategory,
+				ReadCategory:         fs.BatchEvalReadCategory,
 			})
 			if err != nil {
 				return false, err
@@ -4182,7 +4183,7 @@ func MVCCDeleteRangeUsingTombstone(
 				StartKey:     startKey,
 				EndKey:       endKey,
 				StartTime:    timestamp.Prev(), // make inclusive
-				ReadCategory: BatchEvalReadCategory,
+				ReadCategory: fs.BatchEvalReadCategory,
 			})
 			if err != nil {
 				return err
@@ -4208,7 +4209,7 @@ func MVCCDeleteRangeUsingTombstone(
 		LowerBound:           startKey,
 		UpperBound:           endKey,
 		RangeKeyMaskingBelow: timestamp, // lower point keys have already been accounted for
-		ReadCategory:         BatchEvalReadCategory,
+		ReadCategory:         fs.BatchEvalReadCategory,
 	}
 	if msCovered != nil {
 		iterOpts.KeyTypes = IterKeyTypeRangesOnly
@@ -4302,7 +4303,7 @@ func MVCCDeleteRangeUsingTombstone(
 			KeyTypes:     IterKeyTypeRangesOnly,
 			LowerBound:   leftPeekBound,
 			UpperBound:   rightPeekBound,
-			ReadCategory: BatchEvalReadCategory,
+			ReadCategory: fs.BatchEvalReadCategory,
 		})
 		if err != nil {
 			return err
@@ -4623,7 +4624,7 @@ type MVCCWriteOptions struct {
 	// The zero value indicates no limit.
 	TargetLockConflictBytes int64
 	// Category is used for writes that need to do a read.
-	Category ReadCategory
+	Category fs.ReadCategory
 }
 
 func (opts *MVCCWriteOptions) validate() error {
@@ -4711,7 +4712,7 @@ type MVCCScanOptions struct {
 	DontInterleaveIntents bool
 	// ReadCategory is used to map to a user-understandable category string, for
 	// stats aggregation and metrics, and a Pebble-understandable QoS.
-	ReadCategory ReadCategory
+	ReadCategory fs.ReadCategory
 }
 
 func (opts *MVCCScanOptions) validate() error {
@@ -5063,7 +5064,7 @@ func MVCCResolveWriteIntent(
 	ltIter, err := NewLockTableIterator(ctx, rw, LockTableIteratorOptions{
 		Prefix:       true,
 		MatchTxnID:   update.Txn.ID,
-		ReadCategory: IntentResolutionReadCategory,
+		ReadCategory: fs.IntentResolutionReadCategory,
 	})
 	if err != nil {
 		return false, 0, nil, false, err
@@ -5124,7 +5125,7 @@ func MVCCResolveWriteIntent(
 				iter, err = rw.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
 					Prefix:       true,
 					KeyTypes:     IterKeyTypePointsAndRanges,
-					ReadCategory: IntentResolutionReadCategory,
+					ReadCategory: fs.IntentResolutionReadCategory,
 				})
 				if err != nil {
 					return false, 0, nil, false, err
@@ -5796,7 +5797,7 @@ func MVCCResolveWriteIntentRange(
 		LowerBound:   ltStart,
 		UpperBound:   ltEnd,
 		MatchTxnID:   update.Txn.ID,
-		ReadCategory: IntentResolutionReadCategory,
+		ReadCategory: fs.IntentResolutionReadCategory,
 	})
 	if err != nil {
 		return 0, 0, nil, 0, false, err
@@ -5807,7 +5808,7 @@ func MVCCResolveWriteIntentRange(
 		KeyTypes:     IterKeyTypePointsAndRanges,
 		LowerBound:   update.Key,
 		UpperBound:   update.EndKey,
-		ReadCategory: IntentResolutionReadCategory,
+		ReadCategory: fs.IntentResolutionReadCategory,
 	}
 	if rw.ConsistentIterators() {
 		// Production code should always have consistent iterators.
@@ -5933,7 +5934,7 @@ func MVCCCheckForAcquireLock(
 		txnID = txn.ID
 	}
 	ltScanner, err := newLockTableKeyScanner(
-		ctx, reader, txnID, str, maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory)
+		ctx, reader, txnID, str, maxLockConflicts, targetLockConflictBytes, fs.BatchEvalReadCategory)
 	if err != nil {
 		return err
 	}
@@ -5966,7 +5967,7 @@ func MVCCAcquireLock(
 		return err
 	}
 	ltScanner, err := newLockTableKeyScanner(
-		ctx, rw, txn.ID, str, maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory)
+		ctx, rw, txn.ID, str, maxLockConflicts, targetLockConflictBytes, fs.BatchEvalReadCategory)
 	if err != nil {
 		return err
 	}
@@ -6132,7 +6133,7 @@ func VerifyLock(
 	// NB: Pass in lock.None when configuring the lockTableKeyScanner to only
 	// return locks held by the our transaction.
 	ltScanner, err := newLockTableKeyScanner(
-		ctx, reader, txn.ID, lock.None, 0, 0, BatchEvalReadCategory,
+		ctx, reader, txn.ID, lock.None, 0, 0, fs.BatchEvalReadCategory,
 	)
 	if err != nil {
 		return false, err
@@ -6271,7 +6272,7 @@ func MVCCGarbageCollect(
 		LowerBound:   keys[0].Key,
 		UpperBound:   keys[len(keys)-1].Key.Next(),
 		KeyTypes:     IterKeyTypePointsAndRanges,
-		ReadCategory: MVCCGCReadCategory,
+		ReadCategory: fs.MVCCGCReadCategory,
 	})
 	if err != nil {
 		return err
@@ -6600,7 +6601,7 @@ func MVCCGarbageCollectRangeKeys(
 			LowerBound:   gcKey.LatchSpan.Key,
 			UpperBound:   gcKey.LatchSpan.EndKey,
 			KeyTypes:     IterKeyTypeRangesOnly,
-			ReadCategory: MVCCGCReadCategory,
+			ReadCategory: fs.MVCCGCReadCategory,
 		})
 		if err != nil {
 			return err
@@ -6692,7 +6693,7 @@ func MVCCGarbageCollectRangeKeys(
 				EndKey:       rangeKeys.Bounds.EndKey,
 				EndTime:      gcKey.Timestamp,
 				IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
-				ReadCategory: MVCCGCReadCategory,
+				ReadCategory: fs.MVCCGCReadCategory,
 			})
 			if err != nil {
 				return err
@@ -6786,7 +6787,7 @@ func CanGCEntireRange(
 		LowerBound:           start,
 		UpperBound:           end,
 		RangeKeyMaskingBelow: gcThreshold,
-		ReadCategory:         MVCCGCReadCategory,
+		ReadCategory:         fs.MVCCGCReadCategory,
 	})
 	if err != nil {
 		return coveredByRangeTombstones, err
@@ -6844,7 +6845,7 @@ func MVCCGarbageCollectPointsWithClearRange(
 		LowerBound:   start,
 		UpperBound:   end,
 		KeyTypes:     IterKeyTypePointsAndRanges,
-		ReadCategory: MVCCGCReadCategory,
+		ReadCategory: fs.MVCCGCReadCategory,
 	})
 	if err != nil {
 		return err
@@ -6971,7 +6972,7 @@ func MVCCFindSplitKey(
 	it, err := reader.NewMVCCIterator(
 		ctx, MVCCKeyAndIntentsIterKind, IterOptions{
 			UpperBound:   endKey.AsRawKey(),
-			ReadCategory: BatchEvalReadCategory,
+			ReadCategory: fs.BatchEvalReadCategory,
 		})
 	if err != nil {
 		return nil, err
@@ -7094,7 +7095,7 @@ func MVCCFirstSplitKey(
 	it, err := reader.NewMVCCIterator(
 		ctx, MVCCKeyAndIntentsIterKind, IterOptions{
 			UpperBound:   endKey.AsRawKey(),
-			ReadCategory: BatchEvalReadCategory,
+			ReadCategory: fs.BatchEvalReadCategory,
 		})
 	if err != nil {
 		return nil, err
@@ -7573,7 +7574,7 @@ func MVCCIsSpanEmpty(
 			KeyTypes:     IterKeyTypePointsAndRanges,
 			LowerBound:   opts.StartKey,
 			UpperBound:   opts.EndKey,
-			ReadCategory: BatchEvalReadCategory,
+			ReadCategory: fs.BatchEvalReadCategory,
 		})
 		if err != nil {
 			return false, err
@@ -7587,7 +7588,7 @@ func MVCCIsSpanEmpty(
 			StartTime:    opts.StartTS,
 			EndTime:      opts.EndTS,
 			IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
-			ReadCategory: BatchEvalReadCategory,
+			ReadCategory: fs.BatchEvalReadCategory,
 		})
 		if err != nil {
 			return false, err
@@ -7765,7 +7766,7 @@ func mvccExportToWriter(
 		EndTime:                 opts.EndTS,
 		RangeKeyMaskingBelow:    rangeKeyMasking,
 		IntentPolicy:            MVCCIncrementalIterIntentPolicyAggregate,
-		ReadCategory:            BackupReadCategory,
+		ReadCategory:            fs.BackupReadCategory,
 		MaxLockConflicts:        opts.MaxLockConflicts,
 		TargetLockConflictBytes: opts.TargetLockConflictBytes,
 	})
@@ -8434,7 +8435,7 @@ func MVCCLookupRangeKeyValue(
 		LowerBound:   key,
 		UpperBound:   endKey,
 		KeyTypes:     IterKeyTypeRangesOnly,
-		ReadCategory: RangefeedReadCategory,
+		ReadCategory: fs.RangefeedReadCategory,
 	})
 	if err != nil {
 		return nil, err
