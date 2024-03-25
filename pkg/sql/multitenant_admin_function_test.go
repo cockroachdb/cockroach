@@ -737,6 +737,7 @@ func TestRelocateVoters(t *testing.T) {
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
 					testCluster.ToggleReplicateQueues(false)
+					testCluster.ToggleSplitQueues(false)
 					replicaState := getReplicaState(
 						t,
 						ctx,
@@ -816,6 +817,7 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
 					testCluster.ToggleReplicateQueues(false)
+					testCluster.ToggleSplitQueues(false)
 					replicaState := getReplicaState(
 						t,
 						ctx,
@@ -908,6 +910,7 @@ func TestRelocateNonVoters(t *testing.T) {
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
 					testCluster.ToggleReplicateQueues(false)
+					testCluster.ToggleSplitQueues(false)
 					replicaState := getReplicaState(
 						t,
 						ctx,
@@ -981,6 +984,7 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
 					testCluster.ToggleReplicateQueues(false)
+					testCluster.ToggleSplitQueues(false)
 					replicaState := getReplicaState(
 						t,
 						ctx,

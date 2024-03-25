@@ -129,7 +129,7 @@ func (s *Store) setReplicaGCQueueActive(active bool) {
 func (s *Store) SetReplicateQueueActive(active bool) {
 	s.replicateQueue.SetDisabled(!active)
 }
-func (s *Store) setSplitQueueActive(active bool) {
+func (s *Store) SetSplitQueueActive(active bool) {
 	s.splitQueue.SetDisabled(!active)
 }
 func (s *Store) setTimeSeriesMaintenanceQueueActive(active bool) {
