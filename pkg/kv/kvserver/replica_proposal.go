@@ -554,15 +554,20 @@ func (r *Replica) leasePostApplyLocked(
 		preferenceStatus := CheckStoreAgainstLeasePreferences(r.store.StoreID(), r.store.Attrs(),
 			r.store.nodeDesc.Attrs, r.store.nodeDesc.Locality, r.mu.conf.LeasePreferences)
 		switch preferenceStatus {
-		case LeasePreferencesOK, LeasePreferencesLessPreferred:
-			// We could also enqueue the lease when we are a less preferred
-			// leaseholder, however the replicate queue will eventually get to it and
-			// we already satisfy _some_ preference.
+		case LeasePreferencesOK:
 		case LeasePreferencesViolating:
 			log.VEventf(ctx, 2,
 				"acquired lease violates lease preferences, enqueuing for transfer [lease=%v preferences=%v]",
 				newLease, r.mu.conf.LeasePreferences)
 			r.store.leaseQueue.AddAsync(ctx, r, allocatorimpl.TransferLeaseForPreferences.Priority())
+		case LeasePreferencesLessPreferred:
+			// Enqueue the replica at a slightly lower priority than violation to
+			// process the lease transfer after ranges where the leaseholder is
+			// violating the preference.
+			log.VEventf(ctx, 2,
+				"acquired lease is less preferred, enqueuing for transfer [lease=%v preferences=%v]",
+				newLease, r.mu.conf.LeasePreferences)
+			r.store.leaseQueue.AddAsync(ctx, r, allocatorimpl.TransferLeaseForPreferences.Priority()-1)
 		default:
 			log.Fatalf(ctx, "unknown lease preferences status: %v", preferenceStatus)
 		}
