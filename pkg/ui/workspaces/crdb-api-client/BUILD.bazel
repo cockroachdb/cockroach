@@ -21,6 +21,10 @@ genrule(
     PROTO_PATHS=$$(for f in $(locations :proto_sources);
         do if [[ "$$f" =~ ^.*/pkg/.*/_virtual_imports/.*_proto/.*.proto$$ ]];
             then echo $$f | sed 's|.*pkg/.*/_virtual_imports/.*_proto/||' | sed 's|.bin$$||';
+        elif [[ "$$f" =~ ^.*/com_github_cockroachdb_errors/.*.proto$$ ]];
+            then echo $$f | sed 's|.*/com_github_cockroachdb_errors/||' | sed 's|.bin$$||';
+        elif [[ "$$f" =~ ^.*/io/prometheus/client/.*.proto$$ ]];
+            then echo $$f | sed 's|.*/io/prometheus/client/|io/prometheus/client/|' | sed 's|.bin$$||';
         fi; done | sort -u);
     export PATH=$$PATH:$$(dirname $(NODE_PATH))
     $(location @com_google_protobuf//:protoc) \
