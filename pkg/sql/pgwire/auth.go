@@ -134,6 +134,7 @@ func (c *conn) handleAuthentication(
 	}
 	c.sessionArgs.SystemIdentity = systemIdentity
 
+	log.Errorf(ctx, "dbUser: %v, systemIdentity: %v", c.sessionArgs.User, systemIdentity)
 	// Delegate to the AuthMethod's MapRole to verify that the
 	// client-provided username matches one of the mappings.
 	if err := c.checkClientUsernameMatchesMapping(ctx, ac, behaviors.MapRole, systemIdentity); err != nil {
