@@ -146,6 +146,6 @@ listeners, if the headers are allowed.`,
 	}
 	VirtualizedEmpty = FlagInfo{
 		Name:        "virtualized-empty",
-		Description: "If set, the cluster will be initialized as a virtualized cluster without an application cluster.",
+		Description: "If set, the cluster will be initialized as a virtualized cluster without main virtual cluster.",
 	}
 )
