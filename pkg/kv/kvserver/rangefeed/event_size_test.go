@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -546,6 +547,7 @@ func TestBasicEventSizeCalculation(t *testing.T) {
 // BenchmarkMemoryAccounting benchmarks the memory accounting of the event
 // struct.
 func BenchmarkMemoryAccounting(b *testing.B) {
+	skip.WithIssue(b, 121087)
 	b.Run("memory_calculation", func(b *testing.B) {
 		b.ReportAllocs()
 		rand, _ := randutil.NewTestRand()
