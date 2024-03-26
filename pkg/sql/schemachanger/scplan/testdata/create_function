@@ -55,6 +55,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
             closedtypeids:
             - 107
             - 108
+          defaultexpr: ""
         ReturnType:
           Type:
             family: IntFamily
@@ -201,6 +202,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
             closedtypeids:
             - 107
             - 108
+          defaultexpr: ""
         ReturnType:
           Type:
             family: IntFamily
@@ -425,6 +427,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
             closedtypeids:
             - 107
             - 108
+          defaultexpr: ""
         ReturnType:
           Type:
             family: IntFamily
@@ -573,6 +576,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
             closedtypeids:
             - 107
             - 108
+          defaultexpr: ""
         ReturnType:
           Type:
             family: IntFamily

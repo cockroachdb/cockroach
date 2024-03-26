@@ -30,6 +30,9 @@ func (i *immediateVisitor) CreateFunctionDescriptor(
 			Name:  param.Name,
 			Type:  param.Type.Type,
 		}
+		if param.DefaultExpr != "" {
+			params[i].DefaultExpr = &param.DefaultExpr
+		}
 	}
 
 	mut := funcdesc.NewMutableFunctionDescriptor(
@@ -104,8 +107,13 @@ func (i *immediateVisitor) SetFunctionBody(ctx context.Context, op scop.SetFunct
 func (i *immediateVisitor) SetFunctionParamDefaultExpr(
 	ctx context.Context, op scop.SetFunctionParamDefaultExpr,
 ) error {
-	// TODO(chengxiong): when default parameter value is supported, we need to
-	// address references here because functions, types and sequences can be used
-	// with a default value expression.
+	fn, err := i.checkOutFunction(ctx, op.Expr.FunctionID)
+	if err != nil {
+		return err
+	}
+	// TODO(check with reviewers): why do we need this? At this point we already
+	// have the correct DEFAULT expression set (done in
+	// CreateFunctionDescriptor).
+	fn.SetParamDefaultExpr(op.Expr.Ordinal, string(op.Expr.Expr))
 	return nil
 }
