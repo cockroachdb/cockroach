@@ -66,9 +66,7 @@ func Test_assertValidTest(t *testing.T) {
 	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (0) must be greater than minUpgrades (1)")
 
 	// Validating minimum supported version.
-	testBuildVersion := version.MustParse("v23.1.2")
-	clusterupgrade.TestBuildVersion = testBuildVersion
-	defer func() { clusterupgrade.TestBuildVersion = nil }()
+	defer withTestBuildVersion("v23.1.2")()
 
 	mvt = newTest(MinimumSupportedVersion("v24.1.0"))
 	assertValidTest(mvt, fatalFunc())
@@ -145,4 +143,13 @@ func Test_choosePreviousReleases(t *testing.T) {
 			}
 		})
 	}
+}
+
+// withTestBuildVersion overwrites the `TestBuildVersion` variable in
+// the `clusterupgrade` package, allowing tests to set a fixed
+// "current version". Returns a function that resets that variable.
+func withTestBuildVersion(v string) func() {
+	testBuildVersion := version.MustParse(v)
+	clusterupgrade.TestBuildVersion = testBuildVersion
+	return func() { clusterupgrade.TestBuildVersion = nil }
 }
