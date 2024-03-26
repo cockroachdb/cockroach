@@ -23,11 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -35,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	proto "github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -402,5 +406,120 @@ func TestLeaseQueueProactiveEnqueueOnPreferences(t *testing.T) {
 			}
 			return nil
 		})
+	})
+}
+
+func toggleLeaseQueues(tc *testcluster.TestCluster, active bool) {
+	for _, s := range tc.Servers {
+		_ = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+			store.TestingSetLeaseQueueActive(active)
+			return nil
+		})
+	}
+}
+
+// TestLeaseQueueAcquiresInvalidLeases asserts that following a restart, leases
+// are invalidated and that the lease queue acquires invalid leases when
+// enabled.
+func TestLeaseQueueAcquiresInvalidLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
+
+	zcfg := zonepb.DefaultZoneConfig()
+	zcfg.NumReplicas = proto.Int32(1)
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			// Disable the replication queue initially, to assert on the lease
+			// statuses pre and post enabling the replicate queue.
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: lisReg,
+			ServerArgs: base.TestServerArgs{
+				Settings:          st,
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				ScanMinIdleTime:   time.Millisecond,
+				ScanMaxIdleTime:   time.Millisecond,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						StickyVFSRegistry:         fs.NewStickyRegistry(),
+						DefaultZoneConfigOverride: &zcfg,
+					},
+				},
+			},
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+	db := tc.Conns[0]
+	// Disable consistency checker and sql stats collection that may acquire a
+	// lease by querying a range.
+	_, err := db.Exec("set cluster setting server.consistency_check.interval = '0s'")
+	require.NoError(t, err)
+	_, err = db.Exec("set cluster setting sql.stats.automatic_collection.enabled = false")
+	require.NoError(t, err)
+
+	// Create ranges to assert on their lease status post restart and after
+	// replicate queue processing.
+	ranges := 30
+	scratchRangeKeys := make([]roachpb.Key, ranges)
+	splitKey := tc.ScratchRange(t)
+	for i := range scratchRangeKeys {
+		_, _ = tc.SplitRangeOrFatal(t, splitKey)
+		scratchRangeKeys[i] = splitKey
+		splitKey = splitKey.Next()
+	}
+
+	invalidLeases := func() []kvserverpb.LeaseStatus {
+		invalid := []kvserverpb.LeaseStatus{}
+		for _, key := range scratchRangeKeys {
+			// Assert that the lease is invalid after restart.
+			repl := tc.GetRaftLeader(t, roachpb.RKey(key))
+			if leaseStatus := repl.CurrentLeaseStatus(ctx); !leaseStatus.IsValid() {
+				invalid = append(invalid, leaseStatus)
+			}
+		}
+		return invalid
+	}
+
+	// Assert that the leases are valid initially.
+	require.Len(t, invalidLeases(), 0)
+
+	// Restart the servers to invalidate the leases.
+	for i := range tc.Servers {
+		tc.StopServer(i)
+		err = tc.RestartServerWithInspect(i, nil)
+		require.NoError(t, err)
+	}
+
+	forceProcess := func() {
+		// Speed up the queue processing.
+		for _, s := range tc.Servers {
+			err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+				return store.ForceLeaseQueueProcess()
+			})
+			require.NoError(t, err)
+		}
+	}
+
+	// NB: The cosnsistency checker and sql stats collector both will attempt a
+	// lease acquisition when processing a range, if it the lease is currently
+	// invalid. They are disabled in this test. We do not assert on the number
+	// of invalid leases prior to enabling the lease queue here to avoid
+	// test flakiness if this changes in the future or for some other reason.
+	// Instead, we are only concerned that no invalid leases remain.
+	toggleLeaseQueues(tc, true /* active */)
+	testutils.SucceedsSoon(t, func() error {
+		forceProcess()
+		// Assert that there are now no invalid leases.
+		invalid := invalidLeases()
+		if len(invalid) > 0 {
+			return errors.Newf("The number of invalid leases are greater than 0, %+v", invalid)
+		}
+		return nil
 	})
 }

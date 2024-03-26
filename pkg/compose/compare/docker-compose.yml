@@ -1,10 +1,5 @@
 version: '3'
 services:
-  postgres:
-    image: postgis/postgis:13-3.1
-    environment:
-      - POSTGRES_INITDB_ARGS=--locale=C --encoding=UTF8
-      - POSTGRES_HOST_AUTH_METHOD=trust
   cockroach1:
     # We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
     # See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
@@ -28,7 +23,6 @@ services:
     # compare.test is a binary built by the pkg/compose/prepare.sh in non-bazel builds
     command: /compare/compare.test -each ${EACH} -test.run ${TESTS} -artifacts ${ARTIFACTS}
     depends_on:
-      - postgres
       - cockroach1
       - cockroach2
     volumes:

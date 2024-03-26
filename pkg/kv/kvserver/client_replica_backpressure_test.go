@@ -296,7 +296,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		})
 
 		s, repl := getFirstStoreReplica(t, tc.Server(1), tablePrefix)
-		s.SetReplicateQueueActive(false)
+		s.TestingSetReplicateQueueActive(false)
 		require.Len(t, repl.Desc().Replicas().Descriptors(), 1)
 		// We really need to make sure that the split queue has hit this range,
 		// otherwise we'll fail to backpressure.
