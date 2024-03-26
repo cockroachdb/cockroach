@@ -1417,7 +1417,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 	if knobs := ex.server.cfg.SchemaChangerTestingKnobs; knobs != nil {
 		inRetryBackoff = knobs.TwoVersionLeaseViolation
 	}
-	regionCache, err := regions.NewCachedDatabaseRegions(ctx, ex.server.cfg.DB, ex.server.cfg.LeaseManager)
+	regionCache, err := regions.NewCachedDatabaseRegionsAt(ctx, ex.server.cfg.DB, ex.server.cfg.LeaseManager, ex.state.mu.txn.ProvisionalCommitTimestamp())
 	if err != nil {
 		return err
 	}
