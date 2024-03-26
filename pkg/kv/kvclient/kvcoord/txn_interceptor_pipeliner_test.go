@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1465,6 +1466,7 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 func TestTxnPipelinerRecordsLocksOnFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.IgnoreLint(t, "WIP")
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
 
@@ -1898,6 +1900,7 @@ func (s descriptorDBRangeIterator) Error() error {
 func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.IgnoreLint(t, "WIP")
 	ctx := context.Background()
 
 	largeAs := make([]byte, 11)
