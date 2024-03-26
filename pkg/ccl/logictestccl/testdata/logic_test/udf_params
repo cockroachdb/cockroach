@@ -69,7 +69,7 @@ SELECT f(3);
 ----
 NOTICE: 2
 
-# TODO(100405): figure out why this causes an internal error.
+# TODO(120942): figure out why this causes an internal error.
 # query II colnames
 # SELECT * FROM f(3);
 # ----
@@ -129,7 +129,7 @@ NOTICE: 1 <NULL>
 NOTICE: 3 <NULL>
 NOTICE: 3 4
 
-# TODO(100405): figure this out.
+# TODO(120942): figure this out.
 # query II colnames
 # SELECT * FROM f(1);
 # ----

@@ -146,6 +146,10 @@ type Builder struct {
 	// UDF.
 	insideUDF bool
 
+	// insideSQLRoutine is true when the current expressions are being built
+	// within a SQL UDF or a SQL procedure.
+	insideSQLRoutine bool
+
 	// insideDataSource is true when we are processing a data source.
 	insideDataSource bool
 
