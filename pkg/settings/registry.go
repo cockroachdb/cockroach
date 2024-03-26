@@ -233,7 +233,6 @@ var retiredSettings = map[InternalKey]struct{}{
 	"changefeed.balance_range_distribution.enable":           {},
 	"changefeed.mux_rangefeed.enabled":                       {},
 	"kv.rangefeed.catchup_scan_concurrency":                  {},
-	"kv.rangefeed.scheduler.enabled":                         {},
 	"physical_replication.producer.mux_rangefeeds.enabled":   {},
 	"kv.rangefeed.use_dedicated_connection_class.enabled":    {},
 	"sql.trace.session_eventlog.enabled":                     {},
