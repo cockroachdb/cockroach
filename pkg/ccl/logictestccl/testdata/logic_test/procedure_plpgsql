@@ -577,3 +577,96 @@ NOTICE: 4 3
 NOTICE: 4 4
 
 subtest end
+
+# TODO(120818): uncomment these tests.
+# statement ok
+# CREATE PROCEDURE p_inner(OUT p_param INT) AS $$ SELECT 1; $$ LANGUAGE SQL;
+#
+# statement ok
+# CREATE FUNCTION f(OUT f_param INT) AS $$ BEGIN CALL p_inner(NULL); END; $$ LANGUAGE PLpgSQL;
+#
+# statement error pgcode 42601 procedure parameter "param" is an output parameter but corresponding argument is not writable
+# SELECT f();
+#
+# statement ok
+# CREATE OR REPLACE FUNCTION f(OUT f_param INT) AS $$ BEGIN CALL p_inner(f_param); END; $$ LANGUAGE PLpgSQL;
+#
+# query I colnames
+# SELECT f();
+# ----
+# f
+# 1
+#
+# query I colnames
+# SELECT * FROM f();
+# ----
+# f_param
+# 1
+#
+# statement ok
+# CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+# DECLARE
+#   v INT;
+# BEGIN
+#   CALL p_inner(v);
+#   RETURN v;
+# END; $$ LANGUAGE PLpgSQL;
+#
+# query I colnames
+# SELECT f();
+# ----
+# f
+# 1
+#
+# query I colnames
+# SELECT * FROM f();
+# ----
+# f
+# 1
+#
+# statement ok
+# DROP FUNCTION f;
+#
+# statement ok
+# CREATE PROCEDURE p_outer(OUT p_outer_param INT) AS $$ BEGIN CALL p_inner(p_outer_param); END; $$ LANGUAGE PLpgSQL;
+#
+# query I colnames
+# CALL p_outer(NULL);
+# ----
+# p_outer_param
+# 1
+#
+# statement ok
+# CREATE OR REPLACE PROCEDURE p_outer(OUT p_outer_param INT) AS $$
+# DECLARE
+#   v INT;
+# BEGIN
+#   CALL p_inner(v);
+# END; $$ LANGUAGE PLpgSQL;
+#
+# query I colnames
+# CALL p_outer(NULL);
+# ----
+# p_outer_param
+# NULL
+#
+# statement ok
+# CREATE OR REPLACE PROCEDURE p_outer(OUT p_outer_param INT) AS $$
+# DECLARE
+#   v INT;
+# BEGIN
+#   CALL p_inner(v);
+#   SELECT v INTO p_outer_param;
+# END; $$ LANGUAGE PLpgSQL;
+#
+# query I colnames
+# CALL p_outer(NULL);
+# ----
+# p_outer_param
+# 1
+#
+# statement ok
+# DROP PROCEDURE p_outer;
+#
+# statement ok
+# DROP PROCEDURE p_inner;

@@ -406,3 +406,26 @@ statement error pgcode 42P13 null input attribute not allowed in procedure defin
 CREATE PROCEDURE pv() AS 'SELECT 1' STRICT LANGUAGE SQL;
 
 subtest end
+
+statement error pgcode 42809 sum is not a procedure
+CALL sum(1);
+
+statement error pgcode 42809 first_value\(int\) is not a procedure
+CALL first_value(1);
+
+statement error pgcode 42809 addgeometrycolumn is not a procedure
+CALL addgeometrycolumn(null, null, null, null, null);
+
+statement ok
+CREATE PROCEDURE p_inner(OUT param INTEGER) AS $$ SELECT 1; $$ LANGUAGE SQL;
+
+skipif config local-mixed-23.2
+statement error pgcode 0A000 calling procedures with output arguments is not supported in SQL functions
+CREATE FUNCTION f() RETURNS INT AS $$ CALL p_inner(NULL); $$ LANGUAGE SQL;
+
+skipif config local-mixed-23.2
+statement error pgcode 0A000 calling procedures with output arguments is not supported in SQL functions
+CREATE PROCEDURE p_outer(OUT param INTEGER) AS $$ CALL p_inner(NULL); $$ LANGUAGE SQL;
+
+statement ok
+DROP PROCEDURE p_inner;
