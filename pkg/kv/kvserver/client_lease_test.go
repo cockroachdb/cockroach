@@ -800,8 +800,8 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 		return nil
 	})
 
-	tc.GetFirstStoreFromServer(t, 1).SetReplicateQueueActive(true)
-	tc.GetFirstStoreFromServer(t, 1).SetLeaseQueueActive(true)
+	tc.GetFirstStoreFromServer(t, 1).TestingSetReplicateQueueActive(true)
+	tc.GetFirstStoreFromServer(t, 1).TestingSetLeaseQueueActive(true)
 	require.NoError(t, tc.GetFirstStoreFromServer(t, 1).ForceReplicationScanAndProcess())
 	require.NoError(t, tc.GetFirstStoreFromServer(t, 1).ForceLeaseQueueProcess())
 

@@ -1501,7 +1501,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 			if tc.splitOngoing {
 				atomic.StoreInt32(&activateSplitFilter, 1)
 				if err := s.Stopper().RunAsyncTask(ctx, "force split", func(_ context.Context) {
-					store.SetSplitQueueActive(true)
+					store.TestingSetSplitQueueActive(true)
 					if err := store.ForceSplitScanAndProcess(); err != nil {
 						log.Fatalf(ctx, "%v", err)
 					}
@@ -1510,7 +1510,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				}
 				<-splitPending
 			} else if tc.splitImpossible {
-				store.SetSplitQueueActive(true)
+				store.TestingSetSplitQueueActive(true)
 				if err := store.ForceSplitScanAndProcess(); err != nil {
 					t.Fatal(err)
 				}

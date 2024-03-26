@@ -1736,7 +1736,7 @@ func filterRangeLog(
 func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
 	for _, s := range tc.Servers {
 		_ = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			store.SetReplicateQueueActive(active)
+			store.TestingSetReplicateQueueActive(active)
 			return nil
 		})
 	}
@@ -1754,7 +1754,7 @@ func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
 func toggleSplitQueues(tc *testcluster.TestCluster, active bool) {
 	for _, s := range tc.Servers {
 		_ = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			store.SetSplitQueueActive(active)
+			store.TestingSetSplitQueueActive(active)
 			return nil
 		})
 	}

@@ -1608,7 +1608,7 @@ func (tc *TestCluster) ReplicationMode() base.TestClusterReplicationMode {
 func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 	for _, s := range tc.Servers {
 		_ = s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			store.SetReplicateQueueActive(active)
+			store.TestingSetReplicateQueueActive(active)
 			return nil
 		})
 	}
@@ -1618,7 +1618,7 @@ func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 func (tc *TestCluster) ToggleSplitQueues(active bool) {
 	for _, s := range tc.Servers {
 		_ = s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			store.SetSplitQueueActive(active)
+			store.TestingSetSplitQueueActive(active)
 			return nil
 		})
 	}

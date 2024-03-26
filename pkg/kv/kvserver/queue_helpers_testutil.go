@@ -108,42 +108,42 @@ func (s *Store) ForceLeaseQueueProcess() error {
 // The methods below can be used to control a store's queues. Stopping a queue
 // is only meant to happen in tests.
 
-func (s *Store) setGCQueueActive(active bool) {
+func (s *Store) testingSetGCQueueActive(active bool) {
 	s.mvccGCQueue.SetDisabled(!active)
 }
 
-// SetLeaseQueueActive controls activating the lease queue. Only intended for
+// TestingSetLeaseQueueActive controls activating the lease queue. Only intended for
 // tests.
-func (s *Store) SetLeaseQueueActive(active bool) {
+func (s *Store) TestingSetLeaseQueueActive(active bool) {
 	s.leaseQueue.SetDisabled(!active)
 }
-func (s *Store) setMergeQueueActive(active bool) {
+func (s *Store) testingSetMergeQueueActive(active bool) {
 	s.mergeQueue.SetDisabled(!active)
 }
-func (s *Store) setRaftLogQueueActive(active bool) {
+func (s *Store) testingSetRaftLogQueueActive(active bool) {
 	s.raftLogQueue.SetDisabled(!active)
 }
-func (s *Store) setReplicaGCQueueActive(active bool) {
+func (s *Store) testingSetReplicaGCQueueActive(active bool) {
 	s.replicaGCQueue.SetDisabled(!active)
 }
 
-// SetReplicateQueueActive controls the replication queue. Only
+// TestingSetReplicateQueueActive controls the replication queue. Only
 // intended for tests.
-func (s *Store) SetReplicateQueueActive(active bool) {
+func (s *Store) TestingSetReplicateQueueActive(active bool) {
 	s.replicateQueue.SetDisabled(!active)
 }
-func (s *Store) SetSplitQueueActive(active bool) {
+func (s *Store) TestingSetSplitQueueActive(active bool) {
 	s.splitQueue.SetDisabled(!active)
 }
-func (s *Store) setTimeSeriesMaintenanceQueueActive(active bool) {
+func (s *Store) testingSetTimeSeriesMaintenanceQueueActive(active bool) {
 	s.tsMaintenanceQueue.SetDisabled(!active)
 }
-func (s *Store) setRaftSnapshotQueueActive(active bool) {
+func (s *Store) testingSetRaftSnapshotQueueActive(active bool) {
 	s.raftSnapshotQueue.SetDisabled(!active)
 }
-func (s *Store) setConsistencyQueueActive(active bool) {
+func (s *Store) testingSetConsistencyQueueActive(active bool) {
 	s.consistencyQueue.SetDisabled(!active)
 }
-func (s *Store) setScannerActive(active bool) {
+func (s *Store) testingSetScannerActive(active bool) {
 	s.scanner.SetDisabled(!active)
 }

@@ -1681,37 +1681,37 @@ func NewStore(
 	}
 
 	if cfg.TestingKnobs.DisableGCQueue {
-		s.setGCQueueActive(false)
+		s.testingSetGCQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableLeaseQueue {
-		s.SetLeaseQueueActive(false)
+		s.TestingSetLeaseQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableMergeQueue {
-		s.setMergeQueueActive(false)
+		s.testingSetMergeQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableRaftLogQueue {
-		s.setRaftLogQueueActive(false)
+		s.testingSetRaftLogQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableReplicaGCQueue {
-		s.setReplicaGCQueueActive(false)
+		s.testingSetReplicaGCQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableReplicateQueue {
-		s.SetReplicateQueueActive(false)
+		s.TestingSetReplicateQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableSplitQueue {
-		s.SetSplitQueueActive(false)
+		s.TestingSetSplitQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableTimeSeriesMaintenanceQueue {
-		s.setTimeSeriesMaintenanceQueueActive(false)
+		s.testingSetTimeSeriesMaintenanceQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableRaftSnapshotQueue {
-		s.setRaftSnapshotQueueActive(false)
+		s.testingSetRaftSnapshotQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableConsistencyQueue {
-		s.setConsistencyQueueActive(false)
+		s.testingSetConsistencyQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableScanner {
-		s.setScannerActive(false)
+		s.testingSetScannerActive(false)
 	}
 
 	return s

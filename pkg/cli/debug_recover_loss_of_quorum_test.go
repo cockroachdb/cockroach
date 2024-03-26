@@ -281,7 +281,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 
 	for i := 0; i < len(tcAfter.Servers); i++ {
 		require.NoError(t, tcAfter.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			store.SetReplicateQueueActive(true)
+			store.TestingSetReplicateQueueActive(true)
 			return nil
 		}), "Failed to activate replication queue")
 	}
