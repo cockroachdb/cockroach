@@ -816,6 +816,110 @@ Final best expression
         └── 5
 
 # --------------------------------------------------
+# PushOffsetIntoIndexJoin
+# --------------------------------------------------
+
+opt expect=PushOffsetIntoIndexJoin
+SELECT * FROM kuv WHERE k = 1 OR k = 2 ORDER BY u OFFSET 5
+----
+index-join kuv
+ ├── columns: k:1!null u:2 v:3
+ ├── ordering: +2
+ └── offset
+      ├── columns: k:1!null u:2 rowid:4!null
+      ├── internal-ordering: +2
+      ├── key: (4)
+      ├── fd: (4)-->(1,2)
+      ├── ordering: +2
+      ├── sort
+      │    ├── columns: k:1!null u:2 rowid:4!null
+      │    ├── key: (4)
+      │    ├── fd: (4)-->(1,2)
+      │    ├── ordering: +2
+      │    └── scan kuv@kuv_k_u_idx
+      │         ├── columns: k:1!null u:2 rowid:4!null
+      │         ├── constraint: /1/2/4: [/1 - /2]
+      │         ├── key: (4)
+      │         └── fd: (4)-->(1,2)
+      └── 5
+
+# Both LIMIT and OFFSET can be pushed below a join.
+opt expect=(PushLimitIntoIndexJoin,PushOffsetIntoIndexJoin)
+SELECT * FROM kuv WHERE k = 1 OR k = 2 ORDER BY u LIMIT 10 OFFSET 5
+----
+index-join kuv
+ ├── columns: k:1!null u:2 v:3
+ ├── cardinality: [0 - 10]
+ ├── ordering: +2
+ └── offset
+      ├── columns: k:1!null u:2 rowid:4!null
+      ├── internal-ordering: +2
+      ├── cardinality: [0 - 10]
+      ├── key: (4)
+      ├── fd: (4)-->(1,2)
+      ├── ordering: +2
+      ├── top-k
+      │    ├── columns: k:1!null u:2 rowid:4!null
+      │    ├── internal-ordering: +2
+      │    ├── k: 15
+      │    ├── cardinality: [0 - 15]
+      │    ├── key: (4)
+      │    ├── fd: (4)-->(1,2)
+      │    ├── ordering: +2
+      │    └── scan kuv@kuv_k_u_idx
+      │         ├── columns: k:1!null u:2 rowid:4!null
+      │         ├── constraint: /1/2/4: [/1 - /2]
+      │         ├── key: (4)
+      │         └── fd: (4)-->(1,2)
+      └── 5
+
+# Ensure that the limit is not pushed down when the ordering requires columns
+# produced by the IndexJoin.
+opt expect-not=PushOffsetIntoIndexJoin
+SELECT * FROM kuv WHERE u > 1 AND u < 10 ORDER BY u, v OFFSET 5
+----
+offset
+ ├── columns: k:1 u:2!null v:3
+ ├── internal-ordering: +2,+3
+ ├── ordering: +2,+3
+ ├── sort
+ │    ├── columns: k:1 u:2!null v:3
+ │    ├── ordering: +2,+3
+ │    └── select
+ │         ├── columns: k:1 u:2!null v:3
+ │         ├── scan kuv
+ │         │    └── columns: k:1 u:2 v:3
+ │         └── filters
+ │              └── (u:2 > 1) AND (u:2 < 10) [outer=(2), constraints=(/2: [/2 - /9]; tight)]
+ └── 5
+
+# Ensure that the limit is not pushed down when using SKIP LOCKED.
+opt expect-not=PushOffsetIntoIndexJoin
+SELECT * FROM kuv WHERE k = 1 ORDER BY u OFFSET 5 FOR UPDATE SKIP LOCKED
+----
+offset
+ ├── columns: k:1!null u:2 v:3
+ ├── internal-ordering: +2 opt(1)
+ ├── volatile
+ ├── fd: ()-->(1)
+ ├── ordering: +2 opt(1) [actual: +2]
+ ├── index-join kuv
+ │    ├── columns: k:1!null u:2 v:3
+ │    ├── locking: for-update,skip-locked
+ │    ├── volatile
+ │    ├── fd: ()-->(1)
+ │    ├── ordering: +2 opt(1) [actual: +2]
+ │    └── scan kuv@kuv_k_u_idx
+ │         ├── columns: k:1!null u:2 rowid:4!null
+ │         ├── constraint: /1/2/4: [/1 - /1]
+ │         ├── locking: for-update,skip-locked
+ │         ├── volatile
+ │         ├── key: (4)
+ │         ├── fd: ()-->(1), (4)-->(2)
+ │         └── ordering: +2 opt(1) [actual: +2]
+ └── 5
+
+# --------------------------------------------------
 # PushLimitIntoOffset + GenerateLimitedScans
 # --------------------------------------------------
 
@@ -825,51 +929,51 @@ Final best expression
 opt
 SELECT * from a ORDER BY s LIMIT 10 OFFSET 10
 ----
-offset
+index-join a
  ├── columns: k:1!null i:2 f:3 s:4 j:5
- ├── internal-ordering: +4
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── ordering: +4
- ├── index-join a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5
- │    ├── cardinality: [0 - 20]
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    ├── ordering: +4
- │    └── scan a@s_idx
- │         ├── columns: k:1!null i:2 f:3 s:4
- │         ├── limit: 20
- │         ├── key: (1)
- │         ├── fd: (1)-->(2-4)
- │         └── ordering: +4
- └── 10
+ └── offset
+      ├── columns: k:1!null i:2 f:3 s:4
+      ├── internal-ordering: +4
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── ordering: +4
+      ├── scan a@s_idx
+      │    ├── columns: k:1!null i:2 f:3 s:4
+      │    ├── limit: 20
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    └── ordering: +4
+      └── 10
 
 # The right index is used for the limited scan based on the order.
 opt
 SELECT * from a ORDER BY s DESC LIMIT 10 OFFSET 10
 ----
-offset
+index-join a
  ├── columns: k:1!null i:2 f:3 s:4 j:5
- ├── internal-ordering: -4
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── ordering: -4
- ├── index-join a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5
- │    ├── cardinality: [0 - 20]
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    ├── ordering: -4
- │    └── scan a@si_idx
- │         ├── columns: k:1!null i:2 s:4 j:5
- │         ├── limit: 20
- │         ├── key: (1)
- │         ├── fd: (1)-->(2,4,5)
- │         └── ordering: -4
- └── 10
+ └── offset
+      ├── columns: k:1!null i:2 s:4 j:5
+      ├── internal-ordering: -4
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── fd: (1)-->(2,4,5)
+      ├── ordering: -4
+      ├── scan a@si_idx
+      │    ├── columns: k:1!null i:2 s:4 j:5
+      │    ├── limit: 20
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,4,5)
+      │    └── ordering: -4
+      └── 10
 
 # PushLimitIntoIndexJoin propagates row-level locking information.
 opt
