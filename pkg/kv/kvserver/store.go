@@ -321,6 +321,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		clock = hlc.NewClockForTesting(nil)
 	}
 	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
+	RejectLeaseOnLeaderUnknown.Override(context.Background(), &st.SV, false)
 	tracer := tracing.NewTracerWithOpt(context.TODO(), tracing.WithClusterSettings(&st.SV))
 	sc := StoreConfig{
 		DefaultSpanConfig:           zonepb.DefaultZoneConfigRef().AsSpanConfig(),
