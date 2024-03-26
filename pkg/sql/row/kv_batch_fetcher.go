@@ -632,9 +632,16 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	// after making sure to nil out the requests in order to lose references to
 	// the underlying Get and Scan requests which could keep large byte slices
 	// alive.
-	f.reqsScratch = ba.Requests
-	for i := range f.reqsScratch {
-		f.reqsScratch[i] = kvpb.RequestUnion{}
+	//
+	// However, we do not re-use the requests slice if we're using the replicated
+	// lock durability, since the requests may be pipelined through raft, which
+	// causes references to the requests to be retained even after their response
+	// has been returned.
+	if f.lockDurability != lock.Replicated {
+		f.reqsScratch = ba.Requests
+		for i := range f.reqsScratch {
+			f.reqsScratch[i] = kvpb.RequestUnion{}
+		}
 	}
 	if monitoring {
 		reqsScratchMemUsage := requestUnionOverhead * int64(cap(f.reqsScratch))

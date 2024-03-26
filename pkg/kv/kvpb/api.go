@@ -84,8 +84,8 @@ var flagDependencies = map[flag][]flag{
 	isAdmin:           {isAlone},
 	isLocking:         {isTxn},
 	isIntentWrite:     {isWrite, isLocking},
-	canPipeline:       {isIntentWrite},
-	canParallelCommit: {canPipeline},
+	canPipeline:       {isLocking},
+	canParallelCommit: {canPipeline, isIntentWrite},
 	appliesTSCache:    {isWrite},
 	skipsLeaseCheck:   {isAlone},
 }
@@ -1871,7 +1871,7 @@ func flagForLockStrength(l lock.Strength) flag {
 
 func flagForLockDurability(d lock.Durability) flag {
 	if d == lock.Replicated {
-		return isWrite
+		return isWrite | canPipeline
 	}
 	return 0
 }
