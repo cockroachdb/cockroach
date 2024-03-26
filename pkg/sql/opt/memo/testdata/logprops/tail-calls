@@ -1,0 +1,1054 @@
+exec-ddl
+CREATE FUNCTION nested() RETURNS INT AS $$
+  SELECT 1;
+$$ LANGUAGE SQL;
+----
+
+exec-ddl
+CREATE FUNCTION nested_arg(x INT) RETURNS INT AS $$
+  SELECT x;
+$$ LANGUAGE SQL;
+----
+
+exec-ddl
+CREATE FUNCTION generator() RETURNS SETOF INT AS $$
+  VALUES (1), (2), (3);
+$$ LANGUAGE SQL;
+----
+
+exec-ddl
+CREATE TABLE t (a INT);
+----
+
+# ==============================================================================
+# Test explicit tail-calls with a SQL routine as the parent.
+# ==============================================================================
+
+# Basic tail call.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  SELECT * FROM t;
+  SELECT nested();
+$$ LANGUAGE SQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                ├── scan t
+                └── values
+                     └── tuple
+                          └── udf: nested
+                               ├── tail-call
+                               └── body
+                                    └── values
+                                         └── tuple
+                                              └── const: 1
+
+# Not a tail-call because it isn't the last body statement.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  SELECT * FROM t;
+  SELECT nested();
+  SELECT 1;
+$$ LANGUAGE SQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                ├── scan t
+                ├── values
+                │    └── tuple
+                │         └── udf: nested
+                │              └── body
+                │                   └── values
+                │                        └── tuple
+                │                             └── const: 1
+                └── values
+                     └── tuple
+                          └── const: 1
+
+# Tail-call with a named result column.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  SELECT * FROM t;
+  SELECT nested() AS foo;
+$$ LANGUAGE SQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                ├── scan t
+                └── values
+                     └── tuple
+                          └── udf: nested
+                               ├── tail-call
+                               └── body
+                                    └── values
+                                         └── tuple
+                                              └── const: 1
+
+# Nested routine cannot be a tail-call because it's a data source.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  SELECT * FROM t;
+  SELECT * FROM nested();
+$$ LANGUAGE SQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                ├── scan t
+                └── limit
+                     ├── project-set
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── zip
+                     │         └── udf: nested
+                     │              └── body
+                     │                   └── values
+                     │                        └── tuple
+                     │                             └── const: 1
+                     └── const: 1
+
+# Case with a nonempty input with one row.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  SELECT * FROM t;
+  SELECT nested() FROM (VALUES (1));
+$$ LANGUAGE SQL;
+----
+
+norm format=(hide-all,show-scalars) disable=(MergeProjectWithValues,PruneValuesCols)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                ├── scan t
+                └── project
+                     ├── values
+                     │    └── tuple
+                     │         └── const: 1
+                     └── projections
+                          └── udf: nested
+                               ├── tail-call
+                               └── body
+                                    └── project
+                                         ├── values
+                                         │    └── tuple
+                                         └── projections
+                                              └── const: 1
+
+# Case with a nonempty input with more than one row. The nested routine can
+# still be considered a tail-call because the UDF enforces a LIMIT 1.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  SELECT * FROM t;
+  SELECT nested() FROM (VALUES (1), (2));
+$$ LANGUAGE SQL;
+----
+
+norm format=(hide-all,show-scalars) disable=PruneValuesCols
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                ├── scan t
+                └── project
+                     ├── limit
+                     │    ├── values
+                     │    │    ├── tuple
+                     │    │    │    └── const: 1
+                     │    │    └── tuple
+                     │    │         └── const: 2
+                     │    └── const: 1
+                     └── projections
+                          └── udf: nested
+                               ├── tail-call
+                               └── body
+                                    └── values
+                                         └── tuple
+                                              └── const: 1
+
+# Case with a nonempty input with more than one row, which disqualifies the
+# routine from being a tail-call.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS SETOF INT AS $$
+  SELECT * FROM t;
+  SELECT nested() FROM (VALUES (1), (2));
+$$ LANGUAGE SQL;
+----
+
+norm format=(hide-all,show-scalars) disable=PruneValuesCols
+SELECT f();
+----
+project-set
+ ├── values
+ │    └── tuple
+ └── zip
+      └── udf: f
+           └── body
+                ├── scan t
+                └── project
+                     ├── values
+                     │    ├── tuple
+                     │    │    └── const: 1
+                     │    └── tuple
+                     │         └── const: 2
+                     └── projections
+                          └── udf: nested
+                               └── body
+                                    └── values
+                                         └── tuple
+                                              └── const: 1
+
+# A generator function cannot be considered a tail-call.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS SETOF INT AS $$
+  SELECT * FROM t;
+  SELECT generator();
+$$ LANGUAGE SQL;
+----
+
+norm format=(hide-all,show-scalars) disable=PruneValuesCols
+SELECT f();
+----
+project-set
+ ├── values
+ │    └── tuple
+ └── zip
+      └── udf: f
+           └── body
+                ├── scan t
+                └── project-set
+                     ├── values
+                     │    └── tuple
+                     └── zip
+                          └── udf: generator
+                               └── body
+                                    └── values
+                                         ├── tuple
+                                         │    └── const: 1
+                                         ├── tuple
+                                         │    └── const: 2
+                                         └── tuple
+                                              └── const: 3
+
+# ==============================================================================
+# Test explicit tail-calls with a PL/pgSQL routine as the parent. These tests
+# also demonstrate that PL/pgSQL sub-routines are tail-calls, as do the
+# optbuilder tests.
+# ==============================================================================
+
+# Basic tail call.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE NOTICE 'foo';
+    RETURN nested();
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── values
+                     └── tuple
+                          └── udf: _stmt_raise_1
+                               ├── tail-call
+                               └── body
+                                    ├── values
+                                    │    └── tuple
+                                    │         └── function: crdb_internal.plpgsql_raise
+                                    │              ├── const: 'NOTICE'
+                                    │              ├── const: 'foo'
+                                    │              ├── const: ''
+                                    │              ├── const: ''
+                                    │              └── const: '00000'
+                                    └── values
+                                         └── tuple
+                                              └── udf: nested
+                                                   ├── tail-call
+                                                   └── body
+                                                        └── values
+                                                             └── tuple
+                                                                  └── const: 1
+
+# Not a tail-call because the result is not used by the parent function.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE NOTICE 'foo';
+    SELECT nested();
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── values
+                     └── tuple
+                          └── udf: _stmt_raise_1
+                               ├── tail-call
+                               └── body
+                                    ├── values
+                                    │    └── tuple
+                                    │         └── function: crdb_internal.plpgsql_raise
+                                    │              ├── const: 'NOTICE'
+                                    │              ├── const: 'foo'
+                                    │              ├── const: ''
+                                    │              ├── const: ''
+                                    │              └── const: '00000'
+                                    └── values
+                                         └── tuple
+                                              └── udf: _stmt_exec_3
+                                                   ├── tail-call
+                                                   └── body
+                                                        ├── values
+                                                        │    └── tuple
+                                                        │         └── udf: nested
+                                                        │              └── body
+                                                        │                   └── values
+                                                        │                        └── tuple
+                                                        │                             └── const: 1
+                                                        └── values
+                                                             └── tuple
+                                                                  └── const: 0
+
+# Tail-call mediated through a variable assignment.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    RAISE NOTICE 'foo';
+    x := nested();
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── project
+                     ├── barrier
+                     │    └── values
+                     │         └── tuple
+                     │              └── null
+                     └── projections
+                          └── udf: _stmt_raise_1
+                               ├── tail-call
+                               ├── args
+                               │    └── variable: x
+                               ├── params: x
+                               └── body
+                                    ├── values
+                                    │    └── tuple
+                                    │         └── function: crdb_internal.plpgsql_raise
+                                    │              ├── const: 'NOTICE'
+                                    │              ├── const: 'foo'
+                                    │              ├── const: ''
+                                    │              ├── const: ''
+                                    │              └── const: '00000'
+                                    └── values
+                                         └── tuple
+                                              └── udf: nested
+                                                   ├── tail-call
+                                                   └── body
+                                                        └── values
+                                                             └── tuple
+                                                                  └── const: 1
+
+# Not a tail-call because of the second RAISE statement.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    RAISE NOTICE 'foo';
+    x := nested();
+    RAISE NOTICE 'bar';
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── project
+                     ├── barrier
+                     │    └── values
+                     │         └── tuple
+                     │              └── null
+                     └── projections
+                          └── udf: _stmt_raise_1
+                               ├── tail-call
+                               ├── args
+                               │    └── variable: x
+                               ├── params: x
+                               └── body
+                                    ├── values
+                                    │    └── tuple
+                                    │         └── function: crdb_internal.plpgsql_raise
+                                    │              ├── const: 'NOTICE'
+                                    │              ├── const: 'foo'
+                                    │              ├── const: ''
+                                    │              ├── const: ''
+                                    │              └── const: '00000'
+                                    └── project
+                                         ├── barrier
+                                         │    └── values
+                                         │         └── tuple
+                                         │              └── udf: nested
+                                         │                   └── body
+                                         │                        └── values
+                                         │                             └── tuple
+                                         │                                  └── const: 1
+                                         └── projections
+                                              └── udf: _stmt_raise_3
+                                                   ├── tail-call
+                                                   ├── args
+                                                   │    └── variable: x
+                                                   ├── params: x
+                                                   └── body
+                                                        ├── values
+                                                        │    └── tuple
+                                                        │         └── function: crdb_internal.plpgsql_raise
+                                                        │              ├── const: 'NOTICE'
+                                                        │              ├── const: 'bar'
+                                                        │              ├── const: ''
+                                                        │              ├── const: ''
+                                                        │              └── const: '00000'
+                                                        └── values
+                                                             └── tuple
+                                                                  └── variable: x
+
+# Tail-call with an argument.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    RAISE NOTICE 'foo';
+    SELECT a INTO x FROM t LIMIT 1;
+    RETURN nested_arg(x);
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── project
+                     ├── barrier
+                     │    └── values
+                     │         └── tuple
+                     │              └── null
+                     └── projections
+                          └── udf: _stmt_raise_1
+                               ├── tail-call
+                               ├── args
+                               │    └── variable: x
+                               ├── params: x
+                               └── body
+                                    ├── values
+                                    │    └── tuple
+                                    │         └── function: crdb_internal.plpgsql_raise
+                                    │              ├── const: 'NOTICE'
+                                    │              ├── const: 'foo'
+                                    │              ├── const: ''
+                                    │              ├── const: ''
+                                    │              └── const: '00000'
+                                    └── values
+                                         └── tuple
+                                              └── udf: _stmt_exec_3
+                                                   ├── tail-call
+                                                   ├── args
+                                                   │    └── variable: x
+                                                   ├── params: x
+                                                   └── body
+                                                        └── project
+                                                             ├── barrier
+                                                             │    └── project
+                                                             │         ├── left-join (cross)
+                                                             │         │    ├── values
+                                                             │         │    │    └── tuple
+                                                             │         │    ├── limit
+                                                             │         │    │    ├── scan t
+                                                             │         │    │    └── const: 1
+                                                             │         │    └── filters (true)
+                                                             │         └── projections
+                                                             │              └── variable: a
+                                                             └── projections
+                                                                  └── udf: _stmt_exec_ret_4
+                                                                       ├── tail-call
+                                                                       ├── args
+                                                                       │    └── variable: x
+                                                                       ├── params: x
+                                                                       └── body
+                                                                            └── values
+                                                                                 └── tuple
+                                                                                      └── udf: nested_arg
+                                                                                           ├── tail-call
+                                                                                           ├── args
+                                                                                           │    └── variable: x
+                                                                                           ├── params: x
+                                                                                           └── body
+                                                                                                └── values
+                                                                                                     └── tuple
+                                                                                                          └── variable: x
+
+# Tail-calls within an IF statement.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x INT := 10;
+  BEGIN
+    IF random() > 0.5 THEN
+      RETURN nested();
+    ELSE
+      RETURN nested_arg(x);
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── project
+                     ├── barrier
+                     │    └── values
+                     │         └── tuple
+                     │              └── const: 10
+                     └── projections
+                          └── case
+                               ├── true
+                               ├── when
+                               │    ├── gt
+                               │    │    ├── function: random
+                               │    │    └── const: 0.5
+                               │    └── subquery
+                               │         └── values
+                               │              └── tuple
+                               │                   └── udf: nested
+                               │                        ├── tail-call
+                               │                        └── body
+                               │                             └── values
+                               │                                  └── tuple
+                               │                                       └── const: 1
+                               └── subquery
+                                    └── values
+                                         └── tuple
+                                              └── udf: nested_arg
+                                                   ├── tail-call
+                                                   ├── args
+                                                   │    └── variable: x
+                                                   ├── params: x
+                                                   └── body
+                                                        └── values
+                                                             └── tuple
+                                                                  └── variable: x
+
+# Tail-call reachable from both branches of an IF statement.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    IF random() > 0.5 THEN
+      x := 100;
+    ELSE
+      x := 200;
+    END IF;
+    RETURN nested_arg(x);
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── project
+                     ├── barrier
+                     │    └── values
+                     │         └── tuple
+                     │              └── null
+                     └── projections
+                          └── case
+                               ├── true
+                               ├── when
+                               │    ├── gt
+                               │    │    ├── function: random
+                               │    │    └── const: 0.5
+                               │    └── subquery
+                               │         └── project
+                               │              ├── barrier
+                               │              │    └── values
+                               │              │         └── tuple
+                               │              │              └── const: 100
+                               │              └── projections
+                               │                   └── udf: stmt_if_1
+                               │                        ├── tail-call
+                               │                        ├── args
+                               │                        │    └── variable: x
+                               │                        ├── params: x
+                               │                        └── body
+                               │                             └── values
+                               │                                  └── tuple
+                               │                                       └── udf: nested_arg
+                               │                                            ├── tail-call
+                               │                                            ├── args
+                               │                                            │    └── variable: x
+                               │                                            ├── params: x
+                               │                                            └── body
+                               │                                                 └── values
+                               │                                                      └── tuple
+                               │                                                           └── variable: x
+                               └── subquery
+                                    └── project
+                                         ├── barrier
+                                         │    └── values
+                                         │         └── tuple
+                                         │              └── const: 200
+                                         └── projections
+                                              └── udf: stmt_if_1
+                                                   ├── tail-call
+                                                   ├── args
+                                                   │    └── variable: x
+                                                   ├── params: x
+                                                   └── body
+                                                        └── values
+                                                             └── tuple
+                                                                  └── udf: nested_arg
+                                                                       ├── tail-call
+                                                                       ├── args
+                                                                       │    └── variable: x
+                                                                       ├── params: x
+                                                                       └── body
+                                                                            └── values
+                                                                                 └── tuple
+                                                                                      └── variable: x
+
+# Tail-call within a loop.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 10 LOOP
+      IF i = 5 THEN
+        RETURN nested();
+      END IF;
+      i := i + 1;
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── project
+                     ├── barrier
+                     │    └── values
+                     │         └── tuple
+                     │              └── const: 0
+                     └── projections
+                          └── udf: stmt_loop_5
+                               ├── tail-call
+                               ├── args
+                               │    └── variable: i
+                               ├── params: i
+                               └── body
+                                    └── values
+                                         └── tuple
+                                              └── case
+                                                   ├── true
+                                                   ├── when
+                                                   │    ├── lt
+                                                   │    │    ├── variable: i
+                                                   │    │    └── const: 10
+                                                   │    └── subquery
+                                                   │         └── values
+                                                   │              └── tuple
+                                                   │                   └── case
+                                                   │                        ├── true
+                                                   │                        ├── when
+                                                   │                        │    ├── eq
+                                                   │                        │    │    ├── variable: i
+                                                   │                        │    │    └── const: 5
+                                                   │                        │    └── subquery
+                                                   │                        │         └── values
+                                                   │                        │              └── tuple
+                                                   │                        │                   └── udf: nested
+                                                   │                        │                        ├── tail-call
+                                                   │                        │                        └── body
+                                                   │                        │                             └── values
+                                                   │                        │                                  └── tuple
+                                                   │                        │                                       └── const: 1
+                                                   │                        └── subquery
+                                                   │                             └── values
+                                                   │                                  └── tuple
+                                                   │                                       └── subquery
+                                                   │                                            └── project
+                                                   │                                                 ├── values
+                                                   │                                                 │    └── tuple
+                                                   │                                                 │         └── plus
+                                                   │                                                 │              ├── variable: i
+                                                   │                                                 │              └── const: 1
+                                                   │                                                 └── projections
+                                                   │                                                      └── subquery
+                                                   │                                                           └── values
+                                                   │                                                                └── tuple
+                                                   │                                                                     └── udf: stmt_loop_5
+                                                   │                                                                          ├── tail-call
+                                                   │                                                                          ├── args
+                                                   │                                                                          │    └── variable: i
+                                                   │                                                                          └── recursive-call
+                                                   └── subquery
+                                                        └── values
+                                                             └── tuple
+                                                                  └── udf: loop_exit_1
+                                                                       ├── tail-call
+                                                                       ├── args
+                                                                       │    └── variable: i
+                                                                       ├── params: i
+                                                                       └── body
+                                                                            └── values
+                                                                                 └── tuple
+                                                                                      └── udf: _end_of_function_2
+                                                                                           ├── tail-call
+                                                                                           ├── args
+                                                                                           │    └── variable: i
+                                                                                           ├── params: i
+                                                                                           └── body
+                                                                                                ├── values
+                                                                                                │    └── tuple
+                                                                                                │         └── function: crdb_internal.plpgsql_raise
+                                                                                                │              ├── const: 'ERROR'
+                                                                                                │              ├── const: 'control reached end of function without RETURN'
+                                                                                                │              ├── const: ''
+                                                                                                │              ├── const: ''
+                                                                                                │              └── const: '2F005'
+                                                                                                └── values
+                                                                                                     └── tuple
+                                                                                                          └── null
+
+# Tail-call within nested PL/pgSQL blocks.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    BEGIN
+      RAISE NOTICE 'foo';
+      If random() < 0.5 THEN
+        RETURN nested();
+      END IF;
+      BEGIN
+        RAISE NOTICE 'bar';
+        RETURN nested_arg(100);
+      END;
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── values
+                     └── tuple
+                          └── udf: _stmt_raise_5
+                               ├── tail-call
+                               └── body
+                                    ├── values
+                                    │    └── tuple
+                                    │         └── function: crdb_internal.plpgsql_raise
+                                    │              ├── const: 'NOTICE'
+                                    │              ├── const: 'foo'
+                                    │              ├── const: ''
+                                    │              ├── const: ''
+                                    │              └── const: '00000'
+                                    └── values
+                                         └── tuple
+                                              └── case
+                                                   ├── true
+                                                   ├── when
+                                                   │    ├── lt
+                                                   │    │    ├── function: random
+                                                   │    │    └── const: 0.5
+                                                   │    └── subquery
+                                                   │         └── values
+                                                   │              └── tuple
+                                                   │                   └── udf: nested
+                                                   │                        ├── tail-call
+                                                   │                        └── body
+                                                   │                             └── values
+                                                   │                                  └── tuple
+                                                   │                                       └── const: 1
+                                                   └── subquery
+                                                        └── values
+                                                             └── tuple
+                                                                  └── udf: stmt_if_7
+                                                                       ├── tail-call
+                                                                       └── body
+                                                                            └── values
+                                                                                 └── tuple
+                                                                                      └── udf: _stmt_raise_9
+                                                                                           ├── tail-call
+                                                                                           └── body
+                                                                                                ├── values
+                                                                                                │    └── tuple
+                                                                                                │         └── function: crdb_internal.plpgsql_raise
+                                                                                                │              ├── const: 'NOTICE'
+                                                                                                │              ├── const: 'bar'
+                                                                                                │              ├── const: ''
+                                                                                                │              ├── const: ''
+                                                                                                │              └── const: '00000'
+                                                                                                └── values
+                                                                                                     └── tuple
+                                                                                                          └── udf: nested_arg
+                                                                                                               ├── tail-call
+                                                                                                               ├── args
+                                                                                                               │    └── const: 100
+                                                                                                               ├── params: x
+                                                                                                               └── body
+                                                                                                                    └── values
+                                                                                                                         └── tuple
+                                                                                                                              └── variable: x
+
+# Tail-call within an exception handler.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN nested_arg(50);
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'oops';
+    RETURN nested();
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── values
+                     └── tuple
+                          └── udf: exception_block_5
+                               ├── tail-call
+                               ├── body
+                               │    └── values
+                               │         └── tuple
+                               │              └── udf: nested_arg
+                               │                   ├── tail-call
+                               │                   ├── args
+                               │                   │    └── const: 50
+                               │                   ├── params: x
+                               │                   └── body
+                               │                        └── values
+                               │                             └── tuple
+                               │                                  └── variable: x
+                               └── exception-handler
+                                    └── SQLSTATE '22012'
+                                         └── values
+                                              └── tuple
+                                                   └── udf: _stmt_raise_2
+                                                        └── body
+                                                             ├── values
+                                                             │    └── tuple
+                                                             │         └── function: crdb_internal.plpgsql_raise
+                                                             │              ├── const: 'NOTICE'
+                                                             │              ├── const: 'oops'
+                                                             │              ├── const: ''
+                                                             │              ├── const: ''
+                                                             │              └── const: '00000'
+                                                             └── values
+                                                                  └── tuple
+                                                                       └── udf: nested
+                                                                            ├── tail-call
+                                                                            └── body
+                                                                                 └── values
+                                                                                      └── tuple
+                                                                                           └── const: 1
+
+# Nested routine cannot be a tail-call because it's a data source.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    SELECT * INTO x FROM nested();
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars)
+VALUES (f());
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── project
+                     ├── barrier
+                     │    └── values
+                     │         └── tuple
+                     │              └── null
+                     └── projections
+                          └── udf: _stmt_exec_1
+                               ├── tail-call
+                               ├── args
+                               │    └── variable: x
+                               ├── params: x
+                               └── body
+                                    └── project
+                                         ├── left-join (cross)
+                                         │    ├── values
+                                         │    │    └── tuple
+                                         │    ├── limit
+                                         │    │    ├── project-set
+                                         │    │    │    ├── values
+                                         │    │    │    │    └── tuple
+                                         │    │    │    └── zip
+                                         │    │    │         └── udf: nested
+                                         │    │    │              └── body
+                                         │    │    │                   └── values
+                                         │    │    │                        └── tuple
+                                         │    │    │                             └── const: 1
+                                         │    │    └── const: 1
+                                         │    └── filters (true)
+                                         └── projections
+                                              └── variable: nested
+
+# A generator function cannot be considered a tail-call.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN (SELECT generator());
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars) disable=PruneValuesCols
+SELECT f();
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── values
+                     └── tuple
+                          └── subquery
+                               └── max1-row
+                                    └── project-set
+                                         ├── values
+                                         │    └── tuple
+                                         └── zip
+                                              └── udf: generator
+                                                   └── body
+                                                        └── values
+                                                             ├── tuple
+                                                             │    └── const: 1
+                                                             ├── tuple
+                                                             │    └── const: 2
+                                                             └── tuple
+                                                                  └── const: 3
+
+# TODO(121105): the set-returning UDF call should be built into a project-set.
+# Until then, just make sure it isn't considered a tail-call.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN generator();
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+norm format=(hide-all,show-scalars) disable=PruneValuesCols
+SELECT f();
+----
+values
+ └── tuple
+      └── udf: f
+           └── body
+                └── values
+                     └── tuple
+                          └── udf: generator
+                               ├── tail-call
+                               └── body
+                                    └── values
+                                         ├── tuple
+                                         │    └── const: 1
+                                         ├── tuple
+                                         │    └── const: 2
+                                         └── tuple
+                                              └── const: 3

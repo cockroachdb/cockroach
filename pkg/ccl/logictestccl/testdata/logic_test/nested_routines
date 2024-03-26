@@ -1,0 +1,27 @@
+# LogicTest: !local-mixed-23.1 !local-mixed-23.2
+
+# Regression test for #120916 - the nested routine is not in tail-call position,
+# and so cannot be a target for TCO.
+statement ok
+CREATE FUNCTION f_nested(x INT) RETURNS INT AS $$
+  BEGIN
+    x := x * 2;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f() RETURNS RECORD AS $$
+  DECLARE
+    a INT := -2;
+  BEGIN
+    a := f_nested(a);
+    RAISE NOTICE 'here';
+    RETURN (a, -a);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II
+SELECT * FROM f() AS g(x INT, y INT);
+----
+-4  4
