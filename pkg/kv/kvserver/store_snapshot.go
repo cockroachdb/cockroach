@@ -513,7 +513,11 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			return noSnap, errors.AssertionFailedf("last span in multiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
 		}
 	}
-	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, keyRanges, kvSS.sstChunkSize, doExcise)
+
+	// TODO(aaditya): Remove once we support flushableIngests for shared and
+	// external files in the engine.
+	skipRangeDelForLastSpan := doExcise && (header.SharedReplicate || header.ExternalReplicate)
+	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, keyRanges, kvSS.sstChunkSize, skipRangeDelForLastSpan)
 	if err != nil {
 		return noSnap, err
 	}
@@ -691,19 +695,20 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 
 			inSnap := IncomingSnapshot{
-				SnapUUID:          snapUUID,
-				SSTStorageScratch: kvSS.scratch,
-				FromReplica:       header.RaftMessageRequest.FromReplica,
-				Desc:              header.State.Desc,
-				DataSize:          dataSize,
-				SSTSize:           sstSize,
-				SharedSize:        sharedSize,
-				raftAppliedIndex:  header.State.RaftAppliedIndex,
-				msgAppRespCh:      make(chan raftpb.Message, 1),
-				sharedSSTs:        sharedSSTs,
-				externalSSTs:      externalSSTs,
-				doExcise:          doExcise,
-				clearedSpans:      keyRanges,
+				SnapUUID:                    snapUUID,
+				SSTStorageScratch:           kvSS.scratch,
+				FromReplica:                 header.RaftMessageRequest.FromReplica,
+				Desc:                        header.State.Desc,
+				DataSize:                    dataSize,
+				SSTSize:                     sstSize,
+				SharedSize:                  sharedSize,
+				raftAppliedIndex:            header.State.RaftAppliedIndex,
+				msgAppRespCh:                make(chan raftpb.Message, 1),
+				sharedSSTs:                  sharedSSTs,
+				externalSSTs:                externalSSTs,
+				doExcise:                    doExcise,
+				includesRangeDelForLastSpan: !skipRangeDelForLastSpan,
+				clearedSpans:                keyRanges,
 			}
 
 			timingTag.stop("totalTime")
