@@ -384,6 +384,142 @@ func TestRefreshSpanIterateSkipLocked(t *testing.T) {
 	require.Equal(t, expReadSpans, readSpans)
 }
 
+func TestResponseKeyIterate(t *testing.T) {
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
+
+	// Encoded keyB with value in the batch_response format.
+	keyBBatchRespEnc := []byte{3, 0, 0, 0, 2, 0, 0, 0, 98, 0, 102, 111, 111}
+
+	pointHeader := RequestHeader{Key: keyA}
+	rangeHeader := RequestHeader{Key: keyA, EndKey: keyD}
+
+	testCases := []struct {
+		name    string
+		req     Request
+		resp    Response
+		expKeys []roachpb.Key
+		expErr  string
+	}{
+		{
+			name:    "get, missing",
+			req:     &GetRequest{RequestHeader: pointHeader},
+			resp:    &GetResponse{},
+			expKeys: nil,
+		},
+		{
+			name:    "get, present",
+			req:     &GetRequest{RequestHeader: pointHeader},
+			resp:    &GetResponse{Value: &roachpb.Value{}},
+			expKeys: []roachpb.Key{keyA},
+		},
+		{
+			name:    "scan, missing",
+			req:     &ScanRequest{RequestHeader: rangeHeader, ScanFormat: KEY_VALUES},
+			resp:    &ScanResponse{},
+			expKeys: nil,
+		},
+		{
+			name: "scan, present, format=key-values",
+			req:  &ScanRequest{RequestHeader: rangeHeader, ScanFormat: KEY_VALUES},
+			resp: &ScanResponse{Rows: []roachpb.KeyValue{
+				{Key: keyA}, {Key: keyB}, {Key: keyC},
+			}},
+			expKeys: []roachpb.Key{keyA, keyB, keyC},
+		},
+		{
+			name:    "scan, present, format=batch-response",
+			req:     &ScanRequest{RequestHeader: rangeHeader, ScanFormat: BATCH_RESPONSE},
+			resp:    &ScanResponse{BatchResponses: [][]byte{keyBBatchRespEnc}},
+			expKeys: []roachpb.Key{keyB},
+		},
+		{
+			name:   "scan, present, format=col-batch-response",
+			req:    &ScanRequest{RequestHeader: rangeHeader, ScanFormat: COL_BATCH_RESPONSE},
+			resp:   &ScanResponse{},
+			expErr: "unexpectedly called ResponseKeyIterate on a ScanRequest with COL_BATCH_RESPONSE scan format",
+		},
+		{
+			name:    "reverse-scan, missing",
+			req:     &ReverseScanRequest{RequestHeader: rangeHeader, ScanFormat: KEY_VALUES},
+			resp:    &ReverseScanResponse{},
+			expKeys: nil,
+		},
+		{
+			name: "reverse-scan, present, format=key-values",
+			req:  &ReverseScanRequest{RequestHeader: rangeHeader, ScanFormat: KEY_VALUES},
+			resp: &ReverseScanResponse{Rows: []roachpb.KeyValue{
+				{Key: keyC}, {Key: keyB}, {Key: keyA},
+			}},
+			expKeys: []roachpb.Key{keyC, keyB, keyA},
+		},
+		{
+			name:    "reverse-scan, present, format=batch-response",
+			req:     &ReverseScanRequest{RequestHeader: rangeHeader, ScanFormat: BATCH_RESPONSE},
+			resp:    &ReverseScanResponse{BatchResponses: [][]byte{keyBBatchRespEnc}},
+			expKeys: []roachpb.Key{keyB},
+		},
+		{
+			name:   "reverse-scan, present, format=col-batch-response",
+			req:    &ReverseScanRequest{RequestHeader: rangeHeader, ScanFormat: COL_BATCH_RESPONSE},
+			resp:   &ReverseScanResponse{},
+			expErr: "unexpectedly called ResponseKeyIterate on a ReverseScanRequest with COL_BATCH_RESPONSE scan format",
+		},
+		{
+			name:   "put",
+			req:    &PutRequest{},
+			resp:   &PutResponse{},
+			expErr: "cannot iterate over response keys of Put request",
+		},
+		{
+			name:   "cput",
+			req:    &ConditionalPutRequest{},
+			resp:   &ConditionalPutResponse{},
+			expErr: "cannot iterate over response keys of ConditionalPut request",
+		},
+		{
+			name:   "initput",
+			req:    &InitPutRequest{},
+			resp:   &InitPutResponse{},
+			expErr: "cannot iterate over response keys of InitPut request",
+		},
+		{
+			name:   "increment",
+			req:    &IncrementRequest{},
+			resp:   &IncrementResponse{},
+			expErr: "cannot iterate over response keys of Increment request",
+		},
+		{
+			name:   "delete",
+			req:    &DeleteRequest{},
+			resp:   &DeleteResponse{},
+			expErr: "cannot iterate over response keys of Delete request",
+		},
+		{
+			name:   "delete-range",
+			req:    &DeleteRangeRequest{},
+			resp:   &DeleteRangeResponse{},
+			expErr: "cannot iterate over response keys of DeleteRange request",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var keys []roachpb.Key
+			err := ResponseKeyIterate(tc.req, tc.resp, func(key roachpb.Key) {
+				keys = append(keys, key)
+			})
+			if tc.expErr == "" {
+				require.Equal(t, tc.expKeys, keys)
+				require.NoError(t, err)
+			} else {
+				require.Empty(t, keys)
+				require.Error(t, err)
+				require.Regexp(t, tc.expErr, err)
+			}
+		})
+	}
+}
+
 func TestBatchResponseCombine(t *testing.T) {
 	br := &BatchResponse{}
 	{
