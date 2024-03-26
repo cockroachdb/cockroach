@@ -205,7 +205,8 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 			RequestHeader: kvpb.RequestHeader{
 				Key: w.Key,
 			},
-			Txn: meta,
+			Txn:      meta,
+			Strength: w.Strength,
 		})
 	}
 

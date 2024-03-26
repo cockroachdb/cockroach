@@ -1436,6 +1436,12 @@ message QueryIntentRequest {
   // If true, return an IntentMissingError if no matching intent (neither a
   // "partial match" nor a "full match") is found.
   bool error_if_missing = 3;
+
+  // The strength with which the lock being queried was acquired at. To ensure
+  // the supplied protection was provided, we check whether the lock was held
+  // with the supplied lock strength or something stronger at the sequence
+  // number.
+  kv.kvserver.concurrency.lock.Strength strength = 4;
 }
 
 // A QueryIntentResponse is the return value from the QueryIntent() method.
