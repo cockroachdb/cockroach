@@ -304,6 +304,20 @@ func (f *Factory) CopyAndReplace(
 ) {
 	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 
+	f.CopyMetadataFrom(from.Memo())
+
+	// Perform copy and replacement, and store result as the root of this
+	// factory's memo.
+	to := f.invokeReplace(from, replace).(memo.RelExpr)
+	f.Memo().SetRoot(to, fromProps)
+}
+
+// CopyMetadataFrom copies the metadata from the given memo to this factory's
+// memo. This allows expressions copied from the original memo to reference the
+// same tables and columns that they did before.
+func (f *Factory) CopyMetadataFrom(from *memo.Memo) {
+	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
+
 	if !f.mem.IsEmpty() {
 		panic(errors.AssertionFailedf("destination memo must be empty"))
 	}
@@ -311,18 +325,13 @@ func (f *Factory) CopyAndReplace(
 	// Copy the next scalar rank to the target memo so that new scalar
 	// expressions built with the new memo will not share scalar ranks with
 	// existing expressions.
-	f.mem.CopyNextRankFrom(from.Memo())
+	f.mem.CopyNextRankFrom(from)
 
 	// Copy all metadata to the target memo so that referenced tables and
 	// columns can keep the same ids they had in the "from" memo. Scalar
 	// expressions in the metadata cannot have placeholders, so we simply copy
 	// the expressions without replacement.
-	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyWithoutAssigningPlaceholders)
-
-	// Perform copy and replacement, and store result as the root of this
-	// factory's memo.
-	to := f.invokeReplace(from, replace).(memo.RelExpr)
-	f.Memo().SetRoot(to, fromProps)
+	f.mem.Metadata().CopyFrom(from.Metadata(), f.CopyWithoutAssigningPlaceholders)
 }
 
 // CopyWithoutAssigningPlaceholders returns a copy of the given scalar expression.
