@@ -277,7 +277,7 @@ func benchmarkCircuitBreakersTrack(
 					assert.NoError(b, err)
 					return
 				}
-				cbToken.Done(br, sendErr, nowNanos)
+				_ = cbToken.Done(br, sendErr, nowNanos) // ignore cancellation error
 			}
 		}()
 	}

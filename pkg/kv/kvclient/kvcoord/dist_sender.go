@@ -2701,7 +2701,14 @@ func (ds *DistSender) sendToReplicas(
 		} else {
 			br, err = transport.SendNext(sendCtx, requestToSend)
 			tEnd := timeutil.Now()
-			cbToken.Done(br, err, tEnd.UnixNano())
+			if cancelErr := cbToken.Done(br, err, tEnd.UnixNano()); cancelErr != nil {
+				// The request was cancelled by the circuit breaker tripping. If this is
+				// detected by request evaluation (as opposed to the transport send), it
+				// will return the context error in br.Error instead of err, which won't
+				// be retried below. Instead, record it as a send error in err and retry
+				// when possible. This commonly happens when the replica is local.
+				br, err = nil, cancelErr
+			}
 
 			if dur := tEnd.Sub(tBegin); dur > slowDistSenderReplicaThreshold {
 				var s redact.StringBuilder
