@@ -18,6 +18,10 @@ CREATE DATABASE d;
 CREATE TABLE d.foo (id INT);
 ----
 
+let $d_id
+SELECT id FROM system.namespace WHERE name = 'd' AND "parentID" = 0;
+----
+
 schema-change expect-pausepoint
 DROP DATABASE d CASCADE;
 ----
@@ -28,7 +32,7 @@ query-sql
 WITH tbls AS (
 	SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS orig FROM system.descriptor
 )
-SELECT orig->'database'->'name', orig->'database'->'state' FROM tbls WHERE id = 107;
+SELECT orig->'database'->'name', orig->'database'->'state' FROM tbls WHERE id = $d_id;
 ----
 "d" "DROP"
 
@@ -122,6 +126,22 @@ CREATE SCHEMA d2.s;
 CREATE TABLE d2.s.t (id INT);
 ----
 
+let $d2_id
+SELECT id FROM system.namespace WHERE name = 'd2' AND "parentID" = 0;
+----
+
+let $s_id
+SELECT id FROM system.namespace WHERE name = 's' AND "parentID" = $d2_id;
+----
+
+let $typ_id
+SELECT id FROM system.namespace WHERE name = 'typ' AND "parentID" = $d2_id;
+----
+
+let $typArray_id
+SELECT id FROM system.namespace WHERE name = '_typ' AND "parentID" = $d2_id;
+----
+
 exec-sql
 SET use_declarative_schema_changer = 'off';
 ----
@@ -148,7 +168,7 @@ query-sql
 WITH tbls AS (
 	SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS orig FROM system.descriptor
 )
-SELECT orig->'schema'->'name', orig->'schema'->'state' FROM tbls WHERE id = 112;
+SELECT orig->'schema'->'name', orig->'schema'->'state' FROM tbls WHERE id = $s_id;
 ----
 "s" "DROP"
 
@@ -157,7 +177,7 @@ query-sql
 WITH tbls AS (
 	SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS orig FROM system.descriptor
 )
-SELECT orig->'type'->'name', orig->'type'->'state' FROM tbls WHERE id = 110 OR id = 111;
+SELECT orig->'type'->'name', orig->'type'->'state' FROM tbls WHERE id = $typ_id OR id = $typArray_id;
 ----
 "typ" "DROP"
 "_typ" "DROP"
