@@ -229,6 +229,7 @@ type option func(*testConfig)
 
 func withPusher(txnPusher TxnPusher) option {
 	return func(config *testConfig) {
+		config.PushTxnsInterval = 10 * time.Millisecond
 		config.PushTxnsAge = 50 * time.Millisecond
 		config.TxnPusher = txnPusher
 	}
@@ -277,6 +278,19 @@ func withEventTimeout(timeout time.Duration) option {
 func withSpan(span roachpb.RSpan) option {
 	return func(config *testConfig) {
 		config.Span = span
+	}
+}
+
+func withSettings(st *cluster.Settings) option {
+	return func(config *testConfig) {
+		config.Settings = st
+	}
+}
+
+func withPushTxnsIntervalAge(interval, age time.Duration) option {
+	return func(config *testConfig) {
+		config.PushTxnsInterval = interval
+		config.PushTxnsAge = age
 	}
 }
 
@@ -1139,6 +1153,64 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 	// Release push attempt to avoid deadlock.
 	resumePushAttemptsC <- struct{}{}
+}
+
+// TestProcessorTxnPushDisabled tests that processors don't attempt txn pushes
+// when disabled.
+func TestProcessorTxnPushDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const pushInterval = 10 * time.Millisecond
+
+	// Set up a txn to write intents.
+	ts := hlc.Timestamp{WallTime: 10}
+	txnID := uuid.MakeV4()
+	txnMeta := enginepb.TxnMeta{
+		ID:             txnID,
+		Key:            keyA,
+		IsoLevel:       isolation.Serializable,
+		WriteTimestamp: ts,
+		MinTimestamp:   ts,
+	}
+
+	// Disable txn pushes.
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	PushTxnsEnabled.Override(ctx, &st.SV, false)
+
+	// Set up a txn pusher and processor that errors on any pushes.
+	//
+	// TODO(kv): We don't test the scheduled processor here, since the setting
+	// instead controls the Store.startRangefeedTxnPushNotifier() loop which sits
+	// outside of the processor and can't be tested with this test harness. Write
+	// a new test when the legacy processor is removed and the scheduled processor
+	// is used by default.
+	var tp testTxnPusher
+	tp.mockPushTxns(func(ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, bool, error) {
+		err := errors.Errorf("unexpected txn push for txns=%v ts=%s", txns, ts)
+		t.Errorf("%v", err)
+		return nil, false, err
+	})
+
+	p, h, stopper := newTestProcessor(t, withSettings(st), withPusher(&tp),
+		withPushTxnsIntervalAge(pushInterval, time.Millisecond))
+	defer stopper.Stop(ctx)
+
+	// Move the resolved ts forward to just before the txn timestamp.
+	rts := ts.Add(-1, 0)
+	require.True(t, p.ForwardClosedTS(ctx, rts))
+	h.syncEventC()
+	require.Equal(t, rts, h.rts.Get())
+
+	// Add a few intents and move the closed timestamp forward.
+	p.ConsumeLogicalOps(ctx, writeIntentOpFromMeta(txnMeta))
+	p.ForwardClosedTS(ctx, ts)
+	h.syncEventC()
+	require.Equal(t, rts, h.rts.Get())
+
+	// Wait for 10x the push txns interval, to make sure pushes are disabled.
+	// Waiting for something to not happen is a bit smelly, but gets the job done.
+	time.Sleep(10 * pushInterval)
 }
 
 // TestProcessorConcurrentStop tests that all methods in Processor's API
