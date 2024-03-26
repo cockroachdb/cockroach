@@ -604,13 +604,7 @@ func (s *Container) PopAllStats(
 		stmts = s.mu.stmts
 		txns = s.mu.txns
 		// Reset statementStats and transactions after they're assigned to local variables.
-		s.mu.stmts = make(map[stmtKey]*stmtStats, len(s.mu.stmts)/2)
-		s.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
-		s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
-		s.freeLocked(ctx)
-		if s.knobs != nil && s.knobs.OnAfterClear != nil {
-			s.knobs.OnAfterClear()
-		}
+		s.clearLocked(ctx)
 	}()
 
 	var data appstatspb.StatementStatistics
@@ -663,7 +657,14 @@ func (s *Container) PopAllStats(
 func (s *Container) Clear(ctx context.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.clearLocked(ctx)
+}
 
+func (s *Container) clearLocked(ctx context.Context) {
+	// freeLocked needs to be called before we clear the containers as
+	// it uses the size of each container to decrements counters that
+	// track the node-wide unique in-memory fingerprint counts for stmts
+	// and txns.
 	s.freeLocked(ctx)
 
 	// Clear the map, to release the memory; make the new map somewhat already
