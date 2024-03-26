@@ -277,7 +277,11 @@ func benchmarkCircuitBreakersTrack(
 					assert.NoError(b, err)
 					return
 				}
-				cbToken.Done(br, sendErr, nowNanos)
+				err = cbToken.Done(br, sendErr, nowNanos)
+				if err != nil {
+					assert.NoError(b, err)
+					return
+				}
 			}
 		}()
 	}
