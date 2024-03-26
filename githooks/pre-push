@@ -8,7 +8,7 @@ set -uo pipefail
 # deny push of a head but not a tag to cockroachdb/cochroach ssh and http URLs.
 while read local_ref local_sha remote_ref remote_sha
 do 
-  if [[ "$remote_ref" == "refs/heads/"* ]] && [[ "$2" == *"cockroachdb/cockroach.git"* ]]; then
+  if [[ "$remote_ref" == "refs/heads/"* ]] && [[ "$2" == *"cockroachdb/cockroach"* ]]; then
     echo "Refusing to push to $remote_ref on $2."
     echo "Push your branch to your own fork and open a PR from there."
     echo "If you just want to see what CI thinks, you can push branch:refs/ci/branch to trigger a CI run."
