@@ -2002,7 +2002,6 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	defer stopper.Stop(ctx)
 	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	cfg := TestStoreConfig(hlc.NewClockForTesting(manualClock))
-	cfg.Settings = cluster.MakeTestingClusterSettings()
 	allowDroppingLatchesBeforeEval.Override(ctx, &cfg.Settings.SV, false)
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
