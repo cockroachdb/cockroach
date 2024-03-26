@@ -513,7 +513,7 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(roachpb.Sp
 		if br != nil {
 			resp = br.Responses[i].GetInner()
 		}
-		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && CanSkipLocked(req) {
+		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && CanSkipLocked(req) && resp != nil {
 			if ba.IndexFetchSpec != nil {
 				return errors.AssertionFailedf("unexpectedly IndexFetchSpec is set with SKIP LOCKED wait policy")
 			}
@@ -574,7 +574,7 @@ func ActualSpan(req Request, resp Response) (roachpb.Span, bool) {
 // COL_BATCH_RESPONSE scan format.
 func ResponseKeyIterate(req Request, resp Response, fn func(roachpb.Key)) error {
 	if resp == nil {
-		return nil
+		return errors.Errorf("cannot iterate over response keys of %s request with nil response", req.Method())
 	}
 	switch v := resp.(type) {
 	case *GetResponse:
