@@ -309,12 +309,16 @@ func runMultiTenantFairness(
 		_, err := vcdb.ExecContext(ctx, "USE kv")
 		require.NoError(t, err)
 
+		// TODO(aaditya): We no longer have the ability to filter for stats by
+		// successful queries, and include ones for failed queries. Maybe consider
+		// finding a way to do this?
+		// See https://github.com/cockroachdb/cockroach/pull/121120.
 		rows, err := vcdb.QueryContext(ctx, `
 			SELECT
 				sum((statistics -> 'statistics' -> 'cnt')::INT),
 				avg((statistics -> 'statistics' -> 'runLat' -> 'mean')::FLOAT)
 			FROM crdb_internal.statement_statistics
-			WHERE metadata @> '{"db":"kv","failed":false}' AND metadata @> $1`,
+			WHERE metadata @> '{"db":"kv"}' AND metadata @> $1`,
 			fmt.Sprintf(`{"querySummary": "%s"}`, s.query))
 		require.NoError(t, err)
 

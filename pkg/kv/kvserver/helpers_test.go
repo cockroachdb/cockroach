@@ -166,28 +166,28 @@ func (s *Store) LeaseQueuePurgatoryLength() int {
 
 // SetRaftLogQueueActive enables or disables the raft log queue.
 func (s *Store) SetRaftLogQueueActive(active bool) {
-	s.setRaftLogQueueActive(active)
+	s.testingSetRaftLogQueueActive(active)
 }
 
 // SetReplicaGCQueueActive enables or disables the replica GC queue.
 func (s *Store) SetReplicaGCQueueActive(active bool) {
-	s.setReplicaGCQueueActive(active)
+	s.testingSetReplicaGCQueueActive(active)
 }
 
 // SetMergeQueueActive enables or disables the merge queue.
 func (s *Store) SetMergeQueueActive(active bool) {
-	s.setMergeQueueActive(active)
+	s.testingSetMergeQueueActive(active)
 }
 
 // SetRaftSnapshotQueueActive enables or disables the raft snapshot queue.
 func (s *Store) SetRaftSnapshotQueueActive(active bool) {
-	s.setRaftSnapshotQueueActive(active)
+	s.testingSetRaftSnapshotQueueActive(active)
 }
 
 // SetReplicaScannerActive enables or disables the scanner. Note that while
 // inactive, removals are still processed.
 func (s *Store) SetReplicaScannerActive(active bool) {
-	s.setScannerActive(active)
+	s.testingSetScannerActive(active)
 }
 
 // EnqueueRaftUpdateCheck enqueues the replica for a Raft update check, forcing
