@@ -84,6 +84,26 @@ func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
 	return setupSpanConfigsStream(ctx, r.evalCtx, r.txn, tenantName)
 }
 
+func (r *replicationStreamManagerImpl) DebugGetProducerStatuses(
+	ctx context.Context,
+) []*streampb.DebugProducerStatus {
+	// TODO(dt): ideally we store pointers to open readers in a map in some field
+	// of some struct off of server (job registry?) so that each VC just sees the
+	// ones it is running, but for now we're using a global singleton map but that
+	// is not the end of the world since only the system tenant can run these so
+	// as long as it is the only one that can see into the singleton we're ok.
+	if !r.evalCtx.Codec.ForSystemTenant() {
+		return nil
+	}
+	activeStreams.Lock()
+	defer activeStreams.Unlock()
+	res := make([]*streampb.DebugProducerStatus, 0, len(activeStreams.m))
+	for _, e := range activeStreams.m {
+		res = append(res, e.DebugGetProducerStatus())
+	}
+	return res
+}
+
 func newReplicationStreamManagerWithPrivilegesCheck(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, sessionID clusterunique.ID,
 ) (eval.ReplicationStreamManager, error) {
