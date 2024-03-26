@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -65,9 +66,12 @@ func (c *CustomFuncs) deriveHasUnhoistableExpr(expr opt.Expr) bool {
 		// cannot be reordered with other expressions.
 		return true
 	case *memo.UDFCallExpr:
-		if t.TailCall {
-			// A routine with the "tail-call" property cannot be reordered with other
-			// expressions, since it may then no longer be in tail-call position.
+		if t.Def.RoutineLang == tree.RoutineLangPLpgSQL {
+			// Hoisting a PL/pgSQL sub-routine could move it out of tail-call
+			// position, forcing inefficient nested execution.
+			//
+			// TODO(#119956): consider relaxing this for routines which aren't already
+			// in tail-call position.
 			return true
 		}
 	}
