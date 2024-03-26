@@ -2024,7 +2024,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 	ctx := context.Background()
 	eng, err := Open(ctx, InMemory(), st, CacheSize(testCacheSize),
 		func(cfg *engineConfig) error {
-			cfg.Opts.DisableAutomaticCompactions = true
+			cfg.opts.DisableAutomaticCompactions = true
 			return nil
 		})
 	require.NoError(b, err)
