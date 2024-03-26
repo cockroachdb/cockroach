@@ -339,9 +339,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 	defer engine.Close()
 
 	// Mock processor. We just needs its eventC.
-	s := newTestScheduler(1)
-	p := ScheduledProcessor{
-		scheduler: s.NewClientScheduler(),
+	p := LegacyProcessor{
 		Config: Config{
 			Span: span,
 		},
@@ -484,11 +482,7 @@ func TestTxnPushAttempt(t *testing.T) {
 
 	// Mock processor. We configure its key span to exclude one of txn2's lock
 	// spans and a portion of three of txn4's lock spans.
-	s := newTestScheduler(1)
-	p := ScheduledProcessor{
-		scheduler: s.NewClientScheduler(),
-		eventC:    make(chan *event, 100),
-	}
+	p := LegacyProcessor{eventC: make(chan *event, 100)}
 	p.Span = roachpb.RSpan{Key: roachpb.RKey("b"), EndKey: roachpb.RKey("m")}
 	p.TxnPusher = &tp
 
