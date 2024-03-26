@@ -865,6 +865,8 @@ type ReplicationStreamManager interface {
 		streamID streampb.StreamID,
 		successfulIngestion bool,
 	) error
+
+	DebugGetProducerStatuses(ctx context.Context) []*streampb.DebugProducerStatus
 }
 
 // StreamIngestManager represents a collection of APIs that streaming replication supports

@@ -359,6 +359,37 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"resolved_age",
 		},
 	},
+	`"".crdb_internal.cluster_replication_node_streams`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"consumer_id",
+			"spans",
+			"initial_ts",
+			"prev_ts",
+			"batches",
+			"checkpoints",
+			"last_checkpoint",
+			"rf_checkpoints",
+			"rf_advances",
+			"rf_last_advance",
+			"rf_resolved",
+			"rf_resolved_age",
+		},
+	},
+	`"".crdb_internal.cluster_replication_node_stream_spans`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"consumer_id",
+		},
+	},
+	`"".crdb_internal.cluster_replication_node_stream_checkpoints`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"consumer_id",
+			"resolved",
+			"resolved_age",
+		},
+	},
 	"crdb_internal.default_privileges": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"database_name",
