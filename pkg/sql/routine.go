@@ -43,6 +43,11 @@ func (d *callNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	if params.p.storedProcTxnState.getTxnOp() != tree.StoredProcTxnNoOp {
+		// The stored procedure has paused execution to COMMIT or ROLLBACK the
+		// current transaction. The current iteration should have no result.
+		return nil
+	}
 	if d.proc.Typ.Family() == types.VoidFamily {
 		// With VOID return type we expect no rows to be produced, so we should
 		// get NULL value from the expression evaluation.
@@ -661,6 +666,13 @@ func (a *storedProcTxnStateAccessor) setStoredProcTxnState(
 	a.ex.extraTxnState.storedProcTxnState.txnOp = txnOp
 	a.ex.extraTxnState.storedProcTxnState.txnModes = txnModes
 	a.ex.extraTxnState.storedProcTxnState.resumeProc = resumeProc
+}
+
+func (a *storedProcTxnStateAccessor) getTxnOp() tree.StoredProcTxnOp {
+	if a.ex == nil {
+		return tree.StoredProcTxnNoOp
+	}
+	return a.ex.extraTxnState.storedProcTxnState.txnOp
 }
 
 func (a *storedProcTxnStateAccessor) getResumeProc() *memo.Memo {
