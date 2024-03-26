@@ -1298,6 +1298,9 @@ define TxnControlPrivate {
     # Props is used when building the plan for the continuation SP.
     Props PhysProps
 
+    # OutCols is used when building the plan for the continuation SP.
+    OutCols ColList
+
     # Def stores the procedure that will resume execution of the parent SP in
     # the new transaction.
     Def UDFDefinition

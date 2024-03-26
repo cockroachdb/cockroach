@@ -499,6 +499,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.BarrierOp:
 		return sb.colStatBarrier(colSet, e.(*BarrierExpr))
 
+	case opt.CallOp:
+		return sb.colStatCall(colSet, e.(*CallExpr))
+
 	case opt.SequenceSelectOp:
 		return sb.colStatSequenceSelect(colSet, e.(*SequenceSelectExpr))
 
@@ -2837,6 +2840,30 @@ func (sb *statisticsBuilder) colStatBarrier(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
+// +------+
+// | Call |
+// +------+
+
+func (sb *statisticsBuilder) buildCall(call *CallExpr, relProps *props.Relational) {
+	s := relProps.Statistics()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short-cut if cardinality is 0.
+		return
+	}
+	s.Available = true
+	s.RowCount = 1
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatCall(colSet opt.ColSet, call *CallExpr) *props.ColumnStatistic {
+	s := call.Relational().Statistics()
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = 1
+	colStat.NullCount = s.RowCount * UnknownNullCountRatio
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }

@@ -64,7 +64,7 @@ func (b *Builder) buildUDF(
 	}
 
 	// Build the routine.
-	routine, isMultiColDataSource := b.buildRoutine(f, def, inScope, colRefs)
+	routine, isMultiColDataSource := b.buildRoutine(f, def, inScope, outScope, colRefs)
 
 	// Synthesize an output columns if necessary.
 	if outCol == nil {
@@ -160,26 +160,46 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 		}
 	}
 
+	// Synthesize output columns for OUT parameters. We can use the return type
+	// to synthesize the columns, since it's based on the OUT parameters.
+	if rTyp := f.ResolvedType(); rTyp.Family() != types.VoidFamily {
+		if len(rTyp.TupleContents()) == 0 {
+			panic(errors.AssertionFailedf("expected procedure to return a record"))
+		}
+		for i := range rTyp.TupleContents() {
+			colName := scopeColName(tree.Name(rTyp.TupleLabels()[i]))
+			b.synthesizeColumn(outScope, colName, rTyp.TupleContents()[i], f, nil /* scalar */)
+		}
+	}
+
 	// Check for execution privileges.
 	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid); err != nil {
 		panic(err)
 	}
 
 	// Build the routine.
-	routine, _ := b.buildRoutine(f, def, inScope, nil /* colRefs */)
+	routine, _ := b.buildRoutine(f, def, inScope, outScope, nil /* colRefs */)
 	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
 		nil /* outScope */, nil /* outCol */)
 
 	// Build a call expression.
-	outScope.expr = b.factory.ConstructCall(routine)
+	callPrivate := &memo.CallPrivate{Columns: outScope.colList()}
+	outScope.expr = b.factory.ConstructCall(routine, callPrivate)
 	return outScope
 }
 
 // buildRoutine returns an expression representing the invocation of a
 // user-defined function or procedure. It also returns the return type of the
 // routine and a boolean that is true if the routine returns multiple columns.
+//
+// - outScope is only used for stored procedures, specifically when there is a
+// transaction control statement. This is necessary because transaction control
+// statements have to construct a new CALL statement to resume execution.
 func (b *Builder) buildRoutine(
-	f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition, inScope *scope, colRefs *opt.ColSet,
+	f *tree.FuncExpr,
+	def *tree.ResolvedFunctionDefinition,
+	inScope, outScope *scope,
+	colRefs *opt.ColSet,
 ) (out opt.ScalarExpr, isMultiColDataSource bool) {
 	o := f.ResolvedOverload()
 	isProc := o.Type == tree.ProcedureRoutine
@@ -367,7 +387,7 @@ func (b *Builder) buildRoutine(
 		var expr memo.RelExpr
 		var physProps *physical.Required
 		plBuilder := newPLpgSQLBuilder(
-			b, def.Name, stmt.AST.Label, colRefs, routineParams, rtyp, isProc,
+			b, def.Name, stmt.AST.Label, colRefs, routineParams, rtyp, isProc, outScope,
 		)
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		finishResolveType(stmtScope)
