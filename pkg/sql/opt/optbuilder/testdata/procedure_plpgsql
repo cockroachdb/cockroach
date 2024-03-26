@@ -85,6 +85,7 @@ call
                 │                        │              └── variable: count_rows:14 [as=c:57]
                 │                        └── projections
                 │                             └── udf: _stmt_exec_ret_2 [as="_stmt_exec_ret_2":58]
+                │                                  ├── tail-call
                 │                                  ├── args
                 │                                  │    ├── variable: arg_k:5
                 │                                  │    ├── variable: new_i:6
@@ -110,6 +111,7 @@ call
                 │                                                      │              │    └── tuple
                 │                                                      │              └── projections
                 │                                                      │                   └── udf: _stmt_exec_4 [as="_stmt_exec_4":41]
+                │                                                      │                        ├── tail-call
                 │                                                      │                        ├── args
                 │                                                      │                        │    ├── variable: arg_k:15
                 │                                                      │                        │    ├── variable: new_i:16
@@ -142,6 +144,7 @@ call
                 │                                                      │                                  │    └── tuple
                 │                                                      │                                  └── projections
                 │                                                      │                                       └── udf: stmt_if_3 [as=stmt_if_3:40]
+                │                                                      │                                            ├── tail-call
                 │                                                      │                                            ├── args
                 │                                                      │                                            │    ├── variable: arg_k:24
                 │                                                      │                                            │    ├── variable: new_i:25
@@ -163,6 +166,7 @@ call
                 │                                                                │    └── tuple
                 │                                                                └── projections
                 │                                                                     └── udf: _stmt_exec_5 [as="_stmt_exec_5":55]
+                │                                                                          ├── tail-call
                 │                                                                          ├── args
                 │                                                                          │    ├── variable: arg_k:15
                 │                                                                          │    ├── variable: new_i:16
@@ -188,6 +192,7 @@ call
                 │                                                                                    │    └── tuple
                 │                                                                                    └── projections
                 │                                                                                         └── udf: stmt_if_3 [as=stmt_if_3:54]
+                │                                                                                              ├── tail-call
                 │                                                                                              ├── args
                 │                                                                                              │    ├── variable: arg_k:42
                 │                                                                                              │    ├── variable: new_i:43
@@ -323,6 +328,7 @@ call
                 │                        │                   └── const: 1
                 │                        └── projections
                 │                             └── udf: _stmt_raise_6 [as="_stmt_raise_6":26]
+                │                                  ├── tail-call
                 │                                  ├── args
                 │                                  │    ├── variable: x:18
                 │                                  │    ├── variable: y:19
@@ -367,6 +373,7 @@ call
                 │                                            │    └── tuple
                 │                                            └── projections
                 │                                                 └── udf: nested_block_3 [as=nested_block_3:25]
+                │                                                      ├── tail-call
                 │                                                      ├── args
                 │                                                      │    ├── variable: x:21
                 │                                                      │    └── variable: y:22
@@ -392,6 +399,7 @@ call
                 │                                                                │                   └── const: 1
                 │                                                                └── projections
                 │                                                                     └── udf: _stmt_raise_4 [as="_stmt_raise_4":16]
+                │                                                                          ├── tail-call
                 │                                                                          ├── args
                 │                                                                          │    ├── variable: x:10
                 │                                                                          │    └── variable: y:11
@@ -499,6 +507,7 @@ call
                 │                        │    └── tuple
                 │                        └── projections
                 │                             └── udf: exception_block_7 [as=exception_block_7:17]
+                │                                  ├── tail-call
                 │                                  ├── args
                 │                                  │    └── variable: x:2
                 │                                  ├── params: x:12
@@ -509,6 +518,7 @@ call
                 │                                  │         │    └── tuple
                 │                                  │         └── projections
                 │                                  │              └── udf: _stmt_exec_8 [as="_stmt_exec_8":16]
+                │                                  │                   ├── tail-call
                 │                                  │                   ├── args
                 │                                  │                   │    └── variable: x:12
                 │                                  │                   ├── params: x:13
@@ -527,6 +537,7 @@ call
                 │                                  │                             │    └── tuple
                 │                                  │                             └── projections
                 │                                  │                                  └── udf: nested_block_3 [as=nested_block_3:15]
+                │                                  │                                       ├── tail-call
                 │                                  │                                       ├── args
                 │                                  │                                       │    └── variable: x:13
                 │                                  │                                       ├── params: x:4
@@ -537,6 +548,7 @@ call
                 │                                  │                                                 │    └── tuple
                 │                                  │                                                 └── projections
                 │                                  │                                                      └── udf: _stmt_raise_4 [as="_stmt_raise_4":8]
+                │                                  │                                                           ├── tail-call
                 │                                  │                                                           ├── args
                 │                                  │                                                           │    └── variable: x:4
                 │                                  │                                                           ├── params: x:5
@@ -590,6 +602,7 @@ call
                 │                                                                     │    └── tuple
                 │                                                                     └── projections
                 │                                                                          └── udf: _stmt_raise_4 [as="_stmt_raise_4":8]
+                │                                                                               ├── tail-call
                 │                                                                               ├── args
                 │                                                                               │    └── variable: x:4
                 │                                                                               ├── params: x:5
