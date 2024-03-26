@@ -39,6 +39,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var activeStreams = struct {
+	syncutil.Mutex
+	m map[*eventStream]*eventStream
+}{m: make(map[*eventStream]*eventStream)}
+
 type eventStream struct {
 	streamID streampb.StreamID
 	execCfg  *sql.ExecutorConfig
@@ -63,6 +68,8 @@ type eventStream struct {
 	seb                streamEventBatcher
 	lastCheckpointTime time.Time
 	lastCheckpointLen  int
+
+	debug streampb.DebugProducerStatus
 }
 
 var _ eval.ValueGenerator = (*eventStream)(nil)
@@ -110,6 +117,8 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithPProfLabel("job", fmt.Sprintf("id=%d", s.streamID)),
 		rangefeed.WithMemoryMonitor(s.mon),
 		rangefeed.WithFrontierSpanVisitor(s.maybeCheckpoint),
+		rangefeed.WithOnFrontierAdvance(s.onFrontier),
+		rangefeed.WithOnCheckpoint(s.onCheckpoint),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
 			s.setErr(err)
 		}),
@@ -147,6 +156,10 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	if err := s.acc.Grow(ctx, s.spec.Config.BatchByteSize); err != nil {
 		return errors.Wrapf(err, "failed to allocated %d bytes from monitor", s.spec.Config.BatchByteSize)
 	}
+
+	activeStreams.Lock()
+	activeStreams.m[s] = s
+	activeStreams.Unlock()
 	return nil
 }
 
@@ -180,6 +193,10 @@ func (s *eventStream) Values() (tree.Datums, error) {
 
 // Close implements eval.ValueGenerator interface.
 func (s *eventStream) Close(ctx context.Context) {
+	activeStreams.Lock()
+	defer activeStreams.Unlock()
+	delete(activeStreams.m, s)
+
 	if s.rf != nil {
 		s.rf.Close()
 	}
@@ -201,6 +218,16 @@ func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {
 	}
 	s.seb.addKV(roachpb.KeyValue{Key: value.Key, Value: value.Value})
 	s.setErr(s.maybeFlushBatch(ctx))
+}
+
+func (s *eventStream) onCheckpoint(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
+	s.debug.RF.Checkpoints.Add(1)
+}
+
+func (s *eventStream) onFrontier(ctx context.Context, timestamp hlc.Timestamp) {
+	s.debug.RF.Advances.Add(1)
+	s.debug.RF.LastAdvanceMicros.Store(timeutil.Now().UnixMicro())
+	s.debug.RF.ResolvedMicros.Store(timestamp.GoTime().UnixMicro())
 }
 
 func (s *eventStream) onSSTable(
@@ -247,6 +274,10 @@ func (s *eventStream) sendCheckpoint(ctx context.Context, frontier rangefeed.Vis
 	}
 	// set the local time for pacing.
 	s.lastCheckpointTime = timeutil.Now()
+
+	s.debug.Flushes.Checkpoints.Add(1)
+	s.debug.LastCheckpoint.Micros.Store(s.lastCheckpointTime.UnixMicro())
+	s.debug.LastCheckpoint.Spans.Store(spans)
 }
 
 func (s *eventStream) maybeFlushBatch(ctx context.Context) error {
@@ -260,6 +291,7 @@ func (s *eventStream) flushBatch(ctx context.Context) error {
 	if s.seb.size == 0 {
 		return nil
 	}
+	s.debug.Flushes.Batches.Add(1)
 	defer s.seb.reset()
 	return s.sendFlush(ctx, &streampb.StreamEvent{Batch: &s.seb.batch})
 }
@@ -391,6 +423,12 @@ func (s *eventStream) validateProducerJobAndSpec(ctx context.Context) (roachpb.T
 		}
 	}
 	return sourceTenantID, nil
+}
+
+func (s *eventStream) DebugGetProducerStatus() *streampb.DebugProducerStatus {
+	s.debug.StreamID = s.streamID
+	s.debug.Spec = s.spec
+	return &s.debug
 }
 
 const defaultBatchSize = 1 << 20
