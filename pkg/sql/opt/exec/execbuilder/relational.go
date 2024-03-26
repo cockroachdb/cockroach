@@ -3390,10 +3390,10 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		udf.Def.CalledOnNullInput,
 		udf.Def.MultiColDataSource,
 		udf.Def.SetReturning,
-		udf.TailCall,
-		true, /* procedure */
-		nil,  /* blockState */
-		nil,  /* cursorDeclaration */
+		false, /* tailCall */
+		true,  /* procedure */
+		nil,   /* blockState */
+		nil,   /* cursorDeclaration */
 	)
 
 	var ep execPlan
