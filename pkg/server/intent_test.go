@@ -32,6 +32,11 @@ import (
 )
 
 // TODO(benesch): move this test to somewhere more specific than package server.
+// TODO(arul): consider deleting this test in its entirety. It's quite old and
+// testing too many things. It'll prove cumbersome when we precisely track
+// locks acquired by scan requests and only perform point intent resolution for
+// those keys in the future (instead of performing ranged intent resolution
+// on the request's span).
 func TestIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -147,8 +152,9 @@ func TestIntentResolution(t *testing.T) {
 					local := rnd.Intn(2) == 0
 					log.Infof(context.Background(), "%d: [%s,%s): local: %t", i, kr[0], kr[1], local)
 					if local {
-						b.DelRange(kr[0], kr[1], false /* returnKeys */)
-					} else if _, err := txn.DelRange(ctx, kr[0], kr[1], false /* returnKeys */); err != nil {
+						b.ScanForUpdate(kr[0], kr[1], kvpb.BestEffort)
+					} else if _, err := txn.ScanForUpdate(
+						ctx, kr[0], kr[1], 0 /* maxRows */, kvpb.BestEffort); err != nil {
 						return err
 					}
 				}

@@ -51,6 +51,7 @@ func RegisterTests(r registry.Registry) {
 	registerDisaggRebalance(r)
 	registerDiskFull(r)
 	registerDiskStalledDetection(r)
+	registerDiskStalledWALFailover(r)
 	registerDjango(r)
 	registerDrain(r)
 	registerDrop(r)
