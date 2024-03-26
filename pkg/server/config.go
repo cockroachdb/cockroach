@@ -861,7 +861,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		// TODO(jackson): Refactor to either reference count references to the env,
 		// or leave ownership with the caller of Open.
 		storeEnvs[i] = nil
-		detail(redact.Sprintf("store %d: %+v", i, eng.Properties()))
+		detail(redact.Sprintf("store %d: %s", i, eng.Properties()))
 		engines = append(engines, eng)
 	}
 
