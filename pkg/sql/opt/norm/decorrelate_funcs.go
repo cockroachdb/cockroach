@@ -65,9 +65,12 @@ func (c *CustomFuncs) deriveHasUnhoistableExpr(expr opt.Expr) bool {
 		// cannot be reordered with other expressions.
 		return true
 	case *memo.UDFCallExpr:
-		if t.TailCall {
-			// A routine with the "tail-call" property cannot be reordered with other
-			// expressions, since it may then no longer be in tail-call position.
+		if t.Def.IsRecursive {
+			// Hoisting a recursive routine call could move it out of tail-call
+			// position, forcing inefficient nested execution.
+			//
+			// TODO(#119956): consider relaxing this for routines which aren't already
+			// in tail-call position.
 			return true
 		}
 	}
