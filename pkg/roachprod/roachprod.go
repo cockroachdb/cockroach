@@ -442,15 +442,61 @@ func SQL(
 	if len(c.Nodes) == 1 {
 		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, cmdArray)
 	}
+
 	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
 	if err != nil {
 		return err
 	}
 
-	for _, r := range results {
-		l.Printf("node %d:\n%s", r.Node, r.CombinedOut)
+	for i, r := range results {
+		printSQLResult(l, i, r, cmdArray)
 	}
 	return nil
+}
+
+// printSQLResult does a best-effort attempt to print single-result-row-per-node
+// result-sets gathered from many nodes as one-line-per-node instead of header
+// separated n-line blocks, to improve the overall readability, falling back to
+// normal header-plus-response-block per node otherwise.
+func printSQLResult(l *logger.Logger, i int, r *install.RunResultDetails, args []string) {
+	tableFormatted := false
+	for i, c := range args {
+		if c == "--format=table" || c == "--format" && len(args) > i+1 && args[i+1] == "table" {
+			tableFormatted = true
+			break
+		}
+	}
+
+	singleResultLen, resultLine := 3, 1 // 3 is header, result, empty-trailing.
+	if tableFormatted {
+		// table output adds separator above the result, and a trailing row count.
+		singleResultLen, resultLine = 5, 2
+	}
+	// If we got a header line and zero or one result lines, we can print the
+	// result line as one-line-per-node, rather than a header per node and then
+	// its n result lines, to make the aggregate output more readable. We can
+	// detect this by splitting on newline into only as many lines as we expect,
+	// and seeing if the final piece is empty or has the rest of >1 results in it.
+	lines := strings.SplitN(r.CombinedOut, "\n", singleResultLen)
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		if i == 0 { // Print the header line of the results once.
+			fmt.Printf("    %s\n", lines[0])
+			if tableFormatted {
+				fmt.Printf("    %s\n", lines[1])
+			}
+		}
+		// Print the result line if there is one.
+		if len(lines) > resultLine {
+			fmt.Printf("%2d: %s\n", r.Node, lines[resultLine])
+			return
+		}
+		// No result from this node, so print a blank for its ID.
+		fmt.Printf("%2d:\n", r.Node)
+		return
+	}
+	// Just print the roachprod header identifying the node, then the node's whole
+	// response, including its internal header row.
+	l.Printf("node %d:\n%s", r.Node, r.CombinedOut)
 }
 
 // IP gets the ip addresses of the nodes in a cluster.

@@ -504,7 +504,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				if populatedColumns.Contains(colOrdinal) {
 					continue
 				}
-				colName := strings.Replace(fmt.Sprintf("........pg.dropped.%-8d", colOrdinal), " ", ".", -1)
+				colName := fmt.Sprintf("........pg.dropped.%d........", colOrdinal)
 				if err := addRow(
 					tableID,                             // attrelid
 					tree.NewDName(colName),              // attname

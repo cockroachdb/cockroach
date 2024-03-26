@@ -11,18 +11,24 @@ export ROACHPROD_DNS="drt.crdb.io"
 
 case $1 in
   "start")
+    if [[ "$*" != *"--restart"* ]]; then
+      # implied for long-lived DRT clusters; avoid on init w/ --restart=false.
+      shift
+      set -- start "--restart" "$@"
+    fi
     if [[ "$*" != *"--secure"* ]]; then
-      echo "--secure is implied when starting DRT clusters, adding it"
-      set -- "$@" "--secure"
+      shift
+      set -- start "--secure" "$@"
     fi
     if [[ "$*" != *"--sql-port 26257"* ]]; then
-     echo "--sql-port 26257 is implied when starting DRT clusters, adding it"
-      set -- "$@" "--sql-port" "26257"
+      shift
+      set -- start "--sql-port" "26257" "$@"
     fi
     ;;
   "sql")
     if [[ "$*" != *"--secure"* ]]; then
-      set -- "$@" "--secure"
+      shift
+      set -- sql --secure "$@"
     fi
     ;;
   "dns")
