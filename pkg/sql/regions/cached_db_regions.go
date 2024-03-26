@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // CachedDatabaseRegions tracks the regions that are part of
@@ -27,14 +28,14 @@ type CachedDatabaseRegions struct {
 	dbRegionEnumDesc catalog.TypeDescriptor
 }
 
-// NewCachedDatabaseRegions creates a new region cache by leasing
-// the underlying descriptors for the system database and region enum.
-func NewCachedDatabaseRegions(
-	ctx context.Context, db *kv.DB, lm *lease.Manager,
+// NewCachedDatabaseRegionsAt creates a new region cache by leasing
+// the underlying descriptors for the system database and region enum,
+// with descriptors fetched at a specific timestamp.
+func NewCachedDatabaseRegionsAt(
+	ctx context.Context, _ *kv.DB, lm *lease.Manager, at hlc.Timestamp,
 ) (cdr *CachedDatabaseRegions, err error) {
 	cdr = &CachedDatabaseRegions{}
-	now := db.Clock().Now()
-	desc, err := lm.Acquire(ctx, now, keys.SystemDatabaseID)
+	desc, err := lm.Acquire(ctx, at, keys.SystemDatabaseID)
 	if err != nil {
 		return nil, err
 	}
@@ -48,13 +49,21 @@ func NewCachedDatabaseRegions(
 		return nil, err
 	}
 
-	desc, err = lm.Acquire(ctx, now, enumID)
+	desc, err = lm.Acquire(ctx, at, enumID)
 	if err != nil {
 		return nil, err
 	}
 	defer desc.Release(ctx)
 	cdr.dbRegionEnumDesc = desc.Underlying().(catalog.EnumTypeDescriptor)
 	return cdr, nil
+}
+
+// NewCachedDatabaseRegions creates a new region cache by leasing
+// the underlying descriptors for the system database and region enum.
+func NewCachedDatabaseRegions(
+	ctx context.Context, db *kv.DB, lm *lease.Manager,
+) (*CachedDatabaseRegions, error) {
+	return NewCachedDatabaseRegionsAt(ctx, db, lm, db.Clock().Now())
 }
 
 // IsMultiRegion returns if the system database is multi-region.
