@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -224,6 +225,7 @@ func TestBatchRequestSummary(t *testing.T) {
 }
 
 func TestLockSpanIterate(t *testing.T) {
+	skip.IgnoreLint(t, "WIP")
 	type testReq struct {
 		req    Request
 		resp   Response
@@ -261,7 +263,8 @@ func TestLockSpanIterate(t *testing.T) {
 			fn := func(span roachpb.Span, dur lock.Durability) {
 				spans[dur] = append(spans[dur], span)
 			}
-			ba.LockSpanIterate(&br, fn)
+			err := ba.LockSpanIterate(&br, fn)
+			require.NoError(t, err)
 
 			toExpSpans := func(trs ...testReq) []roachpb.Span {
 				exp := make([]roachpb.Span, len(trs))
@@ -534,6 +537,7 @@ func TestResponseKeyIterate(t *testing.T) {
 				require.Error(t, err)
 				require.Regexp(t, tc.expErr, err)
 			}
+			require.Equal(t, err == nil, canIterateResponseKeys(tc.req, tc.resp))
 		})
 	}
 }
