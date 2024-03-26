@@ -151,7 +151,7 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 		}
 		require.Equal(t, expLocks, etReq.LockSpans)
 		expInFlight := []roachpb.SequencedWrite{
-			{Key: keyA, Sequence: 1},
+			{Key: keyA, Sequence: 1, Strength: lock.Intent},
 		}
 		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
@@ -302,11 +302,11 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		etReq := ba.Requests[5].GetEndTxn()
 		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.LockSpans)
 		expInFlight := []roachpb.SequencedWrite{
-			{Key: keyA, Sequence: 2},
-			{Key: keyB, Sequence: 3},
-			{Key: keyC, Sequence: 4},
-			{Key: keyC, Sequence: 5},
-			{Key: keyD, Sequence: 6},
+			{Key: keyA, Sequence: 2, Strength: lock.Intent},
+			{Key: keyB, Sequence: 3, Strength: lock.Intent},
+			{Key: keyC, Sequence: 4, Strength: lock.Intent},
+			{Key: keyC, Sequence: 5, Strength: lock.Intent},
+			{Key: keyD, Sequence: 6, Strength: lock.Intent},
 		}
 		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
@@ -497,7 +497,7 @@ func TestTxnPipelinerReads(t *testing.T) {
 	require.NotNil(t, br)
 
 	// Add a key into the in-flight writes set.
-	tp.ifWrites.insert(keyA, 10)
+	tp.ifWrites.insert(keyA, 10, lock.Intent)
 	require.Equal(t, 1, tp.ifWrites.len())
 
 	// Read-only with conflicting in-flight write.
@@ -574,11 +574,11 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 	// request. Send the batch again and assert that the Put chains onto the
 	// first in-flight write and the DeleteRange chains onto the second and
 	// third in-flight write.
-	tp.ifWrites.insert(roachpb.Key("a"), 10)
-	tp.ifWrites.insert(roachpb.Key("b"), 11)
-	tp.ifWrites.insert(roachpb.Key("c"), 12)
-	tp.ifWrites.insert(roachpb.Key("d"), 13)
-	tp.ifWrites.insert(roachpb.Key("e"), 13)
+	tp.ifWrites.insert(roachpb.Key("a"), 10, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("b"), 11, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("c"), 12, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("d"), 13, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("e"), 13, lock.Intent)
 	require.Equal(t, 5, tp.ifWrites.len())
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -858,7 +858,10 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 
 		etReq := ba.Requests[0].GetEndTxn()
 		require.Len(t, etReq.LockSpans, 0)
-		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
+		expInFlight := []roachpb.SequencedWrite{
+			{Key: keyA, Sequence: 1, Strength: lock.Intent},
+		}
+		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -886,7 +889,10 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 
 		etReq := ba.Requests[0].GetEndTxn()
 		require.Len(t, etReq.LockSpans, 0)
-		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
+		expInFlight := []roachpb.SequencedWrite{
+			{Key: keyA, Sequence: 1, Strength: lock.Intent},
+		}
+		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -908,8 +914,8 @@ func TestTxnPipelinerEpochIncrement(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	tp, _ := makeMockTxnPipeliner(nil /* iter */)
 
-	tp.ifWrites.insert(roachpb.Key("b"), 10)
-	tp.ifWrites.insert(roachpb.Key("d"), 11)
+	tp.ifWrites.insert(roachpb.Key("b"), 10, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("d"), 11, lock.Intent)
 	require.Equal(t, 2, tp.ifWrites.len())
 	require.Equal(t, 0, len(tp.lockFootprint.asSlice()))
 
@@ -939,10 +945,10 @@ func TestTxnPipelinerIntentMissingError(t *testing.T) {
 
 	// Insert in-flight writes into the in-flight write set so that each request
 	// will need to chain on with a QueryIntent.
-	tp.ifWrites.insert(keyA, 1)
-	tp.ifWrites.insert(keyB, 2)
-	tp.ifWrites.insert(keyC, 3)
-	tp.ifWrites.insert(keyD, 4)
+	tp.ifWrites.insert(keyA, 1, lock.Intent)
+	tp.ifWrites.insert(keyB, 2, lock.Intent)
+	tp.ifWrites.insert(keyC, 3, lock.Intent)
+	tp.ifWrites.insert(keyD, 4, lock.Intent)
 
 	for errIdx, resErrIdx := range map[int32]int32{
 		0: 0, // intent on key "a" missing
@@ -1045,9 +1051,9 @@ func TestTxnPipelinerDeleteRangeRequests(t *testing.T) {
 		etReq := ba.Requests[4].GetEndTxn()
 		require.Equal(t, []roachpb.Span{{Key: keyC, EndKey: keyE}}, etReq.LockSpans)
 		expInFlight := []roachpb.SequencedWrite{
-			{Key: keyA, Sequence: 7},
-			{Key: keyB, Sequence: 7},
-			{Key: keyD, Sequence: 7},
+			{Key: keyA, Sequence: 7, Strength: lock.Intent},
+			{Key: keyB, Sequence: 7, Strength: lock.Intent},
+			{Key: keyD, Sequence: 7, Strength: lock.Intent},
 		}
 		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
@@ -1181,7 +1187,10 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 
 		etReq := ba.Requests[1].GetEndTxn()
 		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.LockSpans)
-		require.Equal(t, []roachpb.SequencedWrite{{Key: keyC, Sequence: 3}}, etReq.InFlightWrites)
+		expInFlight := []roachpb.SequencedWrite{
+			{Key: keyC, Sequence: 3, Strength: lock.Intent},
+		}
+		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1720,17 +1729,17 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	initialSavepoint := savepoint{}
 	tp.createSavepointLocked(ctx, &initialSavepoint)
 
-	tp.ifWrites.insert(roachpb.Key("a"), 10)
-	tp.ifWrites.insert(roachpb.Key("b"), 11)
-	tp.ifWrites.insert(roachpb.Key("c"), 12)
+	tp.ifWrites.insert(roachpb.Key("a"), 10, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("b"), 11, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("c"), 12, lock.Intent)
 	require.Equal(t, 3, tp.ifWrites.len())
 
 	s := savepoint{seqNum: enginepb.TxnSeq(12), active: true}
 	tp.createSavepointLocked(ctx, &s)
 
 	// Some more writes after the savepoint.
-	tp.ifWrites.insert(roachpb.Key("c"), 13)
-	tp.ifWrites.insert(roachpb.Key("d"), 14)
+	tp.ifWrites.insert(roachpb.Key("c"), 13, lock.Intent)
+	tp.ifWrites.insert(roachpb.Key("d"), 14, lock.Intent)
 	require.Equal(t, 5, tp.ifWrites.len())
 	require.Empty(t, tp.lockFootprint.asSlice())
 
@@ -1773,8 +1782,8 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	})
 	require.Equal(t,
 		[]inFlightWrite{
-			{SequencedWrite: roachpb.SequencedWrite{Key: roachpb.Key("b"), Sequence: 11}},
-			{SequencedWrite: roachpb.SequencedWrite{Key: roachpb.Key("c"), Sequence: 12}},
+			{SequencedWrite: roachpb.SequencedWrite{Key: roachpb.Key("b"), Sequence: 11, Strength: lock.Intent}},
+			{SequencedWrite: roachpb.SequencedWrite{Key: roachpb.Key("c"), Sequence: 12, Strength: lock.Intent}},
 		},
 		ifWrites)
 
@@ -1878,7 +1887,7 @@ func TestTxnPipelinerCondenseLockSpans2(t *testing.T) {
 			}
 
 			for _, k := range tc.ifWrites {
-				tp.ifWrites.insert(roachpb.Key(k), 1)
+				tp.ifWrites.insert(roachpb.Key(k), 1, lock.Intent)
 			}
 
 			txn := makeTxnProto()
