@@ -1268,7 +1268,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	{
 		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
-		store.SetReplicateQueueActive(true)
+		store.TestingSetReplicateQueueActive(true)
 		trace, processErr, err := store.Enqueue(
 			ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 		)
@@ -1289,14 +1289,14 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 			return nil
 		})
 		// It has done everything it needs to do now, disable before the next test section.
-		store.SetReplicateQueueActive(false)
+		store.TestingSetReplicateQueueActive(false)
 	}
 
 	// Create a VOTER_OUTGOING, i.e. a joint configuration.
 	ltk.withStopAfterJointConfig(func() {
 		desc := tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(2))
 		require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
-		store.SetReplicateQueueActive(true)
+		store.TestingSetReplicateQueueActive(true)
 		trace, processErr, err := store.Enqueue(
 			ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 		)
@@ -1312,7 +1312,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 			}
 			return nil
 		})
-		store.SetReplicateQueueActive(false)
+		store.TestingSetReplicateQueueActive(false)
 	})
 }
 

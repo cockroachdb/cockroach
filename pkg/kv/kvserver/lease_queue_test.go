@@ -412,7 +412,7 @@ func TestLeaseQueueProactiveEnqueueOnPreferences(t *testing.T) {
 func toggleLeaseQueues(tc *testcluster.TestCluster, active bool) {
 	for _, s := range tc.Servers {
 		_ = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			store.SetLeaseQueueActive(active)
+			store.TestingSetLeaseQueueActive(active)
 			return nil
 		})
 	}
