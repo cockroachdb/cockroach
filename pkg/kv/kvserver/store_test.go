@@ -304,8 +304,6 @@ func createTestStore(
 ) (*Store, *timeutil.ManualTime) {
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
-	RejectLeaseOnLeaderUnknown.Override(ctx, &cfg.Settings.SV, false)
-
 	store := createTestStoreWithConfig(ctx, t, stopper, opts, &cfg)
 	return store, manual
 }
