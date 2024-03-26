@@ -414,6 +414,12 @@ func TestResponseKeyIterate(t *testing.T) {
 			expKeys: []roachpb.Key{keyA},
 		},
 		{
+			name:   "get, no response",
+			req:    &GetRequest{RequestHeader: pointHeader},
+			resp:   nil,
+			expErr: "cannot iterate over response keys of Get request with nil response",
+		},
+		{
 			name:    "scan, missing",
 			req:     &ScanRequest{RequestHeader: rangeHeader, ScanFormat: KEY_VALUES},
 			resp:    &ScanResponse{},
