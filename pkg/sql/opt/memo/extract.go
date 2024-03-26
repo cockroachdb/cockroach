@@ -450,3 +450,76 @@ func ExtractValueForConstColumn(
 	}
 	return nil
 }
+
+// ExtractTailCalls traverses of the given expression tree, searching for
+// routines that are in tail-call position relative to the (assumed) calling
+// routine. ExtractTailCalls assumes that the given expression is the last body
+// statement of the calling routine, and that the map is already initialized.
+//
+// In order for a nested routine to qualify as a tail-call, the following
+// condition must be true: If the nested routine is evaluated, then the calling
+// routine must return the result of the nested routine without further
+// modification. This means even simple expressions like CAST are not allowed.
+//
+// ExtractTailCalls is best-effort, but is sufficient to identify the tail-calls
+// produced among PL/pgSQL sub-routines.
+//
+// NOTE: ExtractTailCalls does not take into account whether the calling routine
+// has an exception handler. The execution engine must take this into account
+// before applying tail-call optimization.
+func ExtractTailCalls(expr opt.Expr, tailCalls map[*UDFCallExpr]struct{}) {
+	switch t := expr.(type) {
+	case *ProjectExpr:
+		// * The cardinality cannot be greater than one: Otherwise, a nested routine
+		// will be evaluated more than once, and all evaluations other than the last
+		// are not tail-calls.
+		//
+		// * There must be a single projection: the execution does not provide
+		// guarantees about order of evaluation for projections (though it may in
+		// the future).
+		//
+		// * The passthrough set must be empty: Otherwise, the result of the nested
+		// routine cannot directly be used as the result of the calling routine.
+		//
+		// * No routine in the input of the project can be a tail-call, since the
+		// Project will perform work after the nested routine evaluates.
+		if t.Relational().Cardinality.IsZeroOrOne() &&
+			len(t.Projections) == 1 && t.Passthrough.Empty() {
+			ExtractTailCalls(t.Projections[0].Element, tailCalls)
+		}
+
+	case *ValuesExpr:
+		// Allow only the case where the Values expression contains only a single
+		// expression. Note: it may be possible to make an explicit guarantee that
+		// expressions in a row are evaluated in order, in which case it would be
+		// sufficient to ensure that the nested routine is in the last column.
+		if len(t.Rows) == 1 || len(t.Rows[0].(*TupleExpr).Elems) == 1 {
+			ExtractTailCalls(t.Rows[0].(*TupleExpr).Elems[0], tailCalls)
+		}
+
+	case *SubqueryExpr:
+		// A subquery within a routine is lazily evaluated and passes through a
+		// single input row. Similar to Project, we require that the input have only
+		// one row and one column, since otherwise work may happen after the nested
+		// routine evaluates.
+		if t.Input.Relational().Cardinality.IsZeroOrOne() &&
+			t.Input.Relational().OutputCols.Len() == 1 {
+			ExtractTailCalls(t.Input, tailCalls)
+		}
+
+	case *CaseExpr:
+		// Case expressions guarantee that exactly one branch is evaluated, and pass
+		// through the result of the chosen branch. Therefore, a routine within a
+		// CASE branch can be a tail-call.
+		for i := range t.Whens {
+			ExtractTailCalls(t.Whens[i].(*WhenExpr).Value, tailCalls)
+		}
+		ExtractTailCalls(t.OrElse, tailCalls)
+
+	case *UDFCallExpr:
+		// If we reached a scalar UDFCall expression, it is a tail call.
+		if !t.Def.SetReturning {
+			tailCalls[t] = struct{}{}
+		}
+	}
+}
