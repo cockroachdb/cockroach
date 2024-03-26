@@ -25,3 +25,31 @@ query II
 SELECT * FROM f() AS g(x INT, y INT);
 ----
 -4  4
+
+# Case with an exception handler on the parent routine. This prevents TCO,
+# since executing the child routine in the parent's context would lose track
+# of the exception handler.
+statement ok
+DROP FUNCTION f;
+DROP FUNCTION f_nested;
+
+statement ok
+CREATE FUNCTION f_nested() RETURNS INT AS $$
+  BEGIN
+    RETURN 1//0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN f_nested();
+  EXCEPTION WHEN division_by_zero THEN
+    RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+-1

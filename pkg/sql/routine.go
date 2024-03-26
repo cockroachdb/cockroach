@@ -114,9 +114,10 @@ func (p *planner) EvalRoutineExpr(
 		return expr.CachedResult, nil
 	}
 
-	if expr.TailCall && !expr.Generator && p.EvalContext().RoutineSender != nil {
+	if tailCallOptimizationEnabled && expr.TailCall && !expr.Generator {
 		// This is a nested routine in tail-call position.
-		if tailCallOptimizationEnabled {
+		sender := p.EvalContext().RoutineSender
+		if sender != nil && sender.CanOptimizeTailCall(expr) {
 			// Tail-call optimizations are enabled. Send the information needed to
 			// evaluate this routine to the parent routine, then return. It is safe to
 			// return NULL here because the parent is guaranteed not to perform any
@@ -484,8 +485,27 @@ var tailCallOptimizationEnabled = util.ConstantWithMetamorphicTestBool(
 	true,
 )
 
-func (g *routineGenerator) SendDeferredRoutine(routine *tree.RoutineExpr, args tree.Datums) {
-	g.deferredRoutine.expr = routine
+func (g *routineGenerator) CanOptimizeTailCall(nestedRoutine *tree.RoutineExpr) bool {
+	// Tail-call optimization is allowed only if the current routine will not
+	// perform any work after its body statements finish executing.
+	//
+	// Note: cursors are opened after the first body statement, and there is
+	// always more than one body statement if a cursor is opened. This is enforced
+	// during exec-building. For this reason, we only have to check for an
+	// exception handler.
+	if g.expr.BlockState != nil && nestedRoutine.BlockState != nil {
+		// If the current routine has an exception handler (which is the case when
+		// BlockState is non-nil), the nested routine must either be part of the
+		// same PL/pgSQL block, or a child block. Otherwise, enabling TCO could
+		// cause execution to skip the exception handler.
+		childBlock := nestedRoutine.BlockState
+		return childBlock == g.expr.BlockState || childBlock.Parent == g.expr.BlockState
+	}
+	return false
+}
+
+func (g *routineGenerator) SendDeferredRoutine(nestedRoutine *tree.RoutineExpr, args tree.Datums) {
+	g.deferredRoutine.expr = nestedRoutine
 	g.deferredRoutine.args = args
 }
 
