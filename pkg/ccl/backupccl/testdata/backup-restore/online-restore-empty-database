@@ -1,0 +1,25 @@
+# This test ensures that online restore works on an empty database.
+
+reset test-nodelocal
+----
+
+new-cluster name=s1 disable-tenant
+----
+
+
+exec-sql
+CREATE DATABASE d;
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster/';
+----
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/cluster/' with EXPERIMENTAL DEFERRED COPY, new_db_name='d2';
+----
+
+query-sql retry
+SELECT count(*) FROM [SHOW JOBS] WHERE job_type='RESTORE' and status='succeeded';
+----
+2
