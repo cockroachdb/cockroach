@@ -59,6 +59,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/fetchpb",
+        "//pkg/storage/disk",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/storage/pebbleiter",

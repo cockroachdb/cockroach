@@ -50,7 +50,7 @@ import (
 //	12  I/Os currently in progress
 //	13  time spent doing I/Os (ms)
 //	14  weighted time spent doing I/Os (ms)
-func parseDiskStats(contents []byte, disks []*monitoredDisk) error {
+func parseDiskStats(contents []byte, disks []*monitoredDisk, measuredAt time.Time) error {
 	for lineNum := 0; len(contents) > 0; lineNum++ {
 		lineBytes, rest := splitLine(contents)
 		line := unsafe.String(&lineBytes[0], len(lineBytes))
@@ -153,7 +153,7 @@ func parseDiskStats(contents []byte, disks []*monitoredDisk) error {
 		} else if ok {
 			stats.FlushesDuration = time.Duration(millis) * time.Millisecond
 		}
-		disks[diskIdx].recordStats(stats)
+		disks[diskIdx].recordStats(measuredAt, stats)
 	}
 	return nil
 }
