@@ -422,15 +422,28 @@ func newReplicaCircuitBreaker(
 // replicaCircuitBreakerToken carries request-scoped state between Track() and
 // done().
 type replicaCircuitBreakerToken struct {
-	r      *ReplicaCircuitBreaker // nil if circuit breakers were disabled
-	ctx    context.Context
-	ba     *kvpb.BatchRequest
-	cancel context.CancelCauseFunc
+	// r is the circuit breaker reference. nil if circuit breakers were disabled
+	// when we began tracking the request.
+	r *ReplicaCircuitBreaker
+
+	// ctx is the client's original context, to determine if it has gone away.
+	ctx context.Context
+
+	// cancelCtx is the child context used to cancel the request. nil if
+	// cancellation is disabled.
+	cancelCtx context.Context
+
+	// ba is the batch request being tracked.
+	ba *kvpb.BatchRequest
 }
 
-// Done records the result of the request and untracks it.
-func (t replicaCircuitBreakerToken) Done(br *kvpb.BatchResponse, err error, nowNanos int64) {
-	t.r.done(t.ctx, t.ba, br, err, nowNanos, t.cancel)
+// Done records the result of the request and untracks it. If the request was
+// cancelled by the circuit breaker, an appropriate context cancellation error
+// is returned.
+func (t replicaCircuitBreakerToken) Done(
+	br *kvpb.BatchResponse, sendErr error, nowNanos int64,
+) error {
+	return t.r.done(t.ctx, t.cancelCtx, t.ba, br, sendErr, nowNanos)
 }
 
 // id returns a string identifier for the replica.
@@ -546,10 +559,13 @@ func (r *ReplicaCircuitBreaker) Track(
 			CircuitBreakerProbeTimeout.Get(&r.d.settings.SV).Nanoseconds()
 
 		if !hasTimeout {
-			sendCtx, token.cancel = context.WithCancelCause(ctx)
+			var cancel context.CancelCauseFunc
+			sendCtx, cancel = context.WithCancelCause(ctx)
+			token.cancelCtx = sendCtx
+
 			reqKind := cbRequestKindFromBatch(ba)
 			r.mu.Lock()
-			r.mu.cancelFns[reqKind][ba] = token.cancel
+			r.mu.cancelFns[reqKind][ba] = cancel
 			r.mu.Unlock()
 		}
 	}
@@ -559,32 +575,50 @@ func (r *ReplicaCircuitBreaker) Track(
 
 // done records the result of a tracked request and untracks it. It is called
 // via replicaCircuitBreakerToken.Done().
+//
+// If the request was cancelled by the circuit breaker, an appropriate context
+// cancellation error is returned.
 func (r *ReplicaCircuitBreaker) done(
 	ctx context.Context,
+	cancelCtx context.Context,
 	ba *kvpb.BatchRequest,
 	br *kvpb.BatchResponse,
-	err error,
+	sendErr error,
 	nowNanos int64,
-	cancel context.CancelCauseFunc,
-) {
+) error {
 	if r == nil {
-		return // circuit breakers disabled when we began tracking the request
+		return nil // circuit breakers disabled when we began tracking the request
 	}
 
-	// Untrack the request, and clean up the cancel function.
+	// Untrack the request.
 	if inflightReqs := r.inflightReqs.Add(-1); inflightReqs < 0 {
 		log.Fatalf(ctx, "inflightReqs %d < 0", inflightReqs)
 	}
 
-	if cancel != nil {
+	// Detect if the circuit breaker cancelled the request, and prepare a
+	// cancellation error to return to the caller.
+	var cancelErr error
+	if cancelCtx != nil {
+		if sendErr != nil || br.Error != nil {
+			if cancelErr = cancelCtx.Err(); cancelErr != nil && ctx.Err() == nil { // check ctx last
+				log.VErrEventf(ctx, 2,
+					"request cancelled by tripped circuit breaker for %s: %s", r.id(), cancelErr)
+				cancelErr = errors.Wrapf(cancelErr, "%s is unavailable (circuit breaker tripped)", r.id())
+			}
+		}
+
+		// Clean up the cancel function.
 		reqKind := cbRequestKindFromBatch(ba)
 		r.mu.Lock()
+		cancel := r.mu.cancelFns[reqKind][ba]
 		delete(r.mu.cancelFns[reqKind], ba) // nolint:deferunlockcheck
 		r.mu.Unlock()
-		cancel(nil)
+		if cancel != nil {
+			cancel(nil)
+		}
 	}
 
-	// If this was a local send error, i.e. err != nil, we rely on RPC circuit
+	// If this was a local send error, i.e. sendErr != nil, we rely on RPC circuit
 	// breakers to fail fast. There is no need for us to launch a probe as well.
 	// This includes the case where either the remote or local node has been
 	// decommissioned.
@@ -595,8 +629,8 @@ func (r *ReplicaCircuitBreaker) done(
 	// can't know if this was because of a client timeout or not, so we assume
 	// there may be a problem with the replica. We will typically see recent
 	// successful responses too if that isn't the case.
-	if err != nil && ctx.Err() == nil {
-		return
+	if sendErr != nil && ctx.Err() == nil {
+		return cancelErr
 	}
 
 	// If we got a response from the replica (even a br.Error), it isn't stalled.
@@ -605,13 +639,14 @@ func (r *ReplicaCircuitBreaker) done(
 	//
 	// NB: we don't reset this to 0 when inflightReqs==0 to avoid unnecessary
 	// synchronization.
-	if err == nil {
+	if sendErr == nil {
 		r.stallSince.Store(nowNanos)
 	}
 
-	// Handle error responses. To record the response as an error, err is set
-	// non-nil. Otherwise, the response is recorded as a success.
-	if err == nil && br.Error != nil {
+	// Record error responses, by setting err non-nil. Otherwise, the response is
+	// recorded as a success.
+	err := sendErr
+	if sendErr == nil && br.Error != nil {
 		switch tErr := br.Error.GetDetail().(type) {
 		case *kvpb.NotLeaseHolderError:
 			// Consider NLHE a success if it contains a lease record, as the replica
@@ -642,7 +677,6 @@ func (r *ReplicaCircuitBreaker) done(
 		}
 	}
 
-	// Track errors.
 	if err == nil {
 		// On success, reset the error tracking.
 		r.errorSince.Store(0)
@@ -654,6 +688,9 @@ func (r *ReplicaCircuitBreaker) done(
 		// The replica has been failing for the past probe threshold, probe it.
 		r.breaker.Probe()
 	}
+
+	// Return the client cancellation error (if any).
+	return cancelErr
 }
 
 // launchProbe spawns an async replica probe that sends LeaseInfo requests to
