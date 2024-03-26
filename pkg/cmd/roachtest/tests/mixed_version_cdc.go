@@ -371,6 +371,14 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 	}
 
 	var ff cdcFeatureFlags
+	rangefeedSchedulerSupported, err := cmvt.rangefeedSchedulerSupported(r, h)
+	if err != nil {
+		return err
+	}
+	if !rangefeedSchedulerSupported {
+		ff.RangeFeedScheduler.v = &featureUnset
+	}
+
 	distributionStrategySupported, err := cmvt.distributionStrategySupported(r, h)
 	if err != nil {
 		return err
@@ -426,17 +434,14 @@ func (cmvt *cdcMixedVersionTester) muxRangeFeedSupported(
 	)
 }
 
+const v232CV = "23.2"
 const v241CV = "24.1"
 
 func (cmvt *cdcMixedVersionTester) rangefeedSchedulerSupported(
-	h *mixedversion.Helper,
-) (bool, option.NodeListOption, error) {
-	// kv.rangefeed.scheduler.enabled only exists in 23.2. In 24.1, it is enabled
-	// unconditionally.
-	return canMixedVersionUseDeletedClusterSetting(h,
-		clusterupgrade.MustParseVersion("v23.2.0"),
-		clusterupgrade.MustParseVersion("v24.1.0-alpha.00000000"),
-	)
+	r *rand.Rand, h *mixedversion.Helper,
+) (bool, error) {
+	// kv.rangefeed.scheduler.enabled only exists since 23.2.
+	return h.ClusterVersionAtLeast(r, v232CV)
 }
 
 func (cmvt *cdcMixedVersionTester) distributionStrategySupported(
@@ -530,14 +535,15 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// Rangefeed scheduler available in 23.2
 	setRangeFeedSchedulerEnabled := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-		supported, gatewayNodes, err := tester.rangefeedSchedulerSupported(h)
+		supported, err := tester.rangefeedSchedulerSupported(r, h)
 		if err != nil {
 			return err
 		}
+		l.Printf("kv.rangefeed.scheduler.enabled=%t", supported)
 		if supported {
 			coin := r.Int()%2 == 0
 			l.PrintfCtx(ctx, "Setting kv.rangefeed.scheduler.enabled=%t", coin)
-			return h.ExecWithGateway(r, gatewayNodes, "SET CLUSTER SETTING kv.rangefeed.scheduler.enabled=$1", coin)
+			return h.Exec(r, "SET CLUSTER SETTING kv.rangefeed.scheduler.enabled=$1", coin)
 		}
 		return nil
 	}

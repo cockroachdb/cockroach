@@ -496,6 +496,7 @@ func (f *enumFeatureFlag) enabled(r enthropy, choose func(enthropy) string) (str
 // cdcFeatureFlags describes various cdc feature flags.
 // zero value cdcFeatureFlags uses metamorphic settings for features.
 type cdcFeatureFlags struct {
+	RangeFeedScheduler   featureFlag
 	SchemaLockTables     featureFlag
 	DistributionStrategy enumFeatureFlag
 }
@@ -2862,6 +2863,16 @@ func (cfc *changefeedCreator) applySettings() error {
 	// kv.rangefeed.enabled is required for changefeeds to run
 	if _, err := cfc.db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
 		return err
+	}
+
+	schedEnabled := cfc.flags.RangeFeedScheduler.enabled(cfc.rng)
+	if schedEnabled != featureUnset {
+		cfc.logger.Printf("Setting kv.rangefeed.scheduler.enabled to %t", schedEnabled == featureEnabled)
+		if _, err := cfc.db.Exec(
+			"SET CLUSTER SETTING kv.rangefeed.scheduler.enabled = $1", schedEnabled == featureEnabled,
+		); err != nil {
+			return err
+		}
 	}
 
 	rangeDistribution, rangeDistributionEnabled := cfc.flags.DistributionStrategy.enabled(cfc.rng,
