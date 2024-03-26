@@ -127,7 +127,7 @@ func (r *Replica) updateTimestampCache(
 		header := req.Header()
 		start, end := header.Key, header.EndKey
 
-		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && kvpb.CanSkipLocked(req) {
+		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && kvpb.CanSkipLocked(req) && resp != nil {
 			if ba.IndexFetchSpec != nil {
 				log.Errorf(ctx, "%v", errors.AssertionFailedf("unexpectedly IndexFetchSpec is set with SKIP LOCKED wait policy"))
 			}
