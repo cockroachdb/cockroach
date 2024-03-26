@@ -670,7 +670,8 @@ type clusterImpl struct {
 	// grafanaTags contains the cluster and test information that grafana will separate
 	// test runs by. This is used by the roachtest grafana API to create appropriately
 	// tagged grafana annotations. If empty, grafana is not available.
-	grafanaTags []string
+	grafanaTags               []string
+	disableGrafanaAnnotations atomic.Bool
 }
 
 // Name returns the cluster name, i.e. something like `teamcity-....`
@@ -2864,9 +2865,18 @@ func (c *clusterImpl) StopGrafana(ctx context.Context, l *logger.Logger, dumpDir
 func (c *clusterImpl) AddGrafanaAnnotation(
 	ctx context.Context, l *logger.Logger, req grafana.AddAnnotationRequest,
 ) error {
-	// If grafanaTags is empty, then grafana is not set up for this cluster.
+	if c.disableGrafanaAnnotations.Load() {
+		return nil
+	}
+
+	// If grafanaTags is empty, then grafana is not set up for this
+	// cluster. We return an annotated error and stop trying to add
+	// annotations in the future. This is to avoid logging the same
+	// error every time the test attempts to add an annotation, which
+	// could add a lot of noise to the logs.
 	if len(c.grafanaTags) == 0 {
-		return errors.New("Grafana is not available for this cluster")
+		c.disableGrafanaAnnotations.Store(true)
+		return errors.New("grafana is not available for this cluster (disabled for the rest of the test)")
 	}
 	// Add grafanaTags so we can filter annotations by test or by cluster.
 	req.Tags = append(req.Tags, c.grafanaTags...)
@@ -2916,6 +2926,12 @@ func (c *clusterImpl) WipeForReuse(
 		}
 		c.localCertsDir = ""
 	}
+
+	// Reset the disableGrafanaAnnotations field so that the warning
+	// about Grafana not being available is always printed at least once
+	// for every test.
+	c.disableGrafanaAnnotations.Store(false)
+
 	// Clear DNS records for the cluster.
 	if err := c.DestroyDNS(ctx, l); err != nil {
 		return err
