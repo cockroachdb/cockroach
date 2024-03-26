@@ -353,7 +353,7 @@ CREATE PROCEDURE sc1.p() LANGUAGE PLpgSQL AS $$ BEGIN SELECT 1; END $$;
 ----
 
 # Make sure the original schema has procedure signatures
-query-sql
+let $defaultdb_sc1_id
 WITH db_id AS (
   SELECT id FROM system.namespace WHERE name = 'defaultdb'
 ),
@@ -365,7 +365,6 @@ schema_id AS (
 )
 SELECT id FROM schema_id;
 ----
-109
 
 query-sql
 WITH to_json AS (
@@ -378,7 +377,7 @@ WITH to_json AS (
       ) AS d
     FROM
       system.descriptor
-    WHERE id = 109
+    WHERE id = $defaultdb_sc1_id
 )
 SELECT d->'schema'->>'functions'::string FROM to_json;
 ----
@@ -396,7 +395,7 @@ exec-sql
 USE db1;
 ----
 
-query-sql
+let $db1_sc1_id
 WITH db_id AS (
   SELECT id FROM system.namespace WHERE name = 'db1'
 ),
@@ -408,7 +407,6 @@ schema_id AS (
 )
 SELECT id FROM schema_id;
 ----
-112
 
 query-sql
 WITH to_json AS (
@@ -421,7 +419,7 @@ WITH to_json AS (
       ) AS d
     FROM
       system.descriptor
-    WHERE id = 112
+    WHERE id = $db1_sc1_id
 )
 SELECT d->'schema'->>'functions'::string FROM to_json;
 ----
