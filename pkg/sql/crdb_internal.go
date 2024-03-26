@@ -91,6 +91,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -221,6 +222,9 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalKVProtectedTS:                      crdbInternalKVProtectedTSTable,
 		catconstants.CrdbInternalKVSessionBasedLeases:               crdbInternalSessionBasedLeases,
 		catconstants.CrdbInternalClusterReplicationResolvedViewID:   crdbInternalClusterReplicationResolvedView,
+		catconstants.CrdbInternalPCRStreamsTableID:                  crdbInternalPCRStreamsTable,
+		catconstants.CrdbInternalPCRStreamSpansTableID:              crdbInternalPCRStreamSpansTable,
+		catconstants.CrdbInternalPCRStreamCheckpointsTableID:        crdbInternalPCRStreamCheckpointsTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -8933,5 +8937,142 @@ var crdbInternalClusterReplicationResolvedView = virtualSchemaView{
 		{Name: "end_key", Typ: types.String},
 		{Name: "resolved", Typ: types.Decimal},
 		{Name: "resolved_age", Typ: types.Interval},
+	},
+}
+
+var crdbInternalPCRStreamsTable = virtualSchemaTable{
+	comment: `node-level table listing all currently running cluster replication production streams`,
+	// NB: startTS is exclusive; consider renaming to startAfter.
+	schema: `
+CREATE TABLE crdb_internal.cluster_replication_node_streams (
+	stream_id INT,
+	consumer_id INT,
+	spans INT,
+	initial_ts DECIMAL,
+	prev_ts DECIMAL,
+
+	batches INT,
+	checkpoints INT,
+	last_checkpoint INTERVAL,
+	
+	rf_checkpoints INT,
+	rf_advances INT,
+	rf_last_advance INTERVAL,
+
+	rf_resolved DECIMAL,
+	rf_resolved_age INTERVAL	
+	);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		sm, err := p.EvalContext().StreamManagerFactory.GetReplicationStreamManager(ctx)
+		if err != nil {
+			return err
+		}
+		now := p.EvalContext().GetStmtTimestamp()
+		age := func(t time.Time) tree.Datum {
+			if t.Unix() == 0 {
+				return tree.DNull
+			}
+			return tree.NewDInterval(duration.Age(now, t), types.DefaultIntervalTypeMetadata)
+		}
+
+		for _, s := range sm.DebugGetProducerStatuses(ctx) {
+			resolved := time.UnixMicro(s.RF.ResolvedMicros.Load())
+			resolvedDatum := tree.DNull
+			if resolved.Unix() != 0 {
+				resolvedDatum = eval.TimestampToDecimalDatum(hlc.Timestamp{WallTime: resolved.UnixNano()})
+			}
+
+			if err := addRow(
+				tree.NewDInt(tree.DInt(s.StreamID)),
+				tree.NewDInt(tree.DInt(s.Spec.ConsumerID)),
+				tree.NewDInt(tree.DInt(len(s.Spec.Spans))),
+				eval.TimestampToDecimalDatum(s.Spec.InitialScanTimestamp),
+				eval.TimestampToDecimalDatum(s.Spec.PreviousReplicatedTimestamp),
+
+				tree.NewDInt(tree.DInt(s.Flushes.Batches.Load())),
+				tree.NewDInt(tree.DInt(s.Flushes.Checkpoints.Load())),
+				age(time.UnixMicro(s.LastCheckpoint.Micros.Load())),
+
+				tree.NewDInt(tree.DInt(s.RF.Checkpoints.Load())),
+				tree.NewDInt(tree.DInt(s.RF.Advances.Load())),
+				age(time.UnixMicro(s.RF.LastAdvanceMicros.Load())),
+
+				resolvedDatum,
+				age(resolved),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalPCRStreamSpansTable = virtualSchemaTable{
+	comment: `node-level table listing all currently running cluster replication production stream spec spans`,
+	schema: `
+CREATE TABLE crdb_internal.cluster_replication_node_stream_spans (
+	stream_id INT,
+	consumer_id INT,
+	span_start STRING,
+	span_end STRING
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		sm, err := p.EvalContext().StreamManagerFactory.GetReplicationStreamManager(ctx)
+		if err != nil {
+			return err
+		}
+		for _, status := range sm.DebugGetProducerStatuses(ctx) {
+			for _, s := range status.Spec.Spans {
+				if err := addRow(
+					tree.NewDInt(tree.DInt(status.StreamID)),
+					tree.NewDInt(tree.DInt(status.Spec.ConsumerID)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, s.Key)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, s.EndKey)),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalPCRStreamCheckpointsTable = virtualSchemaTable{
+	comment: `node-level table listing all currently running cluster replication production stream checkpoint spans`,
+	schema: `
+CREATE TABLE crdb_internal.cluster_replication_node_stream_checkpoints (
+	stream_id INT,
+	consumer_id INT,
+	span_start STRING,
+	span_end STRING,
+	resolved DECIMAL,
+	resolved_age INTERVAL
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		sm, err := p.EvalContext().StreamManagerFactory.GetReplicationStreamManager(ctx)
+		if err != nil {
+			return err
+		}
+		for _, status := range sm.DebugGetProducerStatuses(ctx) {
+			sp := status.LastCheckpoint.Spans.Load()
+			if sp == nil {
+				continue
+			}
+			for _, s := range sp.([]jobspb.ResolvedSpan) {
+				if err := addRow(
+					tree.NewDInt(tree.DInt(status.StreamID)),
+					tree.NewDInt(tree.DInt(status.Spec.ConsumerID)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, s.Span.Key)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, s.Span.EndKey)),
+					eval.TimestampToDecimalDatum(s.Timestamp),
+					tree.NewDInterval(duration.Age(
+						p.EvalContext().GetStmtTimestamp(), s.Timestamp.GoTime()), types.DefaultIntervalTypeMetadata,
+					),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	},
 }
