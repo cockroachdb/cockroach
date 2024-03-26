@@ -567,7 +567,7 @@ func TestFileSSTSinkCopyPointKeys(t *testing.T) {
 					withKVs(kvs).
 					withRangeKeys([]rangeKeyAndTS{{"a", "z", 10}}).
 					build()
-				err := sink.copyPointKeys(es.dataSST)
+				err := sink.copyPointKeys(ctx, es.dataSST)
 				if input.expectErr != "" {
 					// Do not compare resulting SSTs if we expect errors.
 					require.ErrorContains(t, err, input.expectErr)
@@ -934,7 +934,7 @@ func fileSSTSinkTestSetUp(
 		settings: &settings.SV,
 	}
 
-	sink := makeFileSSTSink(sinkConf, store)
+	sink := makeFileSSTSink(sinkConf, store, nil /* pacer */)
 	return sink, store
 }
 
