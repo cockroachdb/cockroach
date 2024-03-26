@@ -49,6 +49,7 @@ call
                           │              ├── fd: ()-->(7)
                           │              └── tuple
                           │                   └── udf: _stmt_raise_2
+                          │                        ├── tail-call
                           │                        ├── args
                           │                        │    └── variable: x:1
                           │                        ├── params: x:4
@@ -97,6 +98,7 @@ call
                                     ├── fd: ()-->(11)
                                     └── tuple
                                          └── udf: _stmt_exec_4
+                                              ├── tail-call
                                               ├── args
                                               │    └── variable: x:1
                                               ├── params: x:8
