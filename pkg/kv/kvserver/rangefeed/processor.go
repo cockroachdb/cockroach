@@ -81,6 +81,13 @@ type Config struct {
 	Span     roachpb.RSpan
 
 	TxnPusher TxnPusher
+	// PushTxnsInterval specifies the interval at which a Processor will push
+	// all transactions in the unresolvedIntentQueue that are above the age
+	// specified by PushTxnsAge.
+	//
+	// This option only applies to LegacyProcessor since ScheduledProcessor is
+	// relying on store to push events to scheduler to initiate transaction push.
+	PushTxnsInterval time.Duration
 	// PushTxnsAge specifies the age at which a Processor will begin to consider
 	// a transaction old enough to push.
 	PushTxnsAge time.Duration
@@ -112,6 +119,9 @@ type Config struct {
 // SetDefaults initializes unset fields in Config to values
 // suitable for use by a Processor.
 func (sc *Config) SetDefaults() {
+	if sc.PushTxnsInterval == 0 {
+		sc.PushTxnsInterval = DefaultPushTxnsInterval
+	}
 	if sc.PushTxnsAge == 0 {
 		sc.PushTxnsAge = defaultPushTxnsAge
 	}
