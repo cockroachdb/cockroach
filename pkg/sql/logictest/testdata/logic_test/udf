@@ -785,3 +785,10 @@ FROM purchase
 10.00  GBP
 
 subtest end
+
+statement ok
+CREATE FUNCTION f113186() RETURNS RECORD AS $$ SELECT 1.99; $$ LANGUAGE SQL;
+
+# Until #113186 is resolved, the internal error is expected.
+statement error pgcode XX000 internal error: invalid datum type given: DECIMAL, expected INT8
+SELECT * FROM f113186() AS foo(x INT);
