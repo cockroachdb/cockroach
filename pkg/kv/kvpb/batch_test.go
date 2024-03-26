@@ -472,6 +472,24 @@ func TestResponseKeyIterate(t *testing.T) {
 			expErr: "unexpectedly called ResponseKeyIterate on a ReverseScanRequest with COL_BATCH_RESPONSE scan format",
 		},
 		{
+			name:    "delete-range, no response keys",
+			req:     &DeleteRangeRequest{RequestHeader: rangeHeader, ReturnKeys: true},
+			resp:    &DeleteRangeResponse{Keys: nil},
+			expKeys: nil,
+		},
+		{
+			name:    "delete-range, some response keys",
+			req:     &DeleteRangeRequest{RequestHeader: rangeHeader, ReturnKeys: true},
+			resp:    &DeleteRangeResponse{Keys: []roachpb.Key{keyB, keyC}},
+			expKeys: []roachpb.Key{keyB, keyC},
+		},
+		{
+			name:   "delete-range, return keys disabled",
+			req:    &DeleteRangeRequest{RequestHeader: rangeHeader, ReturnKeys: false},
+			resp:   &DeleteRangeResponse{},
+			expErr: "cannot iterate over response keys of DeleteRange request when ReturnKeys=false",
+		},
+		{
 			name:   "put",
 			req:    &PutRequest{},
 			resp:   &PutResponse{},
@@ -500,12 +518,6 @@ func TestResponseKeyIterate(t *testing.T) {
 			req:    &DeleteRequest{},
 			resp:   &DeleteResponse{},
 			expErr: "cannot iterate over response keys of Delete request",
-		},
-		{
-			name:   "delete-range",
-			req:    &DeleteRangeRequest{},
-			resp:   &DeleteRangeResponse{},
-			expErr: "cannot iterate over response keys of DeleteRange request",
 		},
 	}
 	for _, tc := range testCases {

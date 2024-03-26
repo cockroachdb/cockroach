@@ -642,6 +642,14 @@ func ResponseKeyIterate(req Request, resp Response, fn func(roachpb.Key)) error 
 				return errors.AssertionFailedf("unexpectedly non-empty ColBatches")
 			}
 		}
+	case *DeleteRangeResponse:
+		if !req.(*DeleteRangeRequest).ReturnKeys {
+			return errors.AssertionFailedf("cannot iterate over response keys of DeleteRange " +
+				"request when ReturnKeys=false")
+		}
+		for _, k := range v.Keys {
+			fn(k)
+		}
 	default:
 		return errors.Errorf("cannot iterate over response keys of %s request", req.Method())
 	}
