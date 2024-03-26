@@ -260,6 +260,51 @@ func (b *Builder) buildRoutine(
 	bodyScope := b.allocScope()
 	var params opt.ColList
 	if o.Types.Length() > 0 {
+		if numDefaultsToUse := o.Types.Length() - len(args); numDefaultsToUse > 0 {
+			var defaultParamOrdinals []int
+			for i, param := range o.RoutineParams {
+				if param.DefaultVal != nil {
+					defaultParamOrdinals = append(defaultParamOrdinals, i)
+				}
+			}
+			if len(defaultParamOrdinals) < numDefaultsToUse {
+				panic(errors.AssertionFailedf(
+					"incorrect overload resolution:\nneeded args: %v\nprovided args: %v\nroutine params: %v",
+					o.Types, f.Exprs, o.RoutineParams,
+				))
+			}
+			// Skip parameters for which the arguments were specified
+			// explicitly.
+			defaultParamOrdinals = defaultParamOrdinals[len(defaultParamOrdinals)-numDefaultsToUse:]
+			for _, paramOrdinal := range defaultParamOrdinals {
+				param := o.RoutineParams[paramOrdinal]
+				if !param.IsInParam() {
+					panic(errors.AssertionFailedf(
+						"non-input routine parameter %d has DEFAULT expression: %v",
+						paramOrdinal, o.RoutineParams,
+					))
+				}
+				// TODO(yuzefovich): this logic is partially duplicated.
+				typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
+				if err != nil {
+					panic(err)
+				}
+				pexpr := inScope.resolveType(param.DefaultVal, typ)
+				arg := b.buildScalar(pexpr, inScope, nil /* outScope */, nil /* outCol */, colRefs)
+				if resolved := pexpr.ResolvedType(); !resolved.Identical(typ) {
+					if !cast.ValidCast(resolved, typ, cast.ContextAssignment) {
+						// Missing assignment cast between these two types
+						// should've been caught earlier during creation time.
+						panic(errors.AssertionFailedf(
+							"DEFAULT expression has type %s, need type %s, assignment cast isn't possible",
+							resolved.SQLStringForError(), typ.SQLStringForError(),
+						))
+					}
+					arg = b.factory.ConstructCast(arg, typ)
+				}
+				args = append(args, arg)
+			}
+		}
 		// Add all input parameters to the scope.
 		paramTypes, ok := o.Types.(tree.ParamTypes)
 		if !ok {

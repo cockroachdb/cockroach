@@ -170,6 +170,8 @@ func redactElement(element scpb.Element) error {
 		}
 	case *scpb.FunctionBody:
 		return redactFunctionBodyStr(e.Lang.Lang, &e.Body)
+	case *scpb.FunctionParamDefaultExpression:
+		return redactExpr(&e.Expression.Expr)
 	}
 	return nil
 }

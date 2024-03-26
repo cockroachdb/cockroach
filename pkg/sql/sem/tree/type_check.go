@@ -3476,7 +3476,26 @@ func getMostSignificantOverload(
 		for k, idx := range oImpls {
 			candidate := overloads[idx]
 			srcParams := candidate.params()
-			if srcParams.MatchIdentical(expTypes) {
+			matches := srcParams.MatchIdentical(expTypes)
+			if !matches && srcParams.Length() != len(expTypes) {
+				_, _, _, defaultExprs := candidate.outParamInfo()
+				if len(defaultExprs) > 0 {
+					// Some parameters have DEFAULT expressions, so it might be
+					// the case that some input arguments were omitted.
+					// TODO(88947): this logic might need to change to support
+					// VARIADIC.
+					allTypes, ok := srcParams.(ParamTypes)
+					if !ok {
+						return QualifiedOverload{}, errors.AssertionFailedf("overload params is %T and not ParamTypes", srcParams)
+					}
+					numOmittedExprs := len(allTypes) - len(typedInputExprs)
+					if numOmittedExprs > 0 && numOmittedExprs <= len(defaultExprs) {
+						allTypes = allTypes[:len(allTypes)-numOmittedExprs]
+						matches = allTypes.MatchIdentical(expTypes)
+					}
+				}
+			}
+			if matches {
 				if foundMatch {
 					// Throw ambiguity error if there are more than one
 					// candidate overloads from same schema.

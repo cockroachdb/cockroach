@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -507,13 +508,17 @@ func (desc *Mutable) ReplaceOverload(
 	for i := range fn.Signatures {
 		sig := fn.Signatures[i]
 		match := existing.Types.Length() == len(sig.ArgTypes) &&
-			len(existing.OutParamOrdinals) == len(sig.OutParamOrdinals)
+			len(existing.OutParamOrdinals) == len(sig.OutParamOrdinals) &&
+			len(existing.DefaultExprs) == len(sig.DefaultExprs)
 		for j := 0; match && j < len(sig.ArgTypes); j++ {
 			match = existing.Types.GetAt(j).Equivalent(sig.ArgTypes[j])
 		}
 		for j := 0; match && j < len(sig.OutParamOrdinals); j++ {
 			match = existing.OutParamOrdinals[j] == sig.OutParamOrdinals[j] &&
 				existing.OutParamTypes.GetAt(j).Equivalent(sig.OutParamTypes[j])
+		}
+		for j := 0; match && j < len(sig.DefaultExprs); j++ {
+			match = tree.Serialize(existing.DefaultExprs[j]) == sig.DefaultExprs[j]
 		}
 		if match {
 			fn.Signatures[i] = newSignature
@@ -583,6 +588,17 @@ func (desc *immutable) GetResolvedFuncDefinition(
 				outParamTypes[j] = tree.ParamType{Typ: sig.OutParamTypes[j]}
 			}
 			overload.OutParamTypes = outParamTypes
+		}
+		if len(sig.DefaultExprs) > 0 {
+			overload.DefaultExprs = make(tree.Exprs, len(sig.DefaultExprs))
+			for j, expr := range sig.DefaultExprs {
+				var err error
+				// TODO: we should never get an error here, right?
+				overload.DefaultExprs[j], err = parser.ParseExpr(expr)
+				if err != nil {
+					return nil, false
+				}
+			}
 		}
 		prefixedOverload := tree.MakeQualifiedOverload(desc.GetName(), overload)
 		funcDef.Overloads = append(funcDef.Overloads, prefixedOverload)

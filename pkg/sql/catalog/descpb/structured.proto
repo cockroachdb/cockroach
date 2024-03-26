@@ -1577,6 +1577,8 @@ message SchemaDescriptor {
     // OutParamTypes contains types of all OUT parameters (it has 1-to-1 match
     // with OutParamOrdinals).
     repeated sql.sem.types.T out_param_types = 7;
+
+    repeated string default_exprs = 8;
   }
 
   // Function contains a group of UDFs with the same name.

@@ -320,7 +320,7 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 			if !inDropContext || !onlyDefaultParamClass {
 				return false
 			}
-			_, outParamOrdinals, outParamTypes := ol.outParamInfo()
+			_, outParamOrdinals, outParamTypes, _ := ol.outParamInfo()
 			if ol.Types.Length()+len(outParamOrdinals) != len(allParamTypes) {
 				return false
 			}

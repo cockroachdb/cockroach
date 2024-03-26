@@ -1534,6 +1534,7 @@ func (b *builderState) BuildUserPrivilegesFromDefaultPrivileges(
 	return ownerElem, upsElems
 }
 
+// TODO(100962): we might need something similar for the DEFAULT expr.
 func (b *builderState) WrapFunctionBody(
 	fnID descpb.ID,
 	bodyStr string,

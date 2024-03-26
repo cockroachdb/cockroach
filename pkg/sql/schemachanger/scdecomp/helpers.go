@@ -101,11 +101,14 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 		}
 	}
 
-	referencedColumns, err := schemaexpr.ExtractColumnIDs(
-		w.desc.(catalog.TableDescriptor), e,
-	)
-	if err != nil {
-		return nil, err
+	var referencedColumns catalog.TableColSet
+	// TODO(100962): what happens with column references if w.desc is
+	// catalog.FunctionDescriptor?
+	if tbl, ok := w.desc.(catalog.TableDescriptor); ok {
+		referencedColumns, err = schemaexpr.ExtractColumnIDs(tbl, e)
+		if err != nil {
+			return nil, err
+		}
 	}
 	referencedFnIDs, err := schemaexpr.GetUDFIDs(e)
 	if err != nil {

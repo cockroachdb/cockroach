@@ -444,6 +444,7 @@ func (md *Metadata) CheckDependencies(
 						// Since we're not in the DROP context, it's sufficient
 						// to specify only the input parameters.
 						Class: tree.RoutineParamIn,
+						// TODO(100962): think about DefaultVal here.
 					}
 				}
 				// NOTE: We match for all types of routines here, including

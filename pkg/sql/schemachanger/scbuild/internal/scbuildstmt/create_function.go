@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -104,11 +103,6 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	}
 	fn.Params = make([]scpb.Function_Parameter, len(n.Params))
 	for i, param := range n.Params {
-		// TODO(chengxiong): create `FunctionParamDefaultExpression` element when
-		// default parameter default expression is enabled.
-		if param.DefaultVal != nil {
-			panic(unimplemented.NewWithIssue(100962, "default value"))
-		}
 		paramCls, err := funcinfo.ParamClassToProto(param.Class)
 		if err != nil {
 			panic(err)
@@ -117,6 +111,11 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 			Name:  string(param.Name),
 			Class: catpb.FunctionParamClass{Class: paramCls},
 			Type:  b.ResolveTypeRef(param.Type),
+		}
+		if param.DefaultVal != nil {
+			fn.Params[i].DefaultExpr = tree.Serialize(param.DefaultVal)
+			// TODO(100962): probably need a similar call to b.WrapFunctionBody
+			// here.
 		}
 	}
 

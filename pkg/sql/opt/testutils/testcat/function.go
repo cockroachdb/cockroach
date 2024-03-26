@@ -175,6 +175,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		RoutineParams:     c.Params,
 		OutParamOrdinals:  outParamOrdinals,
 		OutParamTypes:     outParams,
+		// TODO(100962): DefaultExprs.
 	}
 	overload.ReturnsRecordType = types.IsRecordType(retType)
 	if c.ReturnType != nil && c.ReturnType.SetOf {
