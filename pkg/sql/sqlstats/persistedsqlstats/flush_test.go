@@ -17,6 +17,7 @@ import (
 	"math"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
@@ -104,6 +106,10 @@ func TestSQLStatsFlush(t *testing.T) {
 	pgSecondSQLConn := secondServer.SQLConn(t)
 	secondSQLConn := sqlutils.MakeSQLRunner(pgSecondSQLConn)
 
+	// We'll use the third server to execute any sql queries we don't want to
+	// pollute the in-memory stats of the other 2 servers.
+	observerConn := sqlutils.MakeSQLRunner(testCluster.Server(2).SQLConn(t))
+
 	firstServerSQLStats := firstServer.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 	secondServerSQLStats := secondServer.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
@@ -119,13 +125,13 @@ func TestSQLStatsFlush(t *testing.T) {
 		}
 
 		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
 
 		firstServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(0).AppStopper())
 		secondServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(1).AppStopper())
 
-		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, firstServerSQLStats)
+		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
 
 		sqlInstanceId := base.SQLInstanceID(0)
 		if sqlstats.GatewayNodeEnabled.Get(&testCluster.Server(0).ClusterSettings().SV) {
@@ -134,8 +140,8 @@ func TestSQLStatsFlush(t *testing.T) {
 		// For each test case, we verify that it's being properly inserted exactly
 		// once and it is exactly executed tc.count number of times.
 		for _, tc := range testQueries {
-			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, sqlInstanceId, 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
-			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), sqlInstanceId, tc.count)
+			verifyNumOfInsertedEntries(t, observerConn, tc.stmtNoConst, sqlInstanceId, 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
+			verifyInsertedFingerprintExecCount(t, observerConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), sqlInstanceId, tc.count)
 		}
 	}
 
@@ -150,13 +156,13 @@ func TestSQLStatsFlush(t *testing.T) {
 			}
 		}
 		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
 
 		firstServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(0).AppStopper())
 		secondServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(1).AppStopper())
 
-		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, firstServerSQLStats)
+		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
 
 		sqlInstanceId := base.SQLInstanceID(0)
 		if sqlstats.GatewayNodeEnabled.Get(&testCluster.Server(0).ClusterSettings().SV) {
@@ -164,10 +170,10 @@ func TestSQLStatsFlush(t *testing.T) {
 		}
 
 		for _, tc := range testQueries {
-			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, sqlInstanceId, 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
+			verifyNumOfInsertedEntries(t, observerConn, tc.stmtNoConst, sqlInstanceId, 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
 			// The execution count is doubled here because we execute all of the
 			// statements here in the same aggregation interval.
-			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), sqlInstanceId, tc.count+tc.count-1 /* expectedCount */)
+			verifyInsertedFingerprintExecCount(t, observerConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), sqlInstanceId, tc.count+tc.count-1 /* expectedCount */)
 		}
 	}
 
@@ -181,13 +187,13 @@ func TestSQLStatsFlush(t *testing.T) {
 			}
 		}
 		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
 
 		firstServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(0).AppStopper())
 		secondServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(1).AppStopper())
 
-		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, firstServerSQLStats)
+		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
 
 		sqlInstanceId := base.SQLInstanceID(0)
 		if sqlstats.GatewayNodeEnabled.Get(&testCluster.Server(0).ClusterSettings().SV) {
@@ -196,8 +202,8 @@ func TestSQLStatsFlush(t *testing.T) {
 
 		for _, tc := range testQueries {
 			// We expect exactly 2 entries since we are in a different aggregation window.
-			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, sqlInstanceId, 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
-			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), sqlInstanceId, tc.count)
+			verifyNumOfInsertedEntries(t, observerConn, tc.stmtNoConst, sqlInstanceId, 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
+			verifyInsertedFingerprintExecCount(t, observerConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), sqlInstanceId, tc.count)
 		}
 	}
 
@@ -208,14 +214,14 @@ func TestSQLStatsFlush(t *testing.T) {
 				secondSQLConn.Exec(t, tc.query)
 			}
 		}
-		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
+		verifyInMemoryStatsEmpty(t, firstServerSQLStats)
 		verifyInMemoryStatsCorrectness(t, testQueries, secondServerSQLStats)
 
 		firstServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(0).AppStopper())
 		secondServerSQLStats.Flush(ctx, testCluster.ApplicationLayer(1).AppStopper())
 
-		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, firstServerSQLStats)
+		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
 
 		if sqlstats.GatewayNodeEnabled.Get(&testCluster.Server(0).ClusterSettings().SV) {
 			// Ensure that we encode the correct node_id for the new entry and did not
@@ -223,8 +229,8 @@ func TestSQLStatsFlush(t *testing.T) {
 			for _, tc := range testQueries {
 				verifyNumOfInsertedEntries(t, firstSQLConn, tc.stmtNoConst, secondServer.SQLInstanceID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
 				verifyInsertedFingerprintExecCount(t, firstSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), secondServer.SQLInstanceID(), tc.count)
-				verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, firstServer.SQLInstanceID(), 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
-				verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count)
+				verifyNumOfInsertedEntries(t, observerConn, tc.stmtNoConst, firstServer.SQLInstanceID(), 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
+				verifyInsertedFingerprintExecCount(t, observerConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count)
 			}
 		} else {
 			sqlInstanceId := base.SQLInstanceID(0)
@@ -1120,19 +1126,39 @@ func verifyInMemoryStatsCorrectness(
 	}
 }
 
-func verifyInMemoryStatsEmpty(
-	t *testing.T, tcs []testCase, statsProvider *persistedsqlstats.PersistedSQLStats,
-) {
-	for _, tc := range tcs {
-		err := statsProvider.SQLStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-			if tc.stmtNoConst == statistics.Key.Query {
-				require.Equal(t, 0 /* expected */, statistics.Stats.Count, "fingerprint: %s", tc.stmtNoConst)
+func verifyInMemoryStatsEmpty(t *testing.T, statsProvider *persistedsqlstats.PersistedSQLStats) {
+	// We could be inserting internal statements in the background, so we only check
+	// that we have no user queries left in the container.
+	fingerprintCount := statsProvider.GetTotalFingerprintCount()
+	var count int64
+	err := statsProvider.SQLStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{},
+		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+			// We should have cleared the sql stats containers on flush.
+			if statistics.Key.App != "" && !strings.HasPrefix(statistics.Key.App, catconstants.InternalAppNamePrefix) {
+				return errors.Newf("unexpected non-internal statement: %s from app %s",
+					statistics.Key.Query, statistics.Key.App)
 			}
+			count++
+			return nil
+		})
+	require.NoError(t, err)
+
+	err = statsProvider.SQLStats.IterateTransactionStats(context.Background(), sqlstats.IteratorOptions{},
+		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
+			// We should have cleared the sql stats containers on flush.
+			if statistics.App != "" && !strings.HasPrefix(statistics.App, catconstants.InternalAppNamePrefix) {
+				return errors.Newf("unexpected non-internal transaction from app %s", statistics.App)
+			}
+			count++
 			return nil
 		})
 
-		require.NoError(t, err)
-	}
+	require.NoError(t, err)
+
+	// More internal statements could have been added since reading the fingerprint
+	// count, so we only check that the number of fingerprints is less than the total
+	// fingerprints counted after the counter read.
+	require.LessOrEqual(t, fingerprintCount, count)
 }
 
 func verifyNodeID(
