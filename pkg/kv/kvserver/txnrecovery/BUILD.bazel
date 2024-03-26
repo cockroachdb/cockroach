@@ -11,7 +11,6 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvpb",
-        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
