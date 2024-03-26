@@ -89,7 +89,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const (
