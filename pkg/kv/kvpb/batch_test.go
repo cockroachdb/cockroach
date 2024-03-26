@@ -12,7 +12,6 @@ package kvpb
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -224,61 +223,229 @@ func TestBatchRequestSummary(t *testing.T) {
 }
 
 func TestLockSpanIterate(t *testing.T) {
-	type testReq struct {
-		req    Request
-		resp   Response
-		span   roachpb.Span
-		resume roachpb.Span
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
+
+	spanA := roachpb.Span{Key: keyA}
+	spanB := roachpb.Span{Key: keyB}
+	spanC := roachpb.Span{Key: keyC}
+	spanAC := roachpb.Span{Key: keyA, EndKey: keyC}
+	spanAD := roachpb.Span{Key: keyA, EndKey: keyD}
+
+	pointHeader := RequestHeader{Key: keyA}
+	rangeHeader := RequestHeader{Key: keyA, EndKey: keyD}
+
+	getReqRepl := &GetRequest{
+		RequestHeader:        pointHeader,
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Replicated,
 	}
-	testReqs := []testReq{
-		{&GetRequest{}, &GetResponse{}, sp("a", ""), sp("", "")},
-		{&ScanRequest{}, &ScanResponse{}, sp("b", "d"), sp("c", "d")},
-		{&ReverseScanRequest{}, &ReverseScanResponse{}, sp("e", "g"), sp("f", "g")},
-		{&PutRequest{}, &PutResponse{}, sp("h", ""), sp("", "")},
-		{&DeleteRangeRequest{}, &DeleteRangeResponse{}, sp("i", "k"), sp("j", "k")},
-		{&GetRequest{KeyLockingStrength: lock.Exclusive}, &GetResponse{}, sp("l", ""), sp("", "")},
-		{&ScanRequest{KeyLockingStrength: lock.Exclusive}, &ScanResponse{}, sp("m", "o"), sp("n", "o")},
-		{&ReverseScanRequest{KeyLockingStrength: lock.Exclusive}, &ReverseScanResponse{}, sp("p", "r"), sp("q", "r")},
+	getReqUnrepl := &GetRequest{
+		RequestHeader:        pointHeader,
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Unreplicated,
+	}
+	scanReq := &ScanRequest{
+		RequestHeader:        rangeHeader,
+		ScanFormat:           KEY_VALUES,
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Replicated,
+	}
+	revScanReq := &ReverseScanRequest{
+		RequestHeader:        rangeHeader,
+		ScanFormat:           KEY_VALUES,
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Replicated,
 	}
 
-	// NB: can't import testutils for RunTrueAndFalse.
-	for _, resume := range []bool{false, true} {
-		t.Run(fmt.Sprintf("resume=%t", resume), func(t *testing.T) {
-			// A batch request with a batch response with no ResumeSpan.
-			ba := BatchRequest{}
-			br := BatchResponse{}
-			for i := range testReqs {
-				tr := &testReqs[i]
-				tr.req.SetHeader(RequestHeaderFromSpan(tr.span))
-				ba.Add(tr.req)
-				if resume {
-					tr.resp.SetHeader(ResponseHeader{ResumeSpan: &tr.resume})
+	testCases := []struct {
+		name      string
+		req       Request
+		resp      Response
+		expSpans  []roachpb.Span
+		expUnrepl bool
+	}{
+		{
+			name:     "get, missing",
+			req:      getReqRepl,
+			resp:     &GetResponse{},
+			expSpans: nil,
+		},
+		{
+			name:     "get, present",
+			req:      getReqRepl,
+			resp:     &GetResponse{Value: &roachpb.Value{}},
+			expSpans: []roachpb.Span{spanA},
+		},
+		{
+			name:     "get, no response",
+			req:      getReqRepl,
+			expSpans: []roachpb.Span{spanA},
+		},
+		{
+			name:      "get, missing, unreplicated",
+			req:       getReqUnrepl,
+			resp:      &GetResponse{},
+			expSpans:  nil,
+			expUnrepl: true,
+		},
+		{
+			name:      "get, present, unreplicated",
+			req:       getReqUnrepl,
+			resp:      &GetResponse{Value: &roachpb.Value{}},
+			expSpans:  []roachpb.Span{spanA},
+			expUnrepl: true,
+		},
+		{
+			name:      "get, no response, unreplicated",
+			req:       getReqUnrepl,
+			resp:      nil,
+			expSpans:  []roachpb.Span{spanA},
+			expUnrepl: true,
+		},
+		{
+			name:     "non-locking get, present",
+			req:      &GetRequest{RequestHeader: pointHeader},
+			resp:     &GetResponse{Value: &roachpb.Value{}},
+			expSpans: nil,
+		},
+		{
+			name:     "scan, missing",
+			req:      scanReq,
+			resp:     &ScanResponse{},
+			expSpans: nil,
+		},
+		{
+			name: "scan, present",
+			req:  scanReq,
+			resp: &ScanResponse{Rows: []roachpb.KeyValue{
+				{Key: keyA}, {Key: keyB}, {Key: keyC},
+			}},
+			expSpans: []roachpb.Span{spanA, spanB, spanC},
+		},
+		{
+			name:     "scan, no response",
+			req:      scanReq,
+			resp:     nil,
+			expSpans: []roachpb.Span{spanAD},
+		},
+		{
+			name: "non-locking scan, present",
+			req:  &ScanRequest{RequestHeader: rangeHeader, ScanFormat: KEY_VALUES},
+			resp: &ScanResponse{Rows: []roachpb.KeyValue{
+				{Key: keyA}, {Key: keyB}, {Key: keyC},
+			}},
+			expSpans: nil,
+		},
+		{
+			name:     "reverse-scan, missing",
+			req:      revScanReq,
+			resp:     &ReverseScanResponse{},
+			expSpans: nil,
+		},
+		{
+			name: "reverse-scan, present",
+			req:  revScanReq,
+			resp: &ReverseScanResponse{Rows: []roachpb.KeyValue{
+				{Key: keyC}, {Key: keyB}, {Key: keyA},
+			}},
+			expSpans: []roachpb.Span{spanC, spanB, spanA},
+		},
+		{
+			name:     "reverse-scan, no response",
+			req:      revScanReq,
+			resp:     nil,
+			expSpans: []roachpb.Span{spanAD},
+		},
+		{
+			name: "non-locking reverse-scan, present",
+			req:  &ReverseScanRequest{RequestHeader: rangeHeader, ScanFormat: KEY_VALUES},
+			resp: &ReverseScanResponse{Rows: []roachpb.KeyValue{
+				{Key: keyC}, {Key: keyB}, {Key: keyA},
+			}},
+			expSpans: nil,
+		},
+		{
+			name:     "put",
+			req:      &PutRequest{RequestHeader: pointHeader},
+			resp:     &PutResponse{},
+			expSpans: []roachpb.Span{spanA},
+		},
+		{
+			name:     "cput",
+			req:      &ConditionalPutRequest{RequestHeader: pointHeader},
+			resp:     &ConditionalPutResponse{},
+			expSpans: []roachpb.Span{spanA},
+		},
+		{
+			name:     "initput",
+			req:      &InitPutRequest{RequestHeader: pointHeader},
+			resp:     &InitPutResponse{},
+			expSpans: []roachpb.Span{spanA},
+		},
+		{
+			name:     "increment",
+			req:      &IncrementRequest{RequestHeader: pointHeader},
+			resp:     &IncrementResponse{},
+			expSpans: []roachpb.Span{spanA},
+		},
+		{
+			name:     "delete",
+			req:      &DeleteRequest{RequestHeader: pointHeader},
+			resp:     &DeleteResponse{},
+			expSpans: []roachpb.Span{spanA},
+		},
+		{
+			name:     "delete-range, no response keys",
+			req:      &DeleteRangeRequest{RequestHeader: rangeHeader, ReturnKeys: true},
+			resp:     &DeleteRangeResponse{Keys: nil},
+			expSpans: nil,
+		},
+		{
+			name:     "delete-range, some response keys",
+			req:      &DeleteRangeRequest{RequestHeader: rangeHeader, ReturnKeys: true},
+			resp:     &DeleteRangeResponse{Keys: []roachpb.Key{keyB, keyC}},
+			expSpans: []roachpb.Span{spanB, spanC},
+		},
+		{
+			name:     "delete-range, return keys disabled",
+			req:      &DeleteRangeRequest{RequestHeader: rangeHeader, ReturnKeys: false},
+			resp:     &DeleteRangeResponse{},
+			expSpans: []roachpb.Span{spanAD},
+		},
+		{
+			name: "delete-range, return keys disabled, resume span",
+			req:  &DeleteRangeRequest{RequestHeader: rangeHeader, ReturnKeys: false},
+			resp: &DeleteRangeResponse{
+				ResponseHeader: ResponseHeader{
+					ResumeSpan: &roachpb.Span{Key: keyC, EndKey: keyD},
+				},
+				Keys: nil,
+			},
+			expSpans: []roachpb.Span{spanAC},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var spans []roachpb.Span
+			var durs []lock.Durability
+			err := LockSpanIterate(tc.req, tc.resp, func(span roachpb.Span, dur lock.Durability) {
+				spans = append(spans, span)
+				durs = append(durs, dur)
+			})
+			require.NoError(t, err)
+			require.Equal(t, tc.expSpans, spans)
+			if len(spans) > 0 {
+				dur := durs[0]
+				for _, otherDur := range durs[1:] {
+					require.Equal(t, dur, otherDur)
 				}
-				br.Add(tr.resp)
-			}
-
-			var spans [lock.MaxDurability + 1][]roachpb.Span
-			fn := func(span roachpb.Span, dur lock.Durability) {
-				spans[dur] = append(spans[dur], span)
-			}
-			ba.LockSpanIterate(&br, fn)
-
-			toExpSpans := func(trs ...testReq) []roachpb.Span {
-				exp := make([]roachpb.Span, len(trs))
-				for i, tr := range trs {
-					exp[i] = tr.span
-					if resume {
-						exp[i].EndKey = tr.resume.Key
-					}
+				expDur := lock.Replicated
+				if tc.expUnrepl {
+					expDur = lock.Unreplicated
 				}
-				return exp
+				require.Equal(t, expDur, dur)
 			}
-
-			// The intent writes are replicated locking request.
-			require.Equal(t, toExpSpans(testReqs[3], testReqs[4]), spans[lock.Replicated])
-
-			// The scans with KeyLockingStrength are unreplicated locking requests.
-			require.Equal(t, toExpSpans(testReqs[5], testReqs[6], testReqs[7]), spans[lock.Unreplicated])
 		})
 	}
 }
@@ -534,6 +701,7 @@ func TestResponseKeyIterate(t *testing.T) {
 				require.Error(t, err)
 				require.Regexp(t, tc.expErr, err)
 			}
+			require.Equal(t, err == nil, canIterateResponseKeys(tc.req, tc.resp))
 		})
 	}
 }
