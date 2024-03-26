@@ -37,8 +37,6 @@
 
 # PushLimitIntoIndexJoin pushes a limit through an index join. Since index
 # lookup can be expensive, it's always better to discard rows beforehand.
-#
-# TODO(radu): we can similarly push Offset too.
 [PushLimitIntoIndexJoin, Explore]
 (Limit
     (IndexJoin $input:* $indexJoinPrivate:*) &
@@ -53,6 +51,25 @@
 =>
 (IndexJoin
     (Limit $input $limitExpr (PruneOrdering $ordering $cols))
+    $indexJoinPrivate
+)
+
+# PushOffsetIntoIndexJoin pushes an offset through an index join. Since an index
+# lookup can be expensive, it's always better to discard rows beforehand.
+[PushOffsetIntoIndexJoin, Explore]
+(Offset
+    (IndexJoin $input:* $indexJoinPrivate:*) &
+        (IndexJoinPreservesRows $indexJoinPrivate)
+    $offsetExpr:(Const $offset:* & (IsPositiveInt $offset))
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $input)
+        )
+)
+=>
+(IndexJoin
+    (Offset $input $offsetExpr (PruneOrdering $ordering $cols))
     $indexJoinPrivate
 )
 
