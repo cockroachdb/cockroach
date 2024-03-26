@@ -31,6 +31,24 @@ case $1 in
       set -- sql --secure "$@"
     fi
     ;;
+  # TODO(dt): build this into roachprod.
+  "push-hosts")
+    if [ "$#" -ne 3 ]; then
+      echo "usage: drtprod $1 <destination> <cluster>"
+      exit 1
+    fi
+    shift
+    dest=$1
+    shift
+    # TODO(dt): support just pushing ips for all clusters.
+    cluster=$1
+    shift
+    ips="$($0 ip $cluster)"
+    pgurls="$($0 pgurl $cluster)"
+    $0 ssh $dest -- "echo '${ips}' > $cluster.ips.txt"
+    $0 ssh $dest -- "echo '${pgurls}' > $cluster.pgurls.txt"
+    exit 0
+    ;;
   "dns")
     if [ "$#" -lt 2 ]; then
       echo "usage: $0 $1 <cluster> [create]"
