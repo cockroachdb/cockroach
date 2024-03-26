@@ -4909,8 +4909,8 @@ func TestRangeMigration(t *testing.T) {
 
 	// We're going to be transitioning from startV to endV. Think a cluster of
 	// binaries running vX, but with active version vX-1.
-	startV := roachpb.Version{Major: 41}
-	endV := roachpb.Version{Major: 42}
+	startV := clusterversion.PreviousRelease.Version()
+	endV := clusterversion.Latest.Version()
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
