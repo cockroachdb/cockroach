@@ -527,8 +527,11 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 	downloadJobRecord := jobs.Record{
 		Description: fmt.Sprintf("Background Data Download for %s", r.job.Payload().Description),
 		Username:    r.job.Payload().UsernameProto.Decode(),
-		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans, PostDownloadTableAutoStatsSettings: details.PostDownloadTableAutoStatsSettings},
-		Progress:    jobspb.RestoreProgress{},
+		Details: jobspb.RestoreDetails{
+			DownloadJob:                        true,
+			DownloadSpans:                      downloadSpans,
+			PostDownloadTableAutoStatsSettings: details.PostDownloadTableAutoStatsSettings},
+		Progress: jobspb.RestoreProgress{},
 	}
 
 	return execConfig.InternalDB.DescsTxn(ctx, func(
