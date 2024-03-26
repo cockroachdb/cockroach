@@ -2162,7 +2162,7 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 	// Restart the servers to invalidate the leases.
 	for i := range tc.Servers {
 		tc.StopServer(i)
-		err = tc.RestartServerWithInspect(i, nil)
+		err = tc.RestartServer(i)
 		require.NoError(t, err)
 	}
 

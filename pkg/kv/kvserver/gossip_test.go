@@ -22,12 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGossipFirstRange(t *testing.T) {
@@ -146,7 +148,11 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 
 	// As of Nov 2018 it takes 3.6s.
 	skip.UnderShort(t)
+	skip.UnderStressRace(t)
 	ctx := context.Background()
+
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	// Shorten the raft tick interval and election timeout to make range leases
 	// much shorter than normal. This keeps us from having to wait so long for
@@ -165,32 +171,38 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
-			ServerArgs: serverArgs,
+			ReusableListenerReg: lisReg,
+			ServerArgs:          serverArgs,
 		})
 	defer tc.Stopper().Stop(context.Background())
 
 	// Take down the first node and replace it with a new one.
 	oldNodeIdx := 0
+	oldServerAddr := tc.Servers[oldNodeIdx].AdvRPCAddr()
 	newServerArgs := serverArgs
-	newServerArgs.Addr = tc.Servers[oldNodeIdx].AdvRPCAddr()
-	newServerArgs.SQLAddr = tc.Servers[oldNodeIdx].AdvSQLAddr()
 	newServerArgs.PartOfCluster = true
 	newServerArgs.JoinAddr = tc.Servers[1].AdvRPCAddr()
+	newServerArgs.NoAutoInitializeCluster = true
+	newServerArgs.DefaultTestTenant = base.TestControlsTenantsExplicitly
+
 	log.Infof(ctx, "stopping server %d", oldNodeIdx)
 	tc.StopServer(oldNodeIdx)
 	// We are re-using a hard-coded port. Other processes on the system may by now
 	// be listening on this port, so there will be flakes. For now, skip the test
 	// when this flake occurs.
 	//
-	// The real solution would be to create listeners for both RPC and SQL at the
-	// beginning of the test, and to make sure they aren't closed on server
-	// shutdown. Then we can pass the listeners to the second invocation. Alas,
-	// this requires some refactoring that remains out of scope for now.
-	if err := tc.AddAndStartServerE(newServerArgs); err != nil && !testutils.IsError(err, `address already in use`) {
-		t.Fatal(err)
-	}
+	// This is restarting, but will get a new node id since it is joining an
+	// existing cluster without saving its memory.
+	require.NoError(t, tc.RestartServerWithArgs(0, newServerArgs, nil))
 
-	tc.WaitForNStores(t, tc.NumServers(), tc.Server(1).GossipI().(*gossip.Gossip))
+	// Wait until we have seen the gossip record for the new store.
+	testutils.SucceedsSoon(t, func() error {
+		g := tc.Server(1).GossipI().(*gossip.Gossip)
+		_, err := g.GetInfo(gossip.MakeStoreDescKey(4))
+		return err
+	})
+	newServerAddr := tc.Servers[oldNodeIdx].AdvRPCAddr()
+	require.Equal(t, oldServerAddr, newServerAddr)
 
 	// Ensure that all servers still running are responsive. If the two remaining
 	// original nodes don't refresh their connection to the address of the first

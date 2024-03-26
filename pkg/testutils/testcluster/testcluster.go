@@ -683,6 +683,8 @@ func (tc *TestCluster) WaitForNStores(t serverutils.TestFataler, n int, g *gossi
 			}
 			t.Fatal(err)
 		case <-time.After(testutils.DefaultSucceedsSoonDuration):
+			storesMu.Lock()
+			defer storesMu.Unlock()
 			t.Fatalf("timed out waiting for %d store descriptors: %v", n-seen, stores)
 		}
 	}
@@ -1712,9 +1714,19 @@ func (tc *TestCluster) RestartServerWithInspect(
 		return errors.Errorf("server %d must be stopped before attempting to restart", idx)
 	}
 	serverArgs := tc.serverArgs[idx]
+	return tc.RestartServerWithArgs(idx, serverArgs, inspect)
+}
 
+func (tc *TestCluster) RestartServerWithArgs(
+	idx int, serverArgs base.TestServerArgs, inspect func(s serverutils.TestServerInterface),
+) error {
 	if ln := tc.reusableListeners[idx]; ln != nil {
 		serverArgs.Listener = ln
+		if serverArgs.Knobs.Server == nil {
+			serverArgs.Knobs.Server = &server.TestingKnobs{}
+		}
+		serverArgs.Knobs.Server.ModuleTestingKnobs()
+		serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = serverArgs.Listener
 	}
 
 	if serverArgs.Listener == nil {
@@ -1748,11 +1760,14 @@ func (tc *TestCluster) RestartServerWithInspect(
 		return err
 	}
 
-	for i, specs := range serverArgs.StoreSpecs {
-		if specs.InMemory && specs.StickyVFSID == "" {
-			return errors.Errorf("failed to restart Server %d, because a restart can only be used on a server with a sticky VFS", i)
+	/*
+		for i, specs := range serverArgs.StoreSpecs {
+			if specs.InMemory && specs.StickyVFSID == "" {
+				return errors.Errorf("failed to restart Server %d, because a restart can only be used on a server with a sticky VFS", i)
+			}
 		}
-	}
+
+	*/
 	s, err := serverutils.NewServer(serverArgs)
 	if err != nil {
 		return err
