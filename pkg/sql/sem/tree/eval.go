@@ -86,8 +86,8 @@ func (*UnaryOp) preferred() bool {
 	return false
 }
 
-func (*UnaryOp) outParamInfo() (RoutineType, []int32, TypeList) {
-	return BuiltinRoutine, nil, nil
+func (*UnaryOp) extraParamInfo() (RoutineType, []int32, TypeList, Exprs) {
+	return BuiltinRoutine, nil, nil, nil
 }
 
 func unaryOpFixups(
@@ -264,8 +264,8 @@ func (op *BinOp) preferred() bool {
 	return op.PreferredOverload
 }
 
-func (op *BinOp) outParamInfo() (RoutineType, []int32, TypeList) {
-	return BuiltinRoutine, nil, nil
+func (op *BinOp) extraParamInfo() (RoutineType, []int32, TypeList, Exprs) {
+	return BuiltinRoutine, nil, nil, nil
 }
 
 // AppendToMaybeNullArray appends an element to an array. If the first
@@ -1410,8 +1410,8 @@ func (op *CmpOp) preferred() bool {
 	return op.PreferredOverload
 }
 
-func (op *CmpOp) outParamInfo() (RoutineType, []int32, TypeList) {
-	return BuiltinRoutine, nil, nil
+func (op *CmpOp) extraParamInfo() (RoutineType, []int32, TypeList, Exprs) {
+	return BuiltinRoutine, nil, nil, nil
 }
 
 func cmpOpFixups(

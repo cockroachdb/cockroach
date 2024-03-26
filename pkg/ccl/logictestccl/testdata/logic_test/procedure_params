@@ -557,3 +557,160 @@ CALL p_udt(NULL);
 ----
 param
 (1,2)
+
+subtest default_exprs
+
+statement error pgcode 22P02 could not parse "a" as type int
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT 2, c INT DEFAULT 'a') AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT 2, c INT) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT 2, INOUT c INT) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 only input parameters can have default values
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT 2, OUT c INT = 3) AS $$ BEGIN SELECT a + b INTO c; END; $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE PROCEDURE my_sum(OUT o INT, a INT, b INT, c INT) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE OR REPLACE PROCEDURE my_sum(OUT o INT, a INT = 1, b INT, c INT = 3) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+# Adding a default expression to a parameter is ok.
+statement ok
+CREATE OR REPLACE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT 2, c INT = 3) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+# But removing an existing default expression is not ok.
+statement error pgcode 42P13 cannot remove parameter defaults from existing function
+CREATE OR REPLACE PROCEDURE my_sum(OUT o INT, a INT, b INT, c INT = 3) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22P02 could not parse "a" as type int
+CREATE OR REPLACE PROCEDURE my_sum(OUT o INT, a INT = 'a', b INT DEFAULT 2, c INT = 3) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+query I
+CALL my_sum(NULL, 1);
+----
+6
+
+query I
+CALL my_sum(NULL, 1, 1);
+----
+5
+
+query I
+CALL my_sum(NULL, 1, 1, 1);
+----
+3
+
+statement error pgcode 42883 procedure my_sum\(unknown\) does not exist
+CALL my_sum(NULL);
+
+statement error pgcode 42883 procedure my_sum\(unknown, int, int, int, int\) does not exist
+CALL my_sum(NULL, 1, 1, 1, 1);
+
+# Same as above, but the default value needs to be coerced from numeric to int
+# (becoming 4).
+statement ok
+CREATE OR REPLACE PROCEDURE my_sum(OUT o INT, a INT, b INT DEFAULT 2, c INT = 3.5) AS $$ BEGIN SELECT a + b + c INTO o; END; $$ LANGUAGE PLpgSQL;
+
+query I
+CALL my_sum(NULL, 1);
+----
+7
+
+query I
+CALL my_sum(NULL, 1, 1);
+----
+6
+
+# Add another overload that creates ambiguity for some number of input
+# arguments.
+statement ok
+CREATE PROCEDURE my_sum(OUT o INT, a INT) AS $$ BEGIN SELECT a INTO o; END; $$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42725 procedure my_sum\(unknown, int\) is not unique
+CALL my_sum(NULL, 1);
+
+statement ok
+DROP PROCEDURE my_sum(INT);
+
+statement ok
+DROP PROCEDURE my_sum;
+
+statement ok
+CREATE PROCEDURE my_sum(OUT sum INT, INOUT a INT, INOUT b INT = 3) AS $$ BEGIN SELECT a + b INTO sum; END; $$ LANGUAGE PLpgSQL;
+
+query III
+CALL my_sum(NULL, 1);
+----
+4  1  3
+
+query III
+CALL my_sum(NULL, 1, 1);
+----
+2  1  1
+
+statement ok
+DROP PROCEDURE my_sum;
+
+statement ok
+CREATE PROCEDURE my_sum(OUT a_plus_one INT, INOUT a INT, INOUT INT = 3) AS $$ BEGIN SELECT a + 1 INTO a_plus_one; END; $$ LANGUAGE PLpgSQL;
+
+# TODO(121251): this should return (2,1,3).
+query III
+CALL my_sum(NULL, 1);
+----
+2  1  NULL
+
+# TODO(121251): this should return (2,1,1).
+query III
+CALL my_sum(NULL, 1, 1);
+----
+2  1  NULL
+
+statement ok
+DROP PROCEDURE my_sum;
+
+# Test case when DEFAULT expression uses a UDF.
+
+statement ok
+CREATE FUNCTION f1(a INT, b INT = 2) RETURNS INT AS $$ BEGIN RETURN a + b; END; $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE PROCEDURE p2(OUT o INT, a INT, b INT = f1(1)) AS $$ BEGIN SELECT a + b INTO o; END; $$ LANGUAGE PLpgSQL;
+
+query I
+CALL p2(NULL, 1);
+----
+4
+
+query I
+CALL p2(NULL, 1, 1);
+----
+2
+
+statement ok
+CREATE OR REPLACE FUNCTION f1(a INT, b INT = 2) RETURNS INT AS $$ BEGIN RETURN a * b; END; $$ LANGUAGE PLpgSQL;
+
+query I
+CALL p2(NULL, 1);
+----
+3
+
+query I
+CALL p2(NULL, 1, 1);
+----
+2
+
+statement error pgcode 2BP01 cannot drop function "f1" because other objects \(\[test.public.p2\]\) still depend on it
+DROP FUNCTION f1;
+
+statement ok
+DROP PROCEDURE p2;
+
+statement ok
+DROP FUNCTION f1;
+
+subtest end

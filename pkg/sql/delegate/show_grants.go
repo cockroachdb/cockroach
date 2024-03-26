@@ -266,8 +266,8 @@ SELECT database_name,
 				return nil, err
 			}
 			ol, err := fd.MatchOverload(
-				d.ctx, d.catalog, &fn, &d.evalCtx.SessionData().SearchPath,
-				routineType, false, /* inDropContext */
+				d.ctx, d.catalog, &fn, &d.evalCtx.SessionData().SearchPath, routineType,
+				false /* inDropContext */, false, /* tryDefaultExprs */
 			)
 			if err != nil {
 				return nil, err

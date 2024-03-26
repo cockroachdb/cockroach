@@ -43,6 +43,11 @@ type SchemaID int32
 // 1 << privilege.Kind, so that multiple privileges can be stored.
 type privilegeBitmap uint64
 
+type udfDep struct {
+	overload        *tree.Overload
+	invocationTypes []*types.T
+}
+
 // Metadata assigns unique ids to the columns, tables, and other metadata used
 // for global identification within the scope of a particular query. These ids
 // tend to be small integers that can be efficiently stored and manipulated.
@@ -122,9 +127,9 @@ type Metadata struct {
 	// dataSourceDeps stores each data source object that the query depends on.
 	dataSourceDeps map[cat.StableID]cat.DataSource
 
-	// udfDeps stores each user-defined function overload that the query depends
-	// on.
-	udfDeps map[cat.StableID]*tree.Overload
+	// udfDeps stores each user-defined function overload (as well as the
+	// invocation signature) that the query depends on.
+	udfDeps map[cat.StableID]udfDep
 
 	// objectRefsByName stores each unique name that the query uses to reference
 	// each object. It is needed because changes to the search path may change
@@ -184,7 +189,7 @@ func (md *Metadata) Init() {
 
 	udfDeps := md.udfDeps
 	if udfDeps == nil {
-		udfDeps = make(map[cat.StableID]*tree.Overload)
+		udfDeps = make(map[cat.StableID]udfDep)
 	}
 	for id := range md.udfDeps {
 		delete(md.udfDeps, id)
@@ -287,7 +292,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 
 	for id, overload := range from.udfDeps {
 		if md.udfDeps == nil {
-			md.udfDeps = make(map[cat.StableID]*tree.Overload)
+			md.udfDeps = make(map[cat.StableID]udfDep)
 		}
 		md.udfDeps[id] = overload
 	}
@@ -424,7 +429,8 @@ func (md *Metadata) CheckDependencies(
 	}
 
 	// Check that no referenced user defined functions have changed.
-	for id, overload := range md.udfDeps {
+	for id, dep := range md.udfDeps {
+		overload := dep.overload
 		if names, ok := md.objectRefsByName[id]; ok {
 			for _, name := range names {
 				definition, err := optCatalog.ResolveFunction(
@@ -436,14 +442,19 @@ func (md *Metadata) CheckDependencies(
 				}
 				routineObj := tree.RoutineObj{
 					FuncName: name.ToRoutineName(),
-					Params:   make(tree.RoutineParams, overload.Types.Length()),
+					Params:   make(tree.RoutineParams, len(dep.invocationTypes)),
 				}
 				for i := 0; i < len(routineObj.Params); i++ {
 					routineObj.Params[i] = tree.RoutineParam{
-						Type: overload.Types.GetAt(i),
+						Type: dep.invocationTypes[i],
 						// Since we're not in the DROP context, it's sufficient
 						// to specify only the input parameters.
 						Class: tree.RoutineParamIn,
+						// Note that we don't need to specify the DefaultVal
+						// here because invocationTypes specifies the argument
+						// schema that was actually used. Instead, we might ask
+						// for matching overloads using their DEFAULT
+						// expressions.
 					}
 				}
 				// NOTE: We match for all types of routines here, including
@@ -451,13 +462,16 @@ func (md *Metadata) CheckDependencies(
 				// procedure is created with the same signature, we do not get a
 				// "<func> is not a function" error here. Instead, we'll return
 				// false and attempt to rebuild the statement.
+				routineType := tree.UDFRoutine | tree.BuiltinRoutine | tree.ProcedureRoutine
+				tryDefaultExprs := len(dep.invocationTypes) != overload.Types.Length()
 				toCheck, err := definition.MatchOverload(
 					ctx,
 					optCatalog,
 					&routineObj,
 					&evalCtx.SessionData().SearchPath,
-					tree.UDFRoutine|tree.BuiltinRoutine|tree.ProcedureRoutine,
+					routineType,
 					false, /* inDropContext */
+					tryDefaultExprs,
 				)
 				if err != nil || toCheck.Oid != overload.Oid || toCheck.Version != overload.Version {
 					return false, err
@@ -473,8 +487,8 @@ func (md *Metadata) CheckDependencies(
 
 	// Check that the role still has execution privilege on the user defined
 	// functions.
-	for _, overload := range md.udfDeps {
-		if err := optCatalog.CheckExecutionPrivilege(ctx, overload.Oid); err != nil {
+	for _, dep := range md.udfDeps {
+		if err := optCatalog.CheckExecutionPrivilege(ctx, dep.overload.Oid); err != nil {
 			return false, err
 		}
 	}
@@ -585,13 +599,16 @@ func (md *Metadata) HasUserDefinedFunctions() bool {
 // AddUserDefinedFunction adds a user-defined function to the metadata for this
 // query. If the function was resolved by name, the name will also be tracked.
 func (md *Metadata) AddUserDefinedFunction(
-	overload *tree.Overload, name *tree.UnresolvedObjectName,
+	overload *tree.Overload, invocationTypes []*types.T, name *tree.UnresolvedObjectName,
 ) {
 	if overload.Type != tree.UDFRoutine {
 		return
 	}
 	id := cat.StableID(catid.UserDefinedOIDToID(overload.Oid))
-	md.udfDeps[id] = overload
+	md.udfDeps[id] = udfDep{
+		overload:        overload,
+		invocationTypes: invocationTypes,
+	}
 	if name != nil {
 		md.objectRefsByName[id] = append(md.objectRefsByName[id], name)
 	}
@@ -1150,9 +1167,19 @@ func (md *Metadata) TestingDataSourceDeps() map[cat.StableID]cat.DataSource {
 	return md.dataSourceDeps
 }
 
-// TestingUDFDeps exposes the udfDeps for testing.
-func (md *Metadata) TestingUDFDeps() map[cat.StableID]*tree.Overload {
-	return md.udfDeps
+// TestingUDFDepsEqual returns whether the UDF deps of the other Metadata are
+// equal to the UDF deps of this Metadata.
+func (md *Metadata) TestingUDFDepsEqual(other *Metadata) bool {
+	for id, otherDep := range other.udfDeps {
+		dep, ok := md.udfDeps[id]
+		if !ok {
+			return false
+		}
+		if dep.overload != otherDep.overload || len(dep.invocationTypes) != len(otherDep.invocationTypes) {
+			return false
+		}
+	}
+	return true
 }
 
 // TestingObjectRefsByName exposes the objectRefsByName for testing.

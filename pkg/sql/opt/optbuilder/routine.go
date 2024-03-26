@@ -43,8 +43,6 @@ func (b *Builder) buildUDF(
 	colRefs *opt.ColSet,
 ) opt.ScalarExpr {
 	o := f.ResolvedOverload()
-	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
-
 	if o.Type == tree.ProcedureRoutine {
 		panic(errors.WithHint(
 			pgerror.Newf(
@@ -183,7 +181,15 @@ func (b *Builder) buildRoutine(
 ) (out opt.ScalarExpr, isMultiColDataSource bool) {
 	o := f.ResolvedOverload()
 	isProc := o.Type == tree.ProcedureRoutine
-	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
+	invocationTypes := make([]*types.T, len(f.Exprs))
+	for i, expr := range f.Exprs {
+		texpr, ok := expr.(tree.TypedExpr)
+		if !ok {
+			panic(errors.AssertionFailedf("expected input expressions to be already type-checked"))
+		}
+		invocationTypes[i] = texpr.ResolvedType()
+	}
+	b.factory.Metadata().AddUserDefinedFunction(o, invocationTypes, f.Func.ReferenceByName)
 
 	// Validate that the return types match the original return types defined in
 	// the function. Return types like user defined return types may change
@@ -260,6 +266,56 @@ func (b *Builder) buildRoutine(
 	bodyScope := b.allocScope()
 	var params opt.ColList
 	if o.Types.Length() > 0 {
+		// Check whether some arguments were omitted. We need to use the
+		// corresponding DEFAULT expressions if so.
+		if numDefaultsToUse := o.Types.Length() - len(args); numDefaultsToUse > 0 {
+			var defaultParamOrdinals []int
+			for i, param := range o.RoutineParams {
+				if param.DefaultVal != nil {
+					defaultParamOrdinals = append(defaultParamOrdinals, i)
+				}
+			}
+			if len(defaultParamOrdinals) < numDefaultsToUse {
+				panic(errors.AssertionFailedf(
+					"incorrect overload resolution:\nneeded args: %v\nprovided args: %v\nroutine params: %v",
+					o.Types, f.Exprs, o.RoutineParams,
+				))
+			}
+			// Skip parameters for which the arguments were specified
+			// explicitly.
+			defaultParamOrdinals = defaultParamOrdinals[len(defaultParamOrdinals)-numDefaultsToUse:]
+			for _, paramOrdinal := range defaultParamOrdinals {
+				param := o.RoutineParams[paramOrdinal]
+				if !param.IsInParam() {
+					// Such a routine shouldn't have been created in the first
+					// place.
+					panic(errors.AssertionFailedf(
+						"non-input routine parameter %d has DEFAULT expression: %v",
+						paramOrdinal, o.RoutineParams,
+					))
+				}
+				// TODO(yuzefovich): parameter type resolution logic is
+				// partially duplicated with handling of PLpgSQL routines below.
+				typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
+				if err != nil {
+					panic(err)
+				}
+				pexpr := inScope.resolveType(param.DefaultVal, typ)
+				arg := b.buildScalar(pexpr, inScope, nil /* outScope */, nil /* outCol */, colRefs)
+				if resolved := pexpr.ResolvedType(); !resolved.Identical(typ) {
+					if !cast.ValidCast(resolved, typ, cast.ContextAssignment) {
+						// Missing assignment cast between these two types
+						// should've been caught earlier during creation time.
+						panic(errors.AssertionFailedf(
+							"DEFAULT expression has type %s, need type %s, assignment cast isn't possible",
+							resolved.SQLStringForError(), typ.SQLStringForError(),
+						))
+					}
+					arg = b.factory.ConstructCast(arg, typ)
+				}
+				args = append(args, arg)
+			}
+		}
 		// Add all input parameters to the scope.
 		paramTypes, ok := o.Types.(tree.ParamTypes)
 		if !ok {
