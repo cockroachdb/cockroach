@@ -976,7 +976,6 @@ func TestDiskStatsMap(t *testing.T) {
 	specs := []base.StoreSpec{
 		{
 			ProvisionedRateSpec: base.ProvisionedRateSpec{
-				DiskName: "foo",
 				// ProvisionedBandwidth is 0 so the cluster setting will be used.
 				ProvisionedBandwidth: 0,
 			},
@@ -984,7 +983,6 @@ func TestDiskStatsMap(t *testing.T) {
 		},
 		{
 			ProvisionedRateSpec: base.ProvisionedRateSpec{
-				DiskName:             "bar",
 				ProvisionedBandwidth: 200,
 			},
 			Path: path.Join(dir, "bar"),
