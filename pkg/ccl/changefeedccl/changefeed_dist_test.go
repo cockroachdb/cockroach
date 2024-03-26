@@ -474,7 +474,7 @@ func TestChangefeedWithNoDistributionStrategy(t *testing.T) {
 	skip.UnderDuress(t)
 
 	noLocality := func(i int) []roachpb.Tier {
-		return make([]roachpb.Tier, 0)
+		return nil
 	}
 
 	// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
@@ -483,8 +483,8 @@ func TestChangefeedWithNoDistributionStrategy(t *testing.T) {
 	tester := newRangeDistributionTester(t, noLocality)
 	defer tester.cleanup()
 
-	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'default'")
-	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.random_replica_selection.enabled = false")
+	serverutils.SetClusterSetting(t, tester.tc, "changefeed.default_range_distribution_strategy", "default")
+	serverutils.SetClusterSetting(t, tester.tc, "changefeed.random_replica_selection.enabled", false)
 	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
 	partitions := tester.getPartitions()
 	counts := tester.countRangesPerNode(partitions)
