@@ -2425,7 +2425,7 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Time",
 		Help:        "Weighted time spent reading from or writing to the store's disk since this process started (as reported by the OS)",
 	}
-	metaIopsInProgress = metric.Metadata{
+	metaDiskIopsInProgress = metric.Metadata{
 		Name:        "storage.disk.iopsinprogress",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
@@ -2840,7 +2840,7 @@ type StoreMetrics struct {
 	DiskWriteTime      *metric.Gauge
 	DiskIOTime         *metric.Gauge
 	DiskWeightedIOTime *metric.Gauge
-	IopsInProgress     *metric.Gauge
+	DiskIopsInProgress *metric.Gauge
 }
 
 type tenantMetricsRef struct {
@@ -3592,7 +3592,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		DiskWriteTime:      metric.NewGauge(metaDiskWriteTime),
 		DiskIOTime:         metric.NewGauge(metaDiskIOTime),
 		DiskWeightedIOTime: metric.NewGauge(metaDiskWeightedIOTime),
-		IopsInProgress:     metric.NewGauge(metaIopsInProgress),
+		DiskIopsInProgress: metric.NewGauge(metaDiskIopsInProgress),
 
 		// Estimated MVCC stats in split.
 		SplitsWithEstimatedStats:     metric.NewCounter(metaSplitEstimatedStats),
@@ -3815,7 +3815,7 @@ func (sm *StoreMetrics) updateDiskStats(stats disk.Stats) {
 	sm.DiskWriteTime.Update(int64(stats.WritesDuration))
 	sm.DiskIOTime.Update(int64(stats.CumulativeDuration))
 	sm.DiskWeightedIOTime.Update(int64(stats.WeightedIODuration))
-	sm.IopsInProgress.Update(int64(stats.InProgressCount))
+	sm.DiskIopsInProgress.Update(int64(stats.InProgressCount))
 }
 
 func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.Metrics) {

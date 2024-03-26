@@ -23,6 +23,7 @@ import (
 )
 
 var defaultDiskStatsPollingInterval = envutil.EnvOrDefaultDuration("COCKROACH_DISK_STATS_POLLING_INTERVAL", 100*time.Millisecond)
+var defaultDiskTracePeriod = envutil.EnvOrDefaultDuration("COCKROACH_DISK_TRACE_PERIOD", 30*time.Second)
 
 // DeviceID uniquely identifies block devices.
 type DeviceID struct {
@@ -79,7 +80,11 @@ func (m *MonitorManager) Monitor(path string) (*Monitor, error) {
 	}
 
 	if disk == nil {
-		disk = &monitoredDisk{manager: m, deviceID: dev}
+		disk = &monitoredDisk{
+			manager:  m,
+			tracer:   newMonitorTracer(int(defaultDiskTracePeriod / defaultDiskStatsPollingInterval)),
+			deviceID: dev,
+		}
 		m.mu.disks = append(m.mu.disks, disk)
 
 		// The design maintains the invariant that the disk stat polling loop
@@ -153,9 +158,11 @@ func (m *MonitorManager) monitorDisks(collector statsCollector, stop chan struct
 
 			if err := collector.collect(disks); err != nil {
 				for i := range disks {
-					disks[i].stats.Lock()
-					disks[i].stats.err = err
-					disks[i].stats.Unlock()
+					disks[i].tracer.RecordEvent(traceEvent{
+						time:  timeutil.Now(),
+						stats: Stats{},
+						err:   err,
+					})
 				}
 			}
 		}
@@ -164,6 +171,7 @@ func (m *MonitorManager) monitorDisks(collector statsCollector, stop chan struct
 
 type monitoredDisk struct {
 	manager  *MonitorManager
+	tracer   *monitorTracer
 	deviceID DeviceID
 	// Tracks the number of Monitors observing stats on this disk. Once
 	// the count is zero, the MonitorManager no longer needs to collect stats
@@ -172,28 +180,19 @@ type monitoredDisk struct {
 	// for ensuring that the monitoredDisk is a singleton which relies on refCount
 	// being modified atomically.
 	refCount int
-
-	stats struct {
-		syncutil.Mutex
-		err             error
-		lastMeasurement Stats
-	}
 }
 
-func (m *monitoredDisk) recordStats(stats Stats) {
-	m.stats.Lock()
-	defer m.stats.Unlock()
-	m.stats.lastMeasurement = stats
-	m.stats.err = nil
+func (m *monitoredDisk) recordStats(t time.Time, stats Stats) {
+	m.tracer.RecordEvent(traceEvent{
+		time:  t,
+		stats: stats,
+		err:   nil,
+	})
 }
 
 // Monitor provides statistics for an individual disk.
 type Monitor struct {
 	*monitoredDisk
-
-	// prevIncrement and prevIncrementAt are used to compute incremental stats.
-	prevIncrement   Stats
-	prevIncrementAt time.Time
 }
 
 func (m *Monitor) Close() {
@@ -205,26 +204,34 @@ func (m *Monitor) Close() {
 
 // CumulativeStats returns the most-recent stats observed.
 func (m *Monitor) CumulativeStats() (Stats, error) {
-	m.stats.Lock()
-	defer m.stats.Unlock()
-	if m.stats.err != nil {
-		return Stats{}, m.stats.err
+	if event, err := m.tracer.Latest(); err != nil {
+		return Stats{}, err
+	} else if event.err != nil {
+		return Stats{}, event.err
+	} else {
+		return event.stats, nil
 	}
-	return m.stats.lastMeasurement, nil
 }
 
-// IncrementalStats computes the change in stats since the last time IncrementalStats
-// was invoked for this monitor. The first time IncrementalStats is invoked, it returns
-// an empty struct.
-func (m *Monitor) IncrementalStats() (Stats, error) {
-	stats, err := m.CumulativeStats()
+// IncrementalStats computes the change in stats over a period, delta.
+func (m *Monitor) IncrementalStats(delta time.Duration) (Stats, error) {
+	event, err := m.tracer.Latest()
 	if err != nil {
 		return Stats{}, err
 	}
-	if m.prevIncrementAt.IsZero() {
-		m.prevIncrementAt = timeutil.Now()
-		m.prevIncrement = stats
-		return Stats{}, nil
+	if event.err != nil {
+		return Stats{}, event.err
 	}
-	return stats.delta(&m.prevIncrement), nil
+	prevEvent, err := m.tracer.Find(timeutil.Now().Add(-delta))
+	if err != nil {
+		return Stats{}, err
+	}
+	if prevEvent.err != nil {
+		return Stats{}, prevEvent.err
+	}
+	return event.stats.delta(&prevEvent.stats), nil
+}
+
+func (m *Monitor) LogTrace() string {
+	return m.tracer.String()
 }

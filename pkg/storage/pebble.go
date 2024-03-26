@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
@@ -882,6 +883,9 @@ type engineConfig struct {
 	beforeClose []func(*Pebble)
 	// afterClose is a slice of functions to be invoked after the engine is closed.
 	afterClose []func()
+
+	// diskMonitor is used to output a disk trace when a stall is detected.
+	diskMonitor *disk.Monitor
 }
 
 // Pebble is a wrapper around a Pebble database instance.
@@ -1428,9 +1432,19 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 					// up.
 					log.MakeProcessUnavailable()
 
-					log.Fatalf(ctx, "disk stall detected: %s", info)
+					if p.cfg.diskMonitor != nil {
+						log.Fatalf(ctx, "disk stall detected: %s\n%s", info, p.cfg.diskMonitor.LogTrace())
+					} else {
+						log.Fatalf(ctx, "disk stall detected: %s", info)
+					}
 				} else {
-					p.async(func() { log.Errorf(ctx, "disk stall detected: %s", info) })
+					if p.cfg.diskMonitor != nil {
+						p.async(func() {
+							log.Errorf(ctx, "disk stall detected: %s\n%s", info, p.cfg.diskMonitor.LogTrace())
+						})
+					} else {
+						p.async(func() { log.Errorf(ctx, "disk stall detected: %s", info) })
+					}
 				}
 				return
 			}
@@ -1503,6 +1517,10 @@ func (p *Pebble) Close() {
 	if p.cfg.env != nil {
 		p.cfg.env.Close()
 		p.cfg.env = nil
+	}
+	if p.cfg.diskMonitor != nil {
+		p.cfg.diskMonitor.Close()
+		p.cfg.diskMonitor = nil
 	}
 	for _, closeFunc := range p.cfg.afterClose {
 		closeFunc()
