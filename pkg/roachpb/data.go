@@ -902,6 +902,29 @@ func (v Value) PrettyPrint() (ret string) {
 	return buf.String()
 }
 
+// SafeFormat implements the redact.SafeFormatter interface.
+func (sp StoreProperties) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.SafeString(redact.SafeString(sp.Dir))
+	w.SafeString(":")
+	if sp.ReadOnly {
+		w.SafeString(" ro")
+	} else {
+		w.SafeString(" rw")
+	}
+	w.Printf(" encrypted=%t", sp.Encrypted)
+	if sp.WalFailoverPath != nil {
+		w.Printf(" wal_failover_path=%s", redact.SafeString(*sp.WalFailoverPath))
+	}
+	if sp.FileStoreProperties != nil {
+		w.SafeString(" fs:{")
+		w.Printf("bdev=%s", redact.SafeString(sp.FileStoreProperties.BlockDevice))
+		w.Printf(" fstype=%s", redact.SafeString(sp.FileStoreProperties.FsType))
+		w.Printf(" mountpoint=%s", redact.SafeString(sp.FileStoreProperties.MountPoint))
+		w.Printf(" mountopts=%s", redact.SafeString(sp.FileStoreProperties.MountOptions))
+		w.SafeString("}")
+	}
+}
+
 // Kind returns the kind of commit trigger as a string.
 func (ct InternalCommitTrigger) Kind() redact.SafeString {
 	switch {
