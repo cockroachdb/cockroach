@@ -40,6 +40,12 @@ type savepoint struct {
 	// seqNum represents the write seq num at the time the savepoint was created.
 	// On rollback, it configures the txn to ignore all seqnums from this value
 	// until the most recent seqnum.
+	// TODO(nvanbenschoten): this field is currently defined to be an exclusive
+	// lower bound, with the assumption that any writes performed after the
+	// savepoint is established will use a higher sequence number. This probably
+	// isn't working correctly with shared and exclusive lock acquisition, which
+	// don't increment the writeSeq. We should increment the writeSeq when a
+	// savepoint is established and then consider this an inclusive lower bound.
 	seqNum enginepb.TxnSeq
 
 	// txnSpanRefresher fields.
