@@ -75,18 +75,27 @@ func (r *replicationStreamManagerImpl) GetReplicationStreamSpec(
 func (r *replicationStreamManagerImpl) CompleteReplicationStream(
 	ctx context.Context, streamID streampb.StreamID, successfulIngestion bool,
 ) error {
+	if err := r.checkLicense(); err != nil {
+		return err
+	}
 	return completeReplicationStream(ctx, r.evalCtx, r.txn, streamID, successfulIngestion)
 }
 
 func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (eval.ValueGenerator, error) {
+	if err := r.checkLicense(); err != nil {
+		return nil, err
+	}
 	return setupSpanConfigsStream(ctx, r.evalCtx, r.txn, tenantName)
 }
 
 func (r *replicationStreamManagerImpl) DebugGetProducerStatuses(
 	ctx context.Context,
 ) []*streampb.DebugProducerStatus {
+	// NB: we don't check license here since if a stream started but the license
+	// expired or was removed, we still was visibility into it during debugging.
+
 	// TODO(dt): ideally we store pointers to open readers in a map in some field
 	// of some struct off of server (job registry?) so that each VC just sees the
 	// ones it is running, but for now we're using a global singleton map but that

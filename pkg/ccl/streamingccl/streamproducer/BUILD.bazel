@@ -85,7 +85,6 @@ go_test(
         "//pkg/ccl/storageccl",
         "//pkg/ccl/streamingccl",
         "//pkg/ccl/streamingccl/replicationtestutils",
-        "//pkg/ccl/utilccl",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
