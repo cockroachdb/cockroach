@@ -2518,9 +2518,11 @@ CREATE TABLE t68254 (
   c JSONB,
   d STRING AS (b || repeat('a', a)) VIRTUAL,
   e STRING AS ((c->'foo')->>'bar') VIRTUAL,
+  f JSONB AS (c->'foo'->'bar') VIRTUAL,
   INDEX (d),
   INDEX (e),
-  INDEX (b, e)
+  INDEX (b, e),
+  INDEX (f)
 )
 
 statement ok
@@ -2553,6 +2555,7 @@ j1               {b}           5          5               1           true
 j1               {c}           5          5               1           true
 j1               {d}           5          5               1           true
 j1               {e}           5          5               1           true
+j1               {f}           5          5               1           true
 
 statement ok
 CREATE STATISTICS j2 ON d FROM t68254
@@ -2560,11 +2563,17 @@ CREATE STATISTICS j2 ON d FROM t68254
 statement ok
 CREATE STATISTICS j3 ON e FROM t68254
 
+statement ok
+CREATE STATISTICS j4 ON f FROM t68254
+
 let $hist_d
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j2'
 
 let $hist_e
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j3'
+
+let $hist_f
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t68254] WHERE statistics_name = 'j4'
 
 query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_d
@@ -2583,6 +2592,66 @@ upper_bound   range_rows  distinct_range_rows  equal_rows
 '{"baz": 1}'  0           0                    1
 '{"baz": 2}'  0           0                    1
 '{"baz": 3}'  0           0                    1
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_f
+----
+upper_bound   range_rows  distinct_range_rows  equal_rows
+'{"baz": 0}'  0           0                    1
+'{"baz": 1}'  0           0                    1
+'{"baz": 2}'  0           0                    1
+'{"baz": 3}'  0           0                    1
+
+query T
+EXPLAIN SELECT * FROM t68254 WHERE e IN ('{"baz": 2}', '{"baz": 3}', '{"baz": 4}')
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ estimated row count: 2
+    │ table: t68254@t68254_pkey
+    │
+    └── • scan
+          estimated row count: 2 (40% of the table; stats collected <hidden> ago)
+          table: t68254@t68254_e_idx
+          spans: [/'{"baz": 2}' - /'{"baz": 2}'] [/'{"baz": 3}' - /'{"baz": 3}'] [/'{"baz": 4}' - /'{"baz": 4}']
+
+query T
+EXPLAIN SELECT * FROM t68254 WHERE f IN ('{"baz": 2}', '{"baz": 3}', '{"baz": 4}')
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ estimated row count: 2
+    │ table: t68254@t68254_pkey
+    │
+    └── • scan
+          estimated row count: 2 (40% of the table; stats collected <hidden> ago)
+          table: t68254@t68254_f_idx
+          spans: [/'{"baz": 2}' - /'{"baz": 2}'] [/'{"baz": 3}' - /'{"baz": 3}'] [/'{"baz": 4}' - /'{"baz": 4}']
+
+query T
+EXPLAIN SELECT * FROM t68254 WHERE c->'foo'->'bar' > '{"baz": 0}'
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ estimated row count: 3
+    │ table: t68254@t68254_pkey
+    │
+    └── • scan
+          estimated row count: 3 (60% of the table; stats collected <hidden> ago)
+          table: t68254@t68254_f_idx
+          spans: (/'{"baz": 0}' - ]
 
 # Check that we also collect stats on the hidden expression index virt column.
 statement ok
@@ -2611,6 +2680,7 @@ j4               {crdb_internal_idx_expr}  5          5               1         
 j4               {c}                       5          5               1           true
 j4               {d}                       5          5               1           true
 j4               {e}                       5          5               1           true
+j4               {f}                       5          5               1           true
 
 statement ok
 CREATE STATISTICS j5 ON crdb_internal_idx_expr FROM t68254
