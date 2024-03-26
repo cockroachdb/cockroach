@@ -671,10 +671,11 @@ func splitIndex(
 			return err
 		}
 
-		holder, err := tc.FindRangeLeaseHolder(rangeDesc, nil)
+		li, _, err := tc.FindRangeLeaseEx(ctx, rangeDesc, nil)
 		if err != nil {
 			return err
 		}
+		holder := li.CurrentOrProspective().Replica
 
 		_, rightRange, err := tc.Server(int(holder.NodeID) - 1).SplitRange(pik)
 		if err != nil {
