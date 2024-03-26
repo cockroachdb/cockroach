@@ -1105,8 +1105,40 @@ func (b *logicalPropsBuilder) buildExportProps(export *ExportExpr, rel *props.Re
 	b.buildBasicProps(export, export.Columns, rel)
 }
 
-func (b *logicalPropsBuilder) buildCallProps(c *CallExpr, rel *props.Relational) {
-	b.buildBasicProps(c, opt.ColList{}, rel)
+func (b *logicalPropsBuilder) buildCallProps(call *CallExpr, rel *props.Relational) {
+	BuildSharedProps(call, &rel.Shared, b.evalCtx)
+
+	// Output Columns
+	// --------------
+	rel.OutputCols = call.Columns.ToSet()
+
+	// Not Null Columns
+	// ----------------
+	// All columns are assumed to be nullable.
+
+	// Outer Columns
+	// -------------
+	// CALL statements should not have outer columns.
+
+	// Functional Dependencies
+	// -----------------------
+	if !rel.OutputCols.Empty() {
+		rel.FuncDeps.MakeMax1Row(rel.OutputCols)
+	}
+
+	// Cardinality
+	// -----------
+	if rel.OutputCols.Empty() {
+		rel.Cardinality = props.ZeroCardinality
+	} else {
+		rel.Cardinality = props.OneCardinality
+	}
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildCall(call, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildTopKProps(topK *TopKExpr, rel *props.Relational) {

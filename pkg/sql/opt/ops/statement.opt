@@ -363,4 +363,11 @@ define AlterRangeRelocatePrivate {
 define Call {
     # Proc is the procedure being invoked. It is a UDFCallExpr.
     Proc ScalarExpr
+    _ CallPrivate
+}
+
+[Private]
+define CallPrivate {
+    # Columns stores the column IDs for the statement result columns.
+    Columns ColList
 }
