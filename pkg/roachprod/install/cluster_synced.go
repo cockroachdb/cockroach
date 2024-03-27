@@ -112,7 +112,7 @@ var DefaultRetryOpt = &retry.Options{
 	MaxRetries: 2,
 }
 
-var DefaultShouldRetryFn = func(res *RunResultDetails) bool { return errors.Is(res.Err, rperrors.ErrSSH255) }
+var DefaultShouldRetryFn = func(res *RunResultDetails) bool { return rperrors.IsTransient(res.Err) }
 
 // defaultSCPRetry won't retry if the error output contains any of the following
 // substrings, in which cases retries are unlikely to help.
