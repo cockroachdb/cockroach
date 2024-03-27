@@ -11,17 +11,11 @@
 package main
 
 import (
-	"context"
 	"os"
-	"path/filepath"
 	"reflect"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/kr/pretty"
 )
 
 func TestPkgsFromDiff(t *testing.T) {
@@ -57,34 +51,4 @@ func TestPkgsFromDiff(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestPkgsFromDiffHelper(t *testing.T) {
-	// This helper can easily generate new test cases.
-	skip.IgnoreLint(t, "only for manual use")
-
-	ctx := context.Background()
-	client := ghClient(ctx)
-
-	const prNum = 10305
-
-	diff, err := getDiff(ctx, client, "cockroachdb", "cockroach", prNum)
-	if err != nil {
-		t.Fatal(err)
-	}
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	name := filepath.Join(wd, "testdata", strconv.Itoa(prNum)+".diff")
-	if err := os.WriteFile(name, []byte(diff), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	pkgs, err := pkgsFromDiff(strings.NewReader(diff))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Errorf("read the following information:\n%v\n\ndiff at %s", pretty.Sprint(pkgs), name)
 }

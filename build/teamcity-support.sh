@@ -228,7 +228,15 @@ get_upstream_branch() {
 }
 
 changed_go_pkgs() {
-  git fetch --quiet origin
+  n=0
+  until git fetch --quiet origin; do
+    n=$((n+1))
+    if [ "$n" -ge 3 ]; then
+      echo "Could not fetch from GitHub"
+      exit 1
+    fi
+    sleep 5
+  done
   upstream_branch=$(get_upstream_branch)
   # Find changed packages, minus those that have been removed entirely. Note
   # that the three-dot notation means we are diffing against the merge-base of
