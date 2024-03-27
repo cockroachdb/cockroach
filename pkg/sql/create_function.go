@@ -485,6 +485,11 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 
 	udfDesc.DependsOnFunctions = make([]descpb.ID, 0, len(n.functionDeps))
 	for id := range n.functionDeps {
+		// Add a reference to the dependency in here. Note that we need to add
+		// this dep before updating the back reference in case it's a
+		// self-dependent function (so that we get a proper error from
+		// AddFunctionReference).
+		udfDesc.DependsOnFunctions = append(udfDesc.DependsOnFunctions, id)
 		// Add a back reference.
 		backRefDesc, err := params.p.Descriptors().MutableByID(params.p.Txn()).Function(params.ctx, id)
 		if err != nil {
@@ -496,8 +501,6 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 		if err := params.p.writeFuncSchemaChange(params.ctx, backRefDesc); err != nil {
 			return err
 		}
-		// Add a reference to the dependency in here.
-		udfDesc.DependsOnFunctions = append(udfDesc.DependsOnFunctions, id)
 	}
 
 	// Add forward references to UDF descriptor.
