@@ -186,15 +186,27 @@ func EncDatumValueFromBufferWithOffsetsAndType(
 
 // DatumToEncDatum initializes an EncDatum with the given Datum.
 func DatumToEncDatum(ctyp *types.T, d tree.Datum) EncDatum {
+	ed, err := DatumToEncDatumEx(ctyp, d)
+	if err != nil {
+		panic(err)
+	}
+	return ed
+}
+
+// DatumToEncDatumEx is the same as DatumToEncDatum that returns an error
+// instead of panicking under unexpected circumstances.
+// TODO(yuzefovich): we should probably get rid of DatumToEncDatum in favor of
+// this method altogether.
+func DatumToEncDatumEx(ctyp *types.T, d tree.Datum) (EncDatum, error) {
 	if d == nil {
-		panic(errors.AssertionFailedf("cannot convert nil datum to EncDatum"))
+		return EncDatum{}, errors.AssertionFailedf("cannot convert nil datum to EncDatum")
 	}
 
 	dTyp := d.ResolvedType()
 	if d != tree.DNull && !ctyp.Equivalent(dTyp) && !dTyp.IsAmbiguous() {
-		panic(errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp.SQLStringForError(), ctyp.SQLStringForError()))
+		return EncDatum{}, errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp.SQLStringForError(), ctyp.SQLStringForError())
 	}
-	return EncDatum{Datum: d}
+	return EncDatum{Datum: d}, nil
 }
 
 // NullEncDatum initializes an EncDatum with the NULL value.
