@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -77,6 +78,22 @@ var RangeFeedSmearInterval = settings.RegisterDurationSetting(
 	1*time.Millisecond,
 	settings.NonNegativeDuration,
 )
+
+// RangeFeedUseScheduler controls type of rangefeed processor is used to process
+// raft updates and sends updates to clients.
+var RangeFeedUseScheduler = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.scheduler.enabled",
+	"use shared fixed pool of workers for all range feeds instead of a "+
+		"worker per range (worker pool size is determined by "+
+		"COCKROACH_RANGEFEED_SCHEDULER_WORKERS env variable)",
+	util.ConstantWithMetamorphicTestBool("kv_rangefeed_scheduler_enabled", true),
+)
+
+// RangefeedSchedulerDisabled is a kill switch for scheduler based rangefeed
+// processors. To be removed in 24.1 after new processor becomes default.
+var RangefeedSchedulerDisabled = envutil.EnvOrDefaultBool("COCKROACH_RANGEFEED_DISABLE_SCHEDULER",
+	false)
 
 func init() {
 	// Inject into kvserverbase to allow usage from kvcoord.
@@ -475,6 +492,11 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// Create a new rangefeed.
 	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(isSystemSpan)
 
+	var sched *rangefeed.Scheduler
+	if shouldUseRangefeedScheduler(&r.ClusterSettings().SV) {
+		sched = r.store.getRangefeedScheduler()
+	}
+
 	desc := r.Desc()
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r, span: desc.RSpan()}
 	cfg := rangefeed.Config{
@@ -485,12 +507,13 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		RangeID:          r.RangeID,
 		Span:             desc.RSpan(),
 		TxnPusher:        &tp,
+		PushTxnsInterval: r.store.TestingKnobs().RangeFeedPushTxnsInterval,
 		PushTxnsAge:      r.store.TestingKnobs().RangeFeedPushTxnsAge,
 		EventChanCap:     defaultEventChanCap,
 		EventChanTimeout: defaultEventChanTimeout,
 		Metrics:          r.store.metrics.RangeFeedMetrics,
 		MemBudget:        feedBudget,
-		Scheduler:        r.store.getRangefeedScheduler(),
+		Scheduler:        sched,
 		Priority:         isSystemSpan, // only takes effect when Scheduler != nil
 	}
 	p = rangefeed.NewProcessor(cfg)
@@ -930,6 +953,10 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *kvpb.Error 
 		}
 	}
 	return nil
+}
+
+func shouldUseRangefeedScheduler(sv *settings.Values) bool {
+	return RangeFeedUseScheduler.Get(sv) && !RangefeedSchedulerDisabled
 }
 
 // TestGetReplicaRangefeedProcessor exposes rangefeed processor for test

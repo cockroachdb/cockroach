@@ -39,6 +39,7 @@ import (
 )
 
 type cdcBenchScanType string
+type cdcBenchServer string
 
 const (
 	// cdcBenchInitialScan runs an initial scan across a table, i.e. it scans and
@@ -59,11 +60,16 @@ const (
 	// do so efficiently. Ideally, this wouldn't take any time at all, but in
 	// practice it can.
 	cdcBenchColdCatchupScan cdcBenchScanType = "catchup-cold"
+
+	cdcBenchNoServer        cdcBenchServer = ""
+	cdcBenchProcessorServer cdcBenchServer = "processor" // legacy processor
+	cdcBenchSchedulerServer cdcBenchServer = "scheduler" // new scheduler
 )
 
 var (
 	cdcBenchScanTypes = []cdcBenchScanType{
 		cdcBenchInitialScan, cdcBenchCatchupScan, cdcBenchColdCatchupScan}
+	cdcBenchServers = []cdcBenchServer{cdcBenchProcessorServer, cdcBenchSchedulerServer}
 )
 
 func registerCDCBench(r registry.Registry) {
@@ -119,26 +125,29 @@ func registerCDCBench(r registry.Registry) {
 				RequiresLicense:  true,
 				Timeout:          time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, "")
+					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, "", "")
 				},
 			})
 
 			// Workloads with a concurrent changefeed running.
-			r.Add(registry.TestSpec{
-				Name: fmt.Sprintf(
-					"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=scheduler/protocol=mux/format=%s/sink=null",
-					readPercent, nodes, cpus, formatSI(ranges), format),
-				Owner:            registry.OwnerCDC,
-				Benchmark:        true,
-				Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
-				CompatibleClouds: registry.AllExceptAWS,
-				Suites:           registry.Suites(registry.Nightly),
-				RequiresLicense:  true,
-				Timeout:          time.Hour,
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, format)
-				},
-			})
+			for _, server := range cdcBenchServers {
+				server := server // pin loop variable
+				r.Add(registry.TestSpec{
+					Name: fmt.Sprintf(
+						"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=mux/format=%s/sink=null",
+						readPercent, nodes, cpus, formatSI(ranges), server, format),
+					Owner:            registry.OwnerCDC,
+					Benchmark:        true,
+					Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
+					CompatibleClouds: registry.AllExceptAWS,
+					Suites:           registry.Suites(registry.Nightly),
+					RequiresLicense:  true,
+					Timeout:          time.Hour,
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format)
+					},
+				})
+			}
 		}
 	}
 }
@@ -352,6 +361,7 @@ func runCDCBenchWorkload(
 	c cluster.Cluster,
 	numRanges int64,
 	readPercent int,
+	server cdcBenchServer,
 	format string,
 ) {
 	const sink = "null://"
@@ -370,11 +380,27 @@ func runCDCBenchWorkload(
 	if readPercent == 100 {
 		insertCount = 1_000_000 // ingest some data to read
 	}
+	// Either of these will disable changefeeds. Make sure they're all disabled.
+	if server == "" || format == "" {
+		require.Empty(t, server)
+		require.Empty(t, format)
+		cdcEnabled = false
+	}
 
 	// Start data nodes first to place data on them. We'll start the changefeed
 	// coordinator later, since we don't want any data on it.
 	opts, settings := makeCDCBenchOptions(c)
 	settings.ClusterSettings["kv.rangefeed.enabled"] = strconv.FormatBool(cdcEnabled)
+
+	switch server {
+	case cdcBenchProcessorServer:
+		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "false"
+	case cdcBenchSchedulerServer:
+		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "true"
+	case cdcBenchNoServer:
+	default:
+		t.Fatalf("unknown server type %q", server)
+	}
 
 	c.Start(ctx, t.L(), opts, settings, nData)
 	m := c.NewMonitor(ctx, nData.Merge(nCoord))
