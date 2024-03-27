@@ -6,7 +6,7 @@
 # Beware that this configuration is quite insecure. By default, it will make
 # CockroachDB accessible on port 26257 on your Kubernetes nodes' network
 # interfaces, meaning that if your nodes are reachable from the Internet, then
-# this CockroachDB cluster will be too. To disable this behavior, remove the 
+# this CockroachDB cluster will be too. To disable this behavior, remove the
 # `hostNetwork` configuration field below.
 #
 # To use this file, customize all the parts labeled "TODO" before running:
@@ -34,15 +34,15 @@ metadata:
     app: cockroachdb
 spec:
   ports:
-  # The main port, served by gRPC, serves Postgres-flavor SQL, internode
-  # traffic and the cli.
-  - port: 26257
-    targetPort: 26257
-    name: grpc
-  # The secondary port serves the UI as well as health and debug endpoints.
-  - port: 8080
-    targetPort: 8080
-    name: http
+    # The main port, served by gRPC, serves Postgres-flavor SQL, internode
+    # traffic and the cli.
+    - port: 26257
+      targetPort: 26257
+      name: grpc
+    # The secondary port serves the UI as well as health and debug endpoints.
+    - port: 8080
+      targetPort: 8080
+      name: http
   selector:
     app: cockroachdb
 ---
@@ -68,12 +68,12 @@ metadata:
     prometheus.io/port: "8080"
 spec:
   ports:
-  - port: 26257
-    targetPort: 26257
-    name: grpc
-  - port: 8080
-    targetPort: 8080
-    name: http
+    - port: 26257
+      targetPort: 26257
+      name: grpc
+    - port: 8080
+      targetPort: 8080
+      name: http
   # We want all pods in the StatefulSet to have their addresses published for
   # the sake of the other CockroachDB pods even before they're ready, since they
   # have to be able to talk to each other in order to become ready.
@@ -82,7 +82,7 @@ spec:
   selector:
     app: cockroachdb
 ---
-apiVersion: policy/v1beta1
+apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: cockroachdb-budget
@@ -127,89 +127,89 @@ spec:
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: app
-                  operator: In
-                  values:
-                  - cockroachdb
-              topologyKey: kubernetes.io/hostname
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - cockroachdb
+                topologyKey: kubernetes.io/hostname
       containers:
-      - name: cockroachdb
-        # NOTE: Always use the most recent version of CockroachDB for the best
-        # performance and reliability.
-        image: cockroachdb/cockroach:@VERSION@
-        imagePullPolicy: IfNotPresent
-        # TODO: Change these to appropriate values for the hardware that you're running. You can see
-        # the resources that can be allocated on each of your Kubernetes nodes by running:
-        #   kubectl describe nodes
-        # Note that requests and limits should have identical values.
-        resources:
-          requests:
-            cpu: "2"
-            memory: "8Gi"
-          limits:
-            cpu: "2"
-            memory: "8Gi" 
-        ports:
-        - containerPort: 26257
-          name: grpc
-        - containerPort: 8080
-          name: http
-# We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
-#       livenessProbe:
-#         httpGet:
-#           path: "/health"
-#           port: http
-#         initialDelaySeconds: 30
-#         periodSeconds: 5
-        readinessProbe:
-          httpGet:
-            path: "/health?ready=1"
-            port: http
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          failureThreshold: 2
-        volumeMounts:
-        - name: datadir
-          mountPath: /cockroach/cockroach-data
-        env:
-        - name: COCKROACH_CHANNEL
-          value: kubernetes-insecure
-        command:
-          - "/bin/bash"
-          - "-ecx"
-          # The use of qualified `hostname -f` is crucial:
-          # Other nodes aren't able to look up the unqualified hostname.
-          - "exec /cockroach/cockroach start --logtostderr --insecure --advertise-host $(hostname -f) --http-addr 0.0.0.0 --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb --cache 25% --max-sql-memory 25%"
+        - name: cockroachdb
+          # NOTE: Always use the most recent version of CockroachDB for the best
+          # performance and reliability.
+          image: cockroachdb/cockroach:@VERSION@
+          imagePullPolicy: IfNotPresent
+          # TODO: Change these to appropriate values for the hardware that you're running. You can see
+          # the resources that can be allocated on each of your Kubernetes nodes by running:
+          #   kubectl describe nodes
+          # Note that requests and limits should have identical values.
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+            limits:
+              cpu: "2"
+              memory: "8Gi"
+          ports:
+            - containerPort: 26257
+              name: grpc
+            - containerPort: 8080
+              name: http
+          # We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
+          #       livenessProbe:
+          #         httpGet:
+          #           path: "/health"
+          #           port: http
+          #         initialDelaySeconds: 30
+          #         periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: "/health?ready=1"
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 2
+          volumeMounts:
+            - name: datadir
+              mountPath: /cockroach/cockroach-data
+          env:
+            - name: COCKROACH_CHANNEL
+              value: kubernetes-insecure
+          command:
+            - "/bin/bash"
+            - "-ecx"
+            # The use of qualified `hostname -f` is crucial:
+            # Other nodes aren't able to look up the unqualified hostname.
+            - "exec /cockroach/cockroach start --logtostderr --insecure --advertise-host $(hostname -f) --http-addr 0.0.0.0 --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb --cache 25% --max-sql-memory 25%"
       # No pre-stop hook is required, a SIGTERM plus some time is all that's
       # needed for graceful shutdown of a node.
       terminationGracePeriodSeconds: 60
       volumes:
-      - name: datadir
-        persistentVolumeClaim:
-          claimName: datadir
+        - name: datadir
+          persistentVolumeClaim:
+            claimName: datadir
   podManagementPolicy: Parallel
   updateStrategy:
     type: RollingUpdate
   volumeClaimTemplates:
-  - metadata:
-      name: datadir
-    spec:
-      accessModes:
-        - "ReadWriteOnce"
-      # TODO: This specifically asks for a storage class with the name "ssd". A
-      # storage class of this name doesn't exist by default. See our docs for
-      # more information on how to create an optimized storage class for use here:
-      # https://www.cockroachlabs.com/docs/stable/kubernetes-performance.html#disk-type
-      storageClassName: ssd
-      resources:
-        requests:
-          # TODO: This asks for a fairly large disk by default because on
-          # certain popular clouds there is a direct correlation between disk
-          # size and the IOPS provisioned to the disk. Change this as necessary
-          # to suit your needs, but be aware that smaller disks will typically
-          # mean worse performance.
-          storage: 1024Gi
+    - metadata:
+        name: datadir
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        # TODO: This specifically asks for a storage class with the name "ssd". A
+        # storage class of this name doesn't exist by default. See our docs for
+        # more information on how to create an optimized storage class for use here:
+        # https://www.cockroachlabs.com/docs/stable/kubernetes-performance.html#disk-type
+        storageClassName: ssd
+        resources:
+          requests:
+            # TODO: This asks for a fairly large disk by default because on
+            # certain popular clouds there is a direct correlation between disk
+            # size and the IOPS provisioned to the disk. Change this as necessary
+            # to suit your needs, but be aware that smaller disks will typically
+            # mean worse performance.
+            storage: 1024Gi
