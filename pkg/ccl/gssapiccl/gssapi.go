@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/errors"
+	"github.com/go-ldap/ldap/v3"
 )
 
 const (
@@ -82,7 +83,7 @@ func authGSS(
 	}
 
 	behaviors.SetAuthenticator(func(
-		_ context.Context, _ username.SQLUsername, _ bool, _ pgwire.PasswordRetrievalFn,
+		_ context.Context, _ username.SQLUsername, _ bool, _ pgwire.PasswordRetrievalFn, _ *ldap.DN,
 	) error {
 		// Enforce krb_realm option, if any.
 		if realms := entry.GetOptions("krb_realm"); len(realms) > 0 {

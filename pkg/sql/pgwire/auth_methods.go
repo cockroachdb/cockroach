@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/go-ldap/ldap/v3"
 	"github.com/xdg-go/scram"
 )
 
@@ -123,6 +124,7 @@ func authPassword(
 		systemIdentity username.SQLUsername,
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
+		_ *ldap.DN,
 	) error {
 		return passwordAuthenticator(ctx, systemIdentity, clientConnection, pwRetrieveFn, c, execCfg)
 	})
@@ -246,6 +248,7 @@ func authScram(
 		systemIdentity username.SQLUsername,
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
+		_ *ldap.DN,
 	) error {
 		return scramAuthenticator(ctx, systemIdentity, clientConnection, pwRetrieveFn, c, execCfg)
 	})
@@ -423,6 +426,7 @@ func authCert(
 		systemIdentity username.SQLUsername,
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
+		roleSubject *ldap.DN,
 	) error {
 		if len(tlsState.PeerCertificates) == 0 {
 			return errors.New("no TLS peer certificates, but required for auth")
@@ -442,6 +446,7 @@ func authCert(
 			&tlsState,
 			execCfg.RPCContext.TenantID,
 			cm,
+			roleSubject,
 		)
 		if err != nil {
 			return err
@@ -520,6 +525,7 @@ func authAutoSelectPasswordProtocol(
 		systemIdentity username.SQLUsername,
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
+		_ *ldap.DN,
 	) error {
 		// Request information about the password hash.
 		expired, hashedPassword, pwRetrieveErr := pwRetrieveFn(ctx)
@@ -615,7 +621,7 @@ func authTrust(
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
-	b.SetAuthenticator(func(_ context.Context, _ username.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
+	b.SetAuthenticator(func(_ context.Context, _ username.SQLUsername, _ bool, _ PasswordRetrievalFn, _ *ldap.DN) error {
 		return nil
 	})
 	return b, nil
@@ -633,7 +639,7 @@ func authReject(
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
-	b.SetAuthenticator(func(ctx context.Context, _ username.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
+	b.SetAuthenticator(func(ctx context.Context, _ username.SQLUsername, _ bool, _ PasswordRetrievalFn, _ *ldap.DN) error {
 		err := errors.New("authentication rejected by configuration")
 		c.LogAuthFailed(ctx, eventpb.AuthFailReason_LOGIN_DISABLED, err)
 		return err
@@ -664,7 +670,7 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 	) (*AuthBehaviors, error) {
 		b := &AuthBehaviors{}
 		b.SetRoleMapper(UseProvidedIdentity)
-		b.SetAuthenticator(func(ctx context.Context, user username.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
+		b.SetAuthenticator(func(ctx context.Context, user username.SQLUsername, _ bool, _ PasswordRetrievalFn, _ *ldap.DN) error {
 			c.LogAuthInfof(ctx, "session revival token detected; attempting to use it")
 			if !sql.AllowSessionRevival.Get(&execCfg.Settings.SV) || execCfg.Codec.ForSystemTenant() {
 				return errors.New("session revival tokens are not supported on this cluster")
@@ -736,7 +742,7 @@ func authJwtToken(
 	}
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
-	b.SetAuthenticator(func(ctx context.Context, user username.SQLUsername, clientConnection bool, pwRetrieveFn PasswordRetrievalFn) error {
+	b.SetAuthenticator(func(ctx context.Context, user username.SQLUsername, clientConnection bool, pwRetrieveFn PasswordRetrievalFn, _ *ldap.DN) error {
 		c.LogAuthInfof(ctx, "JWT token detected; attempting to use it")
 		if !clientConnection {
 			err := errors.New("JWT token authentication is only available for client connections")

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/go-ldap/ldap/v3"
 )
 
 // Authenticator is a component of an AuthMethod that determines if the
@@ -25,6 +26,7 @@ type Authenticator = func(
 	systemIdentity username.SQLUsername,
 	clientConnection bool,
 	pwRetrieveFn PasswordRetrievalFn,
+	roleSubject *ldap.DN,
 ) error
 
 // PasswordRetrievalFn defines a method to retrieve a hashed password
