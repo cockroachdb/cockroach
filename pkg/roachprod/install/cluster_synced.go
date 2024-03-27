@@ -128,7 +128,7 @@ var defaultSCPShouldRetryFn = func(res *RunResultDetails) bool {
 }
 
 // runWithMaybeRetry will run the specified function `f` at least once, or only
-// once if `runRetryOpts` is nil
+// once if `retryOpts` is nil
 //
 // Any RunResultDetails containing a non nil err from `f` is passed to `shouldRetryFn` which,
 // if it returns true, will result in `f` being retried using the `RetryOpts`
@@ -2717,7 +2717,7 @@ func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		err = errors.Wrapf(err, "~ %s\n%s", strings.Join(args, " "), out)
+		err = rperrors.NewSSHError(errors.Wrapf(err, "~ %s\n%s", strings.Join(args, " "), out))
 	}
 
 	res := newRunResultDetails(-1, err)
