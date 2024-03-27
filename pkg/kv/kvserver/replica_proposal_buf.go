@@ -699,8 +699,12 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 		if li.iAmTheLeader {
 			return false
 		}
-		ownsCurrentLease := b.p.ownsValidLease(ctx, b.clock.NowAsClockTimestamp())
-		if li.leaderEligibleForLease && !ownsCurrentLease && !b.testing.allowLeaseProposalWhenNotLeader {
+		if b.p.ownsValidLease(ctx, b.clock.NowAsClockTimestamp()) {
+			log.VEventf(ctx, 2, "proposing lease extension even though we're not the leader; we hold the current lease")
+			return false
+		}
+
+		if li.leaderEligibleForLease && !b.testing.allowLeaseProposalWhenNotLeader {
 			log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
 				li.leader)
 			b.p.rejectProposalWithRedirectLocked(ctx, p, li.leader)
@@ -715,12 +719,9 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 			}
 			return true
 		}
-		// If the leader is not known, or if it is known but it's ineligible
-		// for the lease, continue with the proposal as explained above. We
-		// also send lease extensions for an existing leaseholder.
-		if ownsCurrentLease {
-			log.VEventf(ctx, 2, "proposing lease extension even though we're not the leader; we hold the current lease")
-		} else if !li.leaderKnown() {
+		// If the leader is not known, or if it is known but is ineligible for the
+		// lease, continue with the proposal as explained above.
+		if !li.leaderKnown() {
 			log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is unknown")
 		} else {
 			log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is ineligible")
