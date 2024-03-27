@@ -351,7 +351,7 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 			block.cursors[dec.Name] = *dec
 		}
 	}
-	if types.IsRecordType(b.returnType) && !b.hasOutParam() {
+	if types.IsRecordType(b.returnType) && types.IsWildcardTupleType(b.returnType) {
 		// For a RECORD-returning routine, infer the concrete type by examining the
 		// RETURN statements. This has to happen after building the declaration
 		// block because RETURN statements can reference declared variables. Only
