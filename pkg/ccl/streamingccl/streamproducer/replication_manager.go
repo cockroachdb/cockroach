@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -36,6 +35,9 @@ type replicationStreamManagerImpl struct {
 func (r *replicationStreamManagerImpl) StartReplicationStream(
 	ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
+	if err := r.checkLicense(); err != nil {
+		return streampb.ReplicationProducerSpec{}, err
+	}
 	return StartReplicationProducerJob(ctx, r.evalCtx, r.txn, tenantName, req)
 }
 
@@ -43,6 +45,9 @@ func (r *replicationStreamManagerImpl) StartReplicationStream(
 func (r *replicationStreamManagerImpl) HeartbeatReplicationStream(
 	ctx context.Context, streamID streampb.StreamID, frontier hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
+	if err := r.checkLicense(); err != nil {
+		return streampb.StreamReplicationStatus{}, err
+	}
 	return heartbeatReplicationStream(ctx, r.evalCtx, r.txn, streamID, frontier)
 }
 
@@ -50,6 +55,9 @@ func (r *replicationStreamManagerImpl) HeartbeatReplicationStream(
 func (r *replicationStreamManagerImpl) StreamPartition(
 	streamID streampb.StreamID, opaqueSpec []byte,
 ) (eval.ValueGenerator, error) {
+	if err := r.checkLicense(); err != nil {
+		return nil, err
+	}
 	return streamPartition(r.evalCtx, streamID, opaqueSpec)
 }
 
@@ -57,6 +65,9 @@ func (r *replicationStreamManagerImpl) StreamPartition(
 func (r *replicationStreamManagerImpl) GetReplicationStreamSpec(
 	ctx context.Context, streamID streampb.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
+	if err := r.checkLicense(); err != nil {
+		return nil, err
+	}
 	return getReplicationStreamSpec(ctx, r.evalCtx, r.txn, streamID)
 }
 
@@ -81,16 +92,15 @@ func newReplicationStreamManagerWithPrivilegesCheck(
 		privilege.REPLICATION); err != nil {
 		return nil, err
 	}
+	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn, sessionID: sessionID}, nil
+}
 
-	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
-	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		execCfg.Settings, "REPLICATION")
-	if enterpriseCheckErr != nil {
-		return nil, pgerror.Wrap(enterpriseCheckErr,
+func (r *replicationStreamManagerImpl) checkLicense() error {
+	if err := utilccl.CheckEnterpriseEnabled(r.evalCtx.Settings, "REPLICATION"); err != nil {
+		return pgerror.Wrap(err,
 			pgcode.CCLValidLicenseRequired, "physical replication requires an enterprise license on the primary (and secondary) cluster")
 	}
-
-	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn, sessionID: sessionID}, nil
+	return nil
 }
 
 func init() {
