@@ -133,3 +133,14 @@ SELECT identity2(11)
 statement ok
 DROP FUNCTION identity2;
 DROP FUNCTION identity1;
+
+statement ok
+CREATE FUNCTION self_cycle(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+# Note that posgres allows creating a function that results in an infinite
+# cycle with itself - it hits the stack depth limit when invoked.
+statement error pgcode 42P13 cannot add dependency from descriptor .* to function self_cycle .* because there will be a dependency cycle
+CREATE OR REPLACE FUNCTION self_cycle(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT self_cycle(a, b); $$;
+
+statement ok
+DROP FUNCTION self_cycle;
