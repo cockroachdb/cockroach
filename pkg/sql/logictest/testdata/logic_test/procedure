@@ -416,6 +416,12 @@ CALL first_value(1);
 statement error pgcode 42809 addgeometrycolumn is not a procedure
 CALL addgeometrycolumn(null, null, null, null, null);
 
+let $funcOID
+SELECT oid FROM pg_proc WHERE proname = 'count_rows';
+
+statement error pgcode 42809 count_rows is not a procedure
+CALL [ FUNCTION $funcOID ] ();
+
 statement ok
 CREATE PROCEDURE p_inner(OUT param INTEGER) AS $$ SELECT 1; $$ LANGUAGE SQL;
 
