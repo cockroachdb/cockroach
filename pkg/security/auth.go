@@ -203,7 +203,7 @@ func UserAuthCertHook(
 		if roleSubject != nil {
 			var err error
 			if certSubject, err = distinguishedname.ParseDNFromCertificate(peerCert); err != nil {
-				return errors.Errorf("could not parse certificate subject DN")
+				return errors.Wrapf(err, "could not parse certificate subject DN")
 			}
 		}
 

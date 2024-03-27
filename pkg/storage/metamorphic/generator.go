@@ -48,6 +48,7 @@ func (e *engineConfig) create(path string, baseFS vfs.FS) (storage.Engine, error
 
 	var configOpts []storage.ConfigOption
 	configOpts = append(configOpts, storage.CacheSize(1<<20))
+	e.opts.EnsureDefaults()
 	if e.opts != nil {
 		configOpts = append(configOpts, storage.PebbleOptions(e.opts.String(), parseHooks))
 	}
