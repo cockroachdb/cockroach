@@ -303,7 +303,7 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 			services = append(services, ServiceDesc{
 				VirtualClusterName: startOpts.VirtualClusterName,
 				ServiceType:        ServiceTypeSQL,
-				ServiceMode:        ServiceModeExternal,
+				ServiceMode:        serviceMode,
 				Node:               node,
 				Port:               startOpts.SQLPort,
 				Instance:           startOpts.SQLInstance,
@@ -313,7 +313,7 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 			services = append(services, ServiceDesc{
 				VirtualClusterName: startOpts.VirtualClusterName,
 				ServiceType:        ServiceTypeUI,
-				ServiceMode:        ServiceModeExternal,
+				ServiceMode:        serviceMode,
 				Node:               node,
 				Port:               startOpts.AdminUIPort,
 				Instance:           startOpts.SQLInstance,
