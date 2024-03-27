@@ -53,6 +53,7 @@ kv.closed_timestamp.lead_for_global_reads_override	duration	0s	if nonzero, overr
 kv.closed_timestamp.side_transport_interval	duration	200ms	the interval at which the closed timestamp side-transport attempts to advance each range's closed timestamp; set to 0 to disable the side-transport	system-visible
 kv.closed_timestamp.target_duration	duration	3s	if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration	system-visible
 kv.dist_sender.circuit_breaker.cancellation.enabled	boolean	true	when enabled, in-flight requests will be cancelled when the circuit breaker trips	application
+kv.dist_sender.circuit_breaker.cancellation.write_grace_period	duration	10s	how long after the circuit breaker trips to cancel write requests (these can't retry internally, so should be long enough to allow quorum/lease recovery)	application
 kv.dist_sender.circuit_breaker.enabled	boolean	true	enable circuit breakers for failing or stalled replicas	application
 kv.dist_sender.circuit_breaker.probe.interval	duration	3s	interval between replica probes	application
 kv.dist_sender.circuit_breaker.probe.threshold	duration	3s	duration of errors or stalls after which a replica will be probed	application
