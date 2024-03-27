@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<launchConfiguration type="org.lamport.tla.toolbox.tool.tlc.modelCheck">
+    <stringAttribute key="TLCCmdLineParameters" value=""/>
+    <intAttribute key="collectCoverage" value="1"/>
+    <stringAttribute key="configurationName" value="Model_1"/>
+    <booleanAttribute key="deferLiveness" value="false"/>
+    <intAttribute key="dfidDepth" value="100"/>
+    <booleanAttribute key="dfidMode" value="false"/>
+    <intAttribute key="distributedFPSetCount" value="0"/>
+    <stringAttribute key="distributedNetworkInterface" value="10.0.0.143"/>
+    <intAttribute key="distributedNodesCount" value="1"/>
+    <stringAttribute key="distributedTLC" value="off"/>
+    <stringAttribute key="distributedTLCVMArgs" value=""/>
+    <intAttribute key="fpBits" value="1"/>
+    <intAttribute key="fpIndex" value="13"/>
+    <booleanAttribute key="fpIndexRandom" value="true"/>
+    <intAttribute key="maxHeapSize" value="25"/>
+    <intAttribute key="maxSetSize" value="1000000"/>
+    <booleanAttribute key="mcMode" value="true"/>
+    <stringAttribute key="modelBehaviorInit" value=""/>
+    <stringAttribute key="modelBehaviorNext" value=""/>
+    <stringAttribute key="modelBehaviorSpec" value="Spec"/>
+    <intAttribute key="modelBehaviorSpecType" value="1"/>
+    <stringAttribute key="modelBehaviorVars" value="upgrade_to_learners, active_ranges, pc, applied_log_indexes, replicas, applied_writes, range_to_right, next_range_id, step, raft_logs, leader_done, range_descs, to_merge_lhs, to_merge_rhs, raft_tombstones, destroyed_ranges"/>
+    <stringAttribute key="modelComments" value=""/>
+    <booleanAttribute key="modelCorrectnessCheckDeadlock" value="true"/>
+    <listAttribute key="modelCorrectnessInvariants">
+        <listEntry value="1TypeInvariants"/>
+        <listEntry value="1RaftLogInvariants"/>
+        <listEntry value="1StoreInvariants"/>
+    </listAttribute>
+    <listAttribute key="modelCorrectnessProperties">
+        <listEntry value="1Termination"/>
+    </listAttribute>
+    <intAttribute key="modelEditorOpenTabs" value="4"/>
+    <stringAttribute key="modelExpressionEval" value=""/>
+    <stringAttribute key="modelParameterActionConstraint" value=""/>
+    <listAttribute key="modelParameterConstants">
+        <listEntry value="MAX_STEPS;;4;0;0"/>
+        <listEntry value="FOLLOWERS;;{f1, f2, f3};1;1"/>
+        <listEntry value="MAX_RANGE_ID;;2;0;0"/>
+        <listEntry value="REPLICATION_FACTOR;;2;0;0"/>
+    </listAttribute>
+    <stringAttribute key="modelParameterContraint" value=""/>
+    <listAttribute key="modelParameterDefinitions"/>
+    <stringAttribute key="modelParameterModelValues" value="{}"/>
+    <stringAttribute key="modelParameterNewDefinitions" value=""/>
+    <intAttribute key="numberOfWorkers" value="10"/>
+    <booleanAttribute key="recover" value="false"/>
+    <stringAttribute key="result.mail.address" value=""/>
+    <intAttribute key="simuAril" value="-1"/>
+    <intAttribute key="simuDepth" value="100"/>
+    <intAttribute key="simuSeed" value="-1"/>
+    <stringAttribute key="specName" value="ReplicaLifetimes"/>
+    <stringAttribute key="tlcResourcesProfile" value="local custom"/>
+    <stringAttribute key="view" value=""/>
+    <booleanAttribute key="visualizeStateGraph" value="false"/>
+</launchConfiguration>
