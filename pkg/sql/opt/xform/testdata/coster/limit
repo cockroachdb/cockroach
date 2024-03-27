@@ -17,50 +17,50 @@ SELECT * FROM a
 WHERE y = 10 ORDER BY s, x DESC
 LIMIT 20 OFFSET 1000
 ----
-offset
+index-join a
  ├── columns: x:1!null y:2!null z:3 s:4!null
- ├── internal-ordering: +4,-1 opt(2)
  ├── cardinality: [0 - 20]
  ├── stats: [rows=1]
- ├── cost: 89.9929301
+ ├── cost: 35.4529295
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3,4)
  ├── ordering: +4,-1 opt(2) [actual: +4,-1]
- ├── index-join a
- │    ├── columns: x:1!null y:2!null z:3 s:4!null
- │    ├── cardinality: [0 - 1020]
- │    ├── stats: [rows=10, distinct(4)=9.56179, null(4)=0]
- │    ├── cost: 89.9729301
- │    ├── key: (1)
- │    ├── fd: ()-->(2), (1)-->(3,4)
- │    ├── ordering: +4,-1 opt(2) [actual: +4,-1]
- │    └── limit
- │         ├── columns: x:1!null y:2!null s:4!null
- │         ├── internal-ordering: +4,-1 opt(2)
- │         ├── cardinality: [0 - 1020]
- │         ├── stats: [rows=10, distinct(4)=9.56179, null(4)=0]
- │         ├── cost: 29.3629295
- │         ├── key: (1)
- │         ├── fd: ()-->(2), (1)-->(4)
- │         ├── ordering: +4,-1 opt(2) [actual: +4,-1]
- │         ├── sort (segmented)
- │         │    ├── columns: x:1!null y:2!null s:4!null
- │         │    ├── stats: [rows=10, distinct(2)=1, null(2)=0, distinct(4)=9.56179, null(4)=0]
- │         │    ├── cost: 29.2529295
- │         │    ├── key: (1)
- │         │    ├── fd: ()-->(2), (1)-->(4)
- │         │    ├── ordering: +4,-1 opt(2) [actual: +4,-1]
- │         │    ├── limit hint: 1020.00
- │         │    └── scan a@a_y_s_idx
- │         │         ├── columns: x:1!null y:2!null s:4!null
- │         │         ├── constraint: /2/4/1: [/10 - /10]
- │         │         ├── stats: [rows=10, distinct(2)=1, null(2)=0, distinct(4)=9.56179, null(4)=0]
- │         │         ├── cost: 28.6200001
- │         │         ├── key: (1)
- │         │         ├── fd: ()-->(2), (1)-->(4)
- │         │         └── ordering: +4 opt(2) [actual: +4]
- │         └── 1020
- └── 1000
+ └── offset
+      ├── columns: x:1!null y:2!null s:4!null
+      ├── internal-ordering: +4,-1 opt(2)
+      ├── cardinality: [0 - 20]
+      ├── stats: [rows=1]
+      ├── cost: 29.3829295
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(4)
+      ├── ordering: +4,-1 opt(2) [actual: +4,-1]
+      ├── limit
+      │    ├── columns: x:1!null y:2!null s:4!null
+      │    ├── internal-ordering: +4,-1 opt(2)
+      │    ├── cardinality: [0 - 1020]
+      │    ├── stats: [rows=10, distinct(4)=9.56179, null(4)=0]
+      │    ├── cost: 29.3629295
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2), (1)-->(4)
+      │    ├── ordering: +4,-1 opt(2) [actual: +4,-1]
+      │    ├── sort (segmented)
+      │    │    ├── columns: x:1!null y:2!null s:4!null
+      │    │    ├── stats: [rows=10, distinct(2)=1, null(2)=0, distinct(4)=9.56179, null(4)=0]
+      │    │    ├── cost: 29.2529295
+      │    │    ├── key: (1)
+      │    │    ├── fd: ()-->(2), (1)-->(4)
+      │    │    ├── ordering: +4,-1 opt(2) [actual: +4,-1]
+      │    │    ├── limit hint: 1020.00
+      │    │    └── scan a@a_y_s_idx
+      │    │         ├── columns: x:1!null y:2!null s:4!null
+      │    │         ├── constraint: /2/4/1: [/10 - /10]
+      │    │         ├── stats: [rows=10, distinct(2)=1, null(2)=0, distinct(4)=9.56179, null(4)=0]
+      │    │         ├── cost: 28.6200001
+      │    │         ├── key: (1)
+      │    │         ├── fd: ()-->(2), (1)-->(4)
+      │    │         └── ordering: +4 opt(2) [actual: +4]
+      │    └── 1020
+      └── 1000
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[

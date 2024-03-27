@@ -1466,16 +1466,16 @@ EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 5 OFFSET 5
 distribution: local
 vectorized: true
 ·
-• limit
+• index join
 │ columns: (a, b, c, d)
-│ offset: 5
+│ ordering: +c
+│ estimated row count: 5 (missing stats)
+│ table: noncover@noncover_pkey
+│ key columns: a
 │
-└── • index join
-    │ columns: (a, b, c, d)
-    │ ordering: +c
-    │ estimated row count: 10 (missing stats)
-    │ table: noncover@noncover_pkey
-    │ key columns: a
+└── • limit
+    │ columns: (a, c)
+    │ offset: 5
     │
     └── • scan
           columns: (a, c)

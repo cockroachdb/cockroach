@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/errors"
 )
 
 // Helper is the struct passed to `stepFunc`s (user-provided or
@@ -111,8 +112,8 @@ func (h *Helper) Background(
 				return err
 			}
 
-			desc := fmt.Sprintf("error in background function %s: %s", name, err)
-			return h.runner.testFailure(desc, bgLogger, nil)
+			err := errors.Wrapf(err, "error in background function %s", name)
+			return h.runner.testFailure(err, bgLogger, nil)
 		}
 
 		return nil
