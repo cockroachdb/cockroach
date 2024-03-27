@@ -336,8 +336,14 @@ func (d *dev) generateJs(cmd *cobra.Command) error {
 
 	// Copy the eslint-plugin output tree back out of the sandbox, since eslint
 	// plugins in editors default to only searching in ./node_modules for plugins.
-	return d.os.CopyAll(
+	err = d.os.CopyAll(
 		filepath.Join(bazelBin, eslintPluginDist),
 		filepath.Join(workspace, eslintPluginDist),
 	)
+	if err != nil {
+		return err
+	}
+
+	// Generate crdb-api-client package.
+	return makeUICrdbApiClientCmd(d).RunE(cmd, []string{})
 }
