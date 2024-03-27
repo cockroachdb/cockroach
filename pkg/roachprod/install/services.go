@@ -81,6 +81,9 @@ type ServiceDescriptors []ServiceDesc
 // ServicePredicate is a predicate function definition for filtering services.
 type ServicePredicate func(ServiceDesc) bool
 
+// FindOpenPortsFunc is a function signature for finding open ports on a node.
+type FindOpenPortsFunc func(ctx context.Context, l *logger.Logger, node Node, startPort, count int) ([]int, error)
+
 // localClusterPortCache is a workaround for local clusters to prevent multiple
 // nodes from using the same port when searching for open ports.
 var localClusterPortCache struct {
