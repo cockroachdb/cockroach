@@ -4037,7 +4037,7 @@ statement error start key must be less than end key
 SELECT crdb_internal.check_consistency(true, crdb_internal.tenant_span()[2], crdb_internal.tenant_span()[2])
 
 query TT
-SELECT status, regexp_replace(detail, '[0-9]+', '', 'g')
+SELECT status, regexp_replace(detail, '[0-9-]+', '', 'g')
 FROM crdb_internal.check_consistency(true, crdb_internal.tenant_span()[1], crdb_internal.tenant_span()[2])
 ORDER BY range_id
 LIMIT 1
