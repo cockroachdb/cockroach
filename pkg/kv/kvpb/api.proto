@@ -1436,6 +1436,19 @@ message QueryIntentRequest {
   // If true, return an IntentMissingError if no matching intent (neither a
   // "partial match" nor a "full match") is found.
   bool error_if_missing = 3;
+
+  // The strength with which the lock being queried was acquired at. To ensure
+  // the supplied protection was provided, we check whether the lock was held
+  // with the supplied lock strength or something stronger at the sequence
+  // number.
+  kv.kvserver.concurrency.lock.Strength strength = 4;
+
+  // The list of sequence numbers that have been ignored by the transaction that
+  // acquired the lock. Any locks found at sequence numbers which are considered
+  // ignored will be treated as "not found"; that's because they can be removed
+  // at any time.
+  repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 5
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
 }
 
 // A QueryIntentResponse is the return value from the QueryIntent() method.

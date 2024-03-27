@@ -1928,7 +1928,7 @@ func MVCCPut(
 		inlinePut := timestamp.IsEmpty()
 		if !inlinePut {
 			ltScanner, err = newLockTableKeyScanner(
-				ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
+				ctx, rw, opts.TxnID(), lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
 			if err != nil {
 				return roachpb.LockAcquisition{}, err
 			}
@@ -1992,7 +1992,7 @@ func MVCCDelete(
 	var ltScanner *lockTableKeyScanner
 	if !inlineDelete {
 		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
+			ctx, rw, opts.TxnID(), lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
 		if err != nil {
 			return false, roachpb.LockAcquisition{}, err
 		}
@@ -2806,7 +2806,7 @@ func MVCCIncrement(
 	var ltScanner *lockTableKeyScanner
 	if !inlineIncrement {
 		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
+			ctx, rw, opts.TxnID(), lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
 		if err != nil {
 			return 0, roachpb.LockAcquisition{}, err
 		}
@@ -2899,7 +2899,7 @@ func MVCCConditionalPut(
 	var ltScanner *lockTableKeyScanner
 	if !inlinePut {
 		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
+			ctx, rw, opts.TxnID(), lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
 		if err != nil {
 			return roachpb.LockAcquisition{}, err
 		}
@@ -2996,7 +2996,7 @@ func MVCCInitPut(
 	var ltScanner *lockTableKeyScanner
 	if !inlinePut {
 		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
+			ctx, rw, opts.TxnID(), lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
 		if err != nil {
 			return roachpb.LockAcquisition{}, err
 		}
@@ -3667,7 +3667,7 @@ func MVCCDeleteRange(
 	var ltScanner *lockTableKeyScanner
 	if !inlineDelete {
 		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, opts.Txn, lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
+			ctx, rw, opts.TxnID(), lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
 		if err != nil {
 			return nil, nil, 0, nil, err
 		}
@@ -3886,7 +3886,9 @@ func MVCCPredicateDeleteRange(
 	defer pointTombstoneIter.Close()
 
 	ltScanner, err := newLockTableKeyScanner(
-		ctx, rw, nil /* txn */, lock.Intent, maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory)
+		ctx, rw, uuid.UUID{} /* txnID */, lock.Intent,
+		maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -4597,7 +4599,8 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 	return intents, nil
 }
 
-// MVCCWriteOptions bundles options for the MVCCPut and MVCCDelete families of functions.
+// MVCCWriteOptions bundles options for the MVCCPut and MVCCDelete families of
+// functions.
 type MVCCWriteOptions struct {
 	// See the comment on mvccPutInternal for details on these parameters.
 	Txn                            *roachpb.Transaction
@@ -4627,6 +4630,16 @@ func (opts *MVCCWriteOptions) validate() error {
 		return errors.Errorf("cannot enable replay protection without a transaction")
 	}
 	return nil
+}
+
+// TxnID returns the transaction ID if the write corresponds to a transactional
+// write. Otherwise, if it corresponds to a non-transactional write, an empty ID
+// is returned.
+func (opts *MVCCWriteOptions) TxnID() uuid.UUID {
+	if opts.Txn != nil {
+		return opts.Txn.ID
+	}
+	return uuid.UUID{}
 }
 
 // MVCCScanOptions bundles options for the MVCCScan family of functions.
@@ -5914,8 +5927,12 @@ func MVCCCheckForAcquireLock(
 	if err := validateLockAcquisitionStrength(str); err != nil {
 		return err
 	}
+	var txnID uuid.UUID
+	if txn != nil {
+		txnID = txn.ID
+	}
 	ltScanner, err := newLockTableKeyScanner(
-		ctx, reader, txn, str, maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory)
+		ctx, reader, txnID, str, maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory)
 	if err != nil {
 		return err
 	}
@@ -5948,7 +5965,7 @@ func MVCCAcquireLock(
 		return err
 	}
 	ltScanner, err := newLockTableKeyScanner(
-		ctx, rw, txn, str, maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory)
+		ctx, rw, txn.ID, str, maxLockConflicts, targetLockConflictBytes, BatchEvalReadCategory)
 	if err != nil {
 		return err
 	}
@@ -6088,6 +6105,69 @@ func validateLockAcquisitionStrength(str lock.Strength) error {
 		return errors.Errorf("invalid lock strength to acquire lock: %s", str.String())
 	}
 	return nil
+}
+
+// VerifyLock returns true if the supplied transaction holds a lock that offers
+// equal to or greater protection[1] than the supplied lock strength.
+//
+// [1] Locks that were acquired at sequence numbers that have since been ignored
+// aren't considered, as they may be rolled back in the future.
+func VerifyLock(
+	ctx context.Context,
+	reader Reader,
+	txn *enginepb.TxnMeta,
+	str lock.Strength,
+	key roachpb.Key,
+	ignoredSeqNums []enginepb.IgnoredSeqNumRange,
+) (bool, error) {
+	if txn == nil {
+		// Non-transactional requests cannot acquire locks that outlive their
+		// lifespan. Nothing to verify.
+		return false, errors.Errorf("txn must be non-nil to verify replicated lock")
+	}
+	if str == lock.None {
+		return false, errors.Errorf("querying a lock with strength %s is nonsensical", lock.None)
+	}
+	// NB: Pass in lock.None when configuring the lockTableKeyScanner to only
+	// return locks held by the our transaction.
+	ltScanner, err := newLockTableKeyScanner(
+		ctx, reader, txn.ID, lock.None, 0, 0, BatchEvalReadCategory,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	defer ltScanner.close()
+	err = ltScanner.scan(key)
+	if err != nil {
+		return false, err
+	}
+
+	for _, iterStr := range strongerOrEqualStrengths(str) {
+		foundLock := ltScanner.foundOwn(iterStr)
+		if foundLock == nil {
+			// Proceed to check weaker strengths...
+			continue
+		}
+
+		if foundLock.Txn.Epoch != txn.Epoch {
+			continue // the lock belongs to a different epoch
+		}
+
+		// We don't keep a full history of all sequence numbers a replicated lock
+		// was acquired at. As long as there exists a lock at some (non-rolled back)
+		// sequence number with sufficient lock strength, we have the desired mutual
+		// exclusion guarantees. We need to make sure the lock we found was written
+		// at a sequence number that hasn't been rolled back; otherwise, there's
+		// nothing stopping another request from rolling back the lock even though
+		// it exists right now.
+		if enginepb.TxnSeqIsIgnored(foundLock.Txn.Sequence, ignoredSeqNums) {
+			continue // the lock is ignored, proceed to check weaker lock strengths...
+		}
+
+		return true, nil
+	}
+	return false, nil
 }
 
 // mvccReleaseLockInternal releases a lock at the specified key and strength and

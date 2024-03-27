@@ -296,21 +296,36 @@ func (r *Replica) updateTimestampCache(
 			}
 			addToTSCache(start, end, ts, txnID)
 		case *kvpb.QueryIntentRequest:
-			missing := false
-			if pErr != nil {
-				_, missing = pErr.GetDetail().(*kvpb.IntentMissingError)
-			} else {
-				missing = !resp.(*kvpb.QueryIntentResponse).FoundUnpushedIntent
-			}
-			if missing {
-				// If the QueryIntent determined that the intent is missing
-				// then we update the timestamp cache at the intent's key to
-				// the intent's transactional timestamp. This will prevent
-				// the intent from ever being written in the future. We use
-				// an empty transaction ID so that we block the intent
-				// regardless of whether it is part of the current batch's
-				// transaction or not.
-				addToTSCache(start, end, t.Txn.WriteTimestamp, uuid.UUID{})
+			// NB: We only need to bump the timestamp cache if the QueryIntentRequest
+			// was querying a write intent and if it wasn't found. This prevents the
+			// intent from ever being written in the future. This is done for the
+			// benefit of txn recovery, where we don't want an intent to land after a
+			// QueryIntent request has already evaluated and determined the fate of
+			// the transaction being recovered. Letting the intent land would cause us
+			// to commit a transaction that we've determined was aborted.
+			//
+			// However, for other replicated locks (shared, exclusive), we know that
+			// they'll never be pipelined if they belong to a batch that's being
+			// committed in parallel. This means that any QueryIntent request for a
+			// replicated shared or exclusive lock is doing so with the knowledge that
+			// the request evaluated successfully (so it can't land later) -- it's
+			// only checking whether the replication succeeded or not.
+			if t.StrengthOrDefault() == lock.Intent {
+				missing := false
+				if pErr != nil {
+					_, missing = pErr.GetDetail().(*kvpb.IntentMissingError)
+				} else {
+					missing = !resp.(*kvpb.QueryIntentResponse).FoundUnpushedIntent
+				}
+				if missing {
+					// If the QueryIntent determined that the intent is missing then we
+					// update the timestamp cache at the intent's key to the intent's
+					// transactional timestamp. This will prevent the intent from ever
+					// being written in the future. We use an empty transaction ID so that
+					// we block the intent regardless of whether it is part of the current
+					// batch's transaction or not.
+					addToTSCache(start, end, t.Txn.WriteTimestamp, uuid.UUID{})
+				}
 			}
 		case *kvpb.ResolveIntentRequest:
 			// Update the timestamp cache on the key the request resolved if there
