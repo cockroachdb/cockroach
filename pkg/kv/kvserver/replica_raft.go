@@ -1481,9 +1481,11 @@ func (r *Replica) refreshProposalsLocked(
 	}
 
 	r.mu.slowProposalCount = slowProposalCount
+	destroyed := r.mu.destroyStatus.Removed()
 
 	// If the breaker isn't tripped yet but we've detected commands that have
-	// taken too long to replicate, trip the breaker now.
+	// taken too long to replicate, and the replica is not destroyed, trip the
+	// breaker now.
 	//
 	// NB: we still keep reproposing commands on this and subsequent ticks
 	// even though this seems strictly counter-productive, except perhaps
@@ -1496,7 +1498,7 @@ func (r *Replica) refreshProposalsLocked(
 	// already tripped and no probe is running, thus ensuring that even if a
 	// request got added in while the probe was about to shut down, there will
 	// be regular attempts at healing the breaker.
-	if maxSlowProposalDuration > 0 && r.breaker.Signal().Err() == nil {
+	if maxSlowProposalDuration > 0 && r.breaker.Signal().Err() == nil && !destroyed {
 		err := errors.Errorf("have been waiting %.2fs for slow proposal %s",
 			maxSlowProposalDuration.Seconds(), maxSlowProposalDurationRequest)
 		log.Warningf(ctx, "%s", err)
