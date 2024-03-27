@@ -12,6 +12,8 @@ package rangefeed
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -175,6 +177,7 @@ func abortIntentOpMemUsage(txnID uuid.UUID) int64 {
 // Pointer to the MVCCAbortTxnOp was already accounted in mvccLogicalOp in the
 // caller. abortTxnOpMemUsage accounts for the memory usage of MVCCAbortTxnOp.
 func abortTxnOpMemUsage(txnID uuid.UUID) int64 {
+
 	// MVCCAbortTxnOp has TxnID which has underlying memory usage in []byte.
 	currMemUsage := mvccAbortTxnOp
 	currMemUsage += int64(cap(txnID))
@@ -225,6 +228,37 @@ func (ops opsEvent) currMemUsage() int64 {
 	// the operation caused resolved timestamp to update. Since these are very
 	// rare, we disregard them to avoid the complexity.
 	return currMemUsage
+}
+
+func (e *event) String() string {
+	if e == nil {
+		return ""
+	}
+	switch {
+	case e.ops != nil:
+		str := strings.Builder{}
+		str.WriteString("event: logicalops\n")
+		for _, op := range e.ops {
+			switch t := op.GetValue().(type) {
+			case *enginepb.MVCCWriteValueOp, *enginepb.MVCCDeleteRangeOp, *enginepb.MVCCWriteIntentOp,
+				*enginepb.MVCCUpdateIntentOp, *enginepb.MVCCCommitIntentOp, *enginepb.MVCCAbortIntentOp, *enginepb.MVCCAbortTxnOp:
+				str.WriteString(fmt.Sprintf("op: %T\n", t))
+			default:
+				str.WriteString("unknown logical op")
+			}
+		}
+		return str.String()
+	case !e.ct.IsEmpty():
+		return "event: checkpoint"
+	case bool(e.initRTS):
+		return "event: initrts"
+	case e.sst != nil:
+		return "event: sst"
+	case e.sync != nil:
+		return "event: sync"
+	default:
+		return "missing event variant"
+	}
 }
 
 // MemUsage estimates the total memory usage of the event, including its
