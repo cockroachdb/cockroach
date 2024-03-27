@@ -616,6 +616,15 @@ func (rpcCtx *Context) ClusterName() string {
 	return rpcCtx.ContextOptions.ClusterName
 }
 
+// GetSQLAdvertiseAddr retrieves the configured sql addr.
+func (rpcCtx *Context) GetSQLAdvertiseAddr() string {
+	if rpcCtx == nil {
+		// This is used in tests.
+		return "<MISSING RPC CONTEXT>"
+	}
+	return rpcCtx.config.SQLAdvertiseAddr
+}
+
 // Metrics returns the Context's Metrics struct.
 func (rpcCtx *Context) Metrics() *Metrics {
 	return &rpcCtx.metrics

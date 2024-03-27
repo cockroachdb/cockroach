@@ -49,6 +49,7 @@ go_library(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings",

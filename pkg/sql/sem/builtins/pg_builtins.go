@@ -13,6 +13,7 @@ package builtins
 import (
 	"context"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -1968,26 +1969,46 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"inet_server_addr": makeBuiltin(defProps(),
+	"inet_server_addr": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.INet),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}}), nil
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.SQLAdvertiseAddr == "" {
+					return tree.DNull, nil
+				}
+				host, _, err := net.SplitHostPort(evalCtx.SQLAdvertiseAddr)
+				if err != nil {
+					return nil, err
+				}
+				return tree.ParseDIPAddrFromINetString(host)
 			},
-			Info:       notUsableInfo,
+			Info:       "Returns the gateway's address",
 			Volatility: volatility.Stable,
 		},
 	),
 
-	"inet_server_port": makeBuiltin(defProps(),
+	"inet_server_port": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.DZero, nil
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.SQLAdvertiseAddr == "" {
+					return tree.DNull, nil
+				}
+				_, portStr, err := net.SplitHostPort(evalCtx.SQLAdvertiseAddr)
+				if err != nil {
+					return nil, err
+				}
+				port, err := strconv.Atoi(portStr)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(port)), nil
 			},
-			Info:       notUsableInfo,
+			Info:       "Returns the gateway's port",
 			Volatility: volatility.Stable,
 		},
 	),

@@ -134,6 +134,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.ClusterID = execCfg.NodeInfo.LogicalClusterID()
 	evalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	evalCtx.NodeID = execCfg.NodeInfo.NodeID
+	evalCtx.SQLAdvertiseAddr = execCfg.RPCContext.GetSQLAdvertiseAddr()
 	evalCtx.Locality = execCfg.Locality
 	evalCtx.OriginalLocality = execCfg.Locality
 	evalCtx.NodesStatusServer = execCfg.NodesStatusServer
@@ -448,6 +449,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.ClusterID = execCfg.NodeInfo.LogicalClusterID()
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	p.extendedEvalCtx.NodeID = execCfg.NodeInfo.NodeID
+	p.extendedEvalCtx.SQLAdvertiseAddr = execCfg.RPCContext.GetSQLAdvertiseAddr()
 	p.extendedEvalCtx.Locality = execCfg.Locality
 	p.extendedEvalCtx.OriginalLocality = execCfg.Locality
 
