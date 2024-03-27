@@ -106,7 +106,6 @@ go_test(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/azure",
-        "//pkg/roachprod/vm/gce",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
