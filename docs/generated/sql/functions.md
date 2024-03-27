@@ -3426,6 +3426,10 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="has_type_privilege"></a><code>has_type_privilege(user: oid, type: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for type.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="inet_server_addr"></a><code>inet_server_addr() &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>Returns the gateway’s address</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="inet_server_port"></a><code>inet_server_port() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the gateway’s port</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="information_schema._pg_numeric_precision"></a><code>information_schema._pg_numeric_precision(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the precision of the given type with type modifier</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="information_schema._pg_numeric_precision_radix"></a><code>information_schema._pg_numeric_precision_radix(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the radix of the given type with type modifier</p>
