@@ -312,6 +312,18 @@ func (r *Replica) updateTimestampCache(
 				// transaction or not.
 				addToTSCache(start, end, t.Txn.WriteTimestamp, uuid.UUID{})
 			}
+			// NB: If this QueryIntentRequest was querying a replicated lock instead
+			// of a write intent, we don't need to worry about updating the timestamp
+			// cache to prevent the replicated lock from ever being acquired after the
+			// QueryIntentRequest has evaluated. This is unlike write intents, where
+			// we prevent them from ever being written in the future. This is done
+			// for the benefit of txn recovery, where we don't want an intent to land
+			// after a QueryTxn request has evaluated. However, for replicated locks,
+			// we know that they'll never be pipelined if they're part of a batch being
+			// committed in parallel. This means any QueryIntent request for a replicated
+			// shared or exclusive lock is doing so with the knowledge that the request
+			// evaluated successfully (so it can't land later) -- it's only checking
+			// whether replication succeeded or not.
 		case *kvpb.ResolveIntentRequest:
 			// Update the timestamp cache on the key the request resolved if there
 			// was a replicated {shared, exclusive} lock on that key which was

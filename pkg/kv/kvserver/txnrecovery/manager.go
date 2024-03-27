@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -205,7 +206,9 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 			RequestHeader: kvpb.RequestHeader{
 				Key: w.Key,
 			},
-			Txn: meta,
+			Txn:            meta,
+			LockStrength:   lock.Intent,
+			IgnoredSeqNums: txn.IgnoredSeqNums,
 		})
 	}
 
