@@ -50,7 +50,7 @@ if files_unchanged_from_upstream go.mod go.sum DEPS.bzl $(find_relevant ./pkg/cm
   echo "Skipping //pkg/cmd/mirror/go:mirror (relevant files are unchanged from upstream)."
   echo "Skipping //pkg/cmd/generate-staticcheck (relevant files are unchanged from upstream)."
 else
-  CONTENTS=$(bazel run //pkg/cmd/mirror/go:mirror)
+  CONTENTS=$(bazel run //pkg/cmd/mirror/go:mirror ${EXTRA_BAZEL_ARGS:-})
   echo "$CONTENTS" > DEPS.bzl
   bazel run pkg/cmd/generate-staticcheck --run_under="cd $PWD && " ${EXTRA_BAZEL_ARGS:-}
 fi
