@@ -1,0 +1,197 @@
+run stats ok
+put k=k1 v=v1 ts=5,0
+put k=k2 v=v2 ts=5,0
+put k=k3 v=v3 ts=5,0
+put k=k4 v=v4 ts=5,0
+put k=k5 v=v5 ts=5,0
+----
+>> put k=k1 v=v1 ts=5,0
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+22
+>> put k=k2 v=v2 ts=5,0
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+22
+>> put k=k3 v=v3 ts=5,0
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+22
+>> put k=k4 v=v4 ts=5,0
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+22
+>> put k=k5 v=v5 ts=5,0
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+22
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+data: "k4"/5.000000000,0 -> /BYTES/v4
+data: "k5"/5.000000000,0 -> /BYTES/v5
+stats: key_count=5 key_bytes=75 val_count=5 val_bytes=35 live_count=5 live_bytes=110
+
+run stats ok
+txn_begin t=A ts=10,0
+txn_begin t=B ts=11,0
+----
+>> at end:
+txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+
+run stats ok
+with t=A
+  txn_step seq=10
+  check_for_acquire_lock k=k1 str=shared
+  check_for_acquire_lock k=k2 str=shared
+  check_for_acquire_lock k=k3 str=exclusive
+  acquire_lock k=k1 str=shared
+  acquire_lock k=k2 str=shared
+  acquire_lock k=k3 str=exclusive
+----
+>> acquire_lock k=k1 str=shared t=A
+stats: lock_count=+1 lock_bytes=+69 lock_age=+90
+>> acquire_lock k=k2 str=shared t=A
+stats: lock_count=+1 lock_bytes=+69 lock_age=+90
+>> acquire_lock k=k3 str=exclusive t=A
+stats: lock_count=+1 lock_bytes=+69 lock_age=+90
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=5 key_bytes=75 val_count=5 val_bytes=35 live_count=5 live_bytes=110 lock_count=3 lock_bytes=207 lock_age=270
+
+run stats ok
+with t=A
+  txn_step seq=10
+  verify_lock k=k1 str=shared
+  verify_lock k=k1 str=exclusive
+  verify_lock k=k2 str=shared
+  verify_lock k=k2 str=exclusive
+  verify_lock k=k3 str=shared
+  verify_lock k=k3 str=exclusive
+----
+found: true
+found: false
+found: true
+found: false
+found: true
+found: true
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+
+# A different transaction shouldn't be able to verify TxnA's locks.
+run stats ok
+with t=B
+  verify_lock k=k1 str=shared
+  verify_lock k=k1 str=exclusive
+  verify_lock k=k2 str=shared
+  verify_lock k=k2 str=exclusive
+  verify_lock k=k3 str=shared
+  verify_lock k=k3 str=exclusive
+----
+found: false
+found: false
+found: false
+found: false
+found: false
+found: false
+
+# Sequence numbers are not considered when verifying locks. Test a sequence
+# numbers both higher and lower than the sequence number at which the lock was
+# acquired. Higher:
+run stats ok
+with t=A
+  txn_step seq=15
+  verify_lock k=k1 str=shared
+  verify_lock k=k1 str=exclusive
+  verify_lock k=k2 str=shared
+  verify_lock k=k2 str=exclusive
+  verify_lock k=k3 str=shared
+  verify_lock k=k3 str=exclusive
+----
+found: true
+found: false
+found: true
+found: false
+found: true
+found: true
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=15} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+
+# Lower:
+run stats ok
+with t=A
+  txn_step seq=5
+  verify_lock k=k1 str=shared
+  verify_lock k=k1 str=exclusive
+  verify_lock k=k2 str=shared
+  verify_lock k=k2 str=exclusive
+  verify_lock k=k3 str=shared
+  verify_lock k=k3 str=exclusive
+----
+found: true
+found: false
+found: true
+found: false
+found: true
+found: true
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=5} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+
+# Ensure if a lock is held at a sequence number that's ignored it'll be
+# considered not found.
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(5-15)
+  verify_lock k=k1 str=shared
+  verify_lock k=k1 str=exclusive
+  verify_lock k=k2 str=shared
+  verify_lock k=k2 str=exclusive
+  verify_lock k=k3 str=shared
+  verify_lock k=k3 str=exclusive
+----
+found: false
+found: false
+found: false
+found: false
+found: false
+found: false
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=5} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+
+# Test that if a lock is held at a sequence number that's ignored, but it's also
+# held at a lock strength that's stronger at a sequence number that's not
+# ignored, we consider the lock found. However, the opposite isn't true -- if
+# the lock at the non-ignored sequence number is weaker in strength, then the
+# stronger lock shouldn't be considered found.
+run ok
+with t=A
+  txn_step seq=10
+  check_for_acquire_lock k=k4 str=shared
+  acquire_lock k=k4 str=shared
+  check_for_acquire_lock k=k5 str=exclusive
+  acquire_lock k=k5 str=exclusive
+  txn_step seq=20
+  check_for_acquire_lock k=k4 str=exclusive
+  acquire_lock k=k4 str=exclusive
+  check_for_acquire_lock k=k5 str=shared
+  acquire_lock k=k5 str=shared
+----
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k4"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=20} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k5"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k5"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=20} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=(5-15)
+  verify_lock k=k4 str=shared
+  verify_lock k=k4 str=exclusive
+  verify_lock k=k5 str=shared
+  verify_lock k=k5 str=exclusive
+----
+found: true
+found: true
+found: true
+found: false
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
