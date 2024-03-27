@@ -769,7 +769,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	}
 	defer storeEnvs.CloseAll()
 
-	walFailoverConfig := storage.WALFailover(cfg.WALFailover, storeEnvs)
+	walFailoverConfig := storage.WALFailover(cfg.WALFailover, storeEnvs, vfs.Default)
 
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
