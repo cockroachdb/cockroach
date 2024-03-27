@@ -1004,12 +1004,11 @@ func TestTxnPipelinerDeleteRangeRequests(t *testing.T) {
 		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[0].GetInner())
 		// The pipeliner should have overriden the ReturnKeys flag.
-		require.True(t, ba.Requests[0].GetInner().(*kvpb.DeleteRangeRequest).ReturnKeys)
+		require.True(t, ba.Requests[0].GetDeleteRange().ReturnKeys)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
-		resp := br.Responses[0].GetInner()
-		resp.(*kvpb.DeleteRangeResponse).Keys = []roachpb.Key{keyA, keyB, keyD}
+		br.Responses[0].GetDeleteRange().Keys = []roachpb.Key{keyA, keyB, keyD}
 		return br, nil
 	})
 
@@ -1466,6 +1465,77 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	require.Equal(t, 2, tp.ifWrites.len())
 }
 
+// TestTxnPipelinerRecordsLocksOnSuccess tests that when a request returns
+// successfully, the locks that it acquired are added to the lock footprint.
+func TestTxnPipelinerRecordsLocksOnSuccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
+
+	txn := makeTxnProto()
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+	keyD, keyE, keyF := roachpb.Key("d"), roachpb.Key("e"), roachpb.Key("f")
+
+	// Return an error for a point write, a range write, and a range locking
+	// read. Because the full response is returned, the client can know the
+	// exact set of keys locked and can avoid any ranged lock spans.
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, EndKey: keyD}})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyD, EndKey: keyF}, KeyLockingStrength: lock.Exclusive})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 3)
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[2].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		// The DeleteRange finds two keys and writes an intent on each.
+		br.Responses[1].GetDeleteRange().Keys = []roachpb.Key{keyB, keyC}
+		// The locking Scan finds two keys and locks each.
+		br.Responses[2].GetScan().Rows = []roachpb.KeyValue{{Key: keyD}, {Key: keyE}}
+		return br, nil
+	})
+
+	br, pErr := tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 0, tp.ifWrites.len())
+
+	var expLocks []roachpb.Span
+	for _, k := range []roachpb.Key{keyA, keyB, keyC, keyD, keyE} {
+		expLocks = append(expLocks, roachpb.Span{Key: k})
+	}
+	require.Equal(t, expLocks, tp.lockFootprint.asSlice())
+
+	// The lock spans are all attached to the EndTxn request when one is sent.
+	ba.Requests = nil
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+		etReq := ba.Requests[0].GetEndTxn()
+		require.Equal(t, expLocks, etReq.LockSpans)
+		require.Len(t, etReq.InFlightWrites, 0)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Txn.Status = roachpb.COMMITTED
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+}
+
 // TestTxnPipelinerRecordsLocksOnFailure tests that even when a request returns
 // with an ABORTED transaction status or an error, the locks that it attempted
 // to acquire are added to the lock footprint.
@@ -1480,7 +1550,10 @@ func TestTxnPipelinerRecordsLocksOnFailure(t *testing.T) {
 	keyD, keyE, keyF := roachpb.Key("d"), roachpb.Key("e"), roachpb.Key("f")
 
 	// Return an error for a point write, a range write, and a range locking
-	// read.
+	// read. Because an error is returned, the client does not know the exact
+	// set of keys locked, so it must assume the worst. This causes it to put
+	// the full spans of each of the point and ranged requests into the lock
+	// footprint.
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
 	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
@@ -1525,6 +1598,7 @@ func TestTxnPipelinerRecordsLocksOnFailure(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
+		br.Txn.Status = roachpb.ABORTED
 		return br, nil
 	})
 
@@ -1672,7 +1746,7 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[1].GetInner())
 
-		qiReq := ba.Requests[0].GetInner().(*kvpb.QueryIntentRequest)
+		qiReq := ba.Requests[0].GetQueryIntent()
 		require.Equal(t, roachpb.Key("a"), qiReq.Key)
 		require.Equal(t, enginepb.TxnSeq(10), qiReq.Txn.Sequence)
 
@@ -1909,6 +1983,8 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 	}
 	largeWrite := putBatch(largeAs, nil)
 
+	// Locking Scan requests and DeleteRange requests both use information stored
+	// in their response to inform the client of the specific locks they acquired.
 	lockingScanRequest := &kvpb.BatchRequest{}
 	lockingScanRequest.Header.MaxSpanRequestKeys = 1
 	lockingScanRequest.Add(&kvpb.ScanRequest{
@@ -1920,14 +1996,8 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 		KeyLockingDurability: lock.Replicated,
 	})
 	lockingScanResp := lockingScanRequest.CreateReply()
-	lockingScanResp.Responses[0].GetInner().(*kvpb.ScanResponse).ResumeSpan = &roachpb.Span{
-		Key:    largeAs,
-		EndKey: roachpb.Key("b"),
-	}
+	lockingScanResp.Responses[0].GetScan().Rows = []roachpb.KeyValue{{Key: largeAs}}
 
-	// DeleteRange requests are accounted for a bit differently than other ranged
-	// requests -- locks acquired by them are tracked more precisely by going
-	// through the actual keys deleted in the response.
 	delRange := &kvpb.BatchRequest{}
 	delRange.Header.MaxSpanRequestKeys = 1
 	delRange.Add(&kvpb.DeleteRangeRequest{
@@ -1938,7 +2008,7 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 		ReturnKeys: true,
 	})
 	delRangeResp := delRange.CreateReply()
-	delRangeResp.Responses[0].GetInner().(*kvpb.DeleteRangeResponse).Keys = []roachpb.Key{largeAs}
+	delRangeResp.Responses[0].GetDeleteRange().Keys = []roachpb.Key{largeAs}
 
 	testCases := []struct {
 		name string
@@ -1981,8 +2051,8 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 		},
 		{
 			name: "scan response goes over budget, next request rejected",
-			// A request returns a response with a large resume span, which takes up
-			// the budget. Then the next request will be rejected.
+			// A request returns a response with a large set of locked keys, which
+			// takes up the budget. Then the next request will be rejected.
 			reqs:         []*kvpb.BatchRequest{lockingScanRequest, putBatch(roachpb.Key("a"), nil)},
 			resp:         []*kvpb.BatchResponse{lockingScanResp},
 			expRejectIdx: 1,
@@ -2000,8 +2070,8 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 		},
 		{
 			name: "del range response goes over budget, next request rejected",
-			// A request returns a response with a large resume span, which takes up
-			// the budget. Then the next request will be rejected.
+			// A request returns a response with a large set of locked keys, which
+			// takes up the budget. Then the next request will be rejected.
 			reqs:         []*kvpb.BatchRequest{delRange, putBatch(roachpb.Key("a"), nil)},
 			resp:         []*kvpb.BatchResponse{delRangeResp},
 			expRejectIdx: 1,
