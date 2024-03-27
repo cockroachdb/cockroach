@@ -32,6 +32,7 @@ func registerYCSB(r registry.Registry) {
 	cpusConfigs := []int{8, 32}
 	cpusWithReadCommitted := 32
 	cpusWithGlobalMVCCRangeTombstone := 32
+	cpusWithUniformDistribution := 32
 
 	// concurrencyConfigs contains near-optimal concurrency levels for each
 	// (workload, cpu count) combination. All of these figures were tuned on GCP
@@ -46,8 +47,14 @@ func registerYCSB(r registry.Registry) {
 		"F": {8: 96, 32: 144},
 	}
 
+	type ycsbOptions struct {
+		readCommitted       bool
+		rangeTombstone      bool
+		uniformDistribution bool
+	}
+
 	runYCSB := func(
-		ctx context.Context, t test.Test, c cluster.Cluster, wl string, cpus int, readCommitted, rangeTombstone bool,
+		ctx context.Context, t test.Test, c cluster.Cluster, wl string, cpus int, opts ycsbOptions,
 	) {
 		// For now, we only want to run the zfs tests on GCE, since only GCE supports
 		// starting roachprod instances on zfs.
@@ -63,7 +70,7 @@ func registerYCSB(r registry.Registry) {
 		}
 
 		settings := install.MakeClusterSettings()
-		if rangeTombstone {
+		if opts.rangeTombstone {
 			settings.Env = append(settings.Env, "COCKROACH_GLOBAL_MVCC_RANGE_TOMBSTONE=true")
 		}
 
@@ -83,8 +90,11 @@ func registerYCSB(r registry.Registry) {
 			var args string
 			args += " --ramp=" + ifLocal(c, "0s", "2m")
 			args += " --duration=" + ifLocal(c, "10s", "30m")
-			if readCommitted {
+			if opts.readCommitted {
 				args += " --isolation-level=read_committed"
+			}
+			if opts.uniformDistribution {
+				args += " --request-distribution=uniform"
 			}
 			if envFlags := os.Getenv(envYCSBFlags); envFlags != "" {
 				args += " " + envFlags
@@ -115,7 +125,7 @@ func registerYCSB(r registry.Registry) {
 				Benchmark: true,
 				Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runYCSB(ctx, t, c, wl, cpus, false /* readCommitted */, false /* rangeTombstone */)
+					runYCSB(ctx, t, c, wl, cpus, ycsbOptions{})
 				},
 				CompatibleClouds: registry.AllClouds,
 				Suites:           registry.Suites(registry.Nightly),
@@ -128,7 +138,7 @@ func registerYCSB(r registry.Registry) {
 					Benchmark: true,
 					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.SetFileSystem(spec.Zfs)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runYCSB(ctx, t, c, wl, cpus, false /* readCommitted */, false /* rangeTombstone */)
+						runYCSB(ctx, t, c, wl, cpus, ycsbOptions{})
 					},
 					CompatibleClouds: registry.AllExceptAWS,
 					Suites:           registry.Suites(registry.Nightly),
@@ -142,7 +152,7 @@ func registerYCSB(r registry.Registry) {
 					Benchmark: true,
 					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runYCSB(ctx, t, c, wl, cpus, true /* readCommitted */, false /* rangeTombstone */)
+						runYCSB(ctx, t, c, wl, cpus, ycsbOptions{readCommitted: true})
 					},
 					CompatibleClouds: registry.AllClouds,
 					Suites:           registry.Suites(registry.Nightly),
@@ -156,7 +166,26 @@ func registerYCSB(r registry.Registry) {
 					Benchmark: true,
 					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runYCSB(ctx, t, c, wl, cpus, false /* readCommitted */, true /* rangeTombstone */)
+						runYCSB(ctx, t, c, wl, cpus, ycsbOptions{rangeTombstone: true})
+					},
+					CompatibleClouds: registry.AllClouds,
+					Suites:           registry.Suites(registry.Nightly),
+				})
+			}
+
+			if cpus == cpusWithUniformDistribution {
+				// Run YCSB workloads with uniform request distribution instead of zipfian.
+				// We expect to see higher throughput as zipfian distribution causes hotspots,
+				// especially on workloads A and F which have high contention. Zipfian is a more
+				// realistic distribution model a customer would see, this serves mostly as a
+				// baseline to compare against.
+				r.Add(registry.TestSpec{
+					Name:      fmt.Sprintf("%s/uniform", name),
+					Owner:     registry.OwnerTestEng,
+					Benchmark: true,
+					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus)),
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runYCSB(ctx, t, c, wl, cpus, ycsbOptions{uniformDistribution: true})
 					},
 					CompatibleClouds: registry.AllClouds,
 					Suites:           registry.Suites(registry.Nightly),
