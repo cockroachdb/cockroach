@@ -21,6 +21,7 @@ import (
 
 	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -399,16 +400,20 @@ func (c *SyncedCluster) FindOpenPorts(
 		return nil, err
 	}
 
+	transientFailure := func(err error) error {
+		return rperrors.TransientFailure(err, "open_ports")
+	}
+
 	res, err := c.runCmdOnSingleNode(ctx, l, node, buf.String(), defaultCmdOpts("find-ports"))
 	if err != nil {
-		return nil, err
+		return nil, transientFailure(errors.Wrapf(err, "output:\n%s", res.CombinedOut))
 	}
 	ports, err = stringToIntegers(strings.TrimSpace(res.CombinedOut))
 	if err != nil {
 		return nil, err
 	}
 	if len(ports) != count {
-		return nil, errors.Errorf("expected %d ports, got %d", count, len(ports))
+		return nil, transientFailure(errors.Errorf("expected %d ports, got %d", count, len(ports)))
 	}
 	return ports, nil
 }
