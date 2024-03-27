@@ -659,6 +659,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 
 		// Add all the column statistics, using the most recent statistic for each
 		// column set. Stats are ordered with most recent first.
+	EachStat:
 		for i := first; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
 			if stat.IsPartial() {
@@ -678,6 +679,9 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				col := tabID.ColumnID(colOrd)
 				cols.Add(col)
 				if tab.Column(colOrd).IsVirtualComputed() {
+					if !sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats {
+						continue EachStat
+					}
 					// We only add virtual columns if we have statistics on them, so that
 					// in higher groups we can decide whether to look up statistics on
 					// virtual columns or on the columns used in their defining
