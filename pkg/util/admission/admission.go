@@ -8,6 +8,106 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// 12/1/2022
+// - Per-node view of inflight follower write work (RTW - remote tracking
+//   window) per-other-{node,store}. S1, S2. S3. S1-S3, S2-S3.
+// 	- {elastic, non-elastic} bytes inflight. We need to cap how much is
+//    granted to each class/priority level.
+//      - Once the sender hears of follower write having completed, return
+//        bytes back ("no longer inflight"). This is elaborated on before.
+//      - When do we block for new tokens? Pre-admission, pre-latch holding
+//        on the proposing leaseholder. We need the possible follower stores
+//        to deduct from the right buckets. Which is also why the CPU slot
+//        acquisition happens after (similar to latches). Similar to other
+//        control mechanisms, given we do this upfront, we always run the
+//        risk of underutilizing if we block after. Hangs off a Store.
+// - Receiver side, we receive the request, immediately process, and send a
+//   message ack back to sender. We don't yet allow the sender to re-add the
+//   bytes back to the bucket, which happens at some later point (when?).
+//   Receiver is tracking the rate it needs to sustain, and giving back
+//   "tokens" only according to the prescribed rate. Hangs off a Store.
+//   - What message specifically do we use to send back this tokens from the
+//     receiver? On which RPCs specifically. Assume dedicated message type.
+//     - We might not need to return the same N tokens every M ms, but only
+//       emit when N changes. So sender might be able to "tick" more
+//       granularly.
+//   - How is the receiver's N disbursed across all possible senders? We should
+//     be aware of all active streams. 4 senders, 4 tenants = 16 demands on N
+//     -- what's fair? If it gets adjudicated on the receiver, do we have
+//     fairness across the entire system.
+// - When do we grab admission slots vs. get this token?
+//   - What if we TryAcquired everything, and if we got everything, go ahead. If
+//     we failed some -- release everything and try again.
+//   - Aside: Two extremes: no blocking ==> slots == number of cores
+// - Today's token buckets go to infinity when AC is disabled. Maybe we don't
+//   do infinity because we have a non-zero RTT until we hear back.
+//
+//
+// 12/2/2022
+// - Start with single tenant. There's one "window" quota pool per receiver
+//   store, each with some fixed capacity. Sum of all capacities across all such
+//   pools on all sender stores, pointing to a given receiver store, is the
+//   burst size we have for admitted follower write work.
+// - For the quota pool deductions, it's such that foreground work will always
+//   get through if there's quota, but elastic work will only get through if
+//   there's some baseline amount of quota.
+// - When a request comes in to a leaseholder, it waits for the quota to be
+//   non-zero before proceeding. After which it goes through, acquires a slot, 
+// - Store/resource under contention is the receiver store. The tokens on this
+//   store do need to get proportioned across tenants.
+// - What if the burst size was tenant+stores instead of tenant*stores? If you
+//   had a budget for the tenant, and a separate one for the store. Say 16MB
+//   each; we deduct from both budgets when we write, and on the response,
+//   credit it back. If 16MB of writes was sprayed across 16 stores, we wouldn't
+//   be work conserving?
+// - We will send at most one extra response after logical admission, to
+//   replace.
+// - We can order on the sender side within a tenant, when window becomes
+//   non-zero, we can pick the higher priority one, perhaps also ordered by
+//   creation time.
+// - On the receiver, when we return the grants, we just return them to the
+//   stores they came from.
+// - It's possible with the window for UserLow inflight work to completely
+//   dominate/starve out UserHigh work, at the window level. Maybe we have C,
+//   C-c, C-2c, C-3c, ... where c = C/number of priorities.
+//
+// 1. Determine set of replica stores (including the leaseholder, but that's the
+//    store we're one).
+// 2. Why don't we deduct upfront? Why do we wait until after proposal? Is it
+//    just for estimation? Because we're waiting, we might be over deducting --
+//    our burst is more than the window. We might be waiting because of CPU slot
+//    or latches/locks during proposal.
+//    - If we deduct upfront, we'd need a way to estimate the size of the
+//      proposal.
+// 3. When deducting, we could check if all store quota pools are positive, then
+//    deduct all at once.
+// 4. Figure out protobufs, what goes into the AdmissionHeader to track these
+//    follower writes to the receiver node. Figure out what comes back on the
+//    response to re-add to the window-quota-pool.
+// 5. Stack a WorkQueue on top of some Granter that's able to react to quota
+//    being added to the quota pool. A token granter with zero refill?
+//
+// 6. Deal with the incoming AC headers, allow work to just add to the raft log,
+//    and also state machine, but create a "virtual waiting request" for that
+//    piece of work with all the relevant metadata (tenantID, which store it
+//    came from if we can't figure it out automatically on the receiving store).
+// 7. Queue that virtual piece of work in the relevant KV-Stores work queue.
+//    Also inform the work queue of the actual disk bandwidth use, raft log
+//    write (in bytes), state machine application (in bytes). We're only doing
+//    this to make sure the token rate we have is the right one to keep the LSM
+//    shape intact.
+//    - Separately, use that token rate to generate these "logical" tokens which
+//      are consumed by the WorkQueue (with tenant fairness in mind), and when
+//      consumed, the original sender is told about it so it can return the
+//      corresponding quota back to its window-pool for that tenant.
+//    NOTE: Also today the token rate switches from infinity to some value. When
+//    does it do that? Ideally this doesn't wait for "overload" (does it
+//    actually today?).
+//    NOTE: Fix 250ms token generation.
+//    NOTE: Do we need to do any better WRT estimating the size of the AddSST
+//    specifically?
+// 8. Metrics-ify everything.
+
 // The admission package contains abstractions for admission control for
 // CockroachDB nodes, both for single-tenant and multi-tenant (aka serverless)
 // clusters. In the latter, both KV and SQL nodes are expected to use these
