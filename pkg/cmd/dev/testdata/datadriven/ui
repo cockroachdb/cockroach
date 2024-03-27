@@ -153,6 +153,9 @@ rm -rf crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
 rm -rf crdb-checkout/pkg/ui/workspaces/db-console/dist
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 rm -rf crdb-checkout/pkg/ui/workspaces/eslint-plugin-crdb/dist
+rm -rf crdb-checkout/pkg/ui/workspaces/crdb-api-client/dist
+rm -rf crdb-checkout/pkg/ui/workspaces/crdb-api-client/index.js
+rm -rf crdb-checkout/pkg/ui/workspaces/crdb-api-client/index.ts
 
 exec
 dev ui clean --all
@@ -166,6 +169,9 @@ rm -rf crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
 rm -rf crdb-checkout/pkg/ui/workspaces/db-console/dist
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 rm -rf crdb-checkout/pkg/ui/workspaces/eslint-plugin-crdb/dist
+rm -rf crdb-checkout/pkg/ui/workspaces/crdb-api-client/dist
+rm -rf crdb-checkout/pkg/ui/workspaces/crdb-api-client/index.js
+rm -rf crdb-checkout/pkg/ui/workspaces/crdb-api-client/index.ts
 rm -rf crdb-checkout/pkg/ui/node_modules
 rm -rf crdb-checkout/pkg/ui/workspaces/db-console/node_modules
 rm -rf crdb-checkout/pkg/ui/workspaces/db-console/src/js/node_modules
@@ -173,6 +179,7 @@ rm -rf crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/node_modules
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/node_modules
 rm -rf crdb-checkout/pkg/ui/workspaces/e2e-tests/node_modules
 rm -rf crdb-checkout/pkg/ui/workspaces/eslint-plugin-crdb/node_modules
+rm -rf crdb-checkout/pkg/ui/workspaces/crdb-api-client/node_modules
 
 exec
 dev ui e2e
