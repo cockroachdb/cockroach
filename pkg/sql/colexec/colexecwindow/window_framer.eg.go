@@ -1288,7 +1288,16 @@ func (b *windowFramerBase) handleOffsets(
 	// For RANGE mode with an offset, there is a single ordering column. The
 	// offset type depends on the ordering column type. In addition, the ordering
 	// column must be stored.
-	if len(ordering.Columns) != 1 {
+	switch len(ordering.Columns) {
+	case 1:
+		// Fall through; no further handling needed.
+	case 2:
+		// An additional boolean ordering column was added to handle NULLS LAST;
+		// it is safe to truncate this because rangeOffsetHandler will correctly
+		// handle NULLS whether they are ordered first or last. The extra ordering
+		// column will be at position 0.
+		ordering.Columns = ordering.Columns[1:]
+	default:
 		colexecerror.InternalError(
 			errors.AssertionFailedf("expected exactly one ordering column for RANGE mode with offset"))
 	}
