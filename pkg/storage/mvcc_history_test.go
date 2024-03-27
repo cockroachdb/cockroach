@@ -840,6 +840,7 @@ var commands = map[string]cmd{
 	"add_unreplicated_lock":  {typLocksUpdate, cmdAddUnreplicatedLock},
 	"check_for_acquire_lock": {typReadOnly, cmdCheckForAcquireLock},
 	"acquire_lock":           {typLocksUpdate, cmdAcquireLock},
+	"verify_lock":            {typReadOnly, cmdVerifyLock},
 
 	"clear":                 {typDataUpdate, cmdClear},
 	"clear_range":           {typDataUpdate, cmdClearRange},
@@ -1181,6 +1182,20 @@ func cmdAcquireLock(e *evalCtx) error {
 		maxLockConflicts := e.getMaxLockConflicts()
 		targetLockConflictBytes := e.getTargetLockConflictBytes()
 		return storage.MVCCAcquireLock(e.ctx, rw, txn, str, key, e.ms, maxLockConflicts, targetLockConflictBytes)
+	})
+}
+
+func cmdVerifyLock(e *evalCtx) error {
+	return e.withReader(func(r storage.Reader) error {
+		txn := e.getTxn(optional)
+		key := e.getKey()
+		str := e.getStrength()
+		found, err := storage.VerifyLock(e.ctx, r, &txn.TxnMeta, str, key, txn.IgnoredSeqNums)
+		if err != nil {
+			return err
+		}
+		e.results.buf.Printf("found: %v\n", found)
+		return nil
 	})
 }
 

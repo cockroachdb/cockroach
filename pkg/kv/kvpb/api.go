@@ -1999,6 +1999,21 @@ func (acrr *AdminChangeReplicasRequest) Changes() []ReplicationChange {
 	return sl
 }
 
+// StrengthOrDefault returns the strength of the lock being queried by the
+// QueryIntentRequest.
+func (qir *QueryIntentRequest) StrengthOrDefault() lock.Strength {
+	// TODO(arul): the Strength field on QueryIntentRequest was introduced in
+	// v24.1. Prior to that, rather unsurprisingly, QueryIntentRequest would only
+	// query replicated locks with strength. To maintain compatibility between
+	// v23.2 <-> v24.1 nodes, if this field is unset, we assume it's lock.Intent.
+	// In the future, once compatibility with v23.2 is no longer a concern, we
+	// should be able to get rid of this logic.
+	if qir.Strength == lock.None {
+		return lock.Intent
+	}
+	return qir.Strength
+}
+
 // AsLockUpdate creates a lock update message corresponding to the given resolve
 // intent request.
 func (rir *ResolveIntentRequest) AsLockUpdate() roachpb.LockUpdate {
