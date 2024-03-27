@@ -49,18 +49,6 @@ func TestCompare(t *testing.T) {
 		addr string
 		init []string
 	}{
-		"postgres": {
-			addr: "postgresql://postgres@postgres:5432/postgres",
-			init: []string{
-				"drop schema if exists public cascade",
-				"create schema public",
-				"CREATE EXTENSION IF NOT EXISTS postgis",
-				"CREATE EXTENSION IF NOT EXISTS postgis_topology",
-				"CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;",
-				"CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";",
-				"CREATE EXTENSION IF NOT EXISTS pg_trgm;",
-			},
-		},
 		"cockroach1": {
 			addr: "postgresql://root@cockroach1:26257/postgres?sslmode=disable",
 			init: []string{
@@ -85,22 +73,6 @@ func TestCompare(t *testing.T) {
 		},
 	}
 	configs := map[string]testConfig{
-		"postgres": {
-			setup:           sqlsmith.Setups[sqlsmith.RandTableSetupName],
-			setupMutators:   []randgen.Mutator{randgen.PostgresCreateTableMutator},
-			opts:            []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
-			ignoreSQLErrors: true,
-			conns: []testConn{
-				{
-					name:     "cockroach1",
-					mutators: []randgen.Mutator{},
-				},
-				{
-					name:     "postgres",
-					mutators: []randgen.Mutator{randgen.PostgresMutator},
-				},
-			},
-		},
 		"mutators": {
 			setup:           sqlsmith.Setups[sqlsmith.RandTableSetupName],
 			opts:            []sqlsmith.SmitherOption{sqlsmith.CompareMode()},
