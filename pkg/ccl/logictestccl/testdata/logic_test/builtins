@@ -1,6 +1,6 @@
 # LogicTest: local
 
-subtest protect_cluster
+subtest protect_mvcc_history
 
 user root
 
@@ -19,7 +19,7 @@ GRANT admin TO testuser
 user testuser
 
 statement ok
-select crdb_internal.protect_cluster(1709131929793796000.0000000000, '24 hours'::interval, 'molt fetch');
+select crdb_internal.protect_mvcc_history(1709131929793796000.0000000000, '24 hours'::interval, 'molt fetch');
 
 query TTT colnames
 select ts as timestamp, meta_type, crdb_internal.pb_to_json( 'cockroach.protectedts.Target', target ) from system.protected_ts_records
@@ -43,7 +43,7 @@ select ts as timestamp, meta_type, crdb_internal.pb_to_json('cockroach.protected
 
 # Confirm PTS expires after the given expiration without cancellation.
 statement ok
-select crdb_internal.protect_cluster(1709131929793796000.0000000000, '10ms'::interval, 'molt fetch');
+select crdb_internal.protect_mvcc_history(1709131929793796000.0000000000, '10ms'::interval, 'molt fetch');
 
 # Confirm that the PTS is gone.
 query TTT retry

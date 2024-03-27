@@ -56,9 +56,8 @@ const (
 	CategoryString              = "String and byte"
 	CategorySystemInfo          = "System info"
 	CategorySystemRepair        = "System repair"
-	CategoryStreamIngestion     = "Stream Ingestion"
+	CategoryClusterReplication  = "Cluster Replication and Migration"
 	CategoryTesting             = "Testing"
-	CategoryMigrations          = "Migrations"
 )
 
 const (
