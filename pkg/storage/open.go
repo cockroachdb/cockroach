@@ -220,7 +220,9 @@ func errConfigOption(err error) func(*engineConfig) error {
 	return func(*engineConfig) error { return err }
 }
 
-func makeExternalWALDir(engineCfg *engineConfig, externalDir base.ExternalPath) (wal.Dir, error) {
+func makeExternalWALDir(
+	engineCfg *engineConfig, externalDir base.ExternalPath, defaultFS vfs.FS,
+) (wal.Dir, error) {
 	// If the store is encrypted, we require that all the WAL failover dirs also
 	// be encrypted so that the user doesn't accidentally leak data unencrypted
 	// onto the filesystem.
@@ -232,7 +234,7 @@ func makeExternalWALDir(engineCfg *engineConfig, externalDir base.ExternalPath) 
 		return wal.Dir{}, errors.Newf("must provide --enterprise-encryption flag for store %q, specified WAL failover path %q is encrypted",
 			engineCfg.env.Dir, externalDir.Path)
 	}
-	env, err := fs.InitEnv(context.Background(), vfs.Default, externalDir.Path, fs.EnvConfig{
+	env, err := fs.InitEnv(context.Background(), defaultFS, externalDir.Path, fs.EnvConfig{
 		RW:                engineCfg.env.RWMode(),
 		EncryptionOptions: externalDir.EncryptionOptions,
 	})
@@ -249,7 +251,7 @@ func makeExternalWALDir(engineCfg *engineConfig, externalDir base.ExternalPath) 
 // WALFailover configures automatic failover of the engine's write-ahead log to
 // another volume in the event the WAL becomes blocked on a write that does not
 // complete within a reasonable duration.
-func WALFailover(walCfg base.WALFailoverConfig, storeEnvs fs.Envs) ConfigOption {
+func WALFailover(walCfg base.WALFailoverConfig, storeEnvs fs.Envs, defaultFS vfs.FS) ConfigOption {
 	// The set of options available in single-store versus multi-store
 	// configurations vary. This is in part due to the need to store the multiple
 	// stores' WALs separately. When WALFailoverExplicitPath is provided, we have
@@ -265,7 +267,7 @@ func WALFailover(walCfg base.WALFailoverConfig, storeEnvs fs.Envs) ConfigOption 
 			// We need to add the explicilt path to WALRecoveryDirs.
 			if walCfg.PrevPath.IsSet() {
 				return func(cfg *engineConfig) error {
-					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath)
+					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath, defaultFS)
 					if err != nil {
 						return err
 					}
@@ -282,13 +284,13 @@ func WALFailover(walCfg base.WALFailoverConfig, storeEnvs fs.Envs) ConfigOption 
 		case base.WALFailoverExplicitPath:
 			// The user has provided an explicit path to which we should fail over WALs.
 			return func(cfg *engineConfig) error {
-				walDir, err := makeExternalWALDir(cfg, walCfg.Path)
+				walDir, err := makeExternalWALDir(cfg, walCfg.Path, defaultFS)
 				if err != nil {
 					return err
 				}
 				cfg.opts.WALFailover = makePebbleWALFailoverOptsForDir(cfg.settings, walDir)
 				if walCfg.PrevPath.IsSet() {
-					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath)
+					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath, defaultFS)
 					if err != nil {
 						return err
 					}
@@ -370,8 +372,16 @@ func WALFailover(walCfg base.WALFailoverConfig, storeEnvs fs.Envs) ConfigOption 
 		if !ok {
 			panic(errors.AssertionFailedf("storage: opening a store with an unrecognized filesystem Env (dir=%s)", cfg.env.Dir))
 		}
+		// Ensure that either all the stores are encrypted, or none are.
+		for _, storeEnv := range sortedEnvs {
+			if (storeEnv.Encryption == nil) != (cfg.env.Encryption == nil) {
+				return errors.Newf("storage: must provide --enterprise-encryption flag for all stores or none if using WAL failover")
+			}
+		}
+
 		failoverIdx := (idx + 1) % len(sortedEnvs)
 		secondaryEnv := sortedEnvs[failoverIdx]
+
 		// Ref once to ensure the secondary Env isn't closed before this Engine has
 		// been closed if the secondary's corresponding Engine is closed first.
 		secondaryEnv.Ref()
@@ -467,6 +477,12 @@ func Open(
 	cfg.opts.ReadOnly = env.IsReadOnly()
 	for _, opt := range opts {
 		if err := opt(&cfg); err != nil {
+			// Run after-close hooks if there are any. This ensures we
+			// release any references to fs.Envs that would've been held by
+			// the engine if it had been successfully opened.
+			for _, f := range cfg.afterClose {
+				f()
+			}
 			return nil, err
 		}
 	}
@@ -476,6 +492,12 @@ func Open(
 	}
 	p, err := newPebble(ctx, cfg)
 	if err != nil {
+		// Run after-close hooks if there are any. This ensures we
+		// release any references to fs.Envs that would've been held by
+		// the engine if it had been successfully opened.
+		for _, f := range cfg.afterClose {
+			f()
+		}
 		return nil, err
 	}
 	return p, nil
