@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/errors"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -401,9 +400,9 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	rawResults := "stdout:\n" + result.Stdout + "\n\nstderr:\n" + result.Stderr
 	t.L().Printf("Test results for pg_regress: %s", rawResults)
 
-	// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.
+	// Fatal for a roachprod or transient error. A roachprod error is when result.Err==nil.
 	// Proceed for any other (command) errors
-	if err != nil && (result.Err == nil || errors.Is(err, rperrors.ErrSSH255)) {
+	if err != nil && (result.Err == nil || rperrors.IsTransient(err)) {
 		t.Fatal(err)
 	}
 
