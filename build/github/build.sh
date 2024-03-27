@@ -38,6 +38,7 @@ bazel build \
     --config "$CONFIG" $EXTRA_ARGS \
     --jobs 100 \
     --build_event_binary_file=bes.bin \
+    --bes_keywords ci-build \
     $(./build/github/engflow-args.sh) \
     //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
     //pkg/cmd/cockroach-sql \
