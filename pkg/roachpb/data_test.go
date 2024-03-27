@@ -367,6 +367,50 @@ func TestValueGetErrorsRedacted(t *testing.T) {
 	require.Equal(t, string(redact.Sprintf("%s %s", err, "sensitive").Redact()), "value type is not INT: BYTES ‹×›")
 }
 
+func TestStorePropertiesSafeFormat(t *testing.T) {
+	type testCase struct {
+		props     *StoreProperties
+		formatted redact.RedactableString
+	}
+
+	walFailoverPath := "/mnt/data2/cockroach/auxiliary/among-stores"
+
+	testCases := []testCase{
+		{
+			props: &StoreProperties{
+				Dir:             "/mnt/data1/cockroach",
+				Encrypted:       true,
+				WalFailoverPath: &walFailoverPath,
+				FileStoreProperties: &FileStoreProperties{
+					BlockDevice:  "nvme1n1",
+					FsType:       "ext4",
+					MountPoint:   "/mnt/data1",
+					MountOptions: "rw,relatime",
+				},
+			},
+			formatted: "/mnt/data1/cockroach: rw encrypted=true wal_failover_path=/mnt/data2/cockroach/auxiliary/among-stores fs:{bdev=nvme1n1 fstype=ext4 mountpoint=/mnt/data1 mountopts=rw,relatime}",
+		},
+		{
+			props: &StoreProperties{
+				Dir:       "/mnt/data3/cockroach",
+				ReadOnly:  true,
+				Encrypted: false,
+				FileStoreProperties: &FileStoreProperties{
+					BlockDevice:  "nvme1n1",
+					FsType:       "zfs",
+					MountPoint:   "/mnt/data3",
+					MountOptions: "ro,relatime",
+				},
+			},
+			formatted: "/mnt/data3/cockroach: ro encrypted=false fs:{bdev=nvme1n1 fstype=zfs mountpoint=/mnt/data3 mountopts=ro,relatime}",
+		},
+	}
+	for _, tc := range testCases {
+		got := redact.Sprintf("%s", tc.props)
+		require.Equal(t, tc.formatted, got)
+	}
+}
+
 func TestSetGetChecked(t *testing.T) {
 	v := Value{}
 
