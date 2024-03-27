@@ -237,7 +237,7 @@ func (c *SyncedCluster) allowServiceRegistration() bool {
 // for the services. If no ports are specified, a search for open
 // ports will be performed and selected for use.
 func (c *SyncedCluster) maybeRegisterServices(
-	ctx context.Context, l *logger.Logger, startOpts StartOpts,
+	ctx context.Context, l *logger.Logger, startOpts StartOpts, portFunc FindOpenPortsFunc,
 ) error {
 	serviceMap, err := c.MapServices(ctx, startOpts.VirtualClusterName, startOpts.SQLInstance)
 	if err != nil {
@@ -249,7 +249,7 @@ func (c *SyncedCluster) maybeRegisterServices(
 	case StartDefault:
 		startOpts.VirtualClusterName = SystemInterfaceName
 		servicesToRegister, err = c.servicesWithOpenPortSelection(
-			ctx, l, startOpts, ServiceModeShared, serviceMap,
+			ctx, l, startOpts, ServiceModeShared, serviceMap, portFunc,
 		)
 	case StartSharedProcessForVirtualCluster:
 		// Specifying a sql instance for shared process virtual clusters
@@ -272,7 +272,7 @@ func (c *SyncedCluster) maybeRegisterServices(
 		}
 	case StartServiceForVirtualCluster:
 		servicesToRegister, err = c.servicesWithOpenPortSelection(
-			ctx, l, startOpts, ServiceModeExternal, serviceMap,
+			ctx, l, startOpts, ServiceModeExternal, serviceMap, portFunc,
 		)
 	}
 
@@ -293,6 +293,7 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 	startOpts StartOpts,
 	serviceMode ServiceMode,
 	serviceMap NodeServiceMap,
+	portFunc FindOpenPortsFunc,
 ) (ServiceDescriptors, error) {
 	var mu syncutil.Mutex
 	var servicesToRegister ServiceDescriptors
@@ -326,7 +327,7 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 			}
 		}
 		if requiredPorts > 0 {
-			openPorts, err := c.FindOpenPorts(ctx, l, node, config.DefaultOpenPortStart, requiredPorts)
+			openPorts, err := portFunc(ctx, l, node, config.DefaultOpenPortStart, requiredPorts)
 			if err != nil {
 				res.Err = err
 				return res, errors.Wrapf(err, "failed to find %d open ports", requiredPorts)
@@ -394,7 +395,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	}
 
 	if c.allowServiceRegistration() {
-		err := c.maybeRegisterServices(ctx, l, startOpts)
+		err := c.maybeRegisterServices(ctx, l, startOpts, c.FindOpenPorts)
 		if err != nil {
 			return err
 		}
