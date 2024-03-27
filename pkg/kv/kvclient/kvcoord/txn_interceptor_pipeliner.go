@@ -211,6 +211,11 @@ type txnPipeliner struct {
 	// In-flight writes are intent point writes that have not yet been proved
 	// to have succeeded. They will need to be proven before the transaction
 	// can commit.
+	// TODO(nvanbenschoten): once we start tracking locking read requests in
+	// this set, we should decide on whether to rename "in-flight writes" to
+	// something else. We could rename to "in-flight locks". Or we could keep
+	// "in-flight writes" but make it clear that these are lock writes of any
+	// strength, and not just intent writes.
 	ifWrites inFlightWriteSet
 	// The in-flight writes chain index is used to uniquely identify calls to
 	// chainToInFlightWrites, so that each call can limit itself to adding a
@@ -309,7 +314,11 @@ func (tp *txnPipeliner) SendLocked(
 	// go over budget despite the earlier pre-emptive check, then we stay over
 	// budget. Further requests will be rejected if they attempt to take more
 	// locks.
-	tp.updateLockTracking(ctx, ba, br, pErr, maxBytes, !rejectOverBudget /* condenseLocksIfOverBudget */)
+	if err := tp.updateLockTracking(
+		ctx, ba, br, pErr, maxBytes, !rejectOverBudget, /* condenseLocksIfOverBudget */
+	); err != nil {
+		return nil, kvpb.NewError(err)
+	}
 	if pErr != nil {
 		return nil, tp.adjustError(ctx, ba, pErr)
 	}
@@ -341,9 +350,11 @@ func (tp *txnPipeliner) maybeRejectOverBudget(ba *kvpb.BatchRequest, maxBytes in
 	}
 
 	var spans []roachpb.Span
-	ba.LockSpanIterate(nil /* br */, func(sp roachpb.Span, _ lock.Durability) {
+	if err := ba.LockSpanIterate(nil /* br */, func(sp roachpb.Span, _ lock.Durability) {
 		spans = append(spans, sp)
-	})
+	}); err != nil {
+		return errors.Wrap(err, "iterating lock spans")
+	}
 
 	// Compute how many bytes we can allocate for locks. We account for the
 	// inflight-writes conservatively, since these might turn into lock spans
@@ -633,8 +644,10 @@ func (tp *txnPipeliner) updateLockTracking(
 	pErr *kvpb.Error,
 	maxBytes int64,
 	condenseLocksIfOverBudget bool,
-) {
-	tp.updateLockTrackingInner(ctx, ba, br, pErr)
+) error {
+	if err := tp.updateLockTrackingInner(ctx, ba, br, pErr); err != nil {
+		return err
+	}
 
 	// Deal with compacting the lock spans.
 
@@ -643,7 +656,7 @@ func (tp *txnPipeliner) updateLockTracking(
 	locksBudget := maxBytes - tp.ifWrites.byteSize()
 	// If we're below budget, there's nothing more to do.
 	if tp.lockFootprint.bytesSize() <= locksBudget {
-		return
+		return nil
 	}
 
 	// We're over budget. If condenseLocksIfOverBudget is set, we condense the
@@ -652,7 +665,7 @@ func (tp *txnPipeliner) updateLockTracking(
 	// txn if we fail (see the estimateSize() call).
 
 	if !condenseLocksIfOverBudget {
-		return
+		return nil
 	}
 
 	// After adding new writes to the lock footprint, check whether we need to
@@ -669,11 +682,12 @@ func (tp *txnPipeliner) updateLockTracking(
 		tp.txnMetrics.TxnsWithCondensedIntents.Inc(1)
 		tp.txnMetrics.TxnsWithCondensedIntentsGauge.Inc(1)
 	}
+	return nil
 }
 
 func (tp *txnPipeliner) updateLockTrackingInner(
 	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, pErr *kvpb.Error,
-) {
+) error {
 	// If the request failed, add all lock acquisitions attempts directly to the
 	// lock footprint. This reduces the likelihood of dangling locks blocking
 	// concurrent requests for extended periods of time. See #3346.
@@ -695,8 +709,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 			copy(baStripped.Requests, ba.Requests[:pErr.Index.Index])
 			copy(baStripped.Requests[pErr.Index.Index:], ba.Requests[pErr.Index.Index+1:])
 		}
-		baStripped.LockSpanIterate(nil, tp.trackLocks)
-		return
+		return baStripped.LockSpanIterate(nil, tp.trackLocks)
 	}
 
 	// Similarly, if the transaction is now finalized, we don't need to
@@ -707,7 +720,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 			// If the transaction is now ABORTED, add all locks acquired by the
 			// batch directly to the lock footprint. We don't know which of
 			// these succeeded.
-			ba.LockSpanIterate(nil, tp.trackLocks)
+			return ba.LockSpanIterate(nil, tp.trackLocks)
 		case roachpb.COMMITTED:
 			// If the transaction is now COMMITTED, it must not have any more
 			// in-flight writes, so clear them. Technically we should move all
@@ -717,10 +730,10 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 				/* reuse - we're not going to use this Btree again, so there's no point in
 				   moving the nodes to a free list */
 				false)
+			return nil
 		default:
 			panic("unexpected")
 		}
-		return
 	}
 
 	for i, ru := range ba.Requests {
@@ -751,33 +764,27 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 			}
 		} else if kvpb.IsLocking(req) {
 			// If the request intended to acquire locks, track its lock spans.
-			if ba.AsyncConsensus {
-				// Record any writes that were performed asynchronously. We'll
-				// need to prove that these succeeded sometime before we commit.
-				header := req.Header()
-				if kvpb.IsRange(req) {
-					switch req.Method() {
-					case kvpb.DeleteRange:
-						for _, key := range resp.(*kvpb.DeleteRangeResponse).Keys {
-							tp.ifWrites.insert(key, header.Sequence)
-						}
-					default:
-						log.Fatalf(ctx, "unexpected ranged request with AsyncConsensus: %s", req)
+			seq := req.Header().Sequence
+			trackLocks := func(span roachpb.Span, _ lock.Durability) {
+				if ba.AsyncConsensus {
+					// Record any writes that were performed asynchronously. We'll
+					// need to prove that these succeeded sometime before we commit.
+					if span.EndKey != nil {
+						log.Fatalf(ctx, "unexpected multi-key intent pipelined")
 					}
+					tp.ifWrites.insert(span.Key, seq)
 				} else {
-					tp.ifWrites.insert(header.Key, header.Sequence)
+					// If the lock acquisitions weren't performed asynchronously
+					// then add them directly to our lock footprint.
+					tp.lockFootprint.insert(span)
 				}
-			} else {
-				// If the lock acquisitions weren't performed asynchronously
-				// then add them directly to our lock footprint. Locking read
-				// requests will always hit this path because they will never
-				// use async consensus.
-				if sp, ok := kvpb.ActualSpan(req, resp); ok {
-					tp.lockFootprint.insert(sp)
-				}
+			}
+			if err := kvpb.LockSpanIterate(req, resp, trackLocks); err != nil {
+				return errors.Wrap(err, "iterating lock spans")
 			}
 		}
 	}
+	return nil
 }
 
 func (tp *txnPipeliner) trackLocks(s roachpb.Span, _ lock.Durability) {

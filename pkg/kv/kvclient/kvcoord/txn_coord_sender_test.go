@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1119,6 +1120,17 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 				t.Errorf("Invalid lock spans: %+v; expected %+v", et.LockSpans, expectedLockSpans)
 			}
 			br.Txn.Status = roachpb.COMMITTED
+		} else {
+			// Pre-EndTxn requests.
+			require.Len(t, ba.Requests, 1)
+			if sArgs, ok := ba.GetArg(kvpb.Scan); ok {
+				require.Equal(t, lock.Shared, sArgs.(*kvpb.ScanRequest).KeyLockingStrength)
+				br.Responses[0].GetScan().Rows = []roachpb.KeyValue{{Key: roachpb.Key("a")}}
+			}
+			if drArgs, ok := ba.GetArg(kvpb.DeleteRange); ok {
+				require.True(t, drArgs.(*kvpb.DeleteRangeRequest).ReturnKeys)
+				br.Responses[0].GetDeleteRange().Keys = []roachpb.Key{roachpb.Key("u"), roachpb.Key("w")}
+			}
 		}
 		return br, nil
 	}
@@ -1138,7 +1150,8 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	db := kv.NewDB(ambient, factory, clock, stopper)
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
-	// Acquire locks on a-b, c, m, u-w before the final batch.
+	// Acquire locks on a, c, m, u, x before the final batch.
+	// NOTE: ScanForShare finds and locks "a" (see senderFn).
 	_, pErr := txn.ScanForShare(
 		ctx, roachpb.Key("a"), roachpb.Key("b"), 0, kvpb.GuaranteedDurability,
 	)
@@ -1149,35 +1162,33 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
+	// NOTE: GetForUpdate does not find a key to lock.
 	_, pErr = txn.GetForUpdate(ctx, roachpb.Key("m"), kvpb.GuaranteedDurability)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	_, pErr = txn.DelRange(ctx, roachpb.Key("u"), roachpb.Key("w"), false /* returnKeys */)
+	// NOTE: DelRange finds and locks "u" and "w" (see senderFn).
+	_, pErr = txn.DelRange(ctx, roachpb.Key("u"), roachpb.Key("x"), false /* returnKeys */)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
 
-	// The final batch overwrites key c, reads key n, and overlaps part of the a-b and u-w ranges.
+	// The final batch overwrites key c, reads key n, and overlaps w with the v-z range.
 	b := txn.NewBatch()
 	b.Put(roachpb.Key("b"), []byte("value"))
-	b.Put(roachpb.Key("c"), []byte("value"))
-	b.Put(roachpb.Key("d"), []byte("value"))
+	b.DelRange(roachpb.Key("c"), roachpb.Key("e"), true /* returnKeys */)
+	b.Put(roachpb.Key("f"), []byte("value"))
 	b.GetForUpdate(roachpb.Key("n"), kvpb.GuaranteedDurability)
 	b.ReverseScanForShare(roachpb.Key("v"), roachpb.Key("z"), kvpb.GuaranteedDurability)
 
-	// The expected locks are a-b, c, m, n, and v-z.
-	//
-	// A note about the v-z span -- because the DeleteRange request did not
-	// actually delete any keys, we'll not track anything for it in the lock
-	// footprint for this transaction. The v-z range comes from the
-	// ReverseScanForShare request in the final batch.
+	// The expected locks are a, b, c-e, f, n, u, and v-z.
 	expectedLockSpans = []roachpb.Span{
-		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b").Next()},
-		{Key: roachpb.Key("c"), EndKey: nil},
-		{Key: roachpb.Key("d"), EndKey: nil},
-		{Key: roachpb.Key("m"), EndKey: nil},
+		{Key: roachpb.Key("a"), EndKey: nil},
+		{Key: roachpb.Key("b"), EndKey: nil},
+		{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")},
+		{Key: roachpb.Key("f"), EndKey: nil},
 		{Key: roachpb.Key("n"), EndKey: nil},
+		{Key: roachpb.Key("u"), EndKey: nil},
 		{Key: roachpb.Key("v"), EndKey: roachpb.Key("z")},
 	}
 
