@@ -195,7 +195,7 @@ func makeConstDatum(s *Smither, typ *types.T) tree.Datum {
 	if s.unlikelyRandomNulls {
 		nullChance = 20 // A one out of 20 chance of generating a NULL.
 	}
-	datum = randgen.RandDatumWithNullChance(s.rnd, typ, nullChance, s.favorCommonData, false /* targetColumnIsUnique */)
+	datum = randgen.RandDatumWithNullChance(s.rnd, typ, nullChance, s.favorCommonData)
 	if f := datum.ResolvedType().Family(); f != types.UnknownFamily && s.simpleDatums {
 		datum = randgen.RandDatumSimple(s.rnd, typ)
 	}

@@ -179,7 +179,7 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 	// Make a random primary key with high likelihood.
 	var pk *tree.IndexTableDef
 	if rng.Intn(8) != 0 {
-		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion)
+		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion, true /* isMaybeUnique */)
 		if ok {
 			pk = &indexDef
 		}
@@ -205,7 +205,9 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 	// Make indexes.
 	nIdxs := rng.Intn(10)
 	for i := 0; i < nIdxs; i++ {
-		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, tableName, false /* isPrimaryIndex */, isMultiRegion)
+		// We create indexes with a rule that they are "maybe" unique - so that
+		isMaybeUnique := rng.Intn(2) == 0
+		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, tableName, false /* isPrimaryIndex */, isMultiRegion, isMaybeUnique /* isMaybeUnique */)
 		if !ok {
 			continue
 		}
@@ -225,7 +227,7 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 		}
 		// Make forward indexes unique 50% of the time. Inverted indexes cannot
 		// be unique.
-		unique := !indexDef.Inverted && rng.Intn(2) == 0
+		unique := !indexDef.Inverted && isMaybeUnique
 		if unique {
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				IndexTableDef: indexDef,
@@ -520,6 +522,7 @@ func randIndexTableDefFromCols(
 	tableName string,
 	isPrimaryIndex bool,
 	isMultiRegion bool,
+	isMaybeUnique bool,
 ) (def tree.IndexTableDef, ok bool) {
 	cpy := make([]*tree.ColumnTableDef, len(columnTableDefs))
 	copy(cpy, columnTableDefs)
@@ -531,7 +534,7 @@ func randIndexTableDefFromCols(
 	switch {
 	case r < 50:
 		// Create a single-column index 40% of the time. Single-column indexes
-		// are more likely then multi-column indexes to be used in query plans
+		// are more likely than multi-column indexes to be used in query plans
 		// for randomly generated queries, so there is some benefit to
 		// guaranteeing that they are generated often.
 		nCols = 1
@@ -568,7 +571,7 @@ func randIndexTableDefFromCols(
 		eligibleExprIndexRefs = eligibleExprIndexRefs[:i]
 	}
 	// prefix is the list of columns in the index up until an inverted column, if
-	// one exists. stopPrefix is set to true if we find an inverted columnn in the
+	// one exists. stopPrefix is set to true if we find an inverted column in the
 	// index, after which we stop adding columns to the prefix.
 	var prefix tree.NameList
 	var stopPrefix bool
@@ -585,21 +588,7 @@ func randIndexTableDefFromCols(
 			Direction: tree.Direction(rng.Intn(int(tree.Descending) + 1)),
 		}
 
-		// Replace the column with an expression 10% of the time.
-		if !isPrimaryIndex && len(eligibleExprIndexRefs) > 0 && rng.Intn(10) == 0 {
-			var expr tree.Expr
-			// Do not allow NULL in expressions to avoid expressions that have
-			// an ambiguous type.
-			var referencedCols map[tree.Name]struct{}
-			expr, semType, _, referencedCols = randExpr(rng, eligibleExprIndexRefs, false /* nullOk */)
-			removeColsFromExprIndexRefCols(referencedCols)
-			elem.Expr = expr
-			elem.Column = ""
-			stopPrefix = true
-		}
-
 		isLastCol := i == len(cols)-1
-
 		// The non-terminal index columns must be indexable.
 		forwardIndexable := colinfo.ColumnTypeIsIndexable(semType)
 		invertedIndexable := colinfo.ColumnTypeIsInvertedIndexable(semType)
@@ -625,6 +614,41 @@ func randIndexTableDefFromCols(
 					elem.OpClass = "gin_trgm_ops"
 				}
 			}
+		}
+
+		// Replace the column with an expression 10% of the time.
+		if !isPrimaryIndex && len(eligibleExprIndexRefs) > 0 {
+			var expr tree.Expr
+			// Do not allow NULL in expressions to avoid expressions that have
+			// an ambiguous type.
+			var referencedCols map[tree.Name]struct{}
+
+			unique := !def.Inverted && isMaybeUnique
+			expr, semType, _, referencedCols = randExpr(rng, eligibleExprIndexRefs, false /* nullOk */)
+			// TODO(comment here)
+			if unique {
+				for {
+					switch semType.Family() {
+					case types.FloatFamily:
+						d := float64(*expr.(*tree.DFloat))
+						isInvalid := math.IsNaN(d) || math.IsInf(d, 1) || math.IsInf(d, -1)
+						if !isInvalid {
+							break
+						}
+					case types.DecimalFamily:
+						d := expr.(tree.Datum).(*tree.DDecimal).Decimal
+						isInvalid := d.Form == apd.NaN || d.Form == apd.Infinite
+						if !isInvalid {
+							break
+						}
+					}
+					expr, semType, _, referencedCols = randExpr(rng, eligibleExprIndexRefs, false /* nullOk */)
+				}
+			}
+			removeColsFromExprIndexRefCols(referencedCols)
+			elem.Expr = expr
+			elem.Column = ""
+			stopPrefix = true
 		}
 
 		// Last column for inverted indexes must always be ascending.
