@@ -462,29 +462,29 @@ func runBackupProcessor(
 	if len(chunk) > 0 {
 		todo <- chunk
 	}
-
-	// Passing a nil pacer is effectively a noop if CPU control is disabled.
-	var pacer *admission.Pacer = nil
-	if fileSSTSinkElasticCPUControlEnabled.Get(&clusterSettings.SV) {
-		tenantID, ok := roachpb.ClientTenantFromContext(ctx)
-		if !ok {
-			tenantID = roachpb.SystemTenantID
-		}
-		pacer = flowCtx.Cfg.AdmissionPacerFactory.NewPacer(
-			100*time.Millisecond,
-			admission.WorkInfo{
-				TenantID:        tenantID,
-				Priority:        admissionpb.BulkNormalPri,
-				CreateTime:      timeutil.Now().UnixNano(),
-				BypassAdmission: false,
-			},
-		)
-	}
-	// It is safe to close a nil pacer.
-	defer pacer.Close()
-
 	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
 		readTime := spec.BackupEndTime.GoTime()
+
+		// Passing a nil pacer is effectively a noop if CPU control is disabled.
+		var pacer *admission.Pacer = nil
+		if fileSSTSinkElasticCPUControlEnabled.Get(&clusterSettings.SV) {
+			tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+			if !ok {
+				tenantID = roachpb.SystemTenantID
+			}
+			pacer = flowCtx.Cfg.AdmissionPacerFactory.NewPacer(
+				100*time.Millisecond,
+				admission.WorkInfo{
+					TenantID:        tenantID,
+					Priority:        admissionpb.BulkNormalPri,
+					CreateTime:      timeutil.Now().UnixNano(),
+					BypassAdmission: false,
+				},
+			)
+		}
+		// It is safe to close a nil pacer.
+		defer pacer.Close()
+
 		sink := makeFileSSTSink(sinkConf, storage, pacer)
 		defer func() {
 			if err := sink.flush(ctx); err != nil {
