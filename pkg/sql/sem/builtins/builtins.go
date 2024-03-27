@@ -8593,9 +8593,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			CalledOnNullInput: true,
 		},
 	),
-	"crdb_internal.protect_cluster": makeBuiltin(
+	"crdb_internal.protect_mvcc_history": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryMigrations,
+			Category:     builtinconstants.CategoryClusterReplication,
 			Undocumented: true,
 		},
 		tree.Overload{
@@ -8631,9 +8631,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Volatility: volatility.Volatile,
 		},
 	),
-	"crdb_internal.extend_cluster_protection": makeBuiltin(
+	"crdb_internal.extend_mvcc_history_protection": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryMigrations,
+			Category:     builtinconstants.CategoryClusterReplication,
 			Undocumented: true,
 		},
 		tree.Overload{
