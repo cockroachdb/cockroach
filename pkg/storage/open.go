@@ -372,8 +372,16 @@ func WALFailover(walCfg base.WALFailoverConfig, storeEnvs fs.Envs, defaultFS vfs
 		if !ok {
 			panic(errors.AssertionFailedf("storage: opening a store with an unrecognized filesystem Env (dir=%s)", cfg.env.Dir))
 		}
+		// Ensure that either all the stores are encrypted, or none are.
+		for _, storeEnv := range sortedEnvs {
+			if (storeEnv.Encryption == nil) != (cfg.env.Encryption == nil) {
+				return errors.Newf("storage: must provide --enterprise-encryption flag for all stores or none if using WAL failover")
+			}
+		}
+
 		failoverIdx := (idx + 1) % len(sortedEnvs)
 		secondaryEnv := sortedEnvs[failoverIdx]
+
 		// Ref once to ensure the secondary Env isn't closed before this Engine has
 		// been closed if the secondary's corresponding Engine is closed first.
 		secondaryEnv.Ref()
@@ -469,6 +477,12 @@ func Open(
 	cfg.opts.ReadOnly = env.IsReadOnly()
 	for _, opt := range opts {
 		if err := opt(&cfg); err != nil {
+			// Run after-close hooks if there are any. This ensures we
+			// release any references to fs.Envs that would've been held by
+			// the engine if it had been successfully opened.
+			for _, f := range cfg.afterClose {
+				f()
+			}
 			return nil, err
 		}
 	}

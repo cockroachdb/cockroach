@@ -33,6 +33,11 @@ func TestWALFailover(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Mock the encryption-at-rest constructor.
+	oldNewEncryptedEnvFunc := fs.NewEncryptedEnvFunc
+	defer func() { fs.NewEncryptedEnvFunc = oldNewEncryptedEnvFunc }()
+	fs.NewEncryptedEnvFunc = fauxNewEncryptedEnvFunc
+
 	var allEnvs fs.Envs
 	defer func() { allEnvs.CloseAll() }()
 
@@ -59,7 +64,15 @@ func TestWALFailover(t *testing.T) {
 				}
 				memfs := vfs.NewMem()
 				require.NoError(t, memfs.MkdirAll(dir, os.ModePerm))
-				e, err := fs.InitEnv(context.Background(), memfs, dir, fs.EnvConfig{})
+
+				var envConfig fs.EnvConfig
+				if td.HasArg("encrypted-at-rest") {
+					envConfig.EncryptionOptions = []byte("test-encryption-options")
+				}
+				if td.HasArg("read-only") {
+					envConfig.RW = fs.ReadOnly
+				}
+				e, err := fs.InitEnv(context.Background(), memfs, dir, envConfig)
 				if err != nil {
 					return fmt.Sprintf("err = %q", err)
 				}
@@ -77,6 +90,12 @@ func TestWALFailover(t *testing.T) {
 					if err := cfg.Set(flagStr); err != nil {
 						return fmt.Sprintf("error parsing flag: %q", err)
 					}
+				}
+				if td.HasArg("path-encrypted") {
+					cfg.Path.EncryptionOptions = []byte("path-encryption-options")
+				}
+				if td.HasArg("prev-path-encrypted") {
+					cfg.PrevPath.EncryptionOptions = []byte("prev-encryption-options")
 				}
 				openEnv := getEnv(openDir)
 				if openEnv == nil {

@@ -160,3 +160,101 @@ open flag=disabled,prev_path=baz envs=(foo) open=foo
 ----
 OK
 WALRecoveryDir: baz
+
+# Make an env with encryption-at-rest.
+
+mkenv ear-a encrypted-at-rest
+----
+
+# Ensure that we error if an explicit path is not encrypted.
+
+open flag=path=baz envs=(ear-a) open=ear-a
+----
+open error: must provide --enterprise-encryption flag for "baz", used as WAL failover path for encrypted store "ear-a"
+
+# And succeed if it is.
+
+open flag=path=baz envs=(ear-a) open=ear-a path-encrypted
+----
+OK
+secondary = baz
+UnhealthyOperationLatencyThreshold() = (100ms,true)
+
+# Disabling should error if no encryption flags for prev_path is provided.
+
+open flag=disabled,prev_path=baz envs=(ear-a) open=ear-a
+----
+open error: must provide --enterprise-encryption flag for "baz", used as WAL failover path for encrypted store "ear-a"
+
+# And succeed if they are.
+
+open flag=disabled,prev_path=baz envs=(ear-a) open=ear-a prev-path-encrypted
+----
+OK
+WALRecoveryDir: baz
+
+# Attempt to use 'among-stores' with an encrypted store and an unencrypted store.
+
+open flag=among-stores envs=(ear-a, foo) open=foo
+----
+open error: storage: must provide --enterprise-encryption flag for all stores or none if using WAL failover
+
+# Ensure we perform the same check when epening the encrypted store.
+
+open flag=among-stores envs=(ear-a, foo) open=ear-a
+----
+open error: storage: must provide --enterprise-encryption flag for all stores or none if using WAL failover
+
+# Using among-stores with all encrypted envs should succeed.
+
+mkenv ear-b encrypted-at-rest
+----
+
+open flag=among-stores envs=(ear-a, ear-b) open=ear-a
+----
+OK
+secondary = ear-b/auxiliary/wals-among-stores
+UnhealthyOperationLatencyThreshold() = (100ms,true)
+
+open flag=disabled envs=(ear-a, ear-b) open=ear-a
+----
+OK
+WALRecoveryDir: ear-b/auxiliary/wals-among-stores
+
+# Open ear-a using an explicit path.
+
+open flag=path=bax envs=(ear-a) open=ear-a path-encrypted
+----
+OK
+secondary = bax
+UnhealthyOperationLatencyThreshold() = (100ms,true)
+
+# Switching the explicit path without specifying the previous path's
+# encryption options should error.
+
+open flag=path=baz,prev_path=bax envs=(ear-a) open=ear-a path-encrypted
+----
+open error: must provide --enterprise-encryption flag for "bax", used as WAL failover path for encrypted store "ear-a"
+
+# Switching the explicit path without specifying the new path's
+# encryption options should error.
+
+open flag=path=baz,prev_path=bax envs=(ear-a) open=ear-a prev-path-encrypted
+----
+open error: must provide --enterprise-encryption flag for "baz", used as WAL failover path for encrypted store "ear-a"
+
+# Providing both should succeed.
+
+open flag=path=baz,prev_path=bax envs=(ear-a) open=ear-a path-encrypted prev-path-encrypted
+----
+OK
+secondary = baz
+UnhealthyOperationLatencyThreshold() = (100ms,true)
+WALRecoveryDir: bax
+
+# Opening an unencrypted store with an encrypted WAL failover
+# path should error.
+
+open flag=path=bax envs=(foo) open=foo path-encrypted
+----
+open error: must provide --enterprise-encryption flag for store "foo", specified WAL failover path "bax" is encrypted
