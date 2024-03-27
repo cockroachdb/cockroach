@@ -50,7 +50,8 @@ func Example_sql() {
 	// connection was established.
 	c.RunWithArgs([]string{`sql`, `-d`, `nonexistent`, `-e`, `create database nonexistent; create table foo(x int); select * from foo`})
 	// COPY should return an intelligible error message.
-	c.RunWithArgs([]string{`sql`, `-e`, `copy t.f from stdin`})
+	// Now that #97751 is fixed this hangs (like it does in psql).
+	//c.RunWithArgs([]string{`sql`, `-e`, `copy t.f from stdin`})
 
 	// Check that partial results + error get reported together. The query will
 	// run via the vectorized execution engine which operates on the batches of
@@ -108,7 +109,6 @@ func Example_sql() {
 	// CREATE DATABASE
 	// CREATE TABLE
 	// x
-	// sql -e copy t.f from stdin
 	// sql -e select 1/(i-2) from generate_series(1,3) g(i)
 	// ?column?
 	// -1.0000000000000000000
