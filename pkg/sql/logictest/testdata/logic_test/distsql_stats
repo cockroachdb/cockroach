@@ -2777,3 +2777,101 @@ SET CLUSTER SETTING jobs.debug.pausepoints = ''
 
 statement ok
 RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TABLE %t118537 ALTER PRIMARY KEY USING COLUMNS (a) USING HASH' AND status = 'paused' FETCH FIRST 1 ROWS ONLY)
+
+# Test optimizer_use_virtual_computed_column_stats.
+
+statement ok
+CREATE TABLE mno (
+  m int NOT NULL,
+  n int,
+  o int AS (sqrt(m::float)::int) VIRTUAL,
+  PRIMARY KEY (m),
+  INDEX (n),
+  INDEX (o) STORING (n)
+)
+
+statement ok
+INSERT INTO mno (m, n) SELECT i, i % 50 FROM generate_series(0, 999) s(i)
+
+statement ok
+ANALYZE mno
+
+query TTIIB
+SELECT statistics_name, column_names, row_count, distinct_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE mno]
+ORDER BY statistics_name, column_names::STRING
+----
+NULL  {m}  1000  1000  true
+NULL  {n}  1000  50    true
+NULL  {o}  1000  33    true
+
+query T
+EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 9
+----
+distribution: full
+vectorized: true
+·
+• render
+│
+└── • filter
+    │ estimated row count: 1
+    │ filter: n = 1
+    │
+    └── • scan
+          estimated row count: 18 (1.8% of the table; stats collected <hidden> ago)
+          table: mno@mno_o_idx
+          spans: [/9 - /9]
+
+query T
+EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 11
+----
+distribution: full
+vectorized: true
+·
+• render
+│
+└── • filter
+    │ estimated row count: 1
+    │ filter: sqrt(m::FLOAT8)::INT8 = 11
+    │
+    └── • scan
+          estimated row count: 20 (2.0% of the table; stats collected <hidden> ago)
+          table: mno@mno_n_idx
+          spans: [/1 - /1]
+
+statement ok
+SET optimizer_use_virtual_computed_column_stats = false
+
+query T
+EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 9
+----
+distribution: full
+vectorized: true
+·
+• render
+│
+└── • filter
+    │ estimated row count: 7
+    │ filter: n = 1
+    │
+    └── • scan
+          estimated row count: 10 (1.0% of the table; stats collected <hidden> ago)
+          table: mno@mno_o_idx
+          spans: [/9 - /9]
+
+query T
+EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 11
+----
+distribution: full
+vectorized: true
+·
+• render
+│
+└── • filter
+    │ estimated row count: 7
+    │ filter: n = 1
+    │
+    └── • scan
+          estimated row count: 10 (1.0% of the table; stats collected <hidden> ago)
+          table: mno@mno_o_idx
+          spans: [/11 - /11]
