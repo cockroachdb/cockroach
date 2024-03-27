@@ -125,17 +125,18 @@ type propBuf struct {
 }
 
 type rangeLeaderInfo struct {
+	// leader is the Raft group's leader. Equals 0 [roachpb.ReplicaID(raft.None)]
+	// if the leader is not known/set, in which case other fields are unset too.
+	leader roachpb.ReplicaID
 	// iAmTheLeader is set if the local replica is the leader.
 	iAmTheLeader bool
-	// leaderKnown is set if the local Raft machinery knows who the leader is. If
-	// not set, all other fields are empty.
-	leaderKnown bool
-	// leader represents the Raft group's leader. Not set if leaderKnown is not
-	// set.
-	leader roachpb.ReplicaID
 	// leaderEligibleForLease is set if the leader is known and its type of
 	// replica allows it to acquire a lease.
 	leaderEligibleForLease bool
+}
+
+func (r rangeLeaderInfo) leaderKnown() bool {
+	return r.leader != roachpb.ReplicaID(raft.None)
 }
 
 type admitEntHandle struct {
@@ -682,11 +683,16 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 		// Thus, we do one of two things:
 		// - if the leader is known, we reject this proposal and make sure the
 		// request that needed the lease is redirected to the leaseholder;
-		// - if the leader is not known, we don't do anything special here to
+		// - if the leader is not known [^1], we don't do anything special here to
 		// terminate the proposal, but we know that Raft will reject it with a
 		// ErrProposalDropped. We'll eventually re-propose it once a leader is
 		// known, at which point it will either go through or be rejected based on
-		// whether or not it is this replica that became the leader.
+		// whether it is this replica that became the leader.
+		//
+		// [^1]: however, if the leader is not known and RejectLeaseOnLeaderUnknown
+		// cluster setting is true, we reject the proposal.
+		// TODO(pav-kv): make this behaviour default. Right now, it is hidden behind
+		// the experimental cluster setting. See #120073 and #118435.
 		//
 		// A special case is when the leader is known, but is ineligible to get the
 		// lease. In that case, we have no choice but to continue with the proposal.
@@ -698,11 +704,25 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 		if li.iAmTheLeader {
 			return false
 		}
-		leaderKnownAndEligible := li.leaderKnown && li.leaderEligibleForLease
-		ownsCurrentLease := b.p.ownsValidLease(ctx, b.clock.NowAsClockTimestamp())
-		if leaderKnownAndEligible && !ownsCurrentLease && !b.testing.allowLeaseProposalWhenNotLeader {
+		if b.p.ownsValidLease(ctx, b.clock.NowAsClockTimestamp()) {
+			log.VEventf(ctx, 2, "proposing lease extension even though we're not the leader; we hold the current lease")
+			return false
+		}
+
+		reject := false
+		if !li.leaderKnown() && RejectLeaseOnLeaderUnknown.Get(&b.settings.SV) {
+			log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; the leader is unknown")
+			reject = true
+		}
+		// TODO(pav-kv): the testing knob logic below doesn't exactly correspond to
+		// its name. Clean it up, potentially replace by the cluster setting above.
+		if li.leaderEligibleForLease && !b.testing.allowLeaseProposalWhenNotLeader {
 			log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
 				li.leader)
+			reject = true
+		}
+		if reject {
+			// NB: li.leader can be None.
 			b.p.rejectProposalWithRedirectLocked(ctx, p, li.leader)
 			if b.p.shouldCampaignOnRedirect(raftGroup) {
 				const format = "campaigning because Raft leader (id=%d) not live in node liveness map"
@@ -715,12 +735,9 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 			}
 			return true
 		}
-		// If the leader is not known, or if it is known but it's ineligible
-		// for the lease, continue with the proposal as explained above. We
-		// also send lease extensions for an existing leaseholder.
-		if ownsCurrentLease {
-			log.VEventf(ctx, 2, "proposing lease extension even though we're not the leader; we hold the current lease")
-		} else if !li.leaderKnown {
+		// If the leader is not known, or if it is known but is ineligible for the
+		// lease, continue with the proposal as explained above.
+		if !li.leaderKnown() {
 			log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is unknown")
 		} else {
 			log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is ineligible")
@@ -810,8 +827,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 func (b *propBuf) leaderStatusRLocked(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo {
 	leaderInfo := b.p.leaderStatus(ctx, raftGroup)
 	// Sanity check.
-	if leaderInfo.leaderKnown && leaderInfo.leader == b.p.getReplicaID() &&
-		!leaderInfo.iAmTheLeader {
+	if leaderInfo.leader == b.p.getReplicaID() && !leaderInfo.iAmTheLeader {
 		log.Fatalf(ctx,
 			"inconsistent Raft state: state %s while the current replica is also the lead: %d",
 			raftGroup.BasicStatus().RaftState, leaderInfo.leader)
@@ -1402,7 +1418,6 @@ func (rp *replicaProposer) leaderStatus(
 	}
 	return rangeLeaderInfo{
 		iAmTheLeader:           iAmTheLeader,
-		leaderKnown:            leaderKnown,
 		leader:                 roachpb.ReplicaID(leader),
 		leaderEligibleForLease: leaderEligibleForLease,
 	}
@@ -1444,6 +1459,14 @@ func (rp *replicaProposer) rejectProposalWithRedirectLocked(
 	rangeDesc := r.descRLocked()
 	storeID := r.store.StoreID()
 	r.store.metrics.LeaseRequestErrorCount.Inc(1)
+	if redirectTo == roachpb.ReplicaID(raft.None) {
+		// We don't know the leader, so pass Lease{} to give no hint.
+		rp.rejectProposalWithErrLocked(ctx, prop, kvpb.NewError(
+			kvpb.NewNotLeaseHolderError(roachpb.Lease{}, storeID, rangeDesc,
+				"refusing to acquire lease on follower")))
+		return
+	}
+
 	redirectRep, _ /* ok */ := rangeDesc.GetReplicaDescriptorByID(redirectTo)
 	log.VEventf(ctx, 2, "redirecting proposal to node %s; request: %s", redirectRep.NodeID, prop.Request)
 	rp.rejectProposalWithErrLocked(ctx, prop, kvpb.NewError(
