@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -50,6 +49,7 @@ var debugTimeSeriesDumpOpts = struct {
 	yaml         string
 	targetURL    string
 	ddApiKey     string
+	httpToken    string
 }{
 	format:       tsDumpText,
 	from:         timestampValue{},
@@ -102,13 +102,20 @@ will then convert it to the --format requested in the current invocation.
 		case tsDumpText:
 			w = defaultTSWriter{w: os.Stdout}
 		case tsDumpJSON:
-			w = makeJSONWriter(debugTimeSeriesDumpOpts.targetURL)
+			w = makeJSONWriter(
+				debugTimeSeriesDumpOpts.targetURL,
+				debugTimeSeriesDumpOpts.httpToken,
+				10_000_000, /* threshold */
+				doRequest,
+			)
 		case tsDumpDatadog:
 			w = makeDatadogWriter(
 				ctx,
 				"https://api.datadoghq.com/api/v2/series",
 				false,
 				debugTimeSeriesDumpOpts.ddApiKey,
+				100, /* threshold */
+				doDDRequest,
 			)
 		case tsDumpDatadogInit:
 			w = makeDatadogWriter(
@@ -116,6 +123,8 @@ will then convert it to the --format requested in the current invocation.
 				"https://api.datadoghq.com/api/v2/series",
 				true,
 				debugTimeSeriesDumpOpts.ddApiKey,
+				100,
+				doDDRequest,
 			)
 		case tsDumpOpenMetrics:
 			if debugTimeSeriesDumpOpts.targetURL != "" {
@@ -230,6 +239,43 @@ will then convert it to the --format requested in the current invocation.
 	}),
 }
 
+func doRequest(req *http.Request) error {
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode > 299 {
+		return errors.Newf("bad status: %+v", resp)
+	}
+	return nil
+}
+
+func doDDRequest(req *http.Request) error {
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	ddResp := DatadogResp{}
+	err = json.Unmarshal(respBytes, &ddResp)
+	if err != nil {
+		return err
+	}
+	if len(ddResp.Errors) > 0 {
+		return errors.Newf("tsdump datadog upload: error response from datadog: %v", ddResp.Errors)
+	}
+	if resp.StatusCode > 299 {
+		return errors.Newf("tsdump datadog upload: bad response status code: %+v", resp)
+	}
+	return nil
+}
+
 // beginHttpRequestWithWritePipe initiates an HTTP request to the
 // `targetURL` argument and returns an `io.Writer` that pipes to the
 // request body. This function will return while the request runs
@@ -263,20 +309,26 @@ type tsWriter interface {
 // them via HTTP to the public DD endpoint, assuming an API key is set
 // in the CLI flags.
 type datadogWriter struct {
-	targetURL       string
-	buffer          bytes.Buffer
-	series          []DatadogSeries
-	metricsMetadata map[string]metric.Metadata
-	timestamp       int64
-	init            bool
-	apiKey          string
+	targetURL string
+	buffer    bytes.Buffer
+	series    []DatadogSeries
+	timestamp int64
+	init      bool
+	apiKey    string
 	// namePrefix sets the string to prepend to all metric names. The
 	// names are kept with `.` delimiters.
 	namePrefix string
+	doRequest  func(req *http.Request) error
+	threshold  int
 }
 
 func makeDatadogWriter(
-	ctx context.Context, targetURL string, init bool, apiKey string,
+	ctx context.Context,
+	targetURL string,
+	init bool,
+	apiKey string,
+	threshold int,
+	doRequest func(req *http.Request) error,
 ) *datadogWriter {
 	fmt.Printf("Datadog writer init: %t\n", init)
 	return &datadogWriter{
@@ -286,6 +338,8 @@ func makeDatadogWriter(
 		init:       init,
 		apiKey:     apiKey,
 		namePrefix: "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
+		doRequest:  doRequest,
+		threshold:  threshold,
 	}
 }
 
@@ -317,9 +371,18 @@ type DatadogSubmitMetrics struct {
 	Series []DatadogSeries `json:"series"`
 }
 
+const (
+	DatadogSeriesTypeUnknown = iota
+	DatadogSeriesTypeCounter
+	DatadogSeriesTypeRate
+	DatadogSeriesTypeGauge
+)
+
 func (d *datadogWriter) Emit(data *tspb.TimeSeriesData) error {
 	series := &DatadogSeries{
-		Type:   d.getType(data),
+		// TODO(davidh): This is not correct. We should inspect metric metadata and set appropriately.
+		// The impact of not doing this is that the metric will be treated as a gauge by default.
+		Type:   DatadogSeriesTypeUnknown,
 		Points: make([]DatadogPoint, len(data.Datapoints)),
 	}
 
@@ -363,7 +426,7 @@ func (d *datadogWriter) Emit(data *tspb.TimeSeriesData) error {
 	if d.init {
 		series.Points = []DatadogPoint{{
 			Value:     0,
-			Timestamp: time.Now().Unix(),
+			Timestamp: timeutil.Now().Unix(),
 		}}
 	} else {
 		for i, ts := range data.Datapoints {
@@ -385,7 +448,7 @@ func (d *datadogWriter) Emit(data *tspb.TimeSeriesData) error {
 	// The limit of `100` is an experimentally set heuristic. It can
 	// probably be increased. This results in a payload that's generally
 	// below 2MB. DD's limit is 5MB.
-	if len(d.series) > 100 {
+	if len(d.series) > d.threshold {
 		fmt.Printf(
 			"Hit threshold after %d series while processing %s. Sending HTTP Request.\n",
 			len(d.series),
@@ -437,46 +500,12 @@ func (d *datadogWriter) flushInternal() error {
 	req.Header.Set(server.ContentTypeHeader, "application/json")
 	req.Header.Set(httputil.ContentEncodingHeader, "gzip")
 
-	resp, err := http.DefaultClient.Do(req)
+	err = d.doRequest(req)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	ddResp := DatadogResp{}
-	err = json.Unmarshal(respBytes, &ddResp)
-	if err != nil {
-		return err
-	}
-	if len(ddResp.Errors) > 0 {
-		return errors.Newf("tsdump datadog upload: error response from datadog: %v", ddResp.Errors)
-	}
-	if resp.StatusCode > 299 {
-		return errors.Newf("tsdump datadog upload: bad response status code: %+v", resp)
-	}
-
 	d.series = nil
 	return nil
-}
-
-func (d *datadogWriter) getType(data *tspb.TimeSeriesData) int {
-	return 1
-	//for name, meta := range d.metricsMetadata {
-	//	if strings.HasSuffix(data.Name, name) {
-	//		switch meta.MetricType {
-	//		case io_prometheus_client.MetricType_COUNTER:
-	//			return 1
-	//		case io_prometheus_client.MetricType_GAUGE:
-	//			return 3
-	//		default:
-	//			return 0
-	//		}
-	//	}
-	//}
-	//return 0
 }
 
 var _ tsWriter = &datadogWriter{}
@@ -485,6 +514,9 @@ type jsonWriter struct {
 	targetURL string
 	buffer    bytes.Buffer
 	timestamp int64
+	httpToken string
+	doRequest func(req *http.Request) error
+	threshold int
 }
 
 // Format via https://docs.victoriametrics.com/#json-line-format
@@ -530,13 +562,6 @@ func (o *jsonWriter) Emit(data *tspb.TimeSeriesData) error {
 	out.Metric["cluster_type"] = "SELF_HOSTED"
 	out.Metric["job"] = "cockroachdb"
 	out.Metric["region"] = "local"
-	// Zero values
-	out.Metric["instance"] = ""
-	out.Metric["node"] = ""
-	out.Metric["organization_id"] = ""
-	out.Metric["organization_label"] = ""
-	out.Metric["sla_type"] = ""
-	out.Metric["tenant_id"] = ""
 	// Command values
 	if debugTimeSeriesDumpOpts.clusterLabel != "" {
 		out.Metric["cluster"] = debugTimeSeriesDumpOpts.clusterLabel
@@ -545,6 +570,7 @@ func (o *jsonWriter) Emit(data *tspb.TimeSeriesData) error {
 	} else {
 		out.Metric["cluster"] = fmt.Sprintf("cluster-debug-%d", o.timestamp)
 	}
+	fmt.Printf("Cluster label is set to: %s\n", out.Metric["cluster"])
 
 	sl := reCrStoreNode.FindStringSubmatch(data.Name)
 	out.Metric["node_id"] = "0"
@@ -570,16 +596,16 @@ func (o *jsonWriter) Emit(data *tspb.TimeSeriesData) error {
 		return err
 	}
 
-	if o.buffer.Len() > 10_000_000 {
+	if o.buffer.Len() > o.threshold {
 		fmt.Printf("Hit threshold. Sending HTTP Request: %s\n", name)
-		resp, err := http.Post(o.targetURL, "application/json", &o.buffer)
+		req, err := http.NewRequest("POST", o.targetURL, &o.buffer)
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode > 299 {
-			return errors.Newf("bad status: %+v", resp)
+		req.Header.Set("X-CRL-TOKEN", o.httpToken)
+		err = o.doRequest(req)
+		if err != nil {
+			return err
 		}
 
 		o.buffer = bytes.Buffer{}
@@ -605,10 +631,15 @@ func (o *jsonWriter) Flush() error {
 
 var _ tsWriter = &jsonWriter{}
 
-func makeJSONWriter(targetURL string) tsWriter {
+func makeJSONWriter(
+	targetURL string, httpToken string, threshold int, doRequest func(req *http.Request) error,
+) tsWriter {
 	return &jsonWriter{
 		targetURL: targetURL,
 		timestamp: timeutil.Now().Unix(),
+		httpToken: httpToken,
+		threshold: threshold,
+		doRequest: doRequest,
 	}
 }
 
