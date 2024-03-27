@@ -135,6 +135,11 @@ func (c *indexConstraintCtx) makeStringPrefixSpan(
 // given type. We disallow mixed-type comparisons because it would result in
 // incorrect encodings (#4313).
 func (c *indexConstraintCtx) verifyType(offset int, typ *types.T) bool {
+	if c.md.TableMeta(c.md.ColumnMeta(c.columns[offset].ID()).Table).Table.IsVirtualTable() {
+		// Virtual indexes permit mixed-type constraints, because we don't need to
+		// actually produce encodings to compare values in virtual indexes.
+		return true
+	}
 	return typ.Family() == types.UnknownFamily || c.colType(offset).Equivalent(typ)
 }
 
