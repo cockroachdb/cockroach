@@ -62,6 +62,9 @@ func strongerOrEqualStrengths(str lock.Strength) []lock.Strength {
 // the provided lock strength.
 func minConflictLockStrength(str lock.Strength) (lock.Strength, error) {
 	switch str {
+	case lock.None:
+		// Don't conflict with any locks held by other transactions.
+		return lock.None, nil
 	case lock.Shared:
 		return lock.Exclusive, nil
 	case lock.Exclusive, lock.Intent:
@@ -113,31 +116,32 @@ var lockTableKeyScannerPool = sync.Pool{
 
 // newLockTableKeyScanner creates a new lockTableKeyScanner.
 //
-// txn is the transaction attempting to acquire locks. If txn is not nil, locks
-// held by the transaction with any strength will be accumulated into the
-// ownLocks array. Otherwise, if txn is nil, the request is non-transactional
-// and no locks will be accumulated into the ownLocks array.
+// txnID corresponds to the ID of the transaction attempting to acquire locks.
+// If txnID is valid (non-empty), locks held by the transaction with any
+// strength will be accumulated into the ownLocks array. Otherwise, if txnID is
+// empty, the request is non-transactional and no locks will be accumulated into
+// the ownLocks array.
 //
 // str is the strength of the lock that the transaction (or non-transactional
 // request) is attempting to acquire. The scanner will search for locks held by
-// other transactions that conflict with this strength.
+// other transactions that conflict with this strength[1].
 //
 // maxConflicts is the maximum number of conflicting locks that the scanner
 // should accumulate before returning an error. If maxConflicts is zero, the
 // scanner will accumulate all conflicting locks.
+//
+// [1] It's valid to pass in lock.None for str. lock.None doesn't conflict with
+// any other replicated locks; as such, passing lock.None configures the scanner
+// to only return locks from the supplied txnID.
 func newLockTableKeyScanner(
 	ctx context.Context,
 	reader Reader,
-	txn *roachpb.Transaction,
+	txnID uuid.UUID,
 	str lock.Strength,
 	maxConflicts int64,
 	targetBytesPerConflict int64,
 	readCategory ReadCategory,
 ) (*lockTableKeyScanner, error) {
-	var txnID uuid.UUID
-	if txn != nil {
-		txnID = txn.ID
-	}
 	minConflictStr, err := minConflictLockStrength(str)
 	if err != nil {
 		return nil, err
