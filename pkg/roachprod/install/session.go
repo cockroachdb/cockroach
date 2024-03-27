@@ -139,8 +139,8 @@ func (s *remoteSession) errWithDebug(err error) error {
 	err = rperrors.ClassifyCmdError(err)
 	// The verbose logs are noisy and not useful for most errors, so only
 	// retain them for potential flakes.
-	if errors.Is(err, rperrors.ErrSSH255) && s.logfile != "" {
-		err = errors.Wrap(err, "_potential_ SSH flake (`ssh -vvv` log retained under ssh/)")
+	if rperrors.IsSSHError(err) && s.logfile != "" {
+		err = errors.Wrapf(err, "_potential_ SSH flake (`ssh -vvv` log retained in %s)", s.logfile)
 		s.logfile = "" // prevent removal on close
 	}
 	return err
