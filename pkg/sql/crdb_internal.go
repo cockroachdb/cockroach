@@ -225,6 +225,26 @@ var crdbInternal = virtualSchema{
 	validWithNoDatabaseContext: true,
 }
 
+// SupportedVTables are the crdb_internal tables that are "supported" for real
+// customer use in production for legacy reasons. Avoid addding to this list if
+// possible and prefer to add new cusotmer-facing tables that should be public
+// under the non-"internal" namespace of information_schema.
+var SupportedVTables = map[string]struct{}{
+	`"".crdb_internal.cluster_contended_indexes`:     {},
+	`"".crdb_internal.cluster_contended_keys`:        {},
+	`"".crdb_internal.cluster_contended_tables`:      {},
+	`"".crdb_internal.cluster_contention_events`:     {},
+	`"".crdb_internal.cluster_locks`:                 {},
+	`"".crdb_internal.cluster_queries`:               {},
+	`"".crdb_internal.cluster_sessions`:              {},
+	`"".crdb_internal.cluster_transactions`:          {},
+	`"".crdb_internal.index_usage_statistics`:        {},
+	`"".crdb_internal.statement_statistics`:          {},
+	`"".crdb_internal.transaction_contention_events`: {},
+	`"".crdb_internal.transaction_statistics`:        {},
+	`"".crdb_internal.zones`:                         {},
+}
+
 var crdbInternalBuildInfoTable = virtualSchemaTable{
 	comment: `detailed identification strings (RAM, local node only)`,
 	schema: `
