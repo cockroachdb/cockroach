@@ -6,7 +6,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/security/distinguishedname",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/security/username",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_go_ldap_ldap_v3//:ldap",
     ],

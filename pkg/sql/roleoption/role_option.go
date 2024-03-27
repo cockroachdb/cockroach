@@ -220,7 +220,10 @@ func MakeListFromKVOptions(
 				if err := base.CheckEnterpriseEnabled(settings, "SUBJECT role option"); err != nil {
 					return err
 				}
-				if err := distinguishedname.ValidateDN(u, s); err != nil {
+				if u.IsRootUser() {
+					return pgerror.Newf(pgcode.InvalidParameterValue, "role %q cannot have a SUBJECT", u)
+				}
+				if err := distinguishedname.ValidateDN(s); err != nil {
 					return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 				}
 				return nil
