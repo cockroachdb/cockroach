@@ -126,7 +126,7 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
 		panic(pgerror.Newf(pgcode.WrongObjectType,
-			"%s is not a procedure", c.Proc.Func.ReferenceByName.String(),
+			"%s is not a procedure", c.Proc.Func.String(),
 		))
 	}
 
