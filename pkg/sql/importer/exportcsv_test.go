@@ -131,6 +131,7 @@ func TestExportImportBank(t *testing.T) {
 			schema := bank.FromRows(1).Tables()[0].Schema
 			exportedFiles := filepath.Join(exportDir, "*")
 			db.Exec(t, fmt.Sprintf("CREATE TABLE bank2 %s", schema))
+			defer db.Exec(t, "DROP TABLE bank2")
 			db.Exec(t, fmt.Sprintf(`IMPORT INTO bank2 CSV DATA ($1) WITH delimiter = '|'%s`, nullIf), exportedFiles)
 
 			db.CheckQueryResults(t,
@@ -140,7 +141,6 @@ func TestExportImportBank(t *testing.T) {
 				`SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE bank2]`,
 				db.QueryStr(t, `SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE bank]`),
 			)
-			db.Exec(t, "DROP TABLE bank2")
 		})
 	}
 }

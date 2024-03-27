@@ -9,7 +9,6 @@ exec-sql
 SET CLUSTER SETTING bulkio.import.write_import_epoch.enabled=true;
 ----
 
-
 exec-sql
 CREATE DATABASE d;
 USE d;
@@ -19,11 +18,11 @@ INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
 ----
 
 exec-sql
-CREATE VIEW import_epoch (epoch)
+CREATE VIEW import_epoch (epoch, type)
 AS WITH tbls AS (
    	SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS orig FROM system.descriptor
    )
-   SELECT orig->'table'->'importEpoch' FROM tbls WHERE id = '109';
+   SELECT orig->'table'->'importEpoch', orig->'table'->'importType' FROM tbls WHERE id = '109';
 ----
 
 exec-sql
@@ -43,7 +42,7 @@ foo 109
 query-sql
 SELECT * FROM import_epoch
 ----
-1
+1 <nil>
 
 exec-sql
 EXPORT INTO CSV 'nodelocal://1/export2/' FROM SELECT * FROM baz WHERE i = 2;
@@ -57,7 +56,7 @@ IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export2/export*-n*.0.csv')
 query-sql
 SELECT * FROM import_epoch
 ----
-2
+2 <nil>
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
@@ -78,13 +77,31 @@ job paused at pausepoint
 query-sql
 SELECT * FROM import_epoch
 ----
-3
+3 "IMPORT_WITH_IMPORT_EPOCH"
 
 # Cancel the job so that the cleanup hook runs.
 job cancel=a
 ----
 
+# Ensure that the import type is cleared.
 query-sql
 SELECT * FROM import_epoch
 ----
-3
+3 <nil>
+
+
+exec-sql
+SET CLUSTER SETTING bulkio.import.write_import_epoch.enabled=false;
+----
+
+# Ensure that the correct ImportType is set when the cluster setting is disabled
+import expect-pausepoint tag=b
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export3/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+# We expect the zero-valued version here.
+query-sql
+SELECT * FROM import_epoch
+----
+3 <nil>
