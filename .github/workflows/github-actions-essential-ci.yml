@@ -284,7 +284,7 @@ jobs:
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: build
-        run: bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-short //pkg/cmd/cockroach-sql //pkg/cmd/cockroach-oss --config crosswindows --jobs 100 --remote_download_minimal --build_event_binary_file=bes.bin --enable_runfiles $(./build/github/engflow-args.sh)
+        run: ./build/github/build.sh crosswindows
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
