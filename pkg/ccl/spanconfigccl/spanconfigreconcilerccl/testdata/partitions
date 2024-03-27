@@ -10,7 +10,7 @@ reconcile
 mutations discard
 ----
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -48,7 +48,7 @@ mutations
 ----
 upsert /Table/10{6-7}                      range default
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -83,7 +83,7 @@ mutations
 delete /Table/10{6-7}
 upsert /Table/10{6-7}                      num_replicas=7 num_voters=5
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -123,7 +123,7 @@ upsert /Table/106/1/{1-2}                  global_reads=true num_replicas=7 num_
 upsert /Table/106/1/{2-3}                  global_reads=true num_replicas=7 num_voters=5
 upsert /Table/10{6/1/3-7}                  num_replicas=7 num_voters=5
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -163,7 +163,7 @@ delete /Table/10{6/1/3-7}
 upsert /Table/106/1/{4-5}                  ttl_seconds=5 num_replicas=7 num_voters=5
 upsert /Table/10{6/1/5-7}                  num_replicas=7 num_voters=5
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -217,7 +217,7 @@ upsert /Table/106/{1/5-2}                  num_replicas=7 num_voters=6
 delete /Table/10{6/1/5-7}
 upsert /Table/10{6/2-7}                    num_replicas=7 num_voters=5
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -269,7 +269,7 @@ upsert /Table/106/1/{4-5}                  ttl_seconds=5 num_replicas=7
 delete /Table/10{6/2-7}
 upsert /Table/10{6/2-7}                    num_replicas=7
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -315,7 +315,7 @@ delete /Table/106/1/{4-5}
 delete /Table/106/{1/5-2}
 delete /Table/10{6/2-7}
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)

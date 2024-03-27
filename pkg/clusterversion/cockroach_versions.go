@@ -305,6 +305,10 @@ const (
 	// splits.
 	V24_1_EstimatedMVCCStatsInSplit
 
+	// V24_1_InstallMeta2StaticSplitPoint installs a static split point between
+	// meta1 and meta2.
+	V24_1_InstallMeta2StaticSplitPoint
+
 	numKeys
 )
 
@@ -372,6 +376,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1_SystemDatabaseSurvivability:          {Major: 23, Minor: 2, Internal: 18},
 	V24_1_GossipMaximumIOOverload:              {Major: 23, Minor: 2, Internal: 20},
 	V24_1_EstimatedMVCCStatsInSplit:            {Major: 23, Minor: 2, Internal: 22},
+	V24_1_InstallMeta2StaticSplitPoint:         {Major: 23, Minor: 2, Internal: 24},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster

@@ -112,9 +112,10 @@ func WriteInitialClusterData(
 		initialReplicaVersion = *knobs.InitialReplicaVersionOverride
 	}
 	// We iterate through the ranges backwards, since they all need to contribute
-	// to the stats of the first range (i.e. because they all write meta2 records
-	// in the first range), and so we want to create the first range last so that
-	// the stats we compute for it are correct.
+	// to the stats of the first and second range (i.e. because all ranges write meta2
+	// records in the second range, which itself writes a meta1 record in the first range)
+	// So, we want to create the second range second last and the first range last,
+	// so that the stats we compute are correct.
 	startKey := roachpb.RKeyMax
 	for i := len(splits) - 1; i >= -1; i-- {
 		endKey := startKey
@@ -181,21 +182,27 @@ func WriteInitialClusterData(
 		); err != nil {
 			return err
 		}
-		// Range addressing for meta2.
-		meta2Key := keys.RangeMetaKey(endKey)
-		if err := storage.MVCCPutProto(
-			ctx, batch, meta2Key.AsRawKey(),
-			now, desc, storage.MVCCWriteOptions{Stats: firstRangeMS},
-		); err != nil {
-			return err
-		}
 
-		// The first range gets some special treatment.
-		if startKey.Equal(roachpb.RKeyMin) {
+		// The first (meta1) and second range (meta2) gets some special treatment.
+		if startKey.Equal(keys.Meta1Prefix) {
+			// The descriptor for meta1 is gossiped around, it's not stored at a
+			// meta key, unlike other range descriptors.
+		} else if startKey.Equal(keys.Meta2Prefix) {
+			// The range descriptor for meta2 is stored in meta1.
 			// Range addressing for meta1.
-			meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax))
+			meta1Key := keys.RangeMetaKey(roachpb.RKey(keys.Meta2KeyMax))
 			if err := storage.MVCCPutProto(
 				ctx, batch, meta1Key.AsRawKey(), now, desc, storage.MVCCWriteOptions{},
+			); err != nil {
+				return err
+			}
+		} else {
+			// All other ranges descriptors are stored in meta2.
+			// Range addressing for meta2.
+			meta2Key := keys.RangeMetaKey(endKey)
+			if err := storage.MVCCPutProto(
+				ctx, batch, meta2Key.AsRawKey(),
+				now, desc, storage.MVCCWriteOptions{Stats: firstRangeMS},
 			); err != nil {
 				return err
 			}

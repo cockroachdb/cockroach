@@ -19,7 +19,7 @@ mutations
 
 # We should observe placeholder entries for both tenants (installed when
 # creating tenant records).
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -102,7 +102,7 @@ upsert /Tenant/10/Table/6{0-1}             database system (tenant)
 upsert /Tenant/10/Table/6{1-2}             database system (tenant)
 upsert /Tenant/10/Table/6{2-3}             database system (tenant)
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -194,7 +194,7 @@ upsert /Tenant/10/Table/10{7-8}            range default
 upsert /Tenant/10/Table/11{2-3}            range default
 upsert /Tenant/10/Table/11{3-4}            range default
 
-state offset=81
+state offset=82
 ----
 ...
 /Tenant/10/Table/2{4-5}                    database system (tenant)

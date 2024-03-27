@@ -1254,7 +1254,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Instantiate a span config manager.
 	spanConfig.sqlTranslatorFactory = spanconfigsqltranslator.NewFactory(
-		execCfg.ProtectedTimestampProvider, codec, spanConfigKnobs,
+		execCfg.ProtectedTimestampProvider, codec, cfg.Settings, spanConfigKnobs,
 	)
 	spanConfig.sqlWatcher = spanconfigsqlwatcher.New(
 		codec,
