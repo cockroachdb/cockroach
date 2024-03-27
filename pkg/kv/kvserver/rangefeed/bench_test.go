@@ -106,8 +106,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 		const withFiltering = false
 		streams[i] = &noopStream{ctx: ctx}
 		futures[i] = &future.ErrorFuture{}
-		ok, _ := p.Register(span, hlc.MinTimestamp, nil,
-			withDiff, withFiltering, streams[i], nil, futures[i])
+		ok, _ := p.Register(span, hlc.MinTimestamp, nil, withDiff, withFiltering, streams[i], nil, futures[i], nil)
 		require.True(b, ok)
 	}
 
@@ -201,4 +200,10 @@ func (s *noopStream) Context() context.Context {
 func (s *noopStream) Send(*kvpb.RangeFeedEvent) error {
 	s.events++
 	return nil
+}
+
+func (s *noopStream) BufferedSend(e *REventWithAlloc) {
+	_, alloc, _ := e.Detatch()
+	s.events++
+	alloc.Release(s.ctx)
 }

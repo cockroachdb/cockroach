@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -67,6 +68,8 @@ type ScheduledProcessor struct {
 	stopping bool
 	stoppedC chan struct{}
 
+	cleaningUp chan struct{}
+
 	// stopper passed by start that is used for firing up async work from scheduler.
 	stopper       *stop.Stopper
 	txnPushActive bool
@@ -88,6 +91,8 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 		eventC:       make(chan *event, cfg.EventChanCap),
 		// Closed when scheduler removed callback.
 		stoppedC: make(chan struct{}),
+		//
+		cleaningUp: make(chan struct{}),
 	}
 	return p
 }
@@ -310,6 +315,7 @@ func (p *ScheduledProcessor) Register(
 	stream Stream,
 	disconnectFn func(),
 	done *future.ErrorFuture,
+	blockRegistration chan struct{},
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -343,16 +349,25 @@ func (p *ScheduledProcessor) Register(
 		// once they observe the first checkpoint event.
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
-		// Run an output loop for the registry.
-		runOutputLoop := func(ctx context.Context) {
-			r.runOutputLoop(ctx, p.RangeID)
+		unregister := func() {
 			if p.unregisterClient(&r) {
-				// unreg callback is set by replica to tear down processors that have
+				// unreg callback is set by reunregisterplica to tear down processors that have
 				// zero registrations left and to update event filters.
 				if r.unreg != nil {
 					r.unreg()
 				}
 			}
+		}
+
+		// Run an output loop for the registry.
+		runOutputLoop := func(ctx context.Context) {
+			if blockRegistration != nil {
+				select {
+				case <-ctx.Done():
+				case <-blockRegistration:
+				}
+			}
+			r.runOutputLoop(ctx, p.RangeID)
 		}
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
 		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
@@ -361,7 +376,42 @@ func (p *ScheduledProcessor) Register(
 			// registration.
 			r.disconnect(kvpb.NewError(err))
 			p.reg.Unregister(ctx, &r)
+			return f
 		}
+
+		// The registration must disconnect if the stream context is cancelled.
+		// If the context from the processor is cancelled, we don't care because things
+		// are shutting down.
+		streamCtx, cancelStreamCtx := context.WithCancel(stream.Context())
+		ctxutil.WhenDone(streamCtx, func() {
+			// If the registration is already disconnected, nothing needs to be done.
+			//
+			// NB: r.ready also avoids deadlock by ensuring that r.mu is not held
+			// by r.disconnect while executing this callback. The callstack for this case is
+			// r.disconnect() -> onReady() -> this function.
+			if !r.ready.CompareAndSwap(false, true) {
+				return
+			}
+			err := kvpb.NewError(errors.New("synthetic context cancellation"))
+			r.disconnect(err)
+		})
+		onReady := func(_ error) {
+			if !r.ready.CompareAndSwap(false, true) {
+				return
+			}
+			// NB: The ctxutil.WhenDone callback above  creates a goroutine when
+			// running in the IDE (see comments on SeDisconnectWithErre
+			// pkg/util/ctxutil/canceler_1_21.go). This goroutine will leak in
+			// unit tests run in the IDE if the context is not cancelled. Cancelling
+			// it here ensures that its cancelled.
+			//
+			// NB: r.mu is held here.
+			cancelStreamCtx()
+			unregister()
+		}
+		// The future is set when the rangefeed disconnects. If the registration is
+		// already disconnected at this point, this will unregister immediately.
+		done.WhenReady(onReady)
 		return f
 	})
 	if filter != nil {
@@ -611,6 +661,8 @@ func runRequest[T interface{}](
 		}
 	})
 	select {
+	case <-p.reg.closing:
+		return r
 	case r = <-result:
 		return r
 	case <-p.stoppedC:

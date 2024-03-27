@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -50,11 +51,47 @@ type testStream struct {
 		sendErr error
 		events  []*kvpb.RangeFeedEvent
 	}
+	bufferedEvents chan *REventWithAlloc
+	g              ctxgroup.Group
 }
 
 func newTestStream() *testStream {
 	ctx, done := context.WithCancel(context.Background())
-	return &testStream{ctx: ctx, ctxDone: done}
+	ts := &testStream{
+		ctx:            ctx,
+		ctxDone:        done,
+		bufferedEvents: make(chan *REventWithAlloc, 128),
+		g:              ctxgroup.WithContext(ctx),
+	}
+	ts.g.Go(ts.outputLoop)
+	return ts
+}
+
+func (s *testStream) outputLoop() error {
+	for {
+		select {
+		case <-s.ctx.Done():
+			return nil
+		case e := <-s.bufferedEvents:
+			ev, alloc, cb := e.Detatch()
+			// Detect a sync event.
+			if ev == nil {
+				cb(nil)
+				continue
+			}
+
+			alloc.Release(s.ctx)
+			func() {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				if s.mu.sendErr != nil {
+					cb(s.mu.sendErr)
+					return
+				}
+				s.mu.events = append(s.mu.events, ev)
+			}()
+		}
+	}
 }
 
 func (s *testStream) Context() context.Context {
@@ -63,6 +100,7 @@ func (s *testStream) Context() context.Context {
 
 func (s *testStream) Cancel() {
 	s.ctxDone()
+	_ = s.g.Wait()
 }
 
 func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
@@ -75,18 +113,45 @@ func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 	return nil
 }
 
+func (s *testStream) BufferedSend(e *REventWithAlloc) {
+	select {
+	case <-s.ctx.Done():
+	case s.bufferedEvents <- e:
+	}
+}
+
 func (s *testStream) SetSendErr(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.sendErr = err
 }
 
+// Events returns the events which have been sent on the stream including all buffered events if any.
+// This function is a synchronization point for buffered events.
 func (s *testStream) Events() []*kvpb.RangeFeedEvent {
+	s.syncEvents()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	es := s.mu.events
 	s.mu.events = nil
 	return es
+}
+
+// syncEvents waits for all previous events to be added to the output array, Events().
+func (s *testStream) syncEvents() {
+	wait := make(chan struct{})
+	// Indicate that this is a sync event by allowing the inner event to be nil.
+	dummyEvent := &REventWithAlloc{
+		callback: func(error) {
+			close(wait)
+		},
+	}
+	s.BufferedSend(dummyEvent)
+	select {
+	case <-s.ctx.Done():
+	case <-wait:
+	}
 }
 
 func (s *testStream) BlockSend() func() {
@@ -121,8 +186,8 @@ func newTestRegistration(
 	catchup storage.SimpleMVCCIterator,
 	withDiff bool,
 	withFiltering bool,
+	s *testStream,
 ) *testRegistration {
-	s := newTestStream()
 	r := newRegistration(
 		span,
 		ts,
@@ -165,8 +230,9 @@ func TestRegistrationBasic(t *testing.T) {
 	ev2.MustSetValue(&kvpb.RangeFeedValue{Key: keyB, Value: val})
 
 	// Registration with no catchup scan specified.
-	noCatchupReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */)
+	noCatchupStream := newTestStream()
+	defer noCatchupStream.Cancel()
+	noCatchupReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, false, false, noCatchupStream)
 	noCatchupReg.publish(ctx, ev1, nil /* alloc */)
 	noCatchupReg.publish(ctx, ev2, nil /* alloc */)
 	require.Equal(t, len(noCatchupReg.buf), 2)
@@ -175,14 +241,17 @@ func TestRegistrationBasic(t *testing.T) {
 	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, noCatchupReg.stream.Events())
 	noCatchupReg.disconnect(nil)
 
-	// Registration with catchup scan.
+	//Registration with catchup scan.
+	catchupStream := newTestStream()
+	defer catchupStream.Cancel()
 	catchupReg := newTestRegistration(spBC, hlc.Timestamp{WallTime: 1},
 		newTestIterator([]storage.MVCCKeyValue{
 			makeKV("b", "val1", 10),
 			makeKV("bc", "val3", 11),
 			makeKV("bd", "val4", 9),
 		}, nil),
-		false /* withDiff */, false /* withFiltering */)
+		false /* withDiff */, false, /* withFiltering */
+		catchupStream)
 	catchupReg.publish(ctx, ev1, nil /* alloc */)
 	catchupReg.publish(ctx, ev2, nil /* alloc */)
 	require.Equal(t, len(catchupReg.buf), 2)
@@ -193,10 +262,12 @@ func TestRegistrationBasic(t *testing.T) {
 	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, events[3:])
 	catchupReg.disconnect(nil)
 
-	// EXIT CONDITIONS
-	// External Disconnect.
+	//EXIT CONDITIONS
+	//External Disconnect.
+	disconnectStream := newTestStream()
+	defer disconnectStream.Cancel()
 	disconnectReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */)
+		false /* withDiff */, false /* withFiltering */, disconnectStream)
 	disconnectReg.publish(ctx, ev1, nil /* alloc */)
 	disconnectReg.publish(ctx, ev2, nil /* alloc */)
 	go disconnectReg.runOutputLoop(ctx, 0)
@@ -207,8 +278,10 @@ func TestRegistrationBasic(t *testing.T) {
 	require.Equal(t, 2, len(disconnectReg.stream.Events()))
 
 	// External Disconnect before output loop.
+	disconnectEarlyStream := newTestStream()
+	defer disconnectEarlyStream.Cancel()
 	disconnectEarlyReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */)
+		false /* withDiff */, false /* withFiltering */, disconnectEarlyStream)
 	disconnectEarlyReg.publish(ctx, ev1, nil /* alloc */)
 	disconnectEarlyReg.publish(ctx, ev2, nil /* alloc */)
 	disconnectEarlyReg.disconnect(discErr)
@@ -217,18 +290,25 @@ func TestRegistrationBasic(t *testing.T) {
 	require.Equal(t, 0, len(disconnectEarlyReg.stream.Events()))
 
 	// Overflow.
+	overflowStream := newTestStream()
+	defer overflowStream.Cancel()
 	overflowReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */)
-	for i := 0; i < cap(overflowReg.buf)+3; i++ {
+		false /* withDiff */, false /* withFiltering */, overflowStream)
+	bufCapacity := cap(overflowReg.buf)
+	for i := 0; i < bufCapacity+3; i++ {
 		overflowReg.publish(ctx, ev1, nil /* alloc */)
 	}
 	go overflowReg.runOutputLoop(ctx, 0)
 	require.Equal(t, newErrBufferCapacityExceeded().GoError(), overflowReg.Err())
-	require.Equal(t, cap(overflowReg.buf), len(overflowReg.Events()))
+	// The output loop exists upon startup with the overflow error, so no events are
+	// actually put on the stream.
+	require.Equal(t, bufCapacity, len(overflowReg.Events()))
 
-	// Stream Error.
+	//Stream Error.
+	streamErrStream := newTestStream()
+	defer streamErrStream.Cancel()
 	streamErrReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */)
+		false /* withDiff */, false /* withFiltering */, streamErrStream)
 	streamErr := fmt.Errorf("stream error")
 	streamErrReg.stream.SetSendErr(streamErr)
 	go streamErrReg.runOutputLoop(ctx, 0)
@@ -236,8 +316,11 @@ func TestRegistrationBasic(t *testing.T) {
 	require.Equal(t, streamErr.Error(), streamErrReg.Err().Error())
 
 	// Stream Context Canceled.
+	streamCancelStream := newTestStream()
+	defer streamCancelStream.Cancel()
 	streamCancelReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */)
+		false /* withDiff */, false /* withFiltering */, streamCancelStream)
+	streamCancelReg.publish(ctx, ev1, nil /* alloc */)
 	streamCancelReg.stream.Cancel()
 	go streamCancelReg.runOutputLoop(ctx, 0)
 	require.NoError(t, streamCancelReg.waitForCaughtUp(ctx))
@@ -287,10 +370,12 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 			makeKV("z", "valZ1", 4),
 		}, roachpb.Key("w"))
 
+		s := newTestStream()
+		defer s.Cancel()
 		r := newTestRegistration(roachpb.Span{
 			Key:    roachpb.Key("d"),
 			EndKey: roachpb.Key("w"),
-		}, hlc.Timestamp{WallTime: 4}, iter, true /* withDiff */, withFiltering)
+		}, hlc.Timestamp{WallTime: 4}, iter, true, withFiltering, s)
 
 		require.Zero(t, r.metrics.RangeFeedCatchUpScanNanos.Count())
 		require.NoError(t, r.maybeRunCatchUpScan(context.Background()))
@@ -391,11 +476,19 @@ func TestRegistryBasic(t *testing.T) {
 	reg.Disconnect(ctx, spAB)
 	reg.DisconnectWithErr(ctx, spAB, err1)
 
-	rAB := newTestRegistration(spAB, hlc.Timestamp{}, nil, false /* withDiff */, false /* withFiltering */)
-	rBC := newTestRegistration(spBC, hlc.Timestamp{}, nil, true /* withDiff */, false /* withFiltering */)
-	rCD := newTestRegistration(spCD, hlc.Timestamp{}, nil, true /* withDiff */, false /* withFiltering */)
-	rAC := newTestRegistration(spAC, hlc.Timestamp{}, nil, false /* withDiff */, false /* withFiltering */)
-	rACFiltering := newTestRegistration(spAC, hlc.Timestamp{}, nil, false /* withDiff */, true /* withFiltering */)
+	streamAB, streamBC, streamCD, streamAC, streamACFiltering := newTestStream(), newTestStream(), newTestStream(), newTestStream(), newTestStream()
+	defer func() {
+		streamAB.Cancel()
+		streamBC.Cancel()
+		streamCD.Cancel()
+		streamAC.Cancel()
+		streamACFiltering.Cancel()
+	}()
+	rAB := newTestRegistration(spAB, hlc.Timestamp{}, nil, false, false, streamAB)
+	rBC := newTestRegistration(spBC, hlc.Timestamp{}, nil, true, false, streamBC)
+	rCD := newTestRegistration(spCD, hlc.Timestamp{}, nil, true, false, streamCD)
+	rAC := newTestRegistration(spAC, hlc.Timestamp{}, nil, false, false, streamAC)
+	rACFiltering := newTestRegistration(spAC, hlc.Timestamp{}, nil, false, true, streamACFiltering)
 	go rAB.runOutputLoop(ctx, 0)
 	go rBC.runOutputLoop(ctx, 0)
 	go rCD.runOutputLoop(ctx, 0)
@@ -514,8 +607,9 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	ctx := context.Background()
 	reg := makeRegistry(NewMetrics())
 
-	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */)
+	s := newTestStream()
+	defer s.Cancel()
+	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, false, false, s)
 	go r.runOutputLoop(ctx, 0)
 	reg.Register(ctx, &r.registration)
 
@@ -596,8 +690,9 @@ func TestRegistryShutdownMetrics(t *testing.T) {
 	reg := makeRegistry(NewMetrics())
 
 	regDoneC := make(chan interface{})
-	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, /*catchup */
-		false /* withDiff */, false /* withFiltering */)
+	s := newTestStream()
+	defer s.Cancel()
+	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, false, false, s)
 	go func() {
 		r.runOutputLoop(ctx, 0)
 		close(regDoneC)

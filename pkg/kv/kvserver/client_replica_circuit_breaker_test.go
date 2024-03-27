@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -469,11 +470,25 @@ func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 	}
 }
 
+func (s *dummyStream) BufferedSend(e *rangefeed.REventWithAlloc) {
+	ev, alloc, callback := e.Detatch()
+	alloc.Release(s.ctx)
+	if ev.Val == nil && ev.Error == nil {
+		callback(nil)
+		return
+	}
+
+	var err error
+	select {
+	case <-s.ctx.Done():
+		err = s.ctx.Err()
+	case s.recv <- ev:
+	}
+	callback(err)
+}
+
 func waitReplicaRangeFeed(
-	ctx context.Context,
-	r *kvserver.Replica,
-	req *kvpb.RangeFeedRequest,
-	stream kvpb.RangeFeedEventSink,
+	ctx context.Context, r *kvserver.Replica, req *kvpb.RangeFeedRequest, stream *dummyStream,
 ) error {
 	rfErr, ctxErr := future.Wait(ctx, r.RangeFeed(req, stream, nil /* pacer */))
 	if ctxErr != nil {

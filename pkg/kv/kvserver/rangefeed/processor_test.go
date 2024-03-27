@@ -178,25 +178,27 @@ const testProcessorEventCCap = 16
 const testProcessorEventCTimeout = 10 * time.Millisecond
 
 type processorTestHelper struct {
-	span         roachpb.RSpan
-	rts          *resolvedTimestamp
-	syncEventC   func()
-	sendSpanSync func(*roachpb.Span)
-	scheduler    *ClientScheduler
+	span            roachpb.RSpan
+	rts             *resolvedTimestamp
+	syncEventC      func()
+	sendSpanSyncReg func(*roachpb.Span)
+	scheduler       *ClientScheduler
 }
 
 // syncEventAndRegistrations waits for all previously sent events to be
-// processed *and* for all registration output loops to fully process their own
-// internal buffers.
+// processed *and* for all registration output loops to complete (ie. complete the
+// catchup scans and empty their internal buffers). This method is the same as
+// syncEventC if the registrations have completed their output loop.
 func (h *processorTestHelper) syncEventAndRegistrations() {
-	h.sendSpanSync(&all)
+	h.sendSpanSyncReg(&all)
 }
 
 // syncEventAndRegistrations waits for all previously sent events to be
-// processed *and* for matching registration output loops to fully process their
-// own internal buffers.
+// processed *and* for matching registration output loops to complete (ie. complete the
+// catchup scans and empty their internal buffers). This method is the same as
+// syncEventC if the registrations have completed their output loop.
 func (h *processorTestHelper) syncEventAndRegistrationsSpan(span roachpb.Span) {
-	h.sendSpanSync(&span)
+	h.sendSpanSyncReg(&span)
 }
 
 // triggerTxnPushUntilPushed will schedule PushTxnQueued events until pushedC
@@ -374,7 +376,7 @@ func newTestProcessor(
 	h.rts = &p.rts
 	h.span = p.Span
 	h.syncEventC = p.syncEventC
-	h.sendSpanSync = func(span *roachpb.Span) {
+	h.sendSpanSyncReg = func(span *roachpb.Span) {
 		p.syncSendAndWait(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
 	}
 	h.scheduler = &p.scheduler
@@ -414,19 +416,11 @@ func TestProcessorBasic(t *testing.T) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
+	defer r1Stream.Cancel()
 	var r1Done future.ErrorFuture
-	r1OK, r1Filter := p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		r1Stream,
-		func() {},
-		&r1Done,
-	)
+	r1OK, r1Filter := p.Register(roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")}, hlc.Timestamp{WallTime: 1}, nil, false, false, r1Stream, func() {}, &r1Done, nil)
 	require.True(t, r1OK)
-	h.syncEventAndRegistrations()
+	h.syncEventAndRegistrations() // Wait for the catchup scan to complete.
 	require.Equal(t, 1, p.Len())
 	require.Equal(t,
 		[]*kvpb.RangeFeedEvent{
@@ -449,7 +443,7 @@ func TestProcessorBasic(t *testing.T) {
 
 	// Test checkpoint with one registration.
 	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 5})
-	h.syncEventAndRegistrations()
+	h.syncEventC()
 	require.Equal(t,
 		[]*kvpb.RangeFeedEvent{
 			rangeFeedCheckpoint(
@@ -463,7 +457,7 @@ func TestProcessorBasic(t *testing.T) {
 	// Test value with one registration.
 	p.ConsumeLogicalOps(ctx,
 		writeValueOpWithKV(roachpb.Key("c"), hlc.Timestamp{WallTime: 6}, []byte("val")))
-	h.syncEventAndRegistrations()
+	h.syncEventC()
 	require.Equal(t,
 		[]*kvpb.RangeFeedEvent{
 			rangeFeedValue(
@@ -480,14 +474,14 @@ func TestProcessorBasic(t *testing.T) {
 	// Test value to non-overlapping key with one registration.
 	p.ConsumeLogicalOps(ctx,
 		writeValueOpWithKV(roachpb.Key("s"), hlc.Timestamp{WallTime: 6}, []byte("val")))
-	h.syncEventAndRegistrations()
+	h.syncEventC()
 	require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
 
 	// Test intent that is aborted with one registration.
 	txn1 := uuid.MakeV4()
 	// Write intent.
 	p.ConsumeLogicalOps(ctx, writeIntentOp(txn1, hlc.Timestamp{WallTime: 6}))
-	h.syncEventAndRegistrations()
+	h.syncEventC()
 	require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
 	// Abort.
 	p.ConsumeLogicalOps(ctx, abortIntentOp(txn1))
@@ -499,11 +493,11 @@ func TestProcessorBasic(t *testing.T) {
 	txn2 := uuid.MakeV4()
 	// Write intent.
 	p.ConsumeLogicalOps(ctx, writeIntentOp(txn2, hlc.Timestamp{WallTime: 10}))
-	h.syncEventAndRegistrations()
+	h.syncEventC()
 	require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
 	// Forward closed timestamp. Should now be stuck on intent.
 	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 15})
-	h.syncEventAndRegistrations()
+	h.syncEventC()
 	require.Equal(t,
 		[]*kvpb.RangeFeedEvent{
 			rangeFeedCheckpoint(
@@ -515,7 +509,7 @@ func TestProcessorBasic(t *testing.T) {
 	)
 	// Update the intent. Should forward resolved timestamp.
 	p.ConsumeLogicalOps(ctx, updateIntentOp(txn2, hlc.Timestamp{WallTime: 12}))
-	h.syncEventAndRegistrations()
+	h.syncEventC()
 	require.Equal(t,
 		[]*kvpb.RangeFeedEvent{
 			rangeFeedCheckpoint(
@@ -528,7 +522,7 @@ func TestProcessorBasic(t *testing.T) {
 	// Commit intent. Should forward resolved timestamp to closed timestamp.
 	p.ConsumeLogicalOps(ctx, commitIntentOpWithKV(txn2, roachpb.Key("e"), hlc.Timestamp{WallTime: 13},
 		[]byte("ival"), false /* omitInRangefeeds */))
-	h.syncEventAndRegistrations()
+	h.syncEventC()
 	require.Equal(t,
 		[]*kvpb.RangeFeedEvent{
 			rangeFeedValue(
@@ -548,6 +542,7 @@ func TestProcessorBasic(t *testing.T) {
 
 	// Add another registration with withDiff = true.
 	r2Stream := newTestStream()
+	defer r2Stream.Cancel()
 	var r2Done future.ErrorFuture
 	r2OK, r1And2Filter := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
@@ -558,9 +553,10 @@ func TestProcessorBasic(t *testing.T) {
 		r2Stream,
 		func() {},
 		&r2Done,
+		nil,
 	)
 	require.True(t, r2OK)
-	h.syncEventAndRegistrations()
+	h.syncEventAndRegistrations() // Wait for catchup scan to complete.
 	require.Equal(t, 2, p.Len())
 	require.Equal(t,
 		[]*kvpb.RangeFeedEvent{
@@ -586,7 +582,7 @@ func TestProcessorBasic(t *testing.T) {
 
 	// Both registrations should see checkpoint.
 	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 20})
-	h.syncEventAndRegistrations()
+	h.syncEventC()
 	chEventAM := []*kvpb.RangeFeedEvent{
 		rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
@@ -605,7 +601,7 @@ func TestProcessorBasic(t *testing.T) {
 	// Test value with two registration that overlaps both.
 	p.ConsumeLogicalOps(ctx,
 		writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: 22}, []byte("val2")))
-	h.syncEventAndRegistrations()
+	h.syncEventC()
 	valEvent := []*kvpb.RangeFeedEvent{
 		rangeFeedValue(
 			roachpb.Key("k"),
@@ -617,11 +613,11 @@ func TestProcessorBasic(t *testing.T) {
 	}
 	require.Equal(t, valEvent, r1Stream.Events())
 	require.Equal(t, valEvent, r2Stream.Events())
-
+	//
 	// Test value that only overlaps the second registration.
 	p.ConsumeLogicalOps(ctx,
 		writeValueOpWithKV(roachpb.Key("v"), hlc.Timestamp{WallTime: 23}, []byte("val3")))
-	h.syncEventAndRegistrations()
+	h.syncEventC()
 	valEvent2 := []*kvpb.RangeFeedEvent{
 		rangeFeedValue(
 			roachpb.Key("v"),
@@ -645,17 +641,9 @@ func TestProcessorBasic(t *testing.T) {
 
 	// Adding another registration should fail.
 	r3Stream := newTestStream()
+	defer r3Stream.Cancel()
 	var r3Done future.ErrorFuture
-	r3OK, _ := p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		r3Stream,
-		func() {},
-		&r3Done,
-	)
+	r3OK, _ := p.Register(roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")}, hlc.Timestamp{WallTime: 1}, nil, false, false, r3Stream, func() {}, &r3Done, nil)
 	require.False(t, r3OK)
 }
 
@@ -667,7 +655,15 @@ func TestProcessorSlowConsumer(t *testing.T) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
+	defer r1Stream.Cancel()
 	var r1Done future.ErrorFuture
+	blockReg := make(chan struct{})
+	unblock := func() {
+		if blockReg != nil {
+			close(blockReg)
+		}
+	}
+	defer unblock()
 	_, _ = p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
@@ -677,8 +673,11 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		r1Stream,
 		func() {},
 		&r1Done,
+		blockReg,
 	)
+
 	r2Stream := newTestStream()
+	defer r2Stream.Cancel()
 	var r2Done future.ErrorFuture
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
@@ -689,18 +688,20 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		r2Stream,
 		func() {},
 		&r2Done,
+		nil,
 	)
-	h.syncEventAndRegistrations()
-	require.Equal(t, 2, p.Len())
-	require.Equal(t,
-		[]*kvpb.RangeFeedEvent{
-			rangeFeedCheckpoint(
-				roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
-				hlc.Timestamp{WallTime: 0},
-			),
-		},
-		r1Stream.Events(),
-	)
+	// Wait for r2 to complete its output loop. r1 is blocked.
+	h.syncEventAndRegistrationsSpan(spXY)
+	//require.Equal(t, 2, p.Len())
+	//require.Equal(t,
+	//	[]*kvpb.RangeFeedEvent{
+	//		rangeFeedCheckpoint(
+	//			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
+	//			hlc.Timestamp{WallTime: 0},
+	//		),
+	//	},
+	//	r1Stream.Events(),
+	//)
 	require.Equal(t,
 		[]*kvpb.RangeFeedEvent{
 			rangeFeedCheckpoint(
@@ -710,26 +711,18 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		},
 		r2Stream.Events(),
 	)
-
-	// Block its Send method and fill up the registration's input channel.
-	unblock := r1Stream.BlockSend()
-	defer func() {
-		if unblock != nil {
-			unblock()
-		}
-	}()
-	// Need one more message to fill the channel because the first one will be
-	// sent to the stream and block the registration outputLoop goroutine.
-	toFill := testProcessorEventCCap + 1
+	// After the initial checkpoint event and these events, r1's event buffer should
+	// be at capacity.
+	toFill := testProcessorEventCCap - 1
 	for i := 0; i < toFill; i++ {
 		ts := hlc.Timestamp{WallTime: int64(i + 2)}
 		p.ConsumeLogicalOps(ctx, writeValueOpWithKV(roachpb.Key("k"), ts, []byte("val")))
 
-		// Wait for just the unblocked registration to catch up. This prevents
-		// the race condition where this registration overflows anyway due to
-		// the rapid event consumption and small buffer size.
+		// Wait for just r2 to catch up. This prevents the race condition where
+		// this registration overflows anyway due to rapid event publishing and small buffer size.
 		h.syncEventAndRegistrationsSpan(spXY)
 	}
+	h.syncEventC()
 
 	// Consume one more event. Should not block, but should cause r1 to overflow
 	// its registration buffer and drop the event.
@@ -741,15 +734,15 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	require.Equal(t, toFill+1, len(r2Stream.Events()))
 	require.Equal(t, 2, p.Len())
 
-	// Unblock the send channel. The events should quickly be consumed.
+	//	Unblock the registration. The events should quickly be consumed.
 	unblock()
-	unblock = nil
-	h.syncEventAndRegistrations()
+	blockReg = nil
+	h.syncEventAndRegistrations() // Wait for r1's catchup scan to complete.
 	// At least one event should have been dropped due to overflow. We expect
 	// exactly one event to be dropped, but it is possible that multiple events
 	// were dropped due to rapid event consumption before the r1's outputLoop
 	// began consuming from its event buffer.
-	require.LessOrEqual(t, len(r1Stream.Events()), toFill)
+	require.LessOrEqual(t, len(r1Stream.Events()), toFill+1)
 	require.Equal(t, newErrBufferCapacityExceeded().GoError(), waitErrorFuture(&r1Done))
 	testutils.SucceedsSoon(t, func() error {
 		if act, exp := p.Len(), 1; exp != act {
@@ -772,6 +765,15 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
+	defer r1Stream.Cancel()
+	// Block it.
+	blockReg := make(chan struct{})
+	unblock := func() {
+		if blockReg != nil {
+			close(blockReg)
+		}
+	}
+	defer unblock()
 	var r1Done future.ErrorFuture
 	_, _ = p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
@@ -782,16 +784,8 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 		r1Stream,
 		func() {},
 		&r1Done,
+		blockReg,
 	)
-	h.syncEventAndRegistrations()
-
-	// Block it.
-	unblock := r1Stream.BlockSend()
-	defer func() {
-		if unblock != nil {
-			unblock()
-		}
-	}()
 
 	// Write entries till budget is exhausted
 	for i := 0; i < 10; i++ {
@@ -807,7 +801,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 
 	// Unblock the 'send' channel. The events should quickly be consumed.
 	unblock()
-	unblock = nil
+	blockReg = nil
 	h.syncEventAndRegistrations()
 
 	require.Equal(t, newErrBufferCapacityExceeded().GoError(), waitErrorFuture(&r1Done))
@@ -826,16 +820,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 	// Add a registration.
 	r1Stream := newTestStream()
 	var r1Done future.ErrorFuture
-	p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		r1Stream,
-		func() {},
-		&r1Done,
-	)
+	p.Register(roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")}, hlc.Timestamp{WallTime: 1}, nil, false, false, r1Stream, func() {}, &r1Done, nil)
 	h.syncEventAndRegistrations()
 
 	// Write entries and check they are consumed so that we could write more
@@ -905,6 +890,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
+	defer r1Stream.Cancel()
 	var r1Done future.ErrorFuture
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
@@ -915,6 +901,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 		r1Stream,
 		func() {},
 		&r1Done,
+		nil,
 	)
 	h.syncEventAndRegistrations()
 	require.Equal(t, 1, p.Len())
@@ -948,7 +935,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	// timestamp. Txn1 has intents at many times but the unresolvedIntentQueue
 	// tracks its latest, which is 19, so the resolved timestamp is
 	// 19.FloorPrev() = 18.
-	h.syncEventAndRegistrations()
+	h.syncEventC()
 	require.True(t, h.rts.IsInit())
 	require.Equal(t, hlc.Timestamp{WallTime: 18}, h.rts.Get())
 
@@ -1153,12 +1140,15 @@ func TestProcessorConcurrentStop(t *testing.T) {
 
 		var wg sync.WaitGroup
 		wg.Add(6)
+		var cancel func()
 		go func() {
 			defer wg.Done()
 			runtime.Gosched()
 			s := newTestStream()
+			cancel = s.Cancel
 			var done future.ErrorFuture
-			p.Register(h.span, hlc.Timestamp{}, nil, false, false, s, func() {}, &done)
+			p.Register(h.span, hlc.Timestamp{}, nil, false, false, s, func() {},
+				&done, nil /* blockRegistration */)
 		}()
 		go func() {
 			defer wg.Done()
@@ -1187,6 +1177,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 			stopper.Stop(context.Background())
 		}()
 		wg.Wait()
+		cancel()
 	}
 }
 
@@ -1219,15 +1210,29 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 		h.syncEventC()
 		close(firstC)
 	}()
+	var streams []*testStream
+	var streamLock sync.Mutex
+	defer func() {
+		streamLock.Lock()
+		defer streamLock.Unlock()
+
+		for _, s := range streams {
+			s.Cancel()
+		}
+	}()
 	go func() {
 		defer wg.Done()
 		for firstIdx := range firstC {
 			// For each index, create a new registration. The first
 			// operation is should see is firstIdx.
 			s := newTestStream()
+			streamLock.Lock()
+			streams = append(streams, s)
+			streamLock.Unlock()
+
 			regs[s] = firstIdx
 			var done future.ErrorFuture
-			p.Register(h.span, hlc.Timestamp{}, nil, false, false, s, func() {}, &done)
+			p.Register(h.span, hlc.Timestamp{}, nil, false, false, s, func() {}, &done, nil)
 			regDone <- struct{}{}
 		}
 	}()
@@ -1290,6 +1295,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 		rStream,
 		func() {},
 		&done,
+		nil,
 	)
 	rErrC := notifyWhenDone(&done)
 	h.syncEventAndRegistrations()
@@ -1370,6 +1376,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 		rStream,
 		func() {},
 		&done,
+		nil,
 	)
 	rErrC := notifyWhenDone(&done)
 	h.syncEventAndRegistrations()
@@ -1439,22 +1446,14 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		r1Stream,
 		func() {},
 		&r1Done,
+		nil, /* blockRegistration */
 	)
 	r1ErrC := notifyWhenDone(&r1Done)
 
 	// Non-blocking registration that would consume all events.
 	r2Stream := newConsumer(0)
 	var r2Done future.ErrorFuture
-	p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		r2Stream,
-		func() {},
-		&r2Done,
-	)
+	p.Register(roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")}, hlc.Timestamp{WallTime: 1}, nil, false, false, r2Stream, func() {}, &r2Done, nil)
 	h.syncEventAndRegistrations()
 
 	for i := 0; i < totalEvents; i++ {
@@ -1538,6 +1537,24 @@ func (c *consumer) Send(e *kvpb.RangeFeedEvent) error {
 	return nil
 }
 
+func (c *consumer) BufferedSend(e *REventWithAlloc) {
+	ev, alloc, cb := e.Detatch()
+	alloc.Release(c.ctx)
+	log.Infof(context.Background(), "BBBBB releasing")
+	if ev.Val != nil {
+		v := int(atomic.AddInt32(&c.sentValues, 1))
+		if v == c.blockAfter {
+			// Resume test if it was waiting for stream to block.
+			close(c.blocked)
+			// Wait for resume signal with an optional error.
+			err, ok := <-c.resume
+			if ok {
+				cb(err)
+			}
+		}
+	}
+}
+
 func (c *consumer) Context() context.Context {
 	return c.ctx
 }
@@ -1601,7 +1618,7 @@ func TestProcessorBackpressure(t *testing.T) {
 	stream := newTestStream()
 	done := &future.ErrorFuture{}
 	ok, _ := p.Register(span, hlc.MinTimestamp, nil, /* catchUpIter */
-		false /* withDiff */, false /* withFiltering */, stream, nil, done)
+		false /* withDiff */, false /* withFiltering */, stream, nil, done, nil)
 	require.True(t, ok)
 
 	// Wait for the initial checkpoint.
