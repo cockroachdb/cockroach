@@ -6558,3 +6558,106 @@ call
                 │                                                                                                             └── cast: VOID [as="_implicit_return":19]
                 │                                                                                                                  └── null
                 └── const: 1
+
+# Regression test for #120692 - don't reset the concrete type for each block in
+# a RECORD-returning PL/pgSQL function.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+BEGIN
+  IF true THEN
+    RETURN (1:::INT8, NULL, -1.0:::DECIMAL);
+  ELSIF false THEN
+    BEGIN
+      RETURN (1:::INT8, 1.0:::DECIMAL, NULL);
+    END;
+  END IF;
+END;
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=(show-scalars,show-types)
+SELECT f();
+----
+project
+ ├── columns: f:9(tuple{int, unknown, decimal})
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── udf: f [as=f:9, type=tuple{int, unknown, decimal}]
+           └── body
+                └── limit
+                     ├── columns: stmt_if_8:8(tuple{int, unknown, decimal})
+                     ├── project
+                     │    ├── columns: stmt_if_8:8(tuple{int, unknown, decimal})
+                     │    ├── values
+                     │    │    └── tuple [type=tuple]
+                     │    └── projections
+                     │         └── case [as=stmt_if_8:8, type=tuple{int, unknown, decimal}]
+                     │              ├── true [type=bool]
+                     │              ├── when [type=tuple{int, unknown, decimal}]
+                     │              │    ├── true [type=bool]
+                     │              │    └── subquery [type=tuple{int, unknown, decimal}]
+                     │              │         └── project
+                     │              │              ├── columns: stmt_return_5:4(tuple{int, unknown, decimal})
+                     │              │              ├── values
+                     │              │              │    └── tuple [type=tuple]
+                     │              │              └── projections
+                     │              │                   └── tuple [as=stmt_return_5:4, type=tuple{int, unknown, decimal}]
+                     │              │                        ├── const: 1 [type=int]
+                     │              │                        ├── null [type=unknown]
+                     │              │                        └── unary-minus [type=decimal]
+                     │              │                             └── const: 1.0 [type=decimal]
+                     │              ├── when [type=tuple{int, unknown, decimal}]
+                     │              │    ├── false [type=bool]
+                     │              │    └── subquery [type=tuple{int, unknown, decimal}]
+                     │              │         └── project
+                     │              │              ├── columns: stmt_return_7:6(tuple{int, unknown, decimal})
+                     │              │              ├── values
+                     │              │              │    └── tuple [type=tuple]
+                     │              │              └── projections
+                     │              │                   └── cast: RECORD [as=stmt_return_7:6, type=tuple{int, unknown, decimal}]
+                     │              │                        └── cast: STRING [type=string]
+                     │              │                             └── tuple [type=tuple{int, decimal, unknown}]
+                     │              │                                  ├── const: 1 [type=int]
+                     │              │                                  ├── const: 1.0 [type=decimal]
+                     │              │                                  └── null [type=unknown]
+                     │              └── subquery [type=tuple{int, unknown, decimal}]
+                     │                   └── project
+                     │                        ├── columns: nested_block_6:7(tuple{int, unknown, decimal})
+                     │                        ├── values
+                     │                        │    └── tuple [type=tuple]
+                     │                        └── projections
+                     │                             └── udf: nested_block_6 [as=nested_block_6:7, type=tuple{int, unknown, decimal}]
+                     │                                  └── body
+                     │                                       └── project
+                     │                                            ├── columns: stmt_if_1:5(tuple{int, unknown, decimal})
+                     │                                            ├── values
+                     │                                            │    └── tuple [type=tuple]
+                     │                                            └── projections
+                     │                                                 └── udf: stmt_if_1 [as=stmt_if_1:5, type=tuple{int, unknown, decimal}]
+                     │                                                      └── body
+                     │                                                           └── project
+                     │                                                                ├── columns: "_end_of_function_2":3(tuple{int, unknown, decimal})
+                     │                                                                ├── values
+                     │                                                                │    └── tuple [type=tuple]
+                     │                                                                └── projections
+                     │                                                                     └── udf: _end_of_function_2 [as="_end_of_function_2":3, type=tuple{int, unknown, decimal}]
+                     │                                                                          └── body
+                     │                                                                               ├── project
+                     │                                                                               │    ├── columns: stmt_raise_3:1(int)
+                     │                                                                               │    ├── values
+                     │                                                                               │    │    └── tuple [type=tuple]
+                     │                                                                               │    └── projections
+                     │                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_3:1, type=int]
+                     │                                                                               │              ├── const: 'ERROR' [type=string]
+                     │                                                                               │              ├── const: 'control reached end of function without RETURN' [type=string]
+                     │                                                                               │              ├── const: '' [type=string]
+                     │                                                                               │              ├── const: '' [type=string]
+                     │                                                                               │              └── const: '2F005' [type=string]
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: end_of_function_4:2(tuple{int, unknown, decimal})
+                     │                                                                                    ├── values
+                     │                                                                                    │    └── tuple [type=tuple]
+                     │                                                                                    └── projections
+                     │                                                                                         └── null [as=end_of_function_4:2, type=tuple{int, unknown, decimal}]
+                     └── const: 1 [type=int]
