@@ -76,6 +76,7 @@ go_library(
         "gorm.go",
         "gorm_blocklist.go",
         "gossip.go",
+        "hardware_limiter.go",
         "hibernate.go",
         "hibernate_blocklist.go",
         "hotspotsplits.go",
