@@ -1104,6 +1104,7 @@ func splitTrigger(
 		RightUserIsEmpty:         emptyRHS,
 		MaxCountDiff:             MaxMVCCStatCountDiff.Get(&rec.ClusterSettings().SV),
 		MaxBytesDiff:             MaxMVCCStatBytesDiff.Get(&rec.ClusterSettings().SV),
+		UseEstimatesBecauseExternalBytesArePresent: split.UseEstimatesBecauseExternalBytesArePresent,
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }
@@ -1197,8 +1198,15 @@ func splitTriggerHelper(
 	// with this split (not compounded estimates from previous splits).
 	preComputedStatsDiff := !statsInput.AbsPreSplitBothStored.HasUserDataCloseTo(
 		statsInput.PreSplitStats, statsInput.MaxCountDiff, statsInput.MaxBytesDiff)
+	// 4. If we haven't been asked to use estimated stats because of
+	// external bytes being present in the underlying store. This should
+	// only be true when an online restore has recently been performed.
+	shouldUseCrudeEstimates := statsInput.UseEstimatesBecauseExternalBytesArePresent &&
+		statsInput.AbsPreSplitBothStored.ContainsEstimates > 0
 
-	if noPreComputedStats || emptyLeftOrRight || preComputedStatsDiff {
+	computeAccurateStats := (noPreComputedStats || emptyLeftOrRight || preComputedStatsDiff)
+	computeAccurateStats = computeAccurateStats && !shouldUseCrudeEstimates
+	if computeAccurateStats {
 		var reason redact.RedactableString
 		if noPreComputedStats {
 			reason = "there are no pre-split LHS stats (or they're empty)"
@@ -1211,6 +1219,8 @@ func splitTriggerHelper(
 		}
 		log.Infof(ctx, "falling back to accurate stats computation because %v", reason)
 		h, err = makeSplitStatsHelper(statsInput)
+	} else if statsInput.UseEstimatesBecauseExternalBytesArePresent {
+		h, err = makeCrudelyEstimatedSplitStatsHelper(statsInput)
 	} else {
 		h, err = makeEstimatedSplitStatsHelper(statsInput)
 	}
