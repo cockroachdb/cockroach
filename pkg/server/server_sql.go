@@ -890,6 +890,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			}
 			return clientsecopts.MakeURLForServer(ccopts, sparams, user)
 		},
+		SQLAddr:          cfg.SQLAddr,
 		LogicalClusterID: cfg.rpcContext.LogicalClusterID.Get,
 		NodeID:           cfg.nodeIDContainer,
 	}

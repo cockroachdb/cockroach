@@ -1187,6 +1187,8 @@ type NodeInfo struct {
 	AdminURL func() *url.URL
 	// PGURL is the SQL connection URL for this server.
 	PGURL func(*url.Userinfo) (*pgurl.URL, error)
+	// SQLAddr is the bound SQL address.
+	SQLAddr string
 }
 
 // limitedMetricsRecorder is a limited portion of the status.MetricsRecorder
