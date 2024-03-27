@@ -208,7 +208,6 @@ go_library(
         "//pkg/util/log/logflags",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",
-        "//pkg/util/metric",
         "//pkg/util/netutil/addr",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
