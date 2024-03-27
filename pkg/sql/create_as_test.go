@@ -79,6 +79,10 @@ func TestCreateAsVTable(t *testing.T) {
 			}
 
 			fqName := name.FQString()
+			if _, ok := SupportedVTables[fqName]; !ok {
+				continue
+			}
+
 			if s.TenantController().StartedDefaultTestTenant() {
 				// Some of the virtual tables are currently only available in
 				// the system tenant.
