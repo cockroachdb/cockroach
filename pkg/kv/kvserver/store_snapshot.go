@@ -467,8 +467,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	header kvserverpb.SnapshotRequest_Header,
 	recordBytesReceived snapshotRecordMetrics,
 ) (IncomingSnapshot, error) {
-	if fn := s.cfg.TestingKnobs.BeforeRecvAcceptedSnapshot; fn != nil {
-		fn()
+	if fn := s.cfg.TestingKnobs.BeforeSnapshotThrottle; fn != nil {
+		fn(false)
 	}
 	snapshotCtx := ctx
 	ctx, rSp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "receive snapshot data")
@@ -1030,12 +1030,12 @@ func (s *Store) reserveReceiveSnapshot(
 	defer sp.Finish()
 
 	return s.throttleSnapshot(ctx,
+		false,
 		s.snapshotApplyQueue,
-		int(header.SenderQueueName),
+		header.SenderQueueName,
 		header.SenderQueuePriority,
 		-1,
 		header.RangeSize,
-		header.RaftMessageRequest.RangeID,
 		snapshotMetrics{
 			s.metrics.RangeSnapshotRecvQueueLength,
 			s.metrics.RangeSnapshotRecvQueueSize,
@@ -1051,17 +1051,14 @@ func (s *Store) reserveSendSnapshot(
 ) (_cleanup func(), _err error) {
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveSendSnapshot")
 	defer sp.Finish()
-	if fn := s.cfg.TestingKnobs.BeforeSendSnapshotThrottle; fn != nil {
-		fn()
-	}
 
 	return s.throttleSnapshot(ctx,
+		true,
 		s.snapshotSendQueue,
-		int(req.SenderQueueName),
+		req.SenderQueueName,
 		req.SenderQueuePriority,
 		req.QueueOnDelegateLen,
 		rangeSize,
-		req.RangeID,
 		snapshotMetrics{
 			s.metrics.RangeSnapshotSendQueueLength,
 			s.metrics.RangeSnapshotSendQueueSize,
@@ -1076,14 +1073,17 @@ func (s *Store) reserveSendSnapshot(
 // release its resources.
 func (s *Store) throttleSnapshot(
 	ctx context.Context,
+	isSend bool,
 	snapshotQueue *multiqueue.MultiQueue,
-	requestSource int,
+	requestSource kvserverpb.SnapshotRequest_QueueName,
 	requestPriority float64,
 	maxQueueLength int64,
 	rangeSize int64,
-	rangeID roachpb.RangeID,
 	snapshotMetrics snapshotMetrics,
 ) (cleanup func(), funcErr error) {
+	if fn := s.cfg.TestingKnobs.BeforeSnapshotThrottle; fn != nil {
+		fn(isSend)
+	}
 
 	tBegin := timeutil.Now()
 	var permit *multiqueue.Permit
@@ -1092,7 +1092,7 @@ func (s *Store) throttleSnapshot(
 	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 	// getting stuck behind large snapshots managed by the replicate queue.
 	if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
-		task, err := snapshotQueue.Add(requestSource, requestPriority, maxQueueLength)
+		task, err := snapshotQueue.Add(int(requestSource), requestPriority, maxQueueLength)
 		if err != nil {
 			return nil, err
 		}
@@ -1127,11 +1127,13 @@ func (s *Store) throttleSnapshot(
 		case permit = <-task.GetWaitChan():
 			// Got a spot in the snapshotQueue, continue with sending the snapshot.
 			if fn := s.cfg.TestingKnobs.AfterSnapshotThrottle; fn != nil {
-				fn()
+				if err := fn(isSend, s.StoreID(), requestSource); err != nil {
+					return nil, err
+				}
 			}
 			log.Event(ctx, "acquired spot in the snapshot snapshotQueue")
 		case <-queueCtx.Done():
-			// We need to cancel the task so that it doesn't ever get a permit.
+			// The permit is canceled by the deferred function.
 			if err := ctx.Err(); err != nil {
 				return nil, errors.Wrap(err, "acquiring snapshot reservation")
 			}
@@ -1160,9 +1162,8 @@ func (s *Store) throttleSnapshot(
 	if elapsed > snapshotReservationWaitWarnThreshold && !buildutil.CrdbTestBuild {
 		log.Infof(
 			ctx,
-			"waited for %.1fs to acquire snapshot reservation to r%d",
+			"waited for %.1fs to acquire snapshot reservation",
 			elapsed.Seconds(),
-			rangeID,
 		)
 	}
 
