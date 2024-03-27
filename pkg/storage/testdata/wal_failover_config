@@ -1,0 +1,162 @@
+mkenv foo
+----
+
+# Open foo with default (disabled) WAL failover configuration in
+# the context of a single-store node.
+
+open flag= envs=(foo) open=foo
+----
+OK
+
+mkenv bar
+----
+
+# Open foo with default (disabled) WAL failover configuration in
+# the context of a two-store node.
+
+open flag= envs=(foo,bar) open=foo
+----
+OK
+
+# Open foo with WAL failover set to 'among-stores' in the context
+# of a single-store node. WAL failover will remain disabled.
+
+open flag=among-stores envs=(foo) open=foo
+----
+OK
+
+# Open foo with 'disabled' WAL failover in the context of a single-store
+# node. This is permitted and WAL failover will remain disbaled.
+open flag=disabled envs=(foo) open=foo
+----
+OK
+
+# Open foo with WAL failover set to 'among-stores' in the context
+# of a two-store node that has not yet finalized 24.1. The
+# UnhealthyOperationLatencyThreshold func should return false,
+# indicating that Pebble is not allowed to failover to the secondary yet.
+
+open flag=among-stores envs=(foo,bar) open=foo min-version=(23,2)
+----
+OK
+secondary = bar/auxiliary/wals-among-stores
+UnhealthyOperationLatencyThreshold() = (100ms,false)
+
+# Open foo with WAL failover set to 'among-stores' in the context
+# of a two-store node that HAS finalized 24.1. The
+# UnhealthyOperationLatencyThreshold func should return true,
+# indicating that Pebble IS allowed to failover to the secondary.
+
+open flag=among-stores envs=(foo,bar) open=foo
+----
+OK
+secondary = bar/auxiliary/wals-among-stores
+UnhealthyOperationLatencyThreshold() = (100ms,true)
+
+# Try to open foo with WAL failover default. The engine should
+# refuse to open (the operator is required to explicitly disable
+# WAL failover).
+
+open flag= envs=(foo,bar) open=foo
+----
+open error: directory "bar/auxiliary/wals-among-stores" may contain relevant WALs
+
+# Opening with the "disabled" setting should succeed.
+
+open flag=disabled envs=(foo,bar) open=foo
+----
+OK
+WALRecoveryDir: bar/auxiliary/wals-among-stores
+
+# And now foo should be able to be opened without setting
+# the disabled flag.
+
+open flag= envs=(foo,bar) open=foo
+----
+OK
+
+# Specifying an explicit path (in enabled or disabled mode) should
+# error in multi-store configurations.
+
+open flag=path=/mnt/data/foo envs=(foo,bar) open=foo
+----
+open error: storage: cannot use explicit path --wal-failover option with multiple stores
+
+open flag=disabled,prev_path=/mnt/data/foo envs=(foo,bar) open=foo
+----
+open error: storage: cannot use explicit prev_path --wal-failover option with multiple stores
+
+# The last store should should use the first store's dir as its
+# secondary.
+
+open flag=among-stores envs=(foo,bar) open=bar
+----
+OK
+secondary = foo/auxiliary/wals-among-stores
+UnhealthyOperationLatencyThreshold() = (100ms,true)
+
+# Disable it.
+
+open flag=disabled envs=(foo,bar) open=bar
+----
+OK
+WALRecoveryDir: foo/auxiliary/wals-among-stores
+
+# Ensure that WAL failover refuses to failover if there's no enterprise
+# license configured.
+open flag=among-stores envs=(foo,bar) open=foo disable-enterprise
+----
+OK
+secondary = bar/auxiliary/wals-among-stores
+UnhealthyOperationLatencyThreshold() = (100ms,false)
+
+open flag=disabled envs=(foo,bar) open=foo
+----
+OK
+WALRecoveryDir: bar/auxiliary/wals-among-stores
+
+# Test specifying an explicit path.
+
+open flag=path=bax envs=(foo) open=foo
+----
+OK
+secondary = bax
+UnhealthyOperationLatencyThreshold() = (100ms,true)
+
+# Test opening foo again without specifying a WAL failover flag.
+# It should fail because the secondary may contain relevant logs.
+
+open flag= envs=(foo) open=foo
+----
+open error: directory "bax" may contain relevant WALs
+
+# Try to disable it without setting a prev_path. It should fail
+# as well.
+
+open flag=disabled envs=(foo) open=foo
+----
+open error: directory "bax" may contain relevant WALs
+
+# Changing the secondary location without specifying prev_path=bax
+# should fail.
+
+open flag=path=baz envs=(foo) open=foo
+----
+open error: directory "bax" may contain relevant WALs
+
+# Changing the secondary location WITH specifying prev_path=bax
+# should succeed.
+
+open flag=path=baz,prev_path=bax envs=(foo) open=foo
+----
+OK
+secondary = baz
+UnhealthyOperationLatencyThreshold() = (100ms,true)
+WALRecoveryDir: bax
+
+# Disabling WAL failover WITH specifying prev_path should succeed too.
+
+open flag=disabled,prev_path=baz envs=(foo) open=foo
+----
+OK
+WALRecoveryDir: baz
