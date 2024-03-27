@@ -210,6 +210,7 @@ func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.Ind
 // import, bumping the ImportEpoch.
 func (desc *Mutable) OfflineForImport() {
 	desc.SetOffline(OfflineReasonImporting)
+	desc.ImportType = descpb.ImportType_IMPORT_WITH_IMPORT_EPOCH
 	desc.ImportEpoch++
 }
 
@@ -224,6 +225,7 @@ func (desc *Mutable) InitializeImport(startWallTime int64) error {
 
 // FinalizeImport removes in progress import metadata from the descriptor
 func (desc *Mutable) FinalizeImport() {
+	desc.ImportType = 0
 	desc.ImportStartWallTime = 0
 }
 
