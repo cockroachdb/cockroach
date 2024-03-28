@@ -30,7 +30,8 @@ AES-256: 64 bytes
 </PRE>
 Valid fields:
 <PRE>
-* path    (required): must match the path of one of the stores
+* path    (required): must match the path of one of the stores, or the special
+                      value "*" to match all stores
 * key     (required): path to the current key file, or "plain"
 * old-key (required): path to the previous key file, or "plain"
 * rotation-period   : amount of time after which data keys should be rotated
