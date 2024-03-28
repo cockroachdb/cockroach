@@ -67,12 +67,6 @@ func validateExternalConnectionSinkURI(
 		serverCfg = s
 	}
 
-	if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.WrapSink != nil {
-		wrapSink := knobs.WrapSink
-		knobs.WrapSink = nil
-		defer func() { knobs.WrapSink = wrapSink }()
-	}
-
 	// Validate the URI by creating a canary sink.
 	//
 	// TODO(adityamaru): When we add `CREATE EXTERNAL CONNECTION ... WITH` support
