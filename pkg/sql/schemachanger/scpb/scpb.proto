@@ -67,10 +67,16 @@ enum Status {
   TRANSIENT_VALIDATED = 20;
   TRANSIENT_PUBLIC = 21;
   TRANSIENT_DROPPED = 22;
+  TRANSIENT_PUBLIC_BUT_INACCESSIBLE = 24;
 
   // When a basic descriptor (the object element) is first created before all
   // the other dependent elements become public.
   DESCRIPTOR_ADDED = 23;
+
+  // Public_But_Inaccessible is used for column element. It is a status where
+  // the column is public but inaccessible. This is the last status before
+  // transitioning into Public status.
+  PUBLIC_BUT_INACCESSIBLE = 25;
 }
 
 // TargetMetadata refers to the metadata for individual elements, where

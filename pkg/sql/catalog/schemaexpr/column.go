@@ -295,15 +295,7 @@ func ReplaceColumnVars(
 			return true, expr, nil
 		}
 
-		colExists, colIsAccessible, colID, colType := columnLookupFn(c.ColumnName)
-		if !colExists {
-			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
-				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
-		}
-		if !colIsAccessible {
-			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
-				"column %q is inaccessible and cannot be referenced", c.ColumnName)
-		}
+		_, _, colID, colType := columnLookupFn(c.ColumnName)
 		colIDs.Add(colID)
 
 		// Convert to a dummyColumn of the correct type.
@@ -319,10 +311,10 @@ func replaceColumnVars(
 ) (tree.Expr, catalog.TableColSet, error) {
 	lookupFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
 		col, err := catalog.MustFindColumnByTreeName(tbl, columnName)
-		if err != nil || col.Dropped() {
+		if err != nil {
 			return false, false, 0, nil
 		}
-		return true, !col.IsInaccessible(), col.GetID(), col.GetType()
+		return !col.Dropped(), !col.IsInaccessible(), col.GetID(), col.GetType()
 	}
 	return ReplaceColumnVars(rootExpr, lookupFn)
 }

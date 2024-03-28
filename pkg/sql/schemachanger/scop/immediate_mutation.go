@@ -221,16 +221,33 @@ type SetAddedColumnType struct {
 	ColumnType scpb.ColumnType
 }
 
-// MakeWriteOnlyColumnPublic moves a new column from its mutation to public.
-type MakeWriteOnlyColumnPublic struct {
+// MakeWriteOnlyColumnPublicButInaccessible moves a new column from its mutation
+// to public but still inaccessible.
+type MakeWriteOnlyColumnPublicButInaccessible struct {
 	immediateMutationOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 }
 
-// MakePublicColumnWriteOnly zeros out the column and adds
+// MakePublicButInaccessibleColumnPublic moves a public but inaccessible
+// column to fully public.
+type MakePublicButInaccessibleColumnPublic struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// MakePublicColumnPublicButInaccessible makes a public inaccessible (but still
+// public).
+type MakePublicColumnPublicButInaccessible struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// MakePublicButInaccessibleColumnWriteOnly zeros out the column and adds
 // a column drop mutation in WRITE_ONLY for it.
-type MakePublicColumnWriteOnly struct {
+type MakePublicButInaccessibleColumnWriteOnly struct {
 	immediateMutationOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID

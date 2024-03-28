@@ -22,10 +22,10 @@ import (
 func init() {
 
 	registerDepRuleForDrop(
-		"column no longer public before dependents",
+		"column no longer accessible before dependents",
 		scgraph.Precedence,
 		"column", "dependent",
-		scpb.Status_WRITE_ONLY, scpb.Status_ABSENT,
+		scpb.Status_PUBLIC_BUT_INACCESSIBLE, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),

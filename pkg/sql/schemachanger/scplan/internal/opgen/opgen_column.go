@@ -35,10 +35,22 @@ func init() {
 					}
 				}),
 			),
+			to(scpb.Status_PUBLIC_BUT_INACCESSIBLE,
+				emit(func(this *scpb.Column, md *opGenContext) *scop.MakeWriteOnlyColumnPublicButInaccessible {
+					return &scop.MakeWriteOnlyColumnPublicButInaccessible{
+						TableID:  this.TableID,
+						ColumnID: this.ColumnID,
+					}
+				}),
+			),
 			to(scpb.Status_PUBLIC,
 				revertible(false),
-				emit(func(this *scpb.Column, md *opGenContext) *scop.MakeWriteOnlyColumnPublic {
-					return &scop.MakeWriteOnlyColumnPublic{
+				emit(func(this *scpb.Column, md *opGenContext) *scop.MakePublicButInaccessibleColumnPublic {
+					if this.IsInaccessible {
+						// Do not make the column accessible if it's meant to be an inaccessible column.
+						return nil
+					}
+					return &scop.MakePublicButInaccessibleColumnPublic{
 						TableID:  this.TableID,
 						ColumnID: this.ColumnID,
 					}
@@ -56,9 +68,17 @@ func init() {
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
+			to(scpb.Status_PUBLIC_BUT_INACCESSIBLE,
+				emit(func(this *scpb.Column) *scop.MakePublicColumnPublicButInaccessible {
+					return &scop.MakePublicColumnPublicButInaccessible{
+						TableID:  this.TableID,
+						ColumnID: this.ColumnID,
+					}
+				}),
+			),
 			to(scpb.Status_WRITE_ONLY,
-				emit(func(this *scpb.Column) *scop.MakePublicColumnWriteOnly {
-					return &scop.MakePublicColumnWriteOnly{
+				emit(func(this *scpb.Column) *scop.MakePublicButInaccessibleColumnWriteOnly {
+					return &scop.MakePublicButInaccessibleColumnWriteOnly{
 						TableID:  this.TableID,
 						ColumnID: this.ColumnID,
 					}
