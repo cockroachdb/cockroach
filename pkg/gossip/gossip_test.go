@@ -954,43 +954,82 @@ func TestGossipCullLeastUsefulAfterSentinelLoss(t *testing.T) {
 
 	local := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
 
-	var peers []*Gossip
+	// Set up all relevant background intervals to trigger quickly, simulating a
+	// real node, but faster. FWIW these numbers were chosen completely
+	// arbitrarily, there's no real significance to them.
+	local.SetStallInterval(5 * time.Millisecond)
+	local.SetBootstrapInterval(5 * time.Millisecond)
+	local.SetCullInterval(20 * time.Millisecond)
+
+	// This is effectively a no-op, but just to demonstrate sometihng resembling
+	// a realistic scenario, add the sentinel key with a negative TTL (to mark it
+	// as immediately expired).
+	if err := local.AddInfo(KeySentinel, nil, -1*time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	// First initialize 3 peers for our `local` node to initially connect to.
+	var initialPeers []*Gossip
 	local.mu.Lock()
-	for i := 0; i < minPeers; i++ {
+	for i := 0; i < 3; i++ {
 		peer := startGossip(clusterID, roachpb.NodeID(i+2), stopper, t, metric.NewRegistry())
 		local.startClientLocked(*peer.GetNodeAddr())
-		peers = append(peers, peer)
+		initialPeers = append(initialPeers, peer)
 	}
 	local.mu.Unlock()
 
-	// Create one extra peer that the local client won't want to talk to because it would exceed its maxPeers.
-	extraPeer := startGossip(clusterID, 5, stopper, t, metric.NewRegistry())
-	extraPeerAddr := extraPeer.GetNodeAddr()
-
-	// Have all of the other peers (nodes 2-4) connect to the "extra" peer, such
-	// that it's unwilling to accept new connections from node 1 later.
-	for i := 0; i < minPeers; i++ {
-		peers[i].mu.Lock()
-		peers[i].startClientLocked(*extraPeerAddr)
-		peers[i].mu.Unlock()
+	// Then add 3 more peers that we won't connect to and that we will fill up
+	// with incoming connections such that they won't accept us when trying to
+	// add them as bootstraps.
+	var fullPeers []*Gossip
+	for i := 0; i < 3; i++ {
+		peer := startGossip(clusterID, roachpb.NodeID(i+5), stopper, t, metric.NewRegistry())
+		peer.mu.Lock()
+		// Connect each node to the network by picking an initialPeer to talk to.
+		peer.startClientLocked(*initialPeers[i].GetNodeAddr())
+		peer.mu.Unlock()
+		fullPeers = append(fullPeers, peer)
 	}
 
-	// Make sure local has an outgoing connection to peers 2-4.
+	// Then, finally, add 3 more peers that will each connect to one of the
+	// fullPeers, causing fullPeers to have the max number of incoming
+	// connections such that they won't accept any new incoming connections.
+	var nonFullPeers []*Gossip
+	for i := 0; i < 3; i++ {
+		peer := startGossip(clusterID, roachpb.NodeID(i+8), stopper, t, metric.NewRegistry())
+		peer.mu.Lock()
+		for j := 0; j < 3; j++ {
+			peer.startClientLocked(*fullPeers[j].GetNodeAddr())
+		}
+		peer.mu.Unlock()
+		nonFullPeers = append(nonFullPeers, peer)
+	}
+
+	// Make sure local has an outgoing connection to the first 3 peers.
 	testutils.SucceedsSoon(t, func() error {
 		outgoing := local.Outgoing()
 		if len(outgoing) == 3 {
 			return nil
 		}
-		return errors.Errorf("not yet connected to all expected peers: %v", outgoing)
+		return errors.Errorf("not yet connected to all expected outgoing peers: %v", outgoing)
 	})
 
-	// Make sure local has registered all four peers' addresses as bootstrap addresses.
+	// Make sure local has registered all 9 peers' addresses as bootstrap addresses.
 	testutils.SucceedsSoon(t, func() error {
 		addrs := local.GetAddresses()
-		if len(addrs) == 4 {
+		if len(addrs) == 9 {
 			return nil
 		}
 		return errors.Errorf("not all addresses have been registered as bootstrap addresses: %v", addrs)
+	})
+
+	// Make sure the three "busy" peers do indeed have 3 incoming connections each.
+	testutils.SucceedsSoon(t, func() error {
+		incoming := fullPeers[0].Incoming()
+		if len(incoming) == 3 {
+			return nil
+		}
+		return errors.Errorf("not yet connected to all expected incoming peers: %v", incoming)
 	})
 
 	// Now the gossip network is fully up and running.
@@ -1010,40 +1049,64 @@ func TestGossipCullLeastUsefulAfterSentinelLoss(t *testing.T) {
 	local.mu.Unlock()
 
 	// Upon being signaled that we're stalled, bootstrap() will attempt to
-	// reconnect to all known bootstrap addresses. It currently does this without
-	// bothering to check whether we're already connected to the given address,
-	// so we open a duplicate connection to each `peer`. `peer` tells us it's a
-	// duplicate connection and closes it on us, but only after telling us what
-	// its node ID is, which (due to how placeholder resolution works in nodeSet)
-	// leads to us removing node ID 2 from the outgoing node set when processing
-	// the disconnection. This leaves the nodeSet with just a placeholder in
-	// place.
-	//
-	// `local` should repeat this process for every possible bootstrap node.
-	// Nodes 2-4 will reject it because it already has a connection to them, and
-	// node 5 will reject it because it already has the max number of incoming
-	// connections.
+	// reconnect to all known bootstrap addresses. One immediately observable
+	// effect of this is that it will connect to extra peers beyond the maxPeers
+	// limit. We will end up connecting to 6 nodes -- we would connect to all 9,
+	// except that three of them are already full and won't let us.
 	testutils.SucceedsSoon(t, func() error {
 		local.mu.Lock()
 		defer local.mu.Unlock()
+		if local.outgoing.len() == 6 {
+			return nil
+		}
+		return errors.Errorf("fewer outgoing connections than expected: %+v", local.outgoing)
+	})
+
+	// There are two other interesting things about the bootstrap() code:
+	//
+	// 1. It currently doesn't bother to check whether we're already connected to
+	// the given address, so we open a duplicate connection to each `peer`.
+	// `peer` tells us it's a duplicate connection and closes it on us, but only
+	// after telling us what its node ID is, which (due to how placeholder
+	// resolution works in nodeSet) leads to us removing node IDs 2-4 from the
+	// outgoing node set when processing the disconnection from our bootstrap
+	// attempts to those nodes. This means that even though the `outgoing`
+	// nodeSet originally contined node IDs 2-4, it now just contains 3
+	// placeholders instead.
+	//
+	// 2. It attempts to avoid opening multiple bootstrap connections to the same
+	// node by tracking the bootstrapAddrs map of currently outgoing bootstrap
+	// connections, which to some extent does a good job of preventing "interesting
+	// thing #1" from affecting the nonFullPeers nodes. However, the
+	// bootstrapAddrs map can be tricked in the case of a server forwarding us to
+	// a different peer. In that case, bootstrapAddrs will track the address of
+	// the node that forwarded us elsewhere (one of the `fullPeers` in this test
+	// case), rather than the address we ended up connected to. That allows us to
+	// trigger "interesting thing #1" from above on the nonFullPeers, causing us
+	// to end up with 6 placeholders and no actual node IDs in the
+	// `local.outgoing` nodeSet.
+	//
+	// Given that the `fullPeer` we connect to picks a forwarding address for us
+	// at random, this SucceedsSoon can sometimes take seconds to resolve and
+	// can on rare occasion fails, but it should usually resolve successfully as
+	// the leastUseful node culling initiated by the shortened cullInterval does
+	// its work to give us multiple chances until we eventually "win" and things
+	// get stuck with all placeholders in `local.outgoing`.
+	testutils.SucceedsSoon(t, func() error {
+		local.mu.Lock()
+		defer local.mu.Unlock()
+		log.Infof(context.TODO(), "local.outgoing internal state: %+v", local.outgoing)
 		// TODO: This isn't actually the behavior that we want, but it's the
 		// behavior that we currently observe.
-		if len(local.outgoing.nodes) == 0 && local.outgoing.placeholders == 3 {
+		if len(local.outgoing.nodes) == 0 && local.outgoing.placeholders == 6 {
 			return nil
 		}
 		return errors.Errorf("unexpected outgoing nodeSet state: %+v", local.outgoing)
 	})
 
 	// At this point, attempting to tighten by finding the least useful node ID
-	// will fail. In this contrived scenario where we only have three peers that's
-	// not the end of the world, but the same problem is also possible after
-	// running bootstrap() has led us to open too many connections, and in that
-	// case it's a bigger problem because we may never actually drop our number
-	// of nodes back down below the desired max.
-	//
-	// We could update this test to demonstrate that scenario as well, but it's
-	// already on the long side and that would make the steps above even more
-	// involved.
+	// will fail *even though we are connected to too many nodes*, which means we
+	// can basically get stuck in this unfortunate state.
 	local.mu.Lock()
 	leastUseful := local.mu.is.leastUseful(local.outgoing)
 	// TODO: This is definitely not the behavior that we want, but it's the
