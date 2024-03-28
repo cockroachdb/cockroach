@@ -624,12 +624,22 @@ func (f *btreeFrontier) SpanEntries(span roachpb.Span, op Operation) {
 func (f *btreeFrontier) String() string {
 	defer f.disallowMutations()()
 
+	const spanStringCharLimit = 1 << 10
+	var skippedSpans int
 	var buf strings.Builder
 	it := f.tree.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
-		if buf.Len() != 0 {
+		if l := buf.Len(); l != 0 {
+			if l > spanStringCharLimit {
+				skippedSpans++
+				continue
+			}
 			buf.WriteString(` `)
 		}
+	}
+	if skippedSpans > 0 {
+		fmt.Fprintf(&buf, `[…%d more spans…] `, skippedSpans-1)
+		it.Last()
 		buf.WriteString(it.Cur().String())
 	}
 	return buf.String()
