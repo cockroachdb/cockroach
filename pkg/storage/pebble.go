@@ -747,6 +747,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		// allow overriding the max at runtime through
 		// Engine.SetCompactionConcurrency.
 		MaxConcurrentCompactions:    getMaxConcurrentCompactions,
+		MaxConcurrentDownloads:      getMaxConcurrentDownloads,
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,

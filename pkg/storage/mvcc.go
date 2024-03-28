@@ -144,6 +144,19 @@ func getMaxConcurrentCompactions() int {
 	return n
 }
 
+// getMaxConcurrentDownloads returns the default max concurrent download
+// compactions. It is installed as the default value of of
+// Options.MaxConcurrentDownloads.
+//
+// TODO(ssd): The current implementation is not based on any data.
+func getMaxConcurrentDownloads() int {
+	const (
+		maxConcurrentDownloads = 3
+		minConcurrentDownloads = 1
+	)
+	return max(min(runtime.GOMAXPROCS(0)-1, maxConcurrentDownloads), minConcurrentDownloads)
+}
+
 // l0SubLevelCompactionConcurrency is the sub-level threshold at which to
 // allow an increase in compaction concurrency. The maximum is still
 // controlled by pebble.Options.MaxConcurrentCompactions. The default of 2
