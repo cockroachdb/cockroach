@@ -96,6 +96,7 @@ type indexHTMLArgs struct {
 
 	LicenseType               string
 	SecondsUntilLicenseExpiry int64
+	IsManaged                 bool
 }
 
 // OIDCUIConf is a variable that stores data required by the
@@ -183,6 +184,9 @@ func Handler(cfg Config) http.Handler {
 
 			LicenseType:               licenseType,
 			SecondsUntilLicenseExpiry: licenseTTL,
+			// log.RedactionPolicyManaged is set to true only when cluster is running under
+			// managed service control.
+			IsManaged: log.RedactionPolicyManaged,
 		}
 		if cfg.NodeID != nil {
 			args.NodeID = cfg.NodeID.String()
