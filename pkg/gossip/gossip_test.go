@@ -941,3 +941,115 @@ func TestGossipLoopbackInfoPropagation(t *testing.T) {
 		return nil
 	})
 }
+
+func TestGossipCullLeastUsefulAfterSentinelLoss(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	// Shared cluster ID by all gossipers (this ensures that the gossipers
+	// don't talk to servers from unrelated tests by accident).
+	clusterID := uuid.MakeV4()
+
+	local := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
+
+	var peers []*Gossip
+	local.mu.Lock()
+	for i := 0; i < minPeers; i++ {
+		peer := startGossip(clusterID, roachpb.NodeID(i+2), stopper, t, metric.NewRegistry())
+		local.startClientLocked(*peer.GetNodeAddr())
+		peers = append(peers, peer)
+	}
+	local.mu.Unlock()
+
+	// Create one extra peer that the local client won't want to talk to because it would exceed its maxPeers.
+	extraPeer := startGossip(clusterID, 5, stopper, t, metric.NewRegistry())
+	extraPeerAddr := extraPeer.GetNodeAddr()
+
+	// Have all of the other peers (nodes 2-4) connect to the "extra" peer, such
+	// that it's unwilling to accept new connections from node 1 later.
+	for i := 0; i < minPeers; i++ {
+		peers[i].mu.Lock()
+		peers[i].startClientLocked(*extraPeerAddr)
+		peers[i].mu.Unlock()
+	}
+
+	// Make sure local has an outgoing connection to peers 2-4.
+	testutils.SucceedsSoon(t, func() error {
+		outgoing := local.Outgoing()
+		if len(outgoing) == 3 {
+			return nil
+		}
+		return errors.Errorf("not yet connected to all expected peers: %v", outgoing)
+	})
+
+	// Make sure local has registered all four peers' addresses as bootstrap addresses.
+	testutils.SucceedsSoon(t, func() error {
+		addrs := local.GetAddresses()
+		if len(addrs) == 4 {
+			return nil
+		}
+		return errors.Errorf("not all addresses have been registered as bootstrap addresses: %v", addrs)
+	})
+
+	// Now the gossip network is fully up and running.
+
+	// Confirm we don't have the sentinel key, which should cause our bootstrap logic to kick in.
+	if val, err := local.GetInfo(KeySentinel); err != NewKeyNotPresentError(KeySentinel) {
+		t.Errorf("unexpectedly have sentinel key present at start of test; value %+v", val)
+	}
+
+	// Start the bootstrap loop and immediately notify it that we're stalled,
+	// mimicking what happens in a real cluster if we notice we don't have the
+	// sentinel key because it expired due to its short TTL.
+	local.bootstrap()
+	local.manage()
+	local.mu.Lock()
+	local.maybeSignalStatusChangeLocked()
+	local.mu.Unlock()
+
+	// Upon being signaled that we're stalled, bootstrap() will attempt to
+	// reconnect to all known bootstrap addresses. It currently does this without
+	// bothering to check whether we're already connected to the given address,
+	// so we open a duplicate connection to each `peer`. `peer` tells us it's a
+	// duplicate connection and closes it on us, but only after telling us what
+	// its node ID is, which (due to how placeholder resolution works in nodeSet)
+	// leads to us removing node ID 2 from the outgoing node set when processing
+	// the disconnection. This leaves the nodeSet with just a placeholder in
+	// place.
+	//
+	// `local` should repeat this process for every possible bootstrap node.
+	// Nodes 2-4 will reject it because it already has a connection to them, and
+	// node 5 will reject it because it already has the max number of incoming
+	// connections.
+	testutils.SucceedsSoon(t, func() error {
+		local.mu.Lock()
+		defer local.mu.Unlock()
+		// TODO: This isn't actually the behavior that we want, but it's the
+		// behavior that we currently observe.
+		if len(local.outgoing.nodes) == 0 && local.outgoing.placeholders == 3 {
+			return nil
+		}
+		return errors.Errorf("unexpected outgoing nodeSet state: %+v", local.outgoing)
+	})
+
+	// At this point, attempting to tighten by finding the least useful node ID
+	// will fail. In this contrived scenario where we only have three peers that's
+	// not the end of the world, but the same problem is also possible after
+	// running bootstrap() has led us to open too many connections, and in that
+	// case it's a bigger problem because we may never actually drop our number
+	// of nodes back down below the desired max.
+	//
+	// We could update this test to demonstrate that scenario as well, but it's
+	// already on the long side and that would make the steps above even more
+	// involved.
+	local.mu.Lock()
+	leastUseful := local.mu.is.leastUseful(local.outgoing)
+	// TODO: This is definitely not the behavior that we want, but it's the
+	// behavior that we currently observe.
+	if leastUseful != 0 {
+		t.Errorf("unexpectedly got back a real least useful node ID: %d", leastUseful)
+	}
+	local.mu.Unlock()
+}
