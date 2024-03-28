@@ -32,13 +32,19 @@ import (
 )
 
 const (
-	changefeedCheckpointHistMaxLatency = 30 * time.Second
-	changefeedBatchHistMaxLatency      = 30 * time.Second
-	changefeedFlushHistMaxLatency      = 1 * time.Minute
-	changefeedIOQueueMaxLatency        = 5 * time.Minute
-	admitLatencyMaxValue               = 1 * time.Minute
-	commitLatencyMaxValue              = 10 * time.Minute
-	kafkaThrottlingTimeMaxValue        = 5 * time.Minute
+	changefeedCheckpointHistMaxLatency     = 30 * time.Second
+	changefeedBatchHistMaxLatency          = 30 * time.Second
+	changefeedFlushHistMaxLatency          = 1 * time.Minute
+	changefeedIOQueueMaxLatency            = 5 * time.Minute
+	admitLatencyMaxValue                   = 1 * time.Minute
+	commitLatencyMaxValue                  = 10 * time.Minute
+	kafkaThrottlingTimeMaxValue            = 10 * time.Minute
+	kafkaBrokerRequestLatencyMaxValue      = 10 * time.Minute
+	kafkaBrokerRequestSizeMaxValue         = 1 << 20 // 1MB
+	kafkaBrokerResponseSizeMaxValue        = 1 << 20 // 1MB
+	kafkaProducerBatchSizeMaxValue         = 1 << 20 // 1MB
+	kafkaProducerRecordsPerRequestMaxValue = 1 << 10 // 1KB
+	kafkaProducerCompressionRatioMaxValue  = 100
 )
 
 // max length for the scope name.
@@ -80,7 +86,23 @@ type AggMetrics struct {
 	CheckpointProgress          *aggmetric.AggGauge
 	LaggingRanges               *aggmetric.AggGauge
 	CloudstorageBufferedBytes   *aggmetric.AggGauge
+
+	// Kafka broker side metrics imported from sarama package.
 	KafkaThrottlingNanos        *aggmetric.AggHistogram
+	KafkaBrokerIncomingBytes    *aggmetric.AggCounter
+	KafkaBrokerOutgoingBytes    *aggmetric.AggCounter
+	KafkaBrokerRequest          *aggmetric.AggCounter
+	KafkaBrokerResponse         *aggmetric.AggCounter
+	KafkaBrokerRequestSize      *aggmetric.AggHistogram
+	KafkaBrokerRequestLatency   *aggmetric.AggHistogram
+	KafkaBrokerResponseSize     *aggmetric.AggHistogram
+	KafkaBrokerRequestsInFlight *aggmetric.AggGauge
+
+	// Kafka producer side metrics imported from sarama package.
+	KafkaProducerBatchSize         *aggmetric.AggHistogram
+	KafkaProducerRecordSentRate    *aggmetric.AggCounter
+	KafkaProducerRecordsPerRequest *aggmetric.AggHistogram
+	KafkaProducerCompressionRatio  *aggmetric.AggHistogram
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -111,7 +133,7 @@ type metricsRecorder interface {
 	newParallelIOMetricsRecorder() parallelIOMetricsRecorder
 	recordSinkIOInflightChange(int64)
 	makeCloudstorageFileAllocCallback() func(delta int64)
-	getKafkaThrottlingMetrics(*cluster.Settings) metrics.Histogram
+	newKafkaMetricsRecorder(*cluster.Settings) kafkaMetricsRecorder
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -151,7 +173,23 @@ type sliMetrics struct {
 	CheckpointProgress          *aggmetric.Gauge
 	LaggingRanges               *aggmetric.Gauge
 	CloudstorageBufferedBytes   *aggmetric.Gauge
+
+	// Kafka broker side metrics imported from sarama package.
 	KafkaThrottlingNanos        *aggmetric.Histogram
+	KafkaBrokerIncomingBytes    *aggmetric.Counter
+	KafkaBrokerOutgoingBytes    *aggmetric.Counter
+	KafkaBrokerRequest          *aggmetric.Counter
+	KafkaBrokerResponse         *aggmetric.Counter
+	KafkaBrokerRequestSize      *aggmetric.Histogram
+	KafkaBrokerRequestLatency   *aggmetric.Histogram
+	KafkaBrokerResponseSize     *aggmetric.Histogram
+	KafkaBrokerRequestsInFlight *aggmetric.Gauge
+
+	// Kafka producer side metrics imported from sarama package.
+	KafkaProducerBatchSize         *aggmetric.Histogram
+	KafkaProducerRecordSentRate    *aggmetric.Counter
+	KafkaProducerRecordsPerRequest *aggmetric.Histogram
+	KafkaProducerCompressionRatio  *aggmetric.Histogram
 
 	mu struct {
 		syncutil.Mutex
@@ -332,6 +370,85 @@ func (m *sliMetrics) recordSizeBasedFlush() {
 	m.SizeBasedFlushes.Inc(1)
 }
 
+type kafkaCounterAdapter struct {
+	settings *cluster.Settings
+	// wrapped  metrics.Counter
+	// Gauge
+	// Crdb gauge -> metrics.Counter
+	wrapped *aggmetric.Gauge
+}
+
+func (k *kafkaCounterAdapter) Clear() {
+	logcrash.ReportOrPanic(context.Background(), &k.settings.SV /*settings.Values*/, "unexpected call to Clear on kafkaCounterAdapter")
+}
+
+func (k *kafkaCounterAdapter) Count() (_ int64) {
+	logcrash.ReportOrPanic(context.Background(), &k.settings.SV /*settings.Values*/, "unexpected call to Count on kafkaCounterAdapter")
+	return
+}
+
+func (k *kafkaCounterAdapter) Dec(i int64) {
+	k.wrapped.Dec(i)
+}
+
+func (k *kafkaCounterAdapter) Inc(i int64) {
+	k.wrapped.Inc(i)
+}
+
+func (k *kafkaCounterAdapter) Snapshot() (_ metrics.Counter) {
+	logcrash.ReportOrPanic(context.Background(), &k.settings.SV /*settings.Values*/, "unexpected call to Snapshot on kafkaCounterAdapter")
+	return
+}
+
+var _ metrics.Counter = (*kafkaCounterAdapter)(nil)
+
+type kafkaMeterAdapter struct {
+	settings *cluster.Settings
+	// wrapped  metrics.Meter
+	// Crdb counter -> metrics.Meter
+	wrapped *aggmetric.Counter
+}
+
+func (k *kafkaMeterAdapter) Count() (_ int64) {
+	logcrash.ReportOrPanic(context.Background(), &k.settings.SV /*settings.Values*/, "unexpected call to Count on kafkaMeterAdapter")
+	return
+}
+
+func (k *kafkaMeterAdapter) Mark(i int64) {
+	k.wrapped.Inc(i)
+}
+
+func (k *kafkaMeterAdapter) Rate1() (_ float64) {
+	logcrash.ReportOrPanic(context.Background(), &k.settings.SV /*settings.Values*/, "unexpected call to Rate1 on kafkaMeterAdapter")
+	return
+}
+
+func (k *kafkaMeterAdapter) Rate5() (_ float64) {
+	logcrash.ReportOrPanic(context.Background(), &k.settings.SV /*settings.Values*/, "unexpected call to Rate5 on kafkaMeterAdapter")
+	return
+}
+
+func (k *kafkaMeterAdapter) Rate15() (_ float64) {
+	logcrash.ReportOrPanic(context.Background(), &k.settings.SV /*settings.Values*/, "unexpected call to Rate15 on kafkaMeterAdapter")
+	return
+}
+
+func (k *kafkaMeterAdapter) RateMean() (_ float64) {
+	logcrash.ReportOrPanic(context.Background(), &k.settings.SV /*settings.Values*/, "unexpected call to RateMean on kafkaMeterAdapter")
+	return
+}
+
+func (k *kafkaMeterAdapter) Snapshot() (_ metrics.Meter) {
+	logcrash.ReportOrPanic(context.Background(), &k.settings.SV /*settings.Values*/, "unexpected call to Snapshot on kafkaMeterAdapter")
+	return
+}
+
+func (k *kafkaMeterAdapter) Stop() {
+	// Stop() is called when metrics is unregistered.
+}
+
+var _ metrics.Meter = (*kafkaMeterAdapter)(nil)
+
 type kafkaHistogramAdapter struct {
 	settings *cluster.Settings
 	wrapped  *aggmetric.Histogram
@@ -341,14 +458,18 @@ var _ metrics.Histogram = (*kafkaHistogramAdapter)(nil)
 
 func (k *kafkaHistogramAdapter) Update(valueInMs int64) {
 	if k != nil {
-		// valueInMs is passed in from sarama with a unit of milliseconds. To
-		// convert this value to nanoseconds, valueInMs * 10^6 is recorded here.
-		k.wrapped.RecordValue(valueInMs * 1000000)
+		if k.wrapped.GetUnit() == metric.Unit_NANOSECONDS {
+			// updates passed from sarama are a unit of milliseconds. To convert this
+			// value to nanoseconds, valueInMs * 10^6 is recorded here.
+			k.wrapped.RecordValue(valueInMs * 1000000)
+		} else {
+			k.wrapped.RecordValue(valueInMs)
+		}
 	}
 }
 
 func (k *kafkaHistogramAdapter) Clear() {
-	logcrash.ReportOrPanic(context.Background(), &k.settings.SV /*settings.Values*/, "unexpected call to Sum on kafkaHistogramAdapter")
+	logcrash.ReportOrPanic(context.Background(), &k.settings.SV /*settings.Values*/, "unexpected call to Clear on kafkaHistogramAdapter")
 }
 
 func (k *kafkaHistogramAdapter) Count() (_ int64) {
@@ -461,13 +582,195 @@ func (m *sliMetrics) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
 	}
 }
 
-func (m *sliMetrics) getKafkaThrottlingMetrics(settings *cluster.Settings) metrics.Histogram {
-	if m == nil {
+type kafkaMetricsRecorder interface {
+	getKafkaThrottlingNanos() metrics.Histogram
+	getKafkaBrokerIncomingBytes() metrics.Meter
+	getKafkaBrokerOutgoingBytes() metrics.Meter
+	getKafkaBrokerRequest() metrics.Meter
+	getKafkaBrokerResponse() metrics.Meter
+	getKafkaBrokerRequestSize() metrics.Histogram
+	getKafkaBrokerRequestLatency() metrics.Histogram
+	getKafkaBrokerResponseSize() metrics.Histogram
+	getKafkaBrokerRequestsInFlight() metrics.Counter
+	getKafkaProducerBatchSize() metrics.Histogram
+	getKafkaProducerRecordSentRate() metrics.Meter
+	getKafkaProducerRecordsPerRequest() metrics.Histogram
+	getKafkaProducerCompressionRatio() metrics.Histogram
+}
+
+type kafkaMetricsRecorderImpl struct {
+	settings *cluster.Settings
+	// Kafka broker side metrics imported from sarama package.
+	kafkaThrottlingNanos        *aggmetric.Histogram
+	kafkaBrokerIncomingBytes    *aggmetric.Counter
+	kafkaBrokerOutgoingBytes    *aggmetric.Counter
+	kafkaBrokerRequest          *aggmetric.Counter
+	kafkaBrokerResponse         *aggmetric.Counter
+	kafkaBrokerRequestSize      *aggmetric.Histogram
+	kafkaBrokerRequestLatency   *aggmetric.Histogram
+	kafkaBrokerResponseSize     *aggmetric.Histogram
+	kafkaBrokerRequestsInFlight *aggmetric.Gauge
+
+	// Kafka producer side metrics imported from sarama package.
+	kafkaProducerBatchSize         *aggmetric.Histogram
+	kafkaProducerRecordSentRate    *aggmetric.Counter
+	kafkaProducerRecordsPerRequest *aggmetric.Histogram
+	kafkaProducerCompressionRatio  *aggmetric.Histogram
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaThrottlingNanos() metrics.Histogram {
+	if k == nil {
 		return (*kafkaHistogramAdapter)(nil)
 	}
 	return &kafkaHistogramAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaThrottlingNanos,
+	}
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaBrokerIncomingBytes() metrics.Meter {
+	if k == nil {
+		return (*kafkaMeterAdapter)(nil)
+	}
+	return &kafkaMeterAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaBrokerIncomingBytes,
+	}
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaBrokerOutgoingBytes() metrics.Meter {
+	if k == nil {
+		return (*kafkaMeterAdapter)(nil)
+	}
+	return &kafkaMeterAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaBrokerOutgoingBytes,
+	}
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaBrokerRequest() metrics.Meter {
+	if k == nil {
+		return (*kafkaMeterAdapter)(nil)
+	}
+	return &kafkaMeterAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaBrokerRequest,
+	}
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaBrokerResponse() metrics.Meter {
+	if k == nil {
+		return (*kafkaMeterAdapter)(nil)
+	}
+	return &kafkaMeterAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaBrokerResponse,
+	}
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaBrokerRequestSize() metrics.Histogram {
+	if k == nil {
+		return (*kafkaHistogramAdapter)(nil)
+	}
+	return &kafkaHistogramAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaBrokerRequestSize,
+	}
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaBrokerRequestLatency() metrics.Histogram {
+	if k == nil {
+		return (*kafkaHistogramAdapter)(nil)
+	}
+	return &kafkaHistogramAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaBrokerRequestLatency,
+	}
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaBrokerResponseSize() metrics.Histogram {
+	if k == nil {
+		return (*kafkaHistogramAdapter)(nil)
+	}
+	return &kafkaHistogramAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaBrokerResponseSize,
+	}
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaBrokerRequestsInFlight() metrics.Counter {
+	if k == nil {
+		return (*kafkaCounterAdapter)(nil)
+	}
+	return &kafkaCounterAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaBrokerRequestsInFlight,
+	}
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaProducerBatchSize() metrics.Histogram {
+	if k == nil {
+		return (*kafkaHistogramAdapter)(nil)
+	}
+	return &kafkaHistogramAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaProducerBatchSize,
+	}
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaProducerRecordSentRate() metrics.Meter {
+	if k == nil {
+		return (*kafkaMeterAdapter)(nil)
+	}
+	return &kafkaMeterAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaProducerRecordSentRate,
+	}
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaProducerRecordsPerRequest() metrics.Histogram {
+	if k == nil {
+		return (*kafkaHistogramAdapter)(nil)
+	}
+	return &kafkaHistogramAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaProducerRecordsPerRequest,
+	}
+}
+
+func (k *kafkaMetricsRecorderImpl) getKafkaProducerCompressionRatio() metrics.Histogram {
+	if k == nil {
+		return (*kafkaHistogramAdapter)(nil)
+	}
+	return &kafkaHistogramAdapter{
+		settings: k.settings,
+		wrapped:  k.kafkaProducerCompressionRatio,
+	}
+}
+
+func (m *sliMetrics) newKafkaMetricsRecorder(settings *cluster.Settings) kafkaMetricsRecorder {
+	if m == nil {
+		return (*kafkaMetricsRecorderImpl)(nil)
+	}
+	return &kafkaMetricsRecorderImpl{
 		settings: settings,
-		wrapped:  m.KafkaThrottlingNanos,
+
+		// Kafka broker side metrics imported from sarama package.
+		kafkaThrottlingNanos:        m.KafkaThrottlingNanos,
+		kafkaBrokerIncomingBytes:    m.KafkaBrokerIncomingBytes,
+		kafkaBrokerOutgoingBytes:    m.KafkaBrokerOutgoingBytes,
+		kafkaBrokerRequest:          m.KafkaBrokerRequest,
+		kafkaBrokerResponse:         m.KafkaBrokerResponse,
+		kafkaBrokerRequestSize:      m.KafkaBrokerRequestSize,
+		kafkaBrokerRequestLatency:   m.KafkaBrokerRequestLatency,
+		kafkaBrokerResponseSize:     m.KafkaBrokerResponseSize,
+		kafkaBrokerRequestsInFlight: m.KafkaBrokerRequestsInFlight,
+
+		// Kafka producer side metrics imported from sarama package.
+		kafkaProducerBatchSize:         m.KafkaProducerBatchSize,
+		kafkaProducerRecordSentRate:    m.KafkaProducerRecordSentRate,
+		kafkaProducerRecordsPerRequest: m.KafkaProducerRecordsPerRequest,
+		kafkaProducerCompressionRatio:  m.KafkaProducerCompressionRatio,
 	}
 }
 
@@ -561,10 +864,10 @@ func (w *wrappingCostController) newParallelIOMetricsRecorder() parallelIOMetric
 	return w.inner.newParallelIOMetricsRecorder()
 }
 
-func (w *wrappingCostController) getKafkaThrottlingMetrics(
+func (w *wrappingCostController) newKafkaMetricsRecorder(
 	settings *cluster.Settings,
-) metrics.Histogram {
-	return w.inner.getKafkaThrottlingMetrics(settings)
+) kafkaMetricsRecorder {
+	return w.inner.newKafkaMetricsRecorder(settings)
 }
 
 var (
@@ -824,6 +1127,78 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaChangefeedKafkaBrokerIncomingBytes := metric.Metadata{
+		Name:        "changefeed.kafka_broker_incoming_bytes",
+		Help:        "The number of bytes read off all kafka brokers",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaChangefeedKafkaBrokerOutgoingBytes := metric.Metadata{
+		Name:        "changefeed.kafka_broker_outgoing_bytes",
+		Help:        "The number of bytes being written off all kafka brokers",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaChangefeedKafkaBrokerRequest := metric.Metadata{
+		Name:        "changefeed.kafka_request",
+		Help:        "The number of requests sent to all kafka brokers",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedKafkaBrokerResponse := metric.Metadata{
+		Name:        "changefeed.kafka_response",
+		Help:        "The number of responses received from all kafka brokers",
+		Measurement: "Responses",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedKafkaBrokerRequestSize := metric.Metadata{
+		Name:        "changefeed.kafka_request_size",
+		Help:        "The size of requests sent to all kafka brokers in bytes",
+		Measurement: "Bytes",
+	}
+	metaChangefeedKafkaBrokerRequestLatency := metric.Metadata{
+		Name: "changefeed.kafka_request_latency",
+		// TODO (wenyihu6): handle the latency in ms
+		Help:        "The latency of requests sent to all kafka brokers in nanoseconds",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaChangefeedKafkaBrokerResponseSize := metric.Metadata{
+		Name:        "changefeed.kafka_response_size",
+		Help:        "The size of responses received from all kafka brokers in bytes",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaChangefeedKafkaBrokerRequestsInFlight := metric.Metadata{
+		Name:        "changefeed.kafka_requests_in_flight",
+		Help:        "The number of requests in flight sent to all kafka brokers",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedKafkaProducerBatchSize := metric.Metadata{
+		Name:        "changefeed.kafka_producer_batch_size",
+		Help:        "Number of bytes sent per partition per request for all topics",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaChangefeedKafkaProducerRecordSentRate := metric.Metadata{
+		Name:        "changefeed.kafka_producer_record_send_rate",
+		Help:        "Number of records sent to all topics",
+		Measurement: "Records",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedKafkaProducerRecordsPerRequest := metric.Metadata{
+		Name:        "changefeed.kafka_producer_records_per_request",
+		Help:        "Number of records sent per request for all topics",
+		Measurement: "Records",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedKafkaProducerCompressionRatio := metric.Metadata{
+		Name:        "changefeed.kafka_producer_compression_ratio",
+		Help:        "Compression ratio of records sent to all topics",
+		Measurement: "Percentage",
+		Unit:        metric.Unit_PERCENT,
+	}
 
 	functionalGaugeMinFn := func(childValues []int64) int64 {
 		var min int64
@@ -923,6 +1298,48 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 			SigFigs:      2,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
+		KafkaBrokerIncomingBytes: b.Counter(metaChangefeedKafkaBrokerIncomingBytes),
+		KafkaBrokerOutgoingBytes: b.Counter(metaChangefeedKafkaBrokerOutgoingBytes),
+		KafkaBrokerRequest:       b.Counter(metaChangefeedKafkaBrokerRequest),
+		KafkaBrokerResponse:      b.Counter(metaChangefeedKafkaBrokerResponse),
+		KafkaBrokerRequestSize: b.Histogram(metric.HistogramOptions{
+			Metadata:     metaChangefeedKafkaBrokerRequestSize,
+			Duration:     histogramWindow,
+			MaxVal:       kafkaBrokerRequestSizeMaxValue,
+			SigFigs:      2,
+			BucketConfig: metric.DataSize16MBBuckets,
+		}),
+		KafkaBrokerRequestLatency: b.Histogram(metric.HistogramOptions{
+			Metadata: metaChangefeedKafkaBrokerRequestLatency,
+			Duration: histogramWindow,
+			MaxVal:   kafkaBrokerRequestLatencyMaxValue.Nanoseconds(),
+			SigFigs:  2,
+		}),
+		KafkaBrokerResponseSize: b.Histogram(metric.HistogramOptions{
+			Metadata: metaChangefeedKafkaBrokerResponseSize,
+			Duration: histogramWindow,
+			MaxVal:   kafkaBrokerResponseSizeMaxValue,
+			SigFigs:  2,
+		}),
+		KafkaBrokerRequestsInFlight: b.Gauge(metaChangefeedKafkaBrokerRequestsInFlight),
+		KafkaProducerBatchSize: b.Histogram(metric.HistogramOptions{
+			Metadata: metaChangefeedKafkaProducerBatchSize,
+			Duration: histogramWindow,
+			MaxVal:   kafkaProducerBatchSizeMaxValue,
+			SigFigs:  2,
+		}),
+		KafkaProducerRecordSentRate: b.Counter(metaChangefeedKafkaProducerRecordSentRate),
+		KafkaProducerRecordsPerRequest: b.Histogram(metric.HistogramOptions{
+			Metadata: metaChangefeedKafkaProducerRecordsPerRequest,
+			Duration: histogramWindow,
+			MaxVal:   kafkaProducerRecordsPerRequestMaxValue,
+			SigFigs:  2,
+		}),
+		KafkaProducerCompressionRatio: b.Histogram(metric.HistogramOptions{
+			Metadata: metaChangefeedKafkaProducerCompressionRatio,
+			Duration: histogramWindow,
+			MaxVal:   kafkaProducerCompressionRatioMaxValue,
+		}),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -988,7 +1405,23 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		SchemaRegistrations:         a.SchemaRegistrations.AddChild(scope),
 		LaggingRanges:               a.LaggingRanges.AddChild(scope),
 		CloudstorageBufferedBytes:   a.CloudstorageBufferedBytes.AddChild(scope),
+
+		// Kafka broker side metrics imported from sarama package.
 		KafkaThrottlingNanos:        a.KafkaThrottlingNanos.AddChild(scope),
+		KafkaBrokerIncomingBytes:    a.KafkaBrokerIncomingBytes.AddChild(scope),
+		KafkaBrokerOutgoingBytes:    a.KafkaBrokerOutgoingBytes.AddChild(scope),
+		KafkaBrokerRequest:          a.KafkaBrokerRequest.AddChild(scope),
+		KafkaBrokerResponse:         a.KafkaBrokerResponse.AddChild(scope),
+		KafkaBrokerRequestSize:      a.KafkaBrokerRequestSize.AddChild(scope),
+		KafkaBrokerRequestLatency:   a.KafkaBrokerRequestLatency.AddChild(scope),
+		KafkaBrokerResponseSize:     a.KafkaBrokerResponseSize.AddChild(scope),
+		KafkaBrokerRequestsInFlight: a.KafkaBrokerRequestsInFlight.AddChild(scope),
+
+		// Kafka producer side metrics imported from sarama package.
+		KafkaProducerBatchSize:         a.KafkaProducerBatchSize.AddChild(scope),
+		KafkaProducerRecordSentRate:    a.KafkaProducerRecordSentRate.AddChild(scope),
+		KafkaProducerRecordsPerRequest: a.KafkaProducerRecordsPerRequest.AddChild(scope),
+		KafkaProducerCompressionRatio:  a.KafkaProducerCompressionRatio.AddChild(scope),
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)

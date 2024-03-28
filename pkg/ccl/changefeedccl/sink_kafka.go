@@ -1179,7 +1179,7 @@ func buildKafkaConfig(
 	ctx context.Context,
 	u sinkURL,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
-	kafkaThrottlingMetrics metrics.Histogram,
+	mr kafkaMetricsRecorder,
 ) (*sarama.Config, error) {
 	dialConfig, err := buildDialConfig(u)
 	if err != nil {
@@ -1190,7 +1190,7 @@ func buildKafkaConfig(
 	config.Producer.Partitioner = newChangefeedPartitioner
 	// Do not fetch metadata for all topics but just for the necessary ones.
 	config.Metadata.Full = false
-	config.MetricRegistry = newMetricsRegistryInterceptor(kafkaThrottlingMetrics)
+	config.MetricRegistry = newMetricsRegistryInterceptor(mr)
 
 	if dialConfig.tlsEnabled {
 		config.Net.TLS.Enable = true
@@ -1286,7 +1286,8 @@ func makeKafkaSink(
 	}
 
 	m := mb(requiresResourceAccounting)
-	config, err := buildKafkaConfig(ctx, u, jsonStr, m.getKafkaThrottlingMetrics(settings))
+	recorder := m.newKafkaMetricsRecorder(settings)
+	config, err := buildKafkaConfig(ctx, u, jsonStr, recorder)
 	if err != nil {
 		return nil, err
 	}
@@ -1347,23 +1348,75 @@ func (s *kafkaStats) String() string {
 
 type metricsRegistryInterceptor struct {
 	metrics.Registry
-	kafkaThrottlingNanos metrics.Histogram
+	// Kafka broker side metrics imported from sarama package.
+	kafkaThrottlingNanos        metrics.Histogram
+	kafkaBrokerIncomingBytes    metrics.Meter
+	kafkaBrokerOutgoingBytes    metrics.Meter
+	kafkaBrokerRequest          metrics.Meter
+	kafkaBrokerResponse         metrics.Meter
+	kafkaBrokerRequestSize      metrics.Histogram
+	kafkaBrokerRequestLatency   metrics.Histogram
+	kafkaBrokerResponseSize     metrics.Histogram
+	kafkaBrokerRequestsInFlight metrics.Counter
+
+	// Kafka producer side metrics imported from sarama package.
+	kafkaProducerBatchSize         metrics.Histogram
+	kafkaProducerRecordSentRate    metrics.Meter
+	kafkaProducerRecordsPerRequest metrics.Histogram
+	kafkaProducerCompressionRatio  metrics.Histogram
 }
 
 var _ metrics.Registry = (*metricsRegistryInterceptor)(nil)
 
-func newMetricsRegistryInterceptor(kafkaMetrics metrics.Histogram) *metricsRegistryInterceptor {
+func newMetricsRegistryInterceptor(mr kafkaMetricsRecorder) *metricsRegistryInterceptor {
 	return &metricsRegistryInterceptor{
-		Registry:             metrics.NewRegistry(),
-		kafkaThrottlingNanos: kafkaMetrics,
+		Registry:                       metrics.NewRegistry(),
+		kafkaThrottlingNanos:           mr.getKafkaThrottlingNanos(),
+		kafkaBrokerIncomingBytes:       mr.getKafkaBrokerIncomingBytes(),
+		kafkaBrokerOutgoingBytes:       mr.getKafkaBrokerOutgoingBytes(),
+		kafkaBrokerRequest:             mr.getKafkaBrokerRequest(),
+		kafkaBrokerResponse:            mr.getKafkaBrokerResponse(),
+		kafkaBrokerRequestSize:         mr.getKafkaBrokerRequestSize(),
+		kafkaBrokerRequestLatency:      mr.getKafkaBrokerRequestLatency(),
+		kafkaBrokerResponseSize:        mr.getKafkaBrokerResponseSize(),
+		kafkaBrokerRequestsInFlight:    mr.getKafkaBrokerRequestsInFlight(),
+		kafkaProducerBatchSize:         mr.getKafkaProducerBatchSize(),
+		kafkaProducerRecordSentRate:    mr.getKafkaProducerRecordSentRate(),
+		kafkaProducerRecordsPerRequest: mr.getKafkaProducerRecordsPerRequest(),
+		kafkaProducerCompressionRatio:  mr.getKafkaProducerCompressionRatio(),
 	}
 }
 
 func (mri *metricsRegistryInterceptor) GetOrRegister(name string, i interface{}) interface{} {
-	const throttleTimeMsMetricsPrefix = "throttle-time-in-ms"
-	if strings.HasPrefix(name, throttleTimeMsMetricsPrefix) {
+	if strings.HasPrefix(name, "throttle-time-in-ms") {
 		return mri.kafkaThrottlingNanos
-	} else {
-		return mri.Registry.GetOrRegister(name, i)
 	}
+	switch name {
+	case "incoming-byte-rate":
+		return mri.kafkaBrokerIncomingBytes
+	case "outgoing-byte-rate":
+		return mri.kafkaBrokerOutgoingBytes
+	case "request-rate":
+		return mri.kafkaBrokerRequest
+	case "response-rate":
+		return mri.kafkaBrokerResponse
+	case "request-size":
+		return mri.kafkaBrokerRequestSize
+	case "request-latency":
+		return mri.kafkaBrokerRequestLatency
+	case "response-size":
+		return mri.kafkaBrokerResponseSize
+	case "requests-in-flight":
+		return mri.kafkaBrokerRequestsInFlight
+	case "batch-size":
+		return mri.kafkaProducerBatchSize
+	case "record-send-rate":
+		return mri.kafkaProducerRecordSentRate
+	case "records-per-request":
+		return mri.kafkaProducerRecordsPerRequest
+	case "compression-ratio":
+		return mri.kafkaProducerCompressionRatio
+	}
+
+	return mri.Registry.GetOrRegister(name, i)
 }

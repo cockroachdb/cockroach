@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/rcrowley/go-metrics"
 )
 
 type sinkTelemetryData struct {
@@ -217,10 +216,10 @@ func (r *telemetryMetricsRecorder) newParallelIOMetricsRecorder() parallelIOMetr
 	return r.inner.newParallelIOMetricsRecorder()
 }
 
-func (r *telemetryMetricsRecorder) getKafkaThrottlingMetrics(
+func (r *telemetryMetricsRecorder) newKafkaMetricsRecorder(
 	settings *cluster.Settings,
-) metrics.Histogram {
-	return r.inner.getKafkaThrottlingMetrics(settings)
+) kafkaMetricsRecorder {
+	return r.inner.newKafkaMetricsRecorder(settings)
 }
 
 // continuousTelemetryInterval determines the interval at which each node emits telemetry events
