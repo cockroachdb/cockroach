@@ -111,6 +111,11 @@ type Builder struct {
 	// subqueries for statements inside a UDF.
 	planLazySubqueries bool
 
+	// tailCalls is used when building the last body statement of a routine. It
+	// identifies nested routines that are in tail-call position. This information
+	// is used to determine whether tail-call optimization is applicable.
+	tailCalls map[*memo.UDFCallExpr]struct{}
+
 	// -- output --
 
 	// flags tracks various properties of the plan accumulated while building.
