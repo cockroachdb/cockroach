@@ -11,13 +11,21 @@
 package appstatspb
 
 import (
+	"encoding/hex"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // StmtFingerprintID is the type of a Statement's fingerprint ID.
 type StmtFingerprintID uint64
+
+func (s StmtFingerprintID) String() string {
+	result := make([]byte, 0, 8)
+	encoding.EncodeUint64Ascending(result, uint64(s))
+	return hex.EncodeToString(result)
+}
 
 // ConstructStatementFingerprintID constructs an ID by hashing query with
 // constants redacted, its database, and if it was part of an

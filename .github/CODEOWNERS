@@ -564,6 +564,7 @@
 #!/pkg/util/                 @cockroachdb/unowned
 /pkg/util/log/               @cockroachdb/obs-inf-prs
 /pkg/util/addr/              @cockroachdb/obs-inf-prs
+/pkg/util/eventagg           @cockroachdb/obs-inf-prs
 /pkg/util/metric/            @cockroachdb/obs-inf-prs
 /pkg/util/stop/              @cockroachdb/kv-prs
 /pkg/util/grunning/          @cockroachdb/admission-control
