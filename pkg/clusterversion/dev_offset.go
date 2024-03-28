@@ -57,7 +57,7 @@ var devOffsetKeyStart = func() Key {
 	if forceDev && forceRelease {
 		panic(errors.AssertionFailedf("cannot set both COCKROACH_FORCE_DEV_VERSION and COCKROACH_TESTING_FORCE_RELEASE_BRANCH"))
 	}
-	isDev := (developmentBranch || forceDev) && !forceRelease
+	isDev := (DevelopmentBranch || forceDev) && !forceRelease
 	if !isDev {
 		// No dev offsets.
 		return numKeys + 1

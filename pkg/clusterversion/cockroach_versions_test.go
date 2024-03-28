@@ -96,7 +96,7 @@ func TestKeyConstants(t *testing.T) {
 
 func TestFinalVersion(t *testing.T) {
 	if finalVersion >= 0 {
-		require.False(t, developmentBranch, "final version set but developmentBranch is still set")
+		require.False(t, DevelopmentBranch, "final version set but developmentBranch is still set")
 		require.Equal(t, Latest, finalVersion, "finalVersion must match the minted latest version")
 	} else {
 		require.False(t, Latest.IsFinal(), "finalVersion not set but Latest is final")
