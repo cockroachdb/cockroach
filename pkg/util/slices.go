@@ -10,10 +10,7 @@
 
 package util
 
-import (
-	"golang.org/x/exp/constraints"
-	"golang.org/x/exp/slices"
-)
+import "golang.org/x/exp/constraints"
 
 // CombineUnique merges two ordered slices. If both slices have unique elements
 // then so does the resulting slice. More generally, each element is present
@@ -52,23 +49,42 @@ func CombineUnique[T constraints.Ordered](a, b []T) []T {
 	return a
 }
 
-// Filter returns a new slice that only contains elements from collection that
-// satisfy predicate.
+// Filter appends elements from collection that satisfy predicate to out and
+// returns it. Accepting out as a parameter allows callers to fine tune
+// allocation performance.
 //
-//	// Filter in place
-//	numbers = Filter(numbers, isEven)
-//	// Filter into a new slice
-//	odds := Filter(numbers, isEven)
-func Filter[T any](collection []T, predicate func(T) bool) []T {
-	i := 0
-	out := make([]T, len(collection))
-	for j := range collection {
-		if predicate(collection[j]) {
-			out[i] = collection[j]
-			i++
+//	// As a special case, if out == nil, a new slice the size of collection will be
+//	// allocated and returned. The following two statements are equivalent.
+//	even := Filter(numbers, isEven, nil)
+//	even := Filter(numbers, isEven, make([]int, 0, len(numbers))
+//
+//	// Force append to resize if any matching elements are found.
+//	_ := Filter(numbers, isEven, []int{})
+//
+//	// Zero allocations, reuses the original slice.
+//	numbers = Filter(numbers, isEven, numbers[:0])
+//
+//	// Exactly one allocation if we know/guessed the number of elements that
+//	// satisfy the predicate (e.g. we did a "first pass" over it).
+//	even := Filter(numbers, isEven, make([]int, 0, 10))
+//
+//	// We optimistically halve the slice size, but allocate 1 extra time if
+//	// it doesn't work out.
+//	even := Filter(numbers, isEven, make([]int, 0, len(numbers)/2)
+func Filter[T any](collection []T, predicate func(T) bool, out []T) []T {
+	// Special/Ergonomic case. If out is nil, optimistically guess that we'll not
+	// be filtering many values.
+	if out == nil {
+		out = make([]T, 0, len(collection))
+	}
+
+	for i := range collection {
+		if predicate(collection[i]) {
+			out = append(out, collection[i])
 		}
 	}
-	return slices.Clip(out[:i])
+
+	return out
 }
 
 // Map returns a new slice containing the results of fn for each element within
