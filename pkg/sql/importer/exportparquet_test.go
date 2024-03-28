@@ -36,9 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	crlparquet "github.com/cockroachdb/cockroach/pkg/util/parquet"
+	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/fraugster/parquet-go/parquet"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,10 +66,6 @@ type parquetTest struct {
 
 	// cols provides the expected column name and type
 	cols colinfo.ResultColumns
-
-	// colFieldRepType provides the expected parquet repetition type of each column in
-	// the parquet file.
-	colFieldRepType []parquet.FieldRepetitionType
 
 	// datums provides the expected values of the parquet file.
 	datums []tree.Datums
@@ -112,7 +107,7 @@ func validateParquetFile(
 		test.datums = make([]tree.Datums, 0)
 	}
 
-	meta, readDatums, err := crlparquet.ReadFile(paths[0])
+	meta, readDatums, err := parquet.ReadFile(paths[0])
 	require.NoError(t, err)
 
 	require.Equal(t, len(test.cols), meta.NumCols)
@@ -242,7 +237,7 @@ func TestRandomParquetExports(t *testing.T) {
 					for _, col := range cols {
 						// TODO(#104278): don't call this function to check if a type is supported.
 						// We should explicitly use the ones supported by  util/parquet).
-						_, err := importer.NewParquetColumn(col.Typ, "", false)
+						_, err := parquet.NewSchema([]string{"test"}, []*types.T{col.Typ})
 						if err != nil {
 							_, err = sqlDB.DB.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tree.NameString(tableName), tree.NameString(col.Name)))
 							if err != nil {
@@ -319,17 +314,10 @@ INDEX (y))`)
 			stmt: `EXPORT INTO PARQUET 'nodelocal://1/colname' FROM SELECT avg(z), min(y) AS baz
 							FROM foo`,
 		},
-		// TODO(#104279): when the underlying library supports repetition type required,
-		// update this test.
 		{
 			filePrefix: "nullable",
 			stmt: `EXPORT INTO PARQUET 'nodelocal://1/nullable' FROM SELECT y,z,x
 							FROM foo`,
-			colFieldRepType: []parquet.FieldRepetitionType{
-				parquet.FieldRepetitionType_OPTIONAL,
-				parquet.FieldRepetitionType_OPTIONAL,
-				parquet.FieldRepetitionType_OPTIONAL,
-			},
 		},
 		{
 			// TODO (mb): switch one of the values in the array to NULL once the
