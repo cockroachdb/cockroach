@@ -85,6 +85,14 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 				))
 			}
 		}
+		tab := m.Metadata().Table(t.Table)
+		for c, ok := t.Cols.Next(0); ok; c, ok = t.Cols.Next(c + 1) {
+			ord := t.Table.ColumnOrdinal(c)
+			switch k := tab.Column(ord).Kind(); k {
+			case cat.WriteOnly, cat.DeleteOnly:
+				panic(errors.AssertionFailedf("unexpected scan of %s column", k))
+			}
+		}
 
 	case *ProjectExpr:
 		if !t.Passthrough.SubsetOf(t.Input.Relational().OutputCols) {
