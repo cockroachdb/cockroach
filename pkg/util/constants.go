@@ -172,11 +172,9 @@ func ConstantWithMetamorphicTestBoolWithoutLogging(name string, defaultValue boo
 // value is included in the random choice.
 //
 // The given name is used for logging.
-func ConstantWithMetamorphicTestChoice(
-	name string, defaultValue interface{}, otherValues ...interface{},
-) interface{} {
+func ConstantWithMetamorphicTestChoice[T any](name string, defaultValue T, otherValues ...T) T {
 	if metamorphicBuild {
-		values := append([]interface{}{defaultValue}, otherValues...)
+		values := append([]T{defaultValue}, otherValues...)
 		rng.Lock()
 		defer rng.Unlock()
 		value := values[rng.r.Int63n(int64(len(values)))]
@@ -186,6 +184,6 @@ func ConstantWithMetamorphicTestChoice(
 	return defaultValue
 }
 
-func logMetamorphicValue(name string, value interface{}) {
+func logMetamorphicValue(name string, value any) {
 	fmt.Fprintf(os.Stderr, "initialized metamorphic constant %q with value %v\n", name, value)
 }
