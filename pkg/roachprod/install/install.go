@@ -17,6 +17,7 @@ import (
 	"io"
 	"sort"
 
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
@@ -194,5 +195,9 @@ func InstallTool(
 	}
 	// Ensure that we early exit if any of the shell statements fail.
 	cmd = "set -exuo pipefail;" + cmd
-	return c.Run(ctx, l, stdout, stderr, WithNodes(nodes), "installing "+softwareName, cmd)
+	if err := c.Run(ctx, l, stdout, stderr, WithNodes(nodes), "installing "+softwareName, cmd); err != nil {
+		return rperrors.TransientFailure(err, "install_flake")
+	}
+
+	return nil
 }
