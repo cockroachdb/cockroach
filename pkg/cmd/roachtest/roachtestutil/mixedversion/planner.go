@@ -176,6 +176,11 @@ const (
 // any mixedversion test plan.
 var planMutators = []mutator{
 	preserveDowngradeOptionRandomizerMutator{},
+	newClusterSettingMutator(
+		"kv.expiration_leases_only.enabled",
+		[]bool{true, false},
+		clusterSettingMinimumVersion("v23.1.0"),
+	),
 }
 
 // Plan returns the TestPlan used to upgrade the cluster from the
