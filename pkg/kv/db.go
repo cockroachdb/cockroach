@@ -1164,7 +1164,9 @@ func getOneRow(runErr error, b *Batch) (KeyValue, error) {
 func IncrementValRetryable(ctx context.Context, db *DB, key roachpb.Key, inc int64) (int64, error) {
 	var err error
 	var res KeyValue
-	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.Closer = db.Context().Stopper.ShouldQuiesce()
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		res, err = db.Inc(ctx, key, inc)
 		if errors.HasType(err, (*kvpb.UnhandledRetryableError)(nil)) ||
 			errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
