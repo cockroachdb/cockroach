@@ -80,8 +80,8 @@ func ParseAndRequireString(
 	case types.JsonFamily:
 		d, err = ParseDJSON(s)
 	case types.OidFamily:
-		if t.Oid() != oid.T_oid && s == ZeroOidValue {
-			d = WrapAsZeroOid(t)
+		if t.Oid() != oid.T_oid && s == UnknownOidName {
+			d = NewDOidWithType(UnknownOidValue, t)
 		} else {
 			d, err = ParseDOidAsInt(s)
 		}
