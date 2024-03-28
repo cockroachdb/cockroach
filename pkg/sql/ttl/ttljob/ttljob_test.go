@@ -1107,7 +1107,8 @@ func TestMakeTTLJobDescription(t *testing.T) {
 			createTable := getCreateTable(testCase.tableSelectBatchSize)
 			th.sqlDB.Exec(t, createTable)
 			th.waitForScheduledJob(t, jobs.StatusSucceeded, "")
-			rows := th.sqlDB.QueryStr(t, "SELECT description FROM [SHOW JOBS] WHERE job_type = 'ROW LEVEL TTL'")
+			rows := th.sqlDB.QueryStr(t, "SELECT description FROM [SHOW JOBS SELECT id FROM system.jobs WHERE job_type = 'ROW LEVEL TTL']")
+			t.Log(rows)
 			require.Len(t, rows, 1)
 			row := rows[0]
 			require.Contains(t, row[0], fmt.Sprintf("LIMIT %d", testCase.jobSelectBatchSize))
