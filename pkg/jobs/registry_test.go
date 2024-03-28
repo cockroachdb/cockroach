@@ -724,7 +724,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		jobMetrics               *JobTypeMetrics
 		adopted                  *metric.Counter
 		resumed                  *metric.Counter
-		afterJobStateMachineKnob func()
+		afterJobStateMachineKnob func(id jobspb.JobID)
 		// expectImmediateRetry is true if the test should expect immediate
 		// resumption on retry, such as after pausing and resuming job.
 		expectImmediateRetry bool
@@ -899,7 +899,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	t.Run("running", func(t *testing.T) {
 		ctx := context.Background()
 		bti := BackoffTestInfra{}
-		bti.afterJobStateMachineKnob = func() {
+		bti.afterJobStateMachineKnob = func(_ jobspb.JobID) {
 			if bti.done.Load().(bool) {
 				return
 			}
@@ -928,7 +928,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			bti.errCh <- nil
 			<-bti.transitionCh
 		}
-		bti.afterJobStateMachineKnob = func() {
+		bti.afterJobStateMachineKnob = func(jobspb.JobID) {
 			if bti.done.Load().(bool) {
 				return
 			}
@@ -954,7 +954,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	t.Run("revert on fail", func(t *testing.T) {
 		ctx := context.Background()
 		bti := BackoffTestInfra{}
-		bti.afterJobStateMachineKnob = func() {
+		bti.afterJobStateMachineKnob = func(jobspb.JobID) {
 			if bti.done.Load().(bool) {
 				return
 			}
@@ -1012,7 +1012,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			bti.errCh <- nil
 			<-bti.transitionCh
 		}
-		bti.afterJobStateMachineKnob = func() {
+		bti.afterJobStateMachineKnob = func(jobspb.JobID) {
 			if bti.done.Load().(bool) {
 				return
 			}
