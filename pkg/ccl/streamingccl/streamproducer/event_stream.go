@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -71,6 +72,13 @@ type eventStream struct {
 
 	debug streampb.DebugProducerStatus
 }
+
+var quantize = settings.RegisterDurationSettingWithExplicitUnit(
+	settings.SystemOnly,
+	"physical_replication.producer.timestamp_granularity",
+	"the granularity at which replicated times are quantized to make tracking more efficient",
+	5*time.Second,
+)
 
 var _ eval.ValueGenerator = (*eventStream)(nil)
 
@@ -124,6 +132,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		}),
 		rangefeed.WithOnSSTable(s.onSSTable),
 		rangefeed.WithOnDeleteRange(s.onDeleteRange),
+		rangefeed.WithFrontierQuantized(quantize.Get(&s.execCfg.Settings.SV)),
 	}
 
 	initialTimestamp := s.spec.InitialScanTimestamp
