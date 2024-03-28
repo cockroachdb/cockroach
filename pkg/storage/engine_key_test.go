@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -329,6 +331,162 @@ var interestingEngineKeys = [][]byte{
 		Strength: lock.Exclusive,
 		TxnUUID:  uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8")),
 	}),
+}
+
+func TestEngineKeyVerifyMVCC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	b := eng.NewBatch()
+	defer b.Close()
+
+	// Test MVCC Key.
+	k := pointKey("mvccKey", 1)
+	v := MVCCValue{Value: roachpb.MakeValueFromString("test")}
+	v.Value.InitChecksum(k.Key)
+	require.NoError(t, b.PutMVCC(k, v))
+	r, err := NewBatchReader(b.Repr())
+	require.NoError(t, err)
+	require.True(t, r.Next())
+	ek, _ := r.EngineKey()
+	require.NoError(t, ek.Verify(r.Value()))
+	// Simulate data corruption
+	r.value[len(r.value)-1]++
+	require.ErrorContains(t, ek.Verify(r.Value()), "invalid checksum")
+}
+
+func TestEngineKeyVerifyLockTableKV(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	b := eng.NewBatch()
+	defer b.Close()
+
+	// Test Lock table Key.
+	lk := LockTableKey{
+		Key:      keys.RangeDescriptorKey(roachpb.RKey("baz")), // causes a doubly-local range local key
+		Strength: lock.Exclusive,
+		TxnUUID:  uuid.MakeV4(),
+	}
+	mvccValue := MVCCValue{
+		Value: roachpb.MakeValueFromString("test"),
+	}
+	mvccValue.Value.InitChecksum(lk.Key)
+	ek, _ := lk.ToEngineKey(nil)
+	meta := enginepb.MVCCMetadata{
+		RawBytes: mvccValue.Value.RawBytes,
+	}
+	buf := make([]byte, meta.Size())
+	n, _ := protoutil.MarshalToSizedBuffer(&meta, buf)
+	require.NoError(t, b.PutEngineKey(ek, buf[:n]))
+	r, err := NewBatchReader(b.Repr())
+	require.NoError(t, err)
+	require.True(t, r.Next())
+	require.NoError(t, ek.Verify(r.Value()))
+	// Simulate data corruption
+	r.value[len(r.value)-1]++
+	require.ErrorContains(t, ek.Verify(r.Value()), "invalid checksum")
+}
+
+// BenchmarkEngineKeyVerify evaluates EngineKey's performance
+// on verifying checksums on different keys value types.
+// Example results with apple m3 cpu:
+// BenchmarkEngineKeyVerify/SimpleMVCCValue
+// BenchmarkEngineKeyVerify/SimpleMVCCValue-12         	  662324	      1806 ns/op
+// BenchmarkEngineKeyVerify/ExtendedMVCCValue
+// BenchmarkEngineKeyVerify/ExtendedMVCCValue-12       	  645627	      1817 ns/op
+// BenchmarkEngineKeyVerify/LockTableKey
+// BenchmarkEngineKeyVerify/LockTableKey-12            	  587613	      2024 ns/op
+func BenchmarkEngineKeyVerify(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
+	type testKV struct {
+		ek  EngineKey
+		val []byte
+	}
+	type testCase struct {
+		name string
+		testKV
+	}
+
+	mustDecodeEngineKey := func(raw []byte) EngineKey {
+		ek, ok := DecodeEngineKey(raw)
+		require.True(b, ok)
+		return ek
+	}
+	mustEncodeMVCC := func(key MVCCKey, v MVCCValue) testKV {
+		encodedKey := EncodeMVCCKey(key)
+		encodedVal, err := EncodeMVCCValue(v)
+		require.NoError(b, err)
+		return testKV{ek: mustDecodeEngineKey(encodedKey), val: encodedVal}
+	}
+	mustEncodeLockTable := func(key LockTableKey, meta *enginepb.MVCCMetadata, v MVCCValue) testKV {
+		encodedMVCCValue, err := EncodeMVCCValue(v)
+		require.NoError(b, err)
+		meta.RawBytes = encodedMVCCValue
+		encodedVal, err := protoutil.Marshal(meta)
+		require.NoError(b, err)
+		ek, _ := key.ToEngineKey(nil)
+		return testKV{ek: ek, val: encodedVal}
+	}
+
+	testCases := []testCase{
+		{
+			name: "SimpleMVCCValue",
+			testKV: mustEncodeMVCC(
+				MVCCKey{
+					Key:       roachpb.Key("foobar"),
+					Timestamp: hlc.Timestamp{WallTime: 1711383740550067000, Logical: 2},
+				},
+				MVCCValue{Value: roachpb.Value{RawBytes: []byte("hello world")}},
+			),
+		},
+		{
+			name: "ExtendedMVCCValue",
+			testKV: mustEncodeMVCC(
+				MVCCKey{
+					Key:       roachpb.Key("foobar"),
+					Timestamp: hlc.Timestamp{WallTime: 1711383740550067000, Logical: 2},
+				},
+				MVCCValue{
+					MVCCValueHeader: enginepb.MVCCValueHeader{
+						LocalTimestamp:   hlc.ClockTimestamp{WallTime: 1711383740550069000},
+						OmitInRangefeeds: true,
+					},
+					Value: roachpb.Value{RawBytes: []byte("hello world")},
+				},
+			),
+		},
+		{
+			name: "LockTableKey",
+			testKV: mustEncodeLockTable(
+				LockTableKey{
+					Key:      roachpb.Key("foobar"),
+					Strength: lock.Exclusive,
+					TxnUUID:  uuid.UUID{},
+				},
+				&enginepb.MVCCMetadata{
+					KeyBytes: 100,
+					ValBytes: 100,
+				},
+				MVCCValue{
+					Value: roachpb.Value{RawBytes: []byte("hello world")},
+				},
+			),
+		},
+	}
+
+	for _, tc := range testCases {
+		b.Run(tc.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = tc.ek.Verify(tc.val)
+			}
+		})
+	}
 }
 
 // FuzzEngineKeysInvariants fuzz tests various functions over engine keys,
