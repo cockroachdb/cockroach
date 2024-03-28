@@ -1561,6 +1561,11 @@ func (n *Node) getLocalityComparison(
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
+	// We can't lookup the locality of SQL gateway nodes for cross locality
+	// metrics, ignore them.
+	if gatewayNodeID == 0 {
+		return roachpb.LocalityComparisonType_UNDEFINED
+	}
 	gatewayNodeDesc, err := gossip.GetNodeDescriptor(gatewayNodeID)
 	if err != nil {
 		log.VInfof(ctx, 2,
