@@ -780,6 +780,12 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.registry,
 	)
 
+	// Start the job scheduler now that the SQL Server and
+	// external storage is initialized.
+	if err := s.initJobScheduler(ctx); err != nil {
+		return err
+	}
+
 	// If enabled, start reporting diagnostics.
 	if s.sqlServer.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut {
 		s.startDiagnostics(workersCtx)
@@ -848,6 +854,28 @@ func (s *SQLServerWrapper) serveConn(
 	default:
 		return errors.AssertionFailedf("programming error: missing case %v", status.State)
 	}
+}
+
+// initJobScheduler starts the job scheduler. This must be called
+// after sqlServer.preStart and after our external storage providers
+// have been initialized.
+//
+// TODO(ssd): We need to clean up the ordering/ownership here. The SQL
+// server owns the job scheduler because the job scheduler needs an
+// internal executor. But, the topLevelServer owns initialization of
+// the external storage providers.
+//
+// TODO(ssd): Remove duplication with *topLevelServer.
+func (s *SQLServerWrapper) initJobScheduler(ctx context.Context) error {
+	// The job scheduler may immediately start jobs that require
+	// external storage providers to be available. We expect the
+	// server start up ordering to ensure this. Hitting this error
+	// is a programming error somewhere in server startup.
+	if err := s.externalStorageBuilder.assertInitComplete(); err != nil {
+		return err
+	}
+	s.sqlServer.startJobScheduler(ctx, s.cfg.TestingKnobs)
+	return nil
 }
 
 // AcceptClients starts listening for incoming SQL clients over the network.

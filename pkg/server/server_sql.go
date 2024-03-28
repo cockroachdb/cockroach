@@ -1664,31 +1664,6 @@ func (s *SQLServer) preStart(
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos)
 
-	// Start scheduled jobs daemon.
-	jobs.StartJobSchedulerDaemon(
-		ctx,
-		stopper,
-		s.metricsRegistry,
-		&scheduledjobs.JobExecutionConfig{
-			Settings:     s.execCfg.Settings,
-			DB:           s.execCfg.InternalDB,
-			TestingKnobs: knobs.JobsTestingKnobs,
-			PlanHookMaker: func(opName string, txn *kv.Txn, user username.SQLUsername) (interface{}, func()) {
-				// This is a hack to get around a Go package dependency cycle. See comment
-				// in sql/jobs/registry.go on planHookMaker.
-				return sql.NewInternalPlanner(
-					opName,
-					txn,
-					user,
-					&sql.MemoryMetrics{},
-					s.execCfg,
-					sessiondatapb.SessionData{},
-				)
-			},
-		},
-		scheduledjobs.ProdJobSchedulerEnv,
-	)
-
 	scheduledlogging.Start(
 		ctx, stopper, s.execCfg.InternalDB, s.execCfg.Settings,
 		s.execCfg.CaptureIndexUsageStatsKnobs,
@@ -1722,6 +1697,32 @@ func (s *SQLServer) preStart(
 	}))
 
 	return nil
+}
+
+func (s *SQLServer) startJobScheduler(ctx context.Context, knobs base.TestingKnobs) {
+	jobs.StartJobSchedulerDaemon(
+		ctx,
+		s.stopper,
+		s.metricsRegistry,
+		&scheduledjobs.JobExecutionConfig{
+			Settings:     s.execCfg.Settings,
+			DB:           s.execCfg.InternalDB,
+			TestingKnobs: knobs.JobsTestingKnobs,
+			PlanHookMaker: func(opName string, txn *kv.Txn, user username.SQLUsername) (interface{}, func()) {
+				// This is a hack to get around a Go package dependency cycle. See comment
+				// in sql/jobs/registry.go on planHookMaker.
+				return sql.NewInternalPlanner(
+					opName,
+					txn,
+					user,
+					&sql.MemoryMetrics{},
+					s.execCfg,
+					sessiondatapb.SessionData{},
+				)
+			},
+		},
+		scheduledjobs.ProdJobSchedulerEnv,
+	)
 }
 
 // SQLInstanceID returns the ephemeral ID assigned to each SQL instance. The ID
