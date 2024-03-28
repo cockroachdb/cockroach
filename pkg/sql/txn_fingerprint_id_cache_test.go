@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -45,7 +46,7 @@ func TestTxnFingerprintIDCacheDataDriven(t *testing.T) {
 				d.ScanArgs(t, "capacity", &capacity)
 
 				st := cluster.MakeTestingClusterSettings()
-				txnFingerprintIDCache = NewTxnFingerprintIDCache(ctx, st, nil /* acc */)
+				txnFingerprintIDCache = NewTxnFingerprintIDCache(ctx, st, mon.NewStandaloneUnlimitedAccount())
 
 				TxnFingerprintIDCacheCapacity.Override(ctx, &st.SV, int64(capacity))
 
