@@ -196,6 +196,18 @@ func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) 
 	return nil
 }
 
+func (p *Provider) CreateLoadBalancer(*logger.Logger, vm.List, int) error {
+	return nil
+}
+
+func (p *Provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
+	return nil
+}
+
+func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddress, error) {
+	return nil, nil
+}
+
 // Create just creates fake host-info entries in the local filesystem
 func (p *Provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, unusedProviderOpts vm.ProviderOpts,
