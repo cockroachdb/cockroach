@@ -64,6 +64,11 @@ type Cluster interface {
 	StopCockroachGracefullyOnNode(ctx context.Context, l *logger.Logger, node int) error
 	NewMonitor(context.Context, ...option.Option) Monitor
 
+	// Starting virtual clusters.
+
+	StartServiceForVirtualClusterE(ctx context.Context, l *logger.Logger, externalNodes option.NodeListOption, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option) error
+	StartServiceForVirtualCluster(ctx context.Context, l *logger.Logger, externalNodes option.NodeListOption, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option)
+
 	// Hostnames and IP addresses of the nodes.
 
 	InternalAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
@@ -81,10 +86,11 @@ type Cluster interface {
 	Conn(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) *gosql.DB
 	ConnE(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) (*gosql.DB, error)
 
-	// URLs for the Admin UI.
+	// URLs and Ports for the Admin UI.
 
 	InternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 	ExternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
+	AdminUIPorts(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]int, error)
 
 	// Running commands on nodes.
 
