@@ -3,6 +3,7 @@
 
 overlapping span=[a,z)
 ----
+[a,z):FALLBACK
 
 apply
 set [b,d):A
@@ -40,6 +41,7 @@ deleted [f,g)
 
 overlapping span=[f,g)
 ----
+[f,g):FALLBACK
 
 overlapping span=[b,j)
 ----

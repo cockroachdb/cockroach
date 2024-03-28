@@ -1,5 +1,39 @@
 # Test basic operations performed with system span configurations.
 
+# Check that no overlapping span config results in the fallback combined with
+# system span configs to be applied.
+overlapping span=[a,z)
+----
+[a,z):FALLBACK
+
+apply
+set {entire-keyspace}:X
+----
+added {entire-keyspace}:X
+
+overlapping span=[a,z)
+----
+[a,z):FALLBACK+X
+
+apply
+set {source=1,target=1}:Y
+----
+added {source=1,target=1}:Y
+
+overlapping span=[a,z)
+----
+[a,z):FALLBACK+X+Y
+
+apply
+delete {entire-keyspace}
+----
+deleted {entire-keyspace}
+
+apply
+delete {source=1,target=1}
+----
+deleted {source=1,target=1}
+
 apply
 set [a,c):A
 ----
@@ -18,6 +52,10 @@ conf=A+X
 get key=c
 ----
 conf=FALLBACK+X
+
+overlapping span=[c,d)
+----
+[c,d):FALLBACK+X
 
 # Ensure no-ops appear as such.
 apply
