@@ -1,4 +1,5 @@
-store store-id=2 attrs=ssd locality-tiers=region=b,zone=b1 node-id=1
+store 
+store-id=2 attrs=ssd locality-tiers=region=b,zone=b1 node-id=1
 ----
 
 span-config name=multi-region1 num-replicas=5 num-voters=3
@@ -47,7 +48,8 @@ voter-constraints:
     non-voters:
 diversity: voter 1.000000, all 1.000000
 
-store store-id=3 attrs=disk locality-tiers=region=b,zone=b1 node-id=1
+store
+store-id=3 attrs=disk locality-tiers=region=b,zone=b1 node-id=1
 ----
 
 analyze-constraints config-name=multi-region1
@@ -100,13 +102,10 @@ replaceVoterRebalance replace=2
 replaceVoterRebalance replace=3
 	err: expected enough voters and non-voters but have 2/3 voters and 0/2 non-voters
 
-store store-id=5 attrs=ssd locality-tiers=region=d,zone=d2 node-id=2
-----
-
-store store-id=6 attrs=disk locality-tiers=region=a,zone=a1 node-id=3
-----
-
-store store-id=7 attrs=disk locality-tiers=region=a,zone=a1 node-id=4
+store 
+store-id=5 attrs=ssd locality-tiers=region=d,zone=d2 node-id=2
+store-id=6 attrs=disk locality-tiers=region=a,zone=a1 node-id=3
+store-id=7 attrs=disk locality-tiers=region=a,zone=a1 node-id=4
 ----
 
 # Stores 3, 6, 7 are not ssd.
@@ -171,13 +170,10 @@ replaceNonVoterRebalance replace=5
 replaceNonVoterRebalance replace=6
 	err: expected enough voters and non-voters but have 2/3 voters and 2/2 non-voters
 
-store store-id=8 attrs=tape locality-tiers=region=d,zone=d2 node-id=5
-----
-
-store store-id=9 attrs=tape locality-tiers=region=d node-id=6
-----
-
-store store-id=10 attrs=tape locality-tiers=region=a,zone=a3 node-id=7
+store 
+store-id=8 attrs=tape locality-tiers=region=d,zone=d2 node-id=5
+store-id=9 attrs=tape locality-tiers=region=d node-id=6
+store-id=10 attrs=tape locality-tiers=region=a,zone=a3 node-id=7
 ----
 
 # Stores 3, 6, 7, 8, 9, 10 are not ssd.
@@ -252,7 +248,8 @@ replaceNonVoterRebalance replace=6
 replaceNonVoterRebalance replace=8
 	err: expected only matched constraints but found under=1 match=0 over=2
 
-store store-id=11 attrs=flash locality-tiers=region=c,zone=c2 node-id=8
+store 
+store-id=11 attrs=flash locality-tiers=region=c,zone=c2 node-id=8
 ----
 
 # The constraints are all matched and there is the correct number of voters and

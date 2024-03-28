@@ -42,15 +42,15 @@ type loadValue int64
 // dimension.
 type loadVector [numLoadDimensions]loadValue
 
-func (lv *loadVector) add(other loadVector) {
-	for i := range other {
-		(*lv)[i] += other[i]
+func (lv *loadVector) sub(other loadVector) {
+	for i := 0; i < int(numLoadDimensions); i++ {
+		lv[i] -= other[i]
 	}
 }
 
-func (lv *loadVector) subtract(other loadVector) {
-	for i := range other {
-		(*lv)[i] -= other[i]
+func (lv *loadVector) add(other loadVector) {
+	for i := 0; i < int(numLoadDimensions); i++ {
+		lv[i] += other[i]
 	}
 }
 
@@ -88,19 +88,20 @@ const (
 
 type secondaryLoadVector [numSecondaryLoadDimensions]loadValue
 
-func (lv *secondaryLoadVector) add(other secondaryLoadVector) {
-	for i := range other {
-		(*lv)[i] += other[i]
+func (slv *secondaryLoadVector) add(other secondaryLoadVector) {
+	for i := 0; i < int(numSecondaryLoadDimensions); i++ {
+		slv[i] += other[i]
 	}
 }
 
-func (lv *secondaryLoadVector) subtract(other secondaryLoadVector) {
-	for i := range other {
-		(*lv)[i] -= other[i]
+func (slv *secondaryLoadVector) sub(other secondaryLoadVector) {
+	for i := 0; i < int(numSecondaryLoadDimensions); i++ {
+		slv[i] -= other[i]
 	}
 }
 
 type rangeLoad struct {
+	roachpb.RangeID
 	load loadVector
 	// Nanos per second. raftCPU <= load[cpu]. Handling this as a special case,
 	// rather than trying to (over) generalize, since currently this is the only
@@ -149,10 +150,17 @@ type storeLoad struct {
 	// decision on what ranges to shed for an overloaded node -- it simply tries
 	// to find new homes for the ranges in this top-k. We decentralize this
 	// decision to reduce the time complexity of rebalancing.
-	topKRanges map[roachpb.RangeID]rangeLoad
+	topKRanges []rangeLoad
 	// Mean load for the non-top-k ranges. This is used to estimate the load
 	// change for transferring them.
 	meanNonTopKRangeLoad rangeLoad
+}
+
+func newStoreLoad(storeID roachpb.StoreID, nodeID roachpb.NodeID) storeLoad {
+	return storeLoad{
+		StoreID: storeID,
+		NodeID:  nodeID,
+	}
 }
 
 // nodeLoad is the load information for a node. Roughly, this is the
@@ -468,6 +476,7 @@ var _ = meansForStoreSetSlicePoolImpl{}.newEntry
 var _ = meansForStoreSetSlicePoolImpl{}.releaseEntry
 var _ = meansForStoreSetAllocator{}.ensureNonNilMapEntry
 var _ = (&meansMemo{}).clear
+var _ = newStoreLoad
 var _ = rangeLoad{}.load
 var _ = rangeLoad{}.raftCPU
 var _ = storeLoad{}.StoreID
