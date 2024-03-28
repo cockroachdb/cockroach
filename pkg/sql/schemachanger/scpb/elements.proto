@@ -19,6 +19,7 @@ import "sql/catalog/catpb/function.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
 import "geo/geopb/config.proto";
+import "config/zonepb/zone.proto";
 
 option (gogoproto.equal_all) = true;
 
@@ -124,6 +125,7 @@ message ElementProto {
     DatabaseRoleSetting database_role_setting = 81 [(gogoproto.moretags) = "parent:\"Database\""];
     DatabaseComment database_comment = 82 [(gogoproto.moretags) = "parent:\"Database\""];
     DatabaseData database_data = 83 [(gogoproto.customname) = "DatabaseData", (gogoproto.moretags) = "parent:\"Database\""];
+    DatabaseZoneConfig database_zone_config = 84 [(gogoproto.moretags) = "parent:\"Database\""];
 
     // Schema elements.
     SchemaParent schema_parent = 90 [(gogoproto.moretags) = "parent:\"Schema\""];
@@ -627,6 +629,18 @@ message CompositeTypeAttrName {
 message CompositeTypeAttrType {
   uint32 composite_type_id = 1 [(gogoproto.customname) = "CompositeTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   TypeT embedded_type_t = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// DatabaseZoneConfig represents a database's zone configuration.
+message DatabaseZoneConfig {
+  uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.config.zonepb.ZoneConfig zone_config = 2;
+
+  // `seq_num` is used to differentiate different zone config elements tied to
+  // the same database. E.g. If we attempt to update a database's zone config,
+  // our solution is to drop the existing element and add a new element, with
+  // different `seq_num`.
+  uint32 seq_num = 3;
 }
 
 message TableZoneConfig {

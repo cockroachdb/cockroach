@@ -93,3 +93,12 @@ func RequireSystemTenantOrClusterSetting(
 		"Feature was disabled by the system operator."),
 		"Feature flag: %s", setting.Name())
 }
+
+// DeclarativeZoneConfig allows virtual clusters to use the declarative
+// schema changer to modify all type of constraints.
+var DeclarativeZoneConfig = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.virtual_cluster.allow_declarative_schema_changer.enabled",
+	"enable the use of ALTER CONFIGURE ZONE in declarative schema changer",
+	false,
+)

@@ -11,8 +11,6 @@
 package scbuildstmt
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
@@ -77,7 +75,7 @@ func panicIfInvalidNonComputedColumnExpr(
 	}
 
 	colType := mustRetrieveColumnTypeElem(b, tbl.TableID, col.ColumnID)
-	typedNewExpr, _, err := sanitizeColumnExpression(context.Background(), b.SemaCtx(), newExpr, colType, schemaChange)
+	typedNewExpr, _, err := sanitizeColumnExpression(b, b.SemaCtx(), newExpr, colType, schemaChange)
 	if err != nil {
 		panic(err)
 	}
@@ -123,13 +121,13 @@ func checkSequenceCrossRef(
 }
 
 func sanitizeColumnExpression(
-	ctx context.Context,
+	b BuildCtx,
 	semaCtx *tree.SemaContext,
 	expr tree.Expr,
 	col *scpb.ColumnType,
 	context tree.SchemaExprContext,
 ) (tree.TypedExpr, string, error) {
-	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(ctx, expr, col.Type, context, semaCtx, volatility.Volatile, false /*allowAssignmentCast*/)
+	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(b, expr, col.Type, context, semaCtx, volatility.Volatile, false /*allowAssignmentCast*/)
 	if err != nil {
 		return nil, "", pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
 	}

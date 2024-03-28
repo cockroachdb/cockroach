@@ -160,6 +160,17 @@ func (w *walkCtx) walkDatabase(db catalog.DatabaseDescriptor) {
 		w.backRefs.Add(id)
 		return nil
 	})
+	zoneConfig, err := w.zoneConfigReader.GetZoneConfig(w.ctx, db.GetID())
+	if err != nil {
+		panic(err)
+	}
+	if zoneConfig != nil {
+		w.ev(scpb.Status_PUBLIC, &scpb.DatabaseZoneConfig{
+			DatabaseID: db.GetID(),
+			ZoneConfig: zoneConfig.ZoneConfigProto(),
+			SeqNum:     0,
+		})
+	}
 }
 
 func (w *walkCtx) walkSchema(sc catalog.SchemaDescriptor) {
