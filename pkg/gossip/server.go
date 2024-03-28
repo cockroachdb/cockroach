@@ -196,6 +196,12 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		case err := <-errCh:
 			return err
 		case <-ready:
+			// Wait out the gossipPropagateInfosDelay to accumulate more infos.
+			select {
+			case <-time.After(gossipPropagateInfosDelay):
+			case <-s.stopper.ShouldQuiesce():
+				return nil
+			}
 		}
 	}
 }

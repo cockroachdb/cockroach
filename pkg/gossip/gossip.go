@@ -123,6 +123,11 @@ const (
 	// we didn't need to tighten the last time we checked.
 	gossipTightenInterval = time.Second
 
+	// gossipPropagateInfosDelay is the delay between gossiping updated infos to
+	// peers. By delaying gossip requests and responses, we more effectively batch
+	// info updates and bound the amount of time we spend computing info deltas.
+	gossipPropagateInfosDelay = 10 * time.Millisecond
+
 	unknownNodeID roachpb.NodeID = 0
 )
 

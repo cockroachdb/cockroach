@@ -377,6 +377,17 @@ func (c *client) gossip(
 		case <-initTimer.C:
 			maybeRegister()
 		case <-sendGossipChan:
+			// Wait out the gossipPropagateInfosDelay to accumulate more infos.
+			select {
+			case <-time.After(gossipPropagateInfosDelay):
+			case <-stopper.ShouldQuiesce():
+				return nil
+			}
+			// Try to clear the channel again, in case it was signaled while we slept.
+			select {
+			case <-sendGossipChan:
+			default:
+			}
 			if err := c.sendGossip(g, stream, count == 0); err != nil {
 				return err
 			}
