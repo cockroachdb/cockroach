@@ -516,7 +516,13 @@ func (r *Replica) adminSplitWithDescriptor(
 			var ba kv.Batch
 			ba.AddRawRequest(&req)
 			if err = r.store.DB().Run(ctx, &ba); err != nil {
-				return reply, errors.Wrapf(err, "failed to re-compute MVCCStats pre split")
+				// An error here is most likely because a descriptor mismatch was
+				// detected in cmd_recompute_stats. Unfortunately, that error is
+				// different from the descriptor-changed errors handled here in
+				// replica_command; the latter present as ConditionFailedError. We log
+				// the error here, and let the code below handle the descriptor-changed
+				// error coming from splitTxnAttempt.
+				log.Warningf(ctx, "failed to re-compute MVCCStats pre split: %v", err)
 			}
 		}
 
