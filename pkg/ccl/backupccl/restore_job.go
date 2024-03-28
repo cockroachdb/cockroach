@@ -322,6 +322,7 @@ func restore(
 	if details.ExperimentalOnline {
 		targetSize = targetOnlineRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
 	}
+	maxFileCount := maxFileCount.Get(&execCtx.ExecCfg().Settings.SV)
 
 	var filter spanCoveringFilter
 	if filter, err = func() (spanCoveringFilter, error) {
@@ -331,6 +332,7 @@ func restore(
 			job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
 			introducedSpanFrontier,
 			targetSize,
+			maxFileCount,
 			progressTracker.useFrontier)
 	}(); err != nil {
 		return roachpb.RowCount{}, err
