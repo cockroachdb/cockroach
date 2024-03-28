@@ -129,10 +129,10 @@ type LoggerFn = func(context.Context, string, ...interface{})
 // cluster to report special events to both a log and the terminal.
 type ShoutLoggerFn = func(context.Context, logpb.Severity, string, ...interface{})
 
-type serverSelection bool
+type serverSelection string
 
-const forSystemTenant serverSelection = false
-const forSecondaryTenant serverSelection = true
+const forSystemTenant serverSelection = "system"
+const forSecondaryTenant serverSelection = demoTenantName
 
 // NewDemoCluster instantiates a demo cluster. The caller must call
 // the .Close() method to clean up resources even if the
@@ -540,8 +540,8 @@ func (c *transientCluster) startTenantService(
 			SSLCertsDir:             c.demoDir,
 			DisableTLSForHTTP:       true,
 			EnableDemoLoginEndpoint: true,
-			StartingRPCAndSQLPort:   c.demoCtx.sqlPort(serverIdx, true) - secondaryTenantID,
-			StartingHTTPPort:        c.demoCtx.httpPort(serverIdx, true) - secondaryTenantID,
+			StartingRPCAndSQLPort:   c.demoCtx.sqlPort(serverIdx, forSecondaryTenant) - secondaryTenantID,
+			StartingHTTPPort:        c.demoCtx.httpPort(serverIdx, forSecondaryTenant) - secondaryTenantID,
 			Locality:                c.demoCtx.Localities[serverIdx],
 			TestingKnobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -949,7 +949,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 	// So by default we use :0 to auto-allocate ports.
 	args.Addr = "127.0.0.1:0"
 	if sqlPort := demoCtx.sqlPort(serverIdx, forSystemTenant); sqlPort != 0 {
-		rpcPort := demoCtx.rpcPort(serverIdx, false)
+		rpcPort := demoCtx.rpcPort(serverIdx, forSystemTenant)
 		args.Addr = fmt.Sprintf("127.0.0.1:%d", rpcPort)
 		args.SQLAddr = fmt.Sprintf("127.0.0.1:%d", sqlPort)
 		if !demoCtx.DisableServerController {
@@ -1548,6 +1548,18 @@ func (c *transientCluster) generateCerts(ctx context.Context, certsDir string) (
 func (c *transientCluster) getNetworkURLForServer(
 	ctx context.Context, serverIdx int, includeAppName bool, target serverSelection,
 ) (*pgurl.URL, error) {
+	return c.getNetworkURLForServerAndUser(ctx, serverIdx, includeAppName, c.adminUser, c.adminPassword, target, "")
+}
+
+func (c *transientCluster) getNetworkURLForServerAndUser(
+	ctx context.Context,
+	serverIdx int,
+	includeAppName bool,
+	user username.SQLUsername,
+	password string,
+	target serverSelection,
+	database string,
+) (*pgurl.URL, error) {
 	u := pgurl.New()
 	if includeAppName {
 		if err := u.SetOption("application_name", catconstants.ReportableAppNamePrefix+"cockroach demo"); err != nil {
@@ -1555,12 +1567,14 @@ func (c *transientCluster) getNetworkURLForServer(
 		}
 	}
 	sqlAddr := c.servers[serverIdx].AdvSQLAddr()
-	database := c.defaultDB
-	if target == forSecondaryTenant {
+	if target != forSystemTenant {
 		sqlAddr = c.tenantServers[serverIdx].SQLAddr()
 	}
-	if (target == forSystemTenant) && c.demoCtx.Multitenant {
-		database = catalogkeys.DefaultDatabaseName
+	if database == "" {
+		database = c.defaultDB
+		if (target == forSystemTenant) && c.demoCtx.Multitenant {
+			database = catalogkeys.DefaultDatabaseName
+		}
 	}
 
 	if err := c.extendURLWithTargetCluster(u, target); err != nil {
@@ -1570,7 +1584,7 @@ func (c *transientCluster) getNetworkURLForServer(
 	u.
 		WithNet(pgurl.NetTCP(host, port)).
 		WithDatabase(database).
-		WithUsername(c.adminUser.Normalized())
+		WithUsername(user.Normalized())
 
 	// For a demo cluster we don't use client TLS certs and instead use
 	// password-based authentication with the password pre-filled in the
@@ -1578,27 +1592,24 @@ func (c *transientCluster) getNetworkURLForServer(
 	if c.demoCtx.Insecure {
 		u.WithInsecure()
 	} else {
-		caCert := certnames.CACertFilename()
-		u.
-			WithAuthn(pgurl.AuthnPassword(true, c.adminPassword)).
-			WithTransport(pgurl.TransportTLS(
-				pgurl.TLSRequire,
-				filepath.Join(c.demoDir, caCert),
-			))
+		u.WithTransport(pgurl.TransportTLS(
+			pgurl.TLSRequire, filepath.Join(c.demoDir, certnames.CACertFilename())))
+
+		if password != "" {
+			u.WithAuthn(pgurl.AuthnPassword(true, password))
+		} else {
+			clientCert := filepath.Join(c.demoDir, certnames.ClientCertFilename(user))
+			clientKey := filepath.Join(c.demoDir, certnames.ClientKeyFilename(user))
+			u.WithAuthn(pgurl.AuthnClientCert(clientCert, clientKey))
+		}
 	}
 	return u, nil
 }
 
 func (c *transientCluster) extendURLWithTargetCluster(u *pgurl.URL, target serverSelection) error {
 	if c.demoCtx.Multitenant && !c.demoCtx.DisableServerController {
-		if target == forSecondaryTenant {
-			if err := u.SetOption("options", "-ccluster="+demoTenantName); err != nil {
-				return err
-			}
-		} else {
-			if err := u.SetOption("options", "-ccluster="+catconstants.SystemTenantName); err != nil {
-				return err
-			}
+		if err := u.SetOption("options", "-ccluster="+string(target)); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1878,7 +1889,7 @@ func (c *transientCluster) sockForServer(
 	if !c.useSockets {
 		return unixSocketDetails{}, nil
 	}
-	port := strconv.Itoa(c.demoCtx.sqlPort(serverIdx, false))
+	port := strconv.Itoa(c.demoCtx.sqlPort(serverIdx, forSystemTenant))
 	databaseName := c.defaultDB
 	if c.demoCtx.Multitenant {
 		// TODO(knz): for now, we only define the unix socket for the
@@ -2043,11 +2054,40 @@ func (c *transientCluster) ExpandShortDemoURLs(s string) string {
 	if !strings.Contains(s, "demo://") {
 		return s
 	}
-	u, err := c.getNetworkURLForServer(context.Background(), 0, false, forSystemTenant)
-	if err != nil {
-		return s
+
+	for _, match := range regexp.MustCompile(`demo://[a-zA-Z0-9:@/]+`).FindAllString(s, -1) {
+		parsed, err := url.Parse(match)
+		if err != nil {
+			continue
+		}
+
+		// If a node number if specified (using port number), use it.
+		idx := 0
+		if i, err := strconv.Atoi(parsed.Port()); err == nil && i > 0 && i <= len(c.servers) {
+			idx = i - 1
+		}
+
+		// By default we'll connect to the default demo user/pw, but use an explicit
+		// user/pw if specified. An empty pw will switch to client-cert auth.
+		user, password := c.adminUser, c.adminPassword
+		if parsed.User != nil {
+			user, err = username.MakeSQLUsernameFromUserInput(parsed.User.Username(), username.PurposeValidation)
+			if err != nil {
+				continue
+			}
+			password, _ = parsed.User.Password()
+		}
+
+		// Generate the new URL, then replace the demo one with it.
+		replaced, err := c.getNetworkURLForServerAndUser(context.Background(),
+			idx, false, user, password, serverSelection(parsed.Hostname()), strings.TrimPrefix(parsed.Path, "/"),
+		)
+		if err != nil {
+			continue
+		}
+		s = strings.ReplaceAll(s, match, replaced.String())
 	}
-	return regexp.MustCompile(`demo://([[:alnum:]]+)`).ReplaceAllString(s, strings.ReplaceAll(u.String(), "-ccluster%3Dsystem", "-ccluster%3D$1"))
+	return s
 }
 
 func (c *transientCluster) printURLs(
