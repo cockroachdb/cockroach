@@ -141,7 +141,7 @@ func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 		return rawStream(ctx, streamAddr, replicationProducerSpec.StreamID, spsBytes)
 	}
 
-	sub, err := client.Subscribe(ctx, replicationProducerSpec.StreamID,
+	sub, err := client.Subscribe(ctx, replicationProducerSpec.StreamID, 1,
 		spsBytes,
 		sps.InitialScanTimestamp,
 		hlc.Timestamp{})
