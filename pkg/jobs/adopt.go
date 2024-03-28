@@ -89,7 +89,7 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 	if err := r.db.Txn(dumpCtx, func(ctx context.Context, txn isql.Txn) error {
 		return WriteProtobinExecutionDetailFile(dumpCtx, resumerTraceFilename, &td, txn, jobID)
 	}); err != nil {
-		log.Warning(dumpCtx, "failed to write trace on resumer trace file")
+		log.Warningf(dumpCtx, "failed to write trace on resumer trace file: %v", err)
 	}
 }
 
@@ -468,7 +468,7 @@ func (r *Registry) runJob(
 	r.maybeClearLease(job, err)
 	r.maybeDumpTrace(ctx, resumer, job.ID())
 	if r.knobs.AfterJobStateMachine != nil {
-		r.knobs.AfterJobStateMachine()
+		r.knobs.AfterJobStateMachine(job.ID())
 	}
 	return err
 }

@@ -65,7 +65,7 @@ type TestingKnobs struct {
 	// AfterJobStateMachine is called once the running instance of the job has
 	// returned from the state machine that transitions it from one state to
 	// another.
-	AfterJobStateMachine func()
+	AfterJobStateMachine func(jobspb.JobID)
 
 	// TimeSource replaces registry's clock.
 	TimeSource *hlc.Clock

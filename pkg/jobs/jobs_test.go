@@ -176,7 +176,7 @@ type registryTestSuite struct {
 
 	// afterJobStateMachine is invoked in the AfterJobStateMachine testing knob if
 	// non-nil.
-	afterJobStateMachine func()
+	afterJobStateMachine func(jobspb.JobID)
 
 	// Instead of a ch for success, use a variable because it can retry since it
 	// is in a transaction.
@@ -200,9 +200,9 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			}
 			return nil
 		}
-		knobs.AfterJobStateMachine = func() {
+		knobs.AfterJobStateMachine = func(id jobspb.JobID) {
 			if rts.afterJobStateMachine != nil {
-				rts.afterJobStateMachine()
+				rts.afterJobStateMachine(id)
 			}
 		}
 		args.Knobs.JobsTestingKnobs = knobs
@@ -891,22 +891,20 @@ func TestRegistryLifecycle(t *testing.T) {
 	t.Run("dump traces on pause-unpause-success", func(t *testing.T) {
 		ctx := context.Background()
 		completeCh := make(chan struct{})
-		var blockAfterJobStateMachine atomic.Bool
-		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
-			if blockAfterJobStateMachine.Load() {
-				completeCh <- struct{}{}
+		var expectedJobID atomic.Int64
+		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func(id jobspb.JobID) {
+			if int64(id) != expectedJobID.Load() {
+				return
 			}
+			completeCh <- struct{}{}
 		}}
 		rts.setUp(t)
 		defer rts.tearDown()
-
-		blockAfterJobStateMachine.Store(true)
 		pauseUnpauseJob := func(expectedNumFiles int) {
-			j, err := jobs.TestingCreateAndStartJob(context.Background(), rts.registry, rts.idb(), rts.mockJob)
-			if err != nil {
-				t.Fatal(err)
-			}
+			j, err := jobs.TestingCreateAndStartJob(ctx, rts.registry, rts.idb(), rts.mockJob)
+			require.NoError(t, err)
 			rts.job = j
+			expectedJobID.Store(int64(j.ID()))
 
 			rts.mu.e.ResumeStart = true
 			rts.resumeCheckCh <- struct{}{}
@@ -938,22 +936,21 @@ func TestRegistryLifecycle(t *testing.T) {
 	t.Run("dump traces on fail", func(t *testing.T) {
 		ctx := context.Background()
 		completeCh := make(chan struct{})
-		var blockAfterJobStateMachine atomic.Bool
-		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
-			if blockAfterJobStateMachine.Load() {
-				completeCh <- struct{}{}
+		var expectedJobID atomic.Int64
+		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func(id jobspb.JobID) {
+			if int64(id) != expectedJobID.Load() {
+				return
 			}
+			completeCh <- struct{}{}
 		}}
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		blockAfterJobStateMachine.Store(true)
 		runJobAndFail := func(expectedNumFiles int) {
 			j, err := jobs.TestingCreateAndStartJob(ctx, rts.registry, rts.idb(), rts.mockJob)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			rts.job = j
+			expectedJobID.Store(int64(j.ID()))
 
 			rts.mu.e.ResumeStart = true
 			rts.resumeCheckCh <- struct{}{}
@@ -978,22 +975,20 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("dump traces on cancel", func(t *testing.T) {
 		completeCh := make(chan struct{})
-		var blockAfterJobStateMachine atomic.Bool
-		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
-			if blockAfterJobStateMachine.Load() {
-				completeCh <- struct{}{}
+		var expectedJobID atomic.Int64
+		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func(id jobspb.JobID) {
+			if int64(id) != expectedJobID.Load() {
+				return
 			}
+			completeCh <- struct{}{}
 		}}
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		blockAfterJobStateMachine.Store(true)
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		rts.job = j
-
+		expectedJobID.Store(int64(j.ID()))
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
 		rts.check(t, jobs.StatusRunning)
