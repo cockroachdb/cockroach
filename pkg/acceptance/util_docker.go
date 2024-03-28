@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/api/types"
@@ -221,6 +222,7 @@ func runTestDockerCLI(t *testing.T, testNameSuffix, testFilePath string) {
 	containerConfig.Env = []string{
 		"CI=1", // Disables the initial color query by the termenv library.
 		fmt.Sprintf("PGUSER=%s", username.RootUser),
+		fmt.Sprintf("COCKROACH_DEV_LICENSE=%s", envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")),
 	}
 	ctx := context.Background()
 	if err := testDockerOneShot(ctx, t, "cli_test_"+testNameSuffix, containerConfig); err != nil {
