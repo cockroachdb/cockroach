@@ -55,10 +55,45 @@ func (s *Smither) pickAnyType(typ *types.T) *types.T {
 	return typ
 }
 
+var simpleScalarTypes = func() (typs []*types.T) {
+	for _, t := range types.Scalar {
+		switch t {
+		case types.Box2D, types.Geography, types.Geometry, types.INet, types.PGLSN,
+			types.RefCursor, types.TSQuery, types.TSVector:
+			// Skip fancy types.
+		default:
+			typs = append(typs, t)
+		}
+	}
+	return typs
+}()
+
+func isSimpleSeedType(typ *types.T) bool {
+	switch typ.Family() {
+	case types.Box2DFamily, types.GeometryFamily, types.GeographyFamily, types.INetFamily,
+		types.PGLSNFamily, types.RefCursorFamily, types.VoidFamily, types.TSVectorFamily, types.TSQueryFamily:
+		return false
+	case types.ArrayFamily:
+		return isSimpleSeedType(typ.ArrayContents())
+	case types.TupleFamily:
+		for _, t := range typ.TupleContents() {
+			if !isSimpleSeedType(t) {
+				return false
+			}
+		}
+		return true
+	default:
+		return true
+	}
+}
+
 func (s *Smither) randScalarType() *types.T {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	scalarTypes := types.Scalar
+	if s.simpleScalarTypes {
+		scalarTypes = simpleScalarTypes
+	}
 	if s.types != nil {
 		scalarTypes = s.types.scalarTypes
 	}
@@ -80,6 +115,9 @@ func (s *Smither) randScalarType() *types.T {
 func (s *Smither) isScalarType(t *types.T) bool {
 	s.lock.AssertRHeld()
 	scalarTypes := types.Scalar
+	if s.simpleScalarTypes {
+		scalarTypes = simpleScalarTypes
+	}
 	if s.types != nil {
 		scalarTypes = s.types.scalarTypes
 	}
@@ -108,6 +146,9 @@ func (s *Smither) randType() *types.T {
 		if s.postgres && typ.Identical(types.Name) {
 			// Name type in CRDB doesn't match Postgres behavior. Exclude for tests
 			// which compare CRDB behavior to Postgres.
+			continue
+		}
+		if s.simpleScalarTypes && !isSimpleSeedType(typ) {
 			continue
 		}
 		break
