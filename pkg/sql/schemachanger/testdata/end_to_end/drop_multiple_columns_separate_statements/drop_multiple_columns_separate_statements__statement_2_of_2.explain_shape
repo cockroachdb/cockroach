@@ -14,4 +14,4 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │    └── from crdb_internal_index_4_name_placeholder into t_pkey+
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
- └── execute 3 system table mutations transactions
+ └── execute 4 system table mutations transactions

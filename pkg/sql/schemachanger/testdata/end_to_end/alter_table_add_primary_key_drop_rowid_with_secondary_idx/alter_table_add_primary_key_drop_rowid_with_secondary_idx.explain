@@ -259,15 +259,17 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
       │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 3, SourceIndexID: 6 (t_pkey~)}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 5}
       │    │    └── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 5}
-      │    ├── 7 elements transitioning toward ABSENT
+      │    ├── 8 elements transitioning toward ABSENT
       │    │    ├── PUBLIC                → WRITE_ONLY       Column:{DescID: 104 (t), ColumnID: 3 (rowid-)}
       │    │    ├── PUBLIC                → ABSENT           ColumnName:{DescID: 104 (t), Name: "rowid", ColumnID: 3 (rowid-)}
+      │    │    ├── VALIDATED             → ABSENT           ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 0}
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 1 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 1 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 1 (t_pkey-)}
       │    │    ├── VALIDATED             → DELETE_ONLY      PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
       │    │    └── PUBLIC                → VALIDATED        SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx_b-), RecreateSourceIndexID: 0}
-      │    └── 22 Mutation operations
+      │    └── 23 Mutation operations
+      │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":7,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":7,"Kind":2,"Ordinal":1,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":9,"TableID":104}
@@ -297,21 +299,19 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
       │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
       │    │    ├── PUBLIC      → TRANSIENT_VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 6 (t_pkey~), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 1 (t_pkey-)}
       │    │    └── PUBLIC      → TRANSIENT_ABSENT    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 6 (t_pkey~)}
-      │    ├── 7 elements transitioning toward ABSENT
+      │    ├── 6 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY  → DELETE_ONLY         Column:{DescID: 104 (t), ColumnID: 3 (rowid-)}
-      │    │    ├── VALIDATED   → ABSENT              ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 0}
       │    │    ├── DELETE_ONLY → ABSENT              PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
       │    │    ├── PUBLIC      → ABSENT              IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 2 (idx_b-)}
       │    │    ├── PUBLIC      → ABSENT              IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 2 (idx_b-)}
       │    │    ├── VALIDATED   → DELETE_ONLY         SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx_b-), RecreateSourceIndexID: 0}
       │    │    └── PUBLIC      → ABSENT              IndexName:{DescID: 104 (t), Name: "idx_b", IndexID: 2 (idx_b-)}
-      │    └── 13 Mutation operations
-      │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
+      │    └── 12 Mutation operations
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":6,"TableID":104}
       │         ├── SetIndexName {"IndexID":6,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":8,"Name":"t_pkey","TableID":104}
-      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":8,"TableID":104}
