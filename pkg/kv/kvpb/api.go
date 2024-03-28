@@ -373,6 +373,8 @@ type Response interface {
 	Header() ResponseHeader
 	// SetHeader sets the response header.
 	SetHeader(ResponseHeader)
+	// ShallowCopy returns a shallow copy of the receiver.
+	ShallowCopy() Response
 	// Verify verifies response integrity, as applicable.
 	Verify(req Request) error
 }
@@ -1295,6 +1297,294 @@ func (r *BarrierRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *IsSpanEmptyRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (gr *GetResponse) ShallowCopy() Response {
+	shallowCopy := *gr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (pr *PutResponse) ShallowCopy() Response {
+	shallowCopy := *pr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (cpr *ConditionalPutResponse) ShallowCopy() Response {
+	shallowCopy := *cpr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (pr *InitPutResponse) ShallowCopy() Response {
+	shallowCopy := *pr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (ir *IncrementResponse) ShallowCopy() Response {
+	shallowCopy := *ir
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (dr *DeleteResponse) ShallowCopy() Response {
+	shallowCopy := *dr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (drr *DeleteRangeResponse) ShallowCopy() Response {
+	shallowCopy := *drr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (crr *ClearRangeResponse) ShallowCopy() Response {
+	shallowCopy := *crr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (crr *RevertRangeResponse) ShallowCopy() Response {
+	shallowCopy := *crr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (sr *ScanResponse) ShallowCopy() Response {
+	shallowCopy := *sr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (rsr *ReverseScanResponse) ShallowCopy() Response {
+	shallowCopy := *rsr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (ccr *CheckConsistencyResponse) ShallowCopy() Response {
+	shallowCopy := *ccr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (etr *EndTxnResponse) ShallowCopy() Response {
+	shallowCopy := *etr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (asr *AdminSplitResponse) ShallowCopy() Response {
+	shallowCopy := *asr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (aur *AdminUnsplitResponse) ShallowCopy() Response {
+	shallowCopy := *aur
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (amr *AdminMergeResponse) ShallowCopy() Response {
+	shallowCopy := *amr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (atlr *AdminTransferLeaseResponse) ShallowCopy() Response {
+	shallowCopy := *atlr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (acrr *AdminChangeReplicasResponse) ShallowCopy() Response {
+	shallowCopy := *acrr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (acrr *AdminRelocateRangeResponse) ShallowCopy() Response {
+	shallowCopy := *acrr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (htr *HeartbeatTxnResponse) ShallowCopy() Response {
+	shallowCopy := *htr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (gcr *GCResponse) ShallowCopy() Response {
+	shallowCopy := *gcr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (ptr *PushTxnResponse) ShallowCopy() Response {
+	shallowCopy := *ptr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (rtr *RecoverTxnResponse) ShallowCopy() Response {
+	shallowCopy := *rtr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (qtr *QueryTxnResponse) ShallowCopy() Response {
+	shallowCopy := *qtr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (pir *QueryIntentResponse) ShallowCopy() Response {
+	shallowCopy := *pir
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (pir *QueryLocksResponse) ShallowCopy() Response {
+	shallowCopy := *pir
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (rir *ResolveIntentResponse) ShallowCopy() Response {
+	shallowCopy := *rir
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (rirr *ResolveIntentRangeResponse) ShallowCopy() Response {
+	shallowCopy := *rirr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (mr *MergeResponse) ShallowCopy() Response {
+	shallowCopy := *mr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (tlr *TruncateLogResponse) ShallowCopy() Response {
+	shallowCopy := *tlr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (rlr *RequestLeaseResponse) ShallowCopy() Response {
+	shallowCopy := *rlr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *ProbeResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (lt *LeaseInfoResponse) ShallowCopy() Response {
+	shallowCopy := *lt
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (ccr *ComputeChecksumResponse) ShallowCopy() Response {
+	shallowCopy := *ccr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (ekr *ExportResponse) ShallowCopy() Response {
+	shallowCopy := *ekr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *AdminScatterResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *AddSSTableResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *LinkExternalSSTableResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *MigrateResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *RecomputeStatsResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *RefreshResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *RefreshRangeResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *SubsumeResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *RangeStatsResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *AdminVerifyProtectedTimestampResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *QueryResolvedTimestampResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *BarrierResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *IsSpanEmptyResponse) ShallowCopy() Response {
 	shallowCopy := *r
 	return &shallowCopy
 }
