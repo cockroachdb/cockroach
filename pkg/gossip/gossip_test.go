@@ -172,7 +172,8 @@ func TestGossipLocalityResolver(t *testing.T) {
 	var node2LocalityList []roachpb.LocalityAddress
 	node2LocalityList = append(node2LocalityList, nodeLocalityAddress2)
 
-	g := NewTestWithLocality(1, stopper, metric.NewRegistry(), gossipLocalityAdvertiseList)
+	g := NewTestWithLocality(1, stopper, metric.NewRegistry(), gossipLocalityAdvertiseList,
+		node1LocalityList)
 	node1 := &roachpb.NodeDescriptor{
 		NodeID:          1,
 		Address:         node1PublicAddressRPC,
