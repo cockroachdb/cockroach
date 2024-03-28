@@ -1163,9 +1163,16 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			if i == j {
 				continue
 			}
-			if _, err := clientNodeContext.ctx.GRPCDialNode(serverNodeContext.ctx.AdvertiseAddr, serverNodeContext.ctx.NodeID.Get(), DefaultClass).Connect(ctx); err != nil {
-				t.Fatal(err)
-			}
+			testutils.SucceedsSoon(t, func() error {
+				if _, err := clientNodeContext.ctx.GRPCDialNode(
+					serverNodeContext.ctx.AdvertiseAddr,
+					serverNodeContext.ctx.NodeID.Get(),
+					DefaultClass,
+				).Connect(ctx); err != nil {
+					return err
+				}
+				return nil
+			})
 		}
 	}
 
