@@ -2873,9 +2873,10 @@ message Header {
   // current batch. When set, it allows the server to handle pushes and write
   // too old conditions locally.
   bool can_forward_read_timestamp = 16;
-  // gateway_node_id is the ID of the gateway node where the request originated.
-  // For requests from tenants, this is set to the NodeID of the KV node handling
-  // the BatchRequest.
+  // gateway_node_id is the ID of the gateway node where the request
+  // originated. For requests from a shared-process cluster, this is set to the
+  // NodeID of the KV node which created the BatchRequest. For requests from a
+  // separate-process SQL Pod or a CLI, this is set to 0.
   int32 gateway_node_id = 11 [(gogoproto.customname) = "GatewayNodeID",
                               (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   // client_range_info represents the kvclient's knowledge about the state of
