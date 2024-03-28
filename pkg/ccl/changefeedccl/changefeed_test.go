@@ -5620,7 +5620,7 @@ func TestChangefeedDescription(t *testing.T) {
 
 			var description string
 			sqlDB.QueryRow(t,
-				`SELECT description FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
+				`SELECT description FROM [SHOW JOB $1]`, jobID,
 			).Scan(&description)
 
 			require.Equal(t, tc.descr, description)

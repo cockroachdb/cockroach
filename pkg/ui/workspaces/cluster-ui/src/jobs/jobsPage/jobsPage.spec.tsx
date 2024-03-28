@@ -78,9 +78,7 @@ describe("Jobs", () => {
       "Job ID",
       "User Name",
       "Creation Time (UTC)",
-      "Last Execution Time (UTC)",
       "Last Modified Time (UTC)",
-      "Execution Count",
     ];
 
     for (const columnTitle of expectedColumnTitles) {
