@@ -222,7 +222,7 @@ ALTER SEQUENCE reverse_direction_seqas AS smallint INCREMENT -1
 query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE reverse_direction_seqas]
 ----
-CREATE SEQUENCE public.reverse_direction_seqas AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -1 START -1
+CREATE SEQUENCE public.reverse_direction_seqas AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT -1 START 1
 
 statement ok
 ALTER SEQUENCE reverse_direction_seqas AS int INCREMENT 1
@@ -286,3 +286,112 @@ CREATE SEQUENCE restart_max_err_seqas MAXVALUE 100
 
 statement error RESTART value \(1000\) cannot be greater than MAXVALUE \(100\)
 ALTER SEQUENCE restart_max_err_seqas RESTART 1000
+
+
+statement ok
+CREATE SEQUENCE set_no_maxvalue MAXVALUE 3
+
+query III
+select nextval('set_no_maxvalue'),nextval('set_no_maxvalue'),nextval('set_no_maxvalue')
+----
+1  2  3
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "set_no_maxvalue" \(3\)
+select nextval('set_no_maxvalue')
+
+statement ok
+ALTER SEQUENCE set_no_maxvalue NO MAXVALUE
+
+query I
+select nextval('set_no_maxvalue')
+----
+4
+
+statement ok
+CREATE SEQUENCE set_no_minvalue INCREMENT -1 MINVALUE -3;
+
+query III
+select nextval('set_no_minvalue'),nextval('set_no_minvalue'),nextval('set_no_minvalue')
+----
+-1  -2  -3
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "set_no_minvalue" \(-3\)
+select nextval('set_no_minvalue')
+
+statement ok
+ALTER SEQUENCE set_no_minvalue NO MINVALUE
+
+query I
+select nextval('set_no_minvalue')
+----
+-4
+
+
+statement ok
+CREATE SEQUENCE seq_inverse_no_change;
+
+statement ok
+ALTER SEQUENCE seq_inverse_no_change INCREMENT BY -1;
+
+query TT colnames
+SHOW CREATE SEQUENCE seq_inverse_no_change;
+----
+table_name             create_statement
+seq_inverse_no_change  CREATE SEQUENCE public.seq_inverse_no_change MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT -1 START 1
+
+statement ok
+ALTER SEQUENCE seq_inverse_no_change INCREMENT BY 1;
+
+query TT colnames
+SHOW CREATE SEQUENCE seq_inverse_no_change;
+----
+table_name             create_statement
+seq_inverse_no_change  CREATE SEQUENCE public.seq_inverse_no_change MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+
+
+statement ok
+CREATE SEQUENCE seq_change_type_bounds MINVALUE -9223372036854775808 MAXVALUE 9223372036854775807 START 0
+
+statement ok
+ALTER SEQUENCE seq_change_type_bounds AS smallint;
+
+query TT colnames
+SHOW CREATE SEQUENCE seq_change_type_bounds;
+----
+table_name              create_statement
+seq_change_type_bounds  CREATE SEQUENCE public.seq_change_type_bounds AS INT2 MINVALUE -32768 MAXVALUE 32767 INCREMENT 1 START 0
+
+statement ok
+ALTER SEQUENCE seq_change_type_bounds AS integer;
+
+query TT colnames
+SHOW CREATE SEQUENCE seq_change_type_bounds;
+----
+table_name              create_statement
+seq_change_type_bounds  CREATE SEQUENCE public.seq_change_type_bounds AS INT8 MINVALUE -9223372036854775808 MAXVALUE 9223372036854775807 INCREMENT 1 START 0
+
+
+statement ok
+CREATE SEQUENCE seq_alter_no_min_max_asc INCREMENT 1 START 5 MINVALUE -10 MAXVALUE 10;
+
+statement ok
+ALTER SEQUENCE seq_alter_no_min_max_asc NO MINVALUE NO MAXVALUE;
+
+query TT colnames
+SHOW CREATE SEQUENCE seq_alter_no_min_max_asc;
+----
+table_name                create_statement
+seq_alter_no_min_max_asc  CREATE SEQUENCE public.seq_alter_no_min_max_asc MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 5
+
+
+statement ok
+CREATE SEQUENCE seq_alter_no_min_max_des INCREMENT -1 START -5 MINVALUE -10 MAXVALUE 10 ;
+
+statement ok
+ALTER SEQUENCE seq_alter_no_min_max_des NO MINVALUE NO MAXVALUE ;
+
+query TT colnames
+SHOW CREATE SEQUENCE seq_alter_no_min_max_des
+----
+table_name                create_statement
+seq_alter_no_min_max_des  CREATE SEQUENCE public.seq_alter_no_min_max_des MINVALUE -9223372036854775808 MAXVALUE -1 INCREMENT -1 START -5

@@ -490,12 +490,16 @@ SELECT query,
        COALESCE(last_error_code, '') last_error_code,
        COALESCE(last_error_redactable, '') last_error
 FROM crdb_internal.node_txn_execution_insights 
-WHERE app_name = $1`, appName)
+WHERE app_name = $1
+AND query = 'SELECT * FROM myusers WHERE city = _ ; UPDATE myusers SET name = _ WHERE city = _'`, appName)
 
 					return row.Scan(&query, &problems, &status, &errorCode, &errorMsg)
 				})
 
-				require.Equal(t, "SELECT * FROM myusers WHERE city = _ ; UPDATE myusers SET name = _ WHERE city = _", query)
+				require.Equalf(t,
+					"SELECT * FROM myusers WHERE city = _ ; UPDATE myusers SET name = _ WHERE city = _", query,
+					"unexpected txn insight found - query: %s, problems: %s, status: %s, errCode: %s, errMsg: %s",
+					query, problems, status, errorCode, errorMsg)
 				expectedProblem := "{FailedExecution}"
 				replacedSlowProblems := problems
 				if problems != expectedProblem {
