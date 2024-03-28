@@ -156,7 +156,7 @@ func TestBackupManifestVersionCompatibility(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			settings := cluster.MakeTestingClusterSettingsWithVersions(binaryVersion, tc.minimumSupportedVersion, false)
 			require.NoError(t, clusterversion.Initialize(context.Background(), tc.clusterVersion, &settings.SV))
-			version := clusterversion.MakeVersionHandleWithOverride(&settings.SV, binaryVersion, tc.minimumSupportedVersion)
+			version := clusterversion.MakeVersionHandle(&settings.SV, binaryVersion, tc.minimumSupportedVersion)
 			manifest := []backuppb.BackupManifest{{ClusterVersion: tc.backupVersion}}
 
 			err := checkBackupManifestVersionCompatability(context.Background(), version, manifest /*unsafe=*/, false)
