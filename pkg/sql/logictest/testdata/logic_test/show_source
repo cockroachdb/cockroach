@@ -561,7 +561,7 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX foo@ix WITH DETAILS]
 ----
 start_key     end_key       replicas  lease_holder
-…/<IndexMin>  <after:/Max>  {1}       1
+…/<IndexMin>  …/<IndexMax>  {1}       1
 
 query TTTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SESSION] LIMIT 0

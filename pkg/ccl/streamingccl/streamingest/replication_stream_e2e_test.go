@@ -810,6 +810,7 @@ func TestStreamingReplanOnLag(t *testing.T) {
 	skip.WithIssue(t, 120688)
 
 	skip.UnderDuressWithIssue(t, 115850, "time to scatter ranges takes too long under duress")
+	skip.UnderMetamorphic(t, "time to scatter ranges takes too long under non-default settings")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
