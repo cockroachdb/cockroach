@@ -31,7 +31,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 	// This test requires us to come back and change the stmts in executeSupportedDDLs to be those
 	// supported in the "previous" major release.
 	r.Add(registry.TestSpec{
-		Name:             "declarative_schema_changer/job-compatibility-mixed-version-V231-V232",
+		Name:             "declarative_schema_changer/job-compatibility-mixed-version-V232-V241",
 		Owner:            registry.OwnerSQLFoundations,
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.AllExceptAWS,
@@ -97,8 +97,8 @@ func executeSupportedDDLs(
 		return err
 	}
 
-	// DDLs supported since V22_2.
-	v222DDLs := []string{
+	// DDLs supported in V23_1.
+	v231DDLs := []string{
 		`COMMENT ON DATABASE testdb IS 'this is a database comment'`,
 		`COMMENT ON SCHEMA testdb.testsc IS 'this is a schema comment'`,
 		`COMMENT ON TABLE testdb.testsc.t IS 'this is a table comment'`,
@@ -109,10 +109,6 @@ func executeSupportedDDLs(
 		`ALTER TABLE testdb.testsc.t DROP COLUMN k`,
 		`ALTER TABLE testdb.testsc.t2 ADD PRIMARY KEY (i)`,
 		`ALTER TABLE testdb.testsc.t2 ALTER PRIMARY KEY USING COLUMNS (j)`,
-	}
-
-	// DDLs supported since V23_1.
-	v231DDls := []string{
 		`CREATE FUNCTION fn(a INT) RETURNS INT AS 'SELECT a*a' LANGUAGE SQL`,
 		`CREATE INDEX ON testdb.testsc.t3 (i)`,
 		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN k SET NOT NULL`,
@@ -127,9 +123,14 @@ func executeSupportedDDLs(
 		`ALTER TABLE testdb.testsc.t3 VALIDATE CONSTRAINT check_positive_not_valid`,
 	}
 
+	// DDLs supported in v23_2.
+	v232DDLs := []string{
+		`CREATE SCHEMA testdb.foo`,
+		`CREATE SCHEMA IF NOT EXISTS testdb.foo`,
+	}
+
 	// Used to clean up our CREATE-d elements after we are done with them.
 	cleanup := []string{
-		// Supported since V22_2.
 		`DROP INDEX testdb.testsc.t@idx`,
 		`DROP SEQUENCE testdb.testsc.s`,
 		`DROP TYPE testdb.testsc.typ`,
@@ -140,11 +141,12 @@ func executeSupportedDDLs(
 		`DROP SCHEMA testdb.testsc`,
 		`DROP DATABASE testdb CASCADE`,
 		`DROP OWNED BY foo`,
-		// Supported since V23_1.
 		`DROP FUNCTION fn`,
+		// Supported in V23_2.
+		`DROP SCHEMA testdb.foo`,
 	}
 
-	ddls := append(append(v222DDLs, v231DDls...), cleanup...)
+	ddls := append(append(v231DDLs, v232DDLs...), cleanup...)
 
 	for _, ddl := range ddls {
 		if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
