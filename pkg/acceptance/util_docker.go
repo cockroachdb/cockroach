@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/api/types"
@@ -40,6 +41,7 @@ func defaultContainerConfig() container.Config {
 			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
 			"PGSSLCERT=/certs/client.root.crt",
 			"PGSSLKEY=/certs/client.root.key",
+			fmt.Sprintf("COCKROACH_DEV_LICENSE=%s", envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")),
 		},
 		Entrypoint: []string{"autouseradd", "-u", "roach", "-C", "/home/roach", "--"},
 	}

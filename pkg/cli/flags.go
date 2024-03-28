@@ -493,6 +493,12 @@ func init() {
 		// Certificate principal map.
 		cliflagcfg.StringSliceFlag(f, &startCtx.serverCertPrincipalMap, cliflags.CertPrincipalMap)
 
+		// Root cert distinguished name
+		cliflagcfg.StringFlag(f, &startCtx.serverRootCertDN, cliflags.RootCertDistinguishedName)
+
+		// Node cert distinguished name
+		cliflagcfg.StringFlag(f, &startCtx.serverNodeCertDN, cliflags.NodeCertDistinguishedName)
+
 		// Cluster name verification.
 		cliflagcfg.VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
 		cliflagcfg.BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
@@ -576,6 +582,12 @@ func init() {
 
 		// All certs command want to map CNs to SQL principals.
 		cliflagcfg.StringSliceFlag(f, &certCtx.certPrincipalMap, cliflags.CertPrincipalMap)
+
+		// Root cert distinguished name
+		cliflagcfg.StringFlag(f, &startCtx.serverRootCertDN, cliflags.RootCertDistinguishedName)
+
+		// Node cert distinguished name
+		cliflagcfg.StringFlag(f, &startCtx.serverNodeCertDN, cliflags.NodeCertDistinguishedName)
 
 		if cmd == listCertsCmd {
 			// The 'list' subcommand does not write to files and thus does
@@ -1081,6 +1093,12 @@ func tenantIDFromFile(
 // It is only called when the command being ran is one of the start commands.
 func extraServerFlagInit(cmd *cobra.Command) error {
 	if err := security.SetCertPrincipalMap(startCtx.serverCertPrincipalMap); err != nil {
+		return err
+	}
+	if err := security.SetRootSubject(startCtx.serverRootCertDN); err != nil {
+		return err
+	}
+	if err := security.SetNodeSubject(startCtx.serverNodeCertDN); err != nil {
 		return err
 	}
 	serverCfg.User = username.NodeUserName()
