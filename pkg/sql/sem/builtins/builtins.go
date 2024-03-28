@@ -4439,9 +4439,8 @@ value if you rely on the HLC for accuracy.`,
 					}
 
 					metadataJSON := tree.MustBeDJSON(metadataDatum).JSON
-					// Ensure we start with an empty slice, otherwise the decode method below
-					// will just append the JSON datum value to what's already there.
-					other.Databases = nil
+					// Ensure we start with a clear slate for the current iteration.
+					other = appstatspb.AggregatedStatementMetadata{}
 					err := sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &other)
 					//  Failure to decode should NOT return an error. Instead let's just ignore
 					// this JSON object that is not the correct format.
