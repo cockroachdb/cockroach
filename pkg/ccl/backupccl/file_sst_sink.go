@@ -54,7 +54,9 @@ type fileSSTSink struct {
 	flushedFiles []backuppb.BackupManifest_File
 	flushedSize  int64
 
-	midKey bool
+	// midRow is true if the last batch added to the sink ended mid-row, which can
+	// be the case if it ended between column families or revisions of a family.
+	midRow bool
 
 	// flushedRevStart is the earliest start time of the export responses
 	// written to this sink since the last flush. Resets on each flush.
@@ -128,7 +130,7 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 		return nil
 	}
 
-	if s.midKey {
+	if s.midRow {
 		var lastKey roachpb.Key
 		if len(s.flushedFiles) > 0 {
 			lastKey = s.flushedFiles[len(s.flushedFiles)-1].Span.EndKey
@@ -209,7 +211,7 @@ func (s *fileSSTSink) open(ctx context.Context) error {
 
 func (s *fileSSTSink) writeWithNoData(resp exportedSpan) {
 	s.completedSpans += resp.completedSpans
-	s.midKey = false
+	s.midRow = false
 }
 
 func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
@@ -252,12 +254,17 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	//
 	// TODO(msbutler): investigate using single a single iterator that surfaces
 	// all point keys first and then all range keys
-	if err := s.copyPointKeys(ctx, resp.dataSST); err != nil {
+	maxKey, err := s.copyPointKeys(ctx, resp.dataSST)
+	if err != nil {
 		return err
 	}
-	if err := s.copyRangeKeys(resp.dataSST); err != nil {
+
+	maxRange, err := s.copyRangeKeys(resp.dataSST)
+	if err != nil {
 		return err
 	}
+
+	s.midRow = isMidRow(maxKey, maxRange, resp.resumeKey)
 
 	// If this span extended the last span added -- that is, picked up where it
 	// ended and has the same time-bounds -- then we can simply extend that span
@@ -278,11 +285,9 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	s.completedSpans += resp.completedSpans
 	s.flushedSize += int64(len(resp.dataSST))
 
-	s.midKey = !resp.atKeyBoundary
-
 	// If our accumulated SST is now big enough, and we are positioned at the end
 	// of a range flush it.
-	if s.flushedSize > targetFileSize.Get(s.conf.settings) && resp.atKeyBoundary {
+	if s.flushedSize > targetFileSize.Get(s.conf.settings) && !s.midRow {
 		s.stats.sizeFlushes++
 		log.VEventf(ctx, 2, "flushing backup file %s with size %d", s.outName, s.flushedSize)
 		if err := s.flushFile(ctx); err != nil {
@@ -294,7 +299,39 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	return nil
 }
 
-func (s *fileSSTSink) copyPointKeys(ctx context.Context, dataSST []byte) error {
+func isMidRow(resumeKey, maxPointKey, maxRangeEnd roachpb.Key) bool {
+	if len(resumeKey) == 0 {
+		return false
+	}
+	maxKey := maxPointKey
+	if maxKey.Compare(maxRangeEnd) < 0 {
+		maxKey = maxRangeEnd
+	}
+
+	maxRowKey, err := keys.EnsureSafeSplitKey(maxKey)
+	if err != nil {
+		// should never happen on a point key since all point keys should have a
+		// valid family suffix; just assume the worst and say we are mid-row.
+		return true
+	}
+
+	resumeRowKey, err := keys.EnsureSafeSplitKey(resumeKey)
+	if err != nil {
+		// if maxKey didn't error but resume key _did_ error, we can gather that
+		// resume key doesn't have family markers on it and maxKey did, so resume
+		// key must not be the same row.
+		return false
+	}
+	// If they have the same row key, we're mid-row but if they're not, then we
+	// are not, regardless of which is larger: if the resumeRowKey is still above
+	// the maxRowKey, it is a later row while if it is before it, it resumeKey was
+	// already a row key/range boundary and we truncated more off of it because of
+	// EnsureSafeSplitKey non-idempotency, but that too indicates it was not a key
+	// in the same row.
+	return maxRowKey.Equal(resumeRowKey)
+}
+
+func (s *fileSSTSink) copyPointKeys(ctx context.Context, dataSST []byte) (roachpb.Key, error) {
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 		LowerBound: keys.LocalMax,
@@ -302,38 +339,39 @@ func (s *fileSSTSink) copyPointKeys(ctx context.Context, dataSST []byte) error {
 	}
 	iter, err := storage.NewMemSSTIterator(dataSST, false, iterOpts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer iter.Close()
 
 	var valueBuf []byte
 
+	nonEmpty := false
 	for iter.SeekGE(storage.MVCCKey{Key: keys.MinKey}); ; iter.Next() {
 		if err := s.pacer.Pace(ctx); err != nil {
-			return err
+			return nil, err
 		}
 		if valid, err := iter.Valid(); !valid || err != nil {
 			if err != nil {
-				return err
+				return nil, err
 			}
 			break
 		}
 		k := iter.UnsafeKey()
 		suffix, ok := bytes.CutPrefix(k.Key, s.elidePrefix)
 		if !ok {
-			return errors.AssertionFailedf("prefix mismatch %q does not have %q", k.Key, s.elidePrefix)
+			return nil, errors.AssertionFailedf("prefix mismatch %q does not have %q", k.Key, s.elidePrefix)
 		}
 		k.Key = suffix
 
 		raw, err := iter.UnsafeValue()
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		valueBuf = append(valueBuf[:0], raw...)
 		v, err := storage.DecodeValueFromMVCCValue(valueBuf)
 		if err != nil {
-			return errors.Wrapf(err, "decoding mvcc value %s", k)
+			return nil, errors.Wrapf(err, "decoding mvcc value %s", k)
 		}
 
 		// Checksums include the key, but *exported* keys no longer live at that key
@@ -350,18 +388,30 @@ func (s *fileSSTSink) copyPointKeys(ctx context.Context, dataSST []byte) error {
 		// bytes, and remove this hacky code.
 		if k.Timestamp.IsEmpty() {
 			if err := s.sst.PutUnversioned(k.Key, valueBuf); err != nil {
-				return err
+				return nil, err
 			}
 		} else {
 			if err := s.sst.PutRawMVCC(k, valueBuf); err != nil {
-				return err
+				return nil, err
 			}
 		}
+		nonEmpty = true
 	}
-	return nil
+	iter.Prev()
+	ok, err := iter.Valid()
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		if nonEmpty {
+			return nil, errors.AssertionFailedf("failed to find last key of non-empty file")
+		}
+		return nil, nil
+	}
+	return iter.UnsafeKey().Key.Clone(), nil
 }
 
-func (s *fileSSTSink) copyRangeKeys(dataSST []byte) error {
+func (s *fileSSTSink) copyRangeKeys(dataSST []byte) (roachpb.Key, error) {
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
 		LowerBound: keys.LocalMax,
@@ -369,32 +419,35 @@ func (s *fileSSTSink) copyRangeKeys(dataSST []byte) error {
 	}
 	iter, err := storage.NewMemSSTIterator(dataSST, false, iterOpts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer iter.Close()
-
+	var maxKey roachpb.Key
 	for iter.SeekGE(storage.MVCCKey{Key: keys.MinKey}); ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
-			return err
+			return nil, err
 		} else if !ok {
 			break
 		}
 		rangeKeys := iter.RangeKeys()
 		for _, v := range rangeKeys.Versions {
 			rk := rangeKeys.AsRangeKey(v)
+			if rk.EndKey.Compare(maxKey) > 1 {
+				maxKey = append(maxKey[:0], rk.EndKey...)
+			}
 			var ok bool
 			if rk.StartKey, ok = bytes.CutPrefix(rk.StartKey, s.elidePrefix); !ok {
-				return errors.AssertionFailedf("prefix mismatch %q does not have %q", rk.StartKey, s.elidePrefix)
+				return nil, errors.AssertionFailedf("prefix mismatch %q does not have %q", rk.StartKey, s.elidePrefix)
 			}
 			if rk.EndKey, ok = bytes.CutPrefix(rk.EndKey, s.elidePrefix); !ok {
-				return errors.AssertionFailedf("prefix mismatch %q does not have %q", rk.EndKey, s.elidePrefix)
+				return nil, errors.AssertionFailedf("prefix mismatch %q does not have %q", rk.EndKey, s.elidePrefix)
 			}
 			if err := s.sst.PutRawMVCCRangeKey(rk, v.Value); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
-	return nil
+	return maxKey, nil
 }
 
 func generateUniqueSSTName(nodeID base.SQLInstanceID) string {

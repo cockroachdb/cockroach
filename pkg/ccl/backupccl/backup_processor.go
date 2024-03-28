@@ -318,7 +318,7 @@ type exportedSpan struct {
 	dataSST        []byte
 	revStart       hlc.Timestamp
 	completedSpans int32
-	atKeyBoundary  bool
+	resumeKey      roachpb.Key
 }
 
 func runBackupProcessor(
@@ -508,6 +508,7 @@ func runBackupProcessor(
 				return ctx.Err()
 			case spans := <-todo:
 				for _, span := range spans {
+					resumed := false
 					for len(span.span.Key) != 0 {
 						splitMidKey := splitKeysOnTimestamps.Get(&clusterSettings.SV)
 						// If we started splitting already, we must continue until we reach the end
@@ -613,9 +614,11 @@ func runBackupProcessor(
 								span.lastTried = timeutil.Now()
 								span.attempts++
 								log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered WriteIntentError: %s", span.span, lockErr.Error())
-								// If we're not mid-key we can put this on the the queue to give
-								// it time to resolve on its own while we work on other spans.
-								if span.firstKeyTS.IsEmpty() {
+								// If we're not mid-span we can put this on the the queue to
+								// give it time to resolve on its own while we work on other
+								// spans; if we've flushed any of this span though we finish it
+								// so that we get to a known row end key for our backed up span.
+								if !resumed {
 									todo <- []spanAndTime{span}
 									span = spanAndTime{}
 								}
@@ -656,7 +659,7 @@ func runBackupProcessor(
 							if !resp.ResumeSpan.Valid() {
 								return errors.Errorf("invalid resume span: %s", resp.ResumeSpan)
 							}
-
+							resumed = true
 							resumeTS := hlc.Timestamp{}
 							// Taking resume timestamp from the last file of response since files must
 							// always be consecutive even if we currently expect only one.
@@ -683,6 +686,11 @@ func runBackupProcessor(
 							log.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
 						}
 
+						var resumeKey roachpb.Key
+						if resp.ResumeSpan != nil {
+							resumeKey = resp.ResumeSpan.Key
+						}
+
 						// Even if the ExportRequest did not export any data we want to report
 						// the span as completed for accurate progress tracking.
 						if len(resp.Files) == 0 {
@@ -702,9 +710,10 @@ func runBackupProcessor(
 									LocalityKV:              destLocalityKV,
 									ApproximatePhysicalSize: uint64(len(file.SST)),
 								},
-								dataSST:       file.SST,
-								revStart:      resp.StartTime,
-								atKeyBoundary: file.EndKeyTS.IsEmpty()}
+								dataSST:   file.SST,
+								revStart:  resp.StartTime,
+								resumeKey: resumeKey,
+							}
 							if span.start != spec.BackupStartTime {
 								ret.metadata.StartTime = span.start
 								ret.metadata.EndTime = span.end
