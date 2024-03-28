@@ -969,6 +969,7 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 	st := cluster.MakeTestingClusterSettings()
 	// TODO(erikgrinaker): We may not need this for all circuit breaker tests.
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	kvserver.RejectLeaseOnLeaderUnknown.Override(ctx, &st.SV, false)
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		SlowReplicationThresholdOverride: func(ba *kvpb.BatchRequest) time.Duration {
 			t.Helper()
