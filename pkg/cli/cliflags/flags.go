@@ -873,6 +873,26 @@ fields. It is permissible for the <cert-principal> string to contain colons.
 `,
 	}
 
+	RootCertDistinguishedName = FlagInfo{
+		Name: "root-cert-distinguished-name",
+		Description: `
+A string of comma separated list of distinguished-name
+<attribute-type>=<attribute-value> mappings in accordance with RFC4514 for the root
+user. This strictly needs to match the DN subject in the client certificate
+provided for root user if this flag is set.
+`,
+	}
+
+	NodeCertDistinguishedName = FlagInfo{
+		Name: "node-cert-distinguished-name",
+		Description: `
+A string of comma separated list of distinguished-name
+<attribute-type>=<attribute-value> mappings in accordance with RFC4514 for the node
+user. This strictly needs to match the DN subject in the client certificate
+provided for node user if this flag is set.
+`,
+	}
+
 	CAKey = FlagInfo{
 		Name:        "ca-key",
 		EnvVar:      "COCKROACH_CA_KEY",

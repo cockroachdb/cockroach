@@ -2,6 +2,10 @@
 
 set -euxo pipefail
 
+set +x
+COCKROACH_DEV_LICENSE=$(gcloud secrets versions access 1 --secret=cockroach-dev-license)
+set -x
+
 bazel build --config crosslinux //pkg/cmd/cockroach-short \
     --bes_keywords integration-test-artifact-build \
     --jobs 100 $(./build/github/engflow-args.sh)
@@ -18,6 +22,7 @@ bazel test //pkg/acceptance:acceptance_test \
   "--test_tmpdir=$ARTIFACTSDIR" \
   --test_arg=-l="$ARTIFACTSDIR" \
   --test_arg=-b=$COCKROACH \
+  --test_env=$COCKROACH_DEV_LICENSE \
   --test_env=TZ=America/New_York \
   --test_timeout=1800 \
   --build_event_binary_file=bes.bin

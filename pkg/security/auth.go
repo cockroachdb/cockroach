@@ -32,6 +32,62 @@ var certPrincipalMap struct {
 	m map[string]string
 }
 
+type userCertDistinguishedNameMu struct {
+	syncutil.RWMutex
+	dn *ldap.DN
+}
+
+func (c *userCertDistinguishedNameMu) setDN(dn *ldap.DN) {
+	c.Lock()
+	defer c.Unlock()
+	c.dn = dn
+}
+
+func (c *userCertDistinguishedNameMu) unsetDN() {
+	c.Lock()
+	defer c.Unlock()
+	c.dn = nil
+}
+
+func (c *userCertDistinguishedNameMu) getDN() (dn *ldap.DN) {
+	c.Lock()
+	defer c.Unlock()
+	dn = c.dn
+	return dn
+}
+
+func (c *userCertDistinguishedNameMu) setDNWithString(dnString string) error {
+	if len(dnString) == 0 {
+		c.unsetDN()
+		return nil
+	}
+
+	dn, err := distinguishedname.ParseDN(dnString)
+	if err != nil {
+		return errors.Errorf("invalid distinguished name string: %q", dnString)
+	}
+	c.setDN(dn)
+	return nil
+}
+
+var rootSubject, nodeSubject userCertDistinguishedNameMu
+
+func SetRootSubject(rootDNString string) error {
+	return rootSubject.setDNWithString(rootDNString)
+}
+
+func UnsetRootSubject() {
+	rootSubject.unsetDN()
+}
+
+func SetNodeSubject(nodeDNString string) error {
+	return nodeSubject.setDNWithString(nodeDNString)
+}
+
+func UnsetNodeSubject() {
+	nodeSubject.unsetDN()
+}
+
 // CertificateUserScope indicates the scope of a user certificate i.e. which
 // tenant the user is allowed to authenticate on. Older client certificates
 // without a tenant scope are treated as global certificates which can
@@ -62,6 +118,49 @@ type UserAuthHook func(
 	systemIdentity username.SQLUsername,
 	clientConnection bool,
 ) error
+
+// applyRootOrNodeDNFlag returns distinguished name set for root or node user
+// via root-cert-distinguished-name and node-cert-distinguished flags
+// respectively if systemIdentity conforms to one of these 2 users. It may also
+// return previously set subject option and systemIdentity is not root or node.
+// Root and Node roles cannot have subject role option set for them.
+func applyRootOrNodeDNFlag(
+	previouslySetRoleSubject *ldap.DN, systemIdentity username.SQLUsername,
+) (dn *ldap.DN) {
+	dn = previouslySetRoleSubject
+	switch {
+	case systemIdentity.IsRootUser():
+		dn = rootSubject.getDN()
+	case systemIdentity.IsNodeUser():
+		dn = nodeSubject.getDN()
+	}
+	return dn
+}
+
+// CheckCertDNMatchesRootDNorNodeDN returns `rootOrNodeDNSet` which validates
+// whether rootDN or nodeDN is currently set using their respective CLI flags
+// *-cert-distinguished-name. It also returns `certDNMatchesRootOrNodeDN` which
+// validates whether DN contained in cert being presented exactly matches rootDN
+// or nodeDN (provided they are set).
+func CheckCertDNMatchesRootDNorNodeDN(
+	cert *x509.Certificate,
+) (rootOrNodeDNSet bool, certDNMatchesRootOrNodeDN bool) {
+	rootDN := rootSubject.getDN()
+	nodeDN := nodeSubject.getDN()
+
+	if rootDN != nil || nodeDN != nil {
+		rootOrNodeDNSet = true
+		certDN, err := distinguishedname.ParseDNFromCertificate(cert)
+		if err != nil {
+			return rootOrNodeDNSet, certDNMatchesRootOrNodeDN
+		}
+		// certDNMatchesRootOrNodeDN is true if certDN exactly matches set rootDN or set nodeDN
+		if (rootDN != nil && certDN.Equal(rootDN)) || (nodeDN != nil && certDN.Equal(nodeDN)) {
+			certDNMatchesRootOrNodeDN = true
+		}
+	}
+	return rootOrNodeDNSet, certDNMatchesRootOrNodeDN
+}
 
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
 // list must either be empty or have the format <source>:<dest>. The principal
@@ -199,6 +298,8 @@ func UserAuthCertHook(
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
+		roleSubject = applyRootOrNodeDNFlag(roleSubject, systemIdentity)
+
 		var certSubject *ldap.DN
 		if roleSubject != nil {
 			var err error
@@ -331,8 +432,8 @@ func ValidateUserScope(
 	certSubject *ldap.DN,
 ) bool {
 	// if subject role option is set, it must match the certificate subject
-	if roleSubject != nil && !roleSubject.Equal(certSubject) {
-		return false
+	if roleSubject != nil {
+		return roleSubject.Equal(certSubject)
 	}
 	for _, scope := range certUserScope {
 		if scope.Username == user {
