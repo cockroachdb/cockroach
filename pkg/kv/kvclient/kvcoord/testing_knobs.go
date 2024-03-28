@@ -49,6 +49,15 @@ type ClientTestingKnobs struct {
 	// only applies to requests sent with the LEASEHOLDER routing policy.
 	DontReorderReplicas bool
 
+	// RouteToLeaseholderFirst, if set, the DistSender will move the leaseholder
+	// to the first replica in the transport list when the policy is
+	// RoutingPolicy_LEASEHOLDER. The leaseholder may still be the first replica
+	// it sends the request to if it is also the closest replica. Requests that
+	// are targeted for the leaseholder will instead be proxied to it. This
+	// parameter is typically not set for tests and instead is controlled by
+	// metamorphicRouteToLeaseholderFirst.
+	RouteToLeaseholderFirst bool
+
 	// CommitWaitFilter allows tests to instrument the beginning of a transaction
 	// commit wait sleep.
 	CommitWaitFilter func()
