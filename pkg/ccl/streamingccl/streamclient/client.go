@@ -85,7 +85,7 @@ type Client interface {
 	// the specified remote address. This is used by each consumer processor to
 	// open its subscription to its partition of a larger stream.
 	// TODO(dt): ts -> checkpointToken.
-	Subscribe(ctx context.Context, streamID streampb.StreamID, spec SubscriptionToken,
+	Subscribe(ctx context.Context, streamID streampb.StreamID, procID int32, spec SubscriptionToken,
 		initialScanTime hlc.Timestamp, previousReplicatedTime hlc.Timestamp) (Subscription, error)
 
 	// Complete completes a replication stream consumption.

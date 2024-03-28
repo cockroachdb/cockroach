@@ -111,6 +111,8 @@ message StreamPartitionSpec {
   }
 
   ExecutionConfig config = 3 [(gogoproto.nullable) = false];
+
+  int32 consumer_id = 5 [(gogoproto.customname) = "ConsumerID"];
 }
 
 // SpanConfigEventStreamSpec is the span config event stream specification.

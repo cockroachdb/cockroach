@@ -10,4 +10,24 @@
 
 package streampb
 
-// This file is intentionally left empty.
+import "sync/atomic"
+
+type DebugProducerStatus struct {
+	// Identification info.
+	StreamID StreamID
+	// Properties.
+	Spec StreamPartitionSpec
+
+	RF struct {
+		Checkpoints, Advances atomic.Int64
+		LastAdvanceMicros     atomic.Int64
+		ResolvedMicros        atomic.Int64
+	}
+	Flushes struct {
+		Batches, Checkpoints atomic.Int64
+	}
+	LastCheckpoint struct {
+		Micros atomic.Int64
+		Spans  atomic.Value
+	}
+}

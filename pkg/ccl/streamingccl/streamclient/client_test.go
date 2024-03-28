@@ -81,7 +81,12 @@ func (sc testStreamClient) Close(_ context.Context) error {
 
 // Subscribe implements the Client interface.
 func (sc testStreamClient) Subscribe(
-	_ context.Context, _ streampb.StreamID, _ SubscriptionToken, _ hlc.Timestamp, _ hlc.Timestamp,
+	_ context.Context,
+	_ streampb.StreamID,
+	_ int32,
+	_ SubscriptionToken,
+	_ hlc.Timestamp,
+	_ hlc.Timestamp,
 ) (Subscription, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
@@ -294,7 +299,7 @@ func ExampleClient() {
 
 		for _, partition := range topology.Partitions {
 			// TODO(dt): use Subscribe helper and partition.SrcAddr
-			sub, err := client.Subscribe(ctx, id, partition.SubscriptionToken, hlc.Timestamp{}, ts)
+			sub, err := client.Subscribe(ctx, id, 0, partition.SubscriptionToken, hlc.Timestamp{}, ts)
 			if err != nil {
 				panic(err)
 			}

@@ -10,11 +10,9 @@ package streamproducer
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -73,29 +71,16 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 	tDB.Exec(t, "CREATE ROLE anybody")
 
 	for _, tc := range []struct {
-		user         string
-		expErr       string
-		isEnterprise bool
+		user   string
+		expErr string
 	}{
-		{user: "admin", expErr: "", isEnterprise: true},
-		{user: "root", expErr: "", isEnterprise: true},
-		{user: "somebody", expErr: "", isEnterprise: true},
-		{user: "anybody", expErr: "user anybody does not have REPLICATION system privilege", isEnterprise: true},
-		{user: "nobody", expErr: `role/user "nobody" does not exist`, isEnterprise: true},
-
-		{user: "admin", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
-		{user: "root", expErr: " use of REPLICATION requires an enterprise license", isEnterprise: false},
-		{user: "somebody", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
-		{user: "anybody", expErr: "user anybody does not have REPLICATION system privilege", isEnterprise: false},
-		{user: "nobody", expErr: `role/user "nobody" does not exist`, isEnterprise: false},
+		{user: "admin", expErr: ""},
+		{user: "root", expErr: ""},
+		{user: "somebody", expErr: ""},
+		{user: "anybody", expErr: "user anybody does not have REPLICATION system privilege"},
+		{user: "nobody", expErr: `role/user "nobody" does not exist`},
 	} {
-		t.Run(fmt.Sprintf("%s/ent=%t", tc.user, tc.isEnterprise), func(t *testing.T) {
-			if tc.isEnterprise {
-				defer utilccl.TestingEnableEnterprise()()
-			} else {
-				defer utilccl.TestingDisableEnterprise()()
-			}
-
+		t.Run(tc.user, func(t *testing.T) {
 			m, err := getManagerForUser(tc.user)
 			if tc.expErr == "" {
 				require.NoError(t, err)

@@ -207,6 +207,7 @@ func (p *partitionedStreamClient) Close(ctx context.Context) error {
 func (p *partitionedStreamClient) Subscribe(
 	ctx context.Context,
 	streamID streampb.StreamID,
+	consumerID int32,
 	spec SubscriptionToken,
 	initialScanTime hlc.Timestamp,
 	previousReplicatedTime hlc.Timestamp,
@@ -220,6 +221,7 @@ func (p *partitionedStreamClient) Subscribe(
 	}
 	sps.InitialScanTimestamp = initialScanTime
 	sps.PreviousReplicatedTimestamp = previousReplicatedTime
+	sps.ConsumerID = consumerID
 
 	specBytes, err := protoutil.Marshal(&sps)
 	if err != nil {
