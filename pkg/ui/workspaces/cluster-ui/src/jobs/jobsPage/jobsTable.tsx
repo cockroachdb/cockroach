@@ -55,9 +55,7 @@ export const jobsColumnLabels: any = {
   users: "User Name",
   creationTime: "Creation Time",
   lastModifiedTime: "Last Modified Time",
-  lastExecutionTime: "Last Execution Time",
   finishedTime: "Completed Time",
-  executionCount: "Execution Count",
   highWaterTimestamp: "High-water Timestamp",
   coordinatorID: "Coordinator Node",
 };
@@ -225,43 +223,6 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
         />
       ),
       sort: job => TimestampToMoment(job?.finished).valueOf(),
-      showByDefault: true,
-    },
-    {
-      name: "lastExecutionTime",
-      title: (
-        <Tooltip
-          placement="bottom"
-          style="tableTitle"
-          content={<p>Date and time of the last attempted job execution.</p>}
-        >
-          <>
-            {jobsColumnLabels.lastExecutionTime} <Timezone />
-          </>
-        </Tooltip>
-      ),
-      cell: job => (
-        <Timestamp
-          time={TimestampToMoment(job?.last_run, null)}
-          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
-        />
-      ),
-      sort: job => TimestampToMoment(job?.last_run).valueOf(),
-      showByDefault: true,
-    },
-    {
-      name: "executionCount",
-      title: (
-        <Tooltip
-          placement="bottom"
-          style="tableTitle"
-          content={<p>Number of times the job was executed.</p>}
-        >
-          {jobsColumnLabels.executionCount}
-        </Tooltip>
-      ),
-      cell: job => String(job.num_runs),
-      sort: job => job.num_runs?.toNumber(),
       showByDefault: true,
     },
     {
