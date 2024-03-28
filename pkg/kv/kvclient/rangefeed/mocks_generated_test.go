@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	kv "github.com/cockroachdb/cockroach/pkg/kv"
 	kvcoord "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -57,15 +58,15 @@ func (mr *MockDBMockRecorder) RangeFeed(arg0, arg1, arg2, arg3 interface{}, arg4
 }
 
 // Scan mocks base method.
-func (m *MockDB) Scan(arg0 context.Context, arg1 []roachpb.Span, arg2 hlc.Timestamp, arg3 func(roachpb.KeyValue), arg4 scanConfig) error {
+func (m *MockDB) Scan(arg0 context.Context, arg1 []roachpb.Span, arg2 hlc.Timestamp, arg3 func(roachpb.KeyValue), arg4 func([]kv.KeyValue), arg5 scanConfig) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Scan", arg0, arg1, arg2, arg3, arg4)
+	ret := m.ctrl.Call(m, "Scan", arg0, arg1, arg2, arg3, arg4, arg5)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Scan indicates an expected call of Scan.
-func (mr *MockDBMockRecorder) Scan(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+func (mr *MockDBMockRecorder) Scan(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scan", reflect.TypeOf((*MockDB)(nil).Scan), arg0, arg1, arg2, arg3, arg4)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scan", reflect.TypeOf((*MockDB)(nil).Scan), arg0, arg1, arg2, arg3, arg4, arg5)
 }
