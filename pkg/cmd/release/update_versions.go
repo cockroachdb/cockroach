@@ -486,6 +486,44 @@ func generateRepoList(
 			},
 		})
 	}
+	// 5. Merge baking branch back to the release branch.
+	maybeBakingbranches := []string{
+		fmt.Sprintf("release-%s-rc", releasedVersion.String()), // e.g. release-23.1.17-rc
+		fmt.Sprintf("staging-%s", releasedVersion.Original()),  // e.g. staging-v23.1.17
+	}
+	var bakingBranches []string
+	for _, branch := range maybeBakingbranches {
+		maybeMergeBranches, err := listRemoteBranches(branch)
+		if err != nil {
+			return []prRepo{}, fmt.Errorf("listing merge branch %s: %w", branch, err)
+		}
+		bakingBranches = append(bakingBranches, maybeMergeBranches...)
+	}
+	if len(bakingBranches) > 1 {
+		return []prRepo{}, fmt.Errorf("too many baking branches: %s", strings.Join(maybeBakingbranches, ", "))
+	}
+	for _, mergeBranch := range bakingBranches {
+		baseBranch := fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor())
+		repo := prRepo{
+			owner:          owner,
+			repo:           prefix + "cockroach",
+			branch:         baseBranch,
+			prBranch:       fmt.Sprintf("merge-%s-to-%s", mergeBranch, baseBranch),
+			githubUsername: "cockroach-teamcity",
+			commitMessage:  generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, baseBranch), releasedVersion, nextVersion),
+			fn: func(gitDir string) error {
+				cmd := exec.Command("git", "merge", "-s", "ours", "--no-commit", mergeBranch)
+				cmd.Dir = gitDir
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("failed running '%s' with message '%s': %w", cmd.String(), string(out), err)
+				}
+				log.Printf("ran '%s': %s\n", cmd.String(), string(out))
+				return nil
+			},
+		}
+		reposToWorkOn = append(reposToWorkOn, repo)
+	}
 	return reposToWorkOn, nil
 }
 
