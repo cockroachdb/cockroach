@@ -793,7 +793,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	asOf1 := strings.TrimPrefix(matches[1], "/full")
 
 	sqlDB.CheckQueryResults(
-		t, "SELECT description FROM [SHOW JOBS] WHERE job_type != 'MIGRATION' AND status != 'failed'",
+		t, "SELECT description FROM crdb_internal.jobs WHERE job_type = 'BACKUP' AND status != 'failed'",
 		[][]string{
 			{fmt.Sprintf("BACKUP TO ('%s', '%s', '%s')", backups[0].(string), backups[1].(string),
 				backups[2].(string))},
@@ -810,7 +810,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 				collections[1], collections[2])},
 		},
 	)
-	sqlDB.CheckQueryResults(t, "SELECT description FROM [SHOW JOBS] WHERE status = 'failed'",
+	sqlDB.CheckQueryResults(t, "SELECT description FROM crdb_internal.jobs WHERE job_type = 'BACKUP' AND status = 'failed'",
 		[][]string{{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", "/subdir", collections[0],
 			collections[1], collections[2])}})
 
@@ -852,7 +852,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	resolvedAsOfCollectionURIs := getResolvedCollectionURIs(collections, asOf1)
 
 	sqlDB.CheckQueryResults(
-		t, "SELECT description FROM [SHOW JOBS] WHERE job_type='RESTORE' ORDER BY created",
+		t, "SELECT description FROM crdb_internal.jobs WHERE job_type='RESTORE' ORDER BY created",
 		[][]string{
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
 				backups[0].(string), backups[1].(string), backups[2].(string))},
@@ -5771,7 +5771,7 @@ func TestBackupRestoreShowJob(t *testing.T) {
 	// TODO (lucy): Update this if/when we decide to change how these jobs queued by
 	// the startup migration are handled.
 	sqlDB.CheckQueryResults(
-		t, "SELECT description FROM [SHOW JOBS] WHERE job_type != 'MIGRATION' AND description != 'updating privileges' ORDER BY description",
+		t, "SELECT description FROM crdb_internal.jobs WHERE job_type = 'BACKUP' OR job_type = 'RESTORE' ORDER BY description",
 		[][]string{
 			{"BACKUP DATABASE data TO 'nodelocal://1/foo' WITH OPTIONS (revision_history = true)"},
 			{"RESTORE TABLE data.bank FROM 'nodelocal://1/foo' WITH OPTIONS (into_db = 'data 2', skip_missing_foreign_keys)"},

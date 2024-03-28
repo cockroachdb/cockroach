@@ -9,6 +9,22 @@ set -euo pipefail
 export GCE_PROJECT=cockroach-drt
 export ROACHPROD_DNS="drt.crdb.io"
 
+if [ "$#" -lt 1 ]; then
+  echo
+  echo "drtprod runs roachprod commands against DRT clusters"
+  echo
+  echo "Usage: drtprod <command>"
+  echo
+  echo "Commands include:"
+  echo "  push-hosts: write the ips and pgurl files for a cluster to a node/cluster"
+  echo "  dns: update/create DNS entries in drt.crdb.io for a cluster"
+  echo "  create: a wrapper for the 'roachprod' with predefined specs for named clusters"
+  echo "  *: any other command is passed to roachprod, potentialy with flags addded"
+  echo
+  roachprod | sed -e 's/roachprod/drtprod/g'
+  exit 0
+fi
+
 case $1 in
   "start")
     if [[ "$*" != *"--restart"* ]]; then
@@ -33,7 +49,7 @@ case $1 in
     ;;
   "dns")
     if [ "$#" -lt 2 ]; then
-      echo "usage: $0 $1 <cluster> [create]"
+      echo "usage: drtprod $1 <cluster> [create]"
       exit 1
     fi 
     # roachprod only manages DNS in ephemeral, so we just do this ourselves.
@@ -53,7 +69,7 @@ case $1 in
     ;;
   "create")
     if [ "$#" -lt 2 ]; then
-      echo "usage: $0 create {drt-main,drt-ua1,drt-ua2}"
+      echo "usage: drtprod create {drt-main,drt-ua1,drt-ua2}"
       exit 1
     fi
     case "${2}" in
@@ -99,7 +115,7 @@ case $1 in
         ;;
       *)
         echo
-        echo "ATN: If $2 is intended to be long-lived, please define it by name in $0 instead."
+        echo "ATN: If $2 is intended to be long-lived, please define it by name in drtprod instead."
         echo
         exec roachprod "$@"
       ;;
