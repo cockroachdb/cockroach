@@ -27,7 +27,8 @@ func constructSelectQuery(n *tree.ShowJobs) string {
 		baseQuery.WriteString(`statement, `)
 	}
 	baseQuery.WriteString(`user_name, status, running_status, `)
-	baseQuery.WriteString(`created, started, finished, modified, `)
+	baseQuery.WriteString(`date_trunc('second', created) as created, date_trunc('second', started) as started, `)
+	baseQuery.WriteString(`date_trunc('second', finished) as finished, date_trunc('second', modified) as modified, `)
 	baseQuery.WriteString(`fraction_completed, error, coordinator_id`)
 
 	if n.Jobs != nil {
