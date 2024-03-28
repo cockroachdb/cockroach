@@ -754,6 +754,7 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 				Server: &server.TestingKnobs{
 					WallClock: manualClock,
 				},
+				KVClient: &kvcoord.ClientTestingKnobs{RouteToLeaseholderFirst: true},
 			},
 			Settings: st,
 			RaftConfig: base.RaftConfig{

@@ -458,6 +458,7 @@ func TestSendRPCOrder(t *testing.T) {
 		TransportFactory:  transportFactory,
 		RangeDescriptorDB: mockRangeDescriptorDBForDescs(descriptor),
 		Settings:          cluster.MakeTestingClusterSettings(),
+		TestingKnobs:      ClientTestingKnobs{RouteToLeaseholderFirst: true},
 	}
 
 	for _, tc := range testCases {
@@ -1189,6 +1190,7 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 		TransportFactory:  adaptSimpleTransport(sendFn),
 		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
+		TestingKnobs:      ClientTestingKnobs{RouteToLeaseholderFirst: true},
 	}
 	ds := NewDistSender(cfg)
 
@@ -1308,6 +1310,7 @@ func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 				TransportFactory:  adaptSimpleTransport(sendFn),
 				RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
 				Settings:          cluster.MakeTestingClusterSettings(),
+				TestingKnobs:      ClientTestingKnobs{RouteToLeaseholderFirst: true},
 			}
 			ds := NewDistSender(cfg)
 
@@ -4020,7 +4023,8 @@ func TestCanSendToFollower(t *testing.T) {
 			InitialBackoff: time.Microsecond,
 			MaxBackoff:     time.Microsecond,
 		},
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings:     cluster.MakeTestingClusterSettings(),
+		TestingKnobs: ClientTestingKnobs{RouteToLeaseholderFirst: true},
 	}
 	for i, c := range []struct {
 		canSendToFollower bool
