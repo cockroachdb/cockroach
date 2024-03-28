@@ -3875,17 +3875,24 @@ func (og *operationGenerator) dropSchema(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 	crossReferences := false
+	crossSchemaFunctionReferences := false
 	if schemaExists {
 		crossReferences, err = og.schemaContainsTypesWithCrossSchemaReferences(ctx, tx, schemaName)
 		if err != nil {
 			return nil, err
 		}
+		crossSchemaFunctionReferences, err = og.schemaContainsHasReferredFunctions(ctx, tx, schemaName)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedSchema, !schemaExists},
 		{pgcode.InvalidSchemaName, schemaName == catconstants.PublicSchemaName},
 		{pgcode.FeatureNotSupported, crossReferences && !og.useDeclarativeSchemaChanger},
+		{pgcode.DependentObjectsStillExist, crossSchemaFunctionReferences && !og.useDeclarativeSchemaChanger},
 	})
 
 	stmt.sql = fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName)
@@ -3923,6 +3930,16 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 		{"descriptors", descJSONQuery},
 	}, `SELECT quote_ident(name) FROM descriptors WHERE descriptor ? 'schema'`)
 
+	functionsQuery := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT
+	quote_ident(schema_id::REGNAMESPACE::STRING) AS schema,
+	quote_ident(name) AS name,
+	array_to_string(proargnames, ',') AS args
+FROM
+	functions
+	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000);`)
 	enums, err := Collect(ctx, og, tx, pgx.RowToMap, enumQuery)
 	if err != nil {
 		return nil, err
@@ -3932,6 +3949,10 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 		return nil, err
 	}
 	schemas, err := Collect(ctx, og, tx, pgx.RowTo[string], schemasQuery)
+	if err != nil {
+		return nil, err
+	}
+	functions, err := Collect(ctx, og, tx, pgx.RowToMap, functionsQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -3969,6 +3990,25 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	for _, table := range tables {
 		possibleReturnReferences = append(possibleReturnReferences, fmt.Sprintf(`SETOF %s`, table))
 		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf(`((SELECT count(*) FROM %s LIMIT 0) = 0)`, table))
+	}
+
+	// For each function generate a possible invocation passing in null arguments.
+	for _, function := range functions {
+		args := ""
+		if function["args"] != nil {
+			args = function["args"].(string)
+			argIn := strings.Builder{}
+			// TODO(fqazi): Longer term we should populate actual arguments and
+			// not just NULLs.
+			for range strings.Split(args, ",") {
+				if argIn.Len() > 0 {
+					argIn.WriteString(",")
+				}
+				argIn.WriteString("NULL")
+			}
+			args = argIn.String()
+		}
+		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf("(SELECT %s.%s(%s) IS NOT NULL)", function["schema"].(string), function["name"].(string), args))
 	}
 
 	placeholderMap := template.FuncMap{
@@ -4057,7 +4097,8 @@ func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opS
 		{"descriptors", descJSONQuery},
 		{"functions", functionDescsQuery},
 	}, `SELECT
-			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')'
+			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')' as name,
+			(id + 100000) as func_oid
 			FROM functions
 			JOIN LATERAL (
 				SELECT
@@ -4070,18 +4111,55 @@ func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opS
 			`,
 	)
 
-	functions, err := Collect(ctx, og, tx, pgx.RowTo[string], q)
+	functions, err := Collect(ctx, og, tx, pgx.RowToMap, q)
 	if err != nil {
 		return nil, err
+	}
+
+	functionDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
+		With([]CTE{
+			{"function_deps", functionDepsQuery},
+		},
+			`SELECT DISTINCT to_oid::INT8 FROM function_deps;`,
+		))
+	if err != nil {
+		return nil, err
+	}
+
+	functionDepsMap := make(map[int64]struct{})
+	for _, f := range functionDeps {
+		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
+	}
+
+	functionWithDeps := make([]map[string]any, 0, len(functions))
+	functionWithoutDeps := make([]map[string]any, 0, len(functions))
+	for _, f := range functions {
+		if _, ok := functionDepsMap[f["func_oid"].(int64)]; ok {
+			functionWithDeps = append(functionWithDeps, f)
+		} else {
+			functionWithoutDeps = append(functionWithoutDeps, f)
+		}
 	}
 
 	stmt, expectedCode, err := Generate[*tree.DropRoutine](og.params.rng, og.produceError(), []GenerationCase{
 		{pgcode.UndefinedFunction, `DROP FUNCTION "NoSuchFunction"`},
 		{pgcode.SuccessfulCompletion, `DROP FUNCTION IF EXISTS "NoSuchFunction"`},
-		{pgcode.SuccessfulCompletion, `DROP FUNCTION { Function }`},
+		{pgcode.SuccessfulCompletion, `DROP FUNCTION { FunctionWithoutDeps }`},
+		{pgcode.DependentObjectsStillExist, `DROP FUNCTION { FunctionWithDeps }`},
 	}, template.FuncMap{
-		"Function": func() (string, error) {
-			return PickOne(og.params.rng, functions)
+		"FunctionWithoutDeps": func() (string, error) {
+			one, err := PickOne(og.params.rng, functionWithoutDeps)
+			if err != nil {
+				return "", err
+			}
+			return one["name"].(string), nil
+		},
+		"FunctionWithDeps": func() (string, error) {
+			one, err := PickOne(og.params.rng, functionWithDeps)
+			if err != nil {
+				return "", err
+			}
+			return one["name"].(string), nil
 		},
 	})
 
@@ -4100,7 +4178,8 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 	}, `SELECT
 				quote_ident(schema_id::REGNAMESPACE::TEXT) AS schema,
 				quote_ident(name) AS name,
-				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')' AS qualified_name
+				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')' AS qualified_name,
+				(id + 100000) as func_oid
 			FROM functions
 			JOIN LATERAL (
 				SELECT
@@ -4117,6 +4196,31 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 
+	functionDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
+		With([]CTE{
+			{"function_deps", functionDepsQuery},
+		},
+			`SELECT DISTINCT to_oid::INT8 FROM function_deps;`,
+		))
+	if err != nil {
+		return nil, err
+	}
+
+	functionDepsMap := make(map[int64]struct{})
+	for _, f := range functionDeps {
+		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
+	}
+
+	functionWithDeps := make([]map[string]any, 0, len(functions))
+	functionWithoutDeps := make([]map[string]any, 0, len(functions))
+	for _, f := range functions {
+		if _, ok := functionDepsMap[f["func_oid"].(int64)]; ok {
+			functionWithDeps = append(functionWithDeps, f)
+		} else {
+			functionWithoutDeps = append(functionWithoutDeps, f)
+		}
+	}
+
 	stmt, expectedCode, err := Generate[*tree.AlterRoutineRename](og.params.rng, og.produceError(), []GenerationCase{
 		{pgcode.UndefinedFunction, `ALTER FUNCTION "NoSuchFunction" RENAME TO "IrrelevantFunctionName"`},
 		// TODO(chrisseto): Neither of these seem to work as expected. Renaming a
@@ -4125,14 +4229,18 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 		// something to do with search paths and/or function overloads.
 		// {pgcode.DuplicateFunction, `{ with ExistingFunction } ALTER FUNCTION { .qualified_name } RENAME TO { ConflictingName . } { end }`},
 		// {pgcode.DuplicateFunction, `{ with ExistingFunction } ALTER FUNCTION { .qualified_name } RENAME TO { .name } { end }`},
-		{pgcode.SuccessfulCompletion, `ALTER FUNCTION { (ExistingFunction).qualified_name } RENAME TO { UniqueName }`},
+		{pgcode.SuccessfulCompletion, `ALTER FUNCTION { (ExistingFunctionWithoutDeps).qualified_name } RENAME TO { UniqueName }`},
+		{pgcode.FeatureNotSupported, `ALTER FUNCTION { (ExistingFunctionWithDeps).qualified_name } RENAME TO { UniqueName }`},
 	}, template.FuncMap{
 		"UniqueName": func() *tree.Name {
 			name := tree.Name(fmt.Sprintf("udf_%s", og.newUniqueSeqNumSuffix()))
 			return &name
 		},
-		"ExistingFunction": func() (map[string]any, error) {
-			return PickOne(og.params.rng, functions)
+		"ExistingFunctionWithoutDeps": func() (map[string]any, error) {
+			return PickOne(og.params.rng, functionWithoutDeps)
+		},
+		"ExistingFunctionWithDeps": func() (map[string]any, error) {
+			return PickOne(og.params.rng, functionWithDeps)
 		},
 		"ConflictingName": func(existing map[string]any) (string, error) {
 			selected, err := PickOne(og.params.rng, util.Filter(functions, func(other map[string]any) bool {

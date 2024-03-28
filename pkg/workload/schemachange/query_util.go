@@ -100,6 +100,14 @@ const (
 	functionDescsQuery = `SELECT id, schema_id, name, descriptor->'function' AS descriptor FROM descriptors WHERE descriptor ? 'function'`
 
 	regionsFromClusterQuery = `SELECT * FROM [SHOW REGIONS FROM CLUSTER]`
+
+	functionDepsQuery = `SELECT
+	objid AS from_oid, refobjid AS to_oid
+FROM
+	pg_depend AS d
+WHERE
+	d.classid = 'pg_catalog.pg_proc'::REGCLASS::INT8
+	AND d.refclassid = 'pg_catalog.pg_proc'::REGCLASS::INT8`
 )
 
 func regionsFromDatabaseQuery(database string) string {

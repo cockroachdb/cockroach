@@ -29,6 +29,29 @@ SELECT * FROM udfCallNest_3(1, 2)
 ----
 512
 
+# Get the dependency graph from pg_depend between functions.
+query TT rowsort
+SELECT
+	src_p.proname as from, dst_p.proname as to
+FROM
+	pg_depend AS d, pg_proc AS src_p, pg_proc AS dst_p
+WHERE
+	d.classid = 'pg_catalog.pg_proc'::REGCLASS::INT8
+	AND d.refclassid = 'pg_catalog.pg_proc'::REGCLASS::INT8
+	AND d.objid = src_p.oid
+	AND d.refobjid = dst_p.oid;
+----
+udfcallnest          udfcall
+udfcallnest_2        udfcall
+udfcallnest_2        udfcallnest
+udfcallnest_3        udfcall
+udfcallnest_3        udfcallnest_2
+udfcallnest_3        udfcallnest
+upper_hello          lower_hello
+concat_hello         lower_hello
+concat_hello         upper_hello
+nested_udf_for_from  upper_hello
+
 # Validate recursion doesn't work today.
 statement error pgcode 42883 unknown function: recursion_check\(\)
 CREATE FUNCTION recursion_check() RETURNS STRING  LANGUAGE SQL AS $$ SELECT recursion_check() $$;
