@@ -2521,12 +2521,12 @@ UTF8  NULL
 
 # TODO(jordan): Restore this to original form by removing FROM
 # clause once issue 32876 is fixed.
-query TITI
-SELECT pg_catalog.inet_client_addr(), pg_catalog.inet_client_port(), pg_catalog.inet_server_addr(), pg_catalog.inet_server_port()
+query TITB
+SELECT pg_catalog.inet_client_addr(), pg_catalog.inet_client_port(), pg_catalog.inet_server_addr(), pg_catalog.inet_server_port() <> 0
 FROM pg_class
 WHERE relname = 'pg_constraint'
 ----
-::/0  0  ::/0  0
+::/0  0  127.0.0.1  true
 
 query TTTT
 SELECT quote_ident('foo'), quote_ident('select'), quote_ident('int8'), quote_ident('numeric')
