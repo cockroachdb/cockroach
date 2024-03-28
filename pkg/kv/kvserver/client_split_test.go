@@ -1185,6 +1185,93 @@ func TestStoreRangeSplitWithTracing(t *testing.T) {
 	require.NotRegexp(t, traceRegexp, stringifiedSpans)
 }
 
+// TestStoreRangeSplitWithMismatchedDesc reproduces a split failure when the
+// request to re-compute stats fails due to a range descriptor mismatch.
+// It does so by splitting a range and concurrently subsuming that range via a
+// range merge. The split fails and returns an error to the client.
+func TestStoreRangeSplitWithMismatchedDesc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	splitBlocked := make(chan struct{})
+	doneBlocking := atomicValue[bool]{}
+	doneBlocking.set(false)
+	filter := func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+		if req, ok := request.GetArg(kvpb.RecomputeStats); ok {
+			rs := req.(*kvpb.RecomputeStatsRequest)
+			// Block the split right before evaluating the RecomputeStats request.
+			// Only do so the first time; the split may get retried or there could be
+			// other RecomputeStatsRequests, and we don't want to block them.
+			if rs.Key.Equal(roachpb.Key("b")) && !doneBlocking.get() {
+				// Signal that the split is blocked.
+				splitBlocked <- struct{}{}
+				// Wait for split to be unblocked.
+				<-splitBlocked
+				doneBlocking.set(true)
+			}
+		}
+		return nil
+	}
+
+	ctx := context.Background()
+	settings := cluster.MakeClusterSettings()
+	kvserver.EnableEstimatedMVCCStatsInSplit.Override(ctx, &settings.SV, true)
+	kvserver.EnableMVCCStatsRecomputationInSplit.Override(ctx, &settings.SV, true)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableMergeQueue:    true,
+				DisableSplitQueue:    true,
+				TestingRequestFilter: filter,
+			},
+		},
+		Settings: settings,
+	})
+
+	defer s.Stopper().Stop(ctx)
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	// Write some initial data.
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("a"), []byte("foo")))
+	require.NoError(t, pErr.GoError())
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("b"), []byte("bar")))
+	require.NoError(t, pErr.GoError())
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("c"), []byte("foo")))
+	require.NoError(t, pErr.GoError())
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), putArgs([]byte("d"), []byte("bar")))
+	require.NoError(t, pErr.GoError())
+
+	// Split the range at "b".
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(roachpb.Key("b")))
+	require.NoError(t, pErr.GoError())
+
+	// Split the new RHS at "c". This split will be blocked by the above filter
+	// because the range we're splitting starts at key "b".
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		// Use AdminSplit with a non-test sender here to reproduce exactly what will
+		// be returned to the client.
+		return store.DB().AdminSplit(ctx, roachpb.Key("c"), hlc.MaxTimestamp)
+	})
+
+	// Wait until split is underway.
+	<-splitBlocked
+
+	// Merge the LHS and RHS back into one range ("a" - "d").
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminMergeArgs(roachpb.Key("a")))
+	require.NoError(t, pErr.GoError())
+
+	// Unblock the split.
+	splitBlocked <- struct{}{}
+
+	// Wait for the split to complete. The RecomputeStats requests finds a
+	// mismatch between the start key of the request ("b") and the start key of
+	// the merged range ("a").
+	require.Regexp(t, g.Wait(),
+		"failed to re-compute MVCCStats pre split: descriptor mismatch; range likely merged")
+}
+
 // RaftMessageHandlerInterceptor wraps a storage.IncomingRaftMessageHandler. It
 // delegates all methods to the underlying storage.IncomingRaftMessageHandler,
 // except that HandleSnapshot calls receiveSnapshotFilter with the snapshot
