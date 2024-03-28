@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -68,7 +69,8 @@ func NewTransactionCommittedError() error {
 
 // NewNonNullViolationError creates an error for a violation of a non-NULL constraint.
 func NewNonNullViolationError(columnName string) error {
-	return pgerror.Newf(pgcode.NotNullViolation, "null value in column %q violates not-null constraint", columnName)
+	return pgerror.Newf(pgcode.NotNullViolation, "null value in column %q violates not-null constraint",
+		log.SafeOperational(columnName))
 }
 
 // NewInvalidAssignmentCastError creates an error that is used when a mutation
