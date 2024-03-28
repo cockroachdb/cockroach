@@ -677,6 +677,10 @@ func (s *scope) startAggFunc() *scope {
 	}
 	s.inAgg = true
 
+	if s.builder.insideRecursiveCTE {
+		panic(pgerror.New(pgcode.InvalidRecursion, "aggregate functions are not allowed in a recursive query's recursive term"))
+	}
+
 	if s.groupby == nil {
 		return s.builder.allocScope()
 	}
