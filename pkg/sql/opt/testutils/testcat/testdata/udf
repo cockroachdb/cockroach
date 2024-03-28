@@ -95,3 +95,13 @@ SHOW CREATE FUNCTION f_default_names
 ----
 FUNCTION f_default_names(: int) -> tuple{int AS column1, int AS param2, int AS column3} [volatile]
  └── SELECT (1, 2, 3)
+
+exec-ddl
+CREATE FUNCTION f_default_params(INOUT INT, IN param2 FLOAT DEFAULT 3.5, OUT INT, IN param4 INT = 4, OUT INT) RETURNS RECORD LANGUAGE SQL AS 'SELECT (1, 2, 3)'
+----
+
+exec-ddl
+SHOW CREATE FUNCTION f_default_params
+----
+FUNCTION f_default_params(: int, param2: float DEFAULT 3.5, param4: int DEFAULT 4) -> tuple{int AS column1, int AS column2, int AS column3} [volatile]
+ └── SELECT (1, 2, 3)

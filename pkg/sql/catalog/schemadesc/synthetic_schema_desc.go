@@ -159,7 +159,9 @@ func (p synthetic) GetRawBytesInStorage() []byte {
 }
 
 // GetResolvedFuncDefinition implements the SchemaDescriptor interface.
-func (p synthetic) GetResolvedFuncDefinition(name string) (*tree.ResolvedFunctionDefinition, bool) {
+func (p synthetic) GetResolvedFuncDefinition(
+	context.Context, string,
+) (*tree.ResolvedFunctionDefinition, bool) {
 	return nil, false
 }
 

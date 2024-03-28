@@ -111,6 +111,7 @@ func TestMetadata(t *testing.T) {
 	udfName := tree.MakeQualifiedRoutineName("t", "public", "udf")
 	md.AddUserDefinedFunction(
 		&tree.Overload{Oid: catid.FuncIDToOID(1111)},
+		types.OneIntCol,
 		udfName.ToUnresolvedObjectName(),
 	)
 
@@ -179,11 +180,8 @@ func TestMetadata(t *testing.T) {
 		}
 	}
 
-	newUDFDeps, oldUDFDeps := mdNew.TestingUDFDeps(), md.TestingUDFDeps()
-	for id, overload := range oldUDFDeps {
-		if newUDFDeps[id] != overload {
-			t.Fatalf("expected UDF dependency to be copied")
-		}
+	if !mdNew.TestingUDFDepsEqual(md) {
+		t.Fatalf("expected UDF dependency to be copied")
 	}
 
 	newNamesByID, oldNamesByID := mdNew.TestingObjectRefsByName(), md.TestingObjectRefsByName()

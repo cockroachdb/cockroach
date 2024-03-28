@@ -507,3 +507,119 @@ CREATE PROCEDURE p_udt(OUT typ) AS $$ SELECT (1, 2); $$ LANGUAGE SQL;
 # ----
 # column1
 # (1,2)
+
+subtest default_exprs
+
+statement error pgcode 22P02 could not parse "a" as type int
+CREATE PROCEDURE my_sum(OUT INT, a INT, b INT DEFAULT 2, c INT DEFAULT 'a') LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE PROCEDURE my_sum(OUT INT, a INT, b INT DEFAULT 2, c INT) LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE PROCEDURE my_sum(OUT INT, a INT, b INT DEFAULT 2, INOUT c INT) LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42P13 only input parameters can have default values
+CREATE PROCEDURE my_sum(OUT INT, a INT, b INT DEFAULT 2, OUT c INT = 3) LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement error pgcode 42P13 procedure OUT parameters cannot appear after one with a default value
+CREATE PROCEDURE my_sum(a INT, b INT DEFAULT 2, OUT INT) LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement ok
+CREATE PROCEDURE my_sum(OUT INT, a INT, b INT, c INT) LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 42P13 input parameters after one with a default value must also have defaults
+CREATE OR REPLACE PROCEDURE my_sum(OUT INT, a INT = 1, b INT, c INT = 3) LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+# Adding a default expression to a parameter is ok.
+statement ok
+CREATE OR REPLACE PROCEDURE my_sum(OUT INT, a INT, b INT DEFAULT 2, c INT = 3) LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+# But removing an existing default expression is not ok.
+statement error pgcode 42P13 cannot remove parameter defaults from existing function
+CREATE OR REPLACE PROCEDURE my_sum(OUT INT, a INT, b INT, c INT = 3) LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+statement error pgcode 22P02 could not parse "a" as type int
+CREATE OR REPLACE PROCEDURE my_sum(OUT INT, a INT = 'a', b INT DEFAULT 2, c INT = 3) LANGUAGE SQL AS $$ SELECT a + b + c; $$;
+
+query I
+CALL my_sum(NULL, 1);
+----
+6
+
+query I
+CALL my_sum(NULL, 1, 1);
+----
+5
+
+# Add another overload that creates ambiguity for some number of input
+# arguments.
+statement ok
+CREATE PROCEDURE my_sum(OUT INT, a INT) LANGUAGE SQL AS $$ SELECT a; $$;
+
+statement error pgcode 42725 procedure my_sum\(unknown, int\) is not unique
+CALL my_sum(NULL, 1);
+
+statement ok
+DROP PROCEDURE my_sum(INT);
+
+statement ok
+DROP PROCEDURE my_sum;
+
+statement ok
+CREATE PROCEDURE my_sum(OUT sum INT, INOUT a INT, INOUT b INT = 3) AS $$ SELECT (a + b, a, b); $$ LANGUAGE SQL;
+
+query III
+CALL my_sum(NULL, 1);
+----
+4  1  3
+
+query III
+CALL my_sum(NULL, 1, 1);
+----
+2  1  1
+
+statement ok
+DROP PROCEDURE my_sum;
+
+# Test case when DEFAULT expression uses a UDF.
+
+statement ok
+CREATE FUNCTION f1(a INT, b INT = 2) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement ok
+CREATE PROCEDURE p2(OUT INT, a INT, b INT = f1(1)) LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+query I
+CALL p2(NULL, 1);
+----
+4
+
+query I
+CALL p2(NULL, 1, 1);
+----
+2
+
+statement ok
+CREATE OR REPLACE FUNCTION f1(a INT, b INT = 2) RETURNS INT LANGUAGE SQL AS $$ SELECT a * b; $$;
+
+query I
+CALL p2(NULL, 1);
+----
+3
+
+query I
+CALL p2(NULL, 1, 1);
+----
+2
+
+statement error pgcode 2BP01 cannot drop function "f1" because other objects \(\[test.public.p2\]\) still depend on it
+DROP FUNCTION f1;
+
+statement ok
+DROP PROCEDURE p2;
+
+statement ok
+DROP FUNCTION f1;
+
+subtest end

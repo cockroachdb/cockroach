@@ -11,6 +11,7 @@
 package schemadesc
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -507,13 +510,17 @@ func (desc *Mutable) ReplaceOverload(
 	for i := range fn.Signatures {
 		sig := fn.Signatures[i]
 		match := existing.Types.Length() == len(sig.ArgTypes) &&
-			len(existing.OutParamOrdinals) == len(sig.OutParamOrdinals)
+			len(existing.OutParamOrdinals) == len(sig.OutParamOrdinals) &&
+			len(existing.DefaultExprs) == len(sig.DefaultExprs)
 		for j := 0; match && j < len(sig.ArgTypes); j++ {
 			match = existing.Types.GetAt(j).Equivalent(sig.ArgTypes[j])
 		}
 		for j := 0; match && j < len(sig.OutParamOrdinals); j++ {
 			match = existing.OutParamOrdinals[j] == sig.OutParamOrdinals[j] &&
 				existing.OutParamTypes.GetAt(j).Equivalent(sig.OutParamTypes[j])
+		}
+		for j := 0; match && j < len(sig.DefaultExprs); j++ {
+			match = tree.Serialize(existing.DefaultExprs[j]) == sig.DefaultExprs[j]
 		}
 		if match {
 			fn.Signatures[i] = newSignature
@@ -537,7 +544,7 @@ func (desc *immutable) GetObjectTypeString() string {
 // TODO(mgartner): This should not create tree.Overloads because it cannot fully
 // populated them.
 func (desc *immutable) GetResolvedFuncDefinition(
-	name string,
+	ctx context.Context, name string,
 ) (*tree.ResolvedFunctionDefinition, bool) {
 	funcDescPb, found := desc.GetFunction(name)
 	if !found {
@@ -583,6 +590,23 @@ func (desc *immutable) GetResolvedFuncDefinition(
 				outParamTypes[j] = tree.ParamType{Typ: sig.OutParamTypes[j]}
 			}
 			overload.OutParamTypes = outParamTypes
+		}
+		if len(sig.DefaultExprs) > 0 {
+			overload.DefaultExprs = make(tree.Exprs, len(sig.DefaultExprs))
+			for j, expr := range sig.DefaultExprs {
+				var err error
+				overload.DefaultExprs[j], err = parser.ParseExpr(expr)
+				if err != nil {
+					// We should never get an error during parsing the default
+					// expr.
+					inputParamOrdinal := len(sig.ArgTypes) - (len(sig.DefaultExprs) - j)
+					log.Errorf(
+						ctx, "DEFAULT expr for input param %d for routine %s: %v",
+						inputParamOrdinal, name, err,
+					)
+					return nil, false
+				}
+			}
 		}
 		prefixedOverload := tree.MakeQualifiedOverload(desc.GetName(), overload)
 		funcDef.Overloads = append(funcDef.Overloads, prefixedOverload)

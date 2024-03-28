@@ -3467,16 +3467,60 @@ func getMostSignificantOverload(
 		// Since there are ambiguity errors when udf with the same family
 		// parameter types, function signature has to be sorted out to directly
 		// match a specific UDF overload for execution.
-		var expTypes []*types.T
+		var allArgTypes []*types.T
 		for _, exp := range typedInputExprs {
-			expTypes = append(expTypes, exp.ResolvedType())
+			allArgTypes = append(allArgTypes, exp.ResolvedType())
 		}
 		matchIdx := -1
 		foundMatch := false
 		for k, idx := range oImpls {
 			candidate := overloads[idx]
 			srcParams := candidate.params()
-			if srcParams.MatchIdentical(expTypes) {
+			matches := srcParams.MatchIdentical(allArgTypes)
+			if !matches {
+				routineType, outParamOrdinals, _, defaultExprs := candidate.extraParamInfo()
+				if len(outParamOrdinals) == 0 && len(defaultExprs) == 0 {
+					continue
+				}
+				// When we have some OUT parameters and / or DEFAULT expressions
+				// for input parameters, simply matching against all argument
+				// types might be insufficient.
+				var inputTypes []*types.T
+				if expr.InCall && routineType == ProcedureRoutine && len(outParamOrdinals) > 0 {
+					// OUT parameters for procedures must be specified in the
+					// CALL invocation, but they should be ignored when
+					// comparing against input parameters. (Note that type
+					// coercibility for OUT parameters has already been
+					// performed.)
+					inputTypes = make([]*types.T, 0, len(typedInputExprs)-len(outParamOrdinals))
+					var numOutParamsSeen int
+					for i, t := range allArgTypes {
+						if numOutParamsSeen < len(outParamOrdinals) && i == int(outParamOrdinals[numOutParamsSeen]) {
+							numOutParamsSeen++
+							continue
+						}
+						inputTypes = append(inputTypes, t)
+					}
+				} else {
+					inputTypes = allArgTypes
+				}
+				// TODO(88947): this logic might need to change to support
+				// VARIADIC.
+				ovInputTypes, ok := srcParams.(ParamTypes)
+				if !ok {
+					return QualifiedOverload{}, errors.AssertionFailedf("overload params is %T and not ParamTypes", srcParams)
+				}
+				if len(defaultExprs) > 0 {
+					// Some parameters have DEFAULT expressions, so it might be
+					// the case that some input arguments were omitted.
+					numOmittedExprs := len(ovInputTypes) - len(inputTypes)
+					if numOmittedExprs > 0 && numOmittedExprs <= len(defaultExprs) {
+						ovInputTypes = ovInputTypes[:len(ovInputTypes)-numOmittedExprs]
+					}
+				}
+				matches = ovInputTypes.MatchIdentical(inputTypes)
+			}
+			if matches {
 				if foundMatch {
 					// Throw ambiguity error if there are more than one
 					// candidate overloads from same schema.

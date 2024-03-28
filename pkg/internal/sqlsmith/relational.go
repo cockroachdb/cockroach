@@ -950,7 +950,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 	if s.types == nil || len(s.types.scalarTypes) == 0 {
 		paramCnt = 0
 	}
-	// TODO(100962): Set a param default value sometimes.
+	var usedDefaultExpr bool
 	params := make(tree.RoutineParams, paramCnt)
 	paramTypes := make(tree.ParamTypes, paramCnt)
 	refs := make(colRefs, paramCnt)
@@ -970,6 +970,17 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 			Name:  tree.Name(pname),
 			Type:  ptyp,
 			Class: tree.RoutineParamClass(s.rnd.Intn(numSupportedParamClasses)),
+		}
+		if params[i].Class != tree.RoutineParamOut {
+			// OUT parameters aren't allowed to have DEFAULT expressions.
+			//
+			// If we already used a DEFAULT expression, then we must add one for
+			// this input parameter too. If we haven't already started using
+			// DEFAULT expressions, start with this parameter in 33% cases.
+			if usedDefaultExpr || s.d6() < 3 {
+				params[i].DefaultVal = makeScalar(s, ptyp, nil /* colRefs */)
+				usedDefaultExpr = true
+			}
 		}
 		paramTypes[i] = tree.ParamType{
 			Name: pname,
@@ -1050,6 +1061,9 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 	}
 
 	stmt := &tree.CreateRoutine{
+		// TODO(yuzefovich): once we start generating procedures, we'll need to
+		// ensure that no OUT parameters are added after the first parameter
+		// with the DEFAULT expression.
 		Replace: s.coin(),
 		Name:    name,
 		Params:  params,

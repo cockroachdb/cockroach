@@ -132,6 +132,7 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 			&evalCtx.SessionData().SearchPath,
 			tree.BuiltinRoutine|tree.UDFRoutine|tree.ProcedureRoutine,
 			false, /* inDropContext */
+			false, /* tryDefaultExprs */
 		)
 		if err != nil {
 			return nil, err

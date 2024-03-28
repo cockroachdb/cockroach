@@ -1276,7 +1276,7 @@ func (s *TestState) ResolveFunction(
 	if err != nil {
 		return nil, err
 	}
-	fd, found := scDesc.GetResolvedFuncDefinition(fnName.Object())
+	fd, found := scDesc.GetResolvedFuncDefinition(ctx, fnName.Object())
 	if !found {
 		return nil, tree.ErrRoutineUndefined
 	}

@@ -578,7 +578,7 @@ func maybeLookupRoutine(
 			return nil, pgerror.Newf(pgcode.UndefinedSchema, "schema %q does not exist", fn.Schema())
 		}
 
-		udfDef, _ := prefix.Schema.GetResolvedFuncDefinition(fn.Object())
+		udfDef, _ := prefix.Schema.GetResolvedFuncDefinition(ctx, fn.Object())
 		return udfDef, nil
 	}
 
@@ -592,7 +592,7 @@ func maybeLookupRoutine(
 		if !found {
 			continue
 		}
-		curUdfDef, found := prefix.Schema.GetResolvedFuncDefinition(fn.Object())
+		curUdfDef, found := prefix.Schema.GetResolvedFuncDefinition(ctx, fn.Object())
 		if !found {
 			continue
 		}

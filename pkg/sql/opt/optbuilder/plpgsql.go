@@ -176,7 +176,6 @@ type routineParam struct {
 	name  ast.Variable
 	typ   *types.T
 	class tree.RoutineParamClass
-	// TODO(100962): populate DefaultVal.
 }
 
 func newPLpgSQLBuilder(
@@ -1854,8 +1853,10 @@ func (b *plpgsqlBuilder) makeReturnForOutParams() tree.Expr {
 		if param != "" {
 			exprs[i] = tree.NewUnresolvedName(string(param))
 		} else {
-			// TODO(100962): this logic will likely need to be
-			// changed.
+			// TODO(121251): if the unnamed parameter is of the INOUT type, then
+			// we should be using the argument expression here - either the
+			// provided one or the DEFAULT one (assuming this parameter hasn't
+			// been modified via $i notation).
 			exprs[i] = tree.DNull
 		}
 	}

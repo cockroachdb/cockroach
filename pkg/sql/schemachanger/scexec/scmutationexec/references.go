@@ -642,6 +642,9 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 				ol.OutParamOrdinals = append(ol.OutParamOrdinals, int32(pIdx))
 				ol.OutParamTypes = append(ol.OutParamTypes, p.Type)
 			}
+			if p.DefaultExpr != nil {
+				ol.DefaultExprs = append(ol.DefaultExprs, *p.DefaultExpr)
+			}
 		}
 		sc.AddFunction(obj.GetName(), ol)
 	}

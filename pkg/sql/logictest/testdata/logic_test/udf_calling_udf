@@ -143,4 +143,21 @@ statement error pgcode 42P13 cannot add dependency from descriptor .* to functio
 CREATE OR REPLACE FUNCTION self_cycle(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT self_cycle(a, b); $$;
 
 statement ok
+CREATE OR REPLACE FUNCTION self_cycle(a INT = 1, b INT = 2) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement error pgcode 42P13 cannot add dependency from descriptor .* to function self_cycle .* because there will be a dependency cycle
+CREATE OR REPLACE FUNCTION self_cycle(a INT = 1, b INT = self_cycle(1)) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b; $$;
+
+statement ok
 DROP FUNCTION self_cycle;
+
+statement ok
+CREATE FUNCTION f1(a INT = 1) RETURNS INT LANGUAGE SQL AS $$ SELECT a; $$;
+CREATE FUNCTION f2(b INT = f1()) RETURNS INT LANGUAGE SQL AS $$ SELECT b; $$;
+
+statement error pgcode 42P13 cannot add dependency from descriptor .* to function f\d .* because there will be a dependency cycle
+CREATE OR REPLACE FUNCTION f1(a INT = f2()) RETURNS INT LANGUAGE SQL AS $$ SELECT a; $$;
+
+statement ok
+DROP FUNCTION f2;
+DROP FUNCTION f1;

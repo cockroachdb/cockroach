@@ -158,6 +158,7 @@ func (n *createFunctionNode) createNewFunction(
 	signatureTypes := make([]*types.T, 0, len(udfDesc.Params))
 	var outParamOrdinals []int32
 	var outParamTypes []*types.T
+	var defaultExprs []string
 	for paramIdx, param := range udfDesc.Params {
 		class := funcdesc.ToTreeRoutineParamClass(param.Class)
 		if tree.IsInParamClass(class) {
@@ -166,6 +167,9 @@ func (n *createFunctionNode) createNewFunction(
 		if class == tree.RoutineParamOut {
 			outParamOrdinals = append(outParamOrdinals, int32(paramIdx))
 			outParamTypes = append(outParamTypes, param.Type)
+		}
+		if param.DefaultExpr != nil {
+			defaultExprs = append(defaultExprs, *param.DefaultExpr)
 		}
 	}
 	scDesc.AddFunction(
@@ -178,6 +182,7 @@ func (n *createFunctionNode) createNewFunction(
 			IsProcedure:      udfDesc.IsProcedure(),
 			OutParamOrdinals: outParamOrdinals,
 			OutParamTypes:    outParamTypes,
+			DefaultExprs:     defaultExprs,
 		},
 	)
 	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {
@@ -240,6 +245,7 @@ func (n *createFunctionNode) replaceFunction(
 	}
 	var outParamOrdinals []int32
 	var outParamTypes []*types.T
+	var defaultExprs []string
 	for i, p := range n.cf.Params {
 		udfDesc.Params[i], err = makeFunctionParam(params.ctx, p, params.p)
 		if err != nil {
@@ -248,6 +254,9 @@ func (n *createFunctionNode) replaceFunction(
 		if p.Class == tree.RoutineParamOut {
 			outParamOrdinals = append(outParamOrdinals, int32(i))
 			outParamTypes = append(outParamTypes, udfDesc.Params[i].Type)
+		}
+		if udfDesc.Params[i].DefaultExpr != nil {
+			defaultExprs = append(defaultExprs, *udfDesc.Params[i].DefaultExpr)
 		}
 	}
 
@@ -298,10 +307,14 @@ func (n *createFunctionNode) replaceFunction(
 	// The only allowed change is reordering OUT parameters in respect to input
 	// ones, but we have a more general "signature change" check here to be
 	// safe.
-	signatureChanged := len(existing.OutParamOrdinals) != len(outParamOrdinals)
+	signatureChanged := len(existing.OutParamOrdinals) != len(outParamOrdinals) ||
+		len(existing.DefaultExprs) != len(defaultExprs)
 	for i := 0; !signatureChanged && i < len(outParamOrdinals); i++ {
 		signatureChanged = existing.OutParamOrdinals[i] != outParamOrdinals[i] ||
 			!existing.OutParamTypes.GetAt(i).Equivalent(outParamTypes[i])
+	}
+	for i := 0; !signatureChanged && i < len(defaultExprs); i++ {
+		signatureChanged = tree.Serialize(existing.DefaultExprs[i]) != defaultExprs[i]
 	}
 	if signatureChanged {
 		if err = scDesc.ReplaceOverload(
@@ -315,6 +328,7 @@ func (n *createFunctionNode) replaceFunction(
 				IsProcedure:      n.cf.IsProcedure,
 				OutParamOrdinals: outParamOrdinals,
 				OutParamTypes:    outParamTypes,
+				DefaultExprs:     defaultExprs,
 			},
 		); err != nil {
 			return err
@@ -592,7 +606,8 @@ func makeFunctionParam(
 	}
 
 	if param.DefaultVal != nil {
-		return descpb.FunctionDescriptor_Parameter{}, unimplemented.NewWithIssue(100962, "default value")
+		s := tree.Serialize(param.DefaultVal)
+		pbParam.DefaultExpr = &s
 	}
 
 	return pbParam, nil
@@ -707,6 +722,18 @@ func (n *createFunctionNode) validateParameters(udfDesc *funcdesc.Mutable) error
 			return errors.AssertionFailedf(
 				"different return types should've been caught earlier: old %v, new %v",
 				origOutParams, newOutParams,
+			)
+		}
+	}
+	// Verify that no DEFAULT expressions have been removed (adding new ones is
+	// ok). Note that other validity checks (like that the expressions are
+	// coercible to the parameter types and that all "default" parameters form
+	// contiguous parameter "suffix") have already been performed in the
+	// optbuilder.
+	for i := range origInParams {
+		if origInParams[i].DefaultExpr != nil && newInParams[i].DefaultVal == nil {
+			return pgerror.Newf(
+				pgcode.InvalidFunctionDefinition, "cannot remove parameter defaults from existing function",
 			)
 		}
 	}

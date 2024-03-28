@@ -61,6 +61,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		b.trackSchemaDeps = false
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
+		b.schemaFunctionDeps = intsets.Fast{}
 		b.qualifyDataSourceNamesInAST = false
 		b.evalCtx.Annotations = oldEvalCtxAnn
 		b.semaCtx.Annotations = oldSemaCtxAnn
@@ -135,9 +136,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	var functionDeps opt.SchemaFunctionDeps
 
 	afterBuildStmt := func() {
-		functionDeps.UnionWith(b.schemaFunctionDeps)
 		deps = append(deps, b.schemaDeps...)
 		typeDeps.UnionWith(b.schemaTypeDeps)
+		functionDeps.UnionWith(b.schemaFunctionDeps)
 		// Reset the tracked dependencies for next statement.
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
@@ -181,6 +182,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	// When multiple OUT parameters are present, parameter names become the
 	// labels in the output RECORD type.
 	var outParamNames []string
+	var sawDefaultExpr bool
 	for i := range cf.Params {
 		param := &cf.Params[i]
 		typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
@@ -207,6 +209,40 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 					"PL/pgSQL functions with RECORD input arguments are not yet supported",
 				))
 			}
+		}
+		if param.DefaultVal != nil && param.Class == tree.RoutineParamOut {
+			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
+				"only input parameters can have default values"))
+		}
+		if sawDefaultExpr {
+			if param.IsInParam() && param.DefaultVal == nil {
+				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
+					"input parameters after one with a default value must also have defaults"))
+			}
+			if cf.IsProcedure && param.Class == tree.RoutineParamOut {
+				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
+					"procedure OUT parameters cannot appear after one with a default value"))
+			}
+		}
+		if param.DefaultVal != nil {
+			// The DEFAULT expression must be coercible to the parameter type.
+			// TODO(check with reviewers): is this the right way to ensure that?
+			texpr := inScope.resolveType(param.DefaultVal, typ)
+			if resolved := texpr.ResolvedType(); resolved.Identical(typ) {
+				if !cast.ValidCast(resolved, typ, cast.ContextAssignment) {
+					panic(pgerror.Newf(pgcode.DatatypeMismatch,
+						"unable to coerce type %s to %s", resolved.Name(), typ.Name(),
+					))
+				}
+			}
+			// We'll build the DEFAULT expression for the purposes of dependency
+			// tracking.
+			// TODO(check with reviewers): is this the right way to do that?
+			// We also build the expression later, during execution of the
+			// routine - should we store this scalar expression somewhere?
+			_ = b.buildScalar(texpr, inScope, nil /* outScope */, nil /* outCol */, nil /* colRefs */)
+			afterBuildStmt()
+			sawDefaultExpr = true
 		}
 
 		// Add all input parameters to the base scope of the body.

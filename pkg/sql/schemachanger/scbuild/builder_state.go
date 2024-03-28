@@ -1294,7 +1294,8 @@ func (b *builderState) ResolveRoutine(
 	}
 
 	ol, err := fd.MatchOverload(
-		b.ctx, b.cr, routineObj, b.semaCtx.SearchPath, routineType, p.InDropContext,
+		b.ctx, b.cr, routineObj, b.semaCtx.SearchPath,
+		routineType, p.InDropContext, false, /* tryDefaultExprs */
 	)
 	if err != nil {
 		if p.IsExistenceOptional && errors.Is(err, tree.ErrRoutineUndefined) {
@@ -1534,6 +1535,7 @@ func (b *builderState) BuildUserPrivilegesFromDefaultPrivileges(
 	return ownerElem, upsElems
 }
 
+// TODO(100962): we might need something similar for the DEFAULT expr.
 func (b *builderState) WrapFunctionBody(
 	fnID descpb.ID,
 	bodyStr string,
