@@ -1,31 +1,8 @@
 # shouldEmitTransaction unit tests
 
-subtest telemetry_disabled
+subtest telemetry_disabled_txn_freq_0
 
-set-cluster-settings telemetryLoggingEnabled=false samplingMode=transaction stmtSampleFreq=10 txnSampleFreq=10
-----
-
-shouldEmitTransactionLog unixSecs=1 isTracing=false appName="telemetry-logging"
-----
-emit: false, skippedTxns: 0
-
-shouldEmitTransactionLog unixSecs=2 isTracing=true appName="telemetry-logging"
-----
-emit: false, skippedTxns: 0
-
-shouldEmitTransactionLog unixSecs=3 isTracing=false appName="telemetry-logging"
-----
-emit: false, skippedTxns: 0
-
-shouldEmitTransactionLog unixSecs=4 isTracing=true appName="telemetry-logging"
-----
-emit: false, skippedTxns: 0
-
-subtest end
-
-subtest telemetry_enabled_txn_freq_0
-
-set-cluster-settings telemetryLoggingEnabled=true samplingMode=transaction txnSampleFreq=0
+set-cluster-settings samplingMode=transaction txnSampleFreq=0
 ----
 
 shouldEmitTransactionLog unixSecs=1 isTracing=false appName="telemetry-logging"
@@ -48,7 +25,7 @@ subtest end
 
 subtest telemetry_enabled_txn_mode_off
 
-set-cluster-settings telemetryLoggingEnabled=true samplingMode=statement txnSampleFreq=10
+set-cluster-settings samplingMode=statement txnSampleFreq=10
 ----
 
 shouldEmitTransactionLog unixSecs=1 isTracing=false appName="telemetry-logging"
@@ -71,7 +48,7 @@ subtest end
 
 subtest telemetry_enabled_txn_mode_on
 
-set-cluster-settings telemetryLoggingEnabled=true samplingMode=transaction txnSampleFreq=1
+set-cluster-settings samplingMode=transaction txnSampleFreq=1
 ----
 
 shouldEmitTransactionLog unixSecs=1 isTracing=false appName="telemetry-logging"
@@ -109,7 +86,7 @@ subtest log_internal_console_queries
 # Transactions with app name prefix '$ internal-console' should be force logged when
 # sql.telemetry.query_sampling.internal_console.enabled is on.
 
-set-cluster-settings telemetryLoggingEnabled=true telemetryInternalConsoleQueriesEnabled=false samplingMode=transaction txnSampleFreq=1
+set-cluster-settings telemetryInternalConsoleQueriesEnabled=false samplingMode=transaction txnSampleFreq=1
 ----
 
 # Should return false because telemetryInternalConsoleQueriesEnabled is false and internal queries logging is off.
@@ -117,7 +94,7 @@ shouldEmitTransactionLog unixSecs=1 isTracing=false isInternal=true appName="$ i
 ----
 emit: false, skippedTxns: 0
 
-set-cluster-settings telemetryLoggingEnabled=true telemetryInternalConsoleQueriesEnabled=true samplingMode=transaction txnSampleFreq=1
+set-cluster-settings telemetryInternalConsoleQueriesEnabled=true samplingMode=transaction txnSampleFreq=1
 ----
 
 shouldEmitTransactionLog unixSecs=1 isTracing=false isInternal=true appName=($ internal-console)
@@ -133,7 +110,7 @@ subtest end
 subtest telemetry_enabled_txn_mode_on_internal_queries_on
 # Test that internal queries are sampled when internalStmtsOn is true.
 
-set-cluster-settings telemetryLoggingEnabled=true samplingMode=transaction txnSampleFreq=1 internalStmtsOn=true
+set-cluster-settings samplingMode=transaction txnSampleFreq=1 internalStmtsOn=true
 ----
 
 shouldEmitTransactionLog unixSecs=1 isTracing=false isInternal=true appName="telemetry-logging"

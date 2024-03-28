@@ -38,7 +38,7 @@ func TestCopyLogging(t *testing.T) {
 
 	for _, strings := range [][]string{
 		{`SET CLUSTER SETTING sql.log.all_statements.enabled = true`},
-		{`SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true`},
+		{`SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 8`},
 		{`SET CLUSTER SETTING sql.log.admin_audit.enabled = true`},
 	} {
 		t.Run(strings[0], func(t *testing.T) {

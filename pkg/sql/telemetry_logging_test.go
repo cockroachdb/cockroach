@@ -76,7 +76,7 @@ func TestTelemetryLogging(t *testing.T) {
 	db.QueryRow(t, `SHOW session_id`).Scan(&sessionID)
 	db.QueryRow(t, `SHOW database`).Scan(&databaseName)
 	db.Exec(t, `SET application_name = 'telemetry-logging-test'`)
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 8;`)
 	db.Exec(t, "CREATE TABLE t();")
 	db.Exec(t, "CREATE TABLE u(x int);")
 	db.Exec(t, "INSERT INTO u SELECT generate_series(1, 100);")
@@ -751,7 +751,6 @@ func TestTelemetryLoggingInternalEnabled(t *testing.T) {
 	db.Exec(t, `SET application_name = 'telemetry-internal-logging-test'`)
 
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 10;`)
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.internal.enabled = true;`)
 
 	// This query should trigger 2 internal TRUNCATE queries.
@@ -838,7 +837,7 @@ func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 8;`)
 	// Set query internal to `false` to guarantee that if an entry qith `internal-console` is showing
 	// is because of the setting `sql.telemetry.query_sampling.internal_console.enabled` and not
 	// being sampled as a regular internal.
@@ -926,7 +925,6 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(context.Background())
 
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
 	db.Exec(t, "CREATE TABLE t();")
 
 	stubMaxEventFrequency := int64(1)
@@ -1027,7 +1025,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(context.Background())
 
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 8;`)
 	db.Exec(t, "CREATE TABLE t ("+
 		"pk INT PRIMARY KEY,"+
 		"col1 INT,"+
@@ -1266,7 +1264,7 @@ func TestTelemetryScanCounts(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(context.Background())
 
-	db.Exec(t, "SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;")
+	db.Exec(t, "SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 8")
 	db.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
 	db.Exec(t, "CREATE TABLE d (d PRIMARY KEY) AS SELECT generate_series(10, 16);")
 	db.Exec(t, "CREATE TABLE e (e PRIMARY KEY) AS SELECT generate_series(0, 19);")
@@ -1536,7 +1534,7 @@ func TestFunctionBodyRedacted(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(context.Background())
 
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 8;`)
 	db.Exec(t, `CREATE TABLE kv (k STRING, v INT)`)
 	stubMaxEventFrequency := int64(1000000)
 	TelemetryMaxStatementEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
@@ -1615,7 +1613,7 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	st.SetTime(timeutil.FromUnixMicros(0))
 	db.Exec(t, `SET application_name = 'telemetry-stmt=count-logging-test'`)
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 10;`)
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "statement";`)
 
 	st.SetTime(timeutil.FromUnixMicros(int64(1e6)))

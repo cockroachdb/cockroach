@@ -15,10 +15,6 @@ SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";
 ----
 
 exec-sql
-SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
-----
-
-exec-sql
 CREATE TABLE t()
 ----
 

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -89,18 +88,12 @@ var adminAuditLogEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
-var telemetryLoggingEnabled = settings.RegisterBoolSetting(
+var _ = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.telemetry.query_sampling.enabled",
-	"when set to true, executed queries will emit an event on the telemetry logging channel",
-	// Note: Usage of an env var here makes it possible to set a default without
-	// the execution of a cluster setting SQL query. This is particularly advantageous
-	// when cluster setting queries would be too inefficient or to slow to use. For
-	// example, in multi-tenant setups in CC, it is impractical to enable this
-	// setting directly after tenant creation without significant overhead in terms
-	// of time and code.
-	envutil.EnvOrDefaultBool("COCKROACH_SQL_TELEMETRY_QUERY_SAMPLING_ENABLED", false),
-	settings.WithPublic)
+	"use sql.telemetry.query_sampling.max_event_frequency and sql.telemetry.transaction_sampling.max_event_frequency",
+	false,
+	settings.Retired)
 
 type executorType int
 
@@ -183,7 +176,8 @@ func (p *planner) maybeLogStatementInternal(
 
 	// We only consider non-internal SQL statements for telemetry logging unless
 	// the telemetryInternalQueriesEnabled is true.
-	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) &&
+	telemetryLoggingEnabled := (telemetryTransactionSamplingFrequency.Get(&p.execCfg.Settings.SV) > 0 ||
+		TelemetryMaxStatementEventFrequency.Get(&p.execCfg.Settings.SV) > 0) &&
 		(execType == executorTypeExec || telemetryInternalQueriesEnabled.Get(&p.execCfg.Settings.SV) || logConsoleQuery)
 
 	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.

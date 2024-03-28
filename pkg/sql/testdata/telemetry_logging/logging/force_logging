@@ -6,16 +6,13 @@ SET CLUSTER SETTING sql.telemetry.transaction_sampling.max_event_frequency = 10;
 ----
 
 exec-sql
-SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 100;
-----
-
-exec-sql
 SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";
 ----
 
 exec-sql
-SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 100;
 ----
+
 
 exec-sql
 CREATE TABLE t()
@@ -131,15 +128,11 @@ SET CLUSTER SETTING sql.telemetry.transaction_sampling.max_event_frequency = 10;
 ----
 
 exec-sql
-SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 100;
-----
-
-exec-sql
 SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";
 ----
 
 exec-sql
-SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 100;
 ----
 
 spy-sql unixSecs=0.1
