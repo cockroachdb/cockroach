@@ -120,6 +120,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 	// zone config changes, however the downside of added overhead. Disable the
 	// test under deadlock builds, as the test is slow and susceptible to
 	// (legitimate) timing issues on a deadlock build.
+	skip.UnderStress(t, "flaky test")
 	skip.UnderRace(t, "flaky test")
 	skip.UnderDeadlock(t, "flaky test")
 	ctx := context.Background()
@@ -177,6 +178,10 @@ func TestMultiRegionDataDriven(t *testing.T) {
 									}
 								},
 							},
+							// NB: This test is asserting on whether it reads from the leaseholder
+							// or the follower first, so it has to route to leaseholder when
+							// requested.
+							KVClient: &kvcoord.ClientTestingKnobs{RouteToLeaseholderFirst: true},
 						},
 					}
 				}

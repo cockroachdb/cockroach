@@ -312,6 +312,14 @@ This counts the number of ranges with an active rangefeed that are performing ca
 	}
 )
 
+var metamorphicRouteToLeaseholderFirst = false
+
+// TODO: uncomment this line
+//var metamorphicRouteToLeaseholderFirst = util.ConstantWithMetamorphicTestBool(
+//	"distsender-leaseholder-first",
+//	true,
+//)
+
 // CanSendToFollower is used by the DistSender to determine if it needs to look
 // up the current lease holder for a request. It is used by the
 // followerreadsccl code to inject logic to check if follower reads are enabled.
@@ -695,6 +703,9 @@ type DistSender struct {
 	// the descriptor, instead of trying to reorder them by latency. The knob
 	// only applies to requests sent with the LEASEHOLDER routing policy.
 	dontReorderReplicas bool
+
+	routeToLeaseholderFirst bool
+
 	// dontConsiderConnHealth, if set, makes the GRPCTransport not take into
 	// consideration the connection health when deciding the ordering for
 	// replicas. When not set, replicas on nodes with unhealthy connections are
@@ -816,6 +827,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		ds.transportFactory = tf(ds.transportFactory)
 	}
 	ds.dontReorderReplicas = cfg.TestingKnobs.DontReorderReplicas
+	ds.routeToLeaseholderFirst = cfg.TestingKnobs.RouteToLeaseholderFirst || metamorphicRouteToLeaseholderFirst
 	ds.dontConsiderConnHealth = cfg.TestingKnobs.DontConsiderConnHealth
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
 	// TODO(arul): The rpcRetryOptions passed in here from server/tenant don't
@@ -2550,7 +2562,9 @@ func (ds *DistSender) sendToReplicas(
 			idx = replicas.Find(routing.Leaseholder().ReplicaID)
 		}
 		if idx != -1 {
-			replicas.MoveToFront(idx)
+			if ds.routeToLeaseholderFirst {
+				replicas.MoveToFront(idx)
+			}
 			routeToLeaseholder = true
 		} else {
 			// The leaseholder node's info must have been missing from gossip when we
@@ -2696,6 +2710,7 @@ func (ds *DistSender) sendToReplicas(
 		requestToSend := ba
 		if !ProxyBatchRequest.Get(&ds.st.SV) {
 			// The setting is disabled, so we don't proxy this request.
+			log.VEventf(ctx, 2, "proxy disabled")
 		} else if ba.ProxyRangeInfo != nil {
 			// Clear out the proxy information to prevent the recipient from
 			// sending this request onwards. This is necessary to prevent proxy
@@ -2704,8 +2719,10 @@ func (ds *DistSender) sendToReplicas(
 			// of routing loops.
 			requestToSend = ba.ShallowCopy()
 			requestToSend.ProxyRangeInfo = nil
+			log.VEventf(ctx, 2, "already proxy request")
 		} else if !routeToLeaseholder {
 			// This request isn't intended for the leaseholder so we don't proxy it.
+			log.VEventf(ctx, 2, "not routing to leaseholder")
 		} else if routing.Leaseholder() == nil {
 			// NB: Normally we don't have both routeToLeaseholder and a nil
 			// leaseholder. This could be changed to an assertion.
@@ -2713,10 +2730,12 @@ func (ds *DistSender) sendToReplicas(
 		} else if ba.Replica.NodeID == routing.Leaseholder().NodeID {
 			// We are sending this request to the leaseholder, so it doesn't
 			// make sense to attempt to proxy it.
+			log.VEventf(ctx, 2, "already sending to leaseholder")
 		} else if ds.nodeIDGetter() == ba.Replica.NodeID {
 			// This condition prevents proxying a request if we are the same
 			// node as the final destination. Without this we would pass through
 			// the same DistSender stack again which is pointless.
+			log.VEventf(ctx, 2, "sending to self")
 		} else {
 			// We passed all the conditions above and want to attempt to proxy
 			// this request. We need to copy it as we are going to modify the
