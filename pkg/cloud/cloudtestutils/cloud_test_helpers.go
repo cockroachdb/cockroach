@@ -582,7 +582,7 @@ func CheckNoPermission(
 		t.Fatalf("expected error when listing %s with no permissions", storeURI)
 	}
 
-	require.Regexp(t, "(failed|unable) to list", err)
+	require.Regexp(t, "AccessDenied", err)
 }
 
 // IsImplicitAuthConfigured returns true if the `GOOGLE_APPLICATION_CREDENTIALS`
