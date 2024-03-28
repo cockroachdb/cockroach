@@ -699,7 +699,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	defer testCluster.Stopper().Stop(context.Background())
 
 	endpoint := fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs)
-	findJobQuery := "SELECT status FROM [SHOW JOBS] WHERE statement = 'CREATE INDEX idx_age ON football.public.players (age) STORING (name)';"
+	findJobQuery := "SELECT status FROM crdb_internal.jobs WHERE statement = 'CREATE INDEX idx_age ON football.public.players (age) STORING (name)';"
 	testAppName := "TestCombinedStatementsWithFullScans"
 
 	firstServerProto := testCluster.Server(0).ApplicationLayer()

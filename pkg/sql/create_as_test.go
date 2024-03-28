@@ -387,7 +387,7 @@ func TestFormat(t *testing.T) {
 			// "updating view reference" job.
 			query := fmt.Sprintf(
 				`SELECT description
-FROM [SHOW JOBS]
+FROM [SHOW JOBS SELECT id FROM system.jobs]
 WHERE job_type IN ('SCHEMA CHANGE', 'NEW SCHEMA CHANGE')
 AND description LIKE 'CREATE%%%s%%'`,
 				name,

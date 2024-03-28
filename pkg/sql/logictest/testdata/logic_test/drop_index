@@ -232,7 +232,7 @@ statement ok
 DROP INDEX expr_idx;
 
 query T colnames
-SELECT description FROM [show jobs] ORDER BY created DESC LIMIT 2;
+SELECT description FROM crdb_internal.jobs ORDER BY created DESC LIMIT 2;
 ----
 description
 GC for DROP INDEX test.public.tbl@expr_idx
