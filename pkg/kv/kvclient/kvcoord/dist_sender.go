@@ -312,6 +312,21 @@ This counts the number of ranges with an active rangefeed that are performing ca
 	}
 )
 
+// metamorphicRouteToLeaseholderFirst is used to control the behavior of the
+// DistSender when sending a BatchRequest.  The default behavior for a request
+// that needs to run on the leaseholder is to send to the leaseholder first, and
+// only send to a follower if the leaseholder is unavailable or the client has
+// stale leaseholder information.  If this flag is set to false, then it will
+// route the request using the default sorting logic without moving the
+// leaseholder to the front of the list. This means that most requests will not
+// go to the leaseholder first, and instead be sent to the leaseholder through a
+// follower using a proxy request. This setting is only intended for testing to
+// stress proxy behavior.
+var metamorphicRouteToLeaseholderFirst = util.ConstantWithMetamorphicTestBool(
+	"distsender-leaseholder-first",
+	true,
+)
+
 // CanSendToFollower is used by the DistSender to determine if it needs to look
 // up the current lease holder for a request. It is used by the
 // followerreadsccl code to inject logic to check if follower reads are enabled.
@@ -695,6 +710,9 @@ type DistSender struct {
 	// the descriptor, instead of trying to reorder them by latency. The knob
 	// only applies to requests sent with the LEASEHOLDER routing policy.
 	dontReorderReplicas bool
+
+	routeToLeaseholderFirst bool
+
 	// dontConsiderConnHealth, if set, makes the GRPCTransport not take into
 	// consideration the connection health when deciding the ordering for
 	// replicas. When not set, replicas on nodes with unhealthy connections are
@@ -816,6 +834,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		ds.transportFactory = tf(ds.transportFactory)
 	}
 	ds.dontReorderReplicas = cfg.TestingKnobs.DontReorderReplicas
+	ds.routeToLeaseholderFirst = cfg.TestingKnobs.RouteToLeaseholderFirst || metamorphicRouteToLeaseholderFirst
 	ds.dontConsiderConnHealth = cfg.TestingKnobs.DontConsiderConnHealth
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
 	// TODO(arul): The rpcRetryOptions passed in here from server/tenant don't
@@ -2550,7 +2569,9 @@ func (ds *DistSender) sendToReplicas(
 			idx = replicas.Find(routing.Leaseholder().ReplicaID)
 		}
 		if idx != -1 {
-			replicas.MoveToFront(idx)
+			if ds.routeToLeaseholderFirst {
+				replicas.MoveToFront(idx)
+			}
 			routeToLeaseholder = true
 		} else {
 			// The leaseholder node's info must have been missing from gossip when we

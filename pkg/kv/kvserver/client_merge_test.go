@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -943,10 +944,11 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 			gba.RangeID = ba.RangeID
 			gba.Timestamp = ba.Timestamp.Add(42 /* wallTime */, 0 /* logical */)
 			gba.Add(getArgs(rhsKey))
-			store := tc.GetFirstStoreFromServer(t, int(ba.Header.Replica.StoreID-1))
+			store := tc.GetFirstStoreFromServer(t, int(ba.Header.Replica.NodeID-1))
 			gbr, pErr := store.Send(ctx, gba)
 			if pErr != nil {
 				t.Error(pErr) // different goroutine, so can't use t.Fatal
+				return pErr
 			}
 			readTS = gbr.Timestamp
 		}
@@ -961,6 +963,11 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 					Store: &kvserver.StoreTestingKnobs{
 						TestingRequestFilter: testingRequestFilter,
 					},
+					// This test intercepts the subsume request and sends a
+					// request to the node that it was intented to target. See
+					// #122287 for a fix. The test is easier to understand
+					// without the proxy routing so we disable it.
+					KVClient: &kvcoord.ClientTestingKnobs{RouteToLeaseholderFirst: true},
 				},
 			},
 		})
