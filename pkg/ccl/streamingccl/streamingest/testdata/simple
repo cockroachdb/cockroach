@@ -21,7 +21,7 @@ CREATE FUNCTION strip_host(s string) returns string language sql AS $$ select co
 ----
 
 query-sql as=destination-system
-SELECT strip_host(description) FROM [SHOW JOBS] WHERE job_type='REPLICATION STREAM INGESTION'
+SELECT strip_host(description) FROM [SHOW JOBS SELECT id FROM system.jobs WHERE job_type='REPLICATION STREAM INGESTION']
 ----
 CREATE VIRTUAL CLUSTER destination FROM REPLICATION OF source ON ('postgres://root@?redacted')
 
