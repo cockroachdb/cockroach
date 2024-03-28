@@ -104,8 +104,8 @@ func (m *monitorTracer) Find(t time.Time) (traceEvent, error) {
 	return m.mu.trace[eventIdx], nil
 }
 
-// Latest retrieves stats from the last traceEvent that was queued. If the trace
-// is empty we throw an error.
+// Latest retrieves the last traceEvent that was queued. If the trace is empty
+// we throw an error.
 func (m *monitorTracer) Latest() (traceEvent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -116,6 +116,22 @@ func (m *monitorTracer) Latest() (traceEvent, error) {
 	// prevent an arithmetic modulus error in case m.mu.end is zero.
 	latestIdx := (m.mu.end - 1 + m.capacity) % m.capacity
 	return m.mu.trace[latestIdx], nil
+}
+
+// RollingWindow retrieves all traceEvents that occurred after the specified
+// time, t. If no event meets this criterion we return an empty slice.
+func (m *monitorTracer) RollingWindow(t time.Time) []traceEvent {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	offset, err := m.ceilSearchLocked(t)
+	if err != nil {
+		return []traceEvent{}
+	}
+	events := make([]traceEvent, m.mu.size-offset)
+	for i := 0; i < m.mu.size-offset; i++ {
+		events[i] = m.mu.trace[(m.mu.start+offset+i)%m.capacity]
+	}
+	return events
 }
 
 // String implements fmt.Stringer.
@@ -177,4 +193,25 @@ func (m *monitorTracer) floorSearchLocked(t time.Time) (int, error) {
 	// Decrement offset since it currently points to the first traceEvent that
 	// occurred after time t.
 	return offset - 1, nil
+}
+
+// ceilSearchLocked retrieves the offset from trace's start for the traceEvent
+// that occurred at or after a specified time, t. If all events occurred before
+// t, an error is thrown. Note that it is the responsibility of the caller to
+// acquire the tracer mutex and the returned offset may become invalid after the
+// mutex is released.
+func (m *monitorTracer) ceilSearchLocked(t time.Time) (int, error) {
+	if m.mu.size == 0 {
+		return -1, errors.Errorf("trace is empty")
+	}
+	// Apply binary search to find the offset of the traceEvent that occurred at
+	// or after time t.
+	offset, _ := sort.Find(m.mu.size, func(i int) int {
+		idx := (m.mu.start + i) % m.capacity
+		return t.Compare(m.mu.trace[idx].time)
+	})
+	if offset == m.mu.size {
+		return -1, errors.Errorf("no event found in trace at or after time %s", t)
+	}
+	return offset, nil
 }

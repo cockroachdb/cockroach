@@ -124,3 +124,27 @@ func (s *Stats) delta(o *Stats) Stats {
 		FlushesDuration:    s.FlushesDuration - o.FlushesDuration,
 	}
 }
+
+// max computes the maximum for each field between the receiver and the provided stats.
+func (s *Stats) max(o *Stats) Stats {
+	return Stats{
+		DeviceName:         s.DeviceName,
+		ReadsCount:         max(s.ReadsCount, o.ReadsCount),
+		ReadsMerged:        max(s.ReadsMerged, o.ReadsMerged),
+		ReadsSectors:       max(s.ReadsSectors, o.ReadsSectors),
+		ReadsDuration:      max(s.ReadsDuration, o.ReadsDuration),
+		WritesCount:        max(s.WritesCount, o.WritesCount),
+		WritesMerged:       max(s.WritesMerged, o.WritesMerged),
+		WritesSectors:      max(s.WritesSectors, o.WritesSectors),
+		WritesDuration:     max(s.WritesDuration, o.WritesDuration),
+		InProgressCount:    max(s.InProgressCount, o.InProgressCount),
+		CumulativeDuration: max(s.CumulativeDuration, o.CumulativeDuration),
+		WeightedIODuration: max(s.WeightedIODuration, o.WeightedIODuration),
+		DiscardsCount:      max(s.DiscardsCount, o.DiscardsCount),
+		DiscardsMerged:     max(s.DiscardsMerged, o.DiscardsMerged),
+		DiscardsSectors:    max(s.DiscardsSectors, o.DiscardsSectors),
+		DiscardsDuration:   max(s.DiscardsDuration, o.DiscardsDuration),
+		FlushesCount:       max(s.FlushesCount, o.FlushesCount),
+		FlushesDuration:    max(s.FlushesDuration, o.FlushesDuration),
+	}
+}
