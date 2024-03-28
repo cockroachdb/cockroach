@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 type (
@@ -53,9 +54,7 @@ type (
 		stopFuncs []StopFunc
 	}
 
-	testFailure struct {
-		summarized     bool
-		description    string
+	testFailureDetails struct {
 		seed           int64
 		testContext    *Context
 		binaryVersions []roachpb.Version
@@ -165,7 +164,7 @@ func (tr *testRunner) run() (retErr error) {
 			return fmt.Errorf("background step `%s` returned error: %w", event.Name, event.Err)
 
 		case err := <-tr.monitor.Err():
-			return tr.testFailure(err.Error(), tr.logger, nil)
+			return tr.testFailure(err, tr.logger, nil)
 		}
 	}
 }
@@ -290,18 +289,20 @@ func (tr *testRunner) startBackgroundStep(ss *singleStep, l *logger.Logger, stop
 // cluster version before and after the step (in case the failure
 // happened *while* the cluster version was updating).
 func (tr *testRunner) stepError(err error, step *singleStep, l *logger.Logger) error {
-	desc := fmt.Sprintf("mixed-version test failure while running step %d (%s): %s",
-		step.ID, step.impl.Description(), err,
+	stepErr := errors.Wrapf(
+		err,
+		"mixed-version test failure while running step %d (%s)",
+		step.ID, step.impl.Description(),
 	)
 
-	return tr.testFailure(desc, l, &step.context)
+	return tr.testFailure(stepErr, l, &step.context)
 }
 
-// testFailure generates a `testFailure` with the given
-// description. It logs the error to the logger passed, and renames
-// the underlying file to include the "FAILED" prefix to help in
-// debugging.
-func (tr *testRunner) testFailure(desc string, l *logger.Logger, testContext *Context) error {
+// testFailure generates a `testFailure` for failures that happened
+// due to the given error.  It logs the error to the logger passed,
+// and renames the underlying file to include the "FAILED" prefix to
+// help in debugging.
+func (tr *testRunner) testFailure(err error, l *logger.Logger, testContext *Context) error {
 	clusterVersionsBefore := tr.clusterVersions
 	var clusterVersionsAfter atomic.Value
 	if tr.connCacheInitialized() {
@@ -312,8 +313,7 @@ func (tr *testRunner) testFailure(desc string, l *logger.Logger, testContext *Co
 		}
 	}
 
-	tf := &testFailure{
-		description:           desc,
+	tf := &testFailureDetails{
 		seed:                  tr.seed,
 		testContext:           testContext,
 		binaryVersions:        loadAtomicVersions(tr.binaryVersions),
@@ -321,15 +321,19 @@ func (tr *testRunner) testFailure(desc string, l *logger.Logger, testContext *Co
 		clusterVersionsAfter:  loadAtomicVersions(clusterVersionsAfter),
 	}
 
+	// failureErr wraps the original error, adding mixed-version state
+	// information as error details.
+	failureErr := errors.WithDetailf(err, "%s", tf.Format())
+
 	// Print the test failure on the step's logger for convenience, and
 	// to reduce cross referencing of logs.
-	l.Printf("%v", tf)
+	l.Printf("%+v", failureErr)
 
 	if err := renameFailedLogger(l); err != nil {
 		tr.logger.Printf("could not rename failed step logger: %v", err)
 	}
 
-	return tf
+	return failureErr
 }
 
 // teardown groups together all tasks that happen once a test finishes.
@@ -612,30 +616,25 @@ func (br *backgroundRunner) CompletedEvents() <-chan backgroundEvent {
 	return br.events
 }
 
-func (tf *testFailure) Error() string {
-	if tf.summarized {
-		return tf.description
-	}
-	tf.summarized = true
-
+func (tfd *testFailureDetails) Format() string {
 	lines := []string{
-		tf.description,
-		fmt.Sprintf("test random seed: %d\n", tf.seed),
+		"test failed:",
+		fmt.Sprintf("test random seed: %d\n", tfd.seed),
 	}
 
-	tw := newTableWriter(len(tf.binaryVersions))
-	if tf.testContext != nil {
-		releasedVersions := make([]*clusterupgrade.Version, 0, len(tf.testContext.CockroachNodes))
-		for _, node := range tf.testContext.CockroachNodes {
-			releasedVersions = append(releasedVersions, tf.testContext.NodeVersion(node))
+	tw := newTableWriter(len(tfd.binaryVersions))
+	if tfd.testContext != nil {
+		releasedVersions := make([]*clusterupgrade.Version, 0, len(tfd.testContext.CockroachNodes))
+		for _, node := range tfd.testContext.CockroachNodes {
+			releasedVersions = append(releasedVersions, tfd.testContext.NodeVersion(node))
 		}
 		tw.AddRow("released versions", toString(releasedVersions)...)
 	}
 
-	tw.AddRow("logical binary versions", toString(tf.binaryVersions)...)
-	tw.AddRow("cluster versions before failure", toString(tf.clusterVersionsBefore)...)
+	tw.AddRow("logical binary versions", toString(tfd.binaryVersions)...)
+	tw.AddRow("cluster versions before failure", toString(tfd.clusterVersionsBefore)...)
 
-	if cv := tf.clusterVersionsAfter; cv != nil {
+	if cv := tfd.clusterVersionsAfter; cv != nil {
 		tw.AddRow("cluster versions after failure", toString(cv)...)
 	}
 
