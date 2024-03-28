@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	tu "github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
@@ -313,6 +314,9 @@ func buildFilters(
 	if err != nil {
 		return memo.FiltersExpr{}, err
 	}
+	// TODO(mgartner): Create a datadriven test command argument for type hints
+	// or types.
+	semaCtx.Placeholders.Types = []*types.T{types.Int}
 	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
 	root, err := b.Build(expr)
 	if err != nil {

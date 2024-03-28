@@ -1,0 +1,14 @@
+index-constraints vars=(a int) index=(a)
+a = $1
+----
+[/$1 - /$1]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a = $1 AND b = 2
+----
+[/$1/2 - /$1/2]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a = 2 AND b = $1
+----
+[/2/$1 - /2/$1]
