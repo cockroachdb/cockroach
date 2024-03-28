@@ -93,7 +93,6 @@ go_library(
         "store_rebalancer.go",
         "store_remove_replica.go",
         "store_replica_btree.go",
-        "store_replicas_by_rangeid.go",
         "store_send.go",
         "store_snapshot.go",
         "store_split.go",
