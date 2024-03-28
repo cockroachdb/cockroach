@@ -412,11 +412,11 @@ func generateAndSetNewDataKey(
 	} else {
 		var keyLength int
 		switch activeStoreKey.EncryptionType {
-		case enginepbccl.EncryptionType_AES128_CTR:
+		case enginepbccl.EncryptionType_AES128_CTR, enginepbccl.EncryptionType_AES_128_CTR_V2:
 			keyLength = 16
-		case enginepbccl.EncryptionType_AES192_CTR:
+		case enginepbccl.EncryptionType_AES192_CTR, enginepbccl.EncryptionType_AES_192_CTR_V2:
 			keyLength = 24
-		case enginepbccl.EncryptionType_AES256_CTR:
+		case enginepbccl.EncryptionType_AES256_CTR, enginepbccl.EncryptionType_AES_256_CTR_V2:
 			keyLength = 32
 		default:
 			return nil, fmt.Errorf("unknown encryption type %d for key ID %s",

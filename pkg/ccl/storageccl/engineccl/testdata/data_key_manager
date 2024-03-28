@@ -245,3 +245,10 @@ wait
 compare-active-data-key
 ----
 different
+
+set-active-store-key id=v2key version=2
+----
+
+get-active-data-key
+----
+encryption_type:AES_128_CTR_V2 creation_time:26 source:"data key manager" parent_key_id:"v2key"
