@@ -2562,8 +2562,14 @@ func tpccWorkloadCmd(
 func bankWorkloadCmd(
 	l *logger.Logger, testRNG *rand.Rand, roachNodes option.NodeListOption, mock bool,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
-	bankPayload := bankPossiblePayloadBytes[testRNG.Intn(len(bankPossiblePayloadBytes))]
 	bankRows := bankPossibleRows[testRNG.Intn(len(bankPossibleRows))]
+	possiblePayloads := bankPossiblePayloadBytes
+	// force smaller row counts to use smaller payloads too to avoid making lots
+	// of large revisions of a handful of keys.
+	if bankRows < 1000 {
+		possiblePayloads = []int{16, 64}
+	}
+	bankPayload := possiblePayloads[testRNG.Intn(len(possiblePayloads))]
 
 	if mock {
 		bankPayload = 9
