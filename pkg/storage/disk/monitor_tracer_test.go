@@ -123,6 +123,18 @@ func TestMonitorTracer(t *testing.T) {
 			buf.Reset()
 			fmt.Fprint(&buf, tracer)
 			return buf.String()
+		case "rolling-window":
+			var timeString string
+			td.ScanArgs(t, "time", &timeString)
+			lowerBoundTime, err := time.Parse(time.RFC3339, timeString)
+			require.NoError(t, err)
+
+			events := tracer.RollingWindow(lowerBoundTime)
+			buf.Reset()
+			for _, event := range events {
+				fmt.Fprintf(&buf, "%q\n", event)
+			}
+			return buf.String()
 		default:
 			panic(fmt.Sprintf("unrecognized command %q", td.Cmd))
 		}

@@ -2431,6 +2431,18 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Operations",
 		Help:        "IO operations currently in progress on the store's disk (as reported by the OS)",
 	}
+	metaDiskReadMaxBytes = metric.Metadata{
+		Name:        "storage.disk.read-max.bytes",
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Bytes",
+		Help:        "Maximum rate at which bytes were read from disk (as reported by the OS)",
+	}
+	metaDiskWriteMaxBytes = metric.Metadata{
+		Name:        "storage.disk.write-max.bytes",
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Bytes",
+		Help:        "Maximum rate at which bytes were written to disk (as reported by the OS)",
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -2841,6 +2853,8 @@ type StoreMetrics struct {
 	DiskIOTime         *metric.Gauge
 	DiskWeightedIOTime *metric.Gauge
 	IopsInProgress     *metric.Gauge
+	DiskReadMaxBytes   *metric.Gauge
+	DiskWriteMaxBytes  *metric.Gauge
 }
 
 type tenantMetricsRef struct {
@@ -3593,6 +3607,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		DiskIOTime:         metric.NewGauge(metaDiskIOTime),
 		DiskWeightedIOTime: metric.NewGauge(metaDiskWeightedIOTime),
 		IopsInProgress:     metric.NewGauge(metaIopsInProgress),
+		DiskReadMaxBytes:   metric.NewGauge(metaDiskReadMaxBytes),
+		DiskWriteMaxBytes:  metric.NewGauge(metaDiskWriteMaxBytes),
 
 		// Estimated MVCC stats in split.
 		SplitsWithEstimatedStats:     metric.NewCounter(metaSplitEstimatedStats),
@@ -3806,16 +3822,21 @@ func (sm *StoreMetrics) updateEnvStats(stats fs.EnvStats) {
 	sm.EncryptionAlgorithm.Update(int64(stats.EncryptionType))
 }
 
-func (sm *StoreMetrics) updateDiskStats(stats disk.Stats) {
-	sm.DiskReadCount.Update(int64(stats.ReadsCount))
-	sm.DiskReadBytes.Update(int64(stats.BytesRead()))
-	sm.DiskReadTime.Update(int64(stats.ReadsDuration))
-	sm.DiskWriteCount.Update(int64(stats.WritesCount))
-	sm.DiskWriteBytes.Update(int64(stats.BytesWritten()))
-	sm.DiskWriteTime.Update(int64(stats.WritesDuration))
-	sm.DiskIOTime.Update(int64(stats.CumulativeDuration))
-	sm.DiskWeightedIOTime.Update(int64(stats.WeightedIODuration))
-	sm.IopsInProgress.Update(int64(stats.InProgressCount))
+func (sm *StoreMetrics) updateDiskStats(cumulativeStats, maxRollingStats disk.Stats) {
+	sm.DiskReadCount.Update(int64(cumulativeStats.ReadsCount))
+	sm.DiskReadBytes.Update(int64(cumulativeStats.BytesRead()))
+	sm.DiskReadTime.Update(int64(cumulativeStats.ReadsDuration))
+	sm.DiskWriteCount.Update(int64(cumulativeStats.WritesCount))
+	sm.DiskWriteBytes.Update(int64(cumulativeStats.BytesWritten()))
+	sm.DiskWriteTime.Update(int64(cumulativeStats.WritesDuration))
+	sm.DiskIOTime.Update(int64(cumulativeStats.CumulativeDuration))
+	sm.DiskWeightedIOTime.Update(int64(cumulativeStats.WeightedIODuration))
+	sm.IopsInProgress.Update(int64(cumulativeStats.InProgressCount))
+	// maxRollingStats is computed as the change in stats every 100ms, so we
+	// scale them to represent the change in stats every 1s.
+	perSecondMultiplier := int(time.Second / disk.DefaultDiskStatsPollingInterval)
+	sm.DiskReadMaxBytes.Update(int64(maxRollingStats.BytesRead() * perSecondMultiplier))
+	sm.DiskWriteMaxBytes.Update(int64(maxRollingStats.BytesWritten() * perSecondMultiplier))
 }
 
 func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.Metrics) {

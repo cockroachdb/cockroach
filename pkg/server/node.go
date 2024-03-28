@@ -1067,19 +1067,14 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 type diskStatsMap struct {
 	provisionedRate   map[roachpb.StoreID]base.ProvisionedRateSpec
 	diskPathToStoreID map[string]roachpb.StoreID
-	diskMonitors      map[string]disk.Monitor
+	diskMonitors      map[string]*disk.Monitor
 }
 
 func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
-	clusterProvisionedBandwidth int64,
-	diskStatsFunc func(map[string]disk.Monitor) (map[string]status.DiskStats, error),
+	clusterProvisionedBandwidth int64, bandwidthStats map[string]admission.DiskStats,
 ) (stats map[roachpb.StoreID]admission.DiskStats, err error) {
 	if dsm.empty() {
 		return stats, nil
-	}
-	diskStats, err := diskStatsFunc(dsm.diskMonitors)
-	if err != nil {
-		return stats, err
 	}
 	stats = make(map[roachpb.StoreID]admission.DiskStats)
 	for id, spec := range dsm.provisionedRate {
@@ -1089,11 +1084,11 @@ func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
 		}
 		stats[id] = s
 	}
-	for path, diskStat := range diskStats {
+	for path, bandwidthStat := range bandwidthStats {
 		if id, ok := dsm.diskPathToStoreID[path]; ok {
 			s := stats[id]
-			s.BytesRead = uint64(diskStat.ReadBytes)
-			s.BytesWritten = uint64(diskStat.WriteBytes)
+			s.BytesRead = bandwidthStat.BytesRead
+			s.BytesWritten = bandwidthStat.BytesWritten
 			stats[id] = s
 		}
 	}
@@ -1110,7 +1105,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 	*dsm = diskStatsMap{
 		provisionedRate:   make(map[roachpb.StoreID]base.ProvisionedRateSpec),
 		diskPathToStoreID: make(map[string]roachpb.StoreID),
-		diskMonitors:      make(map[string]disk.Monitor),
+		diskMonitors:      make(map[string]*disk.Monitor),
 	}
 	for i := range engines {
 		if specs[i].Path == "" || specs[i].InMemory {
@@ -1126,9 +1121,24 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 		}
 		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
 		dsm.diskPathToStoreID[specs[i].Path] = id.StoreID
-		dsm.diskMonitors[specs[i].Path] = *monitor
+		dsm.diskMonitors[specs[i].Path] = monitor
 	}
 	return nil
+}
+
+func (dsm *diskStatsMap) maxInstantaneousDiskBandwidth(
+	maxDiskStatsFunc func(*disk.Monitor) disk.Stats,
+) map[string]admission.DiskStats {
+	admissionStats := make(map[string]admission.DiskStats, len(dsm.diskMonitors))
+	for path, monitor := range dsm.diskMonitors {
+		maxDiskStats := maxDiskStatsFunc(monitor)
+		perSecondMultiplier := int(time.Second / disk.DefaultDiskStatsPollingInterval)
+		admissionStats[path] = admission.DiskStats{
+			BytesRead:    uint64(maxDiskStats.BytesRead() * perSecondMultiplier),
+			BytesWritten: uint64(maxDiskStats.BytesWritten() * perSecondMultiplier),
+		}
+	}
+	return admissionStats
 }
 
 func (dsm *diskStatsMap) closeDiskMonitors() {
@@ -1153,8 +1163,11 @@ func (n *Node) registerEnginesForDiskStatsMap(
 func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 	clusterProvisionedBandwidth := kvadmission.ProvisionedBandwidth.Get(
 		&n.storeCfg.Settings.SV)
+	maxBandwidthStats := n.diskStatsMap.maxInstantaneousDiskBandwidth(func(monitor *disk.Monitor) disk.Stats {
+		return monitor.RollingStats(base.DefaultMetricsSampleInterval).Max()
+	})
 	storeIDToDiskStats, err := n.diskStatsMap.tryPopulateAdmissionDiskStats(
-		clusterProvisionedBandwidth, status.GetMonitorCounters)
+		clusterProvisionedBandwidth, maxBandwidthStats)
 	if err != nil {
 		log.Warningf(context.Background(), "%v",
 			errors.Wrapf(err, "unable to populate disk stats"))

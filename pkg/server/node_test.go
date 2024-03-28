@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -1023,24 +1023,22 @@ func TestDiskStatsMap(t *testing.T) {
 	// diskStatsMap initialized with these two stores.
 	require.NoError(t, dsm.initDiskStatsMap(specs, engines, diskManager))
 
-	// diskStatsFunc returns stats for these two stores, and an unknown store.
-	diskStatsFunc := func(map[string]disk.Monitor) (map[string]status.DiskStats, error) {
-		return map[string]status.DiskStats{
-			path.Join(dir, "baz"): {
-				ReadBytes:  100,
-				WriteBytes: 200,
-			},
-			path.Join(dir, "foo"): {
-				ReadBytes:  500,
-				WriteBytes: 1000,
-			},
-			path.Join(dir, "bar"): {
-				ReadBytes:  2000,
-				WriteBytes: 2500,
-			},
-		}, nil
+	// bandwidthStats returns stats for these two stores, and an unknown store.
+	bandwidthStats := map[string]admission.DiskStats{
+		path.Join(dir, "baz"): {
+			BytesRead:    100,
+			BytesWritten: 200,
+		},
+		path.Join(dir, "foo"): {
+			BytesRead:    500,
+			BytesWritten: 1000,
+		},
+		path.Join(dir, "bar"): {
+			BytesRead:    2000,
+			BytesWritten: 2500,
+		},
 	}
-	stats, err = dsm.tryPopulateAdmissionDiskStats(clusterProvisionedBW, diskStatsFunc)
+	stats, err = dsm.tryPopulateAdmissionDiskStats(clusterProvisionedBW, bandwidthStats)
 	require.NoError(t, err)
 	// The stats for the two stores are as expected.
 	require.Equal(t, 2, len(stats))
@@ -1061,16 +1059,14 @@ func TestDiskStatsMap(t *testing.T) {
 		require.Equal(t, expectedDS, ds)
 	}
 
-	// disk stats are only retrieved for "foo".
-	diskStatsFunc = func(map[string]disk.Monitor) (map[string]status.DiskStats, error) {
-		return map[string]status.DiskStats{
-			path.Join(dir, "foo"): {
-				ReadBytes:  3500,
-				WriteBytes: 4500,
-			},
-		}, nil
+	// bandwidth stats are only retrieved for "foo".
+	bandwidthStats = map[string]admission.DiskStats{
+		path.Join(dir, "foo"): {
+			BytesRead:    3500,
+			BytesWritten: 4500,
+		},
 	}
-	stats, err = dsm.tryPopulateAdmissionDiskStats(clusterProvisionedBW, diskStatsFunc)
+	stats, err = dsm.tryPopulateAdmissionDiskStats(clusterProvisionedBW, bandwidthStats)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(stats))
 	for i := range engineIDs {
@@ -1089,6 +1085,38 @@ func TestDiskStatsMap(t *testing.T) {
 		}
 		require.Equal(t, expectedDS, ds)
 	}
+}
+
+func TestMaxInstantaneousDiskBandwidth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	fooMonitor := disk.Monitor{}
+	barMonitor := disk.Monitor{}
+	dsm := diskStatsMap{
+		diskMonitors: map[string]*disk.Monitor{
+			"/dev/foo": &fooMonitor,
+			"/dev/bar": &barMonitor,
+		},
+	}
+	maxStatsFunc := func(monitor *disk.Monitor) disk.Stats {
+		var maxDiskStats disk.Stats
+		switch monitor {
+		case &fooMonitor:
+			return disk.Stats{ReadsSectors: 2}
+		case &barMonitor:
+			return disk.Stats{ReadsSectors: 3, WritesSectors: 4}
+		}
+		return maxDiskStats
+	}
+
+	admissionStats := dsm.maxInstantaneousDiskBandwidth(maxStatsFunc)
+	perSecondMultiplier := uint64(time.Second / disk.DefaultDiskStatsPollingInterval)
+	expectedAdmissionStats := map[string]admission.DiskStats{
+		"/dev/foo": {BytesRead: 2 * disk.SectorSizeBytes * perSecondMultiplier, BytesWritten: 0},
+		"/dev/bar": {BytesRead: 3 * disk.SectorSizeBytes * perSecondMultiplier, BytesWritten: 4 * disk.SectorSizeBytes * perSecondMultiplier},
+	}
+	require.Equal(t, expectedAdmissionStats, admissionStats)
 }
 
 // TestRevertToEpochIfTooManyRanges verifies that leases switch from epoch back

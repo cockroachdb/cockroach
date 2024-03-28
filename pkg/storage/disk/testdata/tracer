@@ -7,6 +7,9 @@ find time=2024-03-27T12:00:00.5Z
 ----
 trace is empty
 
+rolling-window time=2024-03-27T12:00:00.5Z
+----
+
 latest
 ----
 trace is empty
@@ -71,6 +74,14 @@ find time=2024-03-27T12:00:00.15Z
 find time=2024-03-27T12:00:00.0Z
 ----
 no event found in trace before or at time 2024-03-27 12:00:00 +0000 UTC
+
+rolling-window time=2024-03-27T12:00:00.15Z
+----
+"2024-03-27T12:00:00.2Z\tsda\t14\t0\t150\t7ms\t0\t0\t0\t0s\t0\t35ms\t7ms\t0\t0\t0\t0s\t0\t0s\tnil"
+"2024-03-27T12:00:00.3Z\tsda\t14\t0\t150\t7ms\t10\t0\t20\t5ms\t2\t45ms\t9ms\t0\t0\t0\t0s\t0\t0s\tnil"
+
+rolling-window time=2024-03-27T12:00:00.4Z
+----
 
 latest
 ----

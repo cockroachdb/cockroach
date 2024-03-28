@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-var defaultDiskStatsPollingInterval = envutil.EnvOrDefaultDuration("COCKROACH_DISK_STATS_POLLING_INTERVAL", 100*time.Millisecond)
+var DefaultDiskStatsPollingInterval = envutil.EnvOrDefaultDuration("COCKROACH_DISK_STATS_POLLING_INTERVAL", 100*time.Millisecond)
 var defaultDiskTracePeriod = envutil.EnvOrDefaultDuration("COCKROACH_DISK_TRACE_PERIOD", 30*time.Second)
 
 // DeviceID uniquely identifies block devices.
@@ -82,7 +82,7 @@ func (m *MonitorManager) Monitor(path string) (*Monitor, error) {
 	if disk == nil {
 		disk = &monitoredDisk{
 			manager:  m,
-			tracer:   newMonitorTracer(defaultDiskTracePeriod, int(defaultDiskTracePeriod/defaultDiskStatsPollingInterval)),
+			tracer:   newMonitorTracer(defaultDiskTracePeriod, int(defaultDiskTracePeriod/DefaultDiskStatsPollingInterval)),
 			deviceID: dev,
 		}
 		m.mu.disks = append(m.mu.disks, disk)
@@ -143,7 +143,7 @@ type statsCollector interface {
 // race where the MonitorManager creates a new stop channel after unrefDisk sends a message
 // across the old stop channel.
 func (m *MonitorManager) monitorDisks(collector statsCollector, stop chan struct{}) {
-	ticker := time.NewTicker(defaultDiskStatsPollingInterval)
+	ticker := time.NewTicker(DefaultDiskStatsPollingInterval)
 	defer ticker.Stop()
 
 	for {
@@ -195,13 +195,6 @@ type Monitor struct {
 	*monitoredDisk
 }
 
-func (m *Monitor) Close() {
-	if m.monitoredDisk != nil {
-		m.manager.unrefDisk(m.monitoredDisk)
-		m.monitoredDisk = nil
-	}
-}
-
 // CumulativeStats returns the most-recent stats observed.
 func (m *Monitor) CumulativeStats() (Stats, error) {
 	if event, err := m.tracer.Latest(); err != nil {
@@ -230,6 +223,47 @@ func (m *Monitor) IncrementalStats(delta time.Duration) (Stats, error) {
 		return Stats{}, prevEvent.err
 	}
 	return event.stats.delta(&prevEvent.stats), nil
+}
+
+// StatsWindow is a wrapper around a rolling window of disk stats, used to
+// apply common rudimentary computations or custom aggregation functions.
+type StatsWindow struct {
+	Stats []Stats
+}
+
+// Max returns the maximum change in stats for each field across the StatsWindow.
+func (s StatsWindow) Max() Stats {
+	var maxStats Stats
+	if len(s.Stats) > 0 {
+		// Since we compute diffs starting from index 1, the IOPS in progress count
+		// at index 0 would be lost.
+		maxStats = Stats{InProgressCount: s.Stats[0].InProgressCount}
+	}
+	for i := 1; i < len(s.Stats); i++ {
+		deltaStats := s.Stats[i].delta(&s.Stats[i-1])
+		maxStats = deltaStats.max(&maxStats)
+	}
+	return maxStats
+}
+
+// RollingStats returns all stats observed over the period, delta.
+func (m *Monitor) RollingStats(delta time.Duration) StatsWindow {
+	events := m.tracer.RollingWindow(timeutil.Now().Add(-delta))
+	var stats []Stats
+	for _, event := range events {
+		// Ignore events where we were unable to collect disk stats.
+		if event.err == nil {
+			stats = append(stats, event.stats)
+		}
+	}
+	return StatsWindow{stats}
+}
+
+func (m *Monitor) Close() {
+	if m.monitoredDisk != nil {
+		m.manager.unrefDisk(m.monitoredDisk)
+		m.monitoredDisk = nil
+	}
 }
 
 func (m *Monitor) LogTrace() string {
