@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -1374,4 +1375,14 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 
 		`CREATE USER regularUser`,
 	)
+}
+
+func waitForGaugeCount(t *testing.T, gauge *aggmetric.AggGauge, count int64) {
+	testutils.SucceedsSoon(t, func() error {
+		val := gauge.Value()
+		if val == count {
+			return nil
+		}
+		return errors.Newf("waiting for metric %s to be %d (value=%d)", gauge.GetName(), count, val)
+	})
 }

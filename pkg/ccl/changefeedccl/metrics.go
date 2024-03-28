@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -636,6 +638,12 @@ var (
 		Measurement: "Count of Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedWatchedTargets = metric.Metadata{
+		Name:        "changefeed.watched_targets",
+		Help:        "Number of unique targets watched by all feeds",
+		Measurement: "Tables",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
@@ -1062,13 +1070,21 @@ type Metrics struct {
 	ParallelConsumerFlushNanos     metric.IHistogram
 	ParallelConsumerConsumeNanos   metric.IHistogram
 	ParallelConsumerInFlightEvents *metric.Gauge
+	WatchedTargets                 *metric.Gauge
 
-	// This map and the MaxBehindNanos metric are deprecated in favor of
+	// The resolved map and the MaxBehindNanos metric are deprecated in favor of
 	// CheckpointProgress which is stored in the sliMetrics.
 	mu struct {
 		syncutil.Mutex
 		id       int
 		resolved map[int]hlc.Timestamp
+		// targets maps table IDs to the number of occurrences of the table ID in
+		// changefeeds.
+		targets map[int]int64
+		// lastTargets maps a changefeed job ID to the set of table IDs that it
+		// targets. This allows us to compare the targets if a changefeed pauses
+		// and resumes.
+		lastTargets map[jobspb.JobID]intsets.Fast
 	}
 	MaxBehindNanos *metric.Gauge
 }
@@ -1079,6 +1095,61 @@ func (*Metrics) MetricStruct() {}
 // getSLIMetrics returns SLIMeterics associated with the specified scope.
 func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
 	return m.AggMetrics.getOrCreateScope(scope)
+}
+
+// updateLastTargets updates the number of targets watched by
+// changefeeds. newTargets should contain the table IDs targeted
+// by the changefeed with the job id. The diff of the newTargets
+// with the changefeed's previous targets are then used to modify
+// target-related metrics.
+func (m *Metrics) updateLastTargets(id jobspb.JobID, newTargets intsets.Fast) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var addedTargets, removedTargets intsets.Fast
+	if oldTargets, ok := m.mu.lastTargets[id]; ok {
+		if oldTargets.Equals(newTargets) {
+			// No need to update metrics if targets haven't changed.
+			return
+		}
+		addedTargets = newTargets.Difference(oldTargets)
+		removedTargets = oldTargets.Difference(newTargets)
+	} else {
+		// All targets are new.
+		addedTargets = newTargets
+	}
+	addedTargets.ForEach(func(i int) {
+		m.incLocked(i)
+	})
+	removedTargets.ForEach(func(i int) {
+		m.decLocked(i)
+	})
+	if newTargets.Empty() {
+		delete(m.mu.lastTargets, id)
+	} else {
+		m.mu.lastTargets[id] = newTargets
+	}
+}
+
+// incrTarget increments the count with the target ID and increments the
+// WatchedTargets metrics if this is the first target with this id.
+// Requires m.mu to be locked.
+func (m *Metrics) incLocked(id int) {
+	m.mu.AssertHeld()
+	m.mu.targets[id]++
+	if m.mu.targets[id] == 1 {
+		m.WatchedTargets.Inc(1)
+	}
+}
+
+// decrTarget decrements the count with the target ID and decrements the
+// WatchedTargets metric if this was the last target with this id.
+// Requires m.mu to be locked.
+func (m *Metrics) decLocked(id int) {
+	m.mu.AssertHeld()
+	m.mu.targets[id]--
+	if m.mu.targets[id] == 0 {
+		m.WatchedTargets.Dec(1)
+	}
 }
 
 // MakeMetrics makes the metrics for changefeed monitoring.
@@ -1114,10 +1185,13 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Mode:         metric.HistogramModePrometheus,
 		}),
 		ParallelConsumerInFlightEvents: metric.NewGauge(metaChangefeedEventConsumerInFlightEvents),
+		WatchedTargets:                 metric.NewGauge(metaChangefeedWatchedTargets),
 	}
 
 	m.mu.resolved = make(map[int]hlc.Timestamp)
 	m.mu.id = 1 // start the first id at 1 so we can detect initialization
+	m.mu.targets = make(map[int]int64)
+	m.mu.lastTargets = make(map[jobspb.JobID]intsets.Fast)
 	m.MaxBehindNanos = metric.NewFunctionalGauge(metaChangefeedMaxBehindNanos, func() int64 {
 		now := timeutil.Now()
 		var maxBehind time.Duration
