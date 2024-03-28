@@ -44,6 +44,7 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 			}
 			runSchemaChangeMixedVersions(ctx, t, c, maxOps, concurrency)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

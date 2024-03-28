@@ -2541,6 +2541,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 			}
 			mvt.Run()
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

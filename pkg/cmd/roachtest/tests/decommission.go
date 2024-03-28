@@ -56,6 +56,7 @@ func registerDecommission(r registry.Registry) {
 				}
 				runDecommission(ctx, t, c, numNodes, duration)
 			},
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 	{
@@ -71,6 +72,7 @@ func registerDecommission(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDrainAndDecommission(ctx, t, c, numNodes, duration)
 			},
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 	{
@@ -85,6 +87,7 @@ func registerDecommission(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionDrains(ctx, t, c)
 			},
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 	{
@@ -100,6 +103,7 @@ func registerDecommission(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionRandomized(ctx, t, c)
 			},
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 	{
@@ -113,6 +117,7 @@ func registerDecommission(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionMixedVersions(ctx, t, c, t.BuildVersion())
 			},
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 	{
@@ -127,6 +132,7 @@ func registerDecommission(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionSlow(ctx, t, c)
 			},
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 }

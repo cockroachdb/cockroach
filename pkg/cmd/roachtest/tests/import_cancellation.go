@@ -45,6 +45,7 @@ func registerImportCancellation(r registry.Registry) {
 			}
 			runImportCancellation(ctx, t, c)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

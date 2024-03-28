@@ -108,5 +108,6 @@ func registerHotSpotSplits(r registry.Registry) {
 			}
 			runHotSpot(ctx, t, c, minutes, concurrency)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }

@@ -135,6 +135,9 @@ type TestSpec struct {
 	// If one is not specified, the default behavior is to upload
 	// a binary with the crdb_test flag randomly enabled or disabled.
 	CockroachBinary ClusterCockroachBinary
+
+	// RequiresDeprecatedWorkload, if true, will validate that `workload` exists.
+	RequiresDeprecatedWorkload bool
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.

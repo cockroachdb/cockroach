@@ -213,6 +213,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, false /* disableStreamer */)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 
 	r.Add(registry.TestSpec{
@@ -226,5 +227,6 @@ func registerTPCHConcurrency(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* disableStreamer */)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }

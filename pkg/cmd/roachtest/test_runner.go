@@ -688,6 +688,11 @@ func (r *testRunner) runWorker(
 			return err
 		}
 
+		if testToRun.spec.RequiresDeprecatedWorkload && workload[arch] == "" {
+			fmt.Fprintf(os.Stderr, "ERROR: unable to find required workload binary for %q", arch)
+			os.Exit(1)
+		}
+
 		var clusterCreateErr error
 		var vmCreateOpts *vm.CreateOpts
 

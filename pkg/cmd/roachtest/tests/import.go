@@ -103,6 +103,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startImport)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:             "import/nodeShutdown/coordinator",
@@ -122,6 +123,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startImport)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 
@@ -183,6 +185,7 @@ func registerImportTPCC(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runImportTPCC(ctx, t, c, testName, timeout, warehouses)
 			},
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 	const geoWarehouses = 4000
@@ -200,6 +203,7 @@ func registerImportTPCC(r registry.Registry) {
 			runImportTPCC(ctx, t, c, fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 				5*time.Hour, geoWarehouses)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 
@@ -365,12 +369,13 @@ func registerImportDecommissioned(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:             "import/decommissioned",
-		Owner:            registry.OwnerSQLQueries,
-		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
-		Run:              runImportDecommissioned,
+		Name:                       "import/decommissioned",
+		Owner:                      registry.OwnerSQLQueries,
+		Cluster:                    r.MakeClusterSpec(4),
+		CompatibleClouds:           registry.AllExceptAWS,
+		Suites:                     registry.Suites(registry.Nightly),
+		Leases:                     registry.MetamorphicLeases,
+		Run:                        runImportDecommissioned,
+		RequiresDeprecatedWorkload: true,
 	})
 }

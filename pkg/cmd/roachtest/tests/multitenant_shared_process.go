@@ -60,5 +60,6 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 				tpccWarehouses, crdbNodes, appTenantName)
 			c.Run(ctx, option.WithNodes(workloadNode), runCmd)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }

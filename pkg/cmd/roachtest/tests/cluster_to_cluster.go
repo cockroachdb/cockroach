@@ -1025,17 +1025,18 @@ func c2cRegisterWrapper(
 	}
 
 	r.Add(registry.TestSpec{
-		Name:             sp.name,
-		Owner:            registry.OwnerDisasterRecovery,
-		Benchmark:        sp.benchmark,
-		Cluster:          r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, clusterOps...),
-		Leases:           registry.MetamorphicLeases,
-		Timeout:          sp.timeout,
-		Skip:             sp.skip,
-		CompatibleClouds: sp.clouds,
-		Suites:           sp.suites,
-		RequiresLicense:  true,
-		Run:              run,
+		Name:                       sp.name,
+		Owner:                      registry.OwnerDisasterRecovery,
+		Benchmark:                  sp.benchmark,
+		Cluster:                    r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, clusterOps...),
+		Leases:                     registry.MetamorphicLeases,
+		Timeout:                    sp.timeout,
+		Skip:                       sp.skip,
+		CompatibleClouds:           sp.clouds,
+		Suites:                     sp.suites,
+		RequiresLicense:            true,
+		Run:                        run,
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

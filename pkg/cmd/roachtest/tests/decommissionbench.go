@@ -307,6 +307,7 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 				runDecommissionBench(ctx, t, c, benchSpec, timeout)
 			}
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 

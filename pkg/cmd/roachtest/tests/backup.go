@@ -234,6 +234,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startBackup)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:              fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
@@ -258,6 +259,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startBackup)
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 
 }
@@ -364,6 +366,7 @@ func registerBackup(r registry.Registry) {
 			})
 			m.Wait()
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 
 	for _, item := range []struct {
@@ -452,6 +455,7 @@ func registerBackup(r registry.Registry) {
 
 				m.Wait()
 			},
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 	KMSSpec := r.MakeClusterSpec(3)
@@ -575,6 +579,7 @@ func registerBackup(r registry.Registry) {
 				})
 				m.Wait()
 			},
+			RequiresDeprecatedWorkload: true,
 		})
 	}
 
@@ -593,6 +598,7 @@ func registerBackup(r registry.Registry) {
 			}
 			runBackupMVCCRangeTombstones(ctx, t, c, mvccRangeTombstoneConfig{})
 		},
+		RequiresDeprecatedWorkload: true,
 	})
 }
 
