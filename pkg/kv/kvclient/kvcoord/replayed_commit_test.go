@@ -52,7 +52,7 @@ func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T
 	}
 	args.ServerArgs.Knobs.KVClient = &kvcoord.ClientTestingKnobs{
 		TransportFactory: func(factory kvcoord.TransportFactory) kvcoord.TransportFactory {
-			return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
+			return func(options kvcoord.SendOptions, slice roachpb.ReplicaSet) (kvcoord.Transport, error) {
 				tf, err := factory(options, slice)
 				if err != nil {
 					return nil, err
@@ -74,7 +74,6 @@ func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T
 				}, nil
 
 			}
-
 		},
 	}
 

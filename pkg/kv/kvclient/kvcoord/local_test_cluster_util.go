@@ -90,7 +90,7 @@ func NewDistSenderForLocalTestCluster(
 		Stopper:            stopper,
 		RPCRetryOptions:    &retryOpts,
 		FirstRangeProvider: g,
-		TransportFactory: func(opts SendOptions, replicas ReplicaSlice) (Transport, error) {
+		TransportFactory: func(opts SendOptions, replicas roachpb.ReplicaSet) (Transport, error) {
 			transport, err := senderTransportFactory(opts, replicas)
 			if err != nil {
 				return nil, err

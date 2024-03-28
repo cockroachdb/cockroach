@@ -266,6 +266,10 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 	})
 }
 
+func (rs ReplicaSlice) AsReplicaSet() roachpb.ReplicaSet {
+	return roachpb.MakeReplicaSet(rs.Descriptors())
+}
+
 // Descriptors returns the ReplicaDescriptors inside the ReplicaSlice.
 func (rs ReplicaSlice) Descriptors() []roachpb.ReplicaDescriptor {
 	reps := make([]roachpb.ReplicaDescriptor, len(rs))
