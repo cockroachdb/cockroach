@@ -421,6 +421,9 @@ func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 	scanner := bufio.NewScanner(&outBuf)
 	for scanner.Scan() {
 		line := scanner.Text()
+		if line == "" {
+			continue
+		}
 		colonIdx := strings.IndexRune(line, ':')
 		if colonIdx == -1 {
 			return nil, fmt.Errorf("malformed public key line %q", line)
@@ -456,7 +459,7 @@ func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 // keys installed on clusters managed by roachprod. Currently, these
 // keys are stored in the project metadata for the roachprod's
 // `DefaultProject`.
-func AddUserAuthorizedKey(ak AuthorizedKey) (retErr error) {
+func AddUserAuthorizedKey(ak AuthorizedKey) error {
 	existingKeys, err := GetUserAuthorizedKeys()
 	if err != nil {
 		return err
@@ -467,6 +470,14 @@ func AddUserAuthorizedKey(ak AuthorizedKey) (retErr error) {
 	}
 
 	newKeys := append(existingKeys, ak)
+	return SetUserAuthorizedKeys(newKeys)
+}
+
+// SetUserAuthorizedKeys updates the default project metadata with the
+// keys provided. Note that this overwrites any existing keys -- all
+// existing keys need to be passed in the `keys` list provided in
+// order for them to continue to exist after this function is called.
+func SetUserAuthorizedKeys(keys AuthorizedKeys) (retErr error) {
 	tmpFile, err := os.CreateTemp("", "ssh-keys-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
@@ -475,7 +486,7 @@ func AddUserAuthorizedKey(ak AuthorizedKey) (retErr error) {
 		retErr = errors.CombineErrors(retErr, os.Remove(tmpFile.Name()))
 	}()
 
-	if err := os.WriteFile(tmpFile.Name(), newKeys.AsProjectMetadata(), 0444); err != nil {
+	if err := os.WriteFile(tmpFile.Name(), keys.AsProjectMetadata(), 0444); err != nil {
 		return fmt.Errorf("failed to write to temp file: %w", err)
 	}
 

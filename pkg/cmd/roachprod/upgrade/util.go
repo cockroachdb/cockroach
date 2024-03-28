@@ -19,13 +19,25 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 )
 
-func PromptYesNo(msg string) bool {
-	fmt.Printf("%s y[default]/n: ", msg)
+func PromptYesNo(msg string, defaultYes bool) bool {
+	if defaultYes {
+		fmt.Printf("%s y[default]/n: ", msg)
+	} else {
+		fmt.Printf("%s y/n[default]: ", msg)
+	}
+
 	var answer string
 	_, _ = fmt.Scanln(&answer)
 	answer = strings.TrimSpace(answer)
 
-	return answer == "y" || answer == "Y" || answer == ""
+	isYes := answer == "y" || answer == "Y"
+	isEmpty := answer == ""
+
+	if defaultYes {
+		return isYes || isEmpty
+	}
+
+	return isYes
 }
 
 // SwapBinary attempts to swap the `old` file with the `new` file. Used to
