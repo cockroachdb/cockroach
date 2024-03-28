@@ -1725,7 +1725,7 @@ vectorized: true
 │       │
 │       └── • filter
 │           │ columns: (p, data)
-│           │ estimated row count: 311 (missing stats)
+│           │ estimated row count: 111 (missing stats)
 │           │ filter: data > 0
 │           │
 │           └── • scan

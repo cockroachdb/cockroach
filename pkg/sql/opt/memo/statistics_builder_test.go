@@ -123,7 +123,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 
 		// Calculate row count and selectivity.
 		s.RowCount = scan.Relational().Statistics().RowCount
-		selectivity, _ := sb.selectivityFromMultiColDistinctCounts(cols, sel, s)
+		selectivity, _, _ := sb.selectivityFromMultiColDistinctCounts(cols, sel, s)
 		s.ApplySelectivity(selectivity)
 
 		// Update null counts.
