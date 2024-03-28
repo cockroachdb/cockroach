@@ -184,7 +184,7 @@ func registerSchemaChangeMultiRegionBenchmarkLeasing(r registry.Registry) {
 			3,
 			spec.Geo(),
 			spec.GCEZones("us-west1-b,us-east1-b,australia-southeast1-a"),
-			spec.AWSZones("us-east-2b,us-west-1a,ap-southeast-4a"),
+			spec.AWSZones("us-east-1a,us-west-2b,ap-southeast-2b"),
 		),
 		CompatibleClouds: registry.AllExceptLocal,
 		Suites:           registry.Suites(registry.Nightly),
