@@ -381,9 +381,12 @@ func TestFlagCombinations(t *testing.T) {
 		&AddSSTableRequest{SSTTimestampToRequestTimestamp: hlc.Timestamp{Logical: 1}},
 		&DeleteRangeRequest{Inline: true},
 		&DeleteRangeRequest{UseRangeTombstone: true},
-		&GetRequest{KeyLockingStrength: lock.Exclusive},
-		&ReverseScanRequest{KeyLockingStrength: lock.Exclusive},
-		&ScanRequest{KeyLockingStrength: lock.Exclusive},
+		&GetRequest{KeyLockingStrength: lock.Shared, KeyLockingDurability: lock.Unreplicated},
+		&GetRequest{KeyLockingStrength: lock.Exclusive, KeyLockingDurability: lock.Replicated},
+		&ScanRequest{KeyLockingStrength: lock.Shared, KeyLockingDurability: lock.Unreplicated},
+		&ScanRequest{KeyLockingStrength: lock.Exclusive, KeyLockingDurability: lock.Replicated},
+		&ReverseScanRequest{KeyLockingStrength: lock.Shared, KeyLockingDurability: lock.Unreplicated},
+		&ReverseScanRequest{KeyLockingStrength: lock.Exclusive, KeyLockingDurability: lock.Replicated},
 	}
 
 	reqTypes := []Request{}

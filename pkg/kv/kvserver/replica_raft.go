@@ -211,9 +211,15 @@ func (r *Replica) evalAndPropose(
 			maybeFinishSpan = proposal.sp.Finish
 		}
 
-		// Signal the proposal's response channel immediately.
+		// Signal the proposal's response channel immediately. Return a shallow-ish
+		// copy of the response to avoid aliasing issues if the client mutates the
+		// batch response header or individual response headers before replication
+		// completes.
 		reply := *proposal.Local.Reply
 		reply.Responses = append([]kvpb.ResponseUnion(nil), reply.Responses...)
+		for i, ru := range reply.Responses {
+			reply.Responses[i].MustSetInner(ru.GetInner().ShallowCopy())
+		}
 		pr := makeProposalResult(&reply, nil /* pErr */, proposal.Local.DetachEncounteredIntents(), nil /* eti */)
 		proposal.signalProposalResult(pr)
 

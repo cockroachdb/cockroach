@@ -632,9 +632,12 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	// after making sure to nil out the requests in order to lose references to
 	// the underlying Get and Scan requests which could keep large byte slices
 	// alive.
-	f.reqsScratch = ba.Requests
-	for i := range f.reqsScratch {
-		f.reqsScratch[i] = kvpb.RequestUnion{}
+	// TODO(nvanbenschoten): explain why this was needed.
+	if f.lockDurability != lock.Replicated {
+		f.reqsScratch = ba.Requests
+		for i := range f.reqsScratch {
+			f.reqsScratch[i] = kvpb.RequestUnion{}
+		}
 	}
 	if monitoring {
 		reqsScratchMemUsage := requestUnionOverhead * int64(cap(f.reqsScratch))
