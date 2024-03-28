@@ -1620,6 +1620,7 @@ func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 			CalledOnNullInput: true,
 			BlockState:        b.block().state,
 			RoutineType:       tree.UDFRoutine,
+			RoutineLang:       tree.RoutineLangPLpgSQL,
 		},
 		typ: continuationDefault,
 		s:   s,
@@ -1671,9 +1672,8 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 	if con == nil {
 		return b.handleEndOfFunction(s)
 	}
-	// PLpgSQL continuation routines are always in tail-call position.
 	args := b.makeContinuationArgs(con, s)
-	call := b.ob.factory.ConstructUDFCall(args, &memo.UDFCallPrivate{Def: con.def, TailCall: true})
+	call := b.ob.factory.ConstructUDFCall(args, &memo.UDFCallPrivate{Def: con.def})
 	b.addBarrierIfVolatile(s, call)
 
 	returnColName := scopeColName("").WithMetadataName(con.def.Name)

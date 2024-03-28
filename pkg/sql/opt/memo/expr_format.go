@@ -171,6 +171,10 @@ type ExprFmtCtx struct {
 	// seenUDFs is used to ensure that formatting of recursive UDFs does not
 	// infinitely recurse.
 	seenUDFs map[*UDFDefinition]struct{}
+
+	// tailCalls allows for quick lookup of all the routines in tail-call position
+	// when the last body statement of a routine is formatted.
+	tailCalls map[*UDFCallExpr]struct{}
 }
 
 // makeExprFmtCtxForString creates an expression formatting context from a new
@@ -957,13 +961,18 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			}
 			n := tp.Child("body")
 			for i := range def.Body {
+				stmtNode := n
 				if i == 0 && def.CursorDeclaration != nil {
 					// The first statement is opening a cursor.
-					cur := n.Child("open-cursor")
-					f.formatExpr(def.Body[i], cur)
-					continue
+					stmtNode = n.Child("open-cursor")
 				}
-				f.formatExpr(def.Body[i], n)
+				prevTailCalls := f.tailCalls
+				if i == len(def.Body)-1 {
+					f.tailCalls = make(map[*UDFCallExpr]struct{})
+					ExtractTailCalls(def.Body[i], f.tailCalls)
+				}
+				f.formatExpr(def.Body[i], stmtNode)
+				f.tailCalls = prevTailCalls
 			}
 			delete(f.seenUDFs, def)
 		} else {
@@ -997,6 +1006,10 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	formatUDFInputAndBody := func(udf *UDFCallExpr, tp treeprinter.Node) {
 		if !udf.Def.CalledOnNullInput {
 			tp.Child("strict")
+		}
+		if _, tailCall := f.tailCalls[udf]; tailCall {
+			// This routine is in tail-call position in the parent routine.
+			tp.Child("tail-call")
 		}
 		formatRoutineArgs(udf.Args, tp)
 		formatUDFDefinition(udf.Def, tp)

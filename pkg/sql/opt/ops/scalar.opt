@@ -1272,11 +1272,6 @@ define UDFCall {
 define UDFCallPrivate {
     # Def points to the UDF SQL body.
     Def UDFDefinition
-
-    # TailCall indicates whether the UDF is in tail-call position, meaning that
-    # it is nested in a parent routine which will not perform any additional
-    # processing once this call is evaluated.
-    TailCall bool
 }
 
 # TxnControl allows PL/pgSQL stored procedures to pause their execution, commit

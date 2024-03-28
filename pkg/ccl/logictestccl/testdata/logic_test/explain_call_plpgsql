@@ -85,6 +85,7 @@ call
                 ├── fd: ()-->(5)
                 └── tuple [type=tuple{void}]
                      └── udf: _stmt_raise_1 [type=void]
+                          ├── tail-call
                           ├── args
                           │    └── variable: x:1 [type=int]
                           ├── params: x:2(int)

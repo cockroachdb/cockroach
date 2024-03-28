@@ -555,9 +555,13 @@ type ClientNoticeSender interface {
 // for its own evaluation to a parent routine. This is used to defer execution
 // for tail-call optimization. It can only be used during local execution.
 type DeferredRoutineSender interface {
+	// CanOptimizeTailCall determines whether a nested routine in tail-call
+	// position can be executed in its parent's context.
+	CanOptimizeTailCall(nestedRoutine *tree.RoutineExpr) bool
+
 	// SendDeferredRoutine sends a local nested routine and its arguments to its
 	// parent routine.
-	SendDeferredRoutine(expr *tree.RoutineExpr, args tree.Datums)
+	SendDeferredRoutine(nestedRoutine *tree.RoutineExpr, args tree.Datums)
 }
 
 // PrivilegedAccessor gives access to certain queries that would otherwise
