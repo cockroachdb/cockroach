@@ -1,0 +1,13 @@
+name: DNM EXPERIMENTAL checkout testing
+on:
+  pull_request:
+    types: [ opened, reopened, synchronize, edited ]
+    branches: [ master ]
+jobs:
+  checkout:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - run: echo hi
