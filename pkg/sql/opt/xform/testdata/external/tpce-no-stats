@@ -4679,19 +4679,19 @@ left-join (cross)
  ├── cardinality: [0 - 50]
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── immutable
- ├── key: (98,99,106)
- ├── fd: (99)-->(100-105,107,108), (103)-->(107,108), (98,99,106)-->(109-111)
+ ├── key: (99,106)
+ ├── fd: (99)-->(98,100-105,107,108), (103)-->(107,108), (99,106)-->(109-111)
  ├── project
  │    ├── columns: row_number:98 t_id:99!null t_dts:100!null st_name:101!null tt_name:102!null t_s_symb:103!null t_qty:104!null t_exec_name:105!null t_chrg:106!null s_name:107!null ex_name:108!null
  │    ├── cardinality: [0 - 50]
  │    ├── immutable
- │    ├── key: (98,99,106)
- │    ├── fd: (99)-->(100-105,107,108), (103)-->(107,108)
+ │    ├── key: (99,106)
+ │    ├── fd: (99)-->(98,100-105,107,108), (103)-->(107,108)
  │    ├── window partition=()
  │    │    ├── columns: trade.t_id:1!null trade.t_dts:2!null t_st_id:3!null t_tt_id:4!null trade.t_s_symb:6!null trade.t_qty:7!null t_ca_id:9!null trade.t_exec_name:10!null trade.t_chrg:12!null s_symb:18!null security.s_name:21!null s_ex_id:22!null ex_id:36!null exchange.ex_name:37!null st_id:45!null status_type.st_name:46!null tt_id:49!null trade_type.tt_name:50!null row_number:55
  │    │    ├── cardinality: [0 - 50]
  │    │    ├── key: (1)
- │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (18)-->(21,22), (6)==(18), (18)==(6), (36)-->(37), (22)==(36), (36)==(22), (45)-->(46), (3)==(45), (45)==(3), (49)-->(50), (4)==(49), (49)==(4)
+ │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12,55), (18)-->(21,22), (6)==(18), (18)==(6), (36)-->(37), (22)==(36), (36)==(22), (45)-->(46), (3)==(45), (45)==(3), (49)-->(50), (4)==(49), (49)==(4)
  │    │    ├── inner-join (lookup trade_type)
  │    │    │    ├── columns: trade.t_id:1!null trade.t_dts:2!null t_st_id:3!null t_tt_id:4!null trade.t_s_symb:6!null trade.t_qty:7!null t_ca_id:9!null trade.t_exec_name:10!null trade.t_chrg:12!null s_symb:18!null security.s_name:21!null s_ex_id:22!null ex_id:36!null exchange.ex_name:37!null st_id:45!null status_type.st_name:46!null tt_id:49!null trade_type.tt_name:50!null
  │    │    │    ├── key columns: [4] = [49]
@@ -4818,19 +4818,19 @@ left-join (cross)
  ├── cardinality: [0 - 50]
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── immutable
- ├── key: (98,99,106)
- ├── fd: (99)-->(100-105,107,108), (103)-->(107,108), (98,99,106)-->(109-111)
+ ├── key: (99,106)
+ ├── fd: (99)-->(98,100-105,107,108), (103)-->(107,108), (99,106)-->(109-111)
  ├── project
  │    ├── columns: row_number:98 t_id:99!null t_dts:100!null st_name:101!null tt_name:102!null t_s_symb:103!null t_qty:104!null t_exec_name:105!null t_chrg:106!null s_name:107!null ex_name:108!null
  │    ├── cardinality: [0 - 50]
  │    ├── immutable
- │    ├── key: (98,99,106)
- │    ├── fd: (99)-->(100-105,107,108), (103)-->(107,108)
+ │    ├── key: (99,106)
+ │    ├── fd: (99)-->(98,100-105,107,108), (103)-->(107,108)
  │    ├── window partition=()
  │    │    ├── columns: trade.t_id:1!null trade.t_dts:2!null t_st_id:3!null t_tt_id:4!null trade.t_s_symb:6!null trade.t_qty:7!null t_ca_id:9!null trade.t_exec_name:10!null trade.t_chrg:12!null s_symb:18!null security.s_name:21!null s_ex_id:22!null ex_id:36!null exchange.ex_name:37!null st_id:45!null status_type.st_name:46!null tt_id:49!null trade_type.tt_name:50!null row_number:55
  │    │    ├── cardinality: [0 - 50]
  │    │    ├── key: (1)
- │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (18)-->(21,22), (6)==(18), (18)==(6), (36)-->(37), (22)==(36), (36)==(22), (45)-->(46), (3)==(45), (45)==(3), (49)-->(50), (4)==(49), (49)==(4)
+ │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12,55), (18)-->(21,22), (6)==(18), (18)==(6), (36)-->(37), (22)==(36), (36)==(22), (45)-->(46), (3)==(45), (45)==(3), (49)-->(50), (4)==(49), (49)==(4)
  │    │    ├── inner-join (hash)
  │    │    │    ├── columns: trade.t_id:1!null trade.t_dts:2!null t_st_id:3!null t_tt_id:4!null trade.t_s_symb:6!null trade.t_qty:7!null t_ca_id:9!null trade.t_exec_name:10!null trade.t_chrg:12!null s_symb:18!null security.s_name:21!null s_ex_id:22!null ex_id:36!null exchange.ex_name:37!null st_id:45!null status_type.st_name:46!null tt_id:49!null trade_type.tt_name:50!null
  │    │    │    ├── flags: force hash join (store right side)
@@ -6080,7 +6080,7 @@ project
       ├── window partition=()
       │    ├── columns: wi_wl_id:1!null wi_s_symb:2!null wl_id:5!null wl_c_id:6!null row_number:9
       │    ├── key: (2,5)
-      │    ├── fd: ()-->(6), (1)==(5), (5)==(1)
+      │    ├── fd: ()-->(6), (1)==(5), (5)==(1), (2,5)-->(9)
       │    ├── inner-join (lookup watch_item)
       │    │    ├── columns: wi_wl_id:1!null wi_s_symb:2!null wl_id:5!null wl_c_id:6!null
       │    │    ├── key columns: [5] = [1]
