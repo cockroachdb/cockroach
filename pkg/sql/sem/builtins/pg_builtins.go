@@ -297,10 +297,7 @@ func makeTypeIOBuiltins(builtinPrefix string, typ *types.T) map[string]builtinDe
 var (
 	// DatEncodingUTFId is the encoding ID for our only supported database
 	// encoding, UTF8.
-	DatEncodingUTFId = tree.NewDInt(6)
-	// DatEncodingEnUTF8 is the encoding name for our only supported database
-	// encoding, UTF8.
-	DatEncodingEnUTF8        = tree.NewDString("en_US.utf8")
+	DatEncodingUTFId         = tree.NewDInt(6)
 	datEncodingUTF8ShortName = tree.NewDString("UTF8")
 )
 
