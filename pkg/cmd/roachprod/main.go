@@ -1505,8 +1505,8 @@ var updateCmd = &cobra.Command{
 		}
 
 		if revertUpdate {
-			if upgrade.PromptYesNo("Revert to previous version? Note: this will replace the" +
-				" current roachprod binary with a previous roachprod.bak binary.") {
+			if upgrade.PromptYesNo("Revert to previous version? Note: this will replace the"+
+				" current roachprod binary with a previous roachprod.bak binary.", true /* defaultYes */) {
 				if err := upgrade.SwapBinary(currentBinary, currentBinary+".bak"); err != nil {
 					return err
 				}
@@ -1520,7 +1520,7 @@ var updateCmd = &cobra.Command{
 			return err
 		}
 
-		if upgrade.PromptYesNo("Continue with update? This will overwrite any existing roachprod.bak binary.") {
+		if upgrade.PromptYesNo("Continue with update? This will overwrite any existing roachprod.bak binary.", true /* defaultYes */) {
 			if err := upgrade.SwapBinary(currentBinary, newBinary); err != nil {
 				return errors.WithDetail(err, "unable to update binary")
 			}
@@ -1529,6 +1529,28 @@ var updateCmd = &cobra.Command{
 		}
 		return nil
 	}),
+}
+
+func printPublicKeyTable(keys gce.AuthorizedKeys, includeSize bool) error {
+	// Align columns left and separate with at least two spaces.
+	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
+
+	fmt.Fprintf(tw, "%s\t%s\n", "User", "Key")
+	for _, ak := range keys {
+		fmt.Fprintf(tw, "%s\t%s\n", ak.User, ak.Format(64 /* maxLen */))
+	}
+
+	err := tw.Flush()
+	if !includeSize {
+		return err
+	}
+
+	const maxProjectMetadataBytes = 262144 /* 256 KiB */
+	metadataLen := len(keys.AsProjectMetadata())
+
+	usage := int(float64(metadataLen*100) / float64(maxProjectMetadataBytes))
+	_, err = fmt.Printf("\nTOTAL: %d bytes (usage: %d%%)\n", metadataLen, usage)
+	return err
 }
 
 var sshKeysCmd = &cobra.Command{
@@ -1545,15 +1567,7 @@ var sshKeysListCmd = &cobra.Command{
 			return err
 		}
 
-		// Align columns left and separate with at least two spaces.
-		tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
-
-		fmt.Fprintf(tw, "%s\t%s\n", "User", "Key")
-		for _, ak := range authorizedKeys {
-			fmt.Fprintf(tw, "%s\t%s\n", ak.User, ak.Format(64 /* maxLen */))
-		}
-
-		return tw.Flush()
+		return printPublicKeyTable(authorizedKeys, true /* includeSize */)
 	}),
 }
 
@@ -1584,10 +1598,53 @@ var sshKeysAddCmd = &cobra.Command{
 	}),
 }
 
+var sshKeysRemoveCmd = &cobra.Command{
+	Use:   "remove <user>",
+	Short: "remove public keys belonging to a user from the set of keys installed on clusters managed by roachprod",
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		user := args[0]
+
+		existingKeys, err := gce.GetUserAuthorizedKeys()
+		if err != nil {
+			return fmt.Errorf("failed to fetch existing keys: %w", err)
+		}
+
+		var toBeDeleted gce.AuthorizedKeys
+		var newKeys gce.AuthorizedKeys
+		for _, existing := range existingKeys {
+			if existing.User == user {
+				toBeDeleted = append(toBeDeleted, existing)
+			} else {
+				newKeys = append(newKeys, existing)
+			}
+		}
+
+		if len(toBeDeleted) == 0 {
+			fmt.Printf("No keys deleted.\n")
+			return nil
+		}
+
+		fmt.Printf("The following keys are going to be deleted:\n")
+		if err := printPublicKeyTable(toBeDeleted, false /* includeSize */); err != nil {
+			return err
+		}
+
+		if upgrade.PromptYesNo("Are you sure?", false /* defaultYes */) {
+			fmt.Printf("Deleting %d keys belonging to %s...\n", len(toBeDeleted), user)
+			return gce.SetUserAuthorizedKeys(newKeys)
+		} else {
+			fmt.Printf("Aborted.\n")
+			return nil
+		}
+	}),
+}
+
 var _ = func() struct{} {
 	sshKeysCmd.AddCommand(
 		sshKeysListCmd,
 		sshKeysAddCmd,
+		sshKeysRemoveCmd,
 	)
 
 	return struct{}{}
