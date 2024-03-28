@@ -1185,10 +1185,11 @@ func TestStoreRangeSplitWithTracing(t *testing.T) {
 	require.NotRegexp(t, traceRegexp, stringifiedSpans)
 }
 
-// TestStoreRangeSplitWithMismatchedDesc reproduces a split failure when the
-// request to re-compute stats fails due to a range descriptor mismatch.
-// It does so by splitting a range and concurrently subsuming that range via a
-// range merge. The split fails and returns an error to the client.
+// TestStoreRangeSplitWithMismatchedDesc ensures that if a RecomputeRequest
+// during a split fails due to a range descriptor mismatch, the split doesn't
+// return an error to the client.
+// The test works by splitting a range and concurrently subsuming that range via
+// a range merge. The split doesn't return an error to the client.
 func TestStoreRangeSplitWithMismatchedDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1265,11 +1266,11 @@ func TestStoreRangeSplitWithMismatchedDesc(t *testing.T) {
 	// Unblock the split.
 	splitBlocked <- struct{}{}
 
-	// Wait for the split to complete. The RecomputeStats requests finds a
-	// mismatch between the start key of the request ("b") and the start key of
-	// the merged range ("a").
-	require.Regexp(t, g.Wait(),
-		"failed to re-compute MVCCStats pre split: descriptor mismatch; range likely merged")
+	// Wait for the split to complete and ensure no error is returned to the client.
+	// The split will hit a benign error because the range descriptor changed, and
+	// will be retried. The second time around, the split is a no-op because the
+	// range "b" - "d" was subsumed.
+	require.Nil(t, g.Wait())
 }
 
 // RaftMessageHandlerInterceptor wraps a storage.IncomingRaftMessageHandler. It
