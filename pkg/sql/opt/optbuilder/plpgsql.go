@@ -1856,6 +1856,9 @@ func (b *plpgsqlBuilder) makeReturnForOutParams() tree.Expr {
 		} else {
 			// TODO(100962): this logic will likely need to be
 			// changed.
+			// TODO(119502): if the unnamed parameter of INOUT type, then we
+			// should be using the argument expression here (assuming this
+			// parameter hasn't been modified via $i notation).
 			exprs[i] = tree.DNull
 		}
 	}
