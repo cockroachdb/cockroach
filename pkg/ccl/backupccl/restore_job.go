@@ -2237,6 +2237,11 @@ func (r *restoreResumer) publishDescriptors(
 			}
 			mutTable.RowLevelTTL.ScheduleID = j.ScheduleID()
 		}
+
+		// If this was an importing table, it is now effectively _not_
+		// importing.
+		mutTable.FinalizeImport()
+
 		newTables = append(newTables, mutTable.TableDesc())
 
 		// Convert any mutations that were in progress on the table descriptor
