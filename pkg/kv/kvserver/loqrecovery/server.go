@@ -175,7 +175,7 @@ func (s Server) ServeClusterReplicas(
 			}
 			defer func() { _ = txn.Rollback(txnCtx) }()
 			log.Infof(txnCtx, "serving recovery range descriptors for all ranges")
-			return txn.Iterate(txnCtx, keys.Meta2Prefix, keys.MetaMax, rangeMetadataScanChunkSize,
+			return txn.Iterate(txnCtx, keys.MinKey, keys.MaxKey, rangeMetadataScanChunkSize,
 				func(kvs []kv.KeyValue) error {
 					for _, rangeDescKV := range kvs {
 						var rangeDesc roachpb.RangeDescriptor

@@ -183,26 +183,25 @@ func WriteInitialClusterData(
 			return err
 		}
 
-		// The first (meta1) and second range (meta2) gets some special treatment.
-		if startKey.Equal(keys.Meta1Prefix) {
-			// The descriptor for meta1 is gossiped around, it's not stored at a
-			// meta key, unlike other range descriptors.
-		} else if startKey.Equal(keys.Meta2Prefix) {
+		// All range descriptors are stored in meta2. Note that we're also storing
+		// the range descriptor for the second range in meta2 as well. This is
+		// because the second range doesn't end at the end of meta2 -- there's
+		// still some keys between the end of meta2 and the start of node
+		// liveness. This probably doesn't matter in practice, as no one is ever
+		// using/looking up these keys.
+		meta2Key := keys.RangeMetaKey(endKey) // range addressing for meta2
+		if err := storage.MVCCPutProto(
+			ctx, batch, meta2Key.AsRawKey(),
+			now, desc, storage.MVCCWriteOptions{Stats: firstRangeMS},
+		); err != nil {
+			return err
+		}
+
+		if startKey.Equal(keys.Meta2Prefix) {
 			// The range descriptor for meta2 is stored in meta1.
-			// Range addressing for meta1.
-			meta1Key := keys.RangeMetaKey(roachpb.RKey(keys.Meta2KeyMax))
+			meta1Key := keys.RangeMetaKey(roachpb.RKey(keys.Meta2KeyMax)) // range addressing for meta1
 			if err := storage.MVCCPutProto(
 				ctx, batch, meta1Key.AsRawKey(), now, desc, storage.MVCCWriteOptions{},
-			); err != nil {
-				return err
-			}
-		} else {
-			// All other ranges descriptors are stored in meta2.
-			// Range addressing for meta2.
-			meta2Key := keys.RangeMetaKey(endKey)
-			if err := storage.MVCCPutProto(
-				ctx, batch, meta2Key.AsRawKey(),
-				now, desc, storage.MVCCWriteOptions{Stats: firstRangeMS},
 			); err != nil {
 				return err
 			}
