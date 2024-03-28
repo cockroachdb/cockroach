@@ -58,6 +58,11 @@ func (es StoreEncryptionSpec) String() string {
 		es.Path, es.KeyPath, es.OldKeyPath, es.RotationPeriod)
 }
 
+// PathMatches returns true if this StoreEncryptionSpec matches the given store path.
+func (es StoreEncryptionSpec) PathMatches(path string) bool {
+	return es.Path == path || es.Path == "*"
+}
+
 // NewStoreEncryptionSpec parses the string passed in and returns a new
 // StoreEncryptionSpec if parsing succeeds.
 // TODO(mberhault): we should share the parsing code with the StoreSpec.
@@ -91,10 +96,14 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 
 		switch field {
 		case pathField:
-			var err error
-			es.Path, err = base.GetAbsoluteFSPath(pathField, value)
-			if err != nil {
-				return StoreEncryptionSpec{}, err
+			if value == "*" {
+				es.Path = value
+			} else {
+				var err error
+				es.Path, err = base.GetAbsoluteFSPath(pathField, value)
+				if err != nil {
+					return StoreEncryptionSpec{}, err
+				}
 			}
 		case "key":
 			if value == plaintextFieldValue {
@@ -195,7 +204,7 @@ func PopulateWithEncryptionOpts(
 	for _, es := range encryptionSpecs.Specs {
 		var found bool
 		for i := range storeSpecs.Specs {
-			if storeSpecs.Specs[i].Path != es.Path {
+			if !es.PathMatches(storeSpecs.Specs[i].Path) {
 				continue
 			}
 
@@ -215,7 +224,7 @@ func PopulateWithEncryptionOpts(
 		}
 
 		for _, externalPath := range [2]*base.ExternalPath{&walFailoverConfig.Path, &walFailoverConfig.PrevPath} {
-			if !externalPath.IsSet() || externalPath.Path != es.Path {
+			if !externalPath.IsSet() || !es.PathMatches(externalPath.Path) {
 				continue
 			}
 			// NB: The external paths WALFailoverConfig.Path and
@@ -250,7 +259,7 @@ func EncryptionOptionsForStore(dir string, encryptionSpecs EncryptionSpecList) (
 		return nil, errors.Wrapf(err, "could not find absolute path for %s ", dir)
 	}
 	for _, es := range encryptionSpecs.Specs {
-		if es.Path == path {
+		if es.PathMatches(path) {
 			return es.ToEncryptionOptions()
 		}
 	}
