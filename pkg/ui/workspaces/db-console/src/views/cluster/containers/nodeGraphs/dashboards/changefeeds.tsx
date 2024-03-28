@@ -66,16 +66,19 @@ export default function (props: GraphDashboardProps) {
           name="cr.node.changefeed.commit_latency-p99"
           title="99th Percentile"
           downsampleMax
+          aggregateMax
         />
         <Metric
           name="cr.node.changefeed.commit_latency-p90"
           title="90th Percentile"
           downsampleMax
+          aggregateMax
         />
         <Metric
           name="cr.node.changefeed.commit_latency-p50"
           title="50th Percentile"
           downsampleMax
+          aggregateMax
         />
       </Axis>
     </LineGraph>,
