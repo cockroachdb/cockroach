@@ -61,7 +61,7 @@ func TestUserLoginAfterGC(t *testing.T) {
 	// Verify that newuser can still log in.
 	newUserURL, cleanup := sqlutils.PGUrlWithOptionalClientCerts(
 		t, s.AdvSQLAddr(), t.Name(), url.UserPassword("newuser", "123"), false, /* withClientCerts */
-	)
+		"")
 	defer cleanup()
 
 	newUserConn, err := sqltestutils.PGXConn(t, newUserURL)
@@ -120,10 +120,10 @@ GRANT admin TO foo`); err != nil {
 
 		// We'll attempt connections on gateway node 0.
 		fooURL, fooCleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
-			s.AdvSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"), false /* withClientCerts */)
+			s.AdvSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"), false, "" /* withClientCerts */)
 		defer fooCleanupFn()
 		barURL, barCleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
-			s.AdvSQLAddr(), t.Name(), url.UserPassword("bar", "testabc"), false /* withClientCerts */)
+			s.AdvSQLAddr(), t.Name(), url.UserPassword("bar", "testabc"), false, "" /* withClientCerts */)
 		defer barCleanupFn()
 		rootURL, rootCleanupFn := sqlutils.PGUrl(t,
 			s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
