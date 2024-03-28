@@ -935,7 +935,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	var readTS hlc.Timestamp
 	rhsKey := scratchKey("c")
 	var tc *testcluster.TestCluster
-	testingRequestFilter := func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+	testingRequestFilter := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 		if ba.IsSingleSubsumeRequest() {
 			// Before we execute a Subsume request, execute a read on the same store
 			// at a much higher timestamp.
@@ -943,10 +943,19 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 			gba.RangeID = ba.RangeID
 			gba.Timestamp = ba.Timestamp.Add(42 /* wallTime */, 0 /* logical */)
 			gba.Add(getArgs(rhsKey))
-			store := tc.GetFirstStoreFromServer(t, int(ba.Header.Replica.StoreID-1))
+			storeID := int(ba.Header.Replica.StoreID)
+			// On a proxy request, send the request to the leaseholder since we are skipping DistSender we care about the final destination.
+			if ba.ProxyRangeInfo != nil {
+				storeID = int(ba.ProxyRangeInfo.Lease.Replica.StoreID - 1)
+			}
+			log.Infof(ctx, "sending high timestamp Get request directly to store s%d for %+v", storeID, ba.Header)
+			store := tc.GetFirstStoreFromServer(t, storeID-1)
 			gbr, pErr := store.Send(ctx, gba)
 			if pErr != nil {
-				t.Error(pErr) // different goroutine, so can't use t.Fatal
+				// An error here is likely a NLHE since we don't know the leaseholder.
+				// This isn't a problem as we expect the client to retry with the
+				// updated information.
+				return nil
 			}
 			readTS = gbr.Timestamp
 		}

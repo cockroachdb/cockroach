@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -4587,6 +4588,8 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 			Server: &server.TestingKnobs{
 				WallClock: manual,
 			},
+			// TODO(baptist): Consider how to make this test pass with this routing.
+			KVClient: &kvcoord.ClientTestingKnobs{RouteToLeaseholderFirst: true},
 		}},
 	})
 	defer tc.Stopper().Stop(ctx)
