@@ -61,6 +61,8 @@ func declareKeysRecomputeStats(
 	return nil
 }
 
+var RecomputeStatsMismatchError = errors.New("descriptor mismatch; range likely merged")
+
 // RecomputeStats recomputes the MVCCStats stored for this range and adjust them accordingly,
 // returning the MVCCStats delta obtained in the process.
 func RecomputeStats(
@@ -69,7 +71,7 @@ func RecomputeStats(
 	desc := cArgs.EvalCtx.Desc()
 	args := cArgs.Args.(*kvpb.RecomputeStatsRequest)
 	if !desc.StartKey.AsRawKey().Equal(args.Key) {
-		return result.Result{}, errors.New("descriptor mismatch; range likely merged")
+		return result.Result{}, RecomputeStatsMismatchError
 	}
 	dryRun := args.DryRun
 
