@@ -130,6 +130,8 @@ message TableReaderSpec {
   // leaseholder of the beginning of the key spans to be scanned).
   optional bool ignore_misplanned_ranges = 22 [(gogoproto.nullable) = false];
 
+  optional bool maintain_ordering = 24 [(gogoproto.nullable) = false];
+
   reserved 1, 2, 4, 6, 7, 8, 13, 14, 15, 16, 19;
 }
 

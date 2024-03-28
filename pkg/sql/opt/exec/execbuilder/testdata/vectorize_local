@@ -185,6 +185,7 @@ quality of service: regular
 │     KV bytes read: 16 B
 │     KV gRPC calls: 2
 │     estimated max memory allocated: 0 B
+│     estimated max sql temp disk usage: 0 B
 │     estimated row count: 1 (100% of the table; stats collected <hidden> ago)
 │     table: c@c_pkey
 │     spans: FULL SCAN
@@ -200,11 +201,12 @@ quality of service: regular
       KV bytes read: 16 B
       KV gRPC calls: 2
       estimated max memory allocated: 0 B
+      estimated max sql temp disk usage: 0 B
       missing stats
       table: d@d_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsU81OIzkQvu9TlOoEWgPdzWoPlpCiDdlRmEmCAuIyipBjF40Vt93YbpEI5bHmBebJRu4GhoQ_MZrj-NByVX3-qvx97jsMNwY5ng2-DPrnIPcF_D-djEDCcDweTGE0mH4awMlkOAYFk3ELOAK1P0eG1ikai4oC8q-Y44xh7Z2kEJxPqbsWMFRL5BlDbesmpvSMoXSekN9h1NEQcjwXc0NTEor8QYYMFUWhTUsre_KyXtAKGfadaSobOAhkeFaLtN1Dhp8vIOqKOGTfv4Uuls5GslE7-6zk3W0ARdIpUhyKLjlfRQrgSSgO-b_wX5ctp6d9kMKY8AishfYPwH-Q4eii34cQqQbpGhthh5bxQNu4yyFrr9IBiBavASqxhIoq51cgjHFSxDRX1s4wF1FeUwDXxLqJHBK-nf8hUeBszbCL7rUNUZSEPH9ixvAYebZmv-ZHvumH6qlnfsz_-PGuH8WWH_mrfvy0obHOK_KkNiyYpZPvQV4wdUS-pBOnLfmDYtNUQ1dxp5f_vXvkdXndbZHhJF2plx4ALUk2z-17S6tUCzcGIlU1KB0W0ARR0m-Q8nBLyuIjT3tKoXY20LakL3bKtjrt5UlYUiV1RgXXeEmn3skW24WTlqhNKAqxqxZdMLRtKU8dPInq8c98ypR_gKl4ypRvMxVvMh1uMGWbM80YXhl3e6kVcszu194Ln4eF6YAoQxL77NrdtrTnqzpJdSVMIIYjsaBjiuQrbXWIWiKPvqH1-q8fAQAA__9OjRUr
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsk8FOGzEQhu99itGcQDWwu1Q9WEKKGtIqtElQQFyqCDn2EKx47cX2ikQoj9UX6JNV3iWUBGhFe-ilPqw8M79_2_N57zDcGOR41vvS656D3BfwcTwagIT-cNgbw6A3_tSDk1F_CApGw0ZwBGp_igytUzQUJQXkXzHHCcPKO0khOJ9Sd42grxbIM4baVnVM6QlD6Twhv8OooyHkeC6mhsYkFPmDDBkqikKbxlZ25GU1pyUy7DpTlzZwEMjwrBJpuocMP19A1CVxyL5_C20snY1ko3b2Scm72wCKpFOkOBRtcrqMFMCTUBzy9_Chzc7Gp12QwpjwIKyE9mvhO2Q4uOh2IUSqQLraRtihRTzQNu5yyJqrtAKi-UuCUiygpNL5JQhjnBQxnStrzpBq4cZApLICpcMc6iBmtC5PRZTXFMDVsaojh2TXXG-dKHCyYthG960PUcwIef6IVf8YebZif4Yr38SlOuoJrul_XH-Lq9jClb-I6yel2jqvyJPaIDRJK38neYb5gPyMTpy25A-KTeaGruJOJ3-7e-T17LqdIsNRulInvQ9akKyf0v03rTzcamXxmpc_plA5G2i7pc_ulG3ttJenxpKaUQsquNpLOvVONto2HDVGTUJRiG21aIO-bUp52sGTKB9-3MdO-SucisdO-bZT8Uunww2nbPNME4ZXxt1eaoUcs_ux98xnPTAtELOQmn127W4b2_NllVp1JUwghgMxp2OK5EttdYhaIo--ptXqzY8AAAD__6sZKPs=
 
 statement ok
 RESET vectorize; RESET distsql
@@ -226,6 +228,10 @@ ALTER TABLE tpar SPLIT AT VALUES(5)
 # Run a select to prime the range cache to simplify the trace below.
 statement ok
 SELECT * FROM tpar
+
+# We want to ensure that local spans are parallelized without the streamer.
+statement ok
+SET streamer_enabled = false
 
 # Make sure that the scan actually gets parallelized.
 statement ok
@@ -252,6 +258,9 @@ WHERE message LIKE 'querying next range at %' OR
 querying next range at /Table/109/1/0/0
 === SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/109/1/10/0
+
+statement ok
+RESET streamer_enabled
 
 # Used to be a regression test for #46123 (rowexec.TableReader not implementing
 # execopnode.OpNode interface).

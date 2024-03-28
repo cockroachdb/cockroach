@@ -250,6 +250,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	*trSpec = execinfrapb.TableReaderSpec{
 		Reverse:                         params.Reverse,
 		TableDescriptorModificationTime: tabDesc.GetModificationTime(),
+		MaintainOrdering:                len(reqOrdering) > 0,
 	}
 	if err := rowenc.InitIndexFetchSpec(&trSpec.FetchSpec, e.planner.ExecCfg().Codec, tabDesc, idx, columnIDs); err != nil {
 		return nil, err

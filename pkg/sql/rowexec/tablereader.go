@@ -145,6 +145,7 @@ func newTableReader(
 		return nil, err
 	}
 
+	// TODO(XXX): use the streamer.
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
 		ctx,

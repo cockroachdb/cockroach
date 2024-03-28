@@ -79,6 +79,7 @@ func (f *txnKVStreamer) SetupNextFetch(
 	spans roachpb.Spans,
 	spanIDs []int,
 	bytesLimit rowinfra.BytesLimit,
+	// TODO(XXX): we probably will need to pay attention to the key limit.
 	_ rowinfra.KeyLimit,
 	_ bool,
 ) error {

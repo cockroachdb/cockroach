@@ -275,8 +275,20 @@ WHERE (message LIKE 'querying next range%' OR message LIKE '%batch%')
   AND message NOT LIKE '%SystemConfigSpan%'
   AND message NOT LIKE '%PushTxn%'
 ----
+colbatchscan      querying next range at /Table/12/1
 dist sender send  querying next range at /Table/12/1
 dist sender send  r15: sending batch 1 Scan to (n1,s1):1
+dist sender send  r14: sending batch 1 Scan to (n1,s1):1
+dist sender send  querying next range at /Table/12/1/2023-06-03T17:35:01.249961Z/"\xcd\xecI\xf2\xdd\x04Fs\xb6C\xe5\xe6r\xbb\x9c\xf8"/0
+dist sender send  r14: sending batch 1 Scan to (n1,s1):1
+dist sender send  querying next range at /Table/12/1/2023-06-03T17:35:01.437908Z/"2\x8f\xb7_\xc5\xe2F\x1a\x9a\x8d1*\xfd\xee\xd5\x0f"/0
+dist sender send  r14: sending batch 1 Scan to (n1,s1):1
+dist sender send  querying next range at /Table/12/1/2023-06-03T17:35:01.525967Z/"N\t/\xf6\x9d*D4\x94\x17/\xba@\xb0\x87,"/0
+dist sender send  r14: sending batch 1 Scan to (n1,s1):1
+dist sender send  querying next range at /Table/12/1/2023-06-03T17:35:01.682513Z/"\x8a_\xb6eU\x9fD\xa6\xb8\xc0\xa1\x00\xf1\xa1g\xa5"/0
+dist sender send  r14: sending batch 1 Scan to (n1,s1):1
+dist sender send  querying next range at /Table/12/1/2023-06-03T17:35:02.038574Z/"}\x0e\xc4\xf9\x8f3D٭\xfeX\x84\xf0\x9f\xf4v"/0
+dist sender send  r14: sending batch 1 Scan to (n1,s1):1
 
 # Regression tests for incorrect interaction between consecutive session traces
 # (#59203, #60672).
