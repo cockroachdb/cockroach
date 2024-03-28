@@ -415,6 +415,15 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
+	// Remove a stale descriptor proposal we are tracking, for purposes of
+	// maintaining the lease. Normally this will be a noop if this replica is
+	// not the leaseholder, but we may also have an old lying around, so it will
+	// get cleaned up. If the proposal has a higher generation, we can't be sure
+	// that it is a failed proposal, since the leaseholder could be catching up
+	// via a snapshot.
+	if r.mu.pendingRangeDescriptor != nil && r.mu.pendingRangeDescriptor.Generation <= desc.Generation {
+		r.mu.pendingRangeDescriptor = nil
+	}
 	r.mu.replicaFlowControlIntegration.onDescChanged(ctx)
 
 	// Give the liveness and meta ranges high priority in the Raft scheduler, to

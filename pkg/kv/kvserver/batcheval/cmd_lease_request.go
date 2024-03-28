@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -66,10 +67,26 @@ func RequestLease(
 		Existing:  prevLease,
 		Requested: args.Lease,
 	}
+	newLease := args.Lease
+	if prevLease.DMELease != nil || args.PrevLease.DMELease != nil {
+		// One of the "previous" leases is a dme-based lease. Do a stricter check
+		// -- arguably we should be doing this for all kinds of leases.
+		if prevLease.Sequence != args.PrevLease.Sequence || *prevLease.ProposedTS != *args.PrevLease.ProposedTS {
+			// The previous lease has changed.
+			rErr.Message = fmt.Sprintf("expected previous lease %s, found %s", args.PrevLease, prevLease)
+			return newFailedLeaseTrigger(false /* isTransfer */), rErr
+		}
+	}
+	// Else, don't do the stricter check. We have picked args.Lease.Start based
+	// on args.PrevLease, and what if the lease has changed? Currently we only
+	// use args.PrevLease.Sequence to set
+	// proposal.command.ProposerLeaseSequence, but what if prevLease and
+	// args.PrevLease share the same sequence due to an extension? We could
+	// replace prevLease even though it is valid.
 
 	// MIGRATION(tschottdorf): needed to apply Raft commands which got proposed
 	// before the StartStasis field was introduced.
-	newLease := args.Lease
+
 	if newLease.DeprecatedStartStasis == nil {
 		newLease.DeprecatedStartStasis = newLease.Expiration
 	}
@@ -122,7 +139,6 @@ func RequestLease(
 		if ts := args.MinProposedTS; isExtension && ts != nil {
 			effectiveStart.Forward(*ts)
 		}
-
 	} else if prevLease.Type() == roachpb.LeaseExpiration {
 		effectiveStart.BackwardWithTimestamp(prevLease.Expiration.Next())
 	}
@@ -137,6 +153,7 @@ func RequestLease(
 			// the caller.
 			t := *newLease.Expiration
 			newLease.Expiration = &t
+			// NB: only forwards if prevLease also an expiration-based lease.
 			newLease.Expiration.Forward(prevLease.GetExpiration())
 		}
 	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.ToTimestamp().Less(prevLease.GetExpiration()) {

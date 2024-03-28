@@ -1173,11 +1173,25 @@ func TestLeaseEqual(t *testing.T) {
 		Epoch                 int64
 		Sequence              LeaseSequence
 		AcquisitionType       LeaseAcquisitionType
+		ExpiredDMELease       *ExpiredDistributedMultiEpochLease
+		DMELease              *DistributedMultiEpochLease
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile
-	// error occurs on the following line of code, update the expectedLease
-	// structure AND update Lease.Equal.
+	// error occurs on the following lines of code, update the expectedLease and
+	// supporting structures AND update Lease.Equal.
 	var _ = expectedLease(Lease{})
+	type expectedExpiredDistributedMultiEpochLease struct {
+		RangeGeneration RangeGeneration
+	}
+	var _ = expectedExpiredDistributedMultiEpochLease(ExpiredDistributedMultiEpochLease{})
+	type expectedDistributedMultiEpochLease struct {
+		Epoch             int64
+		MinExpiration     hlc.Timestamp
+		RangeGeneration   RangeGeneration
+		PrevLeaseSequence LeaseSequence
+		PrevLeaseProposal hlc.ClockTimestamp
+	}
+	var _ = expectedDistributedMultiEpochLease(DistributedMultiEpochLease{})
 
 	// Verify that nil == &hlc.Timestamp{} for the Expiration and
 	// DeprecatedStartStasis fields. See #19843.

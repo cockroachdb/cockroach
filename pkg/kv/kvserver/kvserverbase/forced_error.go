@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
 // ProposalRejectionType indicates how to handle a proposal that was
@@ -115,7 +116,28 @@ func CheckForcedErr(
 	// To understand why this lease verification is necessary, see comments on the
 	// proposer_lease field in the proto.
 	leaseMismatch := raftCmd.ProposerLeaseSequence != replicaState.Lease.Sequence
+	var additionalErrStr redact.SafeString
 	if !leaseMismatch && isLeaseRequest {
+		if requestedLease.ExpiredDMELease != nil &&
+			requestedLease.ExpiredDMELease.RangeGeneration != replicaState.Desc.Generation {
+			leaseMismatch = true
+			additionalErrStr = redact.SafeString(
+				fmt.Sprintf(" lease proposal %s computed expiry of dme-based lease on stale range descriptor",
+					requestedLease.String()))
+		}
+		if !leaseMismatch && requestedLease.DMELease != nil {
+			dmeLease := requestedLease.DMELease
+			if dmeLease.RangeGeneration != replicaState.Desc.Generation {
+				leaseMismatch = true
+				additionalErrStr = redact.SafeString(fmt.Sprintf(" lease proposal %s refers to stale range descriptor",
+					requestedLease.String()))
+			} else if dmeLease.PrevLeaseSequence != replicaState.Lease.Sequence ||
+				dmeLease.PrevLeaseProposal != *replicaState.Lease.ProposedTS {
+				leaseMismatch = true
+				additionalErrStr = redact.SafeString(fmt.Sprintf(" lease proposal %s refers to stale lease, actual lease %s",
+					requestedLease.String(), replicaState.Lease.String()))
+			}
+		}
 		// Lease sequence numbers are a reflection of lease equivalency
 		// between subsequent leases. However, Lease.Equivalent is not fully
 		// symmetric, meaning that two leases may be Equivalent to a third
@@ -126,15 +148,18 @@ func CheckForcedErr(
 		// the sequence number.
 		//
 		// This can lead to inversions in lease expiration timestamps if
-		// we're not careful. To avoid this, if a lease request's proposer
-		// lease sequence matches the current lease sequence and the current
-		// lease sequence also matches the requested lease sequence, we make
-		// sure the requested lease is Equivalent to current lease.
-		if replicaState.Lease.Sequence == requestedLease.Sequence {
+		// we're not careful. To avoid this, if the current lease sequence matches
+		// the requested lease sequence, we make sure the requested lease is
+		// Equivalent to current lease.
+		if !leaseMismatch && replicaState.Lease.Sequence == requestedLease.Sequence {
 			// It is only possible for this to fail when expiration-based
 			// lease extensions are proposed concurrently.
 			expToEpochEquiv := raftCmd.ReplicatedEvalResult.IsLeaseRequestWithExpirationToEpochEquivalent
 			leaseMismatch = !replicaState.Lease.Equivalent(requestedLease, expToEpochEquiv)
+			if leaseMismatch {
+				additionalErrStr = redact.SafeString(fmt.Sprintf(" lease proposal %s is not equivalent to current lease %s",
+					requestedLease.String(), replicaState.Lease))
+			}
 		}
 
 		// This is a check to see if the lease we proposed this lease request
@@ -151,17 +176,19 @@ func CheckForcedErr(
 		//
 		// PrevLeaseProposal is always set. Its nullability dates back to the
 		// migration that introduced it.
-		if raftCmd.ReplicatedEvalResult.PrevLeaseProposal != nil &&
+		if !leaseMismatch && raftCmd.ReplicatedEvalResult.PrevLeaseProposal != nil &&
 			// NB: ProposedTS can be nil if the right-hand side is the Range's initial zero Lease.
 			(!raftCmd.ReplicatedEvalResult.PrevLeaseProposal.Equal(replicaState.Lease.ProposedTS)) {
 			leaseMismatch = true
+			additionalErrStr = redact.SafeString(fmt.Sprintf(" lease proposal %s has PrevLeaseProposal that does not refer to current lease %s",
+				requestedLease.String(), replicaState.Lease.String()))
 		}
 	}
 	if leaseMismatch {
 		log.VEventf(
 			ctx, 1,
-			"command with lease #%d incompatible to %v",
-			raftCmd.ProposerLeaseSequence, *replicaState.Lease,
+			"command with lease #%d incompatible to %v%s",
+			raftCmd.ProposerLeaseSequence, *replicaState.Lease, additionalErrStr,
 		)
 		if isLeaseRequest {
 			// For lease requests we return a special error that
@@ -173,7 +200,8 @@ func CheckForcedErr(
 				ForcedError: kvpb.NewError(&kvpb.LeaseRejectedError{
 					Existing:  *replicaState.Lease,
 					Requested: requestedLease,
-					Message:   "proposed under invalid lease",
+					// TODO(sumeer): this message is inaccurate if the rejection is due to a stale RangeDescriptor.
+					Message: "proposed under invalid lease",
 				}),
 			}
 		}

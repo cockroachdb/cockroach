@@ -1407,6 +1407,7 @@ GO_TARGETS = [
     "//pkg/kv/kvserver/concurrency:concurrency_test",
     "//pkg/kv/kvserver/constraint:constraint",
     "//pkg/kv/kvserver/diskmap:diskmap",
+    "//pkg/kv/kvserver/dme_liveness:dme_liveness",
     "//pkg/kv/kvserver/gc:gc",
     "//pkg/kv/kvserver/gc:gc_test",
     "//pkg/kv/kvserver/idalloc:idalloc",

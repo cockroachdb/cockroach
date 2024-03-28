@@ -196,6 +196,10 @@ type proposer interface {
 
 	// leaseDebugRLocked returns info on the current lease.
 	leaseDebugRLocked() string
+
+	// proposedRangeDescriptorLocked informs the proposer that a RangeDescriptor
+	// is being proposed.
+	proposedRangeDescriptorLocked(desc *roachpb.RangeDescriptor)
 }
 
 // proposerRaft abstracts the propBuf's dependency on *raft.RawNode, to help
@@ -566,6 +570,16 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				firstErr = err
 				continue
 			}
+			// Start tracking this RangeDescriptor in case we need to maintain a
+			// dme-based lease. We are currently doing this before proposing since
+			// we thought that it is theoretically possible that by the time
+			// proposeBatch returns that the proposal has already applied on some
+			// other replica. But it was clarified that "This isn't actually
+			// possible. We're holding the raftMu here, so we have exclusive access
+			// to the raft group. The proposals won't be processed until the next
+			// call to handleRaftReady."
+			// TODO(sumeer): change this.
+			b.p.proposedRangeDescriptorLocked(p.command.ReplicatedEvalResult.State.Desc)
 			sl := []raftpb.Entry{{Type: typ, Data: data}}
 			// Send config change in a single-element batch. We go through
 			// proposeBatch since there's observability in there.
@@ -1345,6 +1359,10 @@ func (rp *replicaProposer) onErrProposalDropped(
 
 func (rp *replicaProposer) leaseDebugRLocked() string {
 	return rp.mu.state.Lease.String()
+}
+
+func (rp *replicaProposer) proposedRangeDescriptorLocked(desc *roachpb.RangeDescriptor) {
+	rp.mu.pendingRangeDescriptor = desc
 }
 
 func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {

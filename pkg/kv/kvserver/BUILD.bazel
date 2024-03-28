@@ -137,6 +137,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/constraint",
+        "//pkg/kv/kvserver/dme_liveness",
         "//pkg/kv/kvserver/gc",
         "//pkg/kv/kvserver/idalloc",
         "//pkg/kv/kvserver/intentresolver",

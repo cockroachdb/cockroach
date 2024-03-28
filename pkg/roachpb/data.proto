@@ -665,7 +665,8 @@ message Lease {
 
   // The expiration is a timestamp at which the lease expires. This means that a
   // new lease can be granted for a later timestamp. This field is only set for
-  // expiration-based leases.
+  // expiration-based leases. NB: this is an exclusive value, i.e. the lease is
+  // valid in [Start, Expiration).
   util.hlc.Timestamp expiration = 2;
 
   // The address of the would-be lease holder.
@@ -694,7 +695,8 @@ message Lease {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 
   // The epoch of the lease holder's node liveness entry. If this value is
-  // non-zero, the expiration field is ignored.
+  // non-zero, the expiration field is ignored. This field is only set for
+  // epoch-based leases.
   int64 epoch = 6;
 
   // A zero-indexed sequence number which is incremented during the acquisition
@@ -711,6 +713,51 @@ message Lease {
   // The type of acquisition event that result in this lease (transfer or
   // request).
   LeaseAcquisitionType acquisition_type = 8;
+
+  // Specified if the new lease is an uncooperative acquisition when the
+  // previous lease was a dme-based lease.
+  ExpiredDistributedMultiEpochLease expired_dme_lease = 9 [(gogoproto.customname) = "ExpiredDMELease"];
+  // Specified if the new lease is a distributed multi-epoch (dme-based)
+  // lease.
+  DistributedMultiEpochLease dme_lease = 10 [(gogoproto.customname) = "DMELease"];
+}
+
+message ExpiredDistributedMultiEpochLease {
+  option (gogoproto.populate) = true;
+
+  // The range generation at which expiry was evaluated. The new lease can
+  // only be applied if the generation has not changed.
+  int64 range_generation = 1 [(gogoproto.casttype) = "RangeGeneration"];
+}
+
+message DistributedMultiEpochLease {
+  option (gogoproto.populate) = true;
+
+  // The lease epoch.
+  int64 epoch = 1;
+  // If MinExpiration is not empty, it is a value > Lease.Start and represents
+  // an expiration-time lower bound. This is needed to correctly handle a
+  // lease extension that transitions from an expiration-based lease to a
+  // dme-based lease -- it is insufficient to ensure that the dme-based lease
+  // has support for the preceding lease's expiration time, since after the
+  // dme-based lease goes into effect, it may propose a config change that
+  // could go into effect before the preceding expiration time, and lose
+  // support from the voting members of the new config.
+  util.hlc.Timestamp min_expiration = 2 [(gogoproto.nullable) = false];
+  // The range generation at which this lease was proposed. It can only be
+  // applied if the generation has not changed.
+  int64 range_generation = 3 [(gogoproto.casttype) = "RangeGeneration"];
+  // The lease proposal needs to reference the lease it is replacing. The
+  // previous lease is uniquely identified by the pair (LeaseSequence,
+  // ProposedTS) (we can't use the Start time, since lease extensions share
+  // the same start time -- see the Start time rewinding in RequestLease). The
+  // denseness of the Lease.Sequence implicitly provides the LeaseSequence
+  // reference. ReplicatedEvalResult.PrevLeaseProposal provides the latter. We
+  // are still trying to gain confidence that these mechanisms are robust, for
+  // dme-based leases, so we also embed the information here, as a fail safe.
+  uint64 prev_lease_sequence = 4 [(gogoproto.casttype) = "LeaseSequence"];
+  util.hlc.Timestamp prev_lease_proposal = 5 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 }
 
 // AbortSpanEntry contains information about a transaction which has

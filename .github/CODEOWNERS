@@ -300,6 +300,7 @@
 /pkg/kv/kvserver/concurrency/           @cockroachdb/kv-prs
 /pkg/kv/kvserver/constraint/            @cockroachdb/kv-prs
 /pkg/kv/kvserver/diskmap/               @cockroachdb/kv-prs
+/pkg/kv/kvserver/dme_liveness/          @cockroachdb/kv-prs
 /pkg/kv/kvserver/gc/                    @cockroachdb/kv-prs
 /pkg/kv/kvserver/idalloc/               @cockroachdb/kv-prs
 /pkg/kv/kvserver/intentresolver/        @cockroachdb/kv-prs

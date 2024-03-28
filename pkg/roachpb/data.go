@@ -1842,11 +1842,22 @@ func (l Lease) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 	if l.Type() == LeaseExpiration {
 		w.Printf("repl=%s seq=%d start=%s exp=%s", l.Replica, l.Sequence, l.Start, l.Expiration)
-	} else {
+	} else if l.Type() == LeaseEpoch {
 		w.Printf("repl=%s seq=%d start=%s epo=%d", l.Replica, l.Sequence, l.Start, l.Epoch)
+	} else if l.Type() == LeaseDistributedMultiEpoch {
+		dmeLease := l.DMELease
+		w.Printf("repl=%s seq=%d start=%s dme-epo=%d dme-range-gen=%s prev-lease=(%d,%s)",
+			l.Replica, l.Sequence, l.Start, dmeLease.Epoch, dmeLease.RangeGeneration, dmeLease.PrevLeaseSequence,
+			dmeLease.PrevLeaseProposal)
+		if dmeLease.MinExpiration != (hlc.Timestamp{}) {
+			w.Printf(" min-exp=%s", dmeLease.MinExpiration)
+		}
 	}
 	if l.ProposedTS != nil {
 		w.Printf(" pro=%s", l.ProposedTS)
+	}
+	if l.ExpiredDMELease != nil {
+		w.Printf(" expired-dme-range-gen=%s", l.ExpiredDMELease.RangeGeneration)
 	}
 }
 
@@ -1872,12 +1883,17 @@ const (
 	// LeaseEpoch allows range operations while the node liveness epoch
 	// is equal to the lease epoch.
 	LeaseEpoch
+	// LeaseDistributedMultiEpoch is a distributed multi-epoch lease.
+	LeaseDistributedMultiEpoch = 3
 )
 
 // Type returns the lease type.
 func (l Lease) Type() LeaseType {
 	if l.Epoch == 0 {
-		return LeaseExpiration
+		if l.DMELease == nil {
+			return LeaseExpiration
+		}
+		return LeaseDistributedMultiEpoch
 	}
 	return LeaseEpoch
 }
@@ -1891,17 +1907,20 @@ func (l Lease) Speculative() bool {
 	return l.Sequence == 0
 }
 
-// Equivalent determines whether ol is considered the same lease
-// for the purposes of matching leases when executing a command.
+// Equivalent determines whether the old lease (l) is considered the same as
+// the new lease (newL) for the purposes of matching leases when executing a
+// command.
+//
 // For expiration-based leases, extensions are allowed.
 // Ignore proposed timestamps for lease verification; for epoch-
 // based leases, the start time of the lease is sufficient to
 // avoid using an older lease with same epoch.
 //
-// expToEpochEquiv indicates whether an expiration-based lease
+// expToEpochOrDMEEquiv indicates whether an expiration-based lease
 // can be considered equivalent to an epoch-based lease during
 // a promotion from expiration-based to epoch-based. It is used
-// for mixed-version compatibility.
+// for mixed-version compatibility. It also covers promotion from
+// expiration-based lease to dme-based lease.
 //
 // NB: Lease.Equivalent is NOT symmetric. For expiration-based
 // leases, a lease is equivalent to another with an equal or
@@ -1910,12 +1929,33 @@ func (l Lease) Speculative() bool {
 // lease with the same replica and start time (representing a
 // promotion from expiration-based to epoch-based), but the
 // reverse is not true.
-func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
+//
+// One of the uses of Equivalent is in deciding what Sequence to assign to
+// newL, so this method must not use the value of Sequence for equivalency.
+//
+// The Start time of the two leases is compared, and a necessary condition for
+// equivalency is that they must be equal. So in the case where the caller is
+// someone who is constructing a new lease proposal, it is the caller's
+// responsibility to realize that the two leases *could* be equivalent, and
+// adjust the start time to be the same. Even if the start times are the same,
+// the leases could turn out to be non equivalent -- in that case they will
+// share a start time but not the sequence.
+//
+// NB: we do not allow transitions from epoch-based or dme-based leases to
+// expiration-based leases to be equivalent. This was because both of the
+// former lease types don't have an expiration in the lease, while the latter
+// does. We can introduce safety violations by shortening the lease expiration
+// if we allow this transition, since the new lease may not apply at the
+// leaseholder until much after it applies at some other replica, so the
+// leaseholder may continue acting as one based on an old lease, while the
+// other replica has stepped up as leaseholder.
+func (l Lease) Equivalent(newL Lease, expToEpochOrDMEEquiv bool) bool {
 	// Ignore proposed timestamp & deprecated start stasis.
 	l.ProposedTS, newL.ProposedTS = nil, nil
 	l.DeprecatedStartStasis, newL.DeprecatedStartStasis = nil, nil
 	// Ignore sequence numbers, they are simply a reflection of
-	// the equivalency of other fields.
+	// the equivalency of other fields. And newL may not have an initialized
+	// sequence number.
 	l.Sequence, newL.Sequence = 0, 0
 	// Ignore the acquisition type, as leases will always be extended via
 	// RequestLease requests regardless of how a leaseholder first acquired its
@@ -1934,17 +1974,21 @@ func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
 		// nullability of this field in the 1.2 cycle, it's crucial and
 		// tested in TestLeaseEquivalence.
 		l.Expiration, newL.Expiration = nil, nil
-
+		newL.DMELease = nil
 		if l.Epoch == newL.Epoch {
 			l.Epoch, newL.Epoch = 0, 0
 		}
+		// Else, the epochs are different, and the later comparison will make the
+		// leases not equivalent. This includes the case of a transition from an
+		// epoch-based lease, which has a non-zero epoch, to an expiration-based
+		// or dme-based lease, which have a zero epoch, for the same replica.
 	case LeaseExpiration:
 		switch newL.Type() {
+		// If the replica is the same, this may be an expiration-based lease
+		// being promoted to an epoch-based lease or dme-based lease. This
+		// transition occurs after a successful lease transfer if the setting
+		// kv.transfer_expiration_leases_first.enabled is enabled.
 		case LeaseEpoch:
-			// An expiration-based lease being promoted to an epoch-based lease. This
-			// transition occurs after a successful lease transfer if the setting
-			// kv.transfer_expiration_leases_first.enabled is enabled.
-			//
 			// Expiration-based leases carry a local expiration timestamp. Epoch-based
 			// leases store their expiration indirectly in NodeLiveness. We assume that
 			// this promotion is only proposed if the liveness expiration is later than
@@ -1952,9 +1996,24 @@ func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
 			// case where Equivalent is not commutative, as the reverse transition
 			// (from epoch-based to expiration-based) requires a sequence increment.
 			//
+			// TODO(sumeer): isn't there a risk that the epoch-based lease doesn't
+			// realize that the expiration-based lease it is replacing is not the
+			// one under which it was proposed and expiration-based lease has been
+			// extended, and it is overwriting that extension (all three leases will
+			// have the same Start)? Consider leases L1, L2, L3 which are all
+			// considered "extensions" and L1 and L2 have expiration time 100 and
+			// 200 respectively. L2 is proposed at 80, and L3 at 81. L3, as an
+			// epoch-based lease, that thinks it is replacing L1, only has to ensure
+			// that node liveness extends up to 100. Say node liveness fails at 150.
+			// The leaseholder applies L2 and thinks it has the lease until 200. A
+			// different node applies L3 and at time 151 realizes the lease is no
+			// longer valid and steps up to be the leaseholder. Meanwhile the
+			// original leaseholder has not yet applied L3 and continues acting as
+			// the leaseholder.
+			//
 			// Ignore epoch and expiration. The remaining fields which are compared
 			// are Replica and Start.
-			if expToEpochEquiv {
+			if expToEpochOrDMEEquiv {
 				l.Epoch, newL.Epoch = 0, 0
 				l.Expiration, newL.Expiration = nil, nil
 			}
@@ -1970,6 +2029,52 @@ func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
 			if l.GetExpiration().LessEq(newL.GetExpiration()) {
 				l.Expiration, newL.Expiration = nil, nil
 			}
+
+		case LeaseDistributedMultiEpoch:
+			// If this is a promotion, we assume that the promotion is only proposed
+			// if the dme-based lease has support at its ProposedTS (this happens in
+			// pendingLeaseRequest.InitOrJoinRequest, since ProposedTS is initially
+			// equal to Start, though later in proposal evaluation Start can get
+			// rewound).
+			if expToEpochOrDMEEquiv {
+				newL.DMELease = nil
+				l.Expiration, newL.Expiration = nil, nil
+			}
+		}
+	case LeaseDistributedMultiEpoch:
+		// We allow extensions of dme-based leases by the leaseholder to improve
+		// the support. Also, the leaseholder may have suspected that it has lost
+		// the lease and is managing to reacquire the lease, without any other
+		// intermediary leaseholder.
+		switch newL.Type() {
+		case LeaseExpiration, LeaseEpoch:
+			// Don't do anything, since these leases cannot be equivalent.
+		case LeaseDistributedMultiEpoch:
+			// The new lease should not be regressing the lease epoch.
+			if l.Replica == newL.Replica && l.DMELease.Epoch <= newL.DMELease.Epoch {
+				// Do some additional sanity checks, which should never fail, unless
+				// we have a bug somewhere.
+				//
+				// TODO(sumeer): I am unsure this is a bug, since stale proposals may
+				// be able to get through all the way to application, and be rejected
+				// in CheckForcedErr, that also calls this method. For now, we've
+				// lifted the checks for stale proposals before the call to this
+				// method, but we should make this less fragile.
+				if l.DMELease.RangeGeneration > newL.DMELease.RangeGeneration {
+					panic(errors.AssertionFailedf("dme-based lease extension is regressing range generation: old %+v new %+v",
+						*l.DMELease, *newL.DMELease))
+				}
+				if newL.DMELease.PrevLeaseSequence != l.Sequence || newL.DMELease.PrevLeaseProposal != *l.ProposedTS {
+					// Odd. The leaseholder did not know about its own previous lease.
+					// Did it think the lease proposal was not successful and tried
+					// again? Maybe that can happen?
+					panic(errors.AssertionFailedf("dme-bases lease extension %s has incorrect prev lease %s",
+						newL, l))
+				}
+				l.DMELease, newL.DMELease = nil, nil
+			}
+			// Else, different replica, or same replica is regressing the lease
+			// epoch, so won't be equivalent.
 		}
 	}
 	return l == newL
@@ -2042,6 +2147,21 @@ func (l *Lease) Equal(that interface{}) bool {
 		return false
 	}
 	if l.Sequence != that1.Sequence {
+		return false
+	}
+	if l.ExpiredDMELease == nil && that1.ExpiredDMELease != nil {
+		return false
+	} else if l.ExpiredDMELease != nil && that1.ExpiredDMELease == nil {
+		return false
+	} else if l.ExpiredDMELease != nil && that1.ExpiredDMELease != nil &&
+		(*l.ExpiredDMELease) != (*that1.ExpiredDMELease) {
+		return false
+	}
+	if l.DMELease == nil && that1.DMELease != nil {
+		return false
+	} else if l.DMELease != nil && that1.DMELease == nil {
+		return false
+	} else if l.DMELease != nil && that1.DMELease != nil && l.DMELease != that1.DMELease {
 		return false
 	}
 	return true

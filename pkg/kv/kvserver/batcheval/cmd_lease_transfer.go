@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -77,6 +78,20 @@ func TransferLease(
 	prevLease, _ := cArgs.EvalCtx.GetLease()
 
 	newLease := args.Lease
+	if prevLease.DMELease != nil || args.PrevLease.DMELease != nil {
+		// One of the "previous" leases is a dme-based lease. Do a stricter check
+		// -- arguably we should be doing this for all kinds of leases.
+		if prevLease.Sequence != args.PrevLease.Sequence || *prevLease.ProposedTS != *args.PrevLease.ProposedTS {
+			// The previous lease has changed.
+			err := errors.Errorf("expected previous lease %s, found %s", args.PrevLease, prevLease)
+			return newFailedLeaseTrigger(true /* isTransfer */), err
+		}
+	}
+	// Else, don't do the stricter check. We use args.PrevLease.Sequence to call
+	// RevokeLease below. If the lease has changed, and the sequence number has
+	// also changed, that call to RevokeLease will be a noop. So this
+	// leaseholder could continue being the leaseholder and create a new
+	// leaseholder when the lease transfer happens. This seems incorrect.
 
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.

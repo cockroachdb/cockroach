@@ -203,6 +203,8 @@ func (t *testProposer) leaseDebugRLocked() string {
 	return ""
 }
 
+func (t *testProposer) proposedRangeDescriptorLocked(desc *roachpb.RangeDescriptor) {}
+
 func (t *testProposer) registerProposalLocked(p *ProposalData) {
 	t.registered++
 }
