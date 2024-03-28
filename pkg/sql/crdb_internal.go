@@ -7780,7 +7780,7 @@ CREATE TABLE crdb_internal.cluster_locks (
     granted             BOOL,
     contended           BOOL NOT NULL,
     duration            INTERVAL,
-    isolation_level 		STRING NOT NULL,
+    isolation_level     STRING,
     INDEX(table_id),
     INDEX(database_name),
     INDEX(table_name),
