@@ -53,7 +53,8 @@ func TestLinux_CollectDiskStats(t *testing.T) {
 				v, err = strconv.ParseUint(cmdArg.Vals[1], 10, 32)
 				require.NoError(t, err)
 				deviceID.minor = uint32(v)
-				disks = append(disks, &monitoredDisk{deviceID: deviceID})
+				tracer := newMonitorTracer(time.Hour, 1000)
+				disks = append(disks, &monitoredDisk{deviceID: deviceID, tracer: tracer})
 			}
 			slices.SortFunc(disks, func(a, b *monitoredDisk) int { return compareDeviceIDs(a.deviceID, b.deviceID) })
 
@@ -69,11 +70,15 @@ func TestLinux_CollectDiskStats(t *testing.T) {
 				return err.Error()
 			}
 			for i := range disks {
+				monitor := Monitor{disks[i]}
+				stats, err := monitor.CumulativeStats()
+				require.NoError(t, err)
+
 				if i > 0 {
 					fmt.Fprintln(&buf)
 				}
 				fmt.Fprintf(&buf, "%s: ", disks[i].deviceID)
-				fmt.Fprint(&buf, disks[i].stats.lastMeasurement.String())
+				fmt.Fprint(&buf, stats.String())
 			}
 			return buf.String()
 		default:

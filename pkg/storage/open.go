@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -440,6 +441,14 @@ func makePebbleWALFailoverOptsForDir(
 func PebbleOptions(pebbleOptions string, parseHooks *pebble.ParseHooks) ConfigOption {
 	return func(cfg *engineConfig) error {
 		return cfg.opts.Parse(pebbleOptions, parseHooks)
+	}
+}
+
+// DiskMonitor configures a monitor to track disk stats.
+func DiskMonitor(diskMonitor *disk.Monitor) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.diskMonitor = diskMonitor
+		return nil
 	}
 }
 
