@@ -10,6 +10,7 @@ package cdceval
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -18,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -205,6 +208,19 @@ func TestNormalizeAndValidate(t *testing.T) {
 			desc:      fooDesc,
 			stmt:      "SELECT *, cdc_prev() FROM foo AS bar",
 			expectErr: `unknown function: cdc_prev()`,
+		},
+		{ // Regression for #115245
+			name:      "changefeed_creation_timestamp",
+			desc:      fooDesc,
+			stmt:      "SELECT * FROM foo WHERE changefeed_creation_timestamp() != changefeed_creation_timestamp()",
+			expectErr: `does not match any rows`,
+		},
+		{ // Regression for #115245
+			name: "changefeed_creation_timestamp",
+			desc: fooDesc,
+			stmt: fmt.Sprintf("SELECT * FROM foo WHERE changefeed_creation_timestamp() = %s",
+				tree.AsStringWithFlags(eval.TimestampToDecimalDatum(hlc.Timestamp{WallTime: 42}), tree.FmtExport)),
+			expectErr: `does not match any rows`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
