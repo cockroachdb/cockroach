@@ -71,6 +71,17 @@ func (p *planner) CreateRoleNode(
 		return nil, pgerror.Newf(pgcode.ReservedName, "%s cannot be used as a role name here", roleSpec.RoleSpecType)
 	}
 
+	// Check that create role is VALID UNTIL 'infinity'
+	// If has, temporary set it to NULL issue #116714
+	for i, v := range kvOptions {
+		option, err := roleoption.ToOption(string(v.Key))
+		if err == nil && option == roleoption.VALIDUNTIL {
+			if v.Value.String() == "'infinity'" {
+				kvOptions[i].Value = tree.DNull
+			}
+		}
+	}
+
 	roleOptions, err := roleoption.MakeListFromKVOptions(
 		ctx, kvOptions, p.ExprEvaluator(opName).LazyStringOrNull,
 	)
