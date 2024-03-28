@@ -272,7 +272,7 @@ var useMuxRangeFeed = util.ConstantWithMetamorphicTestBool("use-mux-rangefeed", 
 // indicates that an initial scan error is non-recoverable.
 func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier) {
 	defer f.running.Done()
-	r := retry.StartWithCtx(ctx, f.retryOptions)
+	r := retry.Start(ctx, f.retryOptions)
 	restartLogEvery := log.Every(10 * time.Second)
 
 	if f.withInitialScan {

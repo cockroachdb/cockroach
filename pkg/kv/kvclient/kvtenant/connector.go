@@ -986,7 +986,7 @@ func (c *connector) getClient(ctx context.Context) (*client, error) {
 // dialAddrs attempts to dial each of the configured addresses in a retry loop.
 // The method will only return a non-nil error on context cancellation.
 func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
-	for r := retry.StartWithCtx(ctx, c.rpcRetryOptions); r.Next(); {
+	for r := retry.Start(ctx, c.rpcRetryOptions); r.Next(); {
 		// Try each address on each retry iteration (in random order).
 		for _, i := range rand.Perm(len(c.addrs)) {
 			addr := c.addrs[i]

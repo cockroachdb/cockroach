@@ -146,7 +146,7 @@ func (s *SQLServer) startAttemptTenantUpgrade(
 
 	// Run the set cluster setting version statement in a transaction
 	// until success.
-	for ur := retry.StartWithCtx(ctx, upgradeRetryOpts); ur.Next(); {
+	for ur := retry.Start(ctx, upgradeRetryOpts); ur.Next(); {
 		if _, err := s.internalExecutor.ExecEx(
 			ctx, "set-version", nil, /* txn */
 			sessiondata.NodeUserSessionDataOverride,

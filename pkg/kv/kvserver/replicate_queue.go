@@ -646,7 +646,7 @@ func (rq *replicateQueue) process(
 	// Use a retry loop in order to backoff in the case of snapshot errors,
 	// usually signaling that a rebalancing reservation could not be made with the
 	// selected target.
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	for r := retry.Start(ctx, retryOpts); r.Next(); {
 		requeue, err := rq.processOneChangeWithTracing(ctx, repl, desc, &conf)
 		if isSnapshotError(err) {
 			// If ChangeReplicas failed because the snapshot failed, we attempt to

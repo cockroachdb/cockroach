@@ -441,7 +441,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		cancel()
 	}).Stop()
 	if prepareErr := func(ctx context.Context) error {
-		retry := retry.StartWithCtx(ctx, retry.Options{})
+		retry := retry.Start(ctx, retry.Options{})
 		var err error
 		for retry.Next() {
 			if err != nil {

@@ -379,7 +379,7 @@ func (nl *NodeLiveness) SetDraining(
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = nl.stopper.ShouldQuiesce()
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	for r := retry.Start(ctx, retryOpts); r.Next(); {
 		oldLivenessRec, ok := nl.cache.self()
 		if !ok {
 			// There was a cache miss, let's now fetch the record from KV
@@ -639,7 +639,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 				func(ctx context.Context) error {
 					nl.cache.checkForStaleEntries(gossip.StoreTTL)
 					// Retry heartbeat in the event the conditional put fails.
-					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+					for r := retry.Start(ctx, retryOpts); r.Next(); {
 						oldLiveness, ok := nl.Self()
 						if !ok {
 							nodeID := nl.cache.selfID()
@@ -1070,7 +1070,7 @@ func (nl *NodeLiveness) updateLiveness(
 	}
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = nl.stopper.ShouldQuiesce()
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	for r := retry.Start(ctx, retryOpts); r.Next(); {
 		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed)
 		if err != nil {
 			if errors.HasType(err, (*errRetryLiveness)(nil)) {

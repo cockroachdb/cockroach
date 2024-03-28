@@ -157,7 +157,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	case *ClosureTxnOperation:
 		// Use a backoff loop to avoid thrashing on txn aborts. Don't wait between
 		// epochs of the same transaction to avoid waiting while holding locks.
-		retryOnAbort := retry.StartWithCtx(ctx, retry.Options{
+		retryOnAbort := retry.Start(ctx, retry.Options{
 			InitialBackoff: 1 * time.Millisecond,
 			MaxBackoff:     250 * time.Millisecond,
 		})
@@ -659,7 +659,7 @@ func resultInit(ctx context.Context, err error) Result {
 func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*kv.DB) roachpb.RangeDescriptor {
 	var dbIdx int
 	var opts = retry.Options{}
-	for r := retry.StartWithCtx(ctx, opts); r.Next(); dbIdx = (dbIdx + 1) % len(dbs) {
+	for r := retry.Start(ctx, opts); r.Next(); dbIdx = (dbIdx + 1) % len(dbs) {
 		sender := dbs[dbIdx].NonTransactionalSender()
 		descs, _, err := kv.RangeLookup(ctx, sender, key, kvpb.CONSISTENT, 0, false)
 		if err != nil {

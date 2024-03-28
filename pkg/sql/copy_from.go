@@ -1107,7 +1107,7 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 		// careful here.
 		rOpts.MaxRetries = 1
 	}
-	r := retry.StartWithCtx(ctx, rOpts)
+	r := retry.Start(ctx, rOpts)
 	for r.Next() {
 		if err = c.insertRowsInternal(ctx, finalBatch); err == nil {
 			// We're done with this batch of rows, so reset the buffered data

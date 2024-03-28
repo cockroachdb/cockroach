@@ -234,7 +234,7 @@ func TestHttpGet(t *testing.T) {
 					InitialBackoff: 500 * time.Microsecond,
 					MaxBackoff:     5 * time.Millisecond,
 				}
-				for attempt := retry.StartWithCtx(ctx, opts); attempt.Next(); {
+				for attempt := retry.Start(ctx, opts); attempt.Next(); {
 					s.CloseClientConnections()
 				}
 				return nil

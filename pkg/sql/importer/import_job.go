@@ -1298,7 +1298,7 @@ func ingestWithRetry(
 	var err error
 	// State to decide when to exit the retry loop.
 	lastProgressChange, lastProgress := timeutil.Now(), getFractionCompleted(job)
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	for r := retry.Start(ctx, retryOpts); r.Next(); {
 		for {
 			res, err = distImport(
 				ctx, execCtx, job, tables, typeDescs, from, format, walltime, testingKnobs, procsPerNode,

@@ -108,7 +108,7 @@ func dialAndCheckHealth(ctx context.Context) error {
 		return err
 	}
 
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	for r := retry.Start(ctx, retryOpts); r.Next(); {
 		if err := timeutil.RunWithTimeout(
 			ctx, "init-open-conn", 5*time.Second, tryConnect,
 		); err != nil {

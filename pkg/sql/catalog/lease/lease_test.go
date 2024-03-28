@@ -3986,7 +3986,7 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 		lease.LeaseDuration.Override(ctx, &st.SV, 0)
 		close(startWaiters)
 
-		r := retry.StartWithCtx(ctx, retry.Options{})
+		r := retry.Start(ctx, retry.Options{})
 		// Wait until long waits are detected in our metrics.
 		for r.Next() {
 			if srv.MustGetSQLCounter("sql.leases.long_wait_for_no_version") == 0 {
@@ -4020,7 +4020,7 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 	// Waits for one version of the descriptor to exist.
 	grp.GoCtx(func(ctx context.Context) error {
 		<-startWaiters
-		r := retry.StartWithCtx(ctx, retry.Options{})
+		r := retry.Start(ctx, retry.Options{})
 		for r.Next() {
 			// Wait for the two versions to exist.
 			if srv.MustGetSQLCounter("sql.leases.long_wait_for_two_version_invariant") == 0 {

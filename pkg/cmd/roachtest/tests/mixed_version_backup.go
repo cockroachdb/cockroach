@@ -1510,7 +1510,7 @@ func (mvb *mixedVersionBackup) waitForDBs(
 	}
 
 	for _, dbName := range mvb.dbs {
-		r := retry.StartWithCtx(ctx, retryOptions)
+		r := retry.Start(ctx, retryOptions)
 		var err error
 		for r.Next() {
 			q := "SELECT 1 FROM [SHOW DATABASES] WHERE database_name = $1"
@@ -1631,7 +1631,7 @@ func (u *CommonTestUtils) waitForJobSuccess(
 	if internalSystemJobs {
 		jobsQuery = fmt.Sprintf("(%s)", jobutils.InternalSystemJobsBaseQuery)
 	}
-	r := retry.StartWithCtx(ctx, backupCompletionRetryOptions)
+	r := retry.Start(ctx, backupCompletionRetryOptions)
 	for r.Next() {
 		var status string
 		var payloadBytes []byte

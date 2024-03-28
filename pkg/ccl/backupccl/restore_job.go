@@ -176,7 +176,7 @@ func restoreWithRetry(
 		currentPersistedSpans  jobspb.RestoreFrontierEntries
 	)
 
-	for r := retry.StartWithCtx(restoreCtx, retryOpts); r.Next(); {
+	for r := retry.Start(restoreCtx, retryOpts); r.Next(); {
 		res, err = restore(
 			restoreCtx,
 			execCtx,

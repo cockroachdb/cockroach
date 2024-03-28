@@ -159,7 +159,7 @@ func WaitForUpdatedReplicationReport(ctx context.Context, t test.Test, db *gosql
 	// Wait for a new report with a timestamp after tStart to ensure
 	// that the report picks up any new tables or zones.
 	tStart := timeutil.Now()
-	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
+	for r := retry.Start(ctx, retry.Options{}); r.Next(); {
 		var count int
 		var gen gosql.NullTime
 		if err := db.QueryRowContext(

@@ -2009,7 +2009,7 @@ func (ds *DistSender) sendPartialBatch(
 	tBegin, attempts := timeutil.Now(), int64(0) // for slow log message
 	// prevTok maintains the EvictionToken used on the previous iteration.
 	var prevTok rangecache.EvictionToken
-	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
+	for r := retry.Start(ctx, ds.rpcRetryOptions); r.Next(); {
 		attempts++
 		pErr = nil
 		// If we've invalidated the descriptor on a send failure, re-lookup.
@@ -2549,7 +2549,7 @@ func (ds *DistSender) sendToReplicas(
 	// TODO(andrei): now that requests wait on lease transfers to complete on
 	// outgoing leaseholders instead of immediately redirecting, we should
 	// rethink this backoff policy.
-	inTransferRetry := retry.StartWithCtx(ctx, ds.rpcRetryOptions)
+	inTransferRetry := retry.Start(ctx, ds.rpcRetryOptions)
 	inTransferRetry.Next() // The first call to Next does not block.
 	var sameReplicaRetries int
 	var prevReplica roachpb.ReplicaDescriptor

@@ -847,7 +847,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	var res roachpb.RowCount
 	var lastProgress float32
 	var numBackupInstances int
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	for r := retry.Start(ctx, retryOpts); r.Next(); {
 		res, numBackupInstances, err = backup(
 			ctx,
 			p,
