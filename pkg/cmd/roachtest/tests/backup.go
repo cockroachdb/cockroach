@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -280,83 +279,6 @@ func fingerprint(ctx context.Context, conn *gosql.DB, db, table string) (string,
 	}
 
 	return b.String(), rows.Err()
-}
-
-// disableJobAdoptionStep writes the sentinel file to prevent a node's
-// registry from adopting a job.
-//
-// TODO(renato): remove this duplicated function once
-// `declarative_schema_changer/job-compatibility-mixed-version` is
-// migrated to the new mixed-version testing framework.
-func disableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		for _, nodeID := range nodeIDs {
-			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID), "echo", "-n", "{store-dir}")
-			if err != nil {
-				t.L().Printf("Failed to retrieve store directory from node %d: %v\n", nodeID, err.Error())
-			}
-			storeDirectory := result.Stdout
-			disableJobAdoptionSentinelFilePath := filepath.Join(storeDirectory, jobs.PreventAdoptionFile)
-			cmd := fmt.Sprintf("touch %s", disableJobAdoptionSentinelFilePath)
-			c.Run(ctx, nodeIDs, cmd)
-			t.L().Printf("Disabling job adoption on node %v: > %v\n", nodeID, cmd)
-
-			// Wait for no jobs to be running on the node that we have halted
-			// adoption on.
-			testutils.SucceedsSoon(t, func() error {
-				gatewayDB := c.Conn(ctx, t.L(), nodeID)
-				defer gatewayDB.Close()
-
-				row := gatewayDB.QueryRow(`SELECT count(*) FROM [SHOW JOBS] WHERE status = 'running'`)
-				var count int
-				require.NoError(t, row.Scan(&count))
-				if count != 0 {
-					return errors.Newf("node is still running %d jobs", count)
-				}
-				return nil
-			})
-		}
-
-		// TODO(adityamaru): This is unfortunate and can be deleted once
-		// https://github.com/cockroachdb/cockroach/pull/79666 is backported to
-		// 21.2 and the mixed version map for roachtests is bumped to the 21.2
-		// patch release with the backport.
-		//
-		// The bug above means that nodes for which we have disabled adoption may
-		// still lay claim on the job, and then not clear their claim on realizing
-		// that adoption is disabled. To get around this we set the env variable
-		// to disable the registries from even laying claim on the jobs.
-		_, err := c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=0")
-		require.NoError(t, err)
-	}
-}
-
-// enableJobAdoptionStep clears the sentinel file that prevents a node's
-// registry from adopting a job.
-//
-// TODO(renato): remove this duplicated function once
-// `declarative_schema_changer/job-compatibility-mixed-version` is
-// migrated to the new mixed-version testing framework.
-func enableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		for _, nodeID := range nodeIDs {
-			result, err := c.RunWithDetailsSingleNode(ctx, t.L(),
-				c.Node(nodeID), "echo", "-n", "{store-dir}")
-			if err != nil {
-				t.L().Printf("Failed to retrieve store directory from node %d: %v\n", nodeID, err.Error())
-			}
-			storeDirectory := result.Stdout
-			disableJobAdoptionSentinelFilePath := filepath.Join(storeDirectory, jobs.PreventAdoptionFile)
-			cmd := fmt.Sprintf("rm -f %s", disableJobAdoptionSentinelFilePath)
-			c.Run(ctx, nodeIDs, cmd)
-			t.L().Printf("Enabling job adoption on node %v: > %v\n", nodeID, cmd)
-		}
-
-		// Reset the env variable that controls how many jobs are claimed by the
-		// registry.
-		_, err := c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=10")
-		require.NoError(t, err)
-	}
 }
 
 // initBulkJobPerfArtifacts registers a histogram, creates a performance
