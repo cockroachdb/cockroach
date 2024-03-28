@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -439,6 +440,48 @@ func TestAlterChangefeedSetDiffOption(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		assertPayloads(t, testFeed, []string{
 			`foo: [0]->{"after": {"a": 0, "b": "initial"}, "before": null}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
+}
+
+func TestAlterChangefeedRespectsCDCQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		const cdcQuery = "SELECT * FROM foo WHERE a % 2 = 0"
+		testFeed := feed(t, f, "CREATE CHANGEFEED WITH format='json', envelope='wrapped' AS "+cdcQuery)
+		defer closeFeed(t, testFeed)
+
+		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET diff`, feed.JobID()))
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		job, err := registry.LoadJob(context.Background(), feed.JobID())
+		require.NoError(t, err)
+		details, ok := job.Details().(jobspb.ChangefeedDetails)
+		require.True(t, ok)
+
+		// Verify the query still intact.
+		sc, err := cdceval.ParseChangefeedExpression(cdcQuery)
+		require.NoError(t, err)
+		require.Equal(t, cdceval.AsStringUnredacted(sc), details.Select)
+
+		// Addition/Removal of the tables is not supported yet.
+		t.Run("cannot add or drop", func(t *testing.T) {
+			sqlDB.ExpectErr(t, "cannot modify targets when using CDC query changefeed",
+				fmt.Sprintf(`ALTER CHANGEFEED %d ADD blah SET DIFF`, feed.JobID()))
+			sqlDB.ExpectErr(t, "cannot modify targets when using CDC query changefeed",
+				fmt.Sprintf(`ALTER CHANGEFEED %d DROP blah SET DIFF`, feed.JobID()))
 		})
 	}
 
