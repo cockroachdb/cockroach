@@ -1301,6 +1301,24 @@ SELECT EXISTS(
 `, tableName.String(), columnName)
 }
 
+func (og *operationGenerator) schemaContainsHasReferredFunctions(
+	ctx context.Context, tx pgx.Tx, schemaName string,
+) (bool, error) {
+	ctes := []CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+		{"pg_depends_from_diff_schema", `
+			SELECT refobjid FROM pg_depend as d, functions as src_function, functions as dst_function
+			WHERE src_function.schema_id <>  $1::REGNAMESPACE::INT8 AND dst_function.schema_id=$1::REGNAMESPACE::INT8 AND
+			d.refobjid=(src_function.id+100000) AND d.objid=(dst_function.id) AND
+			d.classid = 'pg_catalog.pg_proc'::REGCLASS::INT8 AND d.refclassid = 'pg_catalog.pg_proc'::REGCLASS::INT8`},
+	}
+
+	result, err := Collect(ctx, og, tx, pgx.RowToMap, With(ctes,
+		"SELECT * FROM pg_depends_from_diff_schema;"), schemaName)
+	return len(result) > 0, err
+}
+
 func (og *operationGenerator) schemaContainsTypesWithCrossSchemaReferences(
 	ctx context.Context, tx pgx.Tx, schemaName string,
 ) (bool, error) {
