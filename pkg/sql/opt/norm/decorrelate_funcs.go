@@ -45,6 +45,41 @@ func (c *CustomFuncs) HasHoistableSubquery(scalar opt.ScalarExpr) bool {
 }
 
 func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
+	if c.deriveHasUnhoistableExpr(scalar) {
+		// Some expressions disqualify subquery-hoisting entirely.
+		return false
+	}
+	return c.deriveHasHoistableSubqueryImpl(scalar)
+}
+
+// deriveHasUnhoistableExpr checks for expressions within the given scalar
+// expression which cannot be hoisted. This is necessary beyond existing
+// volatility checks because of #97432: when a subquery-hoisting rule is
+// triggered, *all* correlated subqueries are hoisted, not just the leak-proof
+// subqueries. Therefore, it is necessary for correctness to avoid hoisting
+// entirely in the presence of certain expressions.
+func (c *CustomFuncs) deriveHasUnhoistableExpr(expr opt.Expr) bool {
+	switch t := expr.(type) {
+	case *memo.BarrierExpr:
+		// An optimization barrier indicates the presence of an expression which
+		// cannot be reordered with other expressions.
+		return true
+	case *memo.UDFCallExpr:
+		if t.TailCall {
+			// A routine with the "tail-call" property cannot be reordered with other
+			// expressions, since it may then no longer be in tail-call position.
+			return true
+		}
+	}
+	for i := 0; i < expr.ChildCount(); i++ {
+		if c.deriveHasUnhoistableExpr(expr.Child(i)) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *CustomFuncs) deriveHasHoistableSubqueryImpl(scalar opt.ScalarExpr) bool {
 	switch t := scalar.(type) {
 	case *memo.SubqueryExpr:
 		return !t.Input.Relational().OuterCols.Empty()
