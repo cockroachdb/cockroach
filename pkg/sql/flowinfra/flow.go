@@ -482,9 +482,7 @@ func (f *FlowBase) StartInternal(
 		// processors.
 		f.waitGroup.Add(len(f.inboundStreams))
 
-		if err := f.flowRegistry.RegisterFlow(
-			ctx, f.ID, f, f.inboundStreams, SettingFlowStreamTimeout.Get(&f.FlowCtx.Cfg.Settings.SV),
-		); err != nil {
+		if err := f.flowRegistry.RegisterFlow(ctx, f.ID, f, f.inboundStreams, 0); err != nil {
 			return err
 		}
 	}

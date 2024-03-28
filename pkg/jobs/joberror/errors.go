@@ -32,7 +32,6 @@ func IsPermanentBulkJobError(err error) bool {
 	return !sqlerrors.IsDistSQLRetryableError(err) &&
 		!grpcutil.IsClosedConnection(err) &&
 		!flowinfra.IsFlowRetryableError(err) &&
-		!flowinfra.IsNoInboundStreamConnectionError(err) &&
 		!kvcoord.IsSendError(err) &&
 		!errors.Is(err, circuit.ErrBreakerOpen) &&
 		!sysutil.IsErrConnectionReset(err) &&
