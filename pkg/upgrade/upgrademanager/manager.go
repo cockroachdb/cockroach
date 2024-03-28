@@ -520,6 +520,11 @@ func (m *Manager) Migrate(
 			if err := m.runMigration(ctx, mig, user, clusterVersion, !m.knobs.DontUseJobs); err != nil {
 				return err
 			}
+			if buildutil.CrdbTestBuild {
+				if err := m.runMigration(ctx, mig, user, clusterVersion, !m.knobs.DontUseJobs); err != nil {
+					return err
+				}
+			}
 		}
 
 		if m.knobs.InterlockPausePoint == upgradebase.AfterMigration {
