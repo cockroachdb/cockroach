@@ -1372,104 +1372,130 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 	schema: vtable.PGCatalogDefaultACL,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		f := func(defaultPrivilegesForRole catpb.DefaultPrivilegesForRole) error {
-			objectTypes := privilege.GetTargetObjectTypes()
-			for _, objectType := range objectTypes {
-				privs, ok := defaultPrivilegesForRole.DefaultPrivilegesPerObject[objectType]
-				if !ok || len(privs.Users) == 0 {
-					// If the default privileges default state has been altered,
-					// we use an empty entry to signify that the user has no privileges.
-					// We only omit the row entirely if the default privileges are
-					// in its default state. This is PG's behavior.
-					// Note that if ForAllRoles is true, we can skip adding an entry
-					// since ForAllRoles cannot be a grantee - therefore we can ignore
-					// the RoleHasAllPrivilegesOnX flag and skip. We still have to take
-					// into consideration the PublicHasUsageOnTypes flag.
-					if objectType == privilege.Types {
-						// if the objectType is Types, we only omit the entry
-						// if both the role has ALL privileges AND public has USAGE.
-						// This is the "default" state for default privileges on types
-						// in Postgres.
-						if (!defaultPrivilegesForRole.IsExplicitRole() ||
-							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Types)) &&
-							catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
+
+		populatePrivilegeRow := func(schemaID descpb.ID) func(defaultPrivilegesForRole catpb.DefaultPrivilegesForRole) error {
+
+			return func(defaultPrivilegesForRole catpb.DefaultPrivilegesForRole) error {
+				objectTypes := privilege.GetTargetObjectTypes()
+				for _, objectType := range objectTypes {
+					privs, ok := defaultPrivilegesForRole.DefaultPrivilegesPerObject[objectType]
+					if !ok || len(privs.Users) == 0 {
+						// If the default privileges default state has been altered,
+						// we use an empty entry to signify that the user has no privileges.
+						// We only omit the row entirely if the default privileges are
+						// in its default state. This is PG's behavior.
+						// Note that if ForAllRoles is true, we can skip adding an entry
+						// since ForAllRoles cannot be a grantee - therefore we can ignore
+						// the RoleHasAllPrivilegesOnX flag and skip. We still have to take
+						// into consideration the PublicHasUsageOnTypes flag.
+						if objectType == privilege.Types {
+							// if the objectType is Types, we only omit the entry
+							// if both the role has ALL privileges AND public has USAGE.
+							// This is the "default" state for default privileges on types
+							// in Postgres.
+							if (!defaultPrivilegesForRole.IsExplicitRole() ||
+								catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Types)) &&
+								catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
+								continue
+							}
+						} else if objectType == privilege.Routines {
+							// if the objectType is Routines, we only omit the entry
+							// if both the role has ALL privileges AND public has EXECUTE.
+							// This is the "default" state for default privileges on routines
+							// in Postgres.
+							if (!defaultPrivilegesForRole.IsExplicitRole() ||
+								catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Routines)) &&
+								catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) {
+								continue
+							}
+						} else if !defaultPrivilegesForRole.IsExplicitRole() ||
+							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, objectType) {
 							continue
 						}
-					} else if objectType == privilege.Routines {
-						// if the objectType is Routines, we only omit the entry
-						// if both the role has ALL privileges AND public has EXECUTE.
-						// This is the "default" state for default privileges on routines
-						// in Postgres.
-						if (!defaultPrivilegesForRole.IsExplicitRole() ||
-							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Routines)) &&
-							catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) {
-							continue
+					}
+
+					// Type of object this entry is for:
+					// r = relation (table, view), S = sequence, f = function, T = type, n = schema.
+					var c string
+					switch objectType {
+					case privilege.Tables:
+						c = "r"
+					case privilege.Sequences:
+						c = "S"
+					case privilege.Types:
+						c = "T"
+					case privilege.Schemas:
+						c = "n"
+					case privilege.Routines:
+						c = "f"
+					}
+					privilegeObjectType := targetObjectToPrivilegeObject[objectType]
+					arr := tree.NewDArray(types.String)
+					for _, userPrivs := range privs.Users {
+						var user string
+						if userPrivs.UserProto.Decode().IsPublicRole() {
+							// Postgres represents Public in defacl as an empty string.
+							user = ""
+						} else {
+							user = userPrivs.UserProto.Decode().Normalized()
 						}
-					} else if !defaultPrivilegesForRole.IsExplicitRole() ||
-						catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, objectType) {
-						continue
-					}
-				}
 
-				// Type of object this entry is for:
-				// r = relation (table, view), S = sequence, f = function, T = type, n = schema.
-				var c string
-				switch objectType {
-				case privilege.Tables:
-					c = "r"
-				case privilege.Sequences:
-					c = "S"
-				case privilege.Types:
-					c = "T"
-				case privilege.Schemas:
-					c = "n"
-				case privilege.Routines:
-					c = "f"
-				}
-				privilegeObjectType := targetObjectToPrivilegeObject[objectType]
-				arr := tree.NewDArray(types.String)
-				for _, userPrivs := range privs.Users {
-					var user string
-					if userPrivs.UserProto.Decode().IsPublicRole() {
-						// Postgres represents Public in defacl as an empty string.
-						user = ""
-					} else {
-						user = userPrivs.UserProto.Decode().Normalized()
+						privileges, err := privilege.ListFromBitField(
+							userPrivs.Privileges, privilegeObjectType,
+						)
+						if err != nil {
+							return err
+						}
+						grantOptions, err := privilege.ListFromBitField(
+							userPrivs.WithGrantOption, privilegeObjectType,
+						)
+						if err != nil {
+							return err
+						}
+						defaclItem, err := createDefACLItem(user, privileges, grantOptions, privilegeObjectType)
+						if err != nil {
+							return err
+						}
+						if err := arr.Append(
+							tree.NewDString(defaclItem)); err != nil {
+							return err
+						}
 					}
 
-					privileges, err := privilege.ListFromBitField(
-						userPrivs.Privileges, privilegeObjectType,
-					)
-					if err != nil {
-						return err
-					}
-					grantOptions, err := privilege.ListFromBitField(
-						userPrivs.WithGrantOption, privilegeObjectType,
-					)
-					if err != nil {
-						return err
-					}
-					defaclItem, err := createDefACLItem(user, privileges, grantOptions, privilegeObjectType)
-					if err != nil {
-						return err
-					}
-					if err := arr.Append(
-						tree.NewDString(defaclItem)); err != nil {
-						return err
-					}
-				}
+					// Special cases to handle for types and functions.
+					// If one of RoleHasAllPrivilegesOnTypes or PublicHasUsageOnTypes is false
+					// and the other is true, we do not omit the entry since the default
+					// state has changed. We have to produce an entry by expanding the
+					// privileges. Similarly, we need to check EXECUTE for functions.
+					if defaultPrivilegesForRole.IsExplicitRole() {
+						publicHasUsage := false
+						roleHasAllPrivileges := false
+						privilegeKind := privilege.USAGE
 
-				// Special cases to handle for types and functions.
-				// If one of RoleHasAllPrivilegesOnTypes or PublicHasUsageOnTypes is false
-				// and the other is true, we do not omit the entry since the default
-				// state has changed. We have to produce an entry by expanding the
-				// privileges. Similarly, we need to check EXECUTE for functions.
-				if defaultPrivilegesForRole.IsExplicitRole() {
-					if objectType == privilege.Types {
-						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Types) &&
-							catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
+						switch objectType {
+						case privilege.Types:
+							publicHasUsage = !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Types) &&
+								catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole)
+							privilegeKind = privilege.USAGE
+							roleHasAllPrivileges = !catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) &&
+								defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTypes
+						case privilege.Routines:
+							publicHasUsage = !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Routines) &&
+								catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole)
+							privilegeKind = privilege.EXECUTE
+							roleHasAllPrivileges = !catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) &&
+								defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnFunctions
+						default:
+							if len(privs.Users) == 0 && schemaID != descpb.InvalidID {
+								continue
+							}
+						}
+
+						// publicHasUsage and roleHasAllPrivileges will always be false
+						// when objectType is not privilege.Types or privilege.Routines
+						if publicHasUsage {
 							defaclItem, err := createDefACLItem(
-								"" /* public role */, privilege.List{privilege.USAGE}, privilege.List{}, privilegeObjectType,
+								"" /* public role */, privilege.List{privilegeKind}, privilege.List{}, privilegeObjectType,
 							)
 							if err != nil {
 								return err
@@ -1477,9 +1503,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							if err := arr.Append(tree.NewDString(defaclItem)); err != nil {
 								return err
 							}
-						}
-						if !catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) &&
-							defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTypes {
+						} else if roleHasAllPrivileges {
 							defaclItem, err := createDefACLItem(
 								defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized(),
 								privilege.List{privilege.ALL}, privilege.List{}, privilegeObjectType,
@@ -1490,67 +1514,58 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							if err := arr.Append(tree.NewDString(defaclItem)); err != nil {
 								return err
 							}
+						} else if len(privs.Users) == 0 && schemaID != descpb.InvalidID {
+							continue
 						}
 					}
-					if objectType == privilege.Routines {
-						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Routines) &&
-							catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) {
-							defaclItem, err := createDefACLItem(
-								"" /* public role */, privilege.List{privilege.EXECUTE}, privilege.List{}, privilegeObjectType,
-							)
-							if err != nil {
-								return err
-							}
-							if err := arr.Append(tree.NewDString(defaclItem)); err != nil {
-								return err
-							}
-						}
-						if !catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) &&
-							defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnFunctions {
-							defaclItem, err := createDefACLItem(
-								defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized(),
-								privilege.List{privilege.ALL}, privilege.List{}, privilegeObjectType,
-							)
-							if err != nil {
-								return err
-							}
-							if err := arr.Append(tree.NewDString(defaclItem)); err != nil {
-								return err
-							}
-						}
-					}
-				}
 
-				// TODO(richardjcai): Update this logic once default privileges on
-				//    schemas are supported.
-				//    See: https://github.com/cockroachdb/cockroach/issues/67376.
-				schemaID := descpb.ID(0)
-				// If ForAllRoles is specified, we use an empty string as the normalized
-				// role name to create the row hash.
-				normalizedName := ""
-				roleOid := oidZero
-				if defaultPrivilegesForRole.IsExplicitRole() {
-					roleOid = h.UserOid(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode())
-					normalizedName = defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized()
+					// If ForAllRoles is specified, we use an empty string as the normalized
+					// role name to create the row hash.
+					normalizedName := ""
+					roleOid := oidZero
+
+					if defaultPrivilegesForRole.IsExplicitRole() {
+						roleOid = h.UserOid(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode())
+						normalizedName = defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized()
+					}
+					rowOid := h.DBSchemaRoleOid(
+						dbContext.GetID(),
+						schemaID,
+						normalizedName,
+					)
+					if err := addRow(
+						rowOid,             // row identifier oid
+						roleOid,            // defaclrole oid
+						oidZero,            // defaclnamespace oid
+						tree.NewDString(c), // defaclobjtype char
+						arr,                // defaclacl aclitem[]
+					); err != nil {
+						return err
+					}
 				}
-				rowOid := h.DBSchemaRoleOid(
-					dbContext.GetID(),
-					schemaID,
-					normalizedName,
-				)
-				if err := addRow(
-					rowOid,             // row identifier oid
-					roleOid,            // defaclrole oid
-					oidZero,            // defaclnamespace oid
-					tree.NewDString(c), // defaclobjtype char
-					arr,                // defaclacl aclitem[]
-				); err != nil {
-					return err
-				}
+				return nil
 			}
-			return nil
 		}
-		return dbContext.GetDefaultPrivilegeDescriptor().ForEachDefaultPrivilegeForRole(f)
+		err := dbContext.ForEachSchema(func(id descpb.ID, name string) error {
+			schemaDescriptor, err := p.Descriptors().ByID(p.txn).Get().Schema(ctx, id)
+			if err != nil {
+				return err
+			}
+
+			err = schemaDescriptor.GetDefaultPrivilegeDescriptor().ForEachDefaultPrivilegeForRole(populatePrivilegeRow(id))
+
+			if err != nil {
+				return err
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			return err
+		}
+
+		return dbContext.GetDefaultPrivilegeDescriptor().ForEachDefaultPrivilegeForRole(populatePrivilegeRow(descpb.InvalidID /* schemaID */))
 	},
 }
 
