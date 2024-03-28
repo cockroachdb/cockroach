@@ -216,8 +216,11 @@ func (f *hookFnNode) startExec(params runParams) error {
 
 func (f *hookFnNode) Next(params runParams) (bool, error) {
 	select {
-	case <-params.ctx.Done():
-		return false, params.ctx.Err()
+	// Note that we don't listen for context cancellation on params.ctx to
+	// ensure that there is no race between the worker goroutine that was spun
+	// off in startExec and us exiting (when that goroutine exits, it closes
+	// both errCh and resultsCh; it should also be listening for context
+	// cancellation, so we shouldn't get stuck).
 	case err := <-f.run.errCh:
 		return false, err
 	case f.run.row = <-f.run.resultsCh:

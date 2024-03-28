@@ -61,6 +61,7 @@ go_test(
         "//pkg/testutils/distsqlutils",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
         "//pkg/util/tracing",
