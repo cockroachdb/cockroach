@@ -22,9 +22,13 @@ import (
 
 func constructSelectQuery(n *tree.ShowJobs) string {
 	var baseQuery strings.Builder
-	baseQuery.WriteString(`SELECT job_id, job_type, description, `)
-	if n.Jobs != nil {
-		baseQuery.WriteString(`statement, `)
+	baseQuery.WriteString(`SELECT job_id, job_type, `)
+	if n.Jobs == nil {
+		baseQuery.WriteString(`CASE WHEN length(description) > 70 THEN `)
+		baseQuery.WriteString(`concat(substr(description, 0, 60)||' … '||right(description, 7)) `)
+		baseQuery.WriteString(`ELSE description END as description, `)
+	} else {
+		baseQuery.WriteString(`description, statement, `)
 	}
 	baseQuery.WriteString(`user_name, status, running_status, `)
 	baseQuery.WriteString(`date_trunc('second', created) as created, date_trunc('second', started) as started, `)
