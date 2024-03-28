@@ -181,6 +181,26 @@ var planMutators = []mutator{
 		[]bool{true, false},
 		clusterSettingMinimumVersion("v23.1.0"),
 	),
+	newClusterSettingMutator(
+		"storage.ingest_split.enabled",
+		[]bool{true, false},
+		clusterSettingMinimumVersion("v23.2.0"),
+	),
+	newClusterSettingMutator(
+		"kv.snapshot_receiver.excise.enabled",
+		[]bool{true, false},
+		clusterSettingMinimumVersion("v23.2.0"),
+	),
+	newClusterSettingMutator(
+		"sql.catalog.experimental_use_session_based_leasing",
+		[]string{"auto", "off", "dual_write", "drain", "session"},
+		clusterSettingMinimumVersion(clusterupgrade.CurrentVersion().String()),
+	),
+	newClusterSettingMutator(
+		"storage.sstable.compression_algorithm",
+		[]string{"snappy", "zstd"},
+		clusterSettingMinimumVersion(clusterupgrade.CurrentVersion().String()),
+	),
 }
 
 // Plan returns the TestPlan used to upgrade the cluster from the

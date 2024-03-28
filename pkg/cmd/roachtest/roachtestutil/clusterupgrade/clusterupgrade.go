@@ -100,6 +100,10 @@ func CurrentVersion() *Version {
 // MustParseVersion parses the version string given (with or without
 // leading 'v') and returns the corresponding `Version` object.
 func MustParseVersion(v string) *Version {
+	if currentVersion := CurrentVersion(); v == currentVersion.String() {
+		return currentVersion
+	}
+
 	versionStr := v
 	if !strings.HasPrefix(v, "v") {
 		versionStr = "v" + v
