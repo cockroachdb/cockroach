@@ -1087,3 +1087,86 @@ project
  │    └── columns: b:2
  └── projections
       └── b:2 [as="?column?":5, outer=(2)]
+
+# --------------------------------------------------
+# NormalizeCmpGreatest, NormalizeCmpLeast
+# --------------------------------------------------
+exec-ddl
+CREATE TABLE alphabet (a INT PRIMARY KEY, b INT, c INT)
+----
+
+norm expect=NormalizeCmpGreatest
+SELECT * FROM alphabet WHERE greatest(a, b, c) < 42 
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan alphabet
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      ├── (a:1 < 42) OR (a:1 IS NULL) [outer=(1), constraints=(/1: [/NULL - /41]; tight)]
+      ├── (b:2 < 42) OR (b:2 IS NULL) [outer=(2), constraints=(/2: [/NULL - /41]; tight)]
+      ├── (c:3 < 42) OR (c:3 IS NULL) [outer=(3), constraints=(/3: [/NULL - /41]; tight)]
+      └── ((a:1 IS NOT NULL) OR (b:2 IS NOT NULL)) OR (c:3 IS NOT NULL) [outer=(1-3)]
+
+norm expect=NormalizeCmpGreatest
+SELECT * FROM alphabet WHERE greatest(a, 3) < 42 
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan alphabet
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── (a:1 < 42) OR (a:1 IS NULL) [outer=(1), constraints=(/1: [/NULL - /41]; tight)]
+
+norm expect=NormalizeCmpGreatest
+SELECT * FROM alphabet WHERE greatest(a, b, c, 43) < 42 
+----
+values
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-3)
+
+norm expect=NormalizeCmpLeast
+SELECT * FROM alphabet WHERE least(a, b, c) < 42 
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan alphabet
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── ((((a:1 < 42) AND (a:1 IS NOT NULL)) OR ((b:2 < 42) AND (b:2 IS NOT NULL))) OR ((c:3 < 42) AND (c:3 IS NOT NULL))) OR ((((a:1 IS NULL) AND (b:2 IS NULL)) AND (c:3 IS NULL)) AND NULL) [outer=(1-3)]
+
+norm expect=NormalizeCmpLeast
+SELECT * FROM alphabet WHERE least(a, 43) < 42 
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan alphabet
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── a:1 < 42 [outer=(1), constraints=(/1: (/NULL - /41]; tight)]
+
+norm expect=NormalizeCmpLeast
+SELECT * FROM alphabet WHERE least(a, b, c, 1) < 42 
+----
+scan alphabet
+ ├── columns: a:1!null b:2 c:3
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
