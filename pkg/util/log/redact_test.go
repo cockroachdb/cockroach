@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -124,11 +123,13 @@ func TestSafeManaged(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Cleanup(func() {
-				envutil.ClearEnvCache()
-			})
-
-			t.Setenv(redactionPolicyManagedEnvVar, fmt.Sprint(tc.redactionPolicyManagedEnabled))
+			// Reassign `RedactionPolicyManaged` var manually because it's not possible to use
+			// testutils.TestingHook due to circular dependency.
+			initRedactionPolicyManaged := RedactionPolicyManaged
+			RedactionPolicyManaged = tc.redactionPolicyManagedEnabled
+			defer func() {
+				RedactionPolicyManaged = initRedactionPolicyManaged
+			}()
 
 			TestingResetActive()
 			cfg := logconfig.DefaultConfig()
