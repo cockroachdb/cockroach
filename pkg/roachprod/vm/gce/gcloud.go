@@ -1386,7 +1386,14 @@ func (p *Provider) Create(
 	}
 
 	// Work out in which zones VMs should be created.
-	nodeZones := vm.ZonePlacement(len(zones), len(names))
+	//nodeZones := vm.ZonePlacement(len(zones), len(names))
+	// TODO(herko): hack
+	nodeZones := []int{
+		0, 0, 1, 1, 2,
+		3, 3, 4, 4, 5,
+		6, 6, 7, 7, 8,
+	}
+
 	// N.B. when len(zones) > len(names), we don't need to map unused zones
 	zoneToHostNames := make(map[string][]string, min(len(zones), len(names)))
 	for i, name := range names {
