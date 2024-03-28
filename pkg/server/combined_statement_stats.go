@@ -691,9 +691,9 @@ SELECT
     statistics
 FROM (SELECT fingerprint_id,
              app_name,
-             max(aggregated_ts)                                         AS aggregated_ts,
-             crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
-             crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
+             max(aggregated_ts)                           AS aggregated_ts,
+             merge_stats_metadata(metadata)               AS metadata,
+             merge_statement_stats(statistics)            AS statistics
       FROM %s %s
       GROUP BY
           fingerprint_id,
@@ -726,9 +726,9 @@ SELECT
     statistics
 FROM (SELECT fingerprint_id,
              app_name,
-             max(aggregated_ts)                                                AS aggregated_ts,
-             crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata)) AS metadata,
-             crdb_internal.merge_statement_stats(array_agg(statistics))        AS statistics
+             max(aggregated_ts)                                                 AS aggregated_ts,
+             crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata))  AS metadata,
+             merge_statement_stats(statistics)                                  AS statistics
       FROM %s %s
       GROUP BY
           fingerprint_id,
@@ -893,10 +893,10 @@ func collectCombinedTransactions(
 	const queryFormat = `
 SELECT *
 FROM (SELECT app_name,
-             max(aggregated_ts)                                           AS aggregated_ts,
+             max(aggregated_ts)                   AS aggregated_ts,
              fingerprint_id,
              max(metadata),
-             crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
+             merge_transaction_stats(statistics)  AS statistics
       FROM %s %s
       GROUP BY
           app_name,
@@ -1032,8 +1032,8 @@ func collectStmtsForTxns(
 	const queryFormat = `
 SELECT fingerprint_id,
        transaction_fingerprint_id,
-       crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
-       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
+       merge_stats_metadata(metadata)    AS metadata,
+       merge_statement_stats(statistics) AS statistics,
        app_name
 FROM %s %s
 GROUP BY
