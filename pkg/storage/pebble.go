@@ -256,6 +256,18 @@ var walFailoverUnhealthyOpThreshold = settings.RegisterDurationSetting(
 	settings.WithPublic,
 )
 
+// TODO(ssd): This could be SystemOnly but we currently init pebble
+// engines for temporary storage. Temporary engines shouldn't really
+// care about download compactions, but they do currently simply
+// because of code organization.
+var concurrentDownloadCompactions = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.max_download_compaction_concurrency",
+	"the maximum number of concurrent download compactions",
+	8,
+	settings.IntWithMinimum(1),
+)
+
 // ShouldUseEFOS returns true if either of the UseEFOS or UseExciseForSnapshots
 // cluster settings are enabled, and EventuallyFileOnlySnapshots must be used
 // to guarantee snapshot-like semantics.
@@ -747,7 +759,6 @@ func DefaultPebbleOptions() *pebble.Options {
 		// allow overriding the max at runtime through
 		// Engine.SetCompactionConcurrency.
 		MaxConcurrentCompactions:    getMaxConcurrentCompactions,
-		MaxConcurrentDownloads:      getMaxConcurrentDownloads,
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
@@ -1075,6 +1086,13 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			return getCompressionAlgorithm(ctx, cfg.settings)
 		}
 	}
+
+	if cfg.opts.MaxConcurrentDownloads == nil {
+		cfg.opts.MaxConcurrentDownloads = func() int {
+			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
+		}
+	}
+
 	cfg.opts.EnsureDefaults()
 
 	// The context dance here is done so that we have a clean context without
