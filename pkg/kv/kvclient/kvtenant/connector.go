@@ -901,8 +901,13 @@ func (c *connector) HotRangesV2(
 func (c *connector) DownloadSpan(
 	ctx context.Context, req *serverpb.DownloadSpanRequest,
 ) (*serverpb.DownloadSpanResponse, error) {
-	if !roachpb.IsSystemTenantID(c.tenantID.InternalValue) {
-		return nil, status.Errorf(codes.PermissionDenied, "only the system tenant can issue download span requests")
+	if !c.tenantID.IsSystem() {
+		tSpan := keys.MakeTenantSpan(c.tenantID)
+		for i := range req.Spans {
+			if !tSpan.Contains(req.Spans[i]) {
+				return nil, status.Errorf(codes.PermissionDenied, "only the system tenant can issue download span requests for another tenant")
+			}
+		}
 	}
 	var resp *serverpb.DownloadSpanResponse
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
