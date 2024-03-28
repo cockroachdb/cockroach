@@ -452,6 +452,10 @@ func TestSendRPCOrder(t *testing.T) {
 		TransportFactory:  transportFactory,
 		RangeDescriptorDB: mockRangeDescriptorDBForDescs(descriptor),
 		Settings:          cluster.MakeTestingClusterSettings(),
+		// This test is checking how the different locality settings impact the
+		// choice of routing and number of requests. It needs to route to the
+		// leaseholder first to prevent extra calls.
+		TestingKnobs: ClientTestingKnobs{RouteToLeaseholderFirst: true},
 	}
 
 	for _, tc := range testCases {
@@ -1183,6 +1187,9 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 		TransportFactory:  adaptSimpleTransport(sendFn),
 		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
+		// This test is counting the number of batch requests sent, so route to
+		// the leaseholder first to avoid spurious calls.
+		TestingKnobs: ClientTestingKnobs{RouteToLeaseholderFirst: true},
 	}
 	ds := NewDistSender(cfg)
 
@@ -1302,6 +1309,9 @@ func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 				TransportFactory:  adaptSimpleTransport(sendFn),
 				RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
 				Settings:          cluster.MakeTestingClusterSettings(),
+				// This test is asserting on the number of requests sent, so it
+				// has to route to the leaseholder first.
+				TestingKnobs: ClientTestingKnobs{RouteToLeaseholderFirst: true},
 			}
 			ds := NewDistSender(cfg)
 
@@ -4012,6 +4022,9 @@ func TestCanSendToFollower(t *testing.T) {
 			MaxBackoff:     time.Microsecond,
 		},
 		Settings: cluster.MakeTestingClusterSettings(),
+		// This test is looking at the exact nodes the requests are sent to. If
+		// we send to a follower first, the sentTo node is incorrect.
+		TestingKnobs: ClientTestingKnobs{RouteToLeaseholderFirst: true},
 	}
 	for i, c := range []struct {
 		canSendToFollower bool
