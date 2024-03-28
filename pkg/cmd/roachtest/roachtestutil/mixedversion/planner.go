@@ -41,6 +41,9 @@ type (
 		// the run encoded by this plan. These upgrades happen *after*
 		// every update in `setup` is finished.
 		upgrades []*upgradePlan
+		// deploymentMode is the associated deployment mode used when
+		// generating this test plan.
+		deploymentMode DeploymentMode
 		// enabledMutators is a list of `mutator` implementations that
 		// were applied when generating this test plan.
 		enabledMutators []mutator
@@ -63,6 +66,7 @@ type (
 	// a test plan from the given rng and user-provided hooks.
 	testPlanner struct {
 		versions       []*clusterupgrade.Version
+		deploymentMode DeploymentMode
 		currentContext *Context
 		crdbNodes      option.NodeListOption
 		rt             test.Test
@@ -257,10 +261,11 @@ func (p *testPlanner) Plan() *TestPlan {
 	}
 
 	testPlan := &TestPlan{
-		setup:     setup,
-		initSteps: p.testStartSteps(),
-		upgrades:  testUpgrades,
-		isLocal:   p.isLocal,
+		setup:          setup,
+		initSteps:      p.testStartSteps(),
+		upgrades:       testUpgrades,
+		deploymentMode: p.deploymentMode,
+		isLocal:        p.isLocal,
 	}
 
 	// Probabilistically enable some of of the mutators on the base test
@@ -940,22 +945,30 @@ func (plan *TestPlan) prettyPrintInternal(debug bool) string {
 	versions := plan.Versions()
 	formattedVersions := make([]string, 0, len(versions))
 	for _, v := range versions {
-		formattedVersions = append(formattedVersions, fmt.Sprintf("%q", v.String()))
+		formattedVersions = append(formattedVersions, v.String())
 	}
 
-	var mutatorsDesc string
+	var lines []string
+	addLine := func(title string, val any) {
+		titleWithColon := fmt.Sprintf("%s:", title)
+		lines = append(lines, fmt.Sprintf("%-20s%v", titleWithColon, val))
+	}
+
+	addLine("Upgrades", strings.Join(formattedVersions, " → "))
+	addLine("Deployment mode", plan.deploymentMode)
+
 	if len(plan.enabledMutators) > 0 {
 		mutatorNames := make([]string, 0, len(plan.enabledMutators))
 		for _, mut := range plan.enabledMutators {
 			mutatorNames = append(mutatorNames, mut.Name())
 		}
 
-		mutatorsDesc = fmt.Sprintf(" with mutators {%s}", strings.Join(mutatorNames, ", "))
+		addLine("Mutators", strings.Join(mutatorNames, ", "))
 	}
 
 	return fmt.Sprintf(
-		"mixed-version test plan for upgrading from %s%s:\n%s",
-		strings.Join(formattedVersions, " to "), mutatorsDesc, out.String(),
+		"%s\nPlan:\n%s",
+		strings.Join(lines, "\n"), out.String(),
 	)
 }
 
