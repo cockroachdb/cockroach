@@ -704,9 +704,9 @@ export class StatementDetails extends React.Component<
     const duration = (v: number) => Duration(v * 1e9);
     const [chartsStart, chartsEnd] = toRoundedDateRange(this.props.timeScale);
     const xScale = {
-      graphTsStartMillis: chartsStart.valueOf,
-      graphTsEndMillis: chartsEnd.valueOf,
-    } as unknown as XScale;
+      graphTsStartMillis: chartsStart.valueOf(),
+      graphTsEndMillis: chartsEnd.valueOf(),
+    } as XScale;
 
     return (
       <>
