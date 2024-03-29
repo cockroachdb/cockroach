@@ -29,8 +29,13 @@ type JSONs struct {
 
 // NewJSONs returns a new JSONs presized to n elements.
 func NewJSONs(n int) *JSONs {
+	return newJSONs(NewBytes(n))
+}
+
+//gcassert:inline
+func newJSONs(bytes *Bytes) *JSONs {
 	return &JSONs{
-		Bytes: *NewBytes(n),
+		Bytes: *bytes,
 	}
 }
 

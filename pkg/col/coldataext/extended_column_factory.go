@@ -13,8 +13,10 @@ package coldataext
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // extendedColumnFactory stores an evalCtx which can be used to construct
@@ -45,4 +47,15 @@ func (cf *extendedColumnFactory) MakeColumn(t *types.T, n int) coldata.Column {
 		return newDatumVec(t, n, cf.evalCtx)
 	}
 	return coldata.StandardColumnFactory.MakeColumn(t, n)
+}
+
+func (cf *extendedColumnFactory) MakeColumns(columns []coldata.Column, t *types.T, length int) {
+	if typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		// In order to properly initialize a datum-backed vector we need to have
+		// a concrete type, so accepting a single one might be incorrect if we
+		// try to batch-allocate columns for different types. For now, we just
+		// don't use this ability.
+		colexecerror.InternalError(errors.AssertionFailedf("batch-allocation of datum vectors is unsupported"))
+	}
+	coldata.StandardColumnFactory.MakeColumns(columns, t, length)
 }

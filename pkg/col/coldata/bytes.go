@@ -172,7 +172,12 @@ type Bytes struct {
 // NewBytes returns a Bytes struct with enough capacity to store n []byte
 // values.
 func NewBytes(n int) *Bytes {
-	return &Bytes{elements: make([]element, n)}
+	return newBytes(make([]element, n))
+}
+
+//gcassert:inline
+func newBytes(elements []element) *Bytes {
+	return &Bytes{elements: elements}
 }
 
 // Get returns the ith []byte in Bytes. Note that the returned byte slice is
