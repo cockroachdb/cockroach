@@ -699,15 +699,13 @@ func (s *Container) freeLocked(ctx context.Context) {
 func (s *Container) MergeApplicationStatementStats(
 	ctx context.Context,
 	other sqlstats.ApplicationStats,
-	transformer func(*appstatspb.CollectedStatementStatistics),
+	transactionFingerprintID appstatspb.TransactionFingerprintID,
 ) (discardedStats uint64) {
 	if err := other.IterateStatementStats(
 		ctx,
 		sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-			if transformer != nil {
-				transformer(statistics)
-			}
+			statistics.Key.TransactionFingerprintID = transactionFingerprintID
 			key := stmtKey{
 				sampledPlanKey: sampledPlanKey{
 					stmtNoConstants: statistics.Key.Query,
