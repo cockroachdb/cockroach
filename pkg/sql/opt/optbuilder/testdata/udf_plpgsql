@@ -5759,7 +5759,7 @@ project
                      │                                                      ├── params: curs:10(refcursor) x:11(int)
                      │                                                      └── body
                      │                                                           └── project
-                     │                                                                ├── columns: "_stmt_exec_ret_4":17(int)
+                     │                                                                ├── columns: "_stmt_fetch_ret_4":17(int)
                      │                                                                ├── outer: (10)
                      │                                                                ├── cardinality: [1 - 1]
                      │                                                                ├── volatile
@@ -5800,7 +5800,7 @@ project
                      │                                                                │         └── column-access: 0 [as=x:13, type=int, outer=(12)]
                      │                                                                │              └── variable: stmt_fetch_3:12 [type=tuple{int}]
                      │                                                                └── projections
-                     │                                                                     └── udf: _stmt_exec_ret_4 [as="_stmt_exec_ret_4":17, type=int, outer=(10,13), udf]
+                     │                                                                     └── udf: _stmt_fetch_ret_4 [as="_stmt_fetch_ret_4":17, type=int, outer=(10,13), udf]
                      │                                                                          ├── tail-call
                      │                                                                          ├── args
                      │                                                                          │    ├── variable: curs:10 [type=refcursor]

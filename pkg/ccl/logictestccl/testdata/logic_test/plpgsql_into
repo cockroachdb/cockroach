@@ -296,7 +296,7 @@ NOTICE: i = <NULL>
 NOTICE: i = 1
 NOTICE: i = <NULL>
 
-statement error pgcode 0A000 pq: unimplemented: assigning to a variable more than once in the same INTO statement is not supported
+statement error pgcode 0A000 pq: unimplemented: duplicate INTO target
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
     i INT;
