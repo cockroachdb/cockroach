@@ -54,6 +54,7 @@ var (
 	tag                   string
 	external              = false
 	pgurlCertsDir         string
+	authMode              string
 	adminurlPath          = ""
 	adminurlIPs           = false
 	urlOpen               = false
@@ -173,7 +174,8 @@ func initFlags() {
 		"external", false, "return pgurls for external connections")
 	pgurlCmd.Flags().StringVar(&pgurlCertsDir,
 		"certs-dir", install.CockroachNodeCertsDir, "cert dir to use for secure connections")
-
+	pgurlCmd.Flags().StringVar(&authMode,
+		"auth-mode", "root", "form of authentication to use")
 	pprofCmd.Flags().DurationVar(&pprofOpts.Duration,
 		"duration", 30*time.Second, "Duration of profile to capture")
 	pprofCmd.Flags().BoolVar(&pprofOpts.Heap,

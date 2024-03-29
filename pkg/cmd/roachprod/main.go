@@ -987,18 +987,38 @@ var sqlCmd = &cobra.Command{
 }
 
 var pgurlCmd = &cobra.Command{
-	Use:   "pgurl <cluster>",
+	Use:   "pgurl <cluster> --auth-mode <auth-mode>",
 	Short: "generate pgurls for the nodes in a cluster",
 	Long: `Generate pgurls for the nodes in a cluster.
+
+--auth-mode specifies the method of authentication if --secure is passed.
+Defaults to root if not passed. Available auth-modes are:
+
+	root: authenticates with the root user and root certificates
+
+	user-password: authenticates with the default roachprod user and password
+
+	user-cert: authenticates with the default roachprod user and certificates
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		var auth install.PGAuthMode
+		switch authMode {
+		case "root":
+			auth = install.AuthRootCert
+		case "user-password":
+			auth = install.AuthUserPassword
+		case "user-cert":
+			auth = install.AuthUserCert
+		default:
+			return errors.Newf("unsupported auth-mode %s, valid auth-modes are root, user-password, and user-cert", authMode)
+		}
 		urls, err := roachprod.PgURL(context.Background(), config.Logger, args[0], pgurlCertsDir, roachprod.PGURLOptions{
 			External:           external,
 			Secure:             secure,
 			VirtualClusterName: virtualClusterName,
 			SQLInstance:        sqlInstance,
-			Auth:               install.AuthRootCert,
+			Auth:               auth,
 		})
 		if err != nil {
 			return err
