@@ -671,9 +671,9 @@ var jobRecordPollFrequency = 3 * time.Second
 
 var jobRecordRetryOpts = retry.Options{
 	InitialBackoff: jobRecordPollFrequency,
-	Multiplier:     1,
-	MaxBackoff:     5 * time.Second,
-	MaxRetries:     30,
+	Multiplier:     2,
+	MaxBackoff:     1 * time.Minute,
+	MaxRetries:     10,
 }
 
 // waitForCheckpoint waits for the specified job to have a non-empty checkpoint
