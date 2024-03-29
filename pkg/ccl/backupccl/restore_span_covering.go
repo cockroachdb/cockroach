@@ -320,11 +320,12 @@ func generateAndSendImportSpans(
 		for layer := range covFilesByLayer {
 			for _, f := range covFilesByLayer[layer] {
 				fileSpec := execinfrapb.RestoreFileSpec{
-					Path:                  f.Path,
-					Dir:                   backups[layer].Dir,
-					BackupFileEntrySpan:   f.Span,
-					BackupFileEntryCounts: f.EntryCounts,
-					BackingFileSize:       f.BackingFileSize,
+					Path:                    f.Path,
+					Dir:                     backups[layer].Dir,
+					BackupFileEntrySpan:     f.Span,
+					BackupFileEntryCounts:   f.EntryCounts,
+					BackingFileSize:         f.BackingFileSize,
+					ApproximatePhysicalSize: f.ApproximatePhysicalSize,
 				}
 				if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
 					fileSpec.Dir = dir
