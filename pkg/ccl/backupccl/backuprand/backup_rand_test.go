@@ -178,8 +178,13 @@ database_name = 'rand' AND schema_name = 'public'`)
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
 		sqlDB.Exec(t, "CREATE DATABASE restoredb")
 
-		tableQuery := fmt.Sprintf("RESTORE rand.* FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb'%s%s)", runSchemaOnlyExtension, withOnlineRestore())
-		if err := backuptestutils.VerifyBackupRestoreStatementResult(
+		online := withOnlineRestore()
+		tableQuery := fmt.Sprintf("RESTORE rand.* FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb'%s%s)", runSchemaOnlyExtension, online)
+		verifyStatementResult := backuptestutils.VerifyBackupRestoreStatementResult
+		if online != "" {
+			verifyStatementResult = backuptestutils.VerifyOnlineRestoreStatementResult
+		}
+		if err := verifyStatementResult(
 			t, sqlDB, tableQuery, backup,
 		); err != nil {
 			t.Fatal(err)
@@ -187,8 +192,13 @@ database_name = 'rand' AND schema_name = 'public'`)
 		verifyTables(t, tableNames, tableQuery)
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
 
-		dbQuery := fmt.Sprintf("RESTORE DATABASE rand FROM LATEST IN $1 WITH OPTIONS (new_db_name='restoredb'%s%s)", runSchemaOnlyExtension, withOnlineRestore())
-		if err := backuptestutils.VerifyBackupRestoreStatementResult(t, sqlDB, dbQuery, backup); err != nil {
+		online = withOnlineRestore()
+		dbQuery := fmt.Sprintf("RESTORE DATABASE rand FROM LATEST IN $1 WITH OPTIONS (new_db_name='restoredb'%s%s)", runSchemaOnlyExtension, online)
+		verifyStatementResult = backuptestutils.VerifyBackupRestoreStatementResult
+		if online != "" {
+			verifyStatementResult = backuptestutils.VerifyOnlineRestoreStatementResult
+		}
+		if err := verifyStatementResult(t, sqlDB, dbQuery, backup); err != nil {
 			t.Fatal(err)
 		}
 		verifyTables(t, tableNames, dbQuery)

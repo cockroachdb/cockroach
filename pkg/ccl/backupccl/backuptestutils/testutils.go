@@ -206,7 +206,7 @@ func setTestClusterDefaults(params *base.TestClusterArgs, dataDir string, useDat
 }
 
 // VerifyBackupRestoreStatementResult conducts a Backup or Restore and verifies
-// it was properly written to the jobs table
+// it was properly written to the jobs table. Note, does not verify online restores
 func VerifyBackupRestoreStatementResult(
 	t *testing.T, sqlDB *sqlutils.SQLRunner, query string, args ...interface{},
 ) error {
@@ -217,7 +217,7 @@ func VerifyBackupRestoreStatementResult(
 	if err != nil {
 		return err
 	}
-	if e, a := columns, []string{
+	if a, e := columns, []string{
 		"job_id", "status", "fraction_completed", "rows", "index_entries", "bytes",
 	}; !reflect.DeepEqual(e, a) {
 		return errors.Errorf("unexpected columns:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
@@ -254,6 +254,61 @@ func VerifyBackupRestoreStatementResult(
 		&expectedJob.id, &expectedJob.status, &expectedJob.fractionCompleted,
 	)
 	require.Equal(t, expectedJob, actualJob, "result does not match system.jobs")
+
+	return nil
+}
+
+// VerifyOnlineRestoreStatementResult conducts an online restore and verifies
+// the output and that it was properly written to the jobs table.
+func VerifyOnlineRestoreStatementResult(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, query string, args ...interface{},
+) error {
+	t.Helper()
+	rows := sqlDB.Query(t, query, args...)
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+	if a, e := columns, []string{
+		"job_id", "tables", "approx_rows", "approx_bytes", "background_download_job_id",
+	}; !reflect.DeepEqual(e, a) {
+		return errors.Errorf("unexpected columns:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
+	}
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return errors.New("zero rows in result")
+	}
+
+	type job struct {
+		id            int64
+		downloadJobID int64
+	}
+
+	var actualJob job
+	var expectedJob job
+	var unused int64
+
+	if err := rows.Scan(
+		&actualJob.id, &unused, &unused, &unused, &actualJob.downloadJobID,
+	); err != nil {
+		return err
+	}
+	sqlDB.QueryRow(t,
+		`SELECT job_id FROM crdb_internal.jobs WHERE job_id = $1`, actualJob.id,
+	).Scan(
+		&expectedJob.id,
+	)
+
+	require.Equal(t, expectedJob.id, actualJob.id, "result does not match system.jobs")
+	require.NotZero(t, actualJob.downloadJobID, "expected a background download job ID")
+
+	if rows.Next() {
+		return errors.New("more than one row in result")
+	}
 
 	return nil
 }

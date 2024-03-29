@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -155,6 +156,28 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 
 	if err := backuptestutils.VerifyBackupRestoreStatementResult(
 		t, sqlDB, "RESTORE data.* FROM $1 WITH OPTIONS (into_db='data2')", localFoo,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOnlineRestoreStatementResult(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	const numAccounts = 1
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	if err := backuptestutils.VerifyBackupRestoreStatementResult(
+		t, sqlDB, "BACKUP DATABASE data INTO $1", localFoo,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := backuptestutils.VerifyOnlineRestoreStatementResult(
+		t, sqlDB, "RESTORE DATABASE data FROM LATEST IN $1 WITH OPTIONS (new_db_name='data2', experimental deferred copy)", localFoo,
 	); err != nil {
 		t.Fatal(err)
 	}
