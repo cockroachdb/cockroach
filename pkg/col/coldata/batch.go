@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -43,11 +44,12 @@ type Batch interface {
 	ColVec(i int) Vec
 	// ColVecs returns all of the underlying Vecs in this batch.
 	ColVecs() []Vec
-	// Selection, if not nil, returns the selection vector on this batch: a
+	// Selection - if not nil - returns the selection vector on this batch: a
 	// densely-packed list of the *increasing* indices in each column that have
 	// not been filtered out by a previous step.
 	// TODO(yuzefovich): consider ensuring that the length of the returned slice
 	// equals the length of the batch.
+	// TODO(yuzefovich): consider using []int16 to reduce memory footprint.
 	Selection() []int
 	// SetSelection sets whether this batch is using its selection vector or not.
 	SetSelection(bool)
@@ -120,25 +122,171 @@ func NewMemBatch(typs []*types.T, factory ColumnFactory) Batch {
 	return NewMemBatchWithCapacity(typs, BatchSize(), factory)
 }
 
+const (
+	boolAllocIdx int = iota
+	bytesAllocIdx
+	int16AllocIdx
+	int32AllocIdx
+	int64AllocIdx
+	float64AllocIdx
+	decimalAllocIdx
+	timeAllocIdx
+	intervalAllocIdx
+	jsonAllocIdx
+	datumAllocIdx
+	numCanonicalTypes
+)
+
+//gcassert:inline
+func toAllocIdx(canonicalTypeFamily types.Family, width int32) int {
+	switch canonicalTypeFamily {
+	case types.BoolFamily:
+		return boolAllocIdx
+	case types.BytesFamily:
+		return bytesAllocIdx
+	case types.IntFamily:
+		switch width {
+		case 16:
+			return int16AllocIdx
+		case 32:
+			return int32AllocIdx
+		case 0, 64:
+			return int64AllocIdx
+		default:
+			return -1
+		}
+	case types.FloatFamily:
+		return float64AllocIdx
+	case types.DecimalFamily:
+		return decimalAllocIdx
+	case types.TimestampTZFamily:
+		return timeAllocIdx
+	case types.IntervalFamily:
+		return intervalAllocIdx
+	case types.JsonFamily:
+		return jsonAllocIdx
+	case typeconv.DatumVecCanonicalTypeFamily:
+		return datumAllocIdx
+	default:
+		// Return negative number which will cause index out of bounds error if
+		// a new natively-supported type is added and this switch is not
+		// updated.
+		return -1
+	}
+}
+
+var (
+	unexpectedAllocIdxErr = errors.New("unexpected allocIdx")
+	datumBackedType       = types.TSQuery
+)
+
+func init() {
+	if typeconv.TypeFamilyToCanonicalTypeFamily(datumBackedType.Family()) != typeconv.DatumVecCanonicalTypeFamily {
+		panic("update datumBackedType to be actually datum-backed")
+	}
+}
+
+//gcassert:inline
+func toCanonicalType(allocIdx int) *types.T {
+	switch allocIdx {
+	case boolAllocIdx:
+		return types.Bool
+	case bytesAllocIdx:
+		return types.Bytes
+	case int16AllocIdx:
+		return types.Int2
+	case int32AllocIdx:
+		return types.Int4
+	case int64AllocIdx:
+		return types.Int
+	case float64AllocIdx:
+		return types.Float
+	case decimalAllocIdx:
+		return types.Decimal
+	case timeAllocIdx:
+		return types.TimestampTZ
+	case intervalAllocIdx:
+		return types.Interval
+	case jsonAllocIdx:
+		return types.Json
+	case datumAllocIdx:
+		return datumBackedType
+	default:
+		panic(unexpectedAllocIdxErr)
+	}
+}
+
 // NewMemBatchWithCapacity allocates a new in-memory Batch with the given
 // column size. Use for operators that have a precisely-sized output batch.
 func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactory) Batch {
 	b := NewMemBatchNoCols(typs, capacity).(*MemBatch)
 	cols := make([]memColumn, len(typs))
+	// numForCanonicalType will track how many times a particular canonical type
+	// family appears in typs.
+	//
+	//gcassert:noescape
+	var numForCanonicalType [numCanonicalTypes]int
 	for i, t := range typs {
-		col := &cols[i]
-		col.init(t, capacity, factory)
-		b.b[i] = col
+		cols[i] = memColumn{
+			t:                   t,
+			canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()),
+		}
+		b.b[i] = &cols[i]
+		allocIdx := toAllocIdx(cols[i].canonicalTypeFamily, cols[i].t.Width())
+		numForCanonicalType[allocIdx]++
+	}
+	var maxSame int
+	for _, numColumns := range numForCanonicalType {
+		maxSame = max(maxSame, numColumns)
+	}
+	// First, initialize columns that can be batch-allocated together for the
+	// same canonical type.
+	if maxSame > 1 {
+		scratchColumns := make([]Column, maxSame)
+		for allocIdx, numColumns := range numForCanonicalType {
+			if numColumns > 1 {
+				scratch := scratchColumns[:numColumns]
+				t := toCanonicalType(allocIdx)
+				factory.MakeColumns(scratch, t, capacity)
+				for i := range cols {
+					if toAllocIdx(cols[i].canonicalTypeFamily, cols[i].t.Width()) == allocIdx {
+						cols[i].col = scratch[0]
+						scratch = scratch[1:]
+					}
+				}
+			}
+		}
+		if numForCanonicalType[datumAllocIdx] > 1 {
+			// We need to set the correct type on each datum-backed vector.
+			for i := range cols {
+				if cols[i].canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
+					cols[i].Datum().SetType(cols[i].t)
+				}
+			}
+		}
+	}
+	// Initialize all remaining columns while also initializing all Nulls
+	// bitmaps.
+	nullsCap := nullsStorageCap(capacity)
+	nullsAlloc := make([]byte, len(typs)*nullsCap)
+	for i := range cols {
+		if cols[i].col == nil {
+			cols[i].col = factory.MakeColumn(cols[i].t, capacity)
+		}
+		cols[i].nulls = newNulls(nullsAlloc[:nullsCap:nullsCap])
+		nullsAlloc = nullsAlloc[nullsCap:]
 	}
 	return b
 }
+
+var batchCapacityTooLargeErr = errors.New("batches cannot have capacity larger than max uint16")
 
 // NewMemBatchNoCols creates a "skeleton" of new in-memory Batch. It allocates
 // memory for the selection vector but does *not* allocate any memory for the
 // column vectors - those will have to be added separately.
 func NewMemBatchNoCols(typs []*types.T, capacity int) Batch {
-	if max := math.MaxUint16; capacity > max {
-		panic(fmt.Sprintf(`batches cannot have capacity larger than %d; requested %d`, max, capacity))
+	if capacity > math.MaxUint16 {
+		panic(batchCapacityTooLargeErr)
 	}
 	b := &MemBatch{}
 	b.capacity = capacity
