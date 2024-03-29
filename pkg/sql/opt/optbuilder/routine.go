@@ -301,16 +301,14 @@ func (b *Builder) buildRoutine(
 	}
 	// Do not track any other routine invocations inside this routine, since
 	// for the schema changer we only need depth 1. Also keep track of when
-	// we have are executing inside a UDF (this could be nested so we need to
-	// track the previous state).
-	oldTrackingSchemaDeps := b.trackSchemaDeps
-	oldInsideUDF := b.insideUDF
-	defer func() {
-		b.trackSchemaDeps = oldTrackingSchemaDeps
-		b.insideUDF = oldInsideUDF
-	}()
-	b.trackSchemaDeps = false
-	b.insideUDF = true
+	// we have are executing inside a UDF, and whether the routine is used as a
+	// data source (this could be nested, so we need to track the previous state).
+	oldInsideDataSource := b.insideDataSource
+	defer func(trackSchemaDeps, insideUDF, insideDataSource bool) {
+		b.trackSchemaDeps = trackSchemaDeps
+		b.insideUDF = insideUDF
+		b.insideDataSource = insideDataSource
+	}(b.trackSchemaDeps, b.insideUDF, b.insideDataSource)
 	isSetReturning := o.Class == tree.GeneratorClass
 	isMultiColDataSource = false
 
@@ -352,7 +350,7 @@ func (b *Builder) buildRoutine(
 				if i == len(stmts)-1 {
 					finishResolveType(stmtScope)
 					expr, physProps, isMultiColDataSource =
-						b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
+						b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, oldInsideDataSource, f)
 				}
 				body[i] = expr
 				bodyProps[i] = physProps
@@ -392,7 +390,7 @@ func (b *Builder) buildRoutine(
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		finishResolveType(stmtScope)
 		expr, physProps, isMultiColDataSource =
-			b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
+			b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, oldInsideDataSource, f)
 		body = []memo.RelExpr{expr}
 		bodyProps = []*physical.Required{physProps}
 		if b.verboseTracing {
@@ -428,8 +426,12 @@ func (b *Builder) buildRoutine(
 // UDF. Depending on the context and return type of the UDF, this may mean
 // expanding a tuple into multiple columns, or combining multiple columns into
 // a tuple.
+//
+// insideDataSource indicates whether the routine is used as a data source. It
+// is passed in rather than using b.insideDataSource because b.insideDataSource
+// is reset while building the body of the routine.
 func (b *Builder) finishBuildLastStmt(
-	stmtScope *scope, bodyScope *scope, isSetReturning bool, f *tree.FuncExpr,
+	stmtScope *scope, bodyScope *scope, isSetReturning, insideDataSource bool, f *tree.FuncExpr,
 ) (expr memo.RelExpr, physProps *physical.Required, isMultiColDataSource bool) {
 	expr, physProps = stmtScope.expr, stmtScope.makePhysicalProps()
 	rtyp := f.ResolvedType()
@@ -457,7 +459,7 @@ func (b *Builder) finishBuildLastStmt(
 	cols := physProps.Presentation
 	isSingleTupleResult := len(stmtScope.cols) == 1 &&
 		stmtScope.cols[0].typ.Family() == types.TupleFamily
-	if b.insideDataSource && rtyp.Family() == types.TupleFamily {
+	if insideDataSource && rtyp.Family() == types.TupleFamily {
 		// When the UDF is used as a data source and expects to output a tuple
 		// type, its output needs to be a row of columns instead of the usual
 		// tuple. If the last statement output a tuple, we need to expand the
