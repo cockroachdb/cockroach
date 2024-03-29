@@ -21,7 +21,7 @@ exec-sql
 BACKUP INTO 'nodelocal://1/cluster';
 ----
 
-query-sql regex=(\d\d+\ssucceeded\s3\s\d+\s\d+\s\d\d+)
+query-sql regex=(\d\d+\ssucceeded\s3\s[1-9]\d*\s[1-9]\d*\s\d\d+)
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/cluster' WITH EXPERIMENTAL DEFERRED COPY, new_db_name='d2';
 ----
 true
