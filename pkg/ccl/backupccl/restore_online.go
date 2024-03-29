@@ -62,6 +62,7 @@ func sendAddRemoteSSTs(
 	encryption *jobspb.BackupEncryptionOptions,
 	uris []string,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	progressTracker *progressTracker,
 	requestFinishedCh chan<- struct{},
 	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
@@ -93,7 +94,7 @@ func sendAddRemoteSSTs(
 
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh, kr, fromSystemTenant))
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, progressTracker, requestFinishedCh, kr, fromSystemTenant))
 	}
 
 	if err := grp.Wait(); err != nil {
@@ -143,6 +144,7 @@ func rewriteSpan(
 func sendAddRemoteSSTWorker(
 	execCtx sql.JobExecContext,
 	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
+	progressTracker *progressTracker,
 	requestFinishedCh chan<- struct{},
 	kr *KeyRewriter,
 	fromSystemTenant bool,
@@ -263,6 +265,16 @@ func sendAddRemoteSSTWorker(
 			if err := flush(rewrittenFlushKey, entry.ElidedPrefix); err != nil {
 				return err
 			}
+			var estimatedDataSize int64
+			for _, file := range entry.Files {
+				estimatedDataSize += int64(file.BackingFileSize)
+			}
+			progressTracker.mu.Lock()
+			progressTracker.mu.res.Add(restoreStats{
+				FilesLinked:       int64(len(entry.Files)),
+				EstimatedDataSize: estimatedDataSize,
+			})
+			progressTracker.mu.Unlock()
 			requestFinishedCh <- struct{}{}
 		}
 		return nil

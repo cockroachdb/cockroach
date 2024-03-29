@@ -471,6 +471,7 @@ func restore(
 				encryption,
 				details.URIs,
 				backupLocalityInfo,
+				progressTracker,
 				requestFinishedCh,
 				tracingAggCh,
 				genSpan,
@@ -2078,14 +2079,25 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(r.job.ID())),
-		tree.NewDString(string(jobs.StatusSucceeded)),
-		tree.NewDFloat(tree.DFloat(1.0)),
-		tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
-		tree.NewDInt(tree.DInt(r.restoreStats.IndexEntries)),
-		tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
-	}:
+	case resultsCh <- func() tree.Datums {
+		if (r.job.Details().(jobspb.RestoreDetails)).ExperimentalOnline {
+			return tree.Datums{
+				tree.NewDInt(tree.DInt(r.job.ID())),
+				tree.NewDString(string(jobs.StatusSucceeded)),
+				tree.NewDInt(tree.DInt(r.restoreStats.FilesLinked)),
+				tree.NewDInt(tree.DInt(r.restoreStats.EstimatedDataSize)),
+			}
+		} else {
+			return tree.Datums{
+				tree.NewDInt(tree.DInt(r.job.ID())),
+				tree.NewDString(string(jobs.StatusSucceeded)),
+				tree.NewDFloat(tree.DFloat(1.0)),
+				tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
+				tree.NewDInt(tree.DInt(r.restoreStats.IndexEntries)),
+				tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
+			}
+		}
+	}():
 		return nil
 	}
 }

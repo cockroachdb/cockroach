@@ -1195,6 +1195,8 @@ func restoreTypeCheck(
 	}
 	if restoreStmt.Options.Detached {
 		header = jobs.DetachedJobExecutionResultHeader
+	} else if restoreStmt.Options.ExperimentalOnline {
+		header = jobs.OnlineRestoreJobExecutionResultHeader
 	} else {
 		header = jobs.BulkJobExecutionResultHeader
 	}
@@ -1441,10 +1443,15 @@ func restorePlanHook(
 		)
 	}
 
+	var header colinfo.ResultColumns
 	if restoreStmt.Options.Detached {
-		return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
+		header = jobs.DetachedJobExecutionResultHeader
+	} else if restoreStmt.Options.ExperimentalOnline {
+		header = jobs.OnlineRestoreJobExecutionResultHeader
+	} else {
+		header = jobs.BulkJobExecutionResultHeader
 	}
-	return fn, jobs.BulkJobExecutionResultHeader, nil, false, nil
+	return fn, header, nil, false, nil
 }
 
 // checkRestoreDestinationPrivileges iterates over the External Storage URIs and
