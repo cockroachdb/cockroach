@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
@@ -62,19 +63,18 @@ func sendAddRemoteSSTs(
 	encryption *jobspb.BackupEncryptionOptions,
 	uris []string,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
-	progressTracker *progressTracker,
 	requestFinishedCh chan<- struct{},
 	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
-) error {
+) (approxRows int64, approxDataSize int64, err error) {
 	defer close(requestFinishedCh)
 	defer close(tracingAggCh)
 
 	if encryption != nil {
-		return errors.AssertionFailedf("encryption not supported with online restore")
+		return 0, 0, errors.AssertionFailedf("encryption not supported with online restore")
 	}
 	if len(uris) > 1 {
-		return errors.AssertionFailedf("online restore can only restore data from a full backup")
+		return 0, 0, errors.AssertionFailedf("online restore can only restore data from a full backup")
 	}
 
 	restoreSpanEntriesCh := make(chan execinfrapb.RestoreSpanEntry, 1)
@@ -87,20 +87,20 @@ func sendAddRemoteSSTs(
 	kr, err := MakeKeyRewriterFromRekeys(execCtx.ExecCfg().Codec, dataToRestore.getRekeys(), dataToRestore.getTenantRekeys(),
 		false /* restoreTenantFromStream */)
 	if err != nil {
-		return errors.Wrap(err, "creating key rewriter from rekeys")
+		return 0, 0, errors.Wrap(err, "creating key rewriter from rekeys")
 	}
 
 	fromSystemTenant := isFromSystemTenant(dataToRestore.getTenantRekeys())
 
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, progressTracker, requestFinishedCh, kr, fromSystemTenant))
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh, kr, fromSystemTenant, &approxRows, &approxDataSize))
 	}
 
 	if err := grp.Wait(); err != nil {
-		return errors.Wrap(err, "failed to generate and send remote file spans")
+		return 0, 0, errors.Wrap(err, "failed to generate and send remote file spans")
 	}
-	return nil
+	return approxRows, approxDataSize, nil
 }
 
 func assertCommonPrefix(span roachpb.Span, elidedPrefixType execinfrapb.ElidePrefix) error {
@@ -144,10 +144,11 @@ func rewriteSpan(
 func sendAddRemoteSSTWorker(
 	execCtx sql.JobExecContext,
 	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
-	progressTracker *progressTracker,
 	requestFinishedCh chan<- struct{},
 	kr *KeyRewriter,
 	fromSystemTenant bool,
+	approxRows *int64,
+	approxDataSize *int64,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		var toAdd []execinfrapb.RestoreFileSpec
@@ -265,16 +266,10 @@ func sendAddRemoteSSTWorker(
 			if err := flush(rewrittenFlushKey, entry.ElidedPrefix); err != nil {
 				return err
 			}
-			var estimatedDataSize int64
 			for _, file := range entry.Files {
-				estimatedDataSize += int64(file.BackingFileSize)
+				atomic.AddInt64(approxRows, file.BackupFileEntryCounts.Rows)
+				atomic.AddInt64(approxDataSize, int64(file.ApproximatePhysicalSize))
 			}
-			progressTracker.mu.Lock()
-			progressTracker.mu.res.Add(restoreStats{
-				FilesLinked:       int64(len(entry.Files)),
-				EstimatedDataSize: estimatedDataSize,
-			})
-			progressTracker.mu.Unlock()
 			requestFinishedCh <- struct{}{}
 		}
 		return nil

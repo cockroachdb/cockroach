@@ -153,7 +153,7 @@ func restoreWithRetry(
 	resumer *restoreResumer,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) (restoreStats, error) {
+) (roachpb.RowCount, error) {
 
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
 	// to restart, it would produce this kind of error, but there may be other
@@ -170,7 +170,7 @@ func restoreWithRetry(
 	// We want to retry a restore if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
 	var (
-		res                    restoreStats
+		res                    roachpb.RowCount
 		err                    error
 		previousPersistedSpans jobspb.RestoreFrontierEntries
 		currentPersistedSpans  jobspb.RestoreFrontierEntries
@@ -194,18 +194,18 @@ func restoreWithRetry(
 		}
 
 		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) || errors.Is(err, restoreProcError) {
-			return restoreStats{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+			return roachpb.RowCount{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
 
 		if joberror.IsPermanentBulkJobError(err) && !errors.Is(err, retryableRestoreProcError) {
-			return restoreStats{}, err
+			return roachpb.RowCount{}, err
 		}
 
 		// If we are draining, it is unlikely we can start a
 		// new DistSQL flow. Exit with a retryable error so
 		// that another node can pick up the job.
 		if execCtx.ExecCfg().JobRegistry.IsDraining() {
-			return restoreStats{}, jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
+			return roachpb.RowCount{}, jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
 		}
 
 		log.Warningf(restoreCtx, "encountered retryable error: %+v", err)
@@ -268,12 +268,12 @@ func restore(
 	resumer *restoreResumer,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) (restoreStats, error) {
+) (roachpb.RowCount, error) {
 	user := execCtx.User()
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
-	emptyRowCount := restoreStats{}
+	emptyRowCount := roachpb.RowCount{}
 
 	// If there isn't any data to restore, then return early.
 	if dataToRestore.isEmpty() {
@@ -333,7 +333,7 @@ func restore(
 			targetSize,
 			progressTracker.useFrontier)
 	}(); err != nil {
-		return restoreStats{}, err
+		return roachpb.RowCount{}, err
 	}
 	defer filter.close()
 
@@ -341,7 +341,7 @@ func restore(
 	// which are grouped by keyrange.
 	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(restoreCtx, execCtx.ExecCfg().DistSQLSrv.ExternalStorage, backupManifests, encryption, kmsEnv)
 	if err != nil {
-		return restoreStats{}, err
+		return roachpb.RowCount{}, err
 	}
 
 	// If any layer of the backup was produced with revision history before 24.1,
@@ -460,10 +460,12 @@ func restore(
 	}
 	tasks = append(tasks, tracingAggLoop)
 
+	onlineRestoreStats := make(chan roachpb.RowCount, 1)
 	runRestore := func(ctx context.Context) error {
+		defer close(onlineRestoreStats)
 		if details.ExperimentalOnline {
 			log.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
-			return errors.Wrap(sendAddRemoteSSTs(
+			approxRows, approxDataSize, err := sendAddRemoteSSTs(
 				ctx,
 				execCtx,
 				job,
@@ -471,11 +473,12 @@ func restore(
 				encryption,
 				details.URIs,
 				backupLocalityInfo,
-				progressTracker,
 				requestFinishedCh,
 				tracingAggCh,
 				genSpan,
-			), "sending remote AddSSTable requests")
+			)
+			onlineRestoreStats <- roachpb.RowCount{Rows: approxRows, DataSize: approxDataSize}
+			return errors.Wrap(err, "sending remote AddSSTable requests")
 		}
 		md := restoreJobMetadata{
 			jobID:              job.ID(),
@@ -516,10 +519,14 @@ func restore(
 		}
 	}
 
-	// progress go routines should be shutdown, but use lock just to be safe.
-	progressTracker.mu.Lock()
-	defer progressTracker.mu.Unlock()
-	return progressTracker.mu.res, nil
+	if details.ExperimentalOnline {
+		return <-onlineRestoreStats, nil
+	} else {
+		// progress go routines should be shutdown, but use lock just to be safe.
+		progressTracker.mu.Lock()
+		defer progressTracker.mu.Unlock()
+		return progressTracker.mu.res, nil
+	}
 }
 
 // loadBackupSQLDescs extracts the backup descriptors, the latest backup
@@ -584,18 +591,6 @@ func loadBackupSQLDescs(
 	return backupManifests, latestBackupManifest, sqlDescs, sz, nil
 }
 
-type restoreStats struct {
-	roachpb.RowCount
-	FilesLinked       int64
-	EstimatedDataSize int64
-}
-
-func (r *restoreStats) Add(other restoreStats) {
-	r.RowCount.Add(other.RowCount)
-	r.FilesLinked += other.FilesLinked
-	r.EstimatedDataSize += other.EstimatedDataSize
-}
-
 // restoreResumer should only store a reference to the job it's running. State
 // should not be stored here, but rather in the job details.
 type restoreResumer struct {
@@ -603,7 +598,7 @@ type restoreResumer struct {
 
 	settings     *cluster.Settings
 	execCfg      *sql.ExecutorConfig
-	restoreStats restoreStats
+	restoreStats roachpb.RowCount
 
 	mu struct {
 		syncutil.Mutex
@@ -1830,7 +1825,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
-	var resTotal restoreStats
+	var resTotal roachpb.RowCount
 
 	if !preData.isEmpty() {
 		res, err := restoreWithRetry(
@@ -2084,8 +2079,8 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 			return tree.Datums{
 				tree.NewDInt(tree.DInt(r.job.ID())),
 				tree.NewDString(string(jobs.StatusSucceeded)),
-				tree.NewDInt(tree.DInt(r.restoreStats.FilesLinked)),
-				tree.NewDInt(tree.DInt(r.restoreStats.EstimatedDataSize)),
+				tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
+				tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
 			}
 		} else {
 			return tree.Datums{

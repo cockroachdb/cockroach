@@ -52,7 +52,7 @@ type progressTracker struct {
 		checkpointFrontier spanUtils.Frontier
 
 		// res tracks the amount of data that has been ingested.
-		res restoreStats
+		res roachpb.RowCount
 
 		// Note that the fields below are used for the deprecated high watermark progress
 		// tracker.
@@ -226,7 +226,7 @@ func (pt *progressTracker) ingestUpdate(
 		return false, nil
 	}
 
-	pt.mu.res.Add(restoreStats{RowCount: progDetails.Summary})
+	pt.mu.res.Add(progDetails.Summary)
 	if pt.useFrontier {
 		updateSpan := progDetails.DataSpan.Clone()
 		// If the completedSpan has the same end key as a requiredSpan_i, forward

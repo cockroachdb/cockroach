@@ -29,8 +29,8 @@ var BulkJobExecutionResultHeader = colinfo.ResultColumns{
 var OnlineRestoreJobExecutionResultHeader = colinfo.ResultColumns{
 	{Name: "job_id", Typ: types.Int},
 	{Name: "status", Typ: types.String},
-	{Name: "files_linked", Typ: types.Int},
-	{Name: "estimated_bytes", Typ: types.Int},
+	{Name: "approximate_rows", Typ: types.Int},
+	{Name: "approximate_bytes", Typ: types.Int},
 }
 
 // DetachedJobExecutionResultHeader is a the header for various job commands when
