@@ -13,10 +13,10 @@ package cluster
 import (
 	"context"
 	"fmt"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -34,38 +34,70 @@ type RemoteCommand struct {
 // A Duration of -1 indicates that the command was cancelled.
 type RemoteResponse struct {
 	RemoteCommand
-	Stdout     string
-	Stderr     string
-	Err        error
-	ExitStatus int
-	Duration   time.Duration
+	Stdout        string
+	Stderr        string
+	Err           error
+	ExitStatus    int
+	Duration      time.Duration
+	commandStatus CommandStatus
 }
+
+type CommandStatus int8
+
+const (
+	Completed CommandStatus = iota
+	Cancelled
+	Terminated
+)
+
+type RemoteExecutionFunc func(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName, SSHOptions, processTag string,
+	secure bool,
+	cmdArray []string,
+	options install.RunOptions,
+) ([]install.RunResultDetails, error)
 
 func remoteWorker(
 	ctx context.Context,
 	log *logger.Logger,
+	execFunc RemoteExecutionFunc,
 	clusterNode string,
-	receive chan []RemoteCommand,
-	response chan RemoteResponse,
+	workChan chan []RemoteCommand,
+	responseChan chan RemoteResponse,
 ) {
 	for {
-		commands := <-receive
+		commands := <-workChan
 		if commands == nil {
 			return
 		}
 		for index, command := range commands {
 			if errors.Is(ctx.Err(), context.Canceled) {
 				for _, cancelCommand := range commands[index:] {
-					response <- RemoteResponse{cancelCommand, "", "", nil, -1, -1}
+					responseChan <- RemoteResponse{RemoteCommand: cancelCommand, commandStatus: Cancelled}
 				}
 				break
 			}
 			start := timeutil.Now()
-			runResult, err := roachprod.RunWithDetails(
+			runResult, err := execFunc(
 				context.Background(), log, clusterNode, "" /* SSHOptions */, "", /* processTag */
-				false /* secure */, command.Args, install.DefaultRunOptions(),
+				false /* secure */, command.Args, install.DefaultRunOptions().WithRetryDisabled(),
 			)
 			duration := timeutil.Since(start)
+
+			// Reschedule on another worker when a roachprod or SSH error occurs. A
+			// roachprod error is when result.Err==nil.
+			if err != nil && (runResult[0].Err == nil || errors.Is(err, rperrors.ErrSSH255)) {
+				log.Printf("SSH error executing command %v on %s: %v, terminating worker.", command.Args, clusterNode, err)
+				responseChan <- RemoteResponse{commandStatus: Terminated}
+				// Requeue all the remaining commands, so that it can be executed by
+				// another worker.
+				commandGroup := commands[index:]
+				workChan <- commandGroup
+				return
+			}
+
 			var stdout, stderr string
 			var exitStatus int
 			if len(runResult) > 0 {
@@ -74,7 +106,15 @@ func remoteWorker(
 				exitStatus = runResult[0].RemoteExitStatus
 				err = errors.CombineErrors(err, runResult[0].Err)
 			}
-			response <- RemoteResponse{command, stdout, stderr, err, exitStatus, duration}
+			responseChan <- RemoteResponse{
+				command,
+				stdout,
+				stderr,
+				err,
+				exitStatus,
+				duration,
+				Completed,
+			}
 		}
 	}
 }
@@ -86,36 +126,46 @@ func remoteWorker(
 // parameter indicates whether the execution should stop on the first error.
 func ExecuteRemoteCommands(
 	log *logger.Logger,
+	execFunc RemoteExecutionFunc,
 	cluster string,
 	commandGroups [][]RemoteCommand,
 	numNodes int,
 	failFast bool,
 	callback func(response RemoteResponse),
-) {
+) error {
 	workChannel := make(chan []RemoteCommand, numNodes)
 	responseChannel := make(chan RemoteResponse, numNodes)
 
-	ctx, cancelCtx := context.WithCancel(context.Background())
+	ctx, cancelCtx := context.WithCancelCause(context.Background())
 
 	for idx := 1; idx <= numNodes; idx++ {
-		go remoteWorker(ctx, log, fmt.Sprintf("%s:%d", cluster, idx), workChannel, responseChannel)
+		go remoteWorker(ctx, log, execFunc, fmt.Sprintf("%s:%d", cluster, idx), workChannel, responseChannel)
 	}
 
 	var wg sync.WaitGroup
 	// Receive responses.
 	go func() {
+		nodesAlive := numNodes
 		for {
 			response := <-responseChannel
-			if response.Args == nil {
+			if response.Args == nil && response.commandStatus == 0 { // channel closed
 				return
 			}
-			if response.Duration != -1 {
+			switch response.commandStatus {
+			case Completed:
 				callback(response)
+				wg.Done()
+			case Cancelled:
+				wg.Done()
+			case Terminated:
+				nodesAlive--
+				if nodesAlive == 0 {
+					cancelCtx(errors.New("all workers terminated"))
+				}
 			}
 			if response.Err != nil && failFast {
-				cancelCtx()
+				cancelCtx(errors.Wrap(response.Err, "failed to execute command, cancelling execution"))
 			}
-			wg.Done()
 		}
 	}()
 
@@ -136,8 +186,23 @@ done:
 		}
 	}
 
-	wg.Wait()
+	// Wait for all commands to be executed. If the context is cancelled, the
+	// workers will be terminated and the workChannel will be closed.
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-ctx.Done():
+	case <-done:
+	}
 
 	close(workChannel)
 	close(responseChannel)
+
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return context.Cause(ctx)
+	}
+	return ctx.Err()
 }
