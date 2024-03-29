@@ -953,7 +953,7 @@ func (j jsonArray) AreKeysSorted() bool {
 func (j jsonObject) AreKeysSorted() bool {
 	keys := make([]string, 0, j.Len())
 	for _, a := range j {
-		keys = append(keys, a.k.String())
+		keys = append(keys, string(a.k))
 	}
 	return sort.StringsAreSorted(keys)
 }
