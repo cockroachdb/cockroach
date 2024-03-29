@@ -420,7 +420,7 @@ func restore(
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	if !details.ExperimentalOnline {
-		// Online restore tracks progress by pinging requestFinishCh instead
+		// Online restore tracks progress by pinging requestFinishedCh instead
 		generativeCheckpointLoop := func(ctx context.Context) error {
 			defer close(requestFinishedCh)
 			for progress := range progCh {
@@ -463,7 +463,7 @@ func restore(
 	runRestore := func(ctx context.Context) error {
 		if details.ExperimentalOnline {
 			log.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
-			return errors.Wrap(sendAddRemoteSSTs(
+			approxRows, approxDataSize, err := sendAddRemoteSSTs(
 				ctx,
 				execCtx,
 				job,
@@ -474,7 +474,14 @@ func restore(
 				requestFinishedCh,
 				tracingAggCh,
 				genSpan,
-			), "sending remote AddSSTable requests")
+			)
+			progressTracker.mu.Lock()
+			defer progressTracker.mu.Unlock()
+			//  During the link phase of online restore, we do not update stats
+			// progress as job occurs.  We merely reuse the `progressTracker.mu.res`
+			// var to reduce the number of local vars floating around in `restore`.
+			progressTracker.mu.res = roachpb.RowCount{Rows: approxRows, DataSize: approxDataSize}
+			return errors.Wrap(err, "sending remote AddSSTable requests")
 		}
 		md := restoreJobMetadata{
 			jobID:              job.ID(),
@@ -588,9 +595,10 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job *jobs.Job
 
-	settings     *cluster.Settings
-	execCfg      *sql.ExecutorConfig
-	restoreStats roachpb.RowCount
+	settings      *cluster.Settings
+	execCfg       *sql.ExecutorConfig
+	restoreStats  roachpb.RowCount
+	downloadJobID jobspb.JobID
 
 	mu struct {
 		syncutil.Mutex
@@ -2066,14 +2074,27 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(r.job.ID())),
-		tree.NewDString(string(jobs.StatusSucceeded)),
-		tree.NewDFloat(tree.DFloat(1.0)),
-		tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
-		tree.NewDInt(tree.DInt(r.restoreStats.IndexEntries)),
-		tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
-	}:
+	case resultsCh <- func() tree.Datums {
+		details := r.job.Details().(jobspb.RestoreDetails)
+		if details.ExperimentalOnline {
+			return tree.Datums{
+				tree.NewDInt(tree.DInt(r.job.ID())),
+				tree.NewDInt(tree.DInt(len(details.TableDescs))),
+				tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
+				tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
+				tree.NewDInt(tree.DInt(r.downloadJobID)),
+			}
+		} else {
+			return tree.Datums{
+				tree.NewDInt(tree.DInt(r.job.ID())),
+				tree.NewDString(string(jobs.StatusSucceeded)),
+				tree.NewDFloat(tree.DFloat(1.0)),
+				tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
+				tree.NewDInt(tree.DInt(r.restoreStats.IndexEntries)),
+				tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
+			}
+		}
+	}():
 		return nil
 	}
 }
