@@ -24,6 +24,14 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/errors"
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+  "golang.org/x/crypto/ssh"
+  "golang.org/x/exp/maps"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/upgrade"
@@ -35,13 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/exp/maps"
-	"golang.org/x/text/language"
-	"golang.org/x/text/message"
 )
 
 var rootCmd = &cobra.Command{
@@ -617,8 +618,6 @@ environment variables to the cockroach process.
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
 		}
-		// TODO(DarrylWong): remove once #117125 is addressed.
-		startOpts.AdminUIPort = 0
 
 		startOpts.Target = install.StartSharedProcessForVirtualCluster
 		// If the user passed an `--external-nodes` option, we are
