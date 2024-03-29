@@ -1035,6 +1035,13 @@ func (b *builderState) resolveRelation(
 		if t.IsTemporary() {
 			panic(scerrors.NotImplementedErrorf(nil /* n */, "dropping a temporary table"))
 		}
+	} else if typ, isType := rel.(catalog.TypeDescriptor); isType {
+		if typ.GetKind() == descpb.TypeDescriptor_ALIAS && typ.GetID() == descpb.InvalidID {
+			// This case handles the types in types.PublicSchemaAliases -- BOX2D,
+			// GEOGRAPHY, and GEOMETRY.
+			panic(pgerror.Newf(pgcode.WrongObjectType,
+				"%s is a built-in type and cannot be modified", tree.ErrNameString(typ.GetName())))
+		}
 	}
 
 	// If we own the schema then we can manipulate the underlying relation,
