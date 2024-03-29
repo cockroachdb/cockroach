@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"golang.org/x/exp/maps"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
@@ -987,18 +988,33 @@ var sqlCmd = &cobra.Command{
 }
 
 var pgurlCmd = &cobra.Command{
-	Use:   "pgurl <cluster>",
+	Use:   "pgurl <cluster> --auth-mode <auth-mode>",
 	Short: "generate pgurls for the nodes in a cluster",
 	Long: `Generate pgurls for the nodes in a cluster.
+
+--auth-mode specifies the method of authentication if --secure is passed.
+Defaults to root if not passed. Available auth-modes are:
+
+	root: authenticates with the root user and root certificates
+
+	user-password: authenticates with the default roachprod user and password
+
+	user-cert: authenticates with the default roachprod user and certificates
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
+
+		auth, ok := pgAuthModes[authMode]
+		if !ok {
+			return errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(pgAuthModes))
+		}
+
 		urls, err := roachprod.PgURL(context.Background(), config.Logger, args[0], pgurlCertsDir, roachprod.PGURLOptions{
 			External:           external,
 			Secure:             secure,
 			VirtualClusterName: virtualClusterName,
 			SQLInstance:        sqlInstance,
-			Auth:               install.AuthRootCert,
+			Auth:               auth,
 		})
 		if err != nil {
 			return err
