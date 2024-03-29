@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -98,11 +99,10 @@ type Builder struct {
 
 	allowInsertFastPath bool
 
-	// forceForUpdateLocking is conditionally passed through to factory methods
-	// for scan operators that serve as the input for mutation operators. When
-	// set to true, it ensures that a FOR UPDATE row-level locking mode is used
-	// by scans. See forUpdateLocking.
-	forceForUpdateLocking bool
+	// forceForUpdateLocking is a set of tables that serve as input for mutation
+	// operators, and should be locked using forUpdateLocking to reduce query
+	// retries.
+	forceForUpdateLocking intsets.Fast
 
 	// planLazySubqueries is true if the builder should plan subqueries that are
 	// lazily evaluated as routines instead of a subquery which is evaluated
