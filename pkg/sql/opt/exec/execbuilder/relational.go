@@ -613,7 +613,7 @@ func (b *Builder) scanParams(
 		return exec.ScanParams{}, colOrdMap{}, err
 	}
 
-	locking, err := b.buildLocking(scan.Locking)
+	locking, err := b.buildLocking(scan.Table, scan.Locking)
 
 	if err != nil {
 		return exec.ScanParams{}, colOrdMap{}, err
@@ -2293,7 +2293,7 @@ func (b *Builder) buildIndexJoin(
 	var needed exec.TableColumnOrdinalSet
 	needed, outputCols = b.getColumns(join.Cols, join.Table)
 
-	locking, err := b.buildLocking(join.Locking)
+	locking, err := b.buildLocking(join.Table, join.Locking)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -2658,7 +2658,7 @@ func (b *Builder) buildLookupJoin(
 	idx := tab.Index(join.Index)
 	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
 
-	locking, err := b.buildLocking(join.Locking)
+	locking, err := b.buildLocking(join.Table, join.Locking)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -2932,7 +2932,7 @@ func (b *Builder) buildInvertedJoin(
 		return execPlan{}, colOrdMap{}, err
 	}
 
-	locking, err := b.buildLocking(join.Locking)
+	locking, err := b.buildLocking(join.Table, join.Locking)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -3016,11 +3016,11 @@ func (b *Builder) buildZigzagJoin(
 	leftOrdinals, leftColMap := b.getColumns(leftCols, join.LeftTable)
 	rightOrdinals, rightColMap := b.getColumns(rightCols, join.RightTable)
 
-	leftLocking, err := b.buildLocking(join.LeftLocking)
+	leftLocking, err := b.buildLocking(join.LeftTable, join.LeftLocking)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	rightLocking, err := b.buildLocking(join.RightLocking)
+	rightLocking, err := b.buildLocking(join.RightTable, join.RightLocking)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -3088,8 +3088,8 @@ func (b *Builder) buildZigzagJoin(
 	return b.applySimpleProject(res, outputCols, join, join.Cols, join.ProvidedPhysical().Ordering)
 }
 
-func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
-	if b.forceForUpdateLocking {
+func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Locking, error) {
+	if b.forceForUpdateLocking.Contains(int(toLock)) {
 		locking = locking.Max(forUpdateLocking)
 	}
 	if locking.IsLocking() {
