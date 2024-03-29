@@ -92,8 +92,11 @@ func runDiskStalledWALFailover(
 	require.NoError(t, n1Conn.PingContext(ctx))
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), n1Conn))
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Nodes(2))
+	require.NoError(t, err)
+	adminURL := adminUIAddrs[0]
 	c.Run(ctx, option.WithNodes(c.Node(4)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
-	_, err := n1Conn.ExecContext(ctx, `USE kv;`)
+	_, err = n1Conn.ExecContext(ctx, `USE kv;`)
 	require.NoError(t, err)
 
 	t.Status("starting workload")
@@ -158,11 +161,27 @@ func runDiskStalledWALFailover(
 		t.Fatal("process exited unexectedly")
 	}
 
-	// TODO(jackson): We could query timeseries to verify that s1 did failover to
-	// its WAL secondary during the test.
+	data := mustGetMetrics(ctx, c, t, adminURL,
+		workloadStartAt.Add(time.Minute),
+		timeutil.Now().Add(-time.Minute),
+		[]tsQuery{
+			{name: "cr.node.sql.exec.latency-p99.99", queryType: total, sources: []string{"2"}},
+			{name: "cr.store.storage.wal.failover.secondary.duration", queryType: total, sources: []string{"1"}},
+		})
 
-	// TODO(jackson): We could query timeseries to perform some sort of assertion
-	// on the quality of service provided.
+	for _, dp := range data.Results[0].Datapoints {
+		if dur := time.Duration(dp.Value); dur > time.Second {
+			t.Errorf("unexpectedly high p99.99 latency %s at %s", dur, timeutil.Unix(0, dp.TimestampNanos).Format(time.RFC3339))
+		}
+	}
+
+	// Over the course of the 1h test, we expect ~6 stalls each lasting 30s. Assert that
+	// the total time spent writing to the secondary is at least 1 minute.
+	durInFailover := time.Duration(data.Results[1].Datapoints[len(data.Results[0].Datapoints)-1].Value)
+	t.L().PrintfCtx(ctx, "duration s1 spent writing to secondary %s", durInFailover)
+	if durInFailover < 60*time.Second {
+		t.Errorf("expected s1 to spend at least 60s writing to secondary, but spent %s", durInFailover)
+	}
 
 	// Shut down the nodes, allowing any devices to be unmounted during cleanup.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 3))
