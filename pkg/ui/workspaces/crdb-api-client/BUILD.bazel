@@ -3,7 +3,6 @@ load("@aspect_rules_js//npm:defs.bzl", "npm_package")
 load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@npm//:defs.bzl", "npm_link_all_packages")
-load("@npm//:defs.bzl", "npm_link_all_packages")
 load("//docs/generated/http:defs.bzl", "PROTOBUF_TARGETS")
 load("//pkg/ui/workspaces/db-console/src/js:defs.bzl", "proto_sources")
 
