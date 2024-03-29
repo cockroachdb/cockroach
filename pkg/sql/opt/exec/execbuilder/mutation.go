@@ -31,14 +31,20 @@ import (
 func (b *Builder) buildMutationInput(
 	mutExpr, inputExpr memo.RelExpr, colList opt.ColList, p *memo.MutationPrivate,
 ) (_ execPlan, outputCols colOrdMap, err error) {
-	shouldApplyImplicitLocking, err := b.shouldApplyImplicitLockingToMutationInput(mutExpr)
+	toLock, err := b.shouldApplyImplicitLockingToMutationInput(mutExpr)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	if shouldApplyImplicitLocking {
-		// Re-entrance is not possible because mutations are never nested.
-		b.forceForUpdateLocking = true
-		defer func() { b.forceForUpdateLocking = false }()
+	if toLock != 0 {
+		if b.forceForUpdateLocking.Contains(int(toLock)) {
+			return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+				"unexpectedly found table %v in forceForUpdateLocking set", toLock,
+			)
+		}
+		b.forceForUpdateLocking.Add(int(toLock))
+		defer func() {
+			b.forceForUpdateLocking.Remove(int(toLock))
+		}()
 	}
 
 	input, inputCols, err := b.buildRelational(inputExpr)
@@ -180,7 +186,7 @@ func (b *Builder) tryBuildFastPathInsert(
 		execFastPathCheck.ReferencedTable = md.Table(c.ReferencedTableID)
 		execFastPathCheck.ReferencedIndex = execFastPathCheck.ReferencedTable.Index(c.ReferencedIndexOrdinal)
 		execFastPathCheck.CheckOrdinal = c.CheckOrdinal
-		locking, err := b.buildLocking(c.Locking)
+		locking, err := b.buildLocking(ins.Table, c.Locking)
 		if err != nil {
 			return execPlan{}, colOrdMap{}, false, err
 		}
@@ -242,7 +248,7 @@ func (b *Builder) tryBuildFastPathInsert(
 			return execPlan{}, colOrdMap{}, false, nil
 		}
 
-		locking, err := b.buildLocking(lookupJoin.Locking)
+		locking, err := b.buildLocking(lookupJoin.Table, lookupJoin.Locking)
 		if err != nil {
 			return execPlan{}, colOrdMap{}, false, err
 		}
@@ -1019,9 +1025,10 @@ func (b *Builder) buildFKCascades(withID opt.WithID, cascades memo.FKCascades) e
 	return nil
 }
 
-// forUpdateLocking is the row-level locking mode used by mutations during their
-// initial row scan, when such locking is deemed desirable. The locking mode is
-// equivalent to that used by a SELECT FOR UPDATE statement, except not durable.
+// forUpdateLocking is the row-level locking mode implicitly used by mutations
+// during their initial row scan, when such locking is deemed desirable. The
+// locking mode is equivalent to that used by a SELECT FOR UPDATE statement,
+// except not durable.
 var forUpdateLocking = opt.Locking{
 	Strength:   tree.ForUpdate,
 	WaitPolicy: tree.LockWaitBlock,
@@ -1030,15 +1037,18 @@ var forUpdateLocking = opt.Locking{
 
 // shouldApplyImplicitLockingToMutationInput determines whether or not the
 // builder should apply a FOR UPDATE row-level locking mode to the initial row
-// scan of a mutation expression.
-func (b *Builder) shouldApplyImplicitLockingToMutationInput(mutExpr memo.RelExpr) (bool, error) {
+// scan of a mutation expression. If the builder should lock the initial row
+// scan, it returns the TableID of the scan, otherwise it returns 0.
+func (b *Builder) shouldApplyImplicitLockingToMutationInput(
+	mutExpr memo.RelExpr,
+) (opt.TableID, error) {
 	switch t := mutExpr.(type) {
 	case *memo.InsertExpr:
 		// Unlike with the other three mutation expressions, it never makes
 		// sense to apply implicit row-level locking to the input of an INSERT
 		// expression because any contention results in unique constraint
 		// violations.
-		return false, nil
+		return 0, nil
 
 	case *memo.UpdateExpr:
 		return b.shouldApplyImplicitLockingToUpdateInput(t), nil
@@ -1050,13 +1060,14 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(mutExpr memo.RelExpr
 		return b.shouldApplyImplicitLockingToDeleteInput(t), nil
 
 	default:
-		return false, errors.AssertionFailedf("unexpected mutation expression %T", t)
+		return 0, errors.AssertionFailedf("unexpected mutation expression %T", t)
 	}
 }
 
 // shouldApplyImplicitLockingToUpdateInput determines whether or not the builder
 // should apply a FOR UPDATE row-level locking mode to the initial row scan of
-// an UPDATE statement.
+// an UPDATE statement. If the builder should lock the initial row scan, it
+// returns the TableID of the scan, otherwise it returns 0.
 //
 // Conceptually, if we picture an UPDATE statement as the composition of a
 // SELECT statement and an INSERT statement (with loosened semantics around
@@ -1076,9 +1087,9 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(mutExpr memo.RelExpr
 // is strictly a performance optimization for contended writes. Therefore, it is
 // not worth risking the transformation being a pessimization, so it is only
 // applied when doing so does not risk creating artificial contention.
-func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) bool {
+func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) opt.TableID {
 	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
-		return false
+		return 0
 	}
 
 	// Try to match the Update's input expression against the pattern:
@@ -1090,16 +1101,19 @@ func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) 
 	if idxJoin, ok := input.(*memo.IndexJoinExpr); ok {
 		input = idxJoin.Input
 	}
-	_, ok := input.(*memo.ScanExpr)
-	return ok
+	if scan, ok := input.(*memo.ScanExpr); ok {
+		return scan.Table
+	}
+	return 0
 }
 
 // tryApplyImplicitLockingToUpsertInput determines whether or not the builder
 // should apply a FOR UPDATE row-level locking mode to the initial row scan of
-// an UPSERT statement.
-func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) bool {
+// an UPSERT statement. If the builder should lock the initial row scan, it
+// returns the TableID of the scan, otherwise it returns 0.
+func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) opt.TableID {
 	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
-		return false
+		return 0
 	}
 
 	// Try to match the Upsert's input expression against the pattern:
@@ -1108,32 +1122,39 @@ func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) 
 	//
 	input := ups.Input
 	input = unwrapProjectExprs(input)
+	var toLock opt.TableID
 	switch join := input.(type) {
 	case *memo.LeftJoinExpr:
-		if _, ok := join.Right.(*memo.ScanExpr); !ok {
-			return false
+		scan, ok := join.Right.(*memo.ScanExpr)
+		if !ok {
+			return 0
 		}
 		input = join.Left
+		toLock = scan.Table
 
 	case *memo.LookupJoinExpr:
 		input = join.Input
+		toLock = join.Table
 
 	default:
-		return false
+		return 0
 	}
 	input = unwrapProjectExprs(input)
-	_, ok := input.(*memo.ValuesExpr)
-	return ok
+	if _, ok := input.(*memo.ValuesExpr); ok {
+		return toLock
+	}
+	return 0
 }
 
 // tryApplyImplicitLockingToDeleteInput determines whether or not the builder
-// should apply a FOR UPDATE row-level locking mode to the initial row scan of
-// an DELETE statement.
+// should apply a FOR UPDATE row-level locking mode to the initial row scan of a
+// DELETE statement. If the builder should lock the initial row scan, it returns
+// the TableID of the scan, otherwise it returns 0.
 //
 // TODO(nvanbenschoten): implement this method to match on appropriate Delete
 // expression trees and apply a row-level locking mode.
-func (b *Builder) shouldApplyImplicitLockingToDeleteInput(del *memo.DeleteExpr) bool {
-	return false
+func (b *Builder) shouldApplyImplicitLockingToDeleteInput(del *memo.DeleteExpr) opt.TableID {
+	return 0
 }
 
 // unwrapProjectExprs unwraps zero or more nested ProjectExprs. It returns the
@@ -1147,7 +1168,7 @@ func unwrapProjectExprs(input memo.RelExpr) memo.RelExpr {
 
 func (b *Builder) buildLock(lock *memo.LockExpr) (_ execPlan, outputCols colOrdMap, err error) {
 	// Don't bother creating the lookup join if we don't need it.
-	locking, err := b.buildLocking(lock.Locking)
+	locking, err := b.buildLocking(lock.Table, lock.Locking)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
