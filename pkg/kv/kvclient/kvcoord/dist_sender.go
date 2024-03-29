@@ -1969,6 +1969,11 @@ func slowReplicaRPCWarningStr(
 		dur.Seconds(), attempts, ba, ba.Replica, resp)
 }
 
+// ProxyFailedWithSendError is a marker to indicate a proxy request failed with
+// a sendError. Node.maybeProxyRequest specifically excludes this error from
+// propagation over the wire and instead return the NLHE from local evaluation.
+var ProxyFailedWithSendError = kvpb.NewErrorf("proxy request failed with send error")
+
 // sendPartialBatch sends the supplied batch to the range specified by the
 // routing token.
 //
@@ -2094,15 +2099,47 @@ func (ds *DistSender) sendPartialBatch(
 			tBegin = time.Time{} // prevent reentering branch for this RPC
 		}
 
+		if ba.ProxyRangeInfo != nil {
+			// On a proxy request (when ProxyRangeInfo is set) we always return
+			// the response immediately without retries. Proxy requests are
+			// retried by the remote client, not the proxy node. If the error
+			// contains updated range information from the leaseholder and is
+			// normally retry, the client will update its cache and routing
+			// information and decide how to proceed. If it decides to retry
+			// against this proxy node, the proxy node will see the updated
+			// range information on the retried request, and apply it to its
+			// cache in the SyncTokenAndMaybeUpdateCache call a few lines above.
+			//
+			// TODO(baptist): Update the cache on a RangeKeyMismatchError before
+			// returning the error.
+			if err != nil {
+				log.VEventf(ctx, 2, "failing proxy request after error %s", err)
+				reply = &kvpb.BatchResponse{}
+				if IsSendError(err) {
+					// sendErrors shouldn't[1] escape from the DistSender. If
+					// routing the request resulted in a sendError, we intercept
+					// it here and replace it with a ProxyFailedWithSendError.
+					//
+					// [1] sendErrors are a mechanism for sendToReplicas to
+					// communicate back that the routing information used to
+					// route the request was stale. Therefore, the cache needs
+					// to be flushed and the request should be retried with
+					// fresher information. However, this is specific to the
+					// proxy node's range cache -- not the remote client's range
+					// cache. As such, returning the sendError back to the
+					// remote client is nonsensical.
+					return response{pErr: ProxyFailedWithSendError}
+				} else {
+					reply.Error = kvpb.NewError(kvpb.NewProxyFailedError(err))
+				}
+			}
+			return response{reply: reply}
+		}
+
 		if err != nil {
 			// Set pErr so that, if we don't perform any more retries, the
 			// deduceRetryEarlyExitError() call below the loop includes this error.
 			pErr = kvpb.NewError(err)
-			// Proxy requests are not retried since we not the originator.
-			if ba.ProxyRangeInfo != nil {
-				log.VEventf(ctx, 1, "failing proxy request after error %s", err)
-				break
-			}
 			switch {
 			case IsSendError(err):
 				// We've tried all the replicas without success. Either they're all
@@ -2357,7 +2394,7 @@ func noMoreReplicasErr(ambiguousErr, replicaUnavailableErr, lastAttemptErr error
 	}
 
 	// Authentication and authorization errors should be propagated up rather than
-	// wrapped in a SendError and retried as they are likely to be fatal if they
+	// wrapped in a sendError and retried as they are likely to be fatal if they
 	// are returned from multiple servers.
 	if grpcutil.IsAuthError(lastAttemptErr) {
 		return lastAttemptErr
@@ -2724,14 +2761,14 @@ func (ds *DistSender) sendToReplicas(
 		}
 		if err == nil {
 			if proxyErr, ok := br.Error.GetDetail().(*kvpb.ProxyFailedError); ok {
-				// The server proxy attempt resulted in a non-BatchRequest error, likely
-				// a communication error. Convert the wrapped error into an error on our
-				// side Depending on the type of request and what the error is we may
-				// treat the error an ambiguous error. Clear out the BatchResponse as
-				// the only information it contained was this error.
+				// The server proxy attempt resulted in an error, likely a
+				// communication error. Unwrap the error from the BatchResponse
+				// and set err to the wrapped error. The code below will
+				// correctly determine whether this error is ambiguous based on
+				// the type of error and the type of request.
 				err = proxyErr.Unwrap()
+				log.VEventf(ctx, 2, "proxy error: %s", err)
 				br = nil
-				log.VEventf(ctx, 2, "proxy send error: %s", err)
 			}
 		}
 
@@ -2982,7 +3019,7 @@ func (ds *DistSender) sendToReplicas(
 						// followers will be marked as potential proxy requests and point to
 						// the new leaseholder. We need to try all the replicas again before
 						// giving up.
-						// NB: We reset and retry here because if we release a SendError to
+						// NB: We reset and retry here because if we release a sendError to
 						// the caller, it will call Evict and evict the leaseholder
 						// information we just learned from this error.
 						// TODO(baptist): If sendPartialBatch didn't evict valid range
@@ -3009,7 +3046,7 @@ func (ds *DistSender) sendToReplicas(
 							// regress. As such, advancing through each replica on the
 							// transport until it's exhausted is unlikely to achieve much.
 							//
-							// We bail early by returning a SendError. The expectation is
+							// We bail early by returning a sendError. The expectation is
 							// for the client to retry with a fresher eviction token.
 							log.VEventf(
 								ctx, 2, "transport incompatible with updated routing; bailing early",
