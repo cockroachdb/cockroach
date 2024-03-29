@@ -26,6 +26,8 @@ var BulkJobExecutionResultHeader = colinfo.ResultColumns{
 	{Name: "bytes", Typ: types.Int},
 }
 
+// OnlineRestoreJobExecutionResultHeader is the header for an online restore
+// job, which provides a header different from the usual bulk job execution
 var OnlineRestoreJobExecutionResultHeader = colinfo.ResultColumns{
 	{Name: "job_id", Typ: types.Int},
 	{Name: "status", Typ: types.String},
