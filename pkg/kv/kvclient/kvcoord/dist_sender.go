@@ -1969,6 +1969,11 @@ func slowReplicaRPCWarningStr(
 		dur.Seconds(), attempts, ba, ba.Replica, resp)
 }
 
+// ProxyFailedWithSendError is a marker to indicate a proxy request failed with
+// a SendError. Node.maybeProxyRequest specifically excludes this error from
+// propagation over the wire and instead return the NLHE from local evaluation.
+var ProxyFailedWithSendError = kvpb.NewErrorf("proxy request failed with send error")
+
 // sendPartialBatch sends the supplied batch to the range specified by the
 // routing token.
 //
@@ -2094,15 +2099,38 @@ func (ds *DistSender) sendPartialBatch(
 			tBegin = time.Time{} // prevent reentering branch for this RPC
 		}
 
+		if ba.ProxyRangeInfo != nil {
+			// On a proxy request (when ProxyRangeInfo is set) we always return
+			// the response immediately without retries. Proxy requests are
+			// retried by the remote client, not the proxy node. If the error
+			// contains updated range information from the leaseholder and is
+			// normally retry, the client will update its cache and routing
+			// information and decide how to proceed. If it decides to retry
+			// against this proxy node, the proxy node will see the updated
+			// range information on the retried request, and apply it to its
+			// cache in the SyncTokenAndMaybeUpdateCache call a few lines above.
+			//
+			// TODO(baptist): Update the cache on a RangeKeyMismatchError before
+			// returning the error.
+			if err != nil {
+				log.VEventf(ctx, 2, "failing proxy request after error %s", err)
+				reply = &kvpb.BatchResponse{}
+				if IsSendError(err) {
+					// SendErrors don't escape from DistSender, we treat this as
+					// empty ProxyFailedErrors to avoid sending them over the
+					// wire. They will be treated SendErrors on receiving side.
+					return response{pErr: ProxyFailedWithSendError}
+				} else {
+					reply.Error = kvpb.NewError(kvpb.NewProxyFailedError(err))
+				}
+			}
+			return response{reply: reply}
+		}
+
 		if err != nil {
 			// Set pErr so that, if we don't perform any more retries, the
 			// deduceRetryEarlyExitError() call below the loop includes this error.
 			pErr = kvpb.NewError(err)
-			// Proxy requests are not retried since we not the originator.
-			if ba.ProxyRangeInfo != nil {
-				log.VEventf(ctx, 1, "failing proxy request after error %s", err)
-				break
-			}
 			switch {
 			case IsSendError(err):
 				// We've tried all the replicas without success. Either they're all
@@ -2724,14 +2752,13 @@ func (ds *DistSender) sendToReplicas(
 		}
 		if err == nil {
 			if proxyErr, ok := br.Error.GetDetail().(*kvpb.ProxyFailedError); ok {
-				// The server proxy attempt resulted in a non-BatchRequest error, likely
-				// a communication error. Convert the wrapped error into an error on our
-				// side Depending on the type of request and what the error is we may
-				// treat the error an ambiguous error. Clear out the BatchResponse as
-				// the only information it contained was this error.
+				// The server proxy attempt resulted in an error, likely a
+				// communication error. Convert the error on the batch request
+				// to a Send error and handle it as if we hit this error
+				// locally.
 				err = proxyErr.Unwrap()
+				log.VEventf(ctx, 2, "proxy error: %s", err)
 				br = nil
-				log.VEventf(ctx, 2, "proxy send error: %s", err)
 			}
 		}
 
@@ -3009,12 +3036,17 @@ func (ds *DistSender) sendToReplicas(
 							// regress. As such, advancing through each replica on the
 							// transport until it's exhausted is unlikely to achieve much.
 							//
-							// We bail early by returning a SendError. The expectation is
-							// for the client to retry with a fresher eviction token.
+							// We bail early by returning the best error we have
+							// seen so far. The expectation is for the client to
+							// retry with a fresher eviction token if possible.
 							log.VEventf(
 								ctx, 2, "transport incompatible with updated routing; bailing early",
 							)
-							return nil, newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error"))
+							return nil, noMoreReplicasErr(
+								ambiguousError,
+								replicaUnavailableError,
+								errors.Wrap(tErr, "leaseholder not found in transport; last error"),
+							)
 						}
 					}
 					// Check whether the request was intentionally sent to a follower

@@ -1532,11 +1532,16 @@ func (n *Node) maybeProxyRequest(
 	// TODO(baptist): Correctly set up the span / tracing.
 	br, pErr := n.proxySender.Send(ctx, ba)
 	if pErr == nil {
-		log.VEvent(ctx, 2, "proxy succeeded")
+		log.VEvent(ctx, 2, "proxy request completed")
 		return br
+	} else if pErr == kvcoord.ProxyFailedWithSendError {
+		log.VEventf(ctx, 2, "proxy failed with send error %v", pErr)
+		// Use the original error NLHE from local evaluation.
+		return nil
 	}
-	// Wrap the error in a ProxyFailedError. It is unwrapped on the client side
-	// and handled there.
+	// On a proxy request, it is rare to get here, wrapping normally happens in
+	// DistSender.sendPartialBatch. Pessimistically wrap and convert this to a
+	// ProxyFailedError which will become an ambiguous error on the other side.
 	log.VEventf(ctx, 2, "proxy attempt resulted in error %v", pErr)
 	br = &kvpb.BatchResponse{}
 	br.Error = kvpb.NewError(kvpb.NewProxyFailedError(pErr.GoError()))
