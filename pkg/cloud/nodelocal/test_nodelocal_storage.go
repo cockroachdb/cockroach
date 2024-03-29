@@ -26,7 +26,7 @@ import (
 // nodelocal with one reads and writes directly from the given
 // directory.
 //
-// The returned func restores the prooduction implemenation.
+// The returned func restores the prooduction implementation.
 func ReplaceNodeLocalForTesting(root string) func() {
 	makeFn := func(ctx context.Context, conf cloud.EarlyBootExternalStorageContext, es cloudpb.ExternalStorage) (cloud.ExternalStorage, error) {
 		return TestingMakeNodelocalStorage(root, conf.Settings, es), nil

@@ -178,17 +178,22 @@ database_name = 'rand' AND schema_name = 'public'`)
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
 		sqlDB.Exec(t, "CREATE DATABASE restoredb")
 
-		tableQuery := fmt.Sprintf("RESTORE rand.* FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb'%s%s)", runSchemaOnlyExtension, withOnlineRestore())
+		online := withOnlineRestore()
+		tableQuery := fmt.Sprintf("RESTORE rand.* FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb'%s%s)", runSchemaOnlyExtension, online)
 		if err := backuptestutils.VerifyBackupRestoreStatementResult(
 			t, sqlDB, tableQuery, backup,
-		); err != nil {
+		); err != nil && online == "" {
+			// Only fail on error for non-online restores as verification checks output for regular restores
 			t.Fatal(err)
 		}
 		verifyTables(t, tableNames, tableQuery)
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
 
-		dbQuery := fmt.Sprintf("RESTORE DATABASE rand FROM LATEST IN $1 WITH OPTIONS (new_db_name='restoredb'%s%s)", runSchemaOnlyExtension, withOnlineRestore())
-		if err := backuptestutils.VerifyBackupRestoreStatementResult(t, sqlDB, dbQuery, backup); err != nil {
+		online = withOnlineRestore()
+		dbQuery := fmt.Sprintf("RESTORE DATABASE rand FROM LATEST IN $1 WITH OPTIONS (new_db_name='restoredb'%s%s)", runSchemaOnlyExtension, online)
+		if err := backuptestutils.VerifyBackupRestoreStatementResult(
+			t, sqlDB, dbQuery, backup,
+		); err != nil && online == "" {
 			t.Fatal(err)
 		}
 		verifyTables(t, tableNames, dbQuery)
