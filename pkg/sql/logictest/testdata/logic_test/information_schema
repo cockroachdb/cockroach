@@ -4612,19 +4612,19 @@ statement ok
 CREATE SEQUENCE test_seq_3 AS smallint
 
 statement ok
-CREATE SEQUENCE test_seq_4 AS integer 
+CREATE SEQUENCE test_seq_4 AS integer
 
 statement ok
 CREATE SEQUENCE test_seq_5 AS bigint
 
 statement ok
-CREATE SEQUENCE test_seq_6 AS INT2 
+CREATE SEQUENCE test_seq_6 AS INT2
 
 statement ok
 CREATE SEQUENCE test_seq_7 AS INT4
 
 statement ok
-CREATE SEQUENCE test_seq_8 AS INT8 
+CREATE SEQUENCE test_seq_8 AS INT8
 
 query TTTTIIITTTTT colnames
 SELECT * FROM information_schema.sequences
@@ -5345,6 +5345,7 @@ optimizer_use_limit_ordering_for_streaming_group_by        on
 optimizer_use_multicol_stats                               on
 optimizer_use_not_visible_indexes                          off
 optimizer_use_provided_ordering_fix                        on
+optimizer_use_trigram_similarity_optimization              off
 override_multi_region_zone_config                          off
 parallelize_multi_key_lookup_joins_enabled                 off
 password_encryption                                        scram-sha-256
