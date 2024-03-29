@@ -51,7 +51,7 @@ var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
 	settings.PositiveInt,
 )
 
-// sendAddRemoteSSTs is a stubbed out, very simplisitic version of restore used
+// sendAddRemoteSSTs is a stubbed out, very simplistic version of restore used
 // to test out ingesting "remote" SSTs. It will be replaced with a real distsql
 // plan and processors in the future.
 func sendAddRemoteSSTs(

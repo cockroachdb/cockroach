@@ -420,7 +420,7 @@ func restore(
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	if !details.ExperimentalOnline {
-		// Online restore tracks progress by pinging requestFinishCh instead
+		// Online restore tracks progress by pinging requestFinishedCh instead
 		generativeCheckpointLoop := func(ctx context.Context) error {
 			defer close(requestFinishedCh)
 			for progress := range progCh {

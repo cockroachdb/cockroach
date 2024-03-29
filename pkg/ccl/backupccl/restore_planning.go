@@ -1291,7 +1291,7 @@ func restorePlanHook(
 			return nil, nil, nil, false, err
 		}
 	} else {
-		// Deprecation notice for non-colelction `RESTORE FROM` syntax. Remove this
+		// Deprecation notice for non-collection `RESTORE FROM` syntax. Remove this
 		// once the syntax is deleted in 22.2.
 		p.BufferClientNotice(ctx,
 			pgnotice.Newf("The `RESTORE FROM <backup>` syntax will be removed in a future release, please"+
