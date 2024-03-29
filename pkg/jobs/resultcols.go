@@ -26,6 +26,16 @@ var BulkJobExecutionResultHeader = colinfo.ResultColumns{
 	{Name: "bytes", Typ: types.Int},
 }
 
+// OnlineRestoreJobExecutionResultHeader is the header for an online restore
+// job, which provides a header different from the usual bulk job execution
+var OnlineRestoreJobExecutionResultHeader = colinfo.ResultColumns{
+	{Name: "job_id", Typ: types.Int},
+	{Name: "tables", Typ: types.Int},
+	{Name: "approx_rows", Typ: types.Int},
+	{Name: "approx_bytes", Typ: types.Int},
+	{Name: "background_download_job_id", Typ: types.Int},
+}
+
 // DetachedJobExecutionResultHeader is a the header for various job commands when
 // job executes in detached mode (i.e. the caller doesn't wait for job completion).
 var DetachedJobExecutionResultHeader = colinfo.ResultColumns{
