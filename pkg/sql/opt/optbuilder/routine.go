@@ -115,19 +115,48 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	b.DisableMemoReuse = true
 	outScope := inScope.push()
 
+	// Type check and resolve the procedure.
+	proc, def := b.resolveProcedureDefinition(inScope, c.Proc)
+
+	// Synthesize output columns for OUT parameters. We can use the return type
+	// to synthesize the columns, since it's based on the OUT parameters.
+	if rTyp := proc.ResolvedType(); rTyp.Family() != types.VoidFamily {
+		if len(rTyp.TupleContents()) == 0 {
+			panic(errors.AssertionFailedf("expected procedure to return a record"))
+		}
+		for i := range rTyp.TupleContents() {
+			colName := scopeColName(tree.Name(rTyp.TupleLabels()[i]))
+			b.synthesizeColumn(outScope, colName, rTyp.TupleContents()[i], proc, nil /* scalar */)
+		}
+	}
+
+	// Build the routine.
+	routine, _ := b.buildRoutine(proc, def, inScope, outScope, nil /* colRefs */)
+	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
+		nil /* outScope */, nil /* outCol */)
+
+	// Build a call expression.
+	callPrivate := &memo.CallPrivate{Columns: outScope.colList()}
+	outScope.expr = b.factory.ConstructCall(routine, callPrivate)
+	return outScope
+}
+
+// resolveProcedureDefinition type-checks and resolves the given procedure
+// reference, and checks its privileges.
+func (b *Builder) resolveProcedureDefinition(
+	inScope *scope, proc *tree.FuncExpr,
+) (f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition) {
 	// Type-check the procedure and its arguments. Subqueries are disallowed in
 	// arguments. Note that we don't use defer to reset semaCtx.Properties
 	// because it must be reset before the call to buildRoutine below, or else
 	// subqueries would be disallowed in the body of procedures.
 	originalProps := b.semaCtx.Properties
 	b.semaCtx.Properties.Require("CALL argument", tree.RejectSubqueries)
-	typedExpr := inScope.resolveType(c.Proc, types.Any)
+	typedExpr := inScope.resolveType(proc, types.Any)
 	b.semaCtx.Properties = originalProps
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
-		panic(pgerror.Newf(pgcode.WrongObjectType,
-			"%s is not a procedure", c.Proc.Func.String(),
-		))
+		panic(pgerror.Newf(pgcode.WrongObjectType, "%s is not a procedure", proc.Func.String()))
 	}
 
 	// Resolve the procedure reference.
@@ -160,32 +189,11 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 		}
 	}
 
-	// Synthesize output columns for OUT parameters. We can use the return type
-	// to synthesize the columns, since it's based on the OUT parameters.
-	if rTyp := f.ResolvedType(); rTyp.Family() != types.VoidFamily {
-		if len(rTyp.TupleContents()) == 0 {
-			panic(errors.AssertionFailedf("expected procedure to return a record"))
-		}
-		for i := range rTyp.TupleContents() {
-			colName := scopeColName(tree.Name(rTyp.TupleLabels()[i]))
-			b.synthesizeColumn(outScope, colName, rTyp.TupleContents()[i], f, nil /* scalar */)
-		}
-	}
-
 	// Check for execution privileges.
 	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid); err != nil {
 		panic(err)
 	}
-
-	// Build the routine.
-	routine, _ := b.buildRoutine(f, def, inScope, outScope, nil /* colRefs */)
-	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
-		nil /* outScope */, nil /* outCol */)
-
-	// Build a call expression.
-	callPrivate := &memo.CallPrivate{Columns: outScope.colList()}
-	outScope.expr = b.factory.ConstructCall(routine, callPrivate)
-	return outScope
+	return f, def
 }
 
 // buildRoutine returns an expression representing the invocation of a
