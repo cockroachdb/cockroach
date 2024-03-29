@@ -165,6 +165,9 @@ module.exports = (env, argv) => {
           loader: "url-loader",
           options: {
             limit: 10000,
+            // Preserve the original filename instead of using hash
+            // in order to play nice with bazel.
+            name: "[name].[ext]",
           },
         },
         { test: /\.html$/, loader: "file-loader" },
