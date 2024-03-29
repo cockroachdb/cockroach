@@ -24,3 +24,5 @@ if [ "$3" == "1" ]; then
     fi
 fi
 
+mkdir -p bin
+ln -sf ../scripts/drtprod bin/drtprod
