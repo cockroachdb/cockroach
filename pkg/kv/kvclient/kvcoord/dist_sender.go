@@ -2094,15 +2094,29 @@ func (ds *DistSender) sendPartialBatch(
 			tBegin = time.Time{} // prevent reentering branch for this RPC
 		}
 
+		// If ProxyRangeInfo is set, this is a proxy request from a remote
+		// client. Proxy requests are retried on the remote client and we don't
+		// need to look at the reply.Error. The client that initiated this proxy
+		// request will do that before returning the response to its caller. If
+		// there is new range info from the client, that would result in the
+		// client retrying, a future proxy request will pass us the information
+		// we need to update our cache.
+		if ba.ProxyRangeInfo != nil {
+			if err != nil {
+				log.VEventf(ctx, 2, "failing proxy request after error %s", err)
+				// Wrap the error in a kvpb.Error to match the interface of
+				// Send. It is immediately unwrapped in node.maybeProxyRequest.
+				return response{pErr: kvpb.NewError(err)}
+			} else {
+				log.VEventf(ctx, 2, "proxy request succeeded with %s", reply)
+				return response{reply: reply}
+			}
+		}
+
 		if err != nil {
 			// Set pErr so that, if we don't perform any more retries, the
 			// deduceRetryEarlyExitError() call below the loop includes this error.
 			pErr = kvpb.NewError(err)
-			// Proxy requests are not retried since we not the originator.
-			if ba.ProxyRangeInfo != nil {
-				log.VEventf(ctx, 1, "failing proxy request after error %s", err)
-				break
-			}
 			switch {
 			case IsSendError(err):
 				// We've tried all the replicas without success. Either they're all
