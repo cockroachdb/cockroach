@@ -167,3 +167,28 @@ CREATE OR REPLACE FUNCTION self_cycle(a INT, b INT) RETURNS INT LANGUAGE SQL AS 
 
 statement ok
 DROP FUNCTION self_cycle;
+
+# Regression test for #121316 - nested routines in a data source.
+statement ok
+CREATE TYPE typ AS (x INT, y INT);
+
+statement ok
+CREATE FUNCTION f_nested(a INT) RETURNS typ AS $$
+  SELECT a * 2;
+  SELECT ROW(1, 2)::typ;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f(a INT) RETURNS INT AS $$
+  SELECT (f_nested(a)).y;
+$$ LANGUAGE SQL;
+
+query I
+SELECT f(2);
+----
+2
+
+query I
+SELECT * FROM f(2);
+----
+2
