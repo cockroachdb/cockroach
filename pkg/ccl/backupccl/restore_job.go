@@ -153,7 +153,7 @@ func restoreWithRetry(
 	resumer *restoreResumer,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) (roachpb.RowCount, error) {
+) (restoreStats, error) {
 
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
 	// to restart, it would produce this kind of error, but there may be other
@@ -170,7 +170,7 @@ func restoreWithRetry(
 	// We want to retry a restore if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
 	var (
-		res                    roachpb.RowCount
+		res                    restoreStats
 		err                    error
 		previousPersistedSpans jobspb.RestoreFrontierEntries
 		currentPersistedSpans  jobspb.RestoreFrontierEntries
@@ -194,18 +194,18 @@ func restoreWithRetry(
 		}
 
 		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) || errors.Is(err, restoreProcError) {
-			return roachpb.RowCount{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+			return restoreStats{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
 
 		if joberror.IsPermanentBulkJobError(err) && !errors.Is(err, retryableRestoreProcError) {
-			return roachpb.RowCount{}, err
+			return restoreStats{}, err
 		}
 
 		// If we are draining, it is unlikely we can start a
 		// new DistSQL flow. Exit with a retryable error so
 		// that another node can pick up the job.
 		if execCtx.ExecCfg().JobRegistry.IsDraining() {
-			return roachpb.RowCount{}, jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
+			return restoreStats{}, jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
 		}
 
 		log.Warningf(restoreCtx, "encountered retryable error: %+v", err)
@@ -268,12 +268,12 @@ func restore(
 	resumer *restoreResumer,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) (roachpb.RowCount, error) {
+) (restoreStats, error) {
 	user := execCtx.User()
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
-	emptyRowCount := roachpb.RowCount{}
+	emptyRowCount := restoreStats{}
 
 	// If there isn't any data to restore, then return early.
 	if dataToRestore.isEmpty() {
@@ -333,7 +333,7 @@ func restore(
 			targetSize,
 			progressTracker.useFrontier)
 	}(); err != nil {
-		return roachpb.RowCount{}, err
+		return restoreStats{}, err
 	}
 	defer filter.close()
 
@@ -341,7 +341,7 @@ func restore(
 	// which are grouped by keyrange.
 	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(restoreCtx, execCtx.ExecCfg().DistSQLSrv.ExternalStorage, backupManifests, encryption, kmsEnv)
 	if err != nil {
-		return roachpb.RowCount{}, err
+		return restoreStats{}, err
 	}
 
 	// If any layer of the backup was produced with revision history before 24.1,
@@ -583,6 +583,18 @@ func loadBackupSQLDescs(
 	return backupManifests, latestBackupManifest, sqlDescs, sz, nil
 }
 
+type restoreStats struct {
+	roachpb.RowCount
+	FilesLinked       int64
+	EstimatedDataSize int64
+}
+
+func (r *restoreStats) Add(other restoreStats) {
+	r.RowCount.Add(other.RowCount)
+	r.FilesLinked += other.FilesLinked
+	r.EstimatedDataSize += other.EstimatedDataSize
+}
+
 // restoreResumer should only store a reference to the job it's running. State
 // should not be stored here, but rather in the job details.
 type restoreResumer struct {
@@ -590,7 +602,7 @@ type restoreResumer struct {
 
 	settings     *cluster.Settings
 	execCfg      *sql.ExecutorConfig
-	restoreStats roachpb.RowCount
+	restoreStats restoreStats
 
 	mu struct {
 		syncutil.Mutex
@@ -1817,7 +1829,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
-	var resTotal roachpb.RowCount
+	var resTotal restoreStats
 
 	if !preData.isEmpty() {
 		res, err := restoreWithRetry(
