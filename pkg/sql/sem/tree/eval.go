@@ -2078,6 +2078,8 @@ func (expr *FuncExpr) MaybeWrapError(err error) error {
 		return err
 	}
 	// Otherwise, wrap it with context.
+	// TODO(yuzefovich): consider removing this context in order to match
+	// postgres error messages.
 	newErr := errors.Wrapf(err, "%s()", errors.Safe(fName))
 	// Count function errors as it flows out of the system. We need to handle
 	// them this way because if we are facing a retry error, in particular those

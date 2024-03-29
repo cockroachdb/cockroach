@@ -3641,10 +3641,10 @@ SELECT json_object_agg(user_name, networks) FROM
 {"Alice": {"Facebook": "Alice_fb", "Instagram": "AliceInst", "Twitter": "@Alice"}}
 {"Bob": {"Facebook": "Bob_fb", "LinkedIn": "Bob The Builder"}}
 
-statement error pq: field name must not be null
+statement error pgcode 22004 null value not allowed for object key
 SELECT json_object_agg(null, null)
 
-statement error pq: field name must not be null
+statement error pgcode 22004 null value not allowed for object key
 SELECT json_object_agg(null, 1)
 
 statement ok
