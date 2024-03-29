@@ -105,7 +105,7 @@ case $1 in
           --clouds="gce" \
           --gce-zones="us-east1-c" \
           --nodes="8" \
-          --gce-machine-type="n2-standard-8" \
+          --gce-machine-type="n2d-standard-16" \
           --local-ssd="true"  \
           --gce-local-ssd-count="16" \
           --username="drt" \
