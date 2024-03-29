@@ -2503,3 +2503,21 @@ statement error box2d is a built-in type and cannot be modified
 CREATE SEQUENCE box2d
 
 subtest end
+
+subtest temp_sequence
+
+statement error temporary tables are only supported experimentally
+CREATE TEMP SEQUENCE temp_seq
+
+statement ok
+SET experimental_enable_temp_tables = true
+
+statement ok
+CREATE TEMP SEQUENCE temp_seq
+
+query TT
+SELECT substring(sequence_schema FOR 7), sequence_name FROM [SHOW SEQUENCES] WHERE sequence_name = 'temp_seq'
+----
+pg_temp  temp_seq
+
+subtest end
