@@ -1490,3 +1490,16 @@ bar   blah
 bar   blah2
 bar2  blah
 bar2  blah2
+
+# Regression test for incorrectly using jsonString.String() for asserting that
+# keys are ordered in the jsonObject (#121326).
+query T rowsort
+WITH cte(col) AS (
+  VALUES
+    ('false'::JSONB),
+    (jsonb_object(ARRAY['0', '', e'\x14', '']::TEXT[]))
+  )
+SELECT jsonb_object_agg('k', 'v') OVER (PARTITION BY cte.col) FROM cte;
+----
+{"k": "v"}
+{"k": "v"}
