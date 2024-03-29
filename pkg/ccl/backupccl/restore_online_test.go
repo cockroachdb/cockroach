@@ -11,9 +11,12 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -27,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,12 +43,13 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	ctx := context.Background()
 
 	const numAccounts = 1000
-	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+	params := base.TestClusterArgs{
 		// Online restore is not supported in a secondary tenant yet.
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		},
-	})
+	}
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
 	externalStorage := "nodelocal://1/backup"
 
@@ -53,11 +58,6 @@ func TestOnlineRestoreBasic(t *testing.T) {
 
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 
-	params := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		},
-	}
 	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
 	defer cleanupFnRestored()
 	var preRestoreTs float64
@@ -80,6 +80,69 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	jobutils.WaitForJobToSucceed(t, rSQLDB, downloadJobID)
 
 	rSQLDB.CheckQueryResults(t, createStmt, createStmtRes)
+}
+
+func TestOnlineRestoreStatementResult(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	const numAccounts = 1
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	})
+	defer cleanupFn()
+
+	if err := backuptestutils.VerifyBackupRestoreStatementResult(
+		t, sqlDB, "BACKUP DATABASE data INTO $1", localFoo,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	rows := sqlDB.Query(t, "RESTORE DATABASE data FROM LATEST IN $1 WITH OPTIONS (new_db_name='data2', experimental deferred copy)", localFoo)
+	columns, err := rows.Columns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, e := columns, []string{
+		"job_id", "tables", "approx_rows", "approx_bytes", "background_download_job_id",
+	}; !reflect.DeepEqual(e, a) {
+		t.Fatalf("unexpected columns:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
+	}
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		t.Fatal("zero rows in result")
+	}
+
+	type job struct {
+		id            int64
+		downloadJobID int64
+	}
+
+	var actualJob job
+	var expectedJob job
+	var unused int64
+	if err := rows.Scan(
+		&actualJob.id, &unused, &unused, &unused, &actualJob.downloadJobID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	sqlDB.QueryRow(t,
+		`SELECT job_id FROM crdb_internal.jobs WHERE job_id = $1`, actualJob.id,
+	).Scan(
+		&expectedJob.id,
+	)
+
+	require.Equal(t, expectedJob.id, actualJob.id, "result does not match system.jobs")
+	require.NotZero(t, actualJob.downloadJobID, "expected a background download job ID")
+
+	if rows.Next() {
+		t.Fatal("more than one row in result")
+	}
 }
 
 // TestOnlineRestoreWaitForDownload checks that the download job succeeeds even
