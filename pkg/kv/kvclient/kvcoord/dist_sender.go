@@ -2513,117 +2513,11 @@ func (ds *DistSender) sendToReplicas(
 		ba = ba.ShallowCopy()
 		ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
 	}
-	// Filter the replicas to only those that are relevant to the routing policy.
-	// NB: When changing leaseholder policy constraint_status_report should be
-	// updated appropriately.
-	var replicaFilter ReplicaSliceFilter
-	switch ba.RoutingPolicy {
-	case kvpb.RoutingPolicy_LEASEHOLDER:
-		replicaFilter = OnlyPotentialLeaseholders
-	case kvpb.RoutingPolicy_NEAREST:
-		replicaFilter = AllExtantReplicas
-	default:
-		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
-	}
 	desc := routing.Desc()
-	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, routing.Leaseholder(), replicaFilter)
+	transport, err := ds.createTransport(ctx, ba, routing)
 	if err != nil {
 		return nil, err
 	}
-
-	// This client requested we proxy this request. Only proxy if we can
-	// determine the leaseholder and it agrees with the ProxyRangeInfo from
-	// the client. We don't support a proxy request to a non-leaseholder
-	// replica. If we decide to proxy this request, we will reduce our replica
-	// list to only the requested replica. If we fail on that request we fail back
-	// to the caller so they can try something else.
-	if ba.ProxyRangeInfo != nil {
-		log.VEventf(ctx, 3, "processing a proxy request to %v", ba.ProxyRangeInfo)
-		ds.metrics.ProxyForwardSentCount.Inc(1)
-		// We don't know who the leaseholder is, and it is likely that the
-		// client had stale information. Return our information to them through
-		// a NLHE and let them retry.
-		if routing.Lease().Empty() {
-			log.VEventf(ctx, 2, "proxy failed, unknown leaseholder %v", routing)
-			br := kvpb.BatchResponse{}
-			br.Error = kvpb.NewError(
-				kvpb.NewNotLeaseHolderError(roachpb.Lease{},
-					0, /* proposerStoreID */
-					routing.Desc(),
-					"client requested a proxy but we can't figure out the leaseholder"),
-			)
-			ds.metrics.ProxyForwardErrCount.Inc(1)
-			return &br, nil
-		}
-		if ba.ProxyRangeInfo.Lease.Sequence != routing.Lease().Sequence ||
-			ba.ProxyRangeInfo.Desc.Generation != routing.Desc().Generation {
-			log.VEventf(ctx, 2, "proxy failed, update client information %v != %v", ba.ProxyRangeInfo, routing)
-			br := kvpb.BatchResponse{}
-			br.Error = kvpb.NewError(
-				kvpb.NewNotLeaseHolderError(
-					*routing.Lease(),
-					0, /* proposerStoreID */
-					routing.Desc(),
-					fmt.Sprintf("proxy failed, update client information %v != %v", ba.ProxyRangeInfo, routing)),
-			)
-			ds.metrics.ProxyForwardErrCount.Inc(1)
-			return &br, nil
-		}
-
-		// On a proxy request, we only send the request to the leaseholder. If we
-		// are here then the client and server agree on the routing information, so
-		// use the leaseholder as our only replica to send to.
-		idx := replicas.Find(routing.Leaseholder().ReplicaID)
-		// This should never happen. We validated the routing above and the token
-		// is still valid.
-		if idx == -1 {
-			return nil, errors.AssertionFailedf("inconsistent routing %v %v", desc, *routing.Leaseholder())
-		}
-		replicas = replicas[idx : idx+1]
-		log.VEventf(ctx, 2, "sender requested proxy to leaseholder %v", replicas)
-	}
-	// Rearrange the replicas so that they're ordered according to the routing
-	// policy.
-	switch ba.RoutingPolicy {
-	case kvpb.RoutingPolicy_LEASEHOLDER:
-		// First order by latency, then move the leaseholder to the front of the
-		// list, if it is known.
-		if !ds.dontReorderReplicas {
-			replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
-		}
-
-		idx := -1
-		if routing.Leaseholder() != nil {
-			idx = replicas.Find(routing.Leaseholder().ReplicaID)
-		}
-		if idx != -1 {
-			if ds.routeToLeaseholderFirst {
-				replicas.MoveToFront(idx)
-			}
-		} else {
-			// The leaseholder node's info must have been missing from gossip when we
-			// created replicas.
-			log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not known")
-		}
-
-	case kvpb.RoutingPolicy_NEAREST:
-		// Order by latency.
-		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
-		replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
-
-	default:
-		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
-	}
-
-	// NB: upgrade the connection class to SYSTEM, for critical ranges. Set it to
-	// DEFAULT if the class is unknown, to handle mixed-version states gracefully.
-	// Other kinds of overrides are possible, see rpc.ConnectionClassForKey().
-	opts := SendOptions{
-		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key, ba.ConnectionClass),
-		metrics:                &ds.metrics,
-		dontConsiderConnHealth: ds.dontConsiderConnHealth,
-	}
-	transport := ds.transportFactory(opts, replicas)
 	defer transport.Release()
 
 	// inTransferRetry is used to slow down retries in cases where an ongoing
@@ -3175,6 +3069,120 @@ func (ds *DistSender) sendToReplicas(
 			return nil, err
 		}
 	}
+}
+
+func (ds *DistSender) createTransport(
+	ctx context.Context, ba *kvpb.BatchRequest, routing rangecache.EvictionToken,
+) (Transport, error) {
+	desc := routing.Desc()
+	// Filter the replicas to only those that are relevant to the routing policy.
+	// NB: When changing leaseholder policy constraint_status_report should be
+	// updated appropriately.
+	var replicaFilter ReplicaSliceFilter
+	switch ba.RoutingPolicy {
+	case kvpb.RoutingPolicy_LEASEHOLDER:
+		replicaFilter = OnlyPotentialLeaseholders
+	case kvpb.RoutingPolicy_NEAREST:
+		replicaFilter = AllExtantReplicas
+	default:
+		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
+	}
+	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, routing.Leaseholder(), replicaFilter)
+	if err != nil {
+		return nil, err
+	}
+
+	// This client requested we proxy this request. Only proxy if we can
+	// determine the leaseholder and it agrees with the ProxyRangeInfo from
+	// the client. We don't support a proxy request to a non-leaseholder
+	// replica. If we decide to proxy this request, we will reduce our replica
+	// list to only the requested replica. If we fail on that request we fail back
+	// to the caller so they can try something else.
+	if ba.ProxyRangeInfo != nil {
+		log.VEventf(ctx, 3, "processing a proxy request to %v", ba.ProxyRangeInfo)
+		ds.metrics.ProxyForwardSentCount.Inc(1)
+		// We don't know who the leaseholder is, and it is likely that the
+		// client had stale information. Return our information to them through
+		// a NLHE and let them retry.
+		if routing.Lease().Empty() {
+			log.VEventf(ctx, 2, "proxy failed, unknown leaseholder %v", routing)
+			ds.metrics.ProxyForwardErrCount.Inc(1)
+			ds.metrics.ProxyForwardErrCount.Inc(1)
+			return nil, newSendError(kvpb.NewNotLeaseHolderError(
+				roachpb.Lease{},
+				0, /* proposerStoreID */
+				routing.Desc(),
+				"client requested a proxy but we don't know the leaseholder"))
+		}
+		leaseCompatible := ba.ProxyRangeInfo.Lease.Sequence >= routing.LeaseSeq()
+		descCompatible := ba.ProxyRangeInfo.Desc.Generation >= desc.Generation
+		if !leaseCompatible || !descCompatible {
+			log.VEventf(ctx, 2, "proxy failed, update client information %v != %v", ba.ProxyRangeInfo, routing)
+			ds.metrics.ProxyForwardErrCount.Inc(1)
+			ds.metrics.ProxyForwardErrCount.Inc(1)
+			return nil, newSendError(kvpb.NewNotLeaseHolderError(
+				*routing.Lease(),
+				0, /* proposerStoreID */
+				routing.Desc(),
+				fmt.Sprintf("proxy failed, update client information %v != %v", ba.ProxyRangeInfo, routing)))
+		}
+
+		// On a proxy request, we only send the request to the leaseholder. If we
+		// are here then the client and server agree on the routing information, so
+		// use the leaseholder as our only replica to send to.
+		idx := replicas.Find(routing.Leaseholder().ReplicaID)
+		// This should never happen. We validated the routing above and the token
+		// is still valid.
+		if idx == -1 {
+			return nil, errors.AssertionFailedf("inconsistent routing %v %v", desc, *routing.Leaseholder())
+		}
+		replicas = replicas[idx : idx+1]
+		log.VEventf(ctx, 2, "sender requested proxy to leaseholder %v", replicas)
+	}
+	// Rearrange the replicas so that they're ordered according to the routing
+	// policy.
+	switch ba.RoutingPolicy {
+	case kvpb.RoutingPolicy_LEASEHOLDER:
+		// First order by latency, then move the leaseholder to the front of the
+		// list, if it is known.
+		if !ds.dontReorderReplicas {
+			replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
+		}
+
+		idx := -1
+		if routing.Leaseholder() != nil {
+			idx = replicas.Find(routing.Leaseholder().ReplicaID)
+		}
+		if idx != -1 {
+			log.VEventf(ctx, 2, "routing to leaseholder %v", routing.Leaseholder())
+			if ds.routeToLeaseholderFirst {
+				replicas.MoveToFront(idx)
+			}
+		} else {
+			// The leaseholder node's info must have been missing from gossip when we
+			// created replicas.
+			log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not known")
+		}
+
+	case kvpb.RoutingPolicy_NEAREST:
+		// Order by latency.
+		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
+		replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
+
+	default:
+		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
+	}
+
+	// NB: upgrade the connection class to SYSTEM, for critical ranges. Set it to
+	// DEFAULT if the class is unknown, to handle mixed-version states gracefully.
+	// Other kinds of overrides are possible, see rpc.ConnectionClassForKey().
+	opts := SendOptions{
+		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key, ba.ConnectionClass),
+		metrics:                &ds.metrics,
+		dontConsiderConnHealth: ds.dontConsiderConnHealth,
+	}
+	transport := ds.transportFactory(opts, replicas)
+	return transport, nil
 }
 
 // getLocalityComparison takes two nodeIDs as input and returns the locality
