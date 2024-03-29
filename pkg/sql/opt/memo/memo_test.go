@@ -430,6 +430,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = false
 	notStale()
 
+	// Stale optimizer_use_trigram_similarity_optimization.
+	evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization = true
+	stale()
+	evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
