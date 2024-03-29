@@ -148,6 +148,10 @@ type memColumn struct {
 // ColumnFactory is an interface that can construct columns for Batches.
 type ColumnFactory interface {
 	MakeColumn(t *types.T, length int) Column
+	// MakeColumns batch-allocates columns of the given type and the given
+	// length. Note that datum-backed vectors will be incomplete - the caller
+	// must set the correct type on each one.
+	MakeColumns(columns []Column, t *types.T, length int)
 }
 
 type defaultColumnFactory struct{}
@@ -188,17 +192,87 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
 	}
 }
 
+func (cf *defaultColumnFactory) MakeColumns(columns []Column, t *types.T, length int) {
+	allocLength := len(columns) * length
+	switch canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()); canonicalTypeFamily {
+	case types.BoolFamily:
+		alloc := make(Bools, allocLength)
+		for i := range columns {
+			columns[i] = alloc[:length:length]
+			alloc = alloc[length:]
+		}
+	case types.BytesFamily:
+		alloc := make([]element, allocLength)
+		wrapperAlloc := make([]Bytes, len(columns))
+		for i := range columns {
+			wrapperAlloc[i].elements = alloc[:length:length]
+			columns[i] = &wrapperAlloc[i]
+			alloc = alloc[length:]
+		}
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			alloc := make(Int16s, allocLength)
+			for i := range columns {
+				columns[i] = alloc[:length:length]
+				alloc = alloc[length:]
+			}
+		case 32:
+			alloc := make(Int32s, allocLength)
+			for i := range columns {
+				columns[i] = alloc[:length:length]
+				alloc = alloc[length:]
+			}
+		case 0, 64:
+			alloc := make(Int64s, allocLength)
+			for i := range columns {
+				columns[i] = alloc[:length:length]
+				alloc = alloc[length:]
+			}
+		default:
+			panic(fmt.Sprintf("unexpected integer width: %d", t.Width()))
+		}
+	case types.FloatFamily:
+		alloc := make(Float64s, allocLength)
+		for i := range columns {
+			columns[i] = alloc[:length:length]
+			alloc = alloc[length:]
+		}
+	case types.DecimalFamily:
+		alloc := make(Decimals, allocLength)
+		for i := range columns {
+			columns[i] = alloc[:length:length]
+			alloc = alloc[length:]
+		}
+	case types.TimestampTZFamily:
+		alloc := make(Times, allocLength)
+		for i := range columns {
+			columns[i] = alloc[:length:length]
+			alloc = alloc[length:]
+		}
+	case types.IntervalFamily:
+		alloc := make(Durations, allocLength)
+		for i := range columns {
+			columns[i] = alloc[:length:length]
+			alloc = alloc[length:]
+		}
+	case types.JsonFamily:
+		alloc := make([]element, allocLength)
+		wrapperAlloc := make([]JSONs, len(columns))
+		for i := range columns {
+			wrapperAlloc[i].elements = alloc[:length:length]
+			columns[i] = &wrapperAlloc[i]
+			alloc = alloc[length:]
+		}
+	default:
+		panic(fmt.Sprintf("StandardColumnFactory doesn't support %s", t))
+	}
+}
+
 // NewMemColumn returns a new memColumn, initialized with a length using the
 // given column factory.
 func NewMemColumn(t *types.T, length int, factory ColumnFactory) Vec {
-	var m memColumn
-	m.init(t, length, factory)
-	return &m
-}
-
-// init initializes the receiver with a length using the given column factory.
-func (m *memColumn) init(t *types.T, length int, factory ColumnFactory) {
-	*m = memColumn{
+	return &memColumn{
 		t:                   t,
 		canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()),
 		col:                 factory.MakeColumn(t, length),
