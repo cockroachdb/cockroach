@@ -433,7 +433,11 @@ func generateAndSendImportSpans(
 					// we want to bound sum total open files across all of them to <= 1k.
 					// We bound the span byte size to improve work distribution and make
 					// the progress more granular.
-					fits := lastCovSpanSize+newCovFilesSize <= filter.targetSize && lastCovSpanCount+newCovFilesCount <= 200
+					// We waive the file count limit if the target size is >8GB, as a size
+					// this large clearly indicates we want lots of files (such as during
+					// online restores where we don't open them).
+					fileCountOK := lastCovSpanCount+newCovFilesCount <= 200 || filter.targetSize > 8<<30
+					fits := lastCovSpanSize+newCovFilesSize <= filter.targetSize && fileCountOK
 
 					if (newCovFilesCount == 0 || fits) && !firstInSpan {
 						// If there are no new files that cover this span or if we can add the
