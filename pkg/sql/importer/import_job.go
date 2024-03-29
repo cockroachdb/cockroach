@@ -105,6 +105,13 @@ var processorsPerNode = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+var performConstraintValidation = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"crdb_internal.import.perform_constraint_validation",
+	"should import perform constraint validation after data load",
+	true,
+)
+
 type preparedSchemaMetadata struct {
 	schemaPreparedDetails jobspb.ImportDetails
 	schemaRewrites        jobspb.DescRewriteMap
@@ -331,8 +338,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	if err := r.checkVirtualConstraints(ctx, p.ExecCfg(), r.job, p.User()); err != nil {
-		return err
+	if performConstraintValidation.Get(&p.ExecCfg().Settings.SV) {
+		if err := r.checkVirtualConstraints(ctx, p.ExecCfg(), r.job, p.User()); err != nil {
+			return err
+		}
 	}
 
 	// If the table being imported into referenced UDTs, ensure that a concurrent
