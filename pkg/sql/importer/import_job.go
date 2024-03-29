@@ -105,6 +105,15 @@ var processorsPerNode = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+var performConstraintValidation = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.import.perform_constraint_validation",
+	"should import perform constraint validation after data load. "+
+		"NOTE: this setting should not be used on production clusters, as it could result in "+
+		"incorrect query results if the imported data set violates constraints (i.e. contains duplicates).",
+	true,
+)
+
 type preparedSchemaMetadata struct {
 	schemaPreparedDetails jobspb.ImportDetails
 	schemaRewrites        jobspb.DescRewriteMap
@@ -331,8 +340,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	if err := r.checkVirtualConstraints(ctx, p.ExecCfg(), r.job, p.User()); err != nil {
-		return err
+	if performConstraintValidation.Get(&p.ExecCfg().Settings.SV) {
+		if err := r.checkVirtualConstraints(ctx, p.ExecCfg(), r.job, p.User()); err != nil {
+			return err
+		}
 	}
 
 	// If the table being imported into referenced UDTs, ensure that a concurrent
