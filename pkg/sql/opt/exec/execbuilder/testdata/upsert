@@ -947,3 +947,46 @@ count         Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
 count         Del /Table/120/2/3/0
 count         CPut /Table/120/2/2/0 -> /BYTES/0x8a (expecting does not exist)
 sql query     execution failed after 0 rows: duplicate key value violates unique constraint "woo"
+
+# Test that implicit SELECT FOR UPDATE doesn't spread to subqueries.
+statement ok
+CREATE TABLE t121322_ab (a int PRIMARY KEY, b int, INDEX (b))
+
+statement ok
+CREATE TABLE t121322_c (c int PRIMARY KEY)
+
+query T
+EXPLAIN UPSERT INTO t121322_ab SELECT 1, (SELECT sum(c) FROM t121322_c)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: t121322_ab(a, b)
+│   │ auto commit
+│   │ arbiter indexes: t121322_ab_pkey
+│   │
+│   └── • cross join (left outer)
+│       │
+│       ├── • values
+│       │     size: 2 columns, 1 row
+│       │
+│       └── • scan
+│             missing stats
+│             table: t121322_ab@t121322_ab_pkey
+│             spans: [/1 - /1]
+│             locking strength: for update
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT sum(c) FROM t121322_c)
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • scan
+              missing stats
+              table: t121322_c@t121322_c_pkey
+              spans: FULL SCAN

@@ -859,3 +859,43 @@ vectorized: true
 # Reset for rest of test.
 statement ok
 SET enable_implicit_select_for_update = true
+
+# Test that implicit SELECT FOR UPDATE doesn't spread to subqueries.
+statement ok
+CREATE TABLE t121322_ab (a int PRIMARY KEY, b int, INDEX (b))
+
+statement ok
+CREATE TABLE t121322_c (c int PRIMARY KEY)
+
+query T
+EXPLAIN UPDATE t121322_ab SET b = (SELECT sum(c) FROM t121322_c) WHERE a = 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: t121322_ab
+│   │ set: b
+│   │ auto commit
+│   │
+│   └── • render
+│       │
+│       └── • scan
+│             missing stats
+│             table: t121322_ab@t121322_ab_pkey
+│             spans: [/1 - /1]
+│             locking strength: for update
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT sum(c) FROM t121322_c)
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • scan
+              missing stats
+              table: t121322_c@t121322_c_pkey
+              spans: FULL SCAN
