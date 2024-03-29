@@ -613,12 +613,12 @@ func TestShowBackupTenants(t *testing.T) {
 
 	res = systemDB.QueryStr(t, `SELECT start_pretty, end_pretty FROM [SHOW BACKUP RANGES FROM LATEST IN 'nodelocal://1/t10']`)
 	require.Equal(t, [][]string{
-		{"/Tenant/10", "/Tenant/11"},
+		{"/Tenant/10", "/Tenant/10/Max"},
 	}, res)
 
 	res = systemDB.QueryStr(t, `SELECT start_pretty, end_pretty FROM [SHOW BACKUP FILES FROM LATEST IN 'nodelocal://1/t10']`)
 	require.Equal(t, [][]string{
-		{"/Tenant/10", "/Tenant/11"},
+		{"/Tenant/10", "/Tenant/10/Max"},
 	}, res)
 
 	res = systemDB.QueryStr(t, `SELECT database_id, parent_schema_id, object_id FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/t10' WITH debug_ids]`)
