@@ -26,6 +26,14 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// replaceFunc is the callback function passed to norm.Factory.Replace. It is
+// copied here from norm.ReplaceFunc to avoid a circular dependency.
+type ReplaceFunc func(e opt.Expr) opt.Expr
+
+// replacer is a wrapper around norm.Factory.Replace, so that we can call it
+// without creating a circular dependency.
+type replacer func(e opt.Expr, replace ReplaceFunc) opt.Expr
+
 // Memo is a data structure for efficiently storing a forest of query plans.
 // Conceptually, the memo is composed of a numbered set of equivalency classes
 // called groups where each group contains a set of logically equivalent
@@ -117,6 +125,10 @@ type Memo struct {
 	// most one instance of each expression in the memo.
 	interner interner
 
+	// replacer is a wrapper around norm.Factory.Replace, used by statistics
+	// builder to rewrite some expressions when calculating stats.
+	replacer replacer
+
 	// logPropsBuilder is inlined in the memo so that it can be reused each time
 	// scalar or relational properties need to be built.
 	logPropsBuilder logicalPropsBuilder
@@ -174,6 +186,7 @@ type Memo struct {
 	sharedLockingForSerializable               bool
 	useLockOpForSerializable                   bool
 	useProvidedOrderingFix                     bool
+	useVirtualComputedColumnStats              bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -246,10 +259,15 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		sharedLockingForSerializable:               evalCtx.SessionData().SharedLockingForSerializable,
 		useLockOpForSerializable:                   evalCtx.SessionData().OptimizerUseLockOpForSerializable,
 		useProvidedOrderingFix:                     evalCtx.SessionData().OptimizerUseProvidedOrderingFix,
+		useVirtualComputedColumnStats:              evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)
+}
+
+func (m *Memo) SetReplacer(replacer replacer) {
+	m.replacer = replacer
 }
 
 // AllowUnconstrainedNonCoveringIndexScan indicates whether unconstrained
@@ -392,6 +410,7 @@ func (m *Memo) IsStale(
 		m.sharedLockingForSerializable != evalCtx.SessionData().SharedLockingForSerializable ||
 		m.useLockOpForSerializable != evalCtx.SessionData().OptimizerUseLockOpForSerializable ||
 		m.useProvidedOrderingFix != evalCtx.SessionData().OptimizerUseProvidedOrderingFix ||
+		m.useVirtualComputedColumnStats != evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}

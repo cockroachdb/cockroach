@@ -474,6 +474,10 @@ message LocalOnlySessionData {
   // CopyNumRetriesPerBatch determines the number of times a single batch of
   // rows can be retried for non-atomic COPY.
   int32 copy_num_retries_per_batch = 120;
+  // OptimizerUseVirtualComputedColumnStats indicates whether we should use
+  // statistics on virtual computed columns for cardinality estimation in the
+  // optimizer.
+  bool optimizer_use_virtual_computed_column_stats = 124;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

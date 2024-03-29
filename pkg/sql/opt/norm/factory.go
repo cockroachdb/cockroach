@@ -136,6 +136,9 @@ func (f *Factory) Init(ctx context.Context, evalCtx *eval.Context, catalog cat.C
 		mem = &memo.Memo{}
 	}
 	mem.Init(ctx, evalCtx)
+	mem.SetReplacer(func(e opt.Expr, replace memo.ReplaceFunc) opt.Expr {
+		return f.Replace(e, ReplaceFunc(replace))
+	})
 
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
