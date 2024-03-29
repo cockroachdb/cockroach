@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -111,15 +112,17 @@ func TestWALFailover(t *testing.T) {
 				}
 				openEnv.Ref()
 
-				// Mock a cluster version, defaulting to 24.1.
-				minVersionMajor, minVersionMinor := 24, 1
-				minVersion := clusterversion.V24_1.Version()
-				if td.MaybeScanArgs(t, "min-version", &minVersionMajor, &minVersionMinor) {
-					// TODO(jackson): Add datadriven support for scanning into int32s so we can
-					// scan directly into minVersion.
-					minVersion.Major, minVersion.Minor = int32(minVersionMajor), int32(minVersionMinor)
+				// Mock a cluster version, defaulting to latest.
+				version := clusterversion.Latest.Version()
+				if td.HasArg("min-version") {
+					var major, minor int
+					td.ScanArgs(t, "min-version", &major, &minor)
+					version = roachpb.Version{
+						Major: int32(major),
+						Minor: int32(minor),
+					}
 				}
-				settings := cluster.MakeTestingClusterSettingsWithVersions(minVersion, minVersion, true /* initializeVersion */)
+				settings := cluster.MakeTestingClusterSettingsWithVersions(version, version, true /* initializeVersion */)
 
 				// Mock an enterpise license, or not if disable-enterprise is specified.
 				enterpriseEnabledFunc := base.CCLDistributionAndEnterpriseEnabled
