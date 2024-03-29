@@ -1,0 +1,27 @@
+# This test ensures that online restore provides relevant output
+# results.
+
+reset test-nodelocal
+----
+
+new-cluster name=s1 disable-tenant
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+CREATE TABLE foofoo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foofoo VALUES (10, 'x0');
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster';
+----
+
+query-sql regex=(\d\d+\ssucceeded\s3\s[1-9]\d*\s[1-9]\d*\s\d\d+)
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/cluster' WITH EXPERIMENTAL DEFERRED COPY, new_db_name='d2';
+----
+true

@@ -1195,6 +1195,8 @@ func restoreTypeCheck(
 	}
 	if restoreStmt.Options.Detached {
 		header = jobs.DetachedJobExecutionResultHeader
+	} else if restoreStmt.Options.ExperimentalOnline {
+		header = jobs.OnlineRestoreJobExecutionResultHeader
 	} else {
 		header = jobs.BulkJobExecutionResultHeader
 	}
@@ -1291,7 +1293,7 @@ func restorePlanHook(
 			return nil, nil, nil, false, err
 		}
 	} else {
-		// Deprecation notice for non-colelction `RESTORE FROM` syntax. Remove this
+		// Deprecation notice for non-collection `RESTORE FROM` syntax. Remove this
 		// once the syntax is deleted in 22.2.
 		p.BufferClientNotice(ctx,
 			pgnotice.Newf("The `RESTORE FROM <backup>` syntax will be removed in a future release, please"+
@@ -1441,10 +1443,15 @@ func restorePlanHook(
 		)
 	}
 
+	var header colinfo.ResultColumns
 	if restoreStmt.Options.Detached {
-		return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
+		header = jobs.DetachedJobExecutionResultHeader
+	} else if restoreStmt.Options.ExperimentalOnline {
+		header = jobs.OnlineRestoreJobExecutionResultHeader
+	} else {
+		header = jobs.BulkJobExecutionResultHeader
 	}
-	return fn, jobs.BulkJobExecutionResultHeader, nil, false, nil
+	return fn, header, nil, false, nil
 }
 
 // checkRestoreDestinationPrivileges iterates over the External Storage URIs and

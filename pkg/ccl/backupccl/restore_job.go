@@ -420,7 +420,7 @@ func restore(
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	if !details.ExperimentalOnline {
-		// Online restore tracks progress by pinging requestFinishCh instead
+		// Online restore tracks progress by pinging requestFinishedCh instead
 		generativeCheckpointLoop := func(ctx context.Context) error {
 			defer close(requestFinishedCh)
 			for progress := range progCh {
@@ -460,10 +460,12 @@ func restore(
 	}
 	tasks = append(tasks, tracingAggLoop)
 
+	onlineRestoreStats := make(chan roachpb.RowCount, 1)
 	runRestore := func(ctx context.Context) error {
+		defer close(onlineRestoreStats)
 		if details.ExperimentalOnline {
 			log.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
-			return errors.Wrap(sendAddRemoteSSTs(
+			approxRows, approxDataSize, err := sendAddRemoteSSTs(
 				ctx,
 				execCtx,
 				job,
@@ -474,7 +476,9 @@ func restore(
 				requestFinishedCh,
 				tracingAggCh,
 				genSpan,
-			), "sending remote AddSSTable requests")
+			)
+			onlineRestoreStats <- roachpb.RowCount{Rows: approxRows, DataSize: approxDataSize}
+			return errors.Wrap(err, "sending remote AddSSTable requests")
 		}
 		md := restoreJobMetadata{
 			jobID:              job.ID(),
@@ -515,10 +519,14 @@ func restore(
 		}
 	}
 
-	// progress go routines should be shutdown, but use lock just to be safe.
-	progressTracker.mu.Lock()
-	defer progressTracker.mu.Unlock()
-	return progressTracker.mu.res, nil
+	if details.ExperimentalOnline {
+		return <-onlineRestoreStats, nil
+	} else {
+		// progress go routines should be shutdown, but use lock just to be safe.
+		progressTracker.mu.Lock()
+		defer progressTracker.mu.Unlock()
+		return progressTracker.mu.res, nil
+	}
 }
 
 // loadBackupSQLDescs extracts the backup descriptors, the latest backup
@@ -588,9 +596,10 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job *jobs.Job
 
-	settings     *cluster.Settings
-	execCfg      *sql.ExecutorConfig
-	restoreStats roachpb.RowCount
+	settings      *cluster.Settings
+	execCfg       *sql.ExecutorConfig
+	restoreStats  roachpb.RowCount
+	downloadJobID jobspb.JobID
 
 	mu struct {
 		syncutil.Mutex
@@ -2066,14 +2075,28 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(r.job.ID())),
-		tree.NewDString(string(jobs.StatusSucceeded)),
-		tree.NewDFloat(tree.DFloat(1.0)),
-		tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
-		tree.NewDInt(tree.DInt(r.restoreStats.IndexEntries)),
-		tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
-	}:
+	case resultsCh <- func() tree.Datums {
+		details := r.job.Details().(jobspb.RestoreDetails)
+		if details.ExperimentalOnline {
+			return tree.Datums{
+				tree.NewDInt(tree.DInt(r.job.ID())),
+				tree.NewDString(string(jobs.StatusSucceeded)),
+				tree.NewDInt(tree.DInt(len(details.TableDescs))),
+				tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
+				tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
+				tree.NewDInt(tree.DInt(r.downloadJobID)),
+			}
+		} else {
+			return tree.Datums{
+				tree.NewDInt(tree.DInt(r.job.ID())),
+				tree.NewDString(string(jobs.StatusSucceeded)),
+				tree.NewDFloat(tree.DFloat(1.0)),
+				tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
+				tree.NewDInt(tree.DInt(r.restoreStats.IndexEntries)),
+				tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
+			}
+		}
+	}():
 		return nil
 	}
 }
