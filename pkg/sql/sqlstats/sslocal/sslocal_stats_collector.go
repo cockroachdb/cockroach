@@ -93,11 +93,7 @@ func (s *StatsCollector) EndTransaction(
 
 	var discardedStats uint64
 	discardedStats += s.flushTarget.MergeApplicationStatementStats(
-		ctx,
-		s.ApplicationStats,
-		func(statistics *appstatspb.CollectedStatementStatistics) {
-			statistics.Key.TransactionFingerprintID = transactionFingerprintID
-		},
+		ctx, s.ApplicationStats, transactionFingerprintID,
 	)
 
 	discardedStats += s.flushTarget.MergeApplicationTransactionStats(
