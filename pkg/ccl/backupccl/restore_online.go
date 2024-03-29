@@ -266,10 +266,13 @@ func sendAddRemoteSSTWorker(
 			if err := flush(rewrittenFlushKey, entry.ElidedPrefix); err != nil {
 				return err
 			}
+			var rows, dataSize int64
 			for _, file := range entry.Files {
-				atomic.AddInt64(approxRows, file.BackupFileEntryCounts.Rows)
-				atomic.AddInt64(approxDataSize, int64(file.ApproximatePhysicalSize))
+				rows += file.BackupFileEntryCounts.Rows
+				dataSize += int64(file.ApproximatePhysicalSize)
 			}
+			atomic.AddInt64(approxRows, rows)
+			atomic.AddInt64(approxDataSize, dataSize)
 			requestFinishedCh <- struct{}{}
 		}
 		return nil
