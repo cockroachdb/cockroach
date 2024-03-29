@@ -204,6 +204,15 @@ func MaxConcurrentCompactions(n int) ConfigOption {
 	}
 }
 
+// MaxConcurrentDownloads configures the maximum number of concurrent
+// download compactions an Engine will execute.
+func MaxConcurrentDownloads(n int) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.opts.MaxConcurrentDownloads = func() int { return n }
+		return nil
+	}
+}
+
 // LBaseMaxBytes configures the maximum number of bytes for LBase.
 func LBaseMaxBytes(v int64) ConfigOption {
 	return func(cfg *engineConfig) error {
