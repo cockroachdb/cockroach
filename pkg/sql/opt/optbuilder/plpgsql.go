@@ -656,22 +656,14 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				// incorrect location.
 				panic(setTxnNotAfterControlStmtErr)
 			}
-			if len(t.Target) > 1 {
-				seenTargets := make(map[ast.Variable]struct{})
-				for _, name := range t.Target {
-					if _, ok := seenTargets[name]; ok {
-						panic(dupIntoErr)
-					}
-					seenTargets[name] = struct{}{}
-				}
-			}
+			b.checkDuplicateTargets(t.Target, "INTO")
 			strict := t.Strict || b.ob.evalCtx.SessionData().PLpgSQLUseStrictInto
 
 			// Create a new continuation routine to handle executing a SQL statement.
 			execCon := b.makeContinuation("_stmt_exec")
 			stmtScope := b.ob.buildStmtAtRootWithScope(t.SqlStmt, nil /* desiredTypes */, execCon.s)
-			if t.Target == nil {
-				// When there is not INTO target, build the SQL statement into a body
+			if len(t.Target) == 0 {
+				// When there is no INTO target, build the SQL statement into a body
 				// statement that is only executed for its side effects.
 				b.appendBodyStmt(&execCon, stmtScope)
 				b.appendPlpgSQLStmts(&execCon, stmts[i+1:])
@@ -833,6 +825,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					panic(fetchRowsErr)
 				}
 			}
+			b.checkDuplicateTargets(t.Target, "FETCH")
 			fetchCon := b.makeContinuation("_stmt_fetch")
 			fetchCon.def.Volatility = volatility.Volatile
 			fetchScope := b.buildFetch(fetchCon.s, t)
@@ -842,30 +835,20 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				return b.callContinuation(&fetchCon, s)
 			}
 			// crdb_internal.plpgsql_fetch will return a tuple with the results of the
-			// FETCH call. Project each element as a PLpgSQL variable. The number of
-			// elements returned is equal to the length of the target list
-			// (padded with NULLs), so we can assume each target variable has a
+			// FETCH call. Project each element as a PLpgSQL variable.
+			//
+			// Note: The number of tuple elements is equal to the length of the target
+			// list (padded with NULLs), so we can assume each target variable has a
 			// corresponding element.
-			fetchCol := fetchScope.cols[0].id
-			intoScope := fetchScope.push()
-			for j := range t.Target {
-				typ := b.resolveVariableForAssign(t.Target[j])
-				colName := scopeColName(t.Target[j])
-				scalar := b.ob.factory.ConstructColumnAccess(
-					b.ob.factory.ConstructVariable(fetchCol),
-					memo.TupleOrdinal(j),
-				)
-				scalar = b.coerceType(scalar, typ)
-				b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
-			}
-			b.ob.constructProjectForScope(fetchScope, intoScope)
+			intoScope := b.projectTupleAsIntoTarget(fetchScope, t.Target)
 
 			// Call a continuation for the remaining PLpgSQL statements from the newly
-			// built statement that has updated variables. Then, call the fetch
-			// continuation from the parent scope.
-			retCon := b.makeContinuation("_stmt_exec_ret")
+			// built statement that has updated variables.
+			retCon := b.makeContinuation("_stmt_fetch_ret")
 			b.appendPlpgSQLStmts(&retCon, stmts[i+1:])
 			intoScope = b.callContinuation(&retCon, intoScope)
+
+			// Add the built statement to the FETCH continuation.
 			b.appendBodyStmt(&fetchCon, intoScope)
 			return b.callContinuation(&fetchCon, s)
 
@@ -921,6 +904,64 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			con.def.Volatility = volatility.Volatile
 			b.appendPlpgSQLStmts(&con, stmts)
 			return b.callContinuationWithTxnOp(&con, s, txnOpType, txnModes)
+
+		case *ast.Call:
+			// Build a continuation that will execute the procedure, and then the
+			// following PL/pgSQL statements.
+			callCon := b.makeContinuation("_stmt_call")
+			callCon.def.Volatility = volatility.Volatile
+
+			// Resolve the procedure definition and overload for the call. Project the
+			// result of the procedure call as a single output column.
+			callScope := callCon.s.push()
+			proc, def := b.ob.resolveProcedureDefinition(callScope, t.Proc)
+			overload := proc.ResolvedOverload()
+			if len(proc.Exprs) != len(overload.RoutineParams) {
+				panic(errors.AssertionFailedf("expected arguments and parameters to be the same length"))
+			}
+			procTyp := proc.ResolvedType()
+			procScalar, _ := b.ob.buildRoutine(proc, def, callCon.s, b.colRefs)
+			colName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_call"))
+			b.ob.synthesizeColumn(callScope, colName, procTyp, nil /* expr */, procScalar)
+			b.ob.constructProjectForScope(callCon.s, callScope)
+
+			// Collect any target variables in OUT-parameter position. The result of
+			// the procedure will be assigned to these variables, if any.
+			var target []ast.Variable
+			for j := range overload.RoutineParams {
+				if overload.RoutineParams[j].IsOutParam() {
+					if arg, ok := proc.Exprs[j].(*scopeColumn); ok {
+						target = append(target, arg.name.refName)
+						continue
+					}
+					panic(pgerror.Newf(pgcode.Syntax,
+						"procedure parameter \"%s\" is an output parameter "+
+							"but corresponding argument is not writable",
+						proc.Exprs[j],
+					))
+				}
+			}
+			b.checkDuplicateTargets(target, "CALL")
+			if len(target) == 0 {
+				// When there is no INTO target, build the nested procedure call into a
+				// body statement that is only executed for its side effects.
+				b.appendBodyStmt(&callCon, callScope)
+				b.appendPlpgSQLStmts(&callCon, stmts[i+1:])
+				return b.callContinuation(&callCon, s)
+			}
+			// The nested procedure will return a tuple with elements corresponding
+			// to the target variables. Project each element as a PLpgSQL variable.
+			intoScope := b.projectTupleAsIntoTarget(callScope, target)
+
+			// Call a continuation for the remaining PLpgSQL statements from the newly
+			// built statement that has updated variables.
+			retCon := b.makeContinuation("_stmt_call_ret")
+			b.appendPlpgSQLStmts(&retCon, stmts[i+1:])
+			intoScope = b.callContinuation(&retCon, intoScope)
+
+			// Add the built statement to the CALL continuation.
+			b.appendBodyStmt(&callCon, intoScope)
+			return b.callContinuation(&callCon, s)
 
 		default:
 			panic(unsupportedPLStmtErr)
@@ -1822,6 +1863,46 @@ func (b *plpgsqlBuilder) resolveVariableForAssign(name ast.Variable) *types.T {
 	panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", name))
 }
 
+// projectTupleAsIntoTarget maps from the elements of a tuple column to the
+// variables of an INTO target for a FETCH or CALL statement.
+//
+// projectTupleAsIntoTarget assumes that inScope contains exactly one column,
+// that the column is a tuple, and that the number of elements is equal to the
+// number of target variables.
+func (b *plpgsqlBuilder) projectTupleAsIntoTarget(inScope *scope, target []ast.Variable) *scope {
+	intoScope := inScope.push()
+	tupleCol := inScope.cols[0].id
+	for i := range target {
+		typ := b.resolveVariableForAssign(target[i])
+		colName := scopeColName(target[i])
+		scalar := b.ob.factory.ConstructColumnAccess(
+			b.ob.factory.ConstructVariable(tupleCol),
+			memo.TupleOrdinal(i),
+		)
+		scalar = b.coerceType(scalar, typ)
+		b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+	}
+	b.ob.constructProjectForScope(inScope, intoScope)
+	return intoScope
+}
+
+// checkDuplicateTargets checks for duplicate variables that are targets for
+// assignment, which currently isn't supported.
+func (b *plpgsqlBuilder) checkDuplicateTargets(target []ast.Variable, stmtName string) {
+	if len(target) > 1 {
+		seenTargets := make(map[ast.Variable]struct{})
+		for _, name := range target {
+			if _, ok := seenTargets[name]; ok {
+				panic(unimplemented.Newf("duplicate %[1]s target",
+					"assigning to a variable more than once in the same %[1]s statement is not supported",
+					stmtName,
+				))
+			}
+			seenTargets[name] = struct{}{}
+		}
+	}
+}
+
 func (b *plpgsqlBuilder) prependStmt(stmt ast.Statement, stmts []ast.Statement) []ast.Statement {
 	newStmts := make([]ast.Statement, 0, len(stmts)+1)
 	newStmts = append(newStmts, stmt)
@@ -2102,9 +2183,6 @@ var (
 	)
 	recordVarErr = unimplemented.NewWithIssueDetail(114874, "RECORD variable",
 		"RECORD type for PL/pgSQL variables is not yet supported",
-	)
-	dupIntoErr = unimplemented.New("duplicate INTO target",
-		"assigning to a variable more than once in the same INTO statement is not supported",
 	)
 	scrollableCursorErr = unimplemented.NewWithIssue(77102,
 		"DECLARE SCROLL CURSOR",

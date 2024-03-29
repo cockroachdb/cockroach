@@ -19,6 +19,12 @@ CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE PLpgSQL AS $$
     RETURN nextval('sc1.sq1');
   END
 $$;
+CREATE PROCEDURE p_nested(a sc1.enum1) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'a: %', a;
+    SELECT nextval('sc1.sq1');
+  END
+$$;
 CREATE SCHEMA sc2;
 CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
 CREATE FUNCTION sc2.f2() RETURNS INT LANGUAGE PLpgSQL AS $$
@@ -27,6 +33,7 @@ CREATE FUNCTION sc2.f2() RETURNS INT LANGUAGE PLpgSQL AS $$
   BEGIN
     SELECT a INTO x FROM sc2.tbl2 LIMIT 1;
     SELECT sc1.f1('Good'::sc1.enum1);
+    CALL p_nested('Good'::sc1.enum1);
     RETURN x;
   END
 $$;
@@ -64,6 +71,7 @@ db1 sc1 enum1 type false
 db1 sc1 _enum1 type false
 db1 sc1 sq1 table false
 db1 sc1 f1 function false
+db1 public p_nested function false
 db1 <nil> sc2 schema false
 db1 sc2 tbl2 table false
 db1 sc2 f2 function false
@@ -91,7 +99,27 @@ $$
 query-sql
 SELECT sc1.f1('Good'::sc1.enum1)
 ----
-3
+4
+
+query-sql
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc2.f2]
+----
+CREATE FUNCTION sc2.f2()
+	RETURNS INT8
+	VOLATILE
+	NOT LEAKPROOF
+	CALLED ON NULL INPUT
+	LANGUAGE plpgsql
+	AS $$
+	DECLARE
+	x INT8;
+	BEGIN
+	SELECT a FROM db1.sc2.tbl2 LIMIT 1 INTO x;
+	SELECT sc1.f1('Good':::db1.sc1.enum1);
+	CALL public.p_nested('Good':::db1.sc1.enum1);
+	RETURN x;
+	END;
+$$
 
 exec-sql
 DROP DATABASE db1
@@ -129,12 +157,32 @@ CREATE FUNCTION sc1.f1(a db1_new.sc1.enum1)
 	END;
 $$
 
+query-sql
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc2.f2]
+----
+CREATE FUNCTION sc2.f2()
+	RETURNS INT8
+	VOLATILE
+	NOT LEAKPROOF
+	CALLED ON NULL INPUT
+	LANGUAGE plpgsql
+	AS $$
+	DECLARE
+	x INT8;
+	BEGIN
+	SELECT a FROM db1_new.sc2.tbl2 LIMIT 1 INTO x;
+	SELECT sc1.f1('Good':::db1_new.sc1.enum1);
+	CALL public.p_nested('Good':::db1_new.sc1.enum1);
+	RETURN x;
+	END;
+$$
+
 # Make sure function signature is rewritten in schema descriptor so that
 # function can be resolved and executed.
 query-sql
 SELECT sc1.f1('Good'::db1_new.sc1.enum1)
 ----
-3
+4
 
 # Make sure function still queries from correct table.
 query-sql
@@ -177,7 +225,7 @@ HINT: consider dropping "f1" first.
 exec-sql
 DROP TYPE sc1.enum1
 ----
-pq: cannot drop type "enum1" because other objects ([db1_new.sc1.f1 db1_new.sc2.f2]) still depend on it
+pq: cannot drop type "enum1" because other objects ([db1_new.sc1.f1 db1_new.public.p_nested db1_new.sc2.f2]) still depend on it
 
 # Test backing up and restoring a full cluster with user defined function.
 new-cluster name=s1

@@ -115,19 +115,35 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	b.DisableMemoReuse = true
 	outScope := inScope.push()
 
+	// Type check and resolve the procedure.
+	proc, def := b.resolveProcedureDefinition(inScope, c.Proc)
+
+	// Build the routine.
+	routine, _ := b.buildRoutine(proc, def, inScope, nil /* colRefs */)
+	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
+		nil /* outScope */, nil /* outCol */)
+
+	// Build a call expression.
+	outScope.expr = b.factory.ConstructCall(routine)
+	return outScope
+}
+
+// resolveProcedureDefinition type-checks and resolves the given procedure
+// reference, and checks its privileges.
+func (b *Builder) resolveProcedureDefinition(
+	inScope *scope, proc *tree.FuncExpr,
+) (f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition) {
 	// Type-check the procedure and its arguments. Subqueries are disallowed in
 	// arguments. Note that we don't use defer to reset semaCtx.Properties
 	// because it must be reset before the call to buildRoutine below, or else
 	// subqueries would be disallowed in the body of procedures.
 	originalProps := b.semaCtx.Properties
 	b.semaCtx.Properties.Require("CALL argument", tree.RejectSubqueries)
-	typedExpr := inScope.resolveType(c.Proc, types.Any)
+	typedExpr := inScope.resolveType(proc, types.Any)
 	b.semaCtx.Properties = originalProps
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
-		panic(pgerror.Newf(pgcode.WrongObjectType,
-			"%s is not a procedure", c.Proc.Func.String(),
-		))
+		panic(pgerror.Newf(pgcode.WrongObjectType, "%s is not a procedure", proc.Func.String()))
 	}
 
 	// Resolve the procedure reference.
@@ -164,15 +180,7 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid); err != nil {
 		panic(err)
 	}
-
-	// Build the routine.
-	routine, _ := b.buildRoutine(f, def, inScope, nil /* colRefs */)
-	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
-		nil /* outScope */, nil /* outCol */)
-
-	// Build a call expression.
-	outScope.expr = b.factory.ConstructCall(routine)
-	return outScope
+	return f, def
 }
 
 // buildRoutine returns an expression representing the invocation of a

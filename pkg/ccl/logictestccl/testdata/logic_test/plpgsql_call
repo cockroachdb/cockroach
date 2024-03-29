@@ -1,0 +1,368 @@
+# LogicTest: !local-mixed-23.1 !local-mixed-23.2
+
+statement ok
+CREATE PROCEDURE p_nested() AS $$
+  BEGIN
+    RAISE NOTICE 'p_nested';
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    CALL p_nested();
+    RAISE NOTICE 'p';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: p_nested
+NOTICE: p
+
+statement ok
+DROP PROCEDURE p;
+DROP PROCEDURE p_nested;
+
+statement ok
+CREATE PROCEDURE p_nested(x INT, y INT) AS $$
+  DECLARE
+    z INT;
+  BEGIN
+    z := x + y;
+    RAISE NOTICE 'p_nested %', z;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Pass constants to the nested procedure.
+statement ok
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    CALL p_nested(100, 200);
+    RAISE NOTICE 'p';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: p_nested 300
+NOTICE: p
+
+# Pass variables to the nested procedure.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(a INT, b INT) AS $$
+  BEGIN
+    CALL p_nested(a, b);
+    RAISE NOTICE 'p';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p(100, 200);
+----
+NOTICE: p_nested 300
+NOTICE: p
+
+statement ok
+DROP PROCEDURE p;
+DROP PROCEDURE p_nested;
+
+# The outer procedure passes variables in OUT-parameter position. Then, the
+# result of the nested procedure is assigned to those variables.
+statement ok
+CREATE PROCEDURE p_nested(x INT, y INT, OUT a INT, OUT b INT) AS $$
+  BEGIN
+    a := x + y;
+    RAISE NOTICE 'p_nested x: % y: %', x, y;
+    b := x * y;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    foo INT := 100;
+    a INT;
+    b INT;
+  BEGIN
+    RAISE NOTICE 'p foo: % a: % b: %', foo, a, b;
+    CALL p_nested(foo, 200, a, b);
+    RAISE NOTICE 'p foo: % a: % b: %', foo, a, b;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: p foo: 100 a: <NULL> b: <NULL>
+NOTICE: p_nested x: 100 y: 200
+NOTICE: p foo: 100 a: 300 b: 20000
+
+statement ok
+DROP PROCEDURE p;
+DROP PROCEDURE p_nested;
+
+statement ok
+CREATE PROCEDURE p_nested(INOUT x INT) AS $$
+  BEGIN
+    x := x * 2;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE PROCEDURE p(a INT) AS $$
+  BEGIN
+    RAISE NOTICE '%', a;
+    CALL p_nested(a);
+    RAISE NOTICE '%', a;
+    CALL p_nested(a);
+    RAISE NOTICE '%', a;
+    CALL p_nested(a);
+    RAISE NOTICE '%', a;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p(2);
+----
+NOTICE: 2
+NOTICE: 4
+NOTICE: 8
+NOTICE: 16
+
+# Test function with nested CALL.
+statement ok
+CREATE FUNCTION f(a INT) RETURNS INT AS $$
+  BEGIN
+    CALL p_nested(a);
+    RETURN a;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(2);
+----
+4
+
+query I
+SELECT * FROM f(2);
+----
+4
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(a INT) RETURNS RECORD AS $$
+  DECLARE
+    b INT := -2;
+  BEGIN
+    CALL p_nested(a);
+    CALL p_nested(b);
+    RETURN (a, b);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f(2);
+----
+(4,-4)
+
+query II
+SELECT * FROM f(2) AS g(x INT, y INT);
+----
+4  -4
+
+statement ok
+DROP FUNCTION f;
+DROP PROCEDURE p;
+
+# Test multiple levels of nested procedures and functions.
+statement ok
+DROP PROCEDURE p_nested;
+CREATE PROCEDURE p_nested(INOUT x INT) AS $$
+  BEGIN
+    x := x * 2;
+    RAISE NOTICE 'p_nested %', x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f_nested(a INT) RETURNS INT AS $$
+  BEGIN
+    a := a * 2;
+    RAISE NOTICE 'f_nested %', a;
+    CALL p_nested(a);
+    RETURN a;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE PROCEDURE p(a INOUT INT) AS $$
+  BEGIN
+    RAISE NOTICE 'p %', a;
+    CALL p_nested(a);
+    a := f_nested(a);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    a INT := 1;
+  BEGIN
+    RAISE NOTICE 'f %', a;
+    CALL p_nested(a);
+    a := f_nested(a);
+    CALL p(a);
+    RETURN a;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+64
+
+query I
+SELECT * FROM f();
+----
+64
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: f 1
+NOTICE: p_nested 2
+NOTICE: f_nested 4
+NOTICE: p_nested 8
+NOTICE: p 8
+NOTICE: p_nested 16
+NOTICE: f_nested 32
+NOTICE: p_nested 64
+
+statement ok
+DROP FUNCTION f;
+DROP PROCEDURE p;
+DROP FUNCTION f_nested;
+DROP PROCEDURE p_nested;
+
+# Single composite-type OUT parameter.
+statement ok
+CREATE TYPE typ AS (a INT, b INT);
+CREATE PROCEDURE p_nested(OUT x typ) AS $$
+  BEGIN
+    x := ROW(1, 2);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE PROCEDURE p(OUT x typ) AS $$
+  BEGIN
+    CALL p_nested(x);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+CALL p(NULL);
+----
+(1,2)
+
+statement ok
+DROP PROCEDURE p;
+DROP PROCEDURE p_nested;
+
+subtest errors
+
+# Recursive CALL is not possible.
+statement error pgcode 42883 pq: unknown function: p\(\)
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    CALL p();
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Cannot CALL a UDF.
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement error pgcode 42809 pq: f\(\) is not a procedure
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    CALL f();
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Cannot CALL a builtin function.
+statement error pgcode 42809 pq: current_database\(\) is not a procedure
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    CALL current_database();
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42809 pq: max is not a procedure
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    CALL max(x);
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Cannot assign to the same variable twice in a CALL statement.
+statement ok
+CREATE PROCEDURE p_nested(OUT x INT, OUT y INT) AS $$
+  BEGIN
+    x := 1;
+    y := 2;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: assigning to a variable more than once in the same CALL statement is not supported
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    foo INT := 100;
+  BEGIN
+    CALL p_nested(foo, foo);
+  END
+$$ LANGUAGE PLpgSQL;
+
+# CALL with mismatched argument types.
+statement error pgcode 42883 pq: unknown signature: public.p_nested\(float, decimal\)
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    a FLOAT;
+    b DECIMAL;
+  BEGIN
+    CALL p_nested(a, b);
+    RAISE NOTICE 'a: % b: %', a, b;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# CALL with non-variable argument in OUT parameter position.
+statement error pgcode 42601 pq: procedure parameter \"b - 1\" is an output parameter but corresponding argument is not writable
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    a INT;
+    b INT;
+  BEGIN
+    CALL p_nested(a, b - 1);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 pq: procedure parameter \"b::INT8\" is an output parameter but corresponding argument is not writable
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    a INT;
+    b FLOAT;
+  BEGIN
+    CALL p_nested(a, b::INT);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP PROCEDURE p_nested;
+
+subtest end
