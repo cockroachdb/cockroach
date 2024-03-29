@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "serviceregistry",
+    srcs = [
+        "registry.go",
+        "registryhandler.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/promhelperservice/serviceregistry",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/cmd/promhelperservice/handlers/instanceconfigs"],
+)
+
+go_library(
+    name = "registryhandler",
+    srcs = ["registryhandler.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/promhelperservice/registryhandler",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/cmd/promhelperservice/logging"],
+)
+
+go_test(
+    name = "registryhandler_test",
+    srcs = ["registryhandler_test.go"],
+    embed = [":registryhandler"],
+    deps = [
+        "//pkg/util/httputil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
