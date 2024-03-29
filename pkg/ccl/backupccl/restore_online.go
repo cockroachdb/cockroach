@@ -544,7 +544,11 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 	return execConfig.InternalDB.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
-		_, err := execConfig.JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, r.job.ID()+1, txn)
+		downloadJobID := r.job.ID() + 1
+		_, err := execConfig.JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, downloadJobID, txn)
+		if err == nil {
+			r.downloadJobID = downloadJobID
+		}
 		return err
 	})
 }

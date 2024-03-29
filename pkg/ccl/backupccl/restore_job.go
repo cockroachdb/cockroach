@@ -596,9 +596,10 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job *jobs.Job
 
-	settings     *cluster.Settings
-	execCfg      *sql.ExecutorConfig
-	restoreStats roachpb.RowCount
+	settings      *cluster.Settings
+	execCfg       *sql.ExecutorConfig
+	restoreStats  roachpb.RowCount
+	downloadJobID jobspb.JobID
 
 	mu struct {
 		syncutil.Mutex
@@ -2075,12 +2076,15 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 	case <-ctx.Done():
 		return ctx.Err()
 	case resultsCh <- func() tree.Datums {
-		if (r.job.Details().(jobspb.RestoreDetails)).ExperimentalOnline {
+		details := r.job.Details().(jobspb.RestoreDetails)
+		if details.ExperimentalOnline {
 			return tree.Datums{
 				tree.NewDInt(tree.DInt(r.job.ID())),
 				tree.NewDString(string(jobs.StatusSucceeded)),
+				tree.NewDInt(tree.DInt(len(details.TableDescs))),
 				tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
 				tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
+				tree.NewDInt(tree.DInt(r.downloadJobID)),
 			}
 		} else {
 			return tree.Datums{
