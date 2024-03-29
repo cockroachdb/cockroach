@@ -1039,14 +1039,7 @@ func (r *importResumer) writeStubStatisticsForImportedTables(
 			distinctCount := uint64(float64(rowCount) * memo.UnknownDistinctCountRatio)
 			nullCount := uint64(float64(rowCount) * memo.UnknownNullCountRatio)
 			avgRowSize := uint64(memo.UnknownAvgRowSize)
-			// Because we don't yet have real distinct and null counts, only produce
-			// single-column stats to avoid the appearance of perfectly correlated
-			// columns.
-			multiColEnabled := false
-			defaultHistogramBuckets := stats.GetDefaultHistogramBuckets(execCfg.SV(), desc)
-			statistics, err := sql.StubTableStats(
-				desc, jobspb.ImportStatsName, multiColEnabled, defaultHistogramBuckets,
-			)
+			statistics, err := sql.StubTableStats(desc, jobspb.ImportStatsName)
 			if err == nil {
 				for _, statistic := range statistics {
 					statistic.RowCount = rowCount
