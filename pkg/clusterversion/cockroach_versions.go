@@ -400,7 +400,7 @@ const PreviousRelease Key = V23_2
 // only need to check that the cluster has upgraded to 24.1.
 const V24_1 = Latest
 
-// developmentBranch must be true on the main development branch but should be
+// DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
 // and associated upgrade implementations are frozen.
 //
@@ -411,7 +411,7 @@ const V24_1 = Latest
 //     binary in a dev cluster.
 //
 // See devOffsetKeyStart for more details.
-const developmentBranch = true
+const DevelopmentBranch = true
 
 // finalVersion should be set on a release branch to the minted final cluster
 // version key, e.g. to V23_2 on the release-23.2 branch once it is minted.
