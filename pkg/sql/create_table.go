@@ -120,7 +120,7 @@ func getSchemaForCreateTable(
 	// schema for PostgreSQL.
 	if tableName.Schema() == catconstants.PublicSchemaName {
 		if _, ok := types.PublicSchemaAliases[tableName.Object()]; ok {
-			return nil, sqlerrors.NewTypeAlreadyExistsError(tableName.String())
+			return nil, sqlerrors.NewTypeAlreadyExistsError(tableName.Object())
 		}
 	}
 
