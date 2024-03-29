@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "promhelperclient",
+    srcs = ["client.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/httputil"],
+)
+
+go_test(
+    name = "promhelperclient_test",
+    srcs = ["client_test.go"],
+    embed = [":promhelperclient"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

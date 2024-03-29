@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "instanceconfigs",
+    srcs = [
+        "delete.go",
+        "helpers.go",
+        "post.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/promhelperservice/handlers/instanceconfigs",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/cmd/promhelperservice/logging"],
+)
+
+go_test(
+    name = "instanceconfigs_test",
+    srcs = [
+        "delete_test.go",
+        "post_test.go",
+    ],
+    embed = [":instanceconfigs"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

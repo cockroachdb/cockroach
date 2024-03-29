@@ -69,9 +69,25 @@ func Post(
 	return DefaultClient.Post(ctx, url, contentType, body)
 }
 
+// Delete does like http.Delete but uses the provided context and obeys its cancellation.
+// It also uses the default client with a default 3 second timeout.
+func Delete(
+	ctx context.Context, url string) (resp *http.Response, err error) {
+	return DefaultClient.Delete(ctx, url)
+}
+
 // Get does like http.Client.Get but uses the provided context and obeys its cancellation.
 func (c *Client) Get(ctx context.Context, url string) (resp *http.Response, err error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.Do(req)
+}
+
+// Delete does like http.Client.Delete but uses the provided context and obeys its cancellation.
+func (c *Client) Delete(ctx context.Context, url string) (resp *http.Response, err error) {
+	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
 	if err != nil {
 		return nil, err
 	}

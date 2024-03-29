@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "handlers",
+    srcs = ["registry.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/promhelperservice/handlers",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/promhelperservice/handlers/instanceconfigs",
+        "//pkg/cmd/promhelperservice/registryhandler",
+    ],
+)
