@@ -594,17 +594,6 @@ func (j *jsonEncoded) AsArray() ([]JSON, bool) {
 	return decoded.AsArray()
 }
 
-func (j *jsonEncoded) AreKeysSorted() bool {
-	if dec := j.alreadyDecoded(); dec != nil {
-		return dec.AreKeysSorted()
-	}
-	decoded, err := j.decode()
-	if err != nil {
-		return false
-	}
-	return decoded.AreKeysSorted()
-}
-
 func (j *jsonEncoded) Compare(other JSON) (_ int, err error) {
 	if other == nil {
 		return -1, nil
