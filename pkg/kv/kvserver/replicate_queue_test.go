@@ -2118,6 +2118,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	// rebalancing to ensure all stores have the same range count initially, due
 	// to slow heartbeats.
 	skip.UnderStress(t)
+	skip.UnderDeadlock(t)
 	skip.UnderRace(t)
 
 	ctx := context.Background()
